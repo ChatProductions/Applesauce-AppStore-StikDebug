@@ -45,6 +45,8 @@ pub struct Thread {
     /// If this is not [ThreadBlock::NotBlocked], the thread is not executing
     /// until a certain condition is fufilled.
     pub blocked_by: ThreadBlock,
+    /// Container for thread local state of various child modules
+    pub thread_local_framework_state: frameworks::ThreadLocalState,
     /// After a secondary thread finishes, this is set to the returned value.
     return_value: Option<MutVoidPtr>,
     /// Context object containing the CPU state for this thread.
@@ -578,6 +580,7 @@ let device_family = match device_family_array.len() {
             guest_context: None,
             host_context: Some(main_thread_init_routine),
             stack: Some(mem::Mem::MAIN_THREAD_STACK_LOW_END..=0u32.wrapping_sub(1)),
+            thread_local_framework_state: Default::default(),
         };
 
         let mut env = Environment {
@@ -720,6 +723,7 @@ let device_family = match device_family_array.len() {
             guest_context: None,
             host_context: None,
             stack: Some(mem::Mem::MAIN_THREAD_STACK_LOW_END..=0u32.wrapping_sub(1)),
+            thread_local_framework_state: Default::default(),
         };
 
         let mut env = Environment {
@@ -1040,6 +1044,7 @@ let device_family = match device_family_array.len() {
             guest_context: Some(Box::new(cpu::CpuContext::new())),
             host_context: Some(thread_routine),
             stack: Some(stack_alloc.to_bits()..=(stack_high_addr - 1)),
+            thread_local_framework_state: Default::default(),
         });
 
         let new_thread_id = self.threads.len() - 1;
@@ -1047,6 +1052,10 @@ let device_family = match device_family_array.len() {
         log_dbg!("Created new thread {} with stack {:#x}–{:#x}, will execute function {:?} with data {:?}", new_thread_id, stack_alloc.to_bits(), (stack_high_addr - 1), start_routine, user_data);
 
         new_thread_id
+    }
+
+    pub fn get_tl_framework_state(&mut self) -> &mut frameworks::ThreadLocalState {
+        &mut self.threads[self.current_thread].thread_local_framework_state
     }
 
     /// Put the current thread to sleep for some duration, running other threads
