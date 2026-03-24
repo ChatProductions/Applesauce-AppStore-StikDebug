@@ -61,14 +61,12 @@ impl AudioFile {
         path: P,
         fs: &Fs,
     ) -> Result<Self, AudioFileOpenError> {
-        // TODO: it would be better not to load the whole file at once
         let Ok(bytes) = fs.read(path.as_ref()) else {
-            // TODO: Handle other FS related errors?
             return Err(AudioFileOpenError::FileReadError);
         };
 
-        if let Ok(bytes) = Self::read_from_vec(bytes) {
-            Ok(bytes)
+        if let Ok(audio_file) = Self::read_from_vec(bytes) {
+            Ok(audio_file)
         } else {
             log!(
                 "Could not decode audio file at path {:?}, likely an unimplemented file format.",
@@ -79,22 +77,21 @@ impl AudioFile {
     }
 
     pub fn read_from_vec(bytes: Vec<u8>) -> Result<Self, AudioFileOpenError> {
-        // Both WavReader::new() and CafPacketReader::new() consume the reader
-        // (in this case, a Cursor) passed to them. This is a bit annoying
-        // considering we don't know which is appropriate for the file without
-        // trying both. This is worked around here by using temporary readers
-        // for checking if the file is the supported format, then recreating the
-        // reader if that works.
-        if hound::WavReader::new(Cursor::new(&bytes)).is_ok() {
-            let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
-            Ok(AudioFile(AudioFileInner::Wave(reader)))
-        } else if caf::CafPacketReader::new(Cursor::new(&bytes), vec![]).is_ok() {
+        // Try hound (WAV) first, but only for supported 8/16-bit integer formats
+        if let Ok(reader) = hound::WavReader::new(Cursor::new(&bytes)) {
+            let spec = reader.spec();
+            if (spec.bits_per_sample == 8 || spec.bits_per_sample == 16) 
+                && spec.sample_format == hound::SampleFormat::Int 
+            {
+                let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
+                return Ok(AudioFile(AudioFileInner::Wave(reader)));
+            }
+            // Fall through to Symphonia for 24-bit, 32-bit or float WAVs
+        }
+
+        if caf::CafPacketReader::new(Cursor::new(&bytes), vec![]).is_ok() {
             let reader = caf::CafPacketReader::new(Cursor::new(bytes), vec![]).unwrap();
             Ok(AudioFile(AudioFileInner::Caf(reader)))
-        // TODO: Real MP3/MP4/Non-linear PCM container handling. Currently we
-        // are immediately decoding the entire file to PCM and acting as if
-        // it's a PCM file, simply because because this is easier. Full MP3
-        // support would require a lot of changes in Audio Toolbox.
         } else if let Ok(pcm) = symphonia_formats::decode_symphonia_to_pcm(Cursor::new(bytes)) {
             Ok(AudioFile(AudioFileInner::Symphonia(pcm)))
         } else {
@@ -111,10 +108,7 @@ impl AudioFile {
                     bits_per_sample,
                     sample_format,
                 } = wave_reader.spec();
-                // Hound supports unsigned 8-bit, signed 16-bit, signed 24-bit
-                // and floating-point 32-bit linear PCM. We should expose all of
-                // these eventually, but we should only expose formats we've
-                // tested.
+                
                 assert!(matches!(bits_per_sample, 8 | 16));
                 assert!(sample_format == hound::SampleFormat::Int);
 
@@ -124,7 +118,7 @@ impl AudioFile {
                         is_float: false,
                         is_little_endian: true,
                     },
-                    bytes_per_packet: u32::from(channels * bits_per_sample / 8),
+                    bytes_per_packet: u32::from(channels) * u32::from(bits_per_sample) / 8,
                     frames_per_packet: 1,
                     channels_per_frame: channels.into(),
                     bits_per_channel: bits_per_sample as u32,
@@ -157,9 +151,6 @@ impl AudioFile {
                             assert!(format_flags == 0);
                             AudioFormat::AppleIma4
                         }
-                        //
-                        // We should expose all of the formats eventually, but
-                        // the others haven't been tested yet.
                         _ => panic!("{format_id:?} not supported yet"),
                     },
                     bytes_per_packet,
@@ -203,11 +194,10 @@ impl AudioFile {
     pub fn byte_count(&self) -> u64 {
         match self.0 {
             AudioFileInner::Wave(ref wave_reader) => {
-                let sample_count = wave_reader.len(); // position-independent
+                let sample_count = wave_reader.len();
                 u64::from(sample_count) * self.bytes_per_sample()
             }
             AudioFileInner::Caf(_) => {
-                // variable size not implemented
                 u64::from(self.packet_size_fixed()) * self.packet_count()
             }
             AudioFileInner::Symphonia(symphonia_formats::SymphoniaDecodedToPcm {
@@ -221,7 +211,6 @@ impl AudioFile {
         match self.0 {
             AudioFileInner::Wave(_)
             | AudioFileInner::Symphonia(symphonia_formats::SymphoniaDecodedToPcm { .. }) => {
-                // never variable-size
                 self.byte_count() / u64::from(self.packet_size_fixed())
             }
             AudioFileInner::Caf(ref caf_reader) => {
@@ -230,8 +219,6 @@ impl AudioFile {
         }
     }
 
-    /// Returns the packet size if this audio format has a constant packet size,
-    /// panics if not.
     pub fn packet_size_fixed(&self) -> u32 {
         let AudioDescription {
             bytes_per_packet, ..
@@ -241,21 +228,19 @@ impl AudioFile {
     }
 
     pub fn packet_size_upper_bound(&self) -> u32 {
-        self.packet_size_fixed() // variable size not implemented
+        self.packet_size_fixed()
     }
 
-    /// Read `buffer.len()` bytes of audio data from byte offset `offset`.
-    /// Returns the number of bytes read.
     pub fn read_bytes(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize, ()> {
         match self.0 {
             AudioFileInner::Wave(_) => {
                 let bytes_per_sample = self.bytes_per_sample();
-                assert!(offset.is_multiple_of(bytes_per_sample));
-                assert!(u64::try_from(buffer.len())
-                    .unwrap()
-                    .is_multiple_of(bytes_per_sample));
+                if bytes_per_sample == 0 { return Err(()); }
+                
+                assert!(offset % bytes_per_sample == 0);
+                assert!(buffer.len() as u64 % bytes_per_sample == 0);
 
-                let sample_count = u64::try_from(buffer.len()).unwrap() / bytes_per_sample;
+                let sample_count = buffer.len() as u64 / bytes_per_sample;
                 let sample_count: usize = sample_count.try_into().unwrap();
 
                 let AudioFileInner::Wave(ref mut wave_reader) = self.0 else {
@@ -263,8 +248,6 @@ impl AudioFile {
                 };
 
                 let channels: u64 = wave_reader.spec().channels.into();
-                // WavReader expects number of samples which are
-                // independent of the number of channels here
                 wave_reader
                     .seek((offset / (bytes_per_sample * channels)).try_into().unwrap())
                     .map_err(|_| ())?;
@@ -273,11 +256,6 @@ impl AudioFile {
                 for sample in wave_reader.samples().take(sample_count) {
                     let sample: i16 = sample.map_err(|_| ())?;
                     match bytes_per_sample {
-                        // From the OpenAL docs: 8-bit PCM data is expressed as
-                        // an unsigned value over the range 0 to 255, 128 being
-                        // an audio output level of zero. Loaded wav samples
-                        // must be converted to that from signed with 0 as
-                        // output level 0.
                         1 => buffer[byte_offset] = (sample + 128) as u8,
                         2 => buffer[byte_offset..][..2].copy_from_slice(&sample.to_le_bytes()),
                         _ => todo!(),
@@ -287,14 +265,11 @@ impl AudioFile {
                 Ok(byte_offset)
             }
             AudioFileInner::Caf(_) => {
-                // variable size not implemented
                 let packet_size = self.packet_size_fixed();
-                assert!(offset.is_multiple_of(packet_size.into()));
-                assert!(u64::try_from(buffer.len())
-                    .unwrap()
-                    .is_multiple_of(packet_size.into()));
+                assert!(offset % u64::from(packet_size) == 0);
+                assert!(buffer.len() as u64 % u64::from(packet_size) == 0);
 
-                let packet_count = u64::try_from(buffer.len()).unwrap() / u64::from(packet_size);
+                let packet_count = buffer.len() as u64 / u64::from(packet_size);
 
                 let AudioFileInner::Caf(ref mut caf_reader) = self.0 else {
                     unreachable!()
@@ -304,15 +279,14 @@ impl AudioFile {
                     .seek_to_packet(usize::try_from(offset / u64::from(packet_size)).unwrap())
                     .map_err(|_| ())?;
 
-                let packet_size = usize::try_from(packet_size).unwrap();
-
+                let packet_size_usize = usize::try_from(packet_size).unwrap();
                 let mut i = 0;
                 let mut byte_offset = 0;
                 while i < packet_count && caf_reader.next_packet_size().is_some() {
                     caf_reader
-                        .read_packet_into(&mut buffer[byte_offset..][..packet_size])
+                        .read_packet_into(&mut buffer[byte_offset..][..packet_size_usize])
                         .map_err(|_| ())?;
-                    byte_offset += packet_size;
+                    byte_offset += packet_size_usize;
                     i += 1;
                 }
                 Ok(byte_offset)
@@ -321,12 +295,12 @@ impl AudioFile {
                 ref bytes,
                 ..
             }) => {
-                let bytes = bytes.get(offset as usize..).ok_or(())?;
-                let bytes_to_read = buffer.len().min(bytes.len());
-                let bytes = &bytes[..bytes_to_read];
-                buffer[..bytes_to_read].copy_from_slice(bytes);
+                let bytes_slice = bytes.get(offset as usize..).ok_or(())?;
+                let bytes_to_read = buffer.len().min(bytes_slice.len());
+                buffer[..bytes_to_read].copy_from_slice(&bytes_slice[..bytes_to_read]);
                 Ok(bytes_to_read)
             }
         }
     }
 }
+
