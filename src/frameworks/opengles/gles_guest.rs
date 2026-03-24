@@ -1681,8 +1681,7 @@ fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
         buffer_size
     })
 }
-export_c_func!(glCurrentPaletteMatrixOES(_, _)),
-    export_c_func!(glLoadPaletteFromModelViewMatrixOES(_)),
-    export_c_func!(glMatrixIndexPointerOES(_, _, _, _, _)),
-    export_c_func!(glWeightPointerOES(_, _, _, _, _)),
-
+    export_c_func! { glCurrentPaletteMatrixOES(_, _) }
+    export_c_func! { glLoadPaletteFromModelViewMatrixOES(_) }
+    export_c_func! { glMatrixIndexPointerOES(_, _, _, _, _) }
+    export_c_func! { glWeightPointerOES(_, _, _, _, _) }
