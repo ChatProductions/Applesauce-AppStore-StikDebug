@@ -6,13 +6,12 @@
 //! `NSData` and `NSMutableData`.
 
 use super::ns_string::to_rust_string;
-use super::{NSRange, NSUInteger};
+use super::NSUInteger;
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
 
@@ -138,17 +137,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path == nil {
         return nil;
     }
-
     let path_str = to_rust_string(env, path);
-
     let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
         release(env, this);
         return nil;
     };
-
     let size = bytes.len().try_into().unwrap();
     let alloc = env.mem.alloc(size);
-
     let casted_alloc: MutPtr<u8> = alloc.cast();
     let slice = env.mem.bytes_at_mut(casted_alloc, size);
     slice.copy_from_slice(&bytes);
@@ -156,7 +151,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     host_object.bytes = alloc;
     host_object.length = size;
-
     this
 }
 
@@ -166,27 +160,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)writeToFile:(id)path atomically:(bool)use_aux_file {
     let _ = use_aux_file;
-
     let file = to_rust_string(env, path);
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
-
     let slice = if host_object.length == 0 {
         &[]
     } else {
         let casted_ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
         env.mem.bytes_at(casted_ptr, host_object.length)
     };
-
     env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
 
 - (())dealloc {
     let &NSDataHostObject { bytes, free_when_done, .. } = env.objc.borrow(this);
-
     if !bytes.is_null() && free_when_done {
         env.mem.free(bytes);
     }
-
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -202,10 +191,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)mutableCopyWithZone:(NSZonePtr)zone {
     let _ = zone;
-
     let bytes: ConstVoidPtr = msg![env; this bytes];
     let length: NSUInteger = msg![env; this length];
-
     let new = msg_class![env; NSMutableData alloc];
     msg![env; new initWithBytes:bytes length:length]
 }
@@ -229,12 +216,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 };
 
 pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
-    let borrowed = env.objc.borrow::<NSDataHostObject>(data);
-
-    if borrowed.length == 0 {
+    let borrowed_data = env.objc.borrow::<NSDataHostObject>(data);
+    if borrowed_data.length == 0 {
         return &[];
     }
-
-    let ptr: ConstPtr<u8> = borrowed.bytes.cast_const().cast();
-    env.mem.bytes_at(ptr, borrowed.length)
-        }
+    let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
+    env.mem.bytes_at(casted_ptr, borrowed_data.length)
+}
