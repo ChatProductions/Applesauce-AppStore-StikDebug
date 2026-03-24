@@ -1466,6 +1466,35 @@ unsafe fn restore_fog_state_values(gles: &mut dyn GLES, from_backup: Option<(f32
         gles.Fogf(gles11::FOG_END, fogEnd);
     }
 }
+// --- Matrix Palette Extension Stubs ---
+
+fn glCurrentPaletteMatrixOES(_env: &mut Environment, index: GLuint) {
+    log!("STUB: glCurrentPaletteMatrixOES({})", index);
+}
+
+fn glLoadPaletteFromModelViewMatrixOES(_env: &mut Environment) {
+    log!("STUB: glLoadPaletteFromModelViewMatrixOES()");
+}
+
+fn glMatrixIndexPointerOES(
+    _env: &mut Environment,
+    _size: GLint,
+    _type_enum: GLenum,
+    _stride: GLsizei,
+    _pointer: ConstVoidPtr,
+) {
+    log!("STUB: glMatrixIndexPointerOES()");
+}
+
+fn glWeightPointerOES(
+    _env: &mut Environment,
+    _size: GLint,
+    _type_enum: GLenum,
+    _stride: GLsizei,
+    _pointer: ConstVoidPtr,
+) {
+    log!("STUB: glWeightPointerOES()");
+}
 
 pub const FUNCTIONS: FunctionExports = &[
     // Generic state manipulation
@@ -1652,3 +1681,8 @@ fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
         buffer_size
     })
 }
+export_c_func!(glCurrentPaletteMatrixOES(_, _)),
+    export_c_func!(glLoadPaletteFromModelViewMatrixOES(_)),
+    export_c_func!(glMatrixIndexPointerOES(_, _, _, _, _)),
+    export_c_func!(glWeightPointerOES(_, _, _, _, _)),
+];
