@@ -37,26 +37,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// test
-
-+ (id)dataWithContentsOfURL:(id)url 
-                    options:(NSUInteger)_options 
-                      error:(MutVoidPtr)_error {
-    log!("STUB: [NSData dataWithContentsOfURL:options:error:] called");
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfURL:url];
-    autorelease(env, new)
-}
-
-- (id)initWithContentsOfURL:(id)url 
-                    options:(NSUInteger)_options 
-                      error:(MutVoidPtr)_error {
-    log!("STUB: [(NSData*){:?} initWithContentsOfURL:options:error:] called", this);
-    msg![env; this initWithContentsOfURL:url]
-}
-
-// ------------------------------------------
-
 + (id)dataWithBytesNoCopy:(MutVoidPtr)bytes
                    length:(NSUInteger)length {
     let new: id = msg![env; this alloc];
@@ -92,6 +72,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)dataWithContentsOfURL:(id)url {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
+    let _ = options;
+    let _ = error;
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithContentsOfURL:url];
     autorelease(env, new)
@@ -141,6 +129,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let path = to_rust_string(env, path);
     log!("TODO: NSData initWithContentsOfURL for {:?}", path);
     nil
+}
+
+- (id)initWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
+    let _ = options;
+    let _ = error;
+    msg![env; this initWithContentsOfURL:url]
 }
 
 - (id)initWithContentsOfFile:(id)path {
@@ -321,3 +315,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     if borrowed_data.length == 0 { return &[]; }
     env.mem.bytes_at(borrowed_data.bytes.cast(), borrowed_data.length)
 }
+
