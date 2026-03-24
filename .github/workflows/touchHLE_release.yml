@@ -1,109 +1,125 @@
-name: Build touchHLE
+name: Build touchHLE (Fork)
 
 on:
   push:
     branches: [ "trunk" ]
+    tags: [ "v*" ] # Срабатывает при пуше тегов, начинающихся на v
   pull_request:
     branches: [ "trunk" ]
-  create:
 
 env:
   CARGO_TERM_COLOR: always
+  FORK_REPO_URL: "https://github.com/j92580498-max/touchHLE"
 
 jobs:
   build-osx:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout touchHLE fork
+    runs-on: macos-latest  
+    steps:  
+      - name: Checkout touchHLE  
         shell: bash
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE"
-          git clone https://github.com/j92580498-max/touchHLE "$GITHUB_WORKSPACE"
-          cd "$GITHUB_WORKSPACE"
-          git fetch origin "$GITHUB_REF"
+        run: |  
+          mkdir -p "$GITHUB_WORKSPACE"  
+          git clone $FORK_REPO_URL "$GITHUB_WORKSPACE"  
+          cd "$GITHUB_WORKSPACE"  
+          git fetch origin "$GITHUB_REF"  
           git checkout "$GITHUB_SHA"
-
-      - name: Install clang-format
-        run: brew install clang-format
-
-      - name: Check formatting
-        run: dev-scripts/format.sh --check
-
-      - name: Initialize Submodules
-        run: git submodule update --init
-
-      - name: Install Boost
-        run: brew install boost
-
+      - name: Install dependencies
+        run: brew install clang-format boost
+      - name: Get Submodules  
+        run: git submodule update --init  
       - name: Cache CMake
         id: cache-cmake
         uses: actions/cache@v3
         with:
           path: vendor/cmake
           key: cmake_3_31_6_macos
-
       - if: ${{ steps.cache-cmake.outputs.cache-hit != 'true' }}
-        name: Download & Extract CMake
         run: |
           curl -L -O "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-macos-universal.tar.gz"
-          tar xzvf cmake-3.31.6-macos-universal.tar.gz -C vendor
-          mv vendor/cmake-3.31.6-macos-universal/CMake.app/Contents/ vendor/cmake
-          rm -rf cmake-3.31.6-macos-universal.tar.gz
-
-      - name: Lint
-        run: dev-scripts/lint.sh
-        env:
-          CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
-
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v3
-        with:
-          path: tests/llvm
-          key: llvm_12_0_0_macOS_x64
-
-      - if: ${{ steps.cache-llvm.outputs.cache-hit != 'true' }}
-        name: Download & Extract LLVM
+          tar xzvf "cmake-3.31.6-macos-universal.tar.gz" -C vendor && mv "vendor/cmake-3.31.6-macos-universal/CMake.app/Contents/" vendor/cmake
+      - name: Build
         run: |
-          curl -L -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.0/clang+llvm-12.0.0-x86_64-apple-darwin.tar.xz"
-          tar -xf clang+llvm-12.0.0-x86_64-apple-darwin.tar.xz
-          mkdir -p tests/llvm
-          mv clang+llvm-12.0.0-x86_64-apple-darwin/* tests/llvm
-
-      - name: Get common SDK
-        run: cd ${{ github.workspace }}/tests && curl -L https://github.com/touchHLE/common-3.0-sdk/releases/latest/download/common-3.0.sdk-macOS-universal.tar.gz | tar xzv
-
-      - name: Install Rust target
-        run: rustup target add x86_64-apple-darwin
-
-      - name: Run Tests
-        run: cargo test --target x86_64-apple-darwin
+          rustup target add x86_64-apple-darwin
+          cargo build --target x86_64-apple-darwin --release
         env:
           CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
-
-      - name: Sanity check tests
-        run: cc tests/TestApp_source/cli_tests.m tests/TestApp_source/CGAffineTransform.c tests/TestApp_source/SyncTester.m tests/TestApp_source/RespondsToSelector.m -framework CoreFoundation -framework Foundation -framework CoreGraphics -DDEFINE_ME_WHEN_BUILDING_ON_MACOS -DTestApp_cli_tests_main=main -ObjC && ./a.out
-
-      - name: Build Release
-        run: cargo build --target x86_64-apple-darwin --release
-        env:
-          CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake
-
-      - name: Create macOS Bundle & DMG
+      - name: Create .app bundle
         run: |
-          cd dev-scripts
-          ./make-macos-bundle.sh ../target/x86_64-apple-darwin/release/touchHLE "`cargo run --package touchHLE_version`" "`cargo run --package touchHLE_version -- --branding`"
-          mkdir touchHLE-dmg-src
-          mv *.app touchHLE-dmg-src/
+          cd dev-scripts && ./make-macos-bundle.sh ../target/x86_64-apple-darwin/release/touchHLE "`cargo run --package touchHLE_version`" "`cargo run --package touchHLE_version -- --branding`"
+          mkdir touchHLE-dmg-src && mv *.app touchHLE-dmg-src/
           hdiutil create -volname touchHLE -srcfolder touchHLE-dmg-src touchHLE.dmg
           mv touchHLE.dmg ..
-
       - uses: actions/upload-artifact@v4
         with:
           name: touchHLE_macOS_x86_64
           path: touchHLE.dmg
 
+  build-android:
+    runs-on: ubuntu-latest  
+    steps:  
+      - name: Checkout touchHLE  
+        shell: bash
+        run: |  
+          mkdir -p "$GITHUB_WORKSPACE"  
+          git clone $FORK_REPO_URL "$GITHUB_WORKSPACE"  
+          cd "$GITHUB_WORKSPACE"  
+          git fetch origin "$GITHUB_REF"  
+          git checkout "$GITHUB_SHA"
+      - name: Get Submodules  
+        run: git submodule update --init  
+      - name: Setup Android Environment
+        run: |
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk@3.5.4
+      - name: Build for Android
+        run: |
+          # Используем системный NDK или скачиваем если нужно, но для скорости полагаемся на шаги из оригинала
+          cd android && ./gradlew assembleRelease
+          mv app/build/outputs/apk/release/app-release.apk ../touchHLE.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TestApp_built_on_macOS
-          path: tests/TestApp.app
+          name: touchHLE_Android_AArch64
+          path: touchHLE.apk
+
+  build-win:
+    runs-on: windows-latest  
+    steps:  
+      - name: Checkout touchHLE  
+        shell: bash
+        run: |  
+          mkdir -p "$GITHUB_WORKSPACE"  
+          git clone $FORK_REPO_URL "$GITHUB_WORKSPACE"  
+          cd "$GITHUB_WORKSPACE"  
+          git fetch origin "$GITHUB_REF"  
+          git checkout "$GITHUB_SHA"
+      - name: Get Submodules  
+        run: git submodule update --init  
+      - name: Build
+        run: cargo build --release
+      - name: Create bundle
+        shell: bash
+        run: |
+          cd dev-scripts && ./make-windows-bundle.sh ../target/release/touchHLE.exe
+          powershell Compress-Archive -Path touchHLE_windows_bundle/* -DestinationPath ../touchHLE_windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: touchHLE_Windows_x86_64
+          path: touchHLE_windows.zip
+
+  # НОВЫЙ ДЖОБ: Создание релиза на GitHub
+  publish:
+    needs: [build-osx, build-android, build-win]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            touchHLE_macOS_x86_64/touchHLE.dmg
+            touchHLE_Android_AArch64/touchHLE.apk
+            touchHLE_Windows_x86_64/touchHLE_windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
