@@ -124,23 +124,18 @@ fn init_common(env: &mut Environment, this: id) -> id {
 
     this
 }
-// TODO: refactor this to be a part of common init
+
 fn set_type(env: &mut Environment, button: id, type_: UIButtonType) {
     match type_ {
         UIButtonTypeCustom => (),
         UIButtonTypeRoundedRect => {
             let bg_color: id = msg_class![env; UIColor whiteColor];
-            // TODO: set blue background image in highlighted state
-            // TODO: image highlighting?
             () = msg![env; button setBackgroundColor:bg_color];
-            // On the real iPhone OS, this is a semi-dark, desaturated blue.
-            // Should we match it?
             let text_color: id = msg_class![env; UIColor blackColor];
             () = msg![env; button setTitleColor:text_color
                                        forState:UIControlStateNormal];
             let layer: id = msg![env; button layer];
             () = msg![env; layer setCornerRadius:(10.0 as CGFloat)];
-            // TODO: set border, once supported
         }
         _ => {
             log!("TODO: UIButtonType {}", type_);
@@ -172,14 +167,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBackgroundColor:bg_color];
 
     let this: id = init_common(env, this);
-    // TODO: check which type is a default one
     set_type(env, this, UIButtonTypeCustom);
     this
 }
 
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
-
     let this = init_common(env, this);
 
     let key_ns_string = get_static_str(env, "UIButtonType");
@@ -189,32 +182,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_ns_string = get_static_str(env, "UIButtonStatefulContent");
     let dict: id = msg![env; coder decodeObjectForKey:key_ns_string];
     assert!(dict != nil);
-    log_dbg!("UIButtonStatefulContent dict: {}", {
-        let desc: id = msg![env; dict description];
-        to_rust_string(env, desc)
-    });
 
-    // It's not entirely clear how the state information is encoded
-    // in this dict.
-    // TODO: support decoding properties of other states
     let key_idx: id = msg_class![env; NSNumber numberWithLongLong:0i64];
     let button_content: id = msg![env; dict objectForKey:key_idx];
 
     let title: id = msg![env; button_content title];
     if title != nil {
-        log_dbg!("UIButton initWithCoder: title {}", to_rust_string(env, title));
         () = msg![env; this setTitle:title forState:UIControlStateNormal];
     }
 
     let title_color: id = msg![env; button_content titleColor];
     if title_color != nil {
-        log_dbg!("UIButton initWithCoder: title_color {}", to_rust_string(env, title_color));
         () = msg![env; this setTitleColor:title_color forState:UIControlStateNormal];
     }
 
-    // TODO: decode other properties
     update(env, this);
-
     this
 }
 
@@ -234,18 +216,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, title_label);
     release(env, image_view);
     release(env, background_image_view);
-    for (_state, title) in titles_for_states {
-        release(env, title);
-    }
-    for (_state, color) in title_colors_for_states {
-        release(env, color);
-    }
-    for (_state, image) in images_for_states {
-        release(env, image);
-    }
-    for (_state, background_image) in background_images_for_states {
-        release(env, background_image);
-    }
+    for (_state, title) in titles_for_states { release(env, title); }
+    for (_state, color) in title_colors_for_states { release(env, color); }
+    for (_state, image) in images_for_states { release(env, image); }
+    for (_state, background_image) in background_images_for_states { release(env, background_image); }
     msg_super![env; this dealloc]
 }
 
@@ -256,8 +230,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     () = msg![env; background_image_view setFrame:bounds];
     () = msg![env; label setFrame:bounds];
-    // TODO: layout for image
-
 }
 
 - (UIButtonType)buttonType {
@@ -275,43 +247,59 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)backgroundImageView {
     env.objc.borrow_mut::<UIButtonHostObject>(this).background_image_view
 }
+
 - (())setEnabled:(bool)enabled {
     () = msg_super![env; this setEnabled:enabled];
     update(env, this);
 }
+
 - (())setSelected:(bool)selected {
     () = msg_super![env; this setSelected:selected];
     update(env, this);
 }
+
 - (())setHighlighted:(bool)highlighted {
     () = msg_super![env; this setHighlighted:highlighted];
     update(env, this);
 }
+
 - (())setAdjustsImageWhenHighlighted:(bool)adjusts {
     todo_objc_setter!(this, adjusts);
 }
+
 - (())setShowsTouchWhenHighlighted:(bool)shows {
     todo_objc_setter!(this, shows);
 }
-- (())setFont:(id)font { // UIFont*
+
+// --- Исправление вылета: методы выравнивания контента ---
+- (())setContentVerticalAlignment:(NSInteger)alignment {
+    log!("STUB: [UIButton setContentVerticalAlignment:{}]", alignment);
+}
+
+- (())setContentHorizontalAlignment:(NSInteger)alignment {
+    log!("STUB: [UIButton setContentHorizontalAlignment:{}]", alignment);
+}
+// -------------------------------------------------------
+
+- (())setFont:(id)font { 
     let label = env.objc.borrow_mut::<UIButtonHostObject>(this).title_label;
     () = msg![env; label setFont:font];
     update(env, this);
 }
-// TODO: observe focussing somehow
 
 - (id)currentTitle {
     let state: UIControlState = msg![env; this state];
     msg![env; this titleForState:state]
 }
+
 - (id)titleForState:(UIControlState)state {
     let host_obj = env.objc.borrow::<UIButtonHostObject>(this);
     host_obj.titles_for_states.get(&state).or_else(|| {
         host_obj.titles_for_states.get(&UIControlStateNormal)
-    }).copied().unwrap()
+    }).copied().unwrap_or(nil)
 }
-- (())setTitle:(id)title // NSString*
-      forState:(UIControlState)state {
+
+- (())setTitle:(id)title forState:(UIControlState)state {
     retain(env, title);
     let host_obj = env.objc.borrow_mut::<UIButtonHostObject>(this);
     if let Some(old) = host_obj.titles_for_states.insert(state, title) {
@@ -324,12 +312,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let state: UIControlState = msg![env; this state];
     msg![env; this backgroundImageForState:state]
 }
+
 - (id)backgroundImageForState:(UIControlState)state {
     let host_obj = env.objc.borrow::<UIButtonHostObject>(this);
     host_obj.background_images_for_states.get(&state).or_else(|| {
         host_obj.background_images_for_states.get(&UIControlStateNormal)
-    }).copied().unwrap()
+    }).copied().unwrap_or(nil)
 }
+
 - (())setBackgroundImage:(id)image forState:(UIControlState)state {
     retain(env,image);
     let host_obj = env.objc.borrow_mut::<UIButtonHostObject>(this);
@@ -343,14 +333,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let state: UIControlState = msg![env; this state];
     msg![env; this titleColorForState:state]
 }
+
 - (id)titleColorForState:(UIControlState)state {
     let host_obj = env.objc.borrow::<UIButtonHostObject>(this);
     host_obj.title_colors_for_states.get(&state).or_else(|| {
         host_obj.title_colors_for_states.get(&UIControlStateNormal)
-    }).copied().unwrap()
+    }).copied().unwrap_or(nil)
 }
-- (())setTitleColor:(id)color // UIColor*
-      forState:(UIControlState)state {
+
+- (())setTitleColor:(id)color forState:(UIControlState)state {
     retain(env, color);
     let host_obj = env.objc.borrow_mut::<UIButtonHostObject>(this);
     if let Some(old) = host_obj.title_colors_for_states.insert(state, color) {
@@ -363,14 +354,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let state: UIControlState = msg![env; this state];
     msg![env; this imageForState:state]
 }
+
 - (id)imageForState:(UIControlState)state {
     let host_obj = env.objc.borrow::<UIButtonHostObject>(this);
     host_obj.images_for_states.get(&state).or_else(|| {
         host_obj.images_for_states.get(&UIControlStateNormal)
-    }).copied().unwrap()
+    }).copied().unwrap_or(nil)
 }
-- (())setImage:(id)image // UIImage*
-      forState:(UIControlState)state {
+
+- (())setImage:(id)image forState:(UIControlState)state {
     retain(env, image);
     let host_obj = env.objc.borrow_mut::<UIButtonHostObject>(this);
     if let Some(old) = host_obj.images_for_states.insert(state, image) {
@@ -379,11 +371,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     update(env, this);
 }
 
-// TODO: actions, etc
-
-- (id)hitTest:(CGPoint)point
-    withEvent:(id)event { // UIEvent* (possibly nil)
-    // Hide subviews from hit testing so event goes straight to this control
+- (id)hitTest:(CGPoint)point withEvent:(id)event {
     if msg![env; this pointInside:point withEvent:event] {
         this
     } else {
@@ -393,10 +381,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
-// Undocumented classes used by NIBs
-
 @implementation UIRoundedRectButton: UIButton
-// TODO: rendering of round corners
 @end
 
 @implementation UIButtonContent: NSObject
@@ -406,55 +391,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// NSCoding implementation
 - (id)initWithCoder:(id)coder {
     let title_key = get_static_str(env, "UITitle");
     let title: id = msg![env; coder decodeObjectForKey:title_key];
-    log_dbg!("UIButtonContent: UITitle -> {}", to_rust_string(env, title));
-
     let title_color_key = get_static_str(env, "UITitleColor");
     let title_color: id = msg![env; coder decodeObjectForKey:title_color_key];
-    log_dbg!("UIButtonContent: UITitleColor -> {:?}", title_color);
-
-    // TODO: decode other properties
 
     retain(env, title);
     retain(env, title_color);
     let host_obj = env.objc.borrow_mut::<UIButtonContentHostObject>(this);
     host_obj.title = title;
     host_obj.title_color = title_color;
-
     this
 }
 
-- (id)title {
-    env.objc.borrow::<UIButtonContentHostObject>(this).title
-}
-- (id)titleColor {
-    env.objc.borrow::<UIButtonContentHostObject>(this).title_color
-}
+- (id)title { env.objc.borrow::<UIButtonContentHostObject>(this).title }
+- (id)titleColor { env.objc.borrow::<UIButtonContentHostObject>(this).title_color }
 
 - (id)description {
     let title = env.objc.borrow::<UIButtonContentHostObject>(this).title;
     let title_color = env.objc.borrow::<UIButtonContentHostObject>(this).title_color;
-    let desc_str = format!(
-        "UIButtonContent({this:?}, title {title:?}, title_color {title_color:?})"
-    );
+    let desc_str = format!("UIButtonContent({this:?}, title {title:?}, title_color {title_color:?})");
     let desc = from_rust_string(env, desc_str);
     autorelease(env, desc)
 }
 
 - (())dealloc {
-    let &UIButtonContentHostObject {
-        title,
-        title_color
-    } = env.objc.borrow(this);
+    let &UIButtonContentHostObject { title, title_color } = env.objc.borrow(this);
     release(env, title);
     release(env, title_color);
-
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
 @end
 
 };
+
