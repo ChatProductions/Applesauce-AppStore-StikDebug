@@ -14,7 +14,7 @@ use crate::objc::{
     autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
     release, retain, todo_objc_setter, ClassExports, HostObject, NSZonePtr,
 };
-use crate::{log, Environment}; // Добавлен импорт log
+use crate::{log, Environment};
 use std::collections::HashMap;
 
 type UIButtonType = NSInteger;
@@ -403,8 +403,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)title { { env.objc.borrow::<UIButtonContentHostObject>(this).title } }
-- (id)titleColor { { env.objc.borrow::<UIButtonContentHostObject>(this).title_color } }
+- (id)title { env.objc.borrow::<UIButtonContentHostObject>(this).title }
+- (id)titleColor { env.objc.borrow::<UIButtonContentHostObject>(this).title_color }
 
 - (id)description {
     let title = env.objc.borrow::<UIButtonContentHostObject>(this).title;
