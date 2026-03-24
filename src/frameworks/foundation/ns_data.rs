@@ -252,4 +252,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-- (id)initWithCapacity:(NSUInteger)
+- (id)initWithCapacity:(NSUInteger)capacity {
+    let _ = capacity;
+    msg![env; this init]
+}
+
+- (id)initWithLength:(NSUInteger)length {
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    assert!(host
