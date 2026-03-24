@@ -808,8 +808,8 @@ impl Dyld {
             }
         }
 
-        log_warn!("Unimplemented function: {}", symbol);
-return 0;
+        println!("Unimplemented function: {}", symbol);
+return None;
     }
 
     /// Creates a guest function that will call a host function with the name
