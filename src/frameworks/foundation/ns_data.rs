@@ -37,23 +37,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes
-                   length:(NSUInteger)length {
++ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithBytesNoCopy:bytes length:length];
     autorelease(env, new)
 }
 
-+ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes
-                   length:(NSUInteger)length
-             freeWhenDone:(bool)free_when_done {
++ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithBytesNoCopy:bytes length:length freeWhenDone:free_when_done];
     autorelease(env, new)
 }
 
-+ (id)dataWithBytes:(ConstVoidPtr)bytes
-             length:(NSUInteger)length {
++ (id)dataWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithBytes:bytes length:length];
     autorelease(env, new)
@@ -91,14 +87,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
-                   length:(NSUInteger)length {
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
     msg![env; this initWithBytesNoCopy:bytes length:length freeWhenDone:true]
 }
 
-- (id)initWithBytesNoCopy:(MutVoidPtr)bytes
-                   length:(NSUInteger)length
-             freeWhenDone:(bool)free_when_done {
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     assert!(host_object.bytes.is_null() && host_object.length == 0);
     host_object.bytes = bytes;
@@ -107,8 +100,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)initWithBytes:(ConstVoidPtr)bytes
-              length:(NSUInteger)length {
+- (id)initWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     assert!(host_object.bytes.is_null() && host_object.length == 0);
     let alloc = env.mem.alloc(length);
@@ -125,8 +117,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithContentsOfURL:(id)url {
-    let path: id = msg![env; url absoluteString];
-    let path = to_rust_string(env, path);
+    let url_str_id: id = msg![env; url absoluteString];
+    let path = to_rust_string(env, url_str_id);
     log!("TODO: NSData initWithContentsOfURL for {:?}", path);
     nil
 }
@@ -141,9 +133,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path == nil {
         return nil;
     }
-    let path = to_rust_string(env, path);
-    log_dbg!("[(NSData*){:?} initWithContentsOfFile:{:?}]", this, path);
-    let Ok(bytes) = env.fs.read(GuestPath::new(&path)) else {
+    let path_str = to_rust_string(env, path);
+    let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
         release(env, this);
         return nil;
     };
@@ -162,7 +153,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithContentsOfFile:path]
 }
 
-- (bool)writeToFile:(id)path atomically:(bool)_use_aux_file {
+- (bool)writeToFile:(id)path atomically:(bool)use_aux_file {
+    let _ = use_aux_file;
     let file = to_rust_string(env, path);
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     let slice = if host_object.length == 0 {
@@ -181,7 +173,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
-- (id)copyWithZone:(NSZonePtr)_zone {
+- (id)copyWithZone:(NSZonePtr)zone {
+    let _ = zone;
     retain(env, this)
 }
 
@@ -190,16 +183,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     decode_current_data(env, coder, true)
 }
 
-- (id)mutableCopyWithZone:(NSZonePtr)_zone {
+- (id)mutableCopyWithZone:(NSZonePtr)zone {
+    let _ = zone;
     let bytes: ConstVoidPtr = msg![env; this bytes];
     let length: NSUInteger = msg![env; this length];
+    let mut_bytes = bytes.cast_mut();
     let new = msg_class![env; NSMutableData alloc];
-    msg![env; new initWithBytes:(bytes.cast_mut()) length:length]
+    msg![env; new initWithBytes:mut_bytes length:length]
 }
 
 - (ConstVoidPtr)bytes {
     env.objc.borrow::<NSDataHostObject>(this).bytes.cast_const()
 }
+
 - (NSUInteger)length {
     env.objc.borrow::<NSDataHostObject>(this).length
 }
@@ -211,8 +207,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())getBytes:(MutPtr<u8>)buffer length:(NSUInteger)length {
-    let length = length.min(env.objc.borrow::<NSDataHostObject>(this).length);
-    let range = NSRange { location: 0, length };
+    let own_length = env.objc.borrow::<NSDataHostObject>(this).length;
+    let final_length = length.min(own_length);
+    let range = NSRange { location: 0, length: final_length };
     msg![env; this getBytes:buffer range:range]
 }
 
@@ -220,7 +217,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if range.length == 0 { return; }
     let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
     assert!(range.location < length && range.location + range.length <= length);
-    env.mem.memmove(buffer.cast(), bytes.cast_const() + range.location, range.length);
+    let src = bytes.cast_const() + range.location;
+    env.mem.memmove(buffer.cast(), src, range.length);
 }
 
 - (())getBytes:(MutPtr<u8>)buffer {
@@ -248,7 +246,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-- (id)initWithCapacity:(NSUInteger)_capacity {
+- (id)initWithCapacity:(NSUInteger)capacity {
+    let _ = capacity;
     msg![env; this init]
 }
 
@@ -261,7 +260,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)copyWithZone:(NSZonePtr)_zone {
+- (id)copyWithZone:(NSZonePtr)zone {
+    let _ = zone;
     let bytes: ConstVoidPtr = msg![env; this bytes];
     let length: NSUInteger = msg![env; this length];
     let new = msg_class![env; NSData alloc];
@@ -280,14 +280,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())appendData:(id)other_data {
     let other_bytes: ConstVoidPtr = msg![env; other_data bytes];
     let other_length: NSUInteger = msg![env; other_data length];
-    msg![env; this appendBytes:other_bytes.cast() length:other_length]
+    let casted_bytes = other_bytes.cast();
+    msg![env; this appendBytes:casted_bytes length:other_length]
 }
 
 - (())appendBytes:(ConstPtr<u8>)append_bytes length:(NSUInteger)append_length {
     let old_len = env.objc.borrow::<NSDataHostObject>(this).length;
     () = msg![env; this increaseLengthBy:append_length];
     let &NSDataHostObject { bytes, .. } = env.objc.borrow(this);
-    env.mem.memmove(bytes + old_len, append_bytes.cast(), append_length);
+    let dest = bytes + old_len;
+    env.mem.memmove(dest, append_bytes.cast(), append_length);
 }
 
 - (MutVoidPtr)mutableBytes {
@@ -299,7 +301,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &NSDataHostObject {bytes, length, .. } = env.objc.borrow(this);
     let new_bytes = env.mem.realloc(bytes, new_length);
     if new_length > length {
-        env.mem.bytes_at_mut(new_bytes.cast(), new_length)[length as usize..].fill(0);
+        let slice = env.mem.bytes_at_mut(new_bytes.cast(), new_length);
+        slice[length as usize..].fill(0);
     }
     let host = env.objc.borrow_mut::<NSDataHostObject>(this);
     host.length = new_length;
@@ -315,4 +318,3 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     if borrowed_data.length == 0 { return &[]; }
     env.mem.bytes_at(borrowed_data.bytes.cast(), borrowed_data.length)
 }
-
