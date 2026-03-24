@@ -1,7 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSData` and `NSMutableData`.
 
@@ -20,6 +20,7 @@ pub(super) struct NSDataHostObject {
     pub(super) length: NSUInteger,
     free_when_done: bool,
 }
+
 impl HostObject for NSDataHostObject {}
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -216,7 +217,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())getBytes:(MutPtr<u8>)buffer range:(NSRange)range {
-    if range.length == 0 { return; }
+    if range.length == 0 {
+        return;
+    }
     let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
     assert!(range.location < length && range.location + range.length <= length);
     let src: ConstVoidPtr = bytes.cast_const() + range.location;
@@ -249,78 +252,4 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-- (id)initWithCapacity:(NSUInteger)capacity {
-    let _ = capacity;
-    msg![env; this init]
-}
-
-- (id)initWithLength:(NSUInteger)length {
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
-    let alloc = env.mem.calloc(length);
-    host_object.bytes = alloc;
-    host_object.length = length;
-    this
-}
-
-- (id)copyWithZone:(NSZonePtr)zone {
-    let _ = zone;
-    let bytes: ConstVoidPtr = msg![env; this bytes];
-    let length: NSUInteger = msg![env; this length];
-    let new = msg_class![env; NSData alloc];
-    msg![env; new initWithBytes:bytes length:length]
-}
-
-- (())increaseLengthBy:(NSUInteger)add_len {
-    let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
-    let new_len = length + add_len;
-    let new_bytes = env.mem.realloc(bytes, new_len);
-    let host = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host.length = new_len;
-    host.bytes = new_bytes;
-}
-
-- (())appendData:(id)other_data {
-    let other_bytes: ConstVoidPtr = msg![env; other_data bytes];
-    let other_length: NSUInteger = msg![env; other_data length];
-    let casted_bytes: ConstPtr<u8> = other_bytes.cast();
-    msg![env; this appendBytes:casted_bytes length:other_length]
-}
-
-- (())appendBytes:(ConstPtr<u8>)append_bytes length:(NSUInteger)append_length {
-    let old_len = env.objc.borrow::<NSDataHostObject>(this).length;
-    () = msg![env; this increaseLengthBy:append_length];
-    let &NSDataHostObject { bytes, .. } = env.objc.borrow(this);
-    let dest: MutVoidPtr = bytes + old_len;
-    let src: ConstVoidPtr = append_bytes.cast();
-    env.mem.memmove(dest, src, append_length);
-}
-
-- (MutVoidPtr)mutableBytes {
-    let host_obj = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host_obj.bytes
-}
-
-- (())setLength:(NSUInteger)new_length {
-    let &NSDataHostObject {bytes, length, .. } = env.objc.borrow(this);
-    let new_bytes = env.mem.realloc(bytes, new_length);
-    if new_length > length {
-        let casted_ptr: MutPtr<u8> = new_bytes.cast();
-        let slice = env.mem.bytes_at_mut(casted_ptr, new_length);
-        slice[length as usize..].fill(0);
-    }
-    let host = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host.length = new_length;
-    host.bytes = new_bytes;
-}
-
-@end
-
-};
-
-pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
-    let borrowed_data = env.objc.borrow::<NSDataHostObject>(data);
-    if borrowed_data.length == 0 { return &[]; }
-    let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
-    env.mem.bytes_at(casted_ptr, borrowed_data.length)
-}
+- (id)initWithCapacity:(NSUInteger)
