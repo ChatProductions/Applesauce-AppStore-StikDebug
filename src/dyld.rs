@@ -808,8 +808,7 @@ impl Dyld {
             }
         }
 
-        println!("Unimplemented function: {}", symbol);
-None
+        panic!("Call to unimplemented function {symbol}");
     }
 
     /// Creates a guest function that will call a host function with the name
@@ -867,4 +866,4 @@ None
 
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
-        }
+    }
