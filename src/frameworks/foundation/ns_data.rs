@@ -1,7 +1,9 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//! `NSData` and `NSMutableData`.
 
 use super::ns_string::to_rust_string;
 use super::{NSRange, NSUInteger};
@@ -9,8 +11,7 @@ use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
 
@@ -30,12 +31,48 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)zone {
     let _ = zone;
-    let host = Box::new(NSDataHostObject {
+    let host_object = Box::new(NSDataHostObject {
         bytes: Ptr::null(),
         length: 0,
         free_when_done: true,
     });
-    env.objc.alloc_object(this, host, &mut env.mem)
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
++ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithBytesNoCopy:bytes length:length];
+    autorelease(env, new)
+}
+
++ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithBytesNoCopy:bytes length:length freeWhenDone:free_when_done];
+    autorelease(env, new)
+}
+
++ (id)dataWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithBytes:bytes length:length];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfFile:(id)path {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfFile:path];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfMappedFile:(id)path {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfMappedFile:path];
+    autorelease(env, new)
+}
+
++ (id)dataWithContentsOfURL:(id)url {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url];
+    autorelease(env, new)
 }
 
 + (id)dataWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
@@ -46,91 +83,105 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)dataWithData:(id)data {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithData:data];
+    autorelease(env, new)
+}
+
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
+    msg![env; this initWithBytesNoCopy:bytes length:length freeWhenDone:true]
+}
+
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    assert!(host_object.bytes.is_null() && host_object.length == 0);
+    host_object.bytes = bytes;
+    host_object.length = length;
+    host_object.free_when_done = free_when_done;
+    this
+}
+
+- (id)initWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    assert!(host_object.bytes.is_null() && host_object.length == 0);
+    let alloc = env.mem.alloc(length);
+    env.mem.memmove(alloc, bytes, length);
+    host_object.bytes = alloc;
+    host_object.length = length;
+    this
+}
+
+- (id)initWithData:(id)data {
+    let bytes: ConstVoidPtr = msg![env; data bytes];
+    let length: NSUInteger = msg![env; data length];
+    msg![env; this initWithBytes:bytes length:length]
+}
+
 - (id)initWithContentsOfURL:(id)url {
-    let url_str: id = msg![env; url absoluteString];
-    let path = to_rust_string(env, url_str);
-
-    // Простейшая реализация: считаем URL как файл
-    if let Ok(bytes) = env.fs.read(GuestPath::new(&path)) {
-        let size = bytes.len() as u32;
-        let alloc = env.mem.alloc(size);
-
-        let ptr: MutPtr<u8> = alloc.cast();
-        let slice = env.mem.bytes_at_mut(ptr, size);
-        slice.copy_from_slice(&bytes);
-
-        let host = env.objc.borrow_mut::<NSDataHostObject>(this);
-        host.bytes = alloc;
-        host.length = size;
-
-        return this;
-    }
-
+    let url_str_id: id = msg![env; url absoluteString];
+    let path = to_rust_string(env, url_str_id);
+    log!("TODO: NSData initWithContentsOfURL for {:?}", path);
     nil
+}
+
+- (id)initWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
+    let _ = options;
+    let _ = error;
+    msg![env; this initWithContentsOfURL:url]
 }
 
 - (id)initWithContentsOfFile:(id)path {
     if path == nil {
         return nil;
     }
-
-    let path = to_rust_string(env, path);
-
-    let Ok(bytes) = env.fs.read(GuestPath::new(&path)) else {
+    let path_str = to_rust_string(env, path);
+    let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
         release(env, this);
         return nil;
     };
-
-    let size = bytes.len() as u32;
+    let size = bytes.len().try_into().unwrap();
     let alloc = env.mem.alloc(size);
-
-    let ptr: MutPtr<u8> = alloc.cast();
-    let slice = env.mem.bytes_at_mut(ptr, size);
+    let casted_alloc: MutPtr<u8> = alloc.cast();
+    let slice = env.mem.bytes_at_mut(casted_alloc, size);
     slice.copy_from_slice(&bytes);
 
-    let host = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host.bytes = alloc;
-    host.length = size;
-
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    host_object.bytes = alloc;
+    host_object.length = size;
     this
 }
 
-- (ConstVoidPtr)bytes {
-    env.objc.borrow::<NSDataHostObject>(this).bytes.cast_const()
+- (id)initWithContentsOfMappedFile:(id)path {
+    msg![env; this initWithContentsOfFile:path]
 }
 
-- (NSUInteger)length {
-    env.objc.borrow::<NSDataHostObject>(this).length
+- (bool)writeToFile:(id)path atomically:(bool)use_aux_file {
+    let _ = use_aux_file;
+    let file = to_rust_string(env, path);
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    let slice = if host_object.length == 0 {
+        &[]
+    } else {
+        let casted_ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
+        env.mem.bytes_at(casted_ptr, host_object.length)
+    };
+    env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
 
 - (())dealloc {
-    let &NSDataHostObject { bytes, free_when_done, .. } =
-        env.objc.borrow(this);
-
+    let &NSDataHostObject { bytes, free_when_done, .. } = env.objc.borrow(this);
     if !bytes.is_null() && free_when_done {
         env.mem.free(bytes);
     }
-
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
-@end
-
-@implementation NSMutableData: NSData
-
-- (id)initWithLength:(NSUInteger)length {
-    let host = env.objc.borrow_mut::<NSDataHostObject>(this);
-
-    assert!(host.bytes.is_null() && host.length == 0);
-
-    let alloc = env.mem.calloc(length);
-
-    host.bytes = alloc;
-    host.length = length;
-
-    this
+- (id)copyWithZone:(NSZonePtr)zone {
+    let _ = zone;
+    retain(env, this)
 }
 
-@end
-
-};
+- (id)initWithCoder:(id)coder {
+    release(env, this);
+    decode_current_data(env, coder,
