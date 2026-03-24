@@ -14,7 +14,7 @@ use crate::objc::{
     autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
     release, retain, todo_objc_setter, ClassExports, HostObject, NSZonePtr,
 };
-use crate::Environment;
+use crate::{log, Environment}; // Добавлен импорт log
 use std::collections::HashMap;
 
 type UIButtonType = NSInteger;
@@ -271,7 +271,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, shows);
 }
 
-// --- Исправление вылета: методы выравнивания контента ---
 - (())setContentVerticalAlignment:(NSInteger)alignment {
     log!("STUB: [UIButton setContentVerticalAlignment:{}]", alignment);
 }
@@ -279,7 +278,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setContentHorizontalAlignment:(NSInteger)alignment {
     log!("STUB: [UIButton setContentHorizontalAlignment:{}]", alignment);
 }
-// -------------------------------------------------------
 
 - (())setFont:(id)font { 
     let label = env.objc.borrow_mut::<UIButtonHostObject>(this).title_label;
@@ -321,7 +319,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setBackgroundImage:(id)image forState:(UIControlState)state {
-    retain(env,image);
+    retain(env, image);
     let host_obj = env.objc.borrow_mut::<UIButtonHostObject>(this);
     if let Some(old) = host_obj.background_images_for_states.insert(state, image) {
         release(env, old);
@@ -405,8 +403,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)title { env.objc.borrow::<UIButtonContentHostObject>(this).title }
-- (id)titleColor { env.objc.borrow::<UIButtonContentHostObject>(this).title_color }
+- (id)title { { env.objc.borrow::<UIButtonContentHostObject>(this).title } }
+- (id)titleColor { { env.objc.borrow::<UIButtonContentHostObject>(this).title_color } }
 
 - (id)description {
     let title = env.objc.borrow::<UIButtonContentHostObject>(this).title;
@@ -426,4 +424,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
