@@ -11,7 +11,7 @@ use super::posix_io::{
 };
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::fs::GuestPath;
-use crate::libc::errno::{set_errno, EBADF};
+use crate::libc::errno::set_errno;
 use crate::libc::string::strlen;
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
@@ -42,27 +42,20 @@ unsafe impl SafeRead for FILE {}
 pub struct State {
     file_streams: HashMap<MutPtr<FILE>, FILEHostObject>,
 }
-
 impl State {
     fn get_mut(env: &mut Environment) -> &mut Self {
         &mut env.libc_state.stdio
     }
-
-    /// Безопасная попытка получить объект хоста для FILE*
-    fn get_file_host_obj_safe(
+    fn get_file_host_obj_mut(
         &mut self,
         mem: &mut Mem,
         file_ptr: MutPtr<FILE>,
-    ) -> Option<&mut FILEHostObject> {
-        if file_ptr.is_null() {
-            return None;
-        }
-
+    ) -> &mut FILEHostObject {
         let FILE { fd } = mem.read(file_ptr);
         if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO)
             && !self.file_streams.contains_key(&file_ptr)
         {
-            // Ленивая инициализация стандартных потоков
+            // Special case, need to do a lazy creation of host object
             self.file_streams.insert(
                 file_ptr,
                 FILEHostObject {
@@ -70,7 +63,7 @@ impl State {
                 },
             );
         }
-        self.file_streams.get_mut(&file_ptr)
+        self.file_streams.get_mut(&file_ptr).unwrap()
     }
 }
 
@@ -78,6 +71,12 @@ impl State {
 type fpos_t = off_t;
 
 fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> MutPtr<FILE> {
+    // Some testing on macOS suggests Apple's implementation will just ignore
+    // flags it doesn't know about, and unfortunately real-world apps seem to
+    // rely on this, e.g. using "wt" to mean open for writing in text mode,
+    // even though that's not a real flag. The one thing that is required is for
+    // a known basic mode (r/w/a) to come first.
+
     let mode = env.mem.cstr_at(mode);
     let [basic_mode @ (b'r' | b'w' | b'a'), flags @ ..] = mode else {
         panic!(
@@ -88,6 +87,7 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
     let mut plus = false;
     for &flag in flags {
         match flag {
+            // binary flag does nothing on UNIX
             b'b' => (),
             b'+' => plus = true,
             other => {
@@ -129,50 +129,45 @@ fn fread(
     n_items: GuestUSize,
     file_ptr: MutPtr<FILE>,
 ) -> GuestUSize {
+    // TODO: handle errno properly
     set_errno(env, 0);
 
     if item_size == 0 {
         return 0;
     }
 
-    let total_size_orig = item_size.checked_mul(n_items).unwrap();
-    let mut total_size = total_size_orig;
-
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return 0;
-    }
-    
-    let FILEHostObject { ref mut pushbacks } = host_obj.unwrap();
-    
+    // Yes, the item_size/n_items split doesn't mean anything. The C standard
+    // really does expect you to just multiply and divide like this, with no
+    // attempt being made to ensure a whole number are read or written!
+    let mut total_size = item_size.checked_mul(n_items).unwrap();
+    let FILEHostObject { ref mut pushbacks } = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr);
     let already_read = if !pushbacks.is_empty() {
         let to_copy = pushbacks.len().min(total_size as usize);
         let offset = pushbacks.len() - to_copy;
 
-        let mut data = pushbacks[offset..].to_vec();
-        data.reverse();
-        
-        let to_copy_guest: GuestUSize = to_copy.try_into().unwrap();
+        _ = &pushbacks[offset..].reverse();
+        let to_copy: GuestUSize = to_copy.try_into().unwrap();
         env.mem
-            .bytes_at_mut(buffer.cast(), to_copy_guest)
-            .copy_from_slice(&data);
+            .bytes_at_mut(buffer.cast(), to_copy)
+            .copy_from_slice(&pushbacks[offset..]);
         pushbacks.truncate(offset);
 
-        if total_size == to_copy_guest {
-            return n_items;
+        if total_size == to_copy {
+            return total_size;
         }
-        total_size -= to_copy_guest;
+        total_size -= to_copy;
         let ptr: MutPtr<u8> = buffer.cast();
-        buffer = (ptr + to_copy_guest).cast();
-        to_copy_guest
+        buffer = (ptr + to_copy).cast();
+        to_copy
     } else {
         0
     };
-
     let FILE { fd } = env.mem.read(file_ptr);
     match posix_io::read(env, fd, buffer, total_size) {
+        // TODO: ferror() support.
         -1 => already_read / item_size,
         bytes_read => {
             let bytes_read: GuestUSize = bytes_read.try_into().unwrap();
@@ -182,54 +177,55 @@ fn fread(
 }
 
 fn fgetc(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
 
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return EOF;
-    }
-
     let FILE { fd } = env.mem.read(file_ptr);
-    let FILEHostObject { ref mut pushbacks } = host_obj.unwrap();
-    
+    let FILEHostObject { ref mut pushbacks } = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr);
     if let Some(pushback) = pushbacks.pop() {
+        let new_offset = posix_io::lseek(env, fd, 1, SEEK_CUR);
+        assert!(new_offset > 0); // TODO: handle error
         return pushback.into();
     }
 
     let buffer = env.mem.alloc(1);
+
     match posix_io::read(env, fd, buffer, 1) {
         -1 => EOF,
         bytes_read => {
+            let bytes_read: GuestUSize = bytes_read.try_into().unwrap();
             if bytes_read < 1 {
                 EOF
             } else {
-                let val = env.mem.read(buffer.cast::<u8>());
-                val as i32
+                let buf: MutPtr<i32> = buffer.cast();
+                env.mem.read(buf)
             }
         }
     }
 }
 
 fn getc(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
+    // `getc` is essentially identical to the `fgetc`
     fgetc(env, file_ptr)
 }
 
 fn ungetc(env: &mut Environment, c: i32, file_ptr: MutPtr<FILE>) -> i32 {
-    if c == EOF { return EOF; }
-    
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return EOF;
-    }
-
+    assert!(c != EOF); // TODO
     let FILE { fd } = env.mem.read(file_ptr);
-    // Попытка очистить EOF через lseek
-    _ = posix_io::lseek(env, fd, 0, SEEK_CUR);
-
-    let FILEHostObject { ref mut pushbacks } = host_obj.unwrap();
-    pushbacks.push(c as u8);
+    let curr_offset = posix_io::lseek(env, fd, 0, SEEK_CUR);
+    assert!(curr_offset > 0);
+    // Note: successful seeking clears EOF indicator
+    let new_offset = posix_io::lseek(env, fd, -1, SEEK_CUR);
+    assert!(new_offset >= 0); // TODO: handle error
+    let FILEHostObject { ref mut pushbacks } = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr);
+    pushbacks.push(c.try_into().unwrap());
+    log_dbg!("ungetc pushbacks: {:?}", pushbacks);
     c
 }
 
@@ -239,16 +235,14 @@ fn fgets(
     size: GuestUSize,
     stream: MutPtr<FILE>,
 ) -> MutPtr<u8> {
-    if size == 0 { return Ptr::null(); }
     let mut read = 0;
     let mut tmp = str;
-    while read < (size - 1) {
-        let c = fgetc(env, stream);
-        if c == EOF { break; }
-        env.mem.write(tmp, c as u8);
+    while read < size && fread(env, tmp.cast(), 1, 1, stream) != 0 {
         tmp += 1;
         read += 1;
-        if c == b'\n' as i32 { break; }
+        if env.mem.read(tmp - 1) == b'\n' {
+            break;
+        }
     }
 
     if read == 0 {
@@ -260,23 +254,31 @@ fn fgets(
 }
 
 fn fputs(env: &mut Environment, str: ConstPtr<u8>, stream: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
+
+    // TODO: this function doesn't set errno or return EOF yet
     let str_len = strlen(env, str);
-    if fwrite(env, str.cast(), str_len, 1, stream) == 1 {
-        0
-    } else {
-        EOF
-    }
+    fwrite(env, str.cast(), str_len, 1, stream)
+        .try_into()
+        .unwrap()
 }
 
 fn fputc(env: &mut Environment, c: i32, stream: MutPtr<FILE>) -> i32 {
-    let val = c as u8;
-    let ptr = env.mem.alloc_and_write(val);
-    let res = fwrite(env, ptr.cast_const().cast(), 1, 1, stream);
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    let ptr: MutPtr<u8> = env.mem.alloc_and_write(c.try_into().unwrap());
+    let res = fwrite(env, ptr.cast_const().cast(), 1, 1, stream)
+        .try_into()
+        .unwrap();
     env.mem.free(ptr.cast());
-    if res == 1 { c } else { EOF }
+    res
 }
 
+// From man page,
+// `The putc() macro acts essentially identically to fputc(),
+// but is a macro that expands in-line.`
 fn putc(env: &mut Environment, c: i32, stream: MutPtr<FILE>) -> i32 {
     fputc(env, c, stream)
 }
@@ -288,40 +290,43 @@ fn fwrite(
     n_items: GuestUSize,
     file_ptr: MutPtr<FILE>,
 ) -> GuestUSize {
+    // TODO: handle errno properly
     set_errno(env, 0);
 
     if item_size == 0 || buffer.is_null() {
         return 0;
     }
 
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return 0;
-    }
-
     let FILE { fd } = env.mem.read(file_ptr);
+
     let total_size = item_size.checked_mul(n_items).unwrap();
 
+    // TODO: Refactor, use traits instead of this hack
     match fd {
         STDOUT_FILENO => {
             let buffer_slice = env.mem.bytes_at(buffer.cast(), total_size);
             match std::io::stdout().write(buffer_slice) {
-                Ok(bytes_written) => (bytes_written as GuestUSize) / item_size,
-                Err(_) => 0,
+                Ok(bytes_written) => (bytes_written / (item_size as usize)) as GuestUSize,
+                Err(_err) => 0,
             }
         }
         STDERR_FILENO => {
             let buffer_slice = env.mem.bytes_at(buffer.cast(), total_size);
             match std::io::stderr().write(buffer_slice) {
-                Ok(bytes_written) => (bytes_written as GuestUSize) / item_size,
-                Err(_) => 0,
+                Ok(bytes_written) => (bytes_written / (item_size as usize)) as GuestUSize,
+                Err(_err) => 0,
             }
         }
         _ => {
+            // The comment about the item_size/n_items split in fread() applies
+            // here too.
             match posix_io::write(env, fd, buffer, total_size) {
+                // TODO: ferror() support.
                 -1 => 0,
-                bytes_written => (bytes_written as GuestUSize) / item_size,
+                bytes_written => {
+                    let bytes_written: GuestUSize = bytes_written.try_into().unwrap();
+                    bytes_written / item_size
+                }
             }
         }
     }
@@ -330,140 +335,212 @@ fn fwrite(
 const SEEK_SET: i32 = posix_io::SEEK_SET;
 const SEEK_CUR: i32 = posix_io::SEEK_CUR;
 const SEEK_END: i32 = posix_io::SEEK_END;
-
 fn fseek(env: &mut Environment, file_ptr: MutPtr<FILE>, offset: i32, whence: i32) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
 
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return -1;
-    }
-
     let FILE { fd } = env.mem.read(file_ptr);
+
+    assert!([SEEK_SET, SEEK_CUR, SEEK_END].contains(&whence));
     match posix_io::lseek(env, fd, offset.into(), whence) {
         -1 => -1,
-        _ => {
-            host_obj.unwrap().pushbacks.clear();
+        _cur_pos => {
+            let FILEHostObject { ref mut pushbacks } = env
+                .libc_state
+                .stdio
+                .get_file_host_obj_mut(&mut env.mem, file_ptr);
+            pushbacks.clear();
             0
         }
     }
 }
 
 fn ftell(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
+
     let FILE { fd } = env.mem.read(file_ptr);
+
     match posix_io::lseek(env, fd, 0, posix_io::SEEK_CUR) {
         -1 => -1,
-        cur_pos => cur_pos as i32,
+        // TODO: What's the correct behaviour if the position is beyond 2GiB?
+        cur_pos => cur_pos.try_into().unwrap(),
     }
 }
 
 fn rewind(env: &mut Environment, file_ptr: MutPtr<FILE>) {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    // Note: this call will clean pushbacks as well
     fseek(env, file_ptr, 0, SEEK_SET);
 }
 
 fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
 
     if file_ptr.is_null() {
+        // According to the docs, this should segfault.
+        // But as tested on iPhone Simulator, it doesn't
+        log!("fclose(NULL) => EOF");
         return EOF;
     }
 
-    let fd = {
-        let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-        if host_obj.is_none() {
-            set_errno(env, EBADF);
-            return EOF;
-        }
-        env.mem.read(file_ptr).fd
-    };
+    // This is needed in order to force lazy instantiation
+    // of stdin-like host object.
+    // Why the app may need to close stdin?
+    // The answer is left as an exercise for the reader.
+    _ = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr);
 
+    let FILE { fd } = env.mem.read(file_ptr);
     if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
-        log!("Warning! fclose({:?}) called for standard descriptor {}.", file_ptr, fd);
+        log!(
+            "Warning! fclose({:?}) is called for standard descriptor {}.",
+            file_ptr,
+            fd
+        );
     }
+    assert!(State::get_mut(env).file_streams.remove(&file_ptr).is_some());
 
-    State::get_mut(env).file_streams.remove(&file_ptr);
     env.mem.free(file_ptr.cast());
 
     match posix_io::close(env, fd) {
         0 => 0,
-        _ => EOF,
+        -1 => EOF,
+        _ => unreachable!(),
     }
 }
 
 fn ferror(env: &mut Environment, _file_ptr: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
+
+    log!("TODO: ferror() support.");
     0
 }
 
 fn fsetpos(env: &mut Environment, file_ptr: MutPtr<FILE>, pos: ConstPtr<fpos_t>) -> i32 {
+    // TODO: handle errno properly
     set_errno(env, 0);
-    let host_obj = env.libc_state.stdio.get_file_host_obj_safe(&mut env.mem, file_ptr);
-    if host_obj.is_none() {
-        set_errno(env, EBADF);
-        return -1;
-    }
 
     let FILE { fd } = env.mem.read(file_ptr);
-    let offset = env.mem.read(pos);
-    if posix_io::lseek(env, fd, offset, SEEK_SET) == -1 {
+
+    let res = posix_io::lseek(env, fd, env.mem.read(pos), SEEK_SET);
+    if res == -1 {
         -1
     } else {
-        host_obj.unwrap().pushbacks.clear();
+        let FILEHostObject { ref mut pushbacks } = env
+            .libc_state
+            .stdio
+            .get_file_host_obj_mut(&mut env.mem, file_ptr);
+        pushbacks.clear();
         0
     }
 }
 
 fn fgetpos(env: &mut Environment, file_ptr: MutPtr<FILE>, pos: MutPtr<fpos_t>) -> i32 {
-    let res = ftell(env, file_ptr);
-    if res == -1 { return -1; }
-    env.mem.write(pos, res as fpos_t);
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    let FILE { fd } = env.mem.read(file_ptr);
+
+    let res = posix_io::lseek(env, fd, 0, posix_io::SEEK_CUR);
+    if res == -1 {
+        return -1;
+    }
+    env.mem.write(pos, res);
     0
 }
 
 fn feof(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
     let FILE { fd } = env.mem.read(file_ptr);
     posix_io::eof(env, fd)
 }
 
 fn clearerr(env: &mut Environment, file_ptr: MutPtr<FILE>) {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
     let FILE { fd } = env.mem.read(file_ptr);
     posix_io::clearerr(env, fd)
 }
 
 fn fflush(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
-    if file_ptr.is_null() { return 0; }
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
     let FILE { fd } = env.mem.read(file_ptr);
     posix_io::fflush(env, fd)
 }
 
 fn puts(env: &mut Environment, s: ConstPtr<u8>) -> i32 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
     let _ = std::io::stdout().write_all(env.mem.cstr_at(s));
     let _ = std::io::stdout().write_all(b"\n");
+    // TODO: I/O error handling
+    // TODO: is this the return value iPhone OS uses?
     0
 }
 
 fn putchar(env: &mut Environment, c: u8) -> i32 {
-    let _ = std::io::stdout().write(&[c]);
-    c as i32
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    let _ = std::io::stdout().write(std::slice::from_ref(&c));
+    0
 }
 
 fn remove(env: &mut Environment, path: ConstPtr<u8>) -> i32 {
-    if Ptr::is_null(path) { return -1; }
-    match env.fs.remove(GuestPath::new(&env.mem.cstr_at_utf8(path).unwrap())) {
-        Ok(()) => 0,
-        Err(_) => -1,
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    if Ptr::is_null(path) {
+        // TODO: set errno
+        log!("remove({:?}) => -1, attempted to remove null", path);
+        return -1;
+    }
+
+    match env
+        .fs
+        .remove(GuestPath::new(&env.mem.cstr_at_utf8(path).unwrap()))
+    {
+        Ok(()) => {
+            log_dbg!("remove({:?}) => 0", path);
+            0
+        }
+        Err(_) => {
+            // TODO: set errno
+            log!("Warning: remove({:?}) failed, returning -1", path);
+            -1
+        }
     }
 }
 
-fn setbuf(env: &mut Environment, _stream: MutPtr<FILE>, _buf: ConstPtr<u8>) {
-    log!("Warning: ignoring setbuf()");
+fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    assert!(buf.is_null());
+    log!(
+        "Warning: ignoring a setbuf() for {:?} with NULL (unbuffered)",
+        stream
+    );
 }
 
+// POSIX-specific functions
+
 fn fileno(env: &mut Environment, file_ptr: MutPtr<FILE>) -> posix_io::FileDescriptor {
-    if file_ptr.is_null() { return -1; }
-    env.mem.read(file_ptr).fd
+    let FILE { fd } = env.mem.read(file_ptr);
+    fd
 }
 
 pub const CONSTANTS: ConstantExports = &[
@@ -471,6 +548,7 @@ pub const CONSTANTS: ConstantExports = &[
         "___stdinp",
         HostConstant::Custom(|env| -> ConstVoidPtr {
             let ptr = env.mem.alloc_and_write(FILE { fd: STDIN_FILENO });
+            // Note: Host object would be created lazily
             env.mem.alloc_and_write(ptr).cast().cast_const()
         }),
     ),
@@ -478,6 +556,7 @@ pub const CONSTANTS: ConstantExports = &[
         "___stdoutp",
         HostConstant::Custom(|env| -> ConstVoidPtr {
             let ptr = env.mem.alloc_and_write(FILE { fd: STDOUT_FILENO });
+            // Note: Host object would be created lazily
             env.mem.alloc_and_write(ptr).cast().cast_const()
         }),
     ),
@@ -485,12 +564,14 @@ pub const CONSTANTS: ConstantExports = &[
         "___stderrp",
         HostConstant::Custom(|env| -> ConstVoidPtr {
             let ptr = env.mem.alloc_and_write(FILE { fd: STDERR_FILENO });
+            // Note: Host object would be created lazily
             env.mem.alloc_and_write(ptr).cast().cast_const()
         }),
     ),
 ];
 
 pub const FUNCTIONS: FunctionExports = &[
+    // Standard C functions
     export_c_func!(fopen(_, _)),
     export_c_func!(fread(_, _, _, _)),
     export_c_func!(fgetc(_)),
@@ -515,6 +596,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(putchar(_)),
     export_c_func!(remove(_)),
     export_c_func!(setbuf(_, _)),
+    // POSIX-specific functions
     export_c_func!(fileno(_)),
 ];
-
