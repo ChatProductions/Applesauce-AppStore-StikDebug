@@ -809,7 +809,7 @@ impl Dyld {
         }
 
         println!("Unimplemented function: {}", symbol);
-return None;
+None
     }
 
     /// Creates a guest function that will call a host function with the name
