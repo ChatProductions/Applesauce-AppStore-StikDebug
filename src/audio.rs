@@ -80,7 +80,8 @@ impl AudioFile {
     }
 
     pub fn read_from_vec(bytes: Vec<u8>) -> Result<Self, AudioFileOpenError> {
-        // Try hound (WAV) first, but only for supported 8/16-bit integer formats
+        // Try hound (WAV) first, but only for supported
+        // 8/16-bit integer formats
         if let Ok(reader) = hound::WavReader::new(Cursor::new(&bytes)) {
             let spec = reader.spec();
             if (spec.bits_per_sample == 8 || spec.bits_per_sample == 16)
@@ -188,11 +189,9 @@ impl AudioFile {
             channels_per_frame,
             ..
         } = self.audio_description();
-
         if !matches!(format, AudioFormat::LinearPcm { .. }) {
             panic!("{format:?} is a compressed format!");
         }
-
         ((bytes_per_packet / frames_per_packet) / channels_per_frame).into()
     }
 
@@ -307,4 +306,4 @@ impl AudioFile {
             }
         }
     }
-                }
+}
