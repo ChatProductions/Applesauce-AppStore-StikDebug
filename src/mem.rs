@@ -402,7 +402,22 @@ impl Mem {
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count)
         }
-        &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
+        let start = ptr.to_bits() as usize;
+let len = count as usize;
+let bytes = self.bytes_mut();
+
+// Prevent overflow and out‑of‑bounds
+let end = match start.checked_add(len) {
+    Some(end) if end <= bytes.len() => end,
+    _ => panic!(
+        "Invalid memory range: ptr={} count={} bytes_len={}",
+        start,
+        len,
+        bytes.len(),
+    ),
+};
+
+&mut bytes[start..end]
     }
 
     /// Get a pointer for reading an array of `count` elements of type `T`.
