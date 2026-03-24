@@ -79,11 +79,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)dataWithContentsOfURL:(id)url
-                    options:(NSUInteger)options
-                      error:(MutVoidPtr)error {
+                    options:(NSUInteger)_options
+                      error:(MutVoidPtr)_error {
     log!("TODO: ignoring options and error in [NSData dataWithContentsOfURL:options:error:]");
     let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfURL:url options:options error:error];
+    let new: id = msg![env; new initWithContentsOfURL:url options:_options error:_error];
     autorelease(env, new)
 }
 
@@ -140,10 +140,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithContentsOfURL:(id)url
-                    options:(NSUInteger)options
-                      error:(MutVoidPtr)error {
+                    options:(NSUInteger)_options
+                      error:(MutVoidPtr)_error {
     log!("TODO: ignoring options and error in [(NSData*){:?} initWithContentsOfURL:options:error:]", this);
-    // Перенаправляем на существующий метод без опций и ошибок
     msg![env; this initWithContentsOfURL:url]
 }
 
