@@ -78,6 +78,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)dataWithContentsOfURL:(id)url
+                    options:(NSUInteger)options
+                      error:(MutVoidPtr)error {
+    log!("TODO: ignoring options and error in [NSData dataWithContentsOfURL:options:error:]");
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url options:options error:error];
+    autorelease(env, new)
+}
+
 + (id)dataWithData:(id)data {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithData:data];
@@ -128,6 +137,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: ignoring [(NSData*){:?} initWithContentsOfURL:{:?}]", this, path);
     // TODO: actually load data once we have proper network support
     nil
+}
+
+- (id)initWithContentsOfURL:(id)url
+                    options:(NSUInteger)options
+                      error:(MutVoidPtr)error {
+    log!("TODO: ignoring options and error in [(NSData*){:?} initWithContentsOfURL:options:error:]", this);
+    // Перенаправляем на существующий метод без опций и ошибок
+    msg![env; this initWithContentsOfURL:url]
 }
 
 - (id)initWithContentsOfFile:(id)path {
@@ -338,3 +355,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     env.mem
         .bytes_at(borrowed_data.bytes.cast(), borrowed_data.length)
 }
+
