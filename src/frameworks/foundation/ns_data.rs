@@ -28,7 +28,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation NSData: NSObject
 
-+ (id)allocWithZone:(NSZonePtr)_zone {
++ (id)allocWithZone:(NSZonePtr)zone {
+    let _ = zone;
     let host_object = Box::new(NSDataHostObject {
         bytes: Ptr::null(),
         length: 0,
@@ -140,7 +141,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     let size = bytes.len().try_into().unwrap();
     let alloc = env.mem.alloc(size);
-    let slice = env.mem.bytes_at_mut(alloc.cast(), size);
+    let casted_alloc: MutPtr<u8> = alloc.cast();
+    let slice = env.mem.bytes_at_mut(casted_alloc, size);
     slice.copy_from_slice(&bytes);
 
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
@@ -160,7 +162,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let slice = if host_object.length == 0 {
         &[]
     } else {
-        env.mem.bytes_at(host_object.bytes.cast(), host_object.length)
+        let casted_ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
+        env.mem.bytes_at(casted_ptr, host_object.length)
     };
     env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
@@ -187,9 +190,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _ = zone;
     let bytes: ConstVoidPtr = msg![env; this bytes];
     let length: NSUInteger = msg![env; this length];
-    let mut_bytes = bytes.cast_mut();
     let new = msg_class![env; NSMutableData alloc];
-    msg![env; new initWithBytes:mut_bytes length:length]
+    msg![env; new initWithBytes:bytes length:length]
 }
 
 - (ConstVoidPtr)bytes {
@@ -217,13 +219,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     if range.length == 0 { return; }
     let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
     assert!(range.location < length && range.location + range.length <= length);
-    let src = bytes.cast_const() + range.location;
+    let src: ConstVoidPtr = bytes.cast_const() + range.location;
     env.mem.memmove(buffer.cast(), src, range.length);
 }
 
 - (())getBytes:(MutPtr<u8>)buffer {
     let &NSDataHostObject { bytes, length, .. } = env.objc.borrow(this);
-    env.mem.memmove(buffer.cast(), bytes.cast_const(), length);
+    let src: ConstVoidPtr = bytes.cast_const();
+    env.mem.memmove(buffer.cast(), src, length);
 }
 
 @end
@@ -280,7 +283,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())appendData:(id)other_data {
     let other_bytes: ConstVoidPtr = msg![env; other_data bytes];
     let other_length: NSUInteger = msg![env; other_data length];
-    let casted_bytes = other_bytes.cast();
+    let casted_bytes: ConstPtr<u8> = other_bytes.cast();
     msg![env; this appendBytes:casted_bytes length:other_length]
 }
 
@@ -288,8 +291,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let old_len = env.objc.borrow::<NSDataHostObject>(this).length;
     () = msg![env; this increaseLengthBy:append_length];
     let &NSDataHostObject { bytes, .. } = env.objc.borrow(this);
-    let dest = bytes + old_len;
-    env.mem.memmove(dest, append_bytes.cast(), append_length);
+    let dest: MutVoidPtr = bytes + old_len;
+    let src: ConstVoidPtr = append_bytes.cast();
+    env.mem.memmove(dest, src, append_length);
 }
 
 - (MutVoidPtr)mutableBytes {
@@ -301,7 +305,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &NSDataHostObject {bytes, length, .. } = env.objc.borrow(this);
     let new_bytes = env.mem.realloc(bytes, new_length);
     if new_length > length {
-        let slice = env.mem.bytes_at_mut(new_bytes.cast(), new_length);
+        let casted_ptr: MutPtr<u8> = new_bytes.cast();
+        let slice = env.mem.bytes_at_mut(casted_ptr, new_length);
         slice[length as usize..].fill(0);
     }
     let host = env.objc.borrow_mut::<NSDataHostObject>(this);
@@ -316,5 +321,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let borrowed_data = env.objc.borrow::<NSDataHostObject>(data);
     if borrowed_data.length == 0 { return &[]; }
-    env.mem.bytes_at(borrowed_data.bytes.cast(), borrowed_data.length)
+    let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
+    env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
