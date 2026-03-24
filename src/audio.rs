@@ -69,7 +69,8 @@ impl AudioFile {
             Ok(audio_file)
         } else {
             log!(
-                "Could not decode audio file at path {:?}, likely an unimplemented file format.",
+                "Could not decode audio file at path {:?}, likely an \
+                unimplemented file format.",
                 path.as_ref()
             );
             Err(AudioFileOpenError::FileReadError)
@@ -77,7 +78,8 @@ impl AudioFile {
     }
 
     pub fn read_from_vec(bytes: Vec<u8>) -> Result<Self, AudioFileOpenError> {
-        // Try hound (WAV) first, but only for supported 8/16-bit integer formats
+        // Try hound (WAV) first, but only for supported 8/16-bit 
+        // integer formats
         if let Ok(reader) = hound::WavReader::new(Cursor::new(&bytes)) {
             let spec = reader.spec();
             if (spec.bits_per_sample == 8 || spec.bits_per_sample == 16) 
