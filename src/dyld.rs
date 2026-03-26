@@ -47,8 +47,7 @@ pub use dylib_list::DYLIB_LIST;
 ///     constant_exports: &[qux::CONSTANTS],
 ///     function_exports: &[qux::FUNCTIONS, baz::FUNCTIONS],
 /// };
-/// ```
-///
+/// ```///
 /// The `path` should be the canonical notional filesystem path that the library
 /// is referenced by on the real OS, for example `"/usr/lib/libobjc.A.dylib"`
 /// or `"/System/Library/Frameworks/Foundation.framework/Foundation"`. For
@@ -97,8 +96,7 @@ pub type FunctionExports = &'static [(&'static str, HostFunction)];
 
 /// Macro for exporting a function with C-style name mangling. See
 /// [FunctionExports].
-///
-/// ```ignore
+////// ```ignore
 /// export_c_func!(NSFoo(_, _))
 /// ```
 ///
@@ -147,8 +145,7 @@ pub enum HostConstant {
 
 /// Type for lists of constants exported by host implementations of  dynamic
 /// libraries (usually frameworks).
-///
-/// Each module that wants to expose functions to guest code should export a
+////// Each module that wants to expose functions to guest code should export a
 /// constant using this type, e.g.:
 ///
 /// ```ignore
@@ -197,8 +194,7 @@ fn search_lists<T>(
 }
 
 fn encode_a32_svc(imm: u32) -> u32 {
-    assert!(imm & 0xff000000 == 0);
-    imm | 0xef000000
+    assert!(imm & 0xff000000 == 0);    imm | 0xef000000
 }
 fn encode_a32_ret() -> u32 {
     0xe12fff1e
@@ -247,8 +243,7 @@ impl Dyld {
     /// We reserve this SVC ID for lazy linking and returning right after.
     /// It is also a mask for the linked functions to indicate that an
     /// additional return instruction needs to be manually executed after
-    /// handling the SVC.
-    pub const SVC_LAZY_LINK_RET_FLAG: u32 = 0x800000;
+    /// handling the SVC.    pub const SVC_LAZY_LINK_RET_FLAG: u32 = 0x800000;
 
     const SYMBOL_STUB1_INSTRUCTIONS: [u32; 1] = [0xe59ff000]; // mask this with lowest 12 bits to restore instructions
     const SYMBOL_STUB_INSTRUCTIONS: [u32; 2] = [0xe59fc000, 0xe59cf000];
@@ -298,7 +293,6 @@ impl Dyld {
 
         ns_string::register_constant_strings(&bins[0], mem, objc);
     }
-
     /// Dumps all lazy symbols (functions) referenced by the binary
     /// as JSON to stdout.
     ///
@@ -347,8 +341,7 @@ impl Dyld {
             }
             for dylib in bins.iter() {
                 if dylib.exported_symbols.contains_key(symbol) {
-                    writeln!(
-                        file,
+                    writeln!(                        file,
                         "        {{ \"symbol\": \"{}\", \"linked_to\": \"dylib\", \"dylib\": \"{}\"}}{}",
                         symbol, dylib.name, comma
                     )?;
@@ -397,8 +390,7 @@ impl Dyld {
     /// environment with no binary (see [crate::Environment::new_without_app]).
     pub fn do_initial_linking_with_no_bins(&mut self, mem: &mut Mem, objc: &mut ObjC) {
         assert!(self.return_to_host_routine.is_none());
-        assert!(self.thread_exit_routine.is_none());
-        self.return_to_host_routine =
+        assert!(self.thread_exit_routine.is_none());        self.return_to_host_routine =
             Some(write_return_to_host_routine(mem, Self::SVC_RETURN_TO_HOST));
         self.thread_exit_routine = Some(write_return_to_host_routine(mem, Self::SVC_THREAD_EXIT));
 
@@ -447,8 +439,7 @@ impl Dyld {
             if entry_size == 4 {
                 mem.write(ptr + 0, encode_a32_svc(Self::SVC_LAZY_LINK_RET_FLAG));
             } else {
-                mem.write(ptr + 0, encode_a32_svc(Self::SVC_LAZY_LINK));
-                mem.write(ptr + 1, encode_a32_ret());
+                mem.write(ptr + 0, encode_a32_svc(Self::SVC_LAZY_LINK));                mem.write(ptr + 1, encode_a32_ret());
             }
             if entry_size == 16 {
                 // This is preceded by a return instruction, so if we do execute
@@ -497,8 +488,7 @@ impl Dyld {
                 // Often used for C++ RTTI
                 Ptr::from_bits(external_addr)
             } else if let Some((symbol, _)) =
-                search_host_dylibs(|dylib| dylib.function_exports, name)
-            {
+                search_host_dylibs(|dylib| dylib.function_exports, name)            {
                 // We want the same symbol name to always point to the same
                 // function.
                 let trampoline_ptr = self
@@ -529,8 +519,10 @@ impl Dyld {
                 Ptr::from_bits(target.to_bits().wrapping_add(offset)),
             )
         }
+        
         // Collecting unhandled relocations for the same symbol onto one line
         // makes the log output much less spammy.
+        let mut has_unhandled_relocations = false;
         for (name, addrs) in unhandled_relocations {
             log!(
                 "Warning: unhandled external relocation {:?} in {:?} at {}",
@@ -541,6 +533,15 @@ impl Dyld {
                     .map(|addr| format!("{addr:#x}"))
                     .collect::<Vec<String>>()
                     .join(", "),
+            );
+            has_unhandled_relocations = true;
+        }
+
+        // FIX: Panic if there are unhandled relocations to prevent null-page access later        if has_unhandled_relocations {
+            panic!(
+                "FATAL: Cannot start app '{}' due to missing symbols (likely from an unimplemented library like CFNetwork).\n\
+                 Unhandled external relocations prevent safe execution. Please implement the missing library or symbols.",
+                bin.name
             );
         }
 
@@ -553,6 +554,9 @@ impl Dyld {
         assert!(entry_size == 4);
         assert!(ptrs.size % entry_size == 0);
         let ptr_count = ptrs.size / entry_size;
+        
+        let mut has_unhandled_nl_symbols = false;
+
         'ptr_loop: for i in 0..ptr_count {
             let Some(symbol) = info.indirect_undef_symbols[i as usize].as_deref() else {
                 continue;
@@ -582,8 +586,7 @@ impl Dyld {
                     symbol,
                     trampoline_ptr
                 );
-                log_dbg!("{:?}", self.non_lazy_host_functions);
-                continue;
+                log_dbg!("{:?}", self.non_lazy_host_functions);                continue;
             }
             if let Some((_, template)) = search_host_dylibs(|dylib| dylib.constant_exports, symbol)
             {
@@ -597,6 +600,16 @@ impl Dyld {
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
                 ptr_ptr,
+                bin.name
+            );
+            has_unhandled_nl_symbols = true;
+        }
+
+        // FIX: Panic if there are unhandled non-lazy symbols to prevent null-page access later
+        if has_unhandled_nl_symbols {
+            panic!(
+                "FATAL: Cannot start app '{}' due to missing non-lazy symbols (constants/functions).\n\
+                 This usually means a required system framework (like CFNetwork) is not implemented in touchHLE.",
                 bin.name
             );
         }
@@ -622,8 +635,7 @@ impl Dyld {
                     let null_ptr_ptr = env.mem.alloc_and_write(null_ptr);
                     null_ptr_ptr.cast().cast_const()
                 }
-                HostConstant::Custom(f) => f(env),
-            };
+                HostConstant::Custom(f) => f(env),            };
             env.mem.write(symbol_ptr_ptr, symbol_ptr.cast());
         }
     }
@@ -672,8 +684,7 @@ impl Dyld {
             cpu: &mut Cpu,
             linked_function: u32,
             svc_pc: u32,
-            entry_size: u32,
-            pic_offset: u32,
+            entry_size: u32,            pic_offset: u32,
         ) -> (MutPtr<u32>, MutPtr<u32>) {
             let original_instructions = match entry_size {
                 4 => Dyld::SYMBOL_STUB1_INSTRUCTIONS.as_slice(),
@@ -722,8 +733,7 @@ impl Dyld {
                 if !(stubs.addr..(stubs.addr + stubs.size)).contains(&svc_pc) {
                     return None;
                 }
-                let pic_offset = bin
-                    .get_section(SectionType::LazySymbolPointers)
+                let pic_offset = bin                    .get_section(SectionType::LazySymbolPointers)
                     .map_or(0, |lazy_ptrs| lazy_ptrs.addr - stubs.addr);
                 Some((stubs, pic_offset))
             })
@@ -772,8 +782,7 @@ impl Dyld {
             self.linked_host_functions.push((symbol, f));
 
             // Rewrite stub function to call this host function
-            let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
-            mem.write(stub_function_ptr, encode_a32_svc(svc));
+            let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);            mem.write(stub_function_ptr, encode_a32_svc(svc));
             if info.entry_size != 4 {
                 assert!(mem.read(stub_function_ptr + 1) == encode_a32_ret());
             }
@@ -822,8 +831,7 @@ impl Dyld {
         &mut self,
         mem: &mut Mem,
         cpu: &mut Cpu,
-        symbol: &str,
-    ) -> Result<GuestFunction, ()> {
+        symbol: &str,    ) -> Result<GuestFunction, ()> {
         let function_ptr = self.create_proc_address_no_inval(mem, symbol)?;
 
         // Just in case
@@ -866,4 +874,4 @@ impl Dyld {
 
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
-    }
+        }
