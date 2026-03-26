@@ -119,6 +119,7 @@ type AudioQueueParameterValue = f32;
 
 pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
+pub const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
 
 /// (*void)(void *in_user_data, AudioQueueRef in_aq, AudioQueuePropertyID in_id)
 type AudioQueuePropertyListenerProc = GuestFunction;
@@ -377,6 +378,7 @@ fn AudioQueueAddPropertyListener(
     }
     0 // success
 }
+
 fn AudioQueueRemovePropertyListener(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -457,6 +459,25 @@ fn AudioQueueGetProperty(
         _ => unreachable!(),
     }
 
+    0 // success
+}
+
+fn AudioQueueSetProperty(
+    env: &mut Environment,
+    in_aq: AudioQueueRef,
+    in_property_id: AudioQueuePropertyID,
+    in_property_data: ConstVoidPtr,
+    in_data_size: u32,
+) -> OSStatus {
+    return_if_null!(in_aq);
+
+    log!(
+        "TODO: AudioQueueSetProperty({:?}, {}, {:?}, {})",
+        in_aq,
+        debug_fourcc(in_property_id),
+        in_property_data,
+        in_data_size
+    );
     0 // success
 }
 
@@ -1100,6 +1121,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueRemovePropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
     export_c_func!(AudioQueueGetProperty(_, _, _, _)),
+    export_c_func!(AudioQueueSetProperty(_, _, _, _)),
     export_c_func!(AudioQueuePrime(_, _, _)),
     export_c_func!(AudioQueueStart(_, _)),
     export_c_func!(AudioQueuePause(_)),
@@ -1109,3 +1131,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueFreeBuffer(_, _)),
     export_c_func!(AudioQueueDispose(_, _)),
 ];
+
