@@ -119,8 +119,6 @@ type AudioQueueParameterValue = f32;
 
 pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
-pub const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
-
 /// (*void)(void *in_user_data, AudioQueueRef in_aq, AudioQueuePropertyID in_id)
 type AudioQueuePropertyListenerProc = GuestFunction;
 
@@ -463,7 +461,7 @@ fn AudioQueueGetProperty(
 }
 
 fn AudioQueueSetProperty(
-    env: &mut Environment,
+    _env: &mut Environment,
     in_aq: AudioQueueRef,
     in_property_id: AudioQueuePropertyID,
     in_property_data: ConstVoidPtr,
