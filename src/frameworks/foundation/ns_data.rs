@@ -3,7 +3,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! `NSData` and `NSMutableData`.
 
 use super::ns_string::to_rust_string;
 use super::NSUInteger;
@@ -14,12 +13,11 @@ use crate::objc::{
     autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
-use std::ops::Add;
 
 pub(super) struct NSDataHostObject {
     pub(super) bytes: MutVoidPtr,
     pub(super) length: NSUInteger,
-    free_when_done: bool,
+    pub(super) free_when_done: bool,
 }
 
 impl HostObject for NSDataHostObject {}
@@ -254,10 +252,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         host_object.length = length;
         host_object.free_when_done = true;
     } else {
+        let old_len = host_object.length;
         let alloc = env.mem.realloc(host_object.bytes, length);
-        if length > host_object.length {
-            let diff = length - host_object.length;
-            let offset_ptr: MutPtr<u8> = alloc.cast() + (host_object.length as usize);
+        if length > old_len {
+            let diff = length - old_len;
+            let offset_ptr: MutPtr<u8> = alloc.cast() + (old_len as u32);
             env.mem.bytes_at_mut(offset_ptr, diff).fill(0);
         }
         host_object.bytes = alloc;
@@ -277,7 +276,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setLength:new_length];
     
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let offset_ptr = (host_object.bytes.cast::<u8>() + (old_length as usize)).cast_void();
+    let offset_ptr = (host_object.bytes.cast::<u8>() + (old_length as u32)).cast_void();
     env.mem.memmove(offset_ptr, bytes, length);
 }
 
