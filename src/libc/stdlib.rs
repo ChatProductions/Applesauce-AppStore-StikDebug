@@ -394,7 +394,8 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
     log!("system({:?})", cmd_str);
 
-    let parts: Vec<&str> = cmd_str.trim().split_whitespace().collect();
+    // split_whitespace() автоматически игнорирует пробелы в начале и конце
+    let parts: Vec<&str> = cmd_str.split_whitespace().collect();
     if parts.is_empty() {
         return 0;
     }
