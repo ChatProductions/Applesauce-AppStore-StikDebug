@@ -36,6 +36,7 @@ use std::collections::{HashMap, VecDeque};
 pub struct State {
     audio_queues: HashMap<AudioQueueRef, AudioQueueHostObject>,
 }
+
 impl State {
     fn get(framework_state: &mut crate::frameworks::State) -> &mut Self {
         &mut framework_state.audio_toolbox.audio_queue
@@ -416,9 +417,8 @@ fn AudioQueueSetProperty(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    // Патч: Если игра передает 'aqmc' (Magic Cookie), мы возвращаем успех (0).
-    // Если вернуть ошибку, некоторые игры могут впасть в ступор или 
-    // неверно рассчитать буфер.
+    // Патч: Если игра передает 'aqmc' (Magic Cookie), мы просто возвращаем
+    // успех (0). Если вернуть ошибку, некоторые игры могут впасть в ступор.
     if in_property_id == kAudioQueueProperty_MagicCookie {
         log_dbg!("AudioQueueSetProperty: Ignoring Magic Cookie for {:?}", in_aq);
         return 0; 
@@ -629,10 +629,10 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         }
     }
 
-    // Шаг 2: Теперь env свободен, можно делать вызовы
+    // Шаг 2: Теперь env свободен. Указываем тип (), чтобы убрать E0283
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
-            callback.call_from_host(env, (user_data, in_aq, buf));
+            let _: () = callback.call_from_host(env, (user_data, in_aq, buf));
         }
     }
 
@@ -640,7 +640,8 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     // Шаг 3: Проверяем состояние воспроизведения
     if let Some(al_source) = al_source_id {
-        let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+        let context = env.framework_state.audio_toolbox
+            .make_al_context_current(&mut env.openal_manager);
         let mut is_stopping = false;
         let mut needs_play = false;
 
