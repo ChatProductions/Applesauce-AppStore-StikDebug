@@ -260,7 +260,6 @@ pub(super) fn UIApplicationMain(
             .main_nib_filename(device_family)
             .map(str::to_owned)
         {
-            // Исправлено: передаем саму строку, а не ссылку
             let ns_main_nib_filename = from_rust_string(env, main_nib_filename);
             let type_: id = get_static_str(env, "nib");
             let bundle: id = msg_class![env; NSBundle mainBundle];
@@ -271,9 +270,6 @@ pub(super) fn UIApplicationMain(
                 let _: id = msg![env; nib instantiateWithOwner:ui_application
                                                options:nil];
             } else {
-                // Здесь main_nib_filename уже перемещен выше, но лог 
-                // можно вызвать до вызова from_rust_string, если нужно.
-                // Чтобы не усложнять, просто уберем вывод имени в лог или клонируем для лога.
                 log!("Warning: couldn't load main nib file.");
             }
         }
@@ -396,3 +392,4 @@ pub const CONSTANTS: ConstantExports = &[
 ];
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
+
