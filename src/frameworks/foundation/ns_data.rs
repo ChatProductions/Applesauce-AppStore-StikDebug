@@ -213,6 +213,82 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+@implementation NSMutableData: NSData
+
++ (id)dataWithLength:(NSUInteger)length {
+    let data: id = msg![env; this alloc];
+    let data: id = msg![env; data initWithLength:length];
+    autorelease(env, data)
+}
+
+- (id)initWithLength:(NSUInteger)length {
+    let data: id = msg![env; this init];
+    let _: () = msg![env; data setLength:length];
+    data
+}
+
+- (MutVoidPtr)mutableBytes {
+    env.objc.borrow_mut::<NSDataHostObject>(this).bytes
+}
+
+- (())setLength:(NSUInteger)length {
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    if host_object.length == length {
+        return;
+    }
+
+    if length == 0 {
+        if !host_object.bytes.is_null() && host_object.free_when_done {
+            env.mem.free(host_object.bytes);
+        }
+        host_object.bytes = Ptr::null();
+        host_object.length = 0;
+        return;
+    }
+
+    if host_object.bytes.is_null() {
+        let alloc = env.mem.alloc(length);
+        env.mem.memset(alloc, 0, length);
+        host_object.bytes = alloc;
+        host_object.length = length;
+        host_object.free_when_done = true;
+    } else {
+        let alloc = env.mem.realloc(host_object.bytes, length);
+        if length > host_object.length {
+            let diff = length - host_object.length;
+            let offset_ptr = alloc.offset(host_object.length as i32);
+            env.mem.memset(offset_ptr, 0, diff);
+        }
+        host_object.bytes = alloc;
+        host_object.length = length;
+        host_object.free_when_done = true;
+    }
+}
+
+- (())appendBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
+    if length == 0 {
+        return;
+    }
+    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
+    let old_length = host_object.length;
+    let new_length = old_length + length;
+    
+    let _: () = msg![env; this setLength:new_length];
+    
+    // Borrow again after method call to satisfy borrow checker
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    let offset_ptr = host_object.bytes.offset(old_length as i32);
+    env.mem.memmove(offset_ptr, bytes, length);
+}
+
+- (())appendData:(id)other {
+    let bytes: ConstVoidPtr = msg![env; other bytes];
+    let length: NSUInteger = msg![env; other length];
+    msg![env; this appendBytes:bytes length:length]
+}
+
+@end
+
 };
 
 pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
