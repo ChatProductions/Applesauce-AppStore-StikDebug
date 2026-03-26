@@ -251,8 +251,6 @@ pub fn AudioQueueAllocateBuffer(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    // Патч: Если гость просит неадекватный объем памяти (баг RE4), даем
-    // ему заглушку в 64 КБ, чтобы избежать null-page panic в госте.
     let mut final_size = in_buffer_byte_size;
     if final_size > 16 * 1024 * 1024 {
         log!("Warning: AudioQueueAllocateBuffer requested {:#x}. Capping.", 
@@ -416,14 +414,10 @@ fn AudioQueueSetProperty(
     _in_data_size: u32,
 ) -> OSStatus {
     return_if_null!(in_aq);
-
-    // Патч: Если игра передает 'aqmc' (Magic Cookie), мы просто возвращаем
-    // успех (0). Если вернуть ошибку, некоторые игры могут впасть в ступор.
     if in_property_id == kAudioQueueProperty_MagicCookie {
         log_dbg!("AudioQueueSetProperty: Ignoring Magic Cookie for {:?}", in_aq);
         return 0; 
     }
-
     0
 }
 
@@ -606,7 +600,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let mut callback_info: Option<(AudioQueueOutputCallback, MutVoidPtr)> = None;
     let mut al_source_id: Option<ALuint> = None;
 
-    // Шаг 1: Ограничиваем область видимости заимствования
+    // Шаг 1: Работаем с состоянием
     {
         let (state, context) = State::get_with_context(
             &mut env.framework_state, &mut env.openal_manager);
@@ -629,7 +623,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         }
     }
 
-    // Шаг 2: Теперь env свободен. Указываем тип (), чтобы убрать E0283
+    // Шаг 2: Вызовы колбэков (env свободен)
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
             let _: () = callback.call_from_host(env, (user_data, in_aq, buf));
@@ -638,36 +632,39 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     prime_audio_queue(env, in_aq);
 
-    // Шаг 3: Проверяем состояние воспроизведения
+    // Шаг 3: Финальные операции OpenAL (разводим заимствования вручную)
     if let Some(al_source) = al_source_id {
-        let context = env.framework_state.audio_toolbox
-            .make_al_context_current(&mut env.openal_manager);
-        let mut is_stopping = false;
         let mut needs_play = false;
+        let mut is_stopping = false;
+        let mut al_state = 0;
 
-        if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
-            if host_object.is_running != AudioQueueIsRunning::Stopped {
-                let mut state = 0;
-                unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
-                if state == al::AL_STOPPED {
+        {
+            // Берем контекст и состояние одновременно через хелпер
+            let (state_ref, context) = State::get_with_context(
+                &mut env.framework_state, &mut env.openal_manager);
+            
+            if let Some(host_object) = state_ref.audio_queues.get_mut(&in_aq) {
+                unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut al_state); }
+                
+                if host_object.is_running != AudioQueueIsRunning::Stopped && al_state == al::AL_STOPPED {
                     needs_play = true;
                 }
-            }
-            if host_object.is_running == AudioQueueIsRunning::Stopping {
-                is_stopping = true;
+                if host_object.is_running == AudioQueueIsRunning::Stopping {
+                    is_stopping = true;
+                }
             }
         }
 
-        if needs_play { unsafe { context.SourcePlay(al_source); } }
-
-        if is_stopping {
-            let mut state = 0;
-            unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
-            if state == al::AL_STOPPED {
+        // Выполняем действия, если нужно
+        if needs_play || (is_stopping && al_state == al::AL_STOPPED) {
+            let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+            if needs_play { unsafe { context.SourcePlay(al_source); } }
+            if is_stopping && al_state == al::AL_STOPPED {
                 finish_stopping_audio_queue(env, in_aq);
             }
         }
 
+        // Сбрасываем флаг обработчика
         if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
             host_object.is_running_handler = false;
         }
