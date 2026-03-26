@@ -230,6 +230,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSDataHostObject>(this).bytes
 }
 
+- (())increaseLengthBy:(NSUInteger)extra_length {
+    if extra_length == 0 {
+        return;
+    }
+    let current_length: NSUInteger = msg![env; this length];
+    let _: () = msg![env; this setLength:current_length + extra_length];
+}
+
 - (())setLength:(NSUInteger)length {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     if host_object.length == length {
@@ -298,3 +306,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
+
