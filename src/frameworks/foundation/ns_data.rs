@@ -10,7 +10,8 @@ use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, 
+    HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
 
@@ -44,9 +45,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
++ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes 
+                   length:(NSUInteger)length 
+             freeWhenDone:(bool)free_when_done {
     let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithBytesNoCopy:bytes length:length freeWhenDone:free_when_done];
+    let new: id = msg![env; new initWithBytesNoCopy:bytes 
+                                             length:length 
+                                       freeWhenDone:free_when_done];
     autorelease(env, new)
 }
 
@@ -74,7 +79,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)dataWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
++ (id)dataWithContentsOfURL:(id)url 
+                    options:(NSUInteger)options 
+                      error:(MutVoidPtr)error {
     let _ = options;
     let _ = error;
     let new: id = msg![env; this alloc];
@@ -92,7 +99,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithBytesNoCopy:bytes length:length freeWhenDone:true]
 }
 
-- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
+- (id)initWithBytesNoCopy:(MutVoidPtr)bytes 
+                   length:(NSUInteger)length 
+             freeWhenDone:(bool)free_when_done {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     assert!(host_object.bytes.is_null() && host_object.length == 0);
     host_object.bytes = bytes;
@@ -126,7 +135,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (id)initWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
+- (id)initWithContentsOfURL:(id)url 
+                    options:(NSUInteger)options 
+                      error:(MutVoidPtr)error {
     let _ = options;
     let _ = error;
     msg![env; this initWithContentsOfURL:url]
@@ -208,6 +219,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     let a = to_rust_slice(env, this).to_owned();
     let b = to_rust_slice(env, other);
     a == b
+}
+
+// Новые методы для копирования байт в буфер игры
+- (())getBytes:(MutVoidPtr)buffer {
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    if host_object.length > 0 && !host_object.bytes.is_null() {
+        env.mem.memmove(buffer, host_object.bytes, host_object.length);
+    }
+}
+
+- (())getBytes:(MutVoidPtr)buffer length:(NSUInteger)length {
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    let to_copy = length.min(host_object.length);
+    if to_copy > 0 && !host_object.bytes.is_null() {
+        env.mem.memmove(buffer, host_object.bytes, to_copy);
+    }
 }
 
 @end
