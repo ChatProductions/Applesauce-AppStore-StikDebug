@@ -36,20 +36,24 @@ type AudioUnitPropertyID = u32;
 type AudioUnitScope = u32;
 type AudioUnitElement = u32;
 
+// --- ОБНОВЛЕННЫЙ БЛОК: СТРУКТУРЫ СДЕЛАНЫ ПУБЛИЧНЫМИ ---
+
 #[repr(C, packed)]
-struct AudioBufferList<const COUNT: usize> {
-    number_buffers: u32,
-    buffers: [AudioBuffer; COUNT],
+pub struct AudioBufferList<const COUNT: usize> {
+    pub number_buffers: u32,
+    pub buffers: [AudioBuffer; COUNT],
 }
 unsafe impl SafeRead for AudioBufferList<1> {}
 unsafe impl SafeRead for AudioBufferList<2> {}
 
 #[repr(C, packed)]
 pub struct AudioBuffer {
-    number_channels: u32,
-    data_byte_size: u32,
-    data: MutVoidPtr,
+    pub number_channels: u32,
+    pub data_byte_size: u32,
+    pub data: MutVoidPtr,
 }
+
+// -----------------------------------------------------
 
 // TODO: Other scopes
 const kAudioUnitScope_Global: AudioUnitScope = 0;
@@ -201,7 +205,7 @@ fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     let context = env
         .framework_state
         .audio_toolbox
-        .make_al_context_current(env.openal_manager.as_mut());
+        .make_al_context_current(&mut env.openal_manager);
 
     let mut source: ALuint = 0;
     unsafe {
@@ -228,7 +232,7 @@ fn AudioOutputUnitStop(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     let at_state = &mut env.framework_state.audio_toolbox;
     let context = at_state
         .al_context
-        .make_al_context_current(env.openal_manager.as_mut());
+        .make_al_context_current(&mut env.openal_manager);
 
     let audio_components_state = &mut at_state.audio_components;
 
@@ -264,7 +268,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let at_state = &mut env.framework_state.audio_toolbox;
     let context = at_state
         .al_context
-        .make_al_context_current(env.openal_manager.as_mut());
+        .make_al_context_current(&mut env.openal_manager);
 
     let audio_session::State {
         current_hardware_sample_rate,
@@ -295,10 +299,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     {
         unimplemented!("AudioUnit {:?} has non default and different input {:?} and output {:?} stream formats, conversion is needed", audio_unit, input_stream_format, output_stream_format);
     } else {
-        // For purposes, the only important part is that format is supported
-        // and playable by OpenAL. Thus, it doesn't really matter if input or
-        // output format is defined by the application.
-        // (but not both at the same time, see the check above)
         input_stream_format
             .unwrap_or(output_stream_format.unwrap_or(audio_unit_host_object.global_stream_format))
     };
@@ -306,8 +306,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         input_stream_format.sample_rate
     } else {
         assert!(output_stream_format.is_some());
-        // TODO: confirm that this is the general behaviour
-        // (and not only RE4 thing)
         current_hardware_sample_rate
     };
 
@@ -328,14 +326,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     }
 
     let now = Instant::now();
-
-    // Calculate number of frames by checking how much time passed since
-    // the last render. Limit to 100ms to prevent delay from adding up
-    // if it's been too long since the last render.
-    // Ace Combat Xi relies on it being 2048 frames (at 48000Hz, 42ms) or under
-    // If it's higher, flawed game logic causes it to call memset in a loop for
-    // every frame over 2048 until it reaches the provided frame number.
-    // TODO: Verify if this behavior is right
     let elapsed_time = now.duration_since(audio_unit_host_object.last_render_time.unwrap());
     let number_frames = ((elapsed_time.as_secs_f64() * sample_rate) as u32).min(2048);
 
@@ -347,61 +337,59 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     // Alloc callback arguments
     let action_flags = env.mem.alloc_and_write(0);
 
-    let (audio_buffer_list, buffer1Data, buffer2Data): (
+    let (audio_buffer_list, buffer1_data, buffer2_data): (
         MutVoidPtr,
         MutVoidPtr,
         Option<MutVoidPtr>,
     ) = if input_stream_format.is_some() {
-        let bufferData = env.mem.alloc(buffer_size);
+        let buffer_data = env.mem.alloc(buffer_size);
         let audio_buffer_list: AudioBufferList<1> = AudioBufferList {
             number_buffers: 1,
             buffers: [AudioBuffer {
                 number_channels: stream_format.channels_per_frame,
                 data_byte_size: buffer_size,
-                data: bufferData,
+                data: buffer_data,
             }],
         };
         (
             env.mem.alloc_and_write(audio_buffer_list).cast(),
-            bufferData,
+            buffer_data,
             None,
         )
     } else {
-        // Resident Evil 4 expects 2 buffers
-        // though it copies the same data to both
-        let buffer1Data = env.mem.alloc(buffer_size);
-        let buffer2Data = env.mem.alloc(buffer_size);
+        let buffer1_data = env.mem.alloc(buffer_size);
+        let buffer2_data = env.mem.alloc(buffer_size);
         let audio_buffer_list: AudioBufferList<2> = AudioBufferList {
             number_buffers: 2,
             buffers: [
                 AudioBuffer {
                     number_channels: stream_format.channels_per_frame,
                     data_byte_size: buffer_size,
-                    data: buffer1Data,
+                    data: buffer1_data,
                 },
                 AudioBuffer {
                     number_channels: stream_format.channels_per_frame,
                     data_byte_size: buffer_size,
-                    data: buffer2Data,
+                    data: buffer2_data,
                 },
             ],
         };
         (
             env.mem.alloc_and_write(audio_buffer_list).cast(),
-            buffer1Data,
-            Some(buffer2Data),
+            buffer1_data,
+            Some(buffer2_data),
         )
     };
 
     // Run render callback
     let AURenderCallbackStruct {
-        input_proc: inputProc,
-        input_proc_ref_con: inputProcRefCon,
+        input_proc,
+        input_proc_ref_con,
     } = audio_unit_host_object.render_callback.unwrap();
-    let () = inputProc.call_from_host(
+    let () = input_proc.call_from_host(
         env,
         (
-            inputProcRefCon,
+            input_proc_ref_con,
             action_flags,
             nil.cast_void().cast_const(),
             0u32,
@@ -413,13 +401,12 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let at_state = &mut env.framework_state.audio_toolbox;
     let context = at_state
         .al_context
-        .make_al_context_current(env.openal_manager.as_mut());
+        .make_al_context_current(&mut env.openal_manager);
 
     let (al_format, _sample_rate, processed_data) =
-        decode_buffer(&env.mem, &stream_format, buffer1Data.cast(), buffer_size);
+        decode_buffer(&env.mem, &stream_format, buffer1_data.cast(), buffer_size);
 
     unsafe {
-        // Get an unqueued buffer or create a new one
         let al_buffer = al_buffers.pop().unwrap_or_else(|| {
             let mut al_buffer = 0;
             context.GenBuffers(1, &mut al_buffer);
@@ -441,9 +428,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             context.SourcePlay(al_source);
         }
 
-        // TODO: Play buffer 2 (In RE4 its the same as buffer 1 though)
-
-        // Clear unused buffers
         if !al_buffers.is_empty() {
             context.DeleteBuffers(al_buffers.len() as i32, al_buffers.as_ptr());
         }
@@ -451,21 +435,17 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         assert_eq!(context.GetError(), 0);
     }
 
-    // TODO: Do something with the action flags?
     env.mem.free(action_flags.cast_void());
-
-    env.mem.free(buffer1Data.cast_void());
-    if let Some(buffer2Data) = buffer2Data {
-        env.mem.free(buffer2Data.cast_void());
+    env.mem.free(buffer1_data.cast_void());
+    if let Some(buffer2_data) = buffer2_data {
+        env.mem.free(buffer2_data.cast_void());
     }
-
     env.mem.free(audio_buffer_list.cast_void());
 
     let audio_unit_host_object = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
         .get_mut(&audio_unit)
         .unwrap();
-    // Reborrow as mutable to update the last render time
 
     audio_unit_host_object.last_render_time = Some(now);
     audio_unit_host_object.is_running_handler = false;
