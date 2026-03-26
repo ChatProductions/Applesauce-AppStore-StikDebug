@@ -128,7 +128,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (f64)statusBarOrientationAnimationDuration {
-    // Standard iOS duration
     0.3
 }
 
@@ -255,10 +254,13 @@ pub(super) fn UIApplicationMain(
         let ui_application: id = msg![env; principal_class new];
 
         let device_family = env.options.device_family;
-        
-        // FIX: Cloned to avoid E0502 borrow checker error
-        if let Some(main_nib_filename) = env.bundle.main_nib_filename(device_family).cloned() {
-            let ns_main_nib_filename = from_rust_string(env, main_nib_filename.to_string());
+
+        if let Some(main_nib_filename) = env
+            .bundle
+            .main_nib_filename(device_family)
+            .map(str::to_owned)
+        {
+            let ns_main_nib_filename = from_rust_string(env, &main_nib_filename);
             let type_: id = get_static_str(env, "nib");
             let bundle: id = msg_class![env; NSBundle mainBundle];
             let res: id = msg![env; bundle pathForResource:ns_main_nib_filename ofType:type_];
