@@ -116,7 +116,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setStatusBarStyle:(UIStatusBarStyle)style
                animated:(bool)_animated {
-    // Заглушка для анимации, вызываем обычный сеттер
     msg![env; this setStatusBarStyle:style]
 }
 
@@ -128,9 +127,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-// --- НАШЕ ИСПРАВЛЕНИЕ ---
 - (f64)statusBarOrientationAnimationDuration {
-    // Стандартное значение для iOS (NSTimeInterval)
+    // Standard iOS duration
     0.3
 }
 
@@ -257,7 +255,9 @@ pub(super) fn UIApplicationMain(
         let ui_application: id = msg![env; principal_class new];
 
         let device_family = env.options.device_family;
-        if let Some(main_nib_filename) = env.bundle.main_nib_filename(device_family) {
+        
+        // FIX: Cloned to avoid E0502 borrow checker error
+        if let Some(main_nib_filename) = env.bundle.main_nib_filename(device_family).cloned() {
             let ns_main_nib_filename = from_rust_string(env, main_nib_filename.to_string());
             let type_: id = get_static_str(env, "nib");
             let bundle: id = msg_class![env; NSBundle mainBundle];
@@ -268,7 +268,10 @@ pub(super) fn UIApplicationMain(
                 let _: id = msg![env; nib instantiateWithOwner:ui_application
                                                options:nil];
             } else {
-                log!("Warning: couldn't load main nib file {:?}", main_nib_filename);
+                log!(
+                    "Warning: couldn't load main nib file {:?}",
+                    main_nib_filename
+                );
             }
         }
 
@@ -390,4 +393,3 @@ pub const CONSTANTS: ConstantExports = &[
 ];
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
-
