@@ -229,7 +229,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.sublayers.iter().position(|&x| x == old_layer)
     };
 
-    if let Some(_) = old_idx {
+    if old_idx.is_some() {
         log!("CALayer: replacing sublayer {:?} with {:?}", old_layer, new_layer);
         
         retain(env, new_layer);
@@ -669,4 +669,3 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
     log_dbg!("Transform from {other:?} to {this:?}: {other_to_this:?}");
     other_to_this
 }
-
