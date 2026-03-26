@@ -248,7 +248,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     if host_object.bytes.is_null() {
         let alloc = env.mem.alloc(length);
-        env.mem.memset(alloc, 0, length);
+        env.mem.bytes_at_mut(alloc.cast(), length).fill(0);
         host_object.bytes = alloc;
         host_object.length = length;
         host_object.free_when_done = true;
@@ -256,8 +256,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let alloc = env.mem.realloc(host_object.bytes, length);
         if length > host_object.length {
             let diff = length - host_object.length;
-            let offset_ptr = alloc.offset(host_object.length as i32);
-            env.mem.memset(offset_ptr, 0, diff);
+            let offset_ptr: MutPtr<u8> = alloc.cast().add(host_object.length as usize);
+            env.mem.bytes_at_mut(offset_ptr, diff).fill(0);
         }
         host_object.bytes = alloc;
         host_object.length = length;
@@ -275,9 +275,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let _: () = msg![env; this setLength:new_length];
     
-    // Borrow again after method call to satisfy borrow checker
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let offset_ptr = host_object.bytes.offset(old_length as i32);
+    let offset_ptr = host_object.bytes.cast::<u8>().add(old_length as usize).cast_void();
     env.mem.memmove(offset_ptr, bytes, length);
 }
 
@@ -299,3 +298,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
+
