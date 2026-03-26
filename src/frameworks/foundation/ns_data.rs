@@ -181,7 +181,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
 
-// Фикс null-page access: правильно обрабатываем NSError** (устанавливаем nil при успехе)
+// Workaround: fix null-page crash in game.
+// Game dereferences NSError** even on success.
 - (bool)writeToFile:(id)path 
             options:(NSUInteger)options 
               error:(MutVoidPtr)error {
@@ -190,10 +191,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let success: bool = msg![env; this writeToFile:path atomically:false];
 
     if !success {
-        log!("Warning: NSData -writeToFile:options:error: failed (real write returned false). Faking success.");
+        log!("Warning: NSData writeToFile:options:error: failed. Faking success.");
     }
 
-    // Обнуляем NSError* если указатель передан (стандартное поведение Foundation)
+    // Set *error = nil (standard Foundation behavior)
     if !error.is_null() {
         let error_ptr: MutPtr<id> = error.cast();
         env.mem.write(error_ptr, nil);
@@ -357,4 +358,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     }
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
-        }
+}
