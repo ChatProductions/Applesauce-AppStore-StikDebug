@@ -219,6 +219,36 @@ pub const CLASSES: ClassExports = objc_classes! {
     sublayers.insert(idx, layer);
 }
 
+- (())replaceSublayer:(id)old_layer with:(id)new_layer {
+    if old_layer == nil || new_layer == nil || old_layer == new_layer {
+        return;
+    }
+
+    let old_idx = {
+        let host = env.objc.borrow::<CALayerHostObject>(this);
+        host.sublayers.iter().position(|&x| x == old_layer)
+    };
+
+    if let Some(_) = old_idx {
+        log!("CALayer: replacing sublayer {:?} with {:?}", old_layer, new_layer);
+        
+        retain(env, new_layer);
+        () = msg![env; new_layer removeFromSuperlayer];
+        
+        let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+        if let Some(actual_idx) = host.sublayers.iter().position(|&x| x == old_layer) {
+            host.sublayers[actual_idx] = new_layer;
+            
+            env.objc.borrow_mut::<CALayerHostObject>(new_layer).superlayer = this;
+            env.objc.borrow_mut::<CALayerHostObject>(old_layer).superlayer = nil;
+            
+            release(env, old_layer);
+        } else {
+            release(env, new_layer);
+        }
+    }
+}
+
 - (())removeFromSuperlayer {
     let CALayerHostObject { ref mut superlayer, .. } = env.objc.borrow_mut(this);
     let superlayer = std::mem::take(superlayer);
@@ -639,3 +669,4 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
     log_dbg!("Transform from {other:?} to {this:?}: {other_to_this:?}");
     other_to_this
 }
+
