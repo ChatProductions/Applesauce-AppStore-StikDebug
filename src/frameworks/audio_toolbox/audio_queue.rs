@@ -354,14 +354,10 @@ fn AudioQueueEnqueueBufferWithParameters(
     in_buffer: AudioQueueBufferRef,
     in_num_packet_descs: u32,
     in_packet_descs: MutVoidPtr,
-    _in_trim_frames_at_start: u32,
-    _in_trim_frames_at_end: u32,
-    _in_num_param_values: u32,
-    _in_param_values: MutVoidPtr,
-    _in_start_time: ConstVoidPtr,
-    _out_actual_start_time: MutVoidPtr,
+    // Remaining args (trim frames, param values, start time, out start time)
+    // are intentionally omitted — they exceed the macro's arity limit and
+    // are not needed for our stub implementation.
 ) -> OSStatus {
-    // Delegate to the simpler enqueue function, ignoring trim/param/time args
     AudioQueueEnqueueBuffer(env, in_aq, in_buffer, in_num_packet_descs, in_packet_descs)
 }
 
@@ -1132,7 +1128,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueAllocateBufferWithPacketDescriptions(_, _, _, _)),
     export_c_func!(AudioQueueAllocateBuffer(_, _, _)),
     export_c_func!(AudioQueueEnqueueBuffer(_, _, _, _)),
-    export_c_func!(AudioQueueEnqueueBufferWithParameters(_, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(AudioQueueEnqueueBufferWithParameters(_, _, _, _)),
     export_c_func!(AudioQueueAddPropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueRemovePropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
