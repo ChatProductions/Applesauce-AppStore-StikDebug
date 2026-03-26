@@ -1,4 +1,4 @@
-/*
+ /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -126,6 +126,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // TODO: post UIWindowDidBecomeVisibleNotification
     () = msg![env; this setHidden:false];
+}
+
+// Legacy iOS 2/3 pattern: [window setContentView:someView]
+// Semantically equivalent to addSubview: for UIWindow.
+- (())setContentView:(id)view {
+    log_dbg!("[(UIWindow*){:?} setContentView:{:?}]", this, view);
+    () = msg![env; this addSubview:view];
+}
+
+// Returns the first subview as the content view (legacy behaviour).
+- (id)contentView {
+    let subviews = &env.objc.borrow::<UIViewHostObject>(this).subviews;
+    subviews.first().copied().unwrap_or(nil)
 }
 
 // UIResponder implementation
