@@ -1,309 +1,398 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, you can obtain one at https://mozilla.org/MPL/2.0/.
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//! `UIApplication` and `UIApplicationMain`.
 
-use super::ns_string::to_rust_string;
-use super::NSUInteger;
-use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
-use crate::fs::GuestPath;
-use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
+use super::ui_device::*;
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str};
+use crate::frameworks::foundation::{ns_array, ns_string, NSInteger, NSUInteger};
+use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
-use crate::{msg_class, Environment};
+use crate::window::DeviceOrientation;
+use crate::{todo_objc_setter, Environment};
 
-pub(super) struct NSDataHostObject {
-    pub(super) bytes: MutVoidPtr,
-    pub(super) length: NSUInteger,
-    pub(super) free_when_done: bool,
+#[derive(Default)]
+pub struct State {
+    /// [UIApplication sharedApplication]
+    shared_application: Option<id>,
+    pub(super) status_bar_hidden: bool,
 }
 
-impl HostObject for NSDataHostObject {}
+struct UIApplicationHostObject {
+    delegate: id,
+    delegate_is_retained: bool,
+}
+impl HostObject for UIApplicationHostObject {}
+
+pub type UIInterfaceOrientation = UIDeviceOrientation;
+#[allow(unused)]
+pub const UIInterfaceOrientationPortrait: UIInterfaceOrientation = UIDeviceOrientationPortrait;
+#[allow(unused)]
+pub const UIInterfaceOrientationPortraitUpsideDown: UIInterfaceOrientation =
+    UIDeviceOrientationPortraitUpsideDown;
+// These are intentionally swapped and documented as such (the UI on the device
+// rotates in the opposite direction to how the device is rotated).
+pub const UIInterfaceOrientationLandscapeLeft: UIInterfaceOrientation =
+    UIDeviceOrientationLandscapeRight;
+pub const UIInterfaceOrientationLandscapeRight: UIInterfaceOrientation =
+    UIDeviceOrientationLandscapeLeft;
+
+type UIRemoteNotificationType = NSUInteger;
+type UIStatusBarAnimation = NSInteger;
+type UIStatusBarStyle = NSInteger;
 
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
-@implementation NSData: NSObject
+@implementation UIApplication: UIResponder
 
-+ (id)allocWithZone:(NSZonePtr)zone {
-    let _ = zone;
-    let host_object = Box::new(NSDataHostObject {
-        bytes: Ptr::null(),
-        length: 0,
-        free_when_done: true,
+// This should only be called by UIApplicationMain
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(UIApplicationHostObject {
+        delegate: nil,
+        delegate_is_retained: false,
     });
-    env.objc.alloc_object(this, host_object, &mut env.mem)
+    env.objc.alloc_static_object(this, host_object, &mut env.mem)
 }
 
-+ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithBytesNoCopy:bytes length:length];
-    autorelease(env, new)
++ (id)sharedApplication {
+    env.framework_state.uikit.ui_application.shared_application.unwrap_or(nil)
 }
 
-+ (id)dataWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithBytesNoCopy:bytes length:length freeWhenDone:free_when_done];
-    autorelease(env, new)
-}
-
-+ (id)dataWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithBytes:bytes length:length];
-    autorelease(env, new)
-}
-
-+ (id)dataWithContentsOfFile:(id)path {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfFile:path];
-    autorelease(env, new)
-}
-
-+ (id)dataWithContentsOfMappedFile:(id)path {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfMappedFile:path];
-    autorelease(env, new)
-}
-
-+ (id)dataWithContentsOfURL:(id)url {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfURL:url];
-    autorelease(env, new)
-}
-
-+ (id)dataWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
-    let _ = options;
-    let _ = error;
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfURL:url];
-    autorelease(env, new)
-}
-
-+ (id)dataWithData:(id)data {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithData:data];
-    autorelease(env, new)
-}
-
-- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length {
-    msg![env; this initWithBytesNoCopy:bytes length:length freeWhenDone:true]
-}
-
-- (id)initWithBytesNoCopy:(MutVoidPtr)bytes length:(NSUInteger)length freeWhenDone:(bool)free_when_done {
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
-    host_object.bytes = bytes;
-    host_object.length = length;
-    host_object.free_when_done = free_when_done;
+// This should only be called by UIApplicationMain
+- (id)init {
+    assert!(env.framework_state.uikit.ui_application.shared_application.is_none());
+    env.framework_state.uikit.ui_application.shared_application = Some(this);
     this
 }
 
-- (id)initWithBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    assert!(host_object.bytes.is_null() && host_object.length == 0);
+// This is a singleton, it shouldn't be deallocated.
+- (id)retain { this }
+- (id)autorelease { this }
+- (())release {}
 
-    let alloc = env.mem.alloc(length);
-    env.mem.memmove(alloc, bytes, length);
-
-    host_object.bytes = alloc;
-    host_object.length = length;
-    this
+- (id)delegate {
+    env.objc.borrow::<UIApplicationHostObject>(this).delegate
 }
-
-- (id)initWithData:(id)data {
-    let bytes: ConstVoidPtr = msg![env; data bytes];
-    let length: NSUInteger = msg![env; data length];
-    msg![env; this initWithBytes:bytes length:length]
-}
-
-- (id)initWithContentsOfURL:(id)url {
-    let url_str_id: id = msg![env; url absoluteString];
-    let path = to_rust_string(env, url_str_id);
-    log!("TODO: NSData initWithContentsOfURL for {:?}", path);
-    nil
-}
-
-- (id)initWithContentsOfURL:(id)url options:(NSUInteger)options error:(MutVoidPtr)error {
-    let _ = options;
-    let _ = error;
-    msg![env; this initWithContentsOfURL:url]
-}
-
-- (id)initWithContentsOfFile:(id)path {
-    if path == nil {
-        return nil;
+- (())setDelegate:(id)delegate { // something implementing UIApplicationDelegate
+    let host_object = env.objc.borrow_mut::<UIApplicationHostObject>(this);
+    // This property is quasi-non-retaining: https://stackoverflow.com/a/14271150/736162
+    let old_delegate = std::mem::replace(&mut host_object.delegate, delegate);
+    if host_object.delegate_is_retained {
+        host_object.delegate_is_retained = false;
+        if delegate != old_delegate {
+            release(env, old_delegate);
+        }
     }
-    let path_str = to_rust_string(env, path);
-    let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
-        release(env, this);
+}
+
+- (bool)isStatusBarHidden {
+    env.framework_state.uikit.ui_application.status_bar_hidden
+}
+- (())setStatusBarHidden:(bool)hidden {
+    env.framework_state.uikit.ui_application.status_bar_hidden = hidden;
+}
+- (())setStatusBarHidden:(bool)hidden
+                animated:(bool)_animated {
+    // TODO: animation
+    msg![env; this setStatusBarHidden:hidden]
+}
+- (())setStatusBarHidden:(bool)hidden
+           withAnimation:(UIStatusBarAnimation)_animation {
+    // TODO: animation
+    msg![env; this setStatusBarHidden:hidden]
+}
+
+- (())setStatusBarStyle:(UIStatusBarStyle)style {
+    todo_objc_setter!(this, style);
+}
+
+- (())setStatusBarStyle:(UIStatusBarStyle)style
+               animated:(bool)_animated {
+    msg![env; this setStatusBarStyle:style]
+}
+
+- (UIInterfaceOrientation)statusBarOrientation {
+    match env.window().current_rotation() {
+        DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
+        DeviceOrientation::LandscapeLeft => UIDeviceOrientationLandscapeLeft,
+        DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight
+    }
+}
+
+- (f64)statusBarOrientationAnimationDuration {
+    0.3
+}
+
+- (())setStatusBarOrientation:(UIInterfaceOrientation)orientation {
+    env.on_parent_stack_in_coroutine(|window, _| {window.rotate_device(match orientation {
+        UIDeviceOrientationPortrait => DeviceOrientation::Portrait,
+        UIDeviceOrientationLandscapeLeft => DeviceOrientation::LandscapeLeft,
+        UIDeviceOrientationLandscapeRight => DeviceOrientation::LandscapeRight,
+        _ => unimplemented!("Orientation {} not handled yet", orientation),
+    })});
+}
+- (())setStatusBarOrientation:(UIInterfaceOrientation)orientation
+                     animated:(bool)_animated {
+    // TODO: animation
+    msg![env; this setStatusBarOrientation:orientation]
+}
+
+- (bool)isIdleTimerDisabled {
+    !env.window().is_screen_saver_enabled()
+}
+- (())setIdleTimerDisabled:(bool)disabled {
+    env.on_parent_stack_in_coroutine(|window, _| window.set_screen_saver_enabled(!disabled))
+}
+
+- (bool)openURL:(id)url { // NSURL
+    let ns_string = msg![env; url absoluteString];
+    let url_string = ns_string::to_rust_string(env, ns_string);
+    if let Err(e) = crate::window::open_url(env, &url_string) {
+        echo!("App opened URL {:?} unsuccessfully ({}), exiting.", url_string, e);
+    } else {
+        echo!("App opened URL {:?}, exiting.", url_string);
+    }
+
+    exit(env);
+    true
+}
+
+-(())beginIgnoringInteractionEvents {
+    log!("TODO: ignoring beginIgnoringInteractionEvents");
+}
+- (bool)isIgnoringInteractionEvents {
+    false
+}
+-(())endIgnoringInteractionEvents {
+    log!("TODO: ignoring endIgnoringInteractionEvents");
+}
+
+- (id)keyWindow {
+    let Some(key_window) = env
+        .framework_state
+        .uikit
+        .ui_view
+        .ui_window
+        .key_window else {
         return nil;
     };
-    let size = bytes.len().try_into().unwrap();
-    let alloc = env.mem.alloc(size);
-    let casted_alloc: MutPtr<u8> = alloc.cast();
-    let slice = env.mem.bytes_at_mut(casted_alloc, size);
-    slice.copy_from_slice(&bytes);
-
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    host_object.bytes = alloc;
-    host_object.length = size;
-    this
+    assert!(env
+        .framework_state
+        .uikit
+        .ui_view
+        .ui_window
+        .windows
+        .contains(&key_window));
+    key_window
 }
 
-- (id)initWithContentsOfMappedFile:(id)path {
-    msg![env; this initWithContentsOfFile:path]
+- (id)windows {
+    let windows: Vec<id> = (*env
+        .framework_state
+        .uikit
+        .ui_view
+        .ui_window
+        .windows).to_vec();
+    for window in &windows {
+        retain(env, *window);
+    }
+    let windows = ns_array::from_vec(env, windows);
+    autorelease(env, windows)
 }
 
-- (bool)writeToFile:(id)path atomically:(bool)use_aux_file {
-    let _ = use_aux_file;
-    let file = to_rust_string(env, path);
-    let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let slice = if host_object.length == 0 {
-        &[]
+- (())registerForRemoteNotificationTypes:(UIRemoteNotificationType)types {
+    log!("TODO: ignoring registerForRemoteNotificationTypes:{}", types);
+}
+
+- (NSInteger)applicationIconBadgeNumber {
+    0 // default value
+}
+- (())setApplicationIconBadgeNumber:(NSInteger)bn {
+    log!("TODO: ignoring setApplicationIconBadgeNumber:{}", bn);
+}
+
+- (id)nextResponder {
+    let delegate = msg![env; this delegate];
+    let app_delegate_class = msg![env; delegate class];
+    let ui_responder_class = env.objc.get_known_class("UIResponder", &mut env.mem);
+    if env.objc.class_is_subclass_of(app_delegate_class, ui_responder_class) {
+        delegate
     } else {
-        let casted_ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
-        env.mem.bytes_at(casted_ptr, host_object.length)
-    };
-    env.fs.write(GuestPath::new(&file), slice).is_ok()
-}
-
-- (())dealloc {
-    let &NSDataHostObject { bytes, free_when_done, .. } = env.objc.borrow(this);
-    if !bytes.is_null() && free_when_done {
-        env.mem.free(bytes);
+        nil
     }
-    env.objc.dealloc_object(this, &mut env.mem)
-}
-
-- (id)copyWithZone:(NSZonePtr)zone {
-    let _ = zone;
-    retain(env, this)
-}
-
-- (id)initWithCoder:(id)coder {
-    release(env, this);
-    decode_current_data(env, coder, true)
-}
-
-- (id)mutableCopyWithZone:(NSZonePtr)zone {
-    let _ = zone;
-    let bytes: ConstVoidPtr = msg![env; this bytes];
-    let length: NSUInteger = msg![env; this length];
-    let new = msg_class![env; NSMutableData alloc];
-    msg![env; new initWithBytes:bytes length:length]
-}
-
-- (ConstVoidPtr)bytes {
-    env.objc.borrow::<NSDataHostObject>(this).bytes.cast_const()
-}
-
-- (NSUInteger)length {
-    env.objc.borrow::<NSDataHostObject>(this).length
-}
-
-- (bool)isEqualToData:(id)other {
-    let a = to_rust_slice(env, this).to_owned();
-    let b = to_rust_slice(env, other);
-    a == b
-}
-
-@end
-
-@implementation NSMutableData: NSData
-
-+ (id)dataWithLength:(NSUInteger)length {
-    let data: id = msg![env; this alloc];
-    let data: id = msg![env; data initWithLength:length];
-    autorelease(env, data)
-}
-
-- (id)initWithLength:(NSUInteger)length {
-    let data: id = msg![env; this init];
-    let _: () = msg![env; data setLength:length];
-    data
-}
-
-- (MutVoidPtr)mutableBytes {
-    env.objc.borrow_mut::<NSDataHostObject>(this).bytes
-}
-
-- (())increaseLengthBy:(NSUInteger)extra_length {
-    if extra_length == 0 {
-        return;
-    }
-    let current_length: NSUInteger = msg![env; this length];
-    let new_length = current_length + extra_length;
-    let _: () = msg![env; this setLength:new_length];
-}
-
-- (())setLength:(NSUInteger)length {
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    if host_object.length == length {
-        return;
-    }
-
-    if length == 0 {
-        if !host_object.bytes.is_null() && host_object.free_when_done {
-            env.mem.free(host_object.bytes);
-        }
-        host_object.bytes = Ptr::null();
-        host_object.length = 0;
-        return;
-    }
-
-    if host_object.bytes.is_null() {
-        let alloc = env.mem.alloc(length);
-        env.mem.bytes_at_mut(alloc.cast(), length).fill(0);
-        host_object.bytes = alloc;
-        host_object.length = length;
-        host_object.free_when_done = true;
-    } else {
-        let old_len = host_object.length;
-        let alloc = env.mem.realloc(host_object.bytes, length);
-        if length > old_len {
-            let diff = length - old_len;
-            let offset_ptr: MutPtr<u8> = alloc.cast() + old_len;
-            env.mem.bytes_at_mut(offset_ptr, diff).fill(0);
-        }
-        host_object.bytes = alloc;
-        host_object.length = length;
-        host_object.free_when_done = true;
-    }
-}
-
-- (())appendBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
-    if length == 0 {
-        return;
-    }
-    let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
-    let old_length = host_object.length;
-    let new_length = old_length + length;
-
-    let _: () = msg![env; this setLength:new_length];
-
-    let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let offset_ptr = (host_object.bytes.cast::<u8>() + old_length).cast_void();
-    env.mem.memmove(offset_ptr, bytes, length);
-}
-
-- (())appendData:(id)other {
-    let bytes: ConstVoidPtr = msg![env; other bytes];
-    let length: NSUInteger = msg![env; other length];
-    msg![env; this appendBytes:bytes length:length]
 }
 
 @end
 
 };
 
-pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
-    let borrowed_data = env.objc.borrow::<NSDataHostObject>(data);
-    if borrowed_data.length == 0 {
-        return &[];
+/// `UIApplicationMain`, the entry point of the application.
+pub(super) fn UIApplicationMain(
+    env: &mut Environment,
+    _argc: i32,
+    _argv: MutPtr<MutPtr<u8>>,
+    principal_class_name: id, // NSString*
+    delegate_class_name: id,  // NSString*
+) {
+    let ui_application = {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+
+        let principal_class = if principal_class_name != nil {
+            let name = ns_string::to_rust_string(env, principal_class_name);
+            env.objc.get_known_class(&name, &mut env.mem)
+        } else {
+            env.objc.get_known_class("UIApplication", &mut env.mem)
+        };
+        let ui_application: id = msg![env; principal_class new];
+
+        let device_family = env.options.device_family;
+
+        if let Some(main_nib_filename) = env
+            .bundle
+            .main_nib_filename(device_family)
+            .map(str::to_owned)
+        {
+            // Исправлено: передаем саму строку, а не ссылку
+            let ns_main_nib_filename = from_rust_string(env, main_nib_filename);
+            let type_: id = get_static_str(env, "nib");
+            let bundle: id = msg_class![env; NSBundle mainBundle];
+            let res: id = msg![env; bundle pathForResource:ns_main_nib_filename ofType:type_];
+            if res != nil {
+                let nib: id = msg_class![env; UINib nibWithNibName:ns_main_nib_filename bundle:nil];
+                release(env, ns_main_nib_filename);
+                let _: id = msg![env; nib instantiateWithOwner:ui_application
+                                               options:nil];
+            } else {
+                // Здесь main_nib_filename уже перемещен выше, но лог 
+                // можно вызвать до вызова from_rust_string, если нужно.
+                // Чтобы не усложнять, просто уберем вывод имени в лог или клонируем для лога.
+                log!("Warning: couldn't load main nib file.");
+            }
+        }
+
+        if env.bundle.status_bar_hidden() {
+            let _: () = msg![env; ui_application setStatusBarHidden:true];
+        }
+
+        let delegate: id = msg![env; ui_application delegate];
+        if delegate != nil {
+            env.objc
+                .borrow_mut::<UIApplicationHostObject>(ui_application)
+                .delegate_is_retained = true;
+            retain(env, delegate);
+        } else {
+            assert!(delegate_class_name != nil);
+            if msg![env; delegate_class_name isEqual:principal_class_name] {
+                let _: () = msg![env; ui_application setDelegate:ui_application];
+            } else {
+                let name = ns_string::to_rust_string(env, delegate_class_name);
+                let class = env.objc.get_known_class(&name, &mut env.mem);
+                let delegate: id = msg![env; class new];
+                let _: () = msg![env; ui_application setDelegate:delegate];
+            }
+        };
+
+        let _: () = msg![env; pool drain];
+        ui_application
+    };
+
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let delegate: id = msg![env; ui_application delegate];
+        if env.objc.object_has_method_named(&env.mem, delegate, "application:didFinishLaunchingWithOptions:") {
+            let empty_dict: id = msg_class![env; NSDictionary dictionary];
+            () = msg![env; delegate application:ui_application didFinishLaunchingWithOptions:empty_dict];
+        } else if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidFinishLaunching:") {
+            () = msg![env; delegate applicationDidFinishLaunching:ui_application];
+        }
+
+        let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+        let notif_name = get_static_str(env, UIApplicationDidFinishLaunchingNotification);
+        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+
+        let _: () = msg![env; pool drain];
     }
-    let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
-    env.mem.bytes_at(casted_ptr, borrowed_data.length)
+
+    let views = env.framework_state.uikit.ui_view.views.clone();
+    for view in views {
+        () = msg![env; view layoutSubviews];
+    }
+
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let delegate: id = msg![env; ui_application delegate];
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:") {
+            () = msg![env; delegate applicationDidBecomeActive:ui_application];
+        }
+        let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+        let notif_name = get_static_str(env, UIApplicationDidBecomeActiveNotification);
+        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+        let _: () = msg![env; pool drain];
+    }
+
+    let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
+    let _: () = msg![env; run_loop run];
 }
+
+pub(super) fn exit(env: &mut Environment) {
+    let ui_application: id = msg_class![env; UIApplication sharedApplication];
+    let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        if !env.is_app_picker {
+            let user_defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
+            let _: bool = msg![env; user_defaults synchronize];
+        }
+        let delegate: id = msg![env; ui_application delegate];
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillResignActive:") {
+            () = msg![env; delegate applicationWillResignActive:ui_application];
+        }
+        let notif_name = get_static_str(env, UIApplicationWillResignActiveNotification);
+        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+        let _: () = msg![env; pool drain];
+    };
+
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let delegate: id = msg![env; ui_application delegate];
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillTerminate:") {
+            () = msg![env; delegate applicationWillTerminate:ui_application];
+        }
+        let notif_name = get_static_str(env, UIApplicationWillTerminateNotification);
+        () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
+        let _: () = msg![env; pool drain];
+    };
+
+    std::process::exit(0);
+}
+
+const UIApplicationDidFinishLaunchingNotification: &str = "UIApplicationDidFinishLaunchingNotification";
+const UIApplicationDidBecomeActiveNotification: &str = "UIApplicationDidBecomeActiveNotification";
+const UIApplicationDidEnterBackgroundNotification: &str = "UIApplicationDidEnterBackgroundNotification";
+const UIApplicationWillEnterForegroundNotification: &str = "UIApplicationWillEnterForegroundNotification";
+const UIApplicationWillResignActiveNotification: &str = "UIApplicationWillResignActiveNotification";
+const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminateNotification";
+const UIApplicationLaunchOptionsRemoteNotificationKey: &str = "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationDidReceiveMemoryWarningNotification: &str = "UIApplicationDidReceiveMemoryWarningNotification";
+
+pub const CONSTANTS: ConstantExports = &[
+    ("_UIApplicationDidFinishLaunchingNotification", HostConstant::NSString(UIApplicationDidFinishLaunchingNotification)),
+    ("_UIApplicationDidBecomeActiveNotification", HostConstant::NSString(UIApplicationDidBecomeActiveNotification)),
+    ("_UIApplicationDidEnterBackgroundNotification", HostConstant::NSString(UIApplicationDidEnterBackgroundNotification)),
+    ("_UIApplicationWillEnterForegroundNotification", HostConstant::NSString(UIApplicationWillEnterForegroundNotification)),
+    ("_UIApplicationWillResignActiveNotification", HostConstant::NSString(UIApplicationWillResignActiveNotification)),
+    ("_UIApplicationWillTerminateNotification", HostConstant::NSString(UIApplicationWillTerminateNotification)),
+    ("_UIApplicationDidReceiveMemoryWarningNotification", HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification)),
+    ("_UIApplicationLaunchOptionsRemoteNotificationKey", HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey)),
+];
+
+pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
