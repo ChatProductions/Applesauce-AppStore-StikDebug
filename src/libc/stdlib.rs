@@ -66,7 +66,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
 
 fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
     log!("TODO: atexit({:?}) (unimplemented)", func);
-    0 
+    0
 }
 
 fn count_whitespace_generic<
@@ -181,7 +181,7 @@ fn setenv(env: &mut Environment, name: ConstPtr<u8>, value: ConstPtr<u8>, overwr
         env.mem.free(existing.cast());
     };
     let value = super::string::strdup(env, value);
-    let name_cstr = env.mem.cstr_at(name); 
+    let name_cstr = env.mem.cstr_at(name);
     env.env_vars.insert(name_cstr.to_vec(), value);
     0
 }
@@ -236,7 +236,12 @@ fn strtof(env: &mut Environment, nptr: ConstPtr<u8>, endptr: MutPtr<ConstPtr<u8>
     number as f32
 }
 
-pub fn strtoul(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> u32 {
+pub fn strtoul(
+    env: &mut Environment,
+    str: ConstPtr<u8>,
+    endptr: MutPtr<MutPtr<u8>>,
+    base: i32,
+) -> u32 {
     set_errno(env, 0);
     let parse_res = str_to_int_inner_generic(
         env,
@@ -251,17 +256,26 @@ pub fn strtoul(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u
     );
     match parse_res {
         Ok((res, len)) => {
-            if !endptr.is_null() { env.mem.write(endptr, (str + len).cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, (str + len).cast_mut());
+            }
             res
         }
         Err(_) => {
-            if !endptr.is_null() { env.mem.write(endptr, str.cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, str.cast_mut());
+            }
             0
         }
     }
 }
 
-fn strtoull(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> u64 {
+fn strtoull(
+    env: &mut Environment,
+    str: ConstPtr<u8>,
+    endptr: MutPtr<MutPtr<u8>>,
+    base: i32,
+) -> u64 {
     set_errno(env, 0);
     let parse_res = str_to_int_inner_generic(
         env,
@@ -276,41 +290,66 @@ fn strtoull(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>
     );
     match parse_res {
         Ok((res, len)) => {
-            if !endptr.is_null() { env.mem.write(endptr, (str + len).cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, (str + len).cast_mut());
+            }
             res
         }
         Err(_) => {
-            if !endptr.is_null() { env.mem.write(endptr, str.cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, str.cast_mut());
+            }
             0
         }
     }
 }
 
-fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
+fn strtol(
+    env: &mut Environment,
+    str: ConstPtr<u8>,
+    endptr: MutPtr<MutPtr<u8>>,
+    base: i32,
+) -> i32 {
     set_errno(env, 0);
     match strtol_inner(env, str, base as u32) {
         Ok((res, len)) => {
-            if !endptr.is_null() { env.mem.write(endptr, (str + len).cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, (str + len).cast_mut());
+            }
             res
         }
         Err(_) => {
-            if !endptr.is_null() { env.mem.write(endptr, str.cast_mut()); }
+            if !endptr.is_null() {
+                env.mem.write(endptr, str.cast_mut());
+            }
             0
         }
     }
 }
 
-fn realpath(env: &mut Environment, file_name: ConstPtr<u8>, resolve_name: MutPtr<u8>) -> MutPtr<u8> {
+fn realpath(
+    env: &mut Environment,
+    file_name: ConstPtr<u8>,
+    resolve_name: MutPtr<u8>,
+) -> MutPtr<u8> {
     assert!(!resolve_name.is_null());
     let file_name_str = env.mem.cstr_at_utf8(file_name).unwrap();
     let resolved = resolve_path(GuestPath::new(file_name_str), Some(env.fs.working_directory()));
     let result = format!("/{}", resolved.join("/"));
-    env.mem.bytes_at_mut(resolve_name, result.len() as GuestUSize).copy_from_slice(result.as_bytes());
-    env.mem.write(resolve_name + result.len() as GuestUSize, b'\0');
+    env.mem
+        .bytes_at_mut(resolve_name, result.len() as GuestUSize)
+        .copy_from_slice(result.as_bytes());
+    env.mem
+        .write(resolve_name + result.len() as GuestUSize, b'\0');
     resolve_name
 }
 
-fn mbstowcs(env: &mut Environment, pwcs: MutPtr<wchar_t>, s: ConstPtr<u8>, n: GuestUSize) -> GuestUSize {
+fn mbstowcs(
+    env: &mut Environment,
+    pwcs: MutPtr<wchar_t>,
+    s: ConstPtr<u8>,
+    n: GuestUSize,
+) -> GuestUSize {
     set_errno(env, 0);
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
     assert_eq!(env.mem.read(ctype_locale), b'C');
@@ -320,28 +359,77 @@ fn mbstowcs(env: &mut Environment, pwcs: MutPtr<wchar_t>, s: ConstPtr<u8>, n: Gu
         let c = env.mem.read(s + i);
         env.mem.write(pwcs + i, c as wchar_t);
     }
-    if to_write < n { env.mem.write(pwcs + to_write, wchar_t::default()); }
+    if to_write < n {
+        env.mem.write(pwcs + to_write, wchar_t::default());
+    }
     to_write
 }
 
-fn wcstombs(env: &mut Environment, s: ConstPtr<u8>, pwcs: MutPtr<wchar_t>, n: GuestUSize) -> GuestUSize {
+fn wcstombs(
+    env: &mut Environment,
+    s: ConstPtr<u8>,
+    pwcs: MutPtr<wchar_t>,
+    n: GuestUSize,
+) -> GuestUSize {
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
     assert_eq!(env.mem.read(ctype_locale), b'C');
-    if n == 0 { return 0; }
+    if n == 0 {
+        return 0;
+    }
     let wcstr = env.mem.wcstr_at(pwcs);
     let len = (wcstr.len() as GuestUSize).min(n);
-    env.mem.bytes_at_mut(s.cast_mut(), len).copy_from_slice(wcstr.as_bytes());
-    if len < n { env.mem.write((s + len).cast_mut(), b'\0'); }
+    env.mem
+        .bytes_at_mut(s.cast_mut(), len)
+        .copy_from_slice(wcstr.as_bytes());
+    if len < n {
+        env.mem.write((s + len).cast_mut(), b'\0');
+    }
     len
 }
 
 fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
-    if cmd.is_null() { return 0; }
-    log!("system({:?})", env.mem.cstr_at_utf8(cmd));
-    todo!()
+    if cmd.is_null() {
+        return 1; // shell is available
+    }
+    let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
+    log!("system({:?})", cmd_str);
+
+    let parts: Vec<&str> = cmd_str.trim().split_whitespace().collect();
+    if parts.is_empty() {
+        return 0;
+    }
+
+    match parts[0] {
+        "mkdir" => {
+            // find path argument (skip flags like -p)
+            let path_arg = parts.iter().skip(1).find(|a| !a.starts_with('-'));
+            if let Some(path) = path_arg {
+                let guest_path = GuestPath::new(path);
+                // use create_dir_all to support mkdir -p semantics
+                match env.fs.create_dir_all(guest_path) {
+                    Ok(_) => {
+                        log!("system: mkdir {:?} => success", path);
+                        0
+                    }
+                    Err(e) => {
+                        log!("system: mkdir {:?} => error: {:?}", path, e);
+                        1
+                    }
+                }
+            } else {
+                1
+            }
+        }
+        _ => {
+            log!(
+                "Warning: system({:?}) not implemented, returning 0",
+                cmd_str
+            );
+            0
+        }
+    }
 }
 
-// Исправлено: Удалено избыточное -> ()
 fn ___assert_rtn(
     env: &mut Environment,
     func: ConstPtr<u8>,
@@ -392,8 +480,17 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func_aliased!("___assert_rtn", ___assert_rtn(_, _, _, _)),
 ];
 
-pub fn atof_inner(env: &mut Environment, s: ConstPtr<u8>) -> Result<(f64, u32), <f64 as FromStr>::Err> {
-    atof_inner_generic(env, |env, s, idx| Ok(env.mem.read(s + idx)), |_, _, _| (), s.cast_mut(), 0)
+pub fn atof_inner(
+    env: &mut Environment,
+    s: ConstPtr<u8>,
+) -> Result<(f64, u32), <f64 as FromStr>::Err> {
+    atof_inner_generic(
+        env,
+        |env, s, idx| Ok(env.mem.read(s + idx)),
+        |_, _, _| (),
+        s.cast_mut(),
+        0,
+    )
 }
 
 pub fn atof_inner_generic<T, U, F1, F2>(
@@ -414,7 +511,10 @@ where
     let _ = || -> Result<(), ()> {
         match count_whitespace_generic(env, &getc_fn, &ungetc_fn, subject, offset) {
             Ok(count) => whitespace_len = count,
-            Err(count) => { whitespace_len = count; return Err(()); }
+            Err(count) => {
+                whitespace_len = count;
+                return Err(());
+            }
         }
         let maybe_sign: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
         if maybe_sign == b'+' || maybe_sign == b'-' || maybe_sign.is_ascii_digit() {
@@ -450,8 +550,6 @@ where
                 ungetc_fn(env, subject, maybe_sign);
             }
             curr = getc_fn(env, subject, offset + whitespace_len + len)?.into();
-            
-            // Исправлено: заменено is_digit(10) на is_ascii_digit()
             while (curr as char).is_ascii_digit() {
                 chars.push(curr);
                 len += 1;
@@ -465,7 +563,11 @@ where
     s.parse().map(|result| (result, whitespace_len + len))
 }
 
-fn strtol_inner(env: &mut Environment, str: ConstPtr<u8>, base: u32) -> Result<(i32, u32), ()> {
+fn strtol_inner(
+    env: &mut Environment,
+    str: ConstPtr<u8>,
+    base: u32,
+) -> Result<(i32, u32), ()> {
     str_to_int_inner_generic(
         env,
         |env, s, idx| Ok(env.mem.read(s + idx)),
@@ -507,24 +609,34 @@ where
     let _ = || -> Result<(), ()> {
         match count_whitespace_generic(env, &getc_fn, &ungetc_fn, subject, offset) {
             Ok(count) => whitespace_len = count,
-            Err(count) => { whitespace_len = count; return Err(()); }
+            Err(count) => {
+                whitespace_len = count;
+                return Err(());
+            }
         }
         let maybe_sign: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
         if maybe_sign == b'+' || maybe_sign == b'-' {
             sign = Some(maybe_sign);
             prefix_length += 1;
             len += 1;
-            if len == max_length { return Ok(()); }
+            if len == max_length {
+                return Ok(());
+            }
         } else {
             ungetc_fn(env, subject, maybe_sign);
         }
         if base == 0 {
             let curr: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
             base = if curr == b'0' {
-                let next: u8 = getc_fn(env, subject, offset + whitespace_len + len + 1)?.into();
+                let next: u8 =
+                    getc_fn(env, subject, offset + whitespace_len + len + 1)?.into();
                 ungetc_fn(env, subject, next);
                 ungetc_fn(env, subject, curr);
-                if next == b'x' || next == b'X' { 16 } else { 8 }
+                if next == b'x' || next == b'X' {
+                    16
+                } else {
+                    8
+                }
             } else {
                 ungetc_fn(env, subject, curr);
                 10
@@ -534,23 +646,36 @@ where
             let curr: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
             if curr == b'0' {
                 len += 1;
-                if len == max_length { return Ok(()); }
+                if len == max_length {
+                    return Ok(());
+                }
                 prefix_length += 1;
                 if base == 16 {
-                    let next: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
+                    let next: u8 =
+                        getc_fn(env, subject, offset + whitespace_len + len)?.into();
                     if next == b'x' || next == b'X' {
                         len += 1;
-                        if len == max_length { return Ok(()); }
+                        if len == max_length {
+                            return Ok(());
+                        }
                         prefix_length += 1;
-                    } else { ungetc_fn(env, subject, next); }
-                } else { ungetc_fn(env, subject, curr); }
-            } else { ungetc_fn(env, subject, curr); }
+                    } else {
+                        ungetc_fn(env, subject, next);
+                    }
+                } else {
+                    ungetc_fn(env, subject, curr);
+                }
+            } else {
+                ungetc_fn(env, subject, curr);
+            }
         }
         let mut curr: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
         while (curr as char).is_digit(base) {
             chars.push(curr);
             len += 1;
-            if len == max_length { return Ok(()); }
+            if len == max_length {
+                return Ok(());
+            }
             curr = getc_fn(env, subject, offset + whitespace_len + len)?.into();
         }
         ungetc_fn(env, subject, curr);
@@ -560,12 +685,15 @@ where
     let magnitude_len = len - prefix_length;
     let res = if magnitude_len > 0 {
         let mut res = from_str_radix_fn(s, base);
-        if sign == Some(b'-') { res = negation_fn(res); }
+        if sign == Some(b'-') {
+            res = negation_fn(res);
+        }
         res
     } else {
-        if base == 8 && prefix_length > 0 { return Ok((Q::default(), whitespace_len + prefix_length)); }
+        if base == 8 && prefix_length > 0 {
+            return Ok((Q::default(), whitespace_len + prefix_length));
+        }
         return Err(());
     };
     Ok((res, whitespace_len + len))
 }
-
