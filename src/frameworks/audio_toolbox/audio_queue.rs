@@ -126,6 +126,7 @@ type AudioQueuePropertyListenerProc = GuestFunction;
 const kAudioQueueErr_InvalidBuffer: OSStatus = -66687;
 const kAudioQueueErr_InvalidPropertySize: OSStatus = -66683;
 const kAudioQueueErr_BufferInQueue: OSStatus = -66679;
+const kAudioQueueErr_InvalidProperty: OSStatus = -66684;
 
 pub fn AudioQueueNewOutput(
     env: &mut Environment,
@@ -289,6 +290,13 @@ pub fn AudioQueueAllocateBuffer(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
+    // Защита от паники хоста: аудиобуферы редко превышают пару сотен килобайт.
+    // Если гость просит больше 16 МБ, это точно ошибка вычислений внутри игры.
+    if in_buffer_byte_size > 16 * 1024 * 1024 {
+        log!("Error: AudioQueueAllocateBuffer requested ridiculously large buffer: {:#x} bytes", in_buffer_byte_size);
+        return -50; // Код ошибки paramErr в CoreAudio
+    }
+
     let host_object = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
@@ -420,8 +428,6 @@ fn AudioQueueRemovePropertyListener(
     0 // success
 }
 
-const kAudioQueueErr_InvalidProperty: OSStatus = -66684;
-
 fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
     match property_id {
         kAudioQueueProperty_IsRunning => Some(guest_size_of::<u32>()),
@@ -520,6 +526,13 @@ fn AudioQueueSetProperty(
         in_property_data,
         in_data_size
     );
+
+    // Возвращаем ошибку для Magic Cookie, чтобы игра не пыталась 
+    // высчитывать размер буфера на основе пустоты.
+    if in_property_id == kAudioQueueProperty_MagicCookie {
+        return kAudioQueueErr_InvalidProperty;
+    }
+
     0 // success
 }
 
