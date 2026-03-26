@@ -235,7 +235,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
     let current_length: NSUInteger = msg![env; this length];
-    let _: () = msg![env; this setLength:current_length + extra_length];
+    let new_length = current_length + extra_length;
+    let _: () = msg![env; this setLength:new_length];
 }
 
 - (())setLength:(NSUInteger)length {
@@ -280,9 +281,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
     let old_length = host_object.length;
     let new_length = old_length + length;
-    
+
     let _: () = msg![env; this setLength:new_length];
-    
+
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     let offset_ptr = (host_object.bytes.cast::<u8>() + old_length).cast_void();
     env.mem.memmove(offset_ptr, bytes, length);
