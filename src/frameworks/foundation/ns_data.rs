@@ -14,6 +14,7 @@ use crate::objc::{
     autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
+use std::ops::Add;
 
 pub(super) struct NSDataHostObject {
     pub(super) bytes: MutVoidPtr,
@@ -256,7 +257,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let alloc = env.mem.realloc(host_object.bytes, length);
         if length > host_object.length {
             let diff = length - host_object.length;
-            let offset_ptr: MutPtr<u8> = alloc.cast().add(host_object.length as usize);
+            let offset_ptr: MutPtr<u8> = alloc.cast() + (host_object.length as usize);
             env.mem.bytes_at_mut(offset_ptr, diff).fill(0);
         }
         host_object.bytes = alloc;
@@ -276,7 +277,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setLength:new_length];
     
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let offset_ptr = host_object.bytes.cast::<u8>().add(old_length as usize).cast_void();
+    let offset_ptr = (host_object.bytes.cast::<u8>() + (old_length as usize)).cast_void();
     env.mem.memmove(offset_ptr, bytes, length);
 }
 
@@ -298,4 +299,3 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
-
