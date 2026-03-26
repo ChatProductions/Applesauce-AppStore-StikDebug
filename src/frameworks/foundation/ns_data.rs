@@ -221,11 +221,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     a == b
 }
 
-// Новые методы для копирования байт в буфер игры
 - (())getBytes:(MutVoidPtr)buffer {
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     if host_object.length > 0 && !host_object.bytes.is_null() {
-        env.mem.memmove(buffer, host_object.bytes, host_object.length);
+        env.mem.memmove(
+            buffer, 
+            host_object.bytes.cast_const(), 
+            host_object.length
+        );
     }
 }
 
@@ -233,7 +236,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     let to_copy = length.min(host_object.length);
     if to_copy > 0 && !host_object.bytes.is_null() {
-        env.mem.memmove(buffer, host_object.bytes, to_copy);
+        env.mem.memmove(buffer, host_object.bytes.cast_const(), to_copy);
     }
 }
 
@@ -334,4 +337,3 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
-
