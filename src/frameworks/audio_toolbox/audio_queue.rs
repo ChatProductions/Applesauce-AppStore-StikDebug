@@ -16,8 +16,8 @@ use crate::audio::openal::{OpenAL, OpenALManager};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::OSStatus;
 use crate::frameworks::core_audio_types::{
-    debug_fourcc, fourcc, kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian,
-    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger,
+    fourcc, kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian,
+    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked,
     kAudioFormatLinearPCM, AudioStreamBasicDescription,
 };
 use crate::frameworks::core_foundation::cf_run_loop::{
@@ -337,8 +337,8 @@ fn AudioQueueRemovePropertyListener(
     env: &mut Environment,
     in_aq: AudioQueueRef,
     in_id: AudioQueuePropertyID,
-    in_proc: AudioQueuePropertyListenerProc,
-    in_user_data: MutVoidPtr,
+    _in_proc: AudioQueuePropertyListenerProc,
+    _in_user_data: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_aq);
     if in_id == kAudioQueueProperty_IsRunning {
@@ -411,8 +411,8 @@ fn AudioQueueSetProperty(
     _env: &mut Environment,
     in_aq: AudioQueueRef,
     in_property_id: AudioQueuePropertyID,
-    in_property_data: ConstVoidPtr,
-    in_data_size: u32,
+    _in_property_data: ConstVoidPtr,
+    _in_data_size: u32,
 ) -> OSStatus {
     return_if_null!(in_aq);
 
@@ -602,42 +602,75 @@ fn unqueue_buffers<F: FnMut(ALuint)>(al_source: ALuint, context: &OpenAL<'_>, mu
 }
 
 pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
-    let (state, context) = State::get_with_context(
-        &mut env.framework_state, &mut env.openal_manager);
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
-    let Some(al_source) = host_object.al_source else { return; };
-    if host_object.is_running_handler { return; }
-
-    host_object.is_running_handler = true;
     let mut to_reuse = Vec::new();
+    let mut callback_info: Option<(AudioQueueOutputCallback, MutVoidPtr)> = None;
+    let mut al_source_id: Option<ALuint> = None;
 
-    unqueue_buffers(al_source, &context, |b| {
-        host_object.al_unused_buffers.push(b);
-        to_reuse.push(host_object.buffer_queue.pop_front().unwrap());
-    });
+    // Шаг 1: Ограничиваем область видимости заимствования
+    {
+        let (state, context) = State::get_with_context(
+            &mut env.framework_state, &mut env.openal_manager);
+        let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+        
+        if let Some(al_source) = host_object.al_source {
+            if !host_object.is_running_handler {
+                host_object.is_running_handler = true;
+                al_source_id = Some(al_source);
 
-    let (callback, user_data) = (host_object.callback_proc, host_object.callback_user_data);
-    for buf in to_reuse {
-        let () = callback.call_from_host(env, (user_data, in_aq, buf));
+                unqueue_buffers(al_source, &context, |b| {
+                    host_object.al_unused_buffers.push(b);
+                    if let Some(buf) = host_object.buffer_queue.pop_front() {
+                        to_reuse.push(buf);
+                    }
+                });
+
+                callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
+            }
+        }
+    }
+
+    // Шаг 2: Теперь env свободен, можно делать вызовы
+    if let Some((callback, user_data)) = callback_info {
+        for buf in to_reuse {
+            callback.call_from_host(env, (user_data, in_aq, buf));
+        }
     }
 
     prime_audio_queue(env, in_aq);
 
-    let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
-    if host_object.is_running != AudioQueueIsRunning::Stopped {
-        let mut state = 0;
-        unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
-        if state == al::AL_STOPPED { unsafe { context.SourcePlay(al_source); } }
-    }
+    // Шаг 3: Проверяем состояние воспроизведения
+    if let Some(al_source) = al_source_id {
+        let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+        let mut is_stopping = false;
+        let mut needs_play = false;
 
-    if host_object.is_running == AudioQueueIsRunning::Stopping {
-        let mut state = 0;
-        unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
-        if state == al::AL_STOPPED { finish_stopping_audio_queue(env, in_aq); }
-    }
+        if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
+            if host_object.is_running != AudioQueueIsRunning::Stopped {
+                let mut state = 0;
+                unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
+                if state == al::AL_STOPPED {
+                    needs_play = true;
+                }
+            }
+            if host_object.is_running == AudioQueueIsRunning::Stopping {
+                is_stopping = true;
+            }
+        }
 
-    State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq)
-        .unwrap().is_running_handler = false;
+        if needs_play { unsafe { context.SourcePlay(al_source); } }
+
+        if is_stopping {
+            let mut state = 0;
+            unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state); }
+            if state == al::AL_STOPPED {
+                finish_stopping_audio_queue(env, in_aq);
+            }
+        }
+
+        if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
+            host_object.is_running_handler = false;
+        }
+    }
 }
 
 fn AudioQueuePrime(env: &mut Environment, in_aq: AudioQueueRef, _: u32, _: MutPtr<u32>) -> OSStatus {
@@ -718,7 +751,7 @@ fn AudioQueueReset(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
     0
 }
 
-fn AudioQueueFlush(_env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus { 0 }
+fn AudioQueueFlush(_env: &mut Environment, _in_aq: AudioQueueRef) -> OSStatus { 0 }
 
 fn AudioQueueFreeBuffer(env: &mut Environment, in_aq: AudioQueueRef, 
                         in_buffer: AudioQueueBufferRef) -> OSStatus {
