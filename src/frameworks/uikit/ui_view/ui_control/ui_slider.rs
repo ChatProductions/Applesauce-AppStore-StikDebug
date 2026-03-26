@@ -6,15 +6,25 @@
 //! `UISlider`.
 
 use crate::frameworks::core_graphics::CGRect;
-use crate::objc::{id, msg_super, objc_classes, ClassExports, HostObject, NSZonePtr};
+// Подключаем именно UIControl, чтобы соблюсти цепочку UISlider -> UIControl -> UIView
+use crate::frameworks::uikit::ui_view::ui_control::UIControlHostObject;
+use crate::objc::{
+    id, impl_HostObject_with_superclass, msg_super, objc_classes, 
+    ClassExports, NSZonePtr,
+};
 
 #[derive(Default)]
 pub(super) struct UISliderHostObject {
+    // Цепочка наследования через поле superclass
+    pub(super) superclass: UIControlHostObject,
     pub(super) value: f32,
     pub(super) minimum_value: f32,
     pub(super) maximum_value: f32,
 }
-impl HostObject for UISliderHostObject {}
+
+// Реализуем трейт HostObject, который позволит методам borrow() 
+// заглядывать внутрь superclass
+impl_HostObject_with_superclass!(UISliderHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -24,6 +34,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UISliderHostObject {
+        superclass: UIControlHostObject::default(),
         value: 0.5,
         minimum_value: 0.0,
         maximum_value: 1.0,
@@ -32,13 +43,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithFrame:(CGRect)frame {
-    log_dbg!("[(UISlider*){:?} initWithFrame:{:?}] TODO: Implement UISlider. The control won't be rendered.", this, frame);
+    log_dbg!("[(UISlider*){:?} initWithFrame:{:?}] TODO: Implement UISlider.", this, frame);
     msg_super![env; this initWithFrame:frame]
 }
 
 // NSCoding implementation
 - (id)initWithCoder:(id)coder {
-    log_dbg!("[(UISlider*){:?} initWithCoder:{:?}] TODO: Implement UISlider. The control won't be rendered.", this, coder);
+    log_dbg!("[(UISlider*){:?} initWithCoder:{:?}] TODO: Implement UISlider.", this, coder);
     msg_super![env; this initWithCoder:coder]
 }
 
@@ -66,12 +77,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UISliderHostObject>(this).maximum_value = value;
 }
 
-- (())setMinimumValueImage:(id)_img { // UIImage *
-    // Просто заглушка, так как UI не рендерится
+- (())setMinimumValueImage:(id)_img { 
+    // Заглушка
 }
 
-- (())setMaximumValueImage:(id)_img { // UIImage *
-    // Просто заглушка, так как UI не рендерится
+- (())setMaximumValueImage:(id)_img { 
+    // Заглушка
 }
 
 @end
