@@ -181,6 +181,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
 
+// Новый метод, который решает панику "writeToFile:options:error:"
+- (bool)writeToFile:(id)path 
+            options:(NSUInteger)options 
+              error:(MutVoidPtr)error {
+    let _ = options;
+    let _ = error;
+    msg![env; this writeToFile:path atomically:false]
+}
+
 - (())dealloc {
     let &NSDataHostObject { bytes, free_when_done, .. } = env.objc.borrow(this);
     if !bytes.is_null() && free_when_done {
@@ -336,4 +345,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     }
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
-}
+    }
