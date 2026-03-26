@@ -189,7 +189,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _ = options;
     let _ = error;
 
-    let success = msg![env; this writeToFile:path atomically:false];
+    let success: bool = msg![env; this writeToFile:path atomically:false];
 
     if !success {
         log!("Warning: NSData -writeToFile:options:error: failed (real write returned false). Faking success.");
@@ -353,4 +353,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     }
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
-}
+    }
