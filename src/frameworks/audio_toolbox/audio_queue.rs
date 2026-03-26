@@ -348,6 +348,23 @@ pub fn AudioQueueEnqueueBuffer(
     0 // success
 }
 
+fn AudioQueueEnqueueBufferWithParameters(
+    env: &mut Environment,
+    in_aq: AudioQueueRef,
+    in_buffer: AudioQueueBufferRef,
+    in_num_packet_descs: u32,
+    in_packet_descs: MutVoidPtr,
+    _in_trim_frames_at_start: u32,
+    _in_trim_frames_at_end: u32,
+    _in_num_param_values: u32,
+    _in_param_values: MutVoidPtr,
+    _in_start_time: ConstVoidPtr,
+    _out_actual_start_time: MutVoidPtr,
+) -> OSStatus {
+    // Delegate to the simpler enqueue function, ignoring trim/param/time args
+    AudioQueueEnqueueBuffer(env, in_aq, in_buffer, in_num_packet_descs, in_packet_descs)
+}
+
 fn AudioQueueAddPropertyListener(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -1115,6 +1132,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueAllocateBufferWithPacketDescriptions(_, _, _, _)),
     export_c_func!(AudioQueueAllocateBuffer(_, _, _)),
     export_c_func!(AudioQueueEnqueueBuffer(_, _, _, _)),
+    export_c_func!(AudioQueueEnqueueBufferWithParameters(_, _, _, _, _, _, _, _, _, _)),
     export_c_func!(AudioQueueAddPropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueRemovePropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
