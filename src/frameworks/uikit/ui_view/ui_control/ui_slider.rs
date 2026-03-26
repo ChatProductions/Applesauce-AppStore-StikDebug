@@ -6,7 +6,7 @@
 //! `UISlider`.
 
 use crate::frameworks::core_graphics::CGRect;
-// Подключаем именно UIControl, чтобы соблюсти цепочку UISlider -> UIControl -> UIView
+// Цепочка: UISlider -> UIControl -> UIView
 use crate::frameworks::uikit::ui_view::ui_control::UIControlHostObject;
 use crate::objc::{
     id, impl_HostObject_with_superclass, msg_super, objc_classes, 
@@ -15,15 +15,13 @@ use crate::objc::{
 
 #[derive(Default)]
 pub(super) struct UISliderHostObject {
-    // Цепочка наследования через поле superclass
     pub(super) superclass: UIControlHostObject,
     pub(super) value: f32,
     pub(super) minimum_value: f32,
     pub(super) maximum_value: f32,
 }
 
-// Реализуем трейт HostObject, который позволит методам borrow() 
-// заглядывать внутрь superclass
+// Позволяет borrow() заглядывать в superclass
 impl_HostObject_with_superclass!(UISliderHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -43,13 +41,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithFrame:(CGRect)frame {
-    log_dbg!("[(UISlider*){:?} initWithFrame:{:?}] TODO: Implement UISlider.", this, frame);
+    log_dbg!("[(UISlider*){:?} initWithFrame:{:?}] TODO: Implement.",
+        this, frame);
     msg_super![env; this initWithFrame:frame]
 }
 
 // NSCoding implementation
 - (id)initWithCoder:(id)coder {
-    log_dbg!("[(UISlider*){:?} initWithCoder:{:?}] TODO: Implement UISlider.", this, coder);
+    log_dbg!("[(UISlider*){:?} initWithCoder:{:?}] TODO: Implement.",
+        this, coder);
     msg_super![env; this initWithCoder:coder]
 }
 
@@ -78,11 +78,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setMinimumValueImage:(id)_img { 
-    // Заглушка
+    // Stub
 }
 
 - (())setMaximumValueImage:(id)_img { 
-    // Заглушка
+    // Stub
 }
 
 @end
