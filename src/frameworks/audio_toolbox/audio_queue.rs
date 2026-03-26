@@ -420,11 +420,13 @@ fn AudioQueueRemovePropertyListener(
     0 // success
 }
 
-fn property_size(property_id: AudioQueuePropertyID) -> GuestUSize {
+const kAudioQueueErr_InvalidProperty: OSStatus = -66684;
+
+fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
     match property_id {
-        kAudioQueueProperty_IsRunning => guest_size_of::<u32>(),
-        kAudioQueueProperty_MagicCookie => 0,
-        _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
+        kAudioQueueProperty_IsRunning => Some(guest_size_of::<u32>()),
+        kAudioQueueProperty_MagicCookie => Some(0),
+        _ => None,
     }
 }
 
@@ -436,8 +438,20 @@ fn AudioQueueGetPropertySize(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    env.mem.write(out_data_size, property_size(in_property_id));
-    0 // success
+    match property_size(in_property_id) {
+        Some(size) => {
+            env.mem.write(out_data_size, size);
+            0 // success
+        }
+        None => {
+            log!(
+                "TODO: AudioQueueGetPropertySize({:?}, {}): unknown property, returning error",
+                in_aq,
+                debug_fourcc(in_property_id)
+            );
+            kAudioQueueErr_InvalidProperty
+        }
+    }
 }
 
 fn AudioQueueGetProperty(
@@ -449,7 +463,17 @@ fn AudioQueueGetProperty(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    let required_size = property_size(in_property_id);
+    let required_size = match property_size(in_property_id) {
+        Some(size) => size,
+        None => {
+            log!(
+                "TODO: AudioQueueGetProperty({:?}, {}): unknown property, returning error",
+                in_aq,
+                debug_fourcc(in_property_id)
+            );
+            return kAudioQueueErr_InvalidProperty;
+        }
+    };
     let provided_size = env.mem.read(io_data_size);
     if required_size != 0 && provided_size < required_size {
         log!("Warning: AudioQueueGetProperty() failed: provided size {} < required size {}", provided_size, required_size);
