@@ -256,7 +256,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let alloc = env.mem.realloc(host_object.bytes, length);
         if length > old_len {
             let diff = length - old_len;
-            let offset_ptr: MutPtr<u8> = alloc.cast() + (old_len as u32);
+            let offset_ptr: MutPtr<u8> = alloc.cast() + old_len;
             env.mem.bytes_at_mut(offset_ptr, diff).fill(0);
         }
         host_object.bytes = alloc;
@@ -276,7 +276,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setLength:new_length];
     
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
-    let offset_ptr = (host_object.bytes.cast::<u8>() + (old_length as u32)).cast_void();
+    let offset_ptr = (host_object.bytes.cast::<u8>() + old_length).cast_void();
     env.mem.memmove(offset_ptr, bytes, length);
 }
 
