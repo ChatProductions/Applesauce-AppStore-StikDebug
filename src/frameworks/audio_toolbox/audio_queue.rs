@@ -119,6 +119,7 @@ type AudioQueueParameterValue = f32;
 
 pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
+const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
 /// (*void)(void *in_user_data, AudioQueueRef in_aq, AudioQueuePropertyID in_id)
 type AudioQueuePropertyListenerProc = GuestFunction;
 
@@ -422,6 +423,7 @@ fn AudioQueueRemovePropertyListener(
 fn property_size(property_id: AudioQueuePropertyID) -> GuestUSize {
     match property_id {
         kAudioQueueProperty_IsRunning => guest_size_of::<u32>(),
+        kAudioQueueProperty_MagicCookie => 0,
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
     }
 }
@@ -448,8 +450,9 @@ fn AudioQueueGetProperty(
     return_if_null!(in_aq);
 
     let required_size = property_size(in_property_id);
-    if env.mem.read(io_data_size) != required_size {
-        log!("Warning: AudioQueueGetProperty() failed");
+    let provided_size = env.mem.read(io_data_size);
+    if required_size != 0 && provided_size < required_size {
+        log!("Warning: AudioQueueGetProperty() failed: provided size {} < required size {}", provided_size, required_size);
         return kAudioQueueErr_InvalidPropertySize;
     }
 
@@ -466,6 +469,10 @@ fn AudioQueueGetProperty(
                 AudioQueueIsRunning::Stopped => 0,
             };
             env.mem.write(out_property_data.cast(), is_running);
+        }
+        kAudioQueueProperty_MagicCookie => {
+            // No magic cookie available; size is 0, nothing to write.
+            log_dbg!("AudioQueueGetProperty: kAudioQueueProperty_MagicCookie requested, returning empty.");
         }
         _ => unreachable!(),
     }
