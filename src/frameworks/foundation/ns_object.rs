@@ -271,10 +271,14 @@ forUndefinedKey:(id)key { // NSString*
         }
         return;
     }
-    
-    // ... (Hacks for specific games)
-    
-    assert!(!wait);
+
+    if wait {
+        // Called from background thread with wait=true.
+        // True cross-thread waiting is not implemented, so we schedule
+        // the selector on the main run loop and proceed without blocking.
+        log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
+    }
+
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
@@ -303,3 +307,4 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
+
