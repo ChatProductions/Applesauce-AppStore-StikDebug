@@ -193,27 +193,26 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         if view == nil {
             continue;
         } else {
-            // Используем CGRect здесь, чтобы не было ошибки unused import
             let f: CGRect = msg![env; view frame];
             log_dbg!("Found view {:?} with frame {:?} for touch", view, f);
         }
 
         let is_multi_touch_enabled: bool = msg![env; view isMultipleTouchEnabled];
-        if !is_multi_touch_enabled {
-            if view_touches.contains_key(&view) || views_with_existing_touches.contains(&view) {
-                let stuck: Vec<FingerId> = env.framework_state.uikit.ui_touch.current_touches.iter()
-                    .filter(|(_, &t)| env.objc.borrow::<UITouchHostObject>(t).view == view && t != touch)
-                    .map(|(&fid, _)| fid).collect();
+        
+        // Схлопнутое условие для Clippy
+        if !is_multi_touch_enabled && (view_touches.contains_key(&view) || views_with_existing_touches.contains(&view)) {
+            let stuck: Vec<FingerId> = env.framework_state.uikit.ui_touch.current_touches.iter()
+                .filter(|(_, &t)| env.objc.borrow::<UITouchHostObject>(t).view == view && t != touch)
+                .map(|(&fid, _)| fid).collect();
 
-                if !stuck.is_empty() {
-                    for fid in stuck {
-                        if let Some(t) = env.framework_state.uikit.ui_touch.current_touches.remove(&fid) {
-                            release(env, t);
-                        }
+            if !stuck.is_empty() {
+                for fid in stuck {
+                    if let Some(t) = env.framework_state.uikit.ui_touch.current_touches.remove(&fid) {
+                        release(env, t);
                     }
-                } else {
-                    continue;
                 }
+            } else {
+                continue;
             }
         }
 
