@@ -23,6 +23,9 @@ use crate::Environment;
 
 type UIDataDetectorTypes = NSUInteger;
 type UIKeyboardType = NSInteger;
+type UIKeyboardAppearance = NSInteger;
+type UITextAutocapitalizationType = NSInteger;
+type UITextAutocorrectionType = NSInteger;
 
 pub struct UITextViewHostObject {
     superclass: super::UIScrollViewHostObject,
@@ -188,6 +191,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setKeyboardType:(UIKeyboardType)type_ {
+    todo_objc_setter!(this, type_);
+}
+
+- (())setKeyboardAppearance:(UIKeyboardAppearance)appearance {
+    todo_objc_setter!(this, appearance);
+}
+
+- (())setAutocapitalizationType:(UITextAutocapitalizationType)type_ {
+    todo_objc_setter!(this, type_);
+}
+
+- (())setAutocorrectionType:(UITextAutocorrectionType)type_ {
     todo_objc_setter!(this, type_);
 }
 
