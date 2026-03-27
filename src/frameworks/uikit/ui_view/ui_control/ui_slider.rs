@@ -6,10 +6,10 @@
 //! `UISlider`.
 
 use crate::frameworks::core_graphics::CGRect;
-// \u0426\u0435\u043f\u043e\u0447\u043a\u0430: UISlider -> UIControl -> UIView
+// Цепочка: UISlider -> UIControl -> UIView
 use crate::frameworks::uikit::ui_view::ui_control::UIControlHostObject;
 use crate::objc::{
-    id, impl_HostObject_with_superclass, msg_super, objc_classes, 
+    id, impl_HostObject_with_superclass, msg_super, objc_classes,
     ClassExports, NSZonePtr,
 };
 
@@ -21,7 +21,7 @@ pub(super) struct UISliderHostObject {
     pub(super) maximum_value: f32,
 }
 
-// \u041f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 borrow() \u0437\u0430\u0433\u043b\u044f\u0434\u044b\u0432\u0430\u0442\u044c \u0432 superclass
+// Позволяет borrow() заглядывать в superclass
 impl_HostObject_with_superclass!(UISliderHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -41,12 +41,57 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithFrame:(CGRect)frame {
-    log_dbg!("[(UISlider*){:?} initWithFrame:{:?}] TODO: Implement.",
-        this, frame);
     msg_super![env; this initWithFrame:frame]
 }
 
-// NSCoding implementation
 - (id)initWithCoder:(id)coder {
-    log_dbg!("[(UISlider*){:?} initWithCoder:{:?}] TODO: Implement.",
-        this, coder);
+    msg_super![env; this initWithCoder:coder]
+}
+
+- (f32)value {
+    env.objc.borrow::<UISliderHostObject>(this).value
+}
+
+- (())setValue:(f32)value {
+    env.objc.borrow_mut::<UISliderHostObject>(this).value = value;
+}
+
+- (f32)minimumValue {
+    env.objc.borrow::<UISliderHostObject>(this).minimum_value
+}
+
+- (())setMinimumValue:(f32)value {
+    env.objc.borrow_mut::<UISliderHostObject>(this).minimum_value = value;
+}
+
+- (f32)maximumValue {
+    env.objc.borrow::<UISliderHostObject>(this).maximum_value
+}
+
+- (())setMaximumValue:(f32)value {
+    env.objc.borrow_mut::<UISliderHostObject>(this).maximum_value = value;
+}
+
+- (())setMinimumValueImage:(id)_img {
+    // Stub
+}
+
+- (())setMaximumValueImage:(id)_img {
+    // Stub
+}
+
+- (())setThumbImage:(id)_image forState:(u32)_state {
+    // Stub: custom thumb images are not rendered
+}
+
+- (())setMinimumTrackImage:(id)_image forState:(u32)_state {
+    // Stub: custom minimum track images are not rendered
+}
+
+- (())setMaximumTrackImage:(id)_image forState:(u32)_state {
+    // Stub: custom maximum track images are not rendered
+}
+
+@end
+
+};
