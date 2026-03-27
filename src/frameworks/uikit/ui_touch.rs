@@ -174,14 +174,21 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
     for i in 0..touches_count {
         let touch: id = msg![env; touches_arr objectAtIndex:i];
-        let &UITouchHostObject { location, .. } = env.objc.borrow(touch);
+        let &UITouchHostObject { mut location, .. } = env.objc.borrow(touch);
 
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
         
-        // --- ОТЛАДКА РАЗМЕРОВ ОКОН ---
-        for (idx, w) in windows.iter().enumerate() {
-            let f: CGRect = msg![env; *w frame];
-            log_dbg!("Window {} frame: {:?}. Checking touch at: {:?}", idx, f, location);
+        // --- Фикс макроса msg! (убираем *w из вызова) и отладка ---
+        for (idx, &w_id) in windows.iter().enumerate() {
+            let f: CGRect = msg![env; w_id frame];
+            log_dbg!("Window {} frame: {:?}. Touch at: {:?}", idx, f, location);
+            
+            // КОРРЕКЦИЯ: Если тач за пределами экрана (например, 569 при высоте 480),
+            // "притягиваем" его к границе окна, чтобы он не игнорировался.
+            if location.y >= f.size.height {
+                location.y = f.size.height - 1.0;
+                log!("FIX: Clamped Y from {} to {} for window {}", location.y, f.size.height - 1.0, idx);
+            }
         }
 
         let Some((window, location_in_window)) = windows.into_iter().rev().find_map(|window| {
@@ -205,15 +212,12 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         }
 
         let is_multi_touch_enabled: bool = msg![env; view isMultipleTouchEnabled];
-        
-        // Исправлено для Clippy (схлопнуто &&)
         if !is_multi_touch_enabled && (view_touches.contains_key(&view) || views_with_existing_touches.contains(&view)) {
             let stuck: Vec<FingerId> = env.framework_state.uikit.ui_touch.current_touches.iter()
                 .filter(|(_, &t)| env.objc.borrow::<UITouchHostObject>(t).view == view && t != touch)
                 .map(|(&fid, _)| fid).collect();
 
             if !stuck.is_empty() {
-                log!("Force-clearing {} stuck touches for view {:?}", stuck.len(), view);
                 for fid in stuck {
                     if let Some(t) = env.framework_state.uikit.ui_touch.current_touches.remove(&fid) {
                         release(env, t);
@@ -237,6 +241,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             let t_obj = env.objc.borrow_mut::<UITouchHostObject>(touch);
             t_obj.view = view;
             t_obj.window = window;
+            t_obj.location = location; // Сохраняем скорректированную позицию
         }
     }
 
@@ -294,7 +299,6 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         msg![env; pi systemUptime]
     };
 
-    // Исправлено: переменная touches инициализирована
     let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
     let all_touches_set: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
     let existing: Vec<id> = env.framework_state.uikit.ui_touch.current_touches.values().cloned().collect();
