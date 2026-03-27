@@ -312,20 +312,22 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
                     // Fall through — new touch is now accepted
                 } else {
                     // views_with_existing_touches was true but no tracked
-                    // touches found for this view — inconsistent state, ignore.
+                    // touches found for this view — inconsistent state,
+                    // ignore.
                     log!(
                         "Ignoring new touch {:?} for view {:?}, !isMultipleTouchEnabled",
                         touch,
                         view
                     );
-                    // The touch will continue to be tracked until it ends, but the
-                    // view will be nil, so messages sent to it will be ignored.
-                    // TODO: Figure out if/how these should be delivered elsewhere
-                    //       in the responder chain.
+                    // The touch will continue to be tracked until it ends,
+                    // but the view will be nil, so messages sent to it will
+                    // be ignored.
+                    // TODO: Figure out if/how these should be delivered
+                    //       elsewhere in the responder chain.
                     // FIXME: The fact the view is nil might be observed via
                     //        touchesForView:nil or allTouches on UIEvent.
-                    //        This might cause problems. What does the real OS do?
-                    //        Does this need to be prevented?
+                    //        This might cause problems. What does the real
+                    //        OS do? Does this need to be prevented?
                     continue;
                 }
             }
@@ -538,3 +540,4 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
     release(env, pool);
 }
+
