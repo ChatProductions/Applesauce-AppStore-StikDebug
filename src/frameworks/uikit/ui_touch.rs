@@ -177,6 +177,13 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         let &UITouchHostObject { location, .. } = env.objc.borrow(touch);
 
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
+        
+        // --- ОТЛАДКА РАЗМЕРОВ ОКОН ---
+        for (idx, w) in windows.iter().enumerate() {
+            let f: CGRect = msg![env; *w frame];
+            log_dbg!("Window {} frame: {:?}. Checking touch at: {:?}", idx, f, location);
+        }
+
         let Some((window, location_in_window)) = windows.into_iter().rev().find_map(|window| {
             let location_in_window: CGPoint = msg![env; window convertPoint:location fromWindow:nil];
             if msg![env; window pointInside:location_in_window withEvent:event] {
@@ -199,13 +206,14 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
         let is_multi_touch_enabled: bool = msg![env; view isMultipleTouchEnabled];
         
-        // Схлопнутое условие для Clippy
+        // Исправлено для Clippy (схлопнуто &&)
         if !is_multi_touch_enabled && (view_touches.contains_key(&view) || views_with_existing_touches.contains(&view)) {
             let stuck: Vec<FingerId> = env.framework_state.uikit.ui_touch.current_touches.iter()
                 .filter(|(_, &t)| env.objc.borrow::<UITouchHostObject>(t).view == view && t != touch)
                 .map(|(&fid, _)| fid).collect();
 
             if !stuck.is_empty() {
+                log!("Force-clearing {} stuck touches for view {:?}", stuck.len(), view);
                 for fid in stuck {
                     if let Some(t) = env.framework_state.uikit.ui_touch.current_touches.remove(&fid) {
                         release(env, t);
@@ -286,6 +294,7 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         msg![env; pi systemUptime]
     };
 
+    // Исправлено: переменная touches инициализирована
     let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
     let all_touches_set: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
     let existing: Vec<id> = env.framework_state.uikit.ui_touch.current_touches.values().cloned().collect();
@@ -326,4 +335,3 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
     release(env, pool);
 }
-
