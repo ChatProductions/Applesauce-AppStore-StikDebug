@@ -19,6 +19,7 @@ pub(super) struct UISliderHostObject {
     pub(super) value: f32,
     pub(super) minimum_value: f32,
     pub(super) maximum_value: f32,
+    pub(super) continuous: bool,
 }
 
 // Позволяет borrow() заглядывать в superclass
@@ -36,6 +37,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         value: 0.5,
         minimum_value: 0.0,
         maximum_value: 1.0,
+        continuous: true, // По умолчанию в UIKit это свойство равно YES
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -70,6 +72,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setMaximumValue:(f32)value {
     env.objc.borrow_mut::<UISliderHostObject>(this).maximum_value = value;
+}
+
+- (bool)isContinuous {
+    env.objc.borrow::<UISliderHostObject>(this).continuous
+}
+
+- (())setContinuous:(bool)value {
+    env.objc.borrow_mut::<UISliderHostObject>(this).continuous = value;
 }
 
 - (())setMinimumValueImage:(id)_img {
