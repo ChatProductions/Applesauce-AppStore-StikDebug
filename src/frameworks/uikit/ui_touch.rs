@@ -265,22 +265,73 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             // there are multiple new touches for this view, we can only report
             // one of them.
             let view_has_other_new_touches = view_touches.contains_key(&view);
-            let view_has_existing_touches = views_with_existing_touches.contains(&view);
-            if view_has_other_new_touches || view_has_existing_touches {
+            if view_has_other_new_touches {
                 log!(
-                    "Ignoring new touch {:?} for view {:?}, !isMultipleTouchEnabled",
+                    "Ignoring new touch {:?} for view {:?}, !isMultipleTouchEnabled (other new touch in batch)",
                     touch,
                     view
                 );
-                // The touch will continue to be tracked until it ends, but the
-                // view will be nil, so messages sent to it will be ignored.
-                // TODO: Figure out if/how these should be delivered elsewhere
-                //       in the responder chain.
-                // FIXME: The fact the view is nil might be observed via
-                //        touchesForView:nil or allTouches on UIEvent.
-                //        This might cause problems. What does the real OS do?
-                //        Does this need to be prevented?
                 continue;
+            }
+
+            let view_has_existing_touches = views_with_existing_touches.contains(&view);
+            if view_has_existing_touches {
+                // Force-cleanup stuck touches for this view (e.g. touches whose
+                // TouchesUp event was never received during view transitions).
+                // This allows new touches to proceed instead of being silently dropped.
+                let current_touch_pairs: Vec<(FingerId, id)> = env
+                    .framework_state
+                    .uikit
+                    .ui_touch
+                    .current_touches
+                    .iter()
+                    .map(|(&finger_id, &touch)| (finger_id, touch))
+                    .collect();
+
+                let stuck_finger_ids: Vec<FingerId> = current_touch_pairs
+                    .into_iter()
+                    .filter_map(|(finger_id, stuck_touch)| {
+                        let stuck_view = env.objc.borrow::<UITouchHostObject>(stuck_touch).view;
+                        if stuck_view == view {
+                            Some(finger_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                if !stuck_finger_ids.is_empty() {
+                    log!(
+                        "Force-clearing {} stuck touch(es) for view {:?} to unblock new touch",
+                        stuck_finger_ids.len(),
+                        view
+                    );
+                    for stuck_fid in stuck_finger_ids {
+                        if let Some(stuck_touch) = env
+                            .framework_state
+                            .uikit
+                            .ui_touch
+                            .current_touches
+                            .remove(&stuck_fid)
+                        {
+                            {
+                                let stuck_host = env.objc.borrow_mut::<UITouchHostObject>(stuck_touch);
+                                stuck_host.phase = UITouchPhaseEnded;
+                            }
+                            release(env, stuck_touch);
+                        }
+                    }
+                    // Fall through — new touch is now accepted.
+                } else {
+                    // view_has_existing_touches was true due to a touch in this
+                    // very batch (shouldn't normally happen), ignore.
+                    log!(
+                        "Ignoring new touch {:?} for view {:?}, !isMultipleTouchEnabled",
+                        touch,
+                        view
+                    );
+                    continue;
+                }
             }
         }
 
@@ -315,179 +366,4 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     release(env, pool);
 }
 
-fn handle_touches_move(env: &mut Environment, map: HashMap<FingerId, Coords>) {
-    let pool: id = msg_class![env; NSAutoreleasePool new];
-
-    let timestamp: NSTimeInterval = {
-        let process_info = msg_class![env; NSProcessInfo processInfo];
-        msg![env; process_info systemUptime]
-    };
-
-    let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-
-    // view to set of touches for this view
-    let mut view_touches: HashMap<id, id> = HashMap::new();
-
-    for (finger_id, coords) in map {
-        let Some(&touch) = env
-            .framework_state
-            .uikit
-            .ui_touch
-            .current_touches
-            .get(&finger_id)
-        else {
-            log!(
-                "Warning: Finger {:?} touch move event received but no current touch, ignoring.",
-                finger_id
-            );
-            continue;
-        };
-
-        let location = CGPoint {
-            x: coords.0,
-            y: coords.1,
-        };
-
-        let view = env.objc.borrow::<UITouchHostObject>(touch).view;
-        let host_object = env.objc.borrow_mut::<UITouchHostObject>(touch);
-
-        if host_object.location == location {
-            continue;
-        }
-
-        log_dbg!("Finger {:?} touch move: {:?}", finger_id, coords);
-
-        host_object.previous_location = host_object.location;
-        host_object.location = location;
-        host_object.timestamp = timestamp;
-        assert_eq!(host_object.phase, UITouchPhaseStationary);
-        host_object.phase = UITouchPhaseMoved;
-
-        let _: () = msg![env; touches addObject:touch];
-
-        if let Entry::Vacant(e) = view_touches.entry(view) {
-            let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-            e.insert(touches);
-        }
-        let touches: id = *view_touches.get(&view).unwrap();
-        let _: () = msg![env; touches addObject:touch];
-    }
-
-    let all_touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-    for &touch in env
-        .framework_state
-        .uikit
-        .ui_touch
-        .current_touches
-        .clone()
-        .values()
-    {
-        let _: () = msg![env; all_touches addObject:touch];
-    }
-
-    let event = ui_event::new_event(env, all_touches);
-    autorelease(env, event);
-
-    for (view, touches) in view_touches {
-        log_dbg!(
-            "Sending [{:?} touchesMoved:{:?} withEvent:{:?}]",
-            view,
-            touches,
-            event
-        );
-        let _: () = msg![env; view touchesMoved:touches withEvent:event];
-    }
-
-    release(env, pool);
-}
-
-fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
-    let pool: id = msg_class![env; NSAutoreleasePool new];
-
-    let timestamp: NSTimeInterval = {
-        let process_info = msg_class![env; NSProcessInfo processInfo];
-        msg![env; process_info systemUptime]
-    };
-
-    let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-
-    // We need to construct all touches set _BEFORE_ removing touches!
-    // (as removed one are reported as the part of the event)
-    let all_touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-    for &touch in env
-        .framework_state
-        .uikit
-        .ui_touch
-        .current_touches
-        .clone()
-        .values()
-    {
-        let _: () = msg![env; all_touches addObject:touch];
-    }
-
-    // view to set of touches for this view
-    let mut view_touches: HashMap<id, id> = HashMap::new();
-
-    for (finger_id, coords) in map {
-        let Some(&touch) = env
-            .framework_state
-            .uikit
-            .ui_touch
-            .current_touches
-            .get(&finger_id)
-        else {
-            log!(
-                "Warning: Finger {:?} touch up event received but no current touch, ignoring.",
-                finger_id
-            );
-            continue;
-        };
-
-        log_dbg!("Finger {:?} touch up: {:?}", finger_id, coords);
-
-        let location = CGPoint {
-            x: coords.0,
-            y: coords.1,
-        };
-
-        let view = env.objc.borrow::<UITouchHostObject>(touch).view;
-        let host_object = env.objc.borrow_mut::<UITouchHostObject>(touch);
-        host_object.previous_location = host_object.location;
-        host_object.location = location;
-        host_object.timestamp = timestamp;
-        assert_eq!(host_object.phase, UITouchPhaseStationary);
-        host_object.phase = UITouchPhaseEnded;
-
-        let _: () = msg![env; touches addObject:touch];
-
-        if let Entry::Vacant(e) = view_touches.entry(view) {
-            let touches: id = msg_class![env; NSMutableSet allocWithZone:(MutVoidPtr::null())];
-            e.insert(touches);
-        }
-        let touches: id = *view_touches.get(&view).unwrap();
-        let _: () = msg![env; touches addObject:touch];
-
-        let _ = &env
-            .framework_state
-            .uikit
-            .ui_touch
-            .current_touches
-            .remove(&finger_id);
-        release(env, touch); // only owner now should be the NSSet
-    }
-
-    let event = ui_event::new_event(env, all_touches);
-    autorelease(env, event);
-
-    for (view, touches) in view_touches {
-        log_dbg!(
-            "Sending [{:?} touchesEnded:{:?} withEvent:{:?}]",
-            view,
-            touches,
-            event
-        );
-        let _: () = msg![env; view touchesEnded:touches withEvent:event];
-    }
-
-    release(env, pool);
-}
+fn handle_touches
