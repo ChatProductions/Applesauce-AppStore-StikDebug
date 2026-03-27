@@ -77,12 +77,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UISliderHostObject>(this).maximum_value = value;
 }
 
-- (())setMinimumValueImage:(id)_img { 
+- (())setMinimumValueImage:(id)_img {
     // Stub
 }
 
-- (())setMaximumValueImage:(id)_img { 
+- (())setMaximumValueImage:(id)_img {
     // Stub
+}
+
+- (())setThumbImage:(id)_image forState:(u32)_state {
+    // Stub: custom thumb images are not rendered
 }
 
 @end
