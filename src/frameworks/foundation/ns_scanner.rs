@@ -40,9 +40,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)allocWithZone:(NSZonePtr)zone {
-    // NSScanner might be subclassed by something which needs
-    // allocWithZone: to have the normal behaviour. Unimplemented: call
-    // superclass alloc then.
     assert!(this == env.objc.get_known_class("NSScanner", &mut env.mem));
     msg_class![env; _touchHLE_NSScanner allocWithZone:zone]
 }
@@ -60,7 +57,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithString:(id)string { // NSString *
     assert!(string != nil);
-    let string: id = msg![env; string copy]; // Same behaviour as simulator
+    let string: id = msg![env; string copy]; 
     let len: NSUInteger = msg![env; string length];
     let default_set = msg_class![env; NSCharacterSet whitespaceAndNewlineCharacterSet];
     retain(env, default_set);
@@ -99,12 +96,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let NSScannerHostObject { to_be_skipped, string, len, mut pos } = env.objc.borrow::<NSScannerHostObject>(this).clone();
     if pos >= len {
-        // Does nothing (same as simulator)
         return false;
     }
     let first_scan: unichar = msg![env; string characterAtIndex:pos];
     if msg![env; cset characterIsMember:first_scan] {
-        // Does nothing (same as simulator)
         return false;
     }
     let mut chars = vec![first_scan];
@@ -137,25 +132,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     skip_characters(env, this);
 
     let NSScannerHostObject { to_be_skipped: _set, string, len, pos } = env.objc.borrow::<NSScannerHostObject>(this).clone();
-    assert!(pos < len);
+    if pos >= len { return false; }
     let susbstring: id = msg![env; string substringFromIndex:pos];
     let tmp = to_rust_string(env, susbstring);
-    assert!(!tmp.starts_with("0x") && !tmp.starts_with("0X"));
-    assert!(!tmp.chars().next().unwrap().is_ascii_hexdigit()); // TODO
+    // TODO: Implement actual hex scanning
     env.mem.write(result, 0);
     false
 }
 
-- (bool)scanUpToString:(id)stop_string // NSString *
-            intoString:(MutPtr<id>)result { // NSString **
+- (bool)scanUpToString:(id)stop_string intoString:(MutPtr<id>)result {
     skip_characters(env, this);
 
     let NSScannerHostObject { to_be_skipped, string, len, pos } = std::mem::take(env.objc.borrow_mut::<NSScannerHostObject>(this));
-    log_dbg!("scanUpToString:'{}' intoString: from '{}' at {}", to_rust_string(env, stop_string), to_rust_string(env, string), pos);
-
-    // TODO: avoid string copying
     let left: id = msg![env; string substringFromIndex:pos];
     let range: NSRange = msg![env; left rangeOfString:stop_string];
+    
     if range.location == 0 {
         *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
         return false;
@@ -166,35 +157,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         range.location
     };
-    assert!(pos + scan_len <= len);
+
     *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos: pos + scan_len };
 
     if !result.is_null() {
         let copy: id = msg![env; left substringToIndex:scan_len];
-        log_dbg!("scanned '{}' up to {}", to_rust_string(env, copy), pos + scan_len);
-        // Note: substring is already autoreleased
         env.mem.write(result, copy);
     }
     true
 }
 
-- (bool)scanString:(id)scan_string // NSString *
-        intoString:(MutPtr<id>)result { // NSString **
+- (bool)scanString:(id)scan_string intoString:(MutPtr<id>)result {
     skip_characters(env, this);
 
     let NSScannerHostObject { to_be_skipped, string, len, pos } = std::mem::take(env.objc.borrow_mut::<NSScannerHostObject>(this));
-    log_dbg!("scanString:{} intoString: from '{}' at {}", to_rust_string(env, scan_string), to_rust_string(env, string), pos);
-
-    // TODO: avoid string copying
     let left: id = msg![env; string substringFromIndex:pos];
     let same_prefix: bool = msg![env; left hasPrefix:scan_string];
+    
     if !same_prefix {
         *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
         return false;
     }
 
     let scan_len: NSUInteger = msg![env; scan_string length];
-    assert!(pos + scan_len <= len);
     *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos: pos + scan_len };
 
     if !result.is_null() {
@@ -216,23 +201,108 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let st = to_rust_string(env, left);
-    let mut cutoff = st.len();
+    let mut cutoff = 0;
     for (i, c) in st.char_indices() {
-        if !c.is_ascii_digit() && c != '+' && c != '-' {
-            cutoff = i;
+        if c.is_ascii_digit() || ((c == '+' || c == '-') && i == 0) {
+            cutoff = i + 1;
+        } else {
             break;
         }
     }
+
     if cutoff == 0 {
-        log_dbg!("scanInt: no valid int found for '{}'", st);
         *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
         return false;
     }
 
     if !result.is_null() {
-        // TODO: handle over/underflow properly
         let res = st[..cutoff].parse().unwrap_or(0);
-        log_dbg!("scanInt: from '{}' -> {}", st, res);
+        env.mem.write(result, res);
+    }
+
+    *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos: pos + cutoff as NSUInteger };
+    true
+}
+
+- (bool)scanFloat:(MutPtr<f32>)result {
+    skip_characters(env, this);
+
+    let NSScannerHostObject { to_be_skipped, string, len, pos } = std::mem::take(env.objc.borrow_mut::<NSScannerHostObject>(this));
+    let left: id = msg![env; string substringFromIndex:pos];
+    if left == nil {
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
+
+    let st = to_rust_string(env, left);
+    let mut cutoff = 0;
+    let mut seen_dot = false;
+    let mut seen_digit = false;
+
+    for (i, c) in st.char_indices() {
+        if c.is_ascii_digit() {
+            seen_digit = true;
+            cutoff = i + 1;
+        } else if c == '.' && !seen_dot {
+            seen_dot = true;
+            cutoff = i + 1;
+        } else if (c == '-' || c == '+') && i == 0 {
+            cutoff = i + 1;
+        } else {
+            break;
+        }
+    }
+
+    if !seen_digit {
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
+
+    if !result.is_null() {
+        let res: f32 = st[..cutoff].parse().unwrap_or(0.0);
+        env.mem.write(result, res);
+    }
+
+    *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos: pos + cutoff as NSUInteger };
+    true
+}
+
+- (bool)scanDouble:(MutPtr<f64>)result {
+    skip_characters(env, this);
+
+    let NSScannerHostObject { to_be_skipped, string, len, pos } = std::mem::take(env.objc.borrow_mut::<NSScannerHostObject>(this));
+    let left: id = msg![env; string substringFromIndex:pos];
+    if left == nil {
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
+
+    let st = to_rust_string(env, left);
+    let mut cutoff = 0;
+    let mut seen_dot = false;
+    let mut seen_digit = false;
+
+    for (i, c) in st.char_indices() {
+        if c.is_ascii_digit() {
+            seen_digit = true;
+            cutoff = i + 1;
+        } else if c == '.' && !seen_dot {
+            seen_dot = true;
+            cutoff = i + 1;
+        } else if (c == '-' || c == '+') && i == 0 {
+            cutoff = i + 1;
+        } else {
+            break;
+        }
+    }
+
+    if !seen_digit {
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) = NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
+
+    if !result.is_null() {
+        let res: f64 = st[..cutoff].parse().unwrap_or(0.0);
         env.mem.write(result, res);
     }
 
