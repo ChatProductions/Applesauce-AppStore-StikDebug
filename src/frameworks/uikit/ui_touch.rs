@@ -178,16 +178,15 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
         
-        // --- Фикс макроса msg! (убираем *w из вызова) и отладка ---
         for (idx, &w_id) in windows.iter().enumerate() {
             let f: CGRect = msg![env; w_id frame];
             log_dbg!("Window {} frame: {:?}. Touch at: {:?}", idx, f, location);
             
-            // КОРРЕКЦИЯ: Если тач за пределами экрана (например, 569 при высоте 480),
+            // КОРРЕКЦИЯ: Если тач за пределами экрана (например, 569 при 480),
             // "притягиваем" его к границе окна, чтобы он не игнорировался.
             if location.y >= f.size.height {
                 location.y = f.size.height - 1.0;
-                log!("FIX: Clamped Y from {} to {} for window {}", location.y, f.size.height - 1.0, idx);
+                log!("FIX: Clamped Y to {} for window {}", location.y, idx);
             }
         }
 
@@ -241,7 +240,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             let t_obj = env.objc.borrow_mut::<UITouchHostObject>(touch);
             t_obj.view = view;
             t_obj.window = window;
-            t_obj.location = location; // Сохраняем скорректированную позицию
+            t_obj.location = location;
         }
     }
 
@@ -339,3 +338,4 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
     release(env, pool);
 }
+
