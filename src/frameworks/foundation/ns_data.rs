@@ -129,10 +129,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithContentsOfURL:(id)url {
-    let url_str_id: id = msg![env; url absoluteString];
-    let path = to_rust_string(env, url_str_id);
-    log!("TODO: NSData initWithContentsOfURL for {:?}", path);
-    nil
+    if url == nil {
+        return nil;
+    }
+    // Получаем путь из URL и вызываем инициализацию из файла
+    let path: id = msg![env; url path];
+    msg![env; this initWithContentsOfFile:path]
 }
 
 - (id)initWithContentsOfURL:(id)url 
@@ -149,6 +151,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let path_str = to_rust_string(env, path);
     let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
+        log_dbg!("NSData: Failed to read file at {:?}", path_str);
         release(env, this);
         return nil;
     };
@@ -181,8 +184,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.fs.write(GuestPath::new(&file), slice).is_ok()
 }
 
-// Workaround: fix null-page crash in game.
-// Game dereferences NSError** even on success.
 - (bool)writeToFile:(id)path 
             options:(NSUInteger)options 
               error:(MutVoidPtr)error {
@@ -194,7 +195,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("Warning: NSData writeToFile:options:error: failed. Faking success.");
     }
 
-    // Set *error = nil (standard Foundation behavior)
     if !error.is_null() {
         let error_ptr: MutPtr<id> = error.cast();
         env.mem.write(error_ptr, nil);
