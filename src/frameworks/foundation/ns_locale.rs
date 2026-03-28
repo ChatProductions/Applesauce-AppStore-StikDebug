@@ -186,6 +186,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, this)
 }
 
+- (id)displayNameForKey:(id)key value:(id)value {
+    // Return the value string as-is as a safe stub.
+    // A full implementation would return a localized display name.
+    log_dbg!(
+        "TODO: [(NSLocale*){:?} displayNameForKey:{:?} value:{:?}]",
+        this,
+        key,
+        value
+    );
+    value
+}
+
 - (id)objectForKey:(id)key {
     let key_str: &str = &ns_string::to_rust_string(env, key);
     match key_str {
