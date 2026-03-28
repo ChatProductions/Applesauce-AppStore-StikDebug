@@ -287,11 +287,14 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
 
     {
         let at = &mut env.framework_state.audio_toolbox;
-        let obj = at.audio_components
+        if let Some(obj) = at.audio_components
             .audio_component_instances
             .get_mut(&audio_unit)
-            .unwrap();
-        obj.is_running_handler = true;
+        {
+            obj.is_running_handler = true;
+        } else {
+            return;
+        }
     }
 
     let stream_format = input_stream_format
