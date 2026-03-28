@@ -125,13 +125,27 @@ fn AudioComponentFindNext(
     assert!(in_component.is_null());
 
     let audio_comp_descr = env.mem.read(in_desc);
-    assert!(audio_comp_descr.component_type == kAudioUnitType_Output);
-    assert!(audio_comp_descr.component_sub_type == kAudioUnitSubType_RemoteIO);
-    assert!(audio_comp_descr.component_manufacturer == kAudioUnitManufacturer_Apple);
+
+    // Only RemoteIO output units are supported. For any other type
+    // (e.g. mixer "aumx") log a warning and return null so the caller
+    // can handle the missing component gracefully instead of panicking.
+    if audio_comp_descr.component_type != kAudioUnitType_Output
+        || audio_comp_descr.component_sub_type != kAudioUnitSubType_RemoteIO
+        || audio_comp_descr.component_manufacturer != kAudioUnitManufacturer_Apple
+    {
+        log!(
+            "AudioComponentFindNext: unsupported component type={:#010x} sub_type={:#010x} manufacturer={:#010x}, returning null",
+            audio_comp_descr.component_type,
+            audio_comp_descr.component_sub_type,
+            audio_comp_descr.component_manufacturer,
+        );
+        return MutPtr::null();
+    }
 
     let state = State::get(&mut env.framework_state);
     if state.audio_component.is_null() {
-        state.audio_component = env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
+        state.audio_component =
+            env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
     }
 
     let out_component: AudioComponent = state.audio_component;
