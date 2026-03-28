@@ -372,7 +372,8 @@ impl ObjC {
             }
 
             // --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДЛЯ AVAudioSession ---
-            // Если класс системный и мы его не знаем, используем FakeClass, чтобы избежать паники в сообщениях.
+            // Если класс системный и мы его не знаем, используем FakeClass,
+            // чтобы избежать паники в сообщениях.
             if name == "AVAudioSession" || name == "AVAudioPlayer" || name == "AVAudioRecorder" {
                 log!("Note: substituting fake system class for {} to prevent panic", name);
                 class_host_object = Box::new(FakeClass {
