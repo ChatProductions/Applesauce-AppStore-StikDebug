@@ -13,11 +13,18 @@ use crate::window::{get_preferred_country_codes, get_preferred_language_codes};
 use crate::Environment;
 
 const NSLocaleCountryCode: &str = "NSLocaleCountryCode";
+const NSLocaleIdentifier: &str = "kCFLocaleIdentifierKey";
 
-pub const CONSTANTS: ConstantExports = &[(
-    "_NSLocaleCountryCode",
-    HostConstant::NSString(NSLocaleCountryCode),
-)];
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_NSLocaleCountryCode",
+        HostConstant::NSString(NSLocaleCountryCode),
+    ),
+    (
+        "_NSLocaleIdentifier",
+        HostConstant::NSString(NSLocaleIdentifier),
+    ),
+];
 
 #[derive(Default)]
 pub struct State {
@@ -196,3 +203,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
