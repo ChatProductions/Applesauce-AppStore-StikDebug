@@ -94,10 +94,16 @@ fn AudioUnitSetProperty(
 ) -> OSStatus {
     assert!(in_element == 0);
 
-    let host_object = audio_components::State::get(&mut env.framework_state)
+    let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
         .get_mut(&in_unit)
-        .unwrap();
+    else {
+        log_dbg!(
+            "AudioUnitSetProperty: unknown audio unit {:?}, returning paramErr",
+            in_unit
+        );
+        return paramErr;
+    };
 
     let result;
     match in_id {
@@ -143,10 +149,16 @@ fn AudioUnitGetProperty(
 ) -> OSStatus {
     assert!(in_element == 0);
 
-    let host_object = audio_components::State::get(&mut env.framework_state)
+    let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
         .get_mut(&in_unit)
-        .unwrap();
+    else {
+        log_dbg!(
+            "AudioUnitGetProperty: unknown audio unit {:?}, returning paramErr",
+            in_unit
+        );
+        return paramErr;
+    };
 
     match in_id {
         kAudioUnitProperty_MaximumFramesPerSlice => {
@@ -398,3 +410,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioOutputUnitStop(_)),
     export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
+
