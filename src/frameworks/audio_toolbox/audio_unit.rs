@@ -226,41 +226,87 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         return;
     }
 
-    let at_state = &mut env.framework_state.audio_toolbox;
-    let context = at_state.al_context.make_al_context_current(&mut env.openal_manager);
-    let current_hardware_sample_rate = at_state.audio_session.current_hardware_sample_rate;
+    // Collect all needed state into locals so the borrow on env ends
+    // before we call back into the guest (which needs &mut env).
+    let (
+        current_hardware_sample_rate,
+        started,
+        is_running_handler,
+        input_stream_format,
+        output_stream_format,
+        global_stream_format,
+        al_source,
+        last_render_time,
+        render_callback,
+    ) = {
+        let at = &mut env.framework_state.audio_toolbox;
+        let obj = at.audio_components
+            .audio_component_instances
+            .get_mut(&audio_unit)
+            .unwrap();
+        (
+            at.audio_session.current_hardware_sample_rate,
+            obj.started,
+            obj.is_running_handler,
+            obj.input_stream_format,
+            obj.output_stream_format,
+            obj.global_stream_format,
+            obj.al_source,
+            obj.last_render_time,
+            obj.render_callback,
+        )
+    };
 
-    let audio_unit_host_object = at_state.audio_components.audio_component_instances.get_mut(&audio_unit).unwrap();
-
-    if !audio_unit_host_object.started || audio_unit_host_object.is_running_handler {
+    if !started || is_running_handler {
         return;
     }
 
-    audio_unit_host_object.is_running_handler = true;
+    {
+        let at = &mut env.framework_state.audio_toolbox;
+        let obj = at.audio_components
+            .audio_component_instances
+            .get_mut(&audio_unit)
+            .unwrap();
+        obj.is_running_handler = true;
+    }
 
-    let input_stream_format = audio_unit_host_object.input_stream_format;
-    let output_stream_format = audio_unit_host_object.output_stream_format;
-    let stream_format = input_stream_format.unwrap_or(output_stream_format.unwrap_or(audio_unit_host_object.global_stream_format));
-    let sample_rate = input_stream_format.map(|f| f.sample_rate).unwrap_or(current_hardware_sample_rate);
+    let stream_format = input_stream_format
+        .unwrap_or(output_stream_format.unwrap_or(global_stream_format));
+    let sample_rate = input_stream_format
+        .map(|f| f.sample_rate)
+        .unwrap_or(current_hardware_sample_rate);
 
-    let al_source = audio_unit_host_object.al_source.unwrap();
+    let al_source = al_source.unwrap();
     let mut al_buffers = Vec::new();
-    unsafe {
-        let mut buffers_processed = 0;
-        context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut buffers_processed);
-        while buffers_processed > 0 {
-            let mut al_buffer = 0;
-            context.SourceUnqueueBuffers(al_source, 1, &mut al_buffer);
-            al_buffers.push(al_buffer);
-            context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut buffers_processed);
+
+    // Scope the context borrow so it ends before the guest callback.
+    {
+        let at = &mut env.framework_state.audio_toolbox;
+        let context = at.al_context
+            .make_al_context_current(&mut env.openal_manager);
+        unsafe {
+            let mut buffers_processed = 0;
+            context.GetSourcei(
+                al_source, AL_BUFFERS_PROCESSED, &mut buffers_processed,
+            );
+            while buffers_processed > 0 {
+                let mut al_buffer = 0;
+                context.SourceUnqueueBuffers(al_source, 1, &mut al_buffer);
+                al_buffers.push(al_buffer);
+                context.GetSourcei(
+                    al_source, AL_BUFFERS_PROCESSED, &mut buffers_processed,
+                );
+            }
         }
     }
 
     let now = Instant::now();
-    let elapsed_time = now.duration_since(audio_unit_host_object.last_render_time.unwrap());
-    let number_frames = ((elapsed_time.as_secs_f64() * sample_rate) as u32).min(2048);
+    let elapsed_time = now.duration_since(last_render_time.unwrap());
+    let number_frames =
+        ((elapsed_time.as_secs_f64() * sample_rate) as u32).min(2048);
     let bytes_per_chan = stream_format.bits_per_channel / 8;
-    let buffer_size = number_frames * stream_format.channels_per_frame * bytes_per_chan;
+    let buffer_size =
+        number_frames * stream_format.channels_per_frame * bytes_per_chan;
 
     let action_flags = env.mem.alloc_and_write(0u32);
     let buffer_data = env.mem.alloc(buffer_size);
@@ -274,12 +320,17 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     };
     let abl_ptr = env.mem.alloc_and_write(audio_buffer_list);
 
-    let callback = audio_unit_host_object.render_callback.unwrap();
-    // Explicit return type so compiler can resolve GuestRet for R.
-    let _: OSStatus = callback.input_proc.call_from_host(
+    // Copy fields from packed struct to locals — taking a reference to a
+    // field of a packed struct is undefined behaviour (E0793).
+    let callback = render_callback.unwrap();
+    let input_proc = callback.input_proc;
+    let input_proc_ref_con = callback.input_proc_ref_con;
+
+    // Explicit return type so compiler can resolve GuestRet for R (E0283).
+    let _: OSStatus = input_proc.call_from_host(
         env,
         (
-            callback.input_proc_ref_con,
+            input_proc_ref_con,
             action_flags,
             nil.cast_void().cast_const(),
             0u32,
@@ -288,30 +339,54 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         ),
     );
 
-    let (al_format, _, processed_data) = decode_buffer(&env.mem, &stream_format, buffer_data.cast(), buffer_size);
+    let (al_format, _, processed_data) = decode_buffer(
+        &env.mem, &stream_format, buffer_data.cast(), buffer_size,
+    );
 
-    unsafe {
-        let al_buffer = al_buffers.pop().unwrap_or_else(|| {
-            let mut b = 0;
-            context.GenBuffers(1, &mut b);
-            b
-        });
-        context.BufferData(al_buffer, al_format, processed_data.as_ptr() as *const ALvoid, processed_data.len() as i32, sample_rate as i32);
-        context.SourceQueueBuffers(al_source, 1, &al_buffer);
-
-        let mut state = 0;
-        context.GetSourcei(al_source, AL_SOURCE_STATE, &mut state);
-        if state != AL_PLAYING { context.SourcePlay(al_source); }
-        if !al_buffers.is_empty() { context.DeleteBuffers(al_buffers.len() as i32, al_buffers.as_ptr()); }
+    // Re-acquire context after guest callback.
+    {
+        let at = &mut env.framework_state.audio_toolbox;
+        let context = at.al_context
+            .make_al_context_current(&mut env.openal_manager);
+        unsafe {
+            let al_buffer = al_buffers.pop().unwrap_or_else(|| {
+                let mut b = 0;
+                context.GenBuffers(1, &mut b);
+                b
+            });
+            context.BufferData(
+                al_buffer,
+                al_format,
+                processed_data.as_ptr() as *const ALvoid,
+                processed_data.len() as i32,
+                sample_rate as i32,
+            );
+            context.SourceQueueBuffers(al_source, 1, &al_buffer);
+            let mut state = 0;
+            context.GetSourcei(al_source, AL_SOURCE_STATE, &mut state);
+            if state != AL_PLAYING {
+                context.SourcePlay(al_source);
+            }
+            if !al_buffers.is_empty() {
+                context.DeleteBuffers(
+                    al_buffers.len() as i32, al_buffers.as_ptr(),
+                );
+            }
+        }
     }
 
     env.mem.free(action_flags.cast_void());
     env.mem.free(buffer_data.cast_void());
     env.mem.free(abl_ptr.cast_void());
 
-    let audio_unit_host_object = audio_components::State::get(&mut env.framework_state).audio_component_instances.get_mut(&audio_unit).unwrap();
-    audio_unit_host_object.last_render_time = Some(now);
-    audio_unit_host_object.is_running_handler = false;
+    let obj = env.framework_state
+        .audio_toolbox
+        .audio_components
+        .audio_component_instances
+        .get_mut(&audio_unit)
+        .unwrap();
+    obj.last_render_time = Some(now);
+    obj.is_running_handler = false;
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -323,4 +398,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioOutputUnitStop(_)),
     export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
-
