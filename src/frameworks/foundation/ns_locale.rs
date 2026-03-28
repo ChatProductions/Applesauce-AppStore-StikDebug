@@ -158,7 +158,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let str = ns_string::to_rust_string(env, string);
     log_dbg!("[(NSLocale *){:?} initWithLocaleIdentifier:'{}']", this, str);
     // Locale identifiers may be "ru", "ru_RU", "en-US", etc.
-    // Use a helper outside the macro to avoid closure syntax inside objc_classes!
+    // Use a helper outside the macro to avoid closure syntax inside
+    // objc_classes!
     let lang = language_from_locale_identifier(&str).to_string();
     let lang_ns_string = ns_string::from_rust_string(env, lang);
     assert!(env.objc.borrow::<NSLocaleHostObject>(this).language_code == nil);
