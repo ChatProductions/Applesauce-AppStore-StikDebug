@@ -5,7 +5,7 @@
  */
 //! NSXMLParser.
 
-use super::ns_string::{from_rust_string, to_rust_string};
+use super::ns_string::from_rust_string; // Убрал to_rust_string
 use super::NSUInteger;
 use crate::environment::Environment;
 use crate::mem::ConstVoidPtr;
@@ -67,10 +67,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)parse {
     let data = env.objc.borrow::<NSXMLParserHostObject>(this).data;
     
-    // ИСПРАВЛЕНИЕ: Вместо вылета с паникой просто возвращаем false, 
-    // если данных нет.
+    // Вместо вылета с паникой просто возвращаем false, если данных нет.
     if data == nil {
-        log_error!("NSXMLParser: data is nil, cannot parse!");
+        log!("NSXMLParser: data is nil, cannot parse!");
         return false;
     }
 
@@ -91,8 +90,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             Ok(Event::Eof) => break,
             Ok(e) => events.push(e.into_owned()),
             Err(e) => {
-                log_error!("XML Parse Error at position {}: {:?}", 
-                           reader.error_position(), e);
+                log!("XML Parse Error at position {}: {:?}", 
+                     reader.error_position(), e);
                 return false;
             },
         }
@@ -257,3 +256,4 @@ fn build_attributes_dict(env: &mut Environment, e: BytesStart) -> id {
     }
     autorelease(env, dict)
 }
+
