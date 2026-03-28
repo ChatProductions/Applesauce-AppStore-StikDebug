@@ -631,7 +631,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // UIResponder implementation
 // From the Apple UIView docs regarding [UIResponder nextResponder]:
 // "UIView implements this method and returns the UIViewController object that
-//  manages it (if it has one) or its superview (if it doesn’t)."
+//  manages it (if it has one) or its superview (if it doesn't)."
 - (id)nextResponder {
     let host_object = env.objc.borrow::<UIViewHostObject>(this);
     if host_object.view_controller != nil {
@@ -647,7 +647,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                fromView:(id)other { // UIView*
     if other == nil {
         let window: id = msg![env; this window];
-        assert!(window != nil);
+        if window == nil {
+            log!("Warning: convertPoint:fromView:nil called on view not in a window, returning point unchanged");
+            return point;
+        }
         return msg![env; this convertPoint:point fromView:window]
     }
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -658,7 +661,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                  toView:(id)other { // UIView*
     if other == nil {
         let window: id = msg![env; this window];
-        assert!(window != nil);
+        if window == nil {
+            log!("Warning: convertPoint:toView:nil called on view not in a window, returning point unchanged");
+            return point;
+        }
         return msg![env; this convertPoint:point toView:window]
     }
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -669,7 +675,10 @@ pub const CLASSES: ClassExports = objc_classes! {
              fromView:(id)other { // UIView*
     if other == nil {
         let window: id = msg![env; this window];
-        assert!(window != nil);
+        if window == nil {
+            log!("Warning: convertRect:fromView:nil called on view not in a window, returning rect unchanged");
+            return rect;
+        }
         return msg![env; this convertRect:rect fromView:window]
     }
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -680,7 +689,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                toView:(id)other { // UIView*
     if other == nil {
         let window: id = msg![env; this window];
-        assert!(window != nil);
+        if window == nil {
+            log!("Warning: convertRect:toView:nil called on view not in a window, returning rect unchanged");
+            return rect;
+        }
         return msg![env; this convertRect:rect toView:window]
     }
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -706,3 +718,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
