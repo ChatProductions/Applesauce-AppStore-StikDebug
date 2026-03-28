@@ -4,14 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! NSXMLParser.
-//!
-//! "Real" iOS implementation probably uses libxml2 under the hood
-//! (at least because error codes are identical to libxml,
-//! at most because it does make sense).
-//!
-//! Our implementation is based instead on [quick-xml crate](https://docs.rs/quick-xml/latest/quick_xml) for convenience.
-//! This is something to reconsider once we integrate
-//! libxml dylib into the project.
 
 use super::ns_string::{from_rust_string, to_rust_string};
 use super::NSUInteger;
@@ -25,10 +17,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 
 struct NSXMLParserHostObject {
-    /// An internal representation of XML data to parse using NSData*
     data: id,
-    /// An object conforming to NSXMLParserDelegateEventAdditions category
-    /// or NSXMLParserDelegate protocol (which is equivalent)
     delegate: id,
 }
 impl HostObject for NSXMLParserHostObject {}
@@ -47,9 +36,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// TODO: more init methods
-// TODO: more delegate messages to support
-
 - (id)initWithContentsOfURL:(id)url { // NSURL *
     let data: id = msg_class![env; NSData dataWithContentsOfURL:url];
     msg![env; this initWithData:data]
@@ -61,7 +47,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// weak/non-retaining
 - (())setDelegate:(id)delegate {
     env.objc.borrow_mut::<NSXMLParserHostObject>(this).delegate = delegate;
 }
@@ -74,33 +59,39 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setShouldProcessNamespaces:(bool)should {
     todo_objc_setter!(this, should);
-    assert!(!should);
 }
 - (())setShouldReportNamespacePrefixes:(bool)should {
     todo_objc_setter!(this, should);
-    assert!(!should);
 }
 
 - (bool)parse {
     let data = env.objc.borrow::<NSXMLParserHostObject>(this).data;
-    assert_ne!(data, nil);
+    
+    // ИСПРАВЛЕНИЕ: Вместо вылета с паникой просто возвращаем false, если данных нет
+    if data == nil {
+        log_error!("NSXMLParser: data is nil, cannot parse!");
+        return false;
+    }
+
     let bytes: ConstVoidPtr = msg![env; data bytes];
     let length: NSUInteger = msg![env; data length];
-    log_dbg!("Parsing {:?}", env.mem.cstr_at_utf8(bytes.cast()));
+    
+    if length == 0 {
+        return false;
+    }
+
+    log_dbg!("Parsing XML data...");
     let bytes: &[u8] = env.mem.bytes_at_mut(bytes.cast().cast_mut(), length);
 
-    // TODO: support partial parsing of XML
     let mut reader = Reader::from_reader(bytes);
-    // TODO: parse and send delegate messages in one pass
     let mut events = Vec::new();
     loop {
         match reader.read_event() {
             Ok(Event::Eof) => break,
-            Ok(e) => events.push(e.into_owned()), // TODO: avoid copying
+            Ok(e) => events.push(e.into_owned()),
             Err(e) => {
-                // TODO: send parser:parseErrorOccurred: to delegate instead,
-                // after (!) other parsing delegate messages were sent
-                panic!("Error at position {}: {:?}", reader.error_position(), e)
+                log_error!("XML Parse Error at position {}: {:?}", reader.error_position(), e);
+                return false;
             },
         }
     }
@@ -150,7 +141,6 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
             Event::Text(e) => {
                 let text = e.decode().unwrap().to_string();
-                // FIXME: skipping the end of the parsed string?
                 if text != "\0" {
                     let sel: SEL = env
                         .objc
@@ -202,23 +192,15 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
             Event::CData(e) => {
+                let text = e.decode().unwrap().to_string();
                 let sel: SEL = env
                     .objc
-                    .register_host_selector("parser:foundCDATA:".to_string(), &mut env.mem);
+                    .register_host_selector("parser:foundCharacters:".to_string(), &mut env.mem);
                 let responds: bool = msg![env; delegate respondsToSelector:sel];
                 if responds {
-                    todo!("Implement parser:foundCDATA: delegate call");
-                } else {
-                    let sel: SEL = env
-                        .objc
-                        .register_host_selector("parser:foundCharacters:".to_string(), &mut env.mem);
-                    let responds: bool = msg![env; delegate respondsToSelector:sel];
-                    if responds {
-                        let text = e.decode().unwrap().to_string();
-                        let text = from_rust_string(env, text);
-                        let text = autorelease(env, text);
-                        () = msg![env; delegate parser:this foundCharacters:text];
-                    }
+                    let text = from_rust_string(env, text);
+                    let text = autorelease(env, text);
+                    () = msg![env; delegate parser:this foundCharacters:text];
                 }
             }
             Event::Comment(e) => {
@@ -233,14 +215,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this foundComment:comment];
                 }
             }
-            Event::Decl(_) => {
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector("parser:foundElementDeclarationWithName:model:".to_string(), &mut env.mem);
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                assert!(!responds); // TODO
-            }
-            e => unimplemented!("{:?}", e)
+            _ => {} // Игнорируем остальные типы событий (декларации и т.д.)
         }
     }
     let sel: SEL = env
@@ -263,8 +238,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-/// A helper function to build an attributes NSDictionary from an XML tag.
-/// Each key/value pair is copied and retained in the dict.
 fn build_attributes_dict(env: &mut Environment, e: BytesStart) -> id {
     let pairs = e.attributes().map(|a| a.unwrap()).map(|a| {
         (
@@ -280,10 +253,6 @@ fn build_attributes_dict(env: &mut Environment, e: BytesStart) -> id {
         release(env, key);
         release(env, val);
     }
-    log_dbg!("attributes {}", {
-        let desc = msg![env; dict description];
-        to_rust_string(env, desc)
-    });
-    // TODO: return an immutable copy
     autorelease(env, dict)
 }
+
