@@ -182,8 +182,14 @@ fn AudioUnitGetProperty(
         kAudioUnitProperty_StreamFormat => {
             let stream_format = match in_scope {
                 kAudioUnitScope_Global => host_object.global_stream_format,
-                kAudioUnitScope_Output => host_object.output_stream_format.unwrap(),
-                kAudioUnitScope_Input => host_object.input_stream_format.unwrap(),
+                kAudioUnitScope_Output => match host_object.output_stream_format {
+                    Some(f) => f,
+                    None => host_object.global_stream_format,
+                },
+                kAudioUnitScope_Input => match host_object.input_stream_format {
+                    Some(f) => f,
+                    None => host_object.global_stream_format,
+                },
                 _ => unimplemented!(),
             };
             env.mem.write(out_data.cast(), stream_format);
@@ -211,7 +217,13 @@ fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     }
 
     let audio_components_state = audio_components::State::get(&mut env.framework_state);
-    let audio_unit_state = audio_components_state.audio_component_instances.get_mut(&ci).unwrap();
+    let Some(audio_unit_state) = audio_components_state
+        .audio_component_instances
+        .get_mut(&ci)
+    else {
+        log_dbg!("AudioOutputUnitStart: unknown audio unit {:?}", ci);
+        return paramErr;
+    };
     audio_unit_state.al_source = Some(source);
     audio_unit_state.last_render_time = Some(Instant::now());
     audio_unit_state.started = true;
@@ -264,10 +276,12 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         render_callback,
     ) = {
         let at = &mut env.framework_state.audio_toolbox;
-        let obj = at.audio_components
+        let Some(obj) = at.audio_components
             .audio_component_instances
             .get_mut(&audio_unit)
-            .unwrap();
+        else {
+            return;
+        };
         (
             at.audio_session.current_hardware_sample_rate,
             obj.started,
