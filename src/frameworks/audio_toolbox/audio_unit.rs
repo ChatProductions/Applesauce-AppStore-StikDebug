@@ -275,7 +275,8 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let abl_ptr = env.mem.alloc_and_write(audio_buffer_list);
 
     let callback = audio_unit_host_object.render_callback.unwrap();
-    callback.input_proc.call_from_host(env, (callback.input_proc_ref_con, action_flags, nil.cast_void().cast_const(), 0u32, number_frames, abl_ptr.cast()));
+    // ИСПРАВЛЕНИЕ: явно указан тип для .cast() — компилятор не мог вывести U самостоятельно
+    callback.input_proc.call_from_host(env, (callback.input_proc_ref_con, action_flags, nil.cast_void().cast_const(), 0u32, number_frames, abl_ptr.cast::<AudioBufferList<1>>()));
 
     let (al_format, _, processed_data) = decode_buffer(&env.mem, &stream_format, buffer_data.cast(), buffer_size);
 
@@ -287,7 +288,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         });
         context.BufferData(al_buffer, al_format, processed_data.as_ptr() as *const ALvoid, processed_data.len() as i32, sample_rate as i32);
         context.SourceQueueBuffers(al_source, 1, &al_buffer);
-        
+
         let mut state = 0;
         context.GetSourcei(al_source, AL_SOURCE_STATE, &mut state);
         if state != AL_PLAYING { context.SourcePlay(al_source); }
