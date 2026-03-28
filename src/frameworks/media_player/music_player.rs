@@ -14,16 +14,25 @@ pub const MPMusicPlayerControllerNowPlayingItemDidChangeNotification: &str =
     "MPMusicPlayerControllerNowPlayingItemDidChangeNotification";
 pub const MPMusicPlayerControllerPlaybackStateDidChangeNotification: &str =
     "MPMusicPlayerControllerPlaybackStateDidChangeNotification";
+pub const MPMediaItemPropertyPersistentID: &str = "persistentID";
 
 /// `NSNotificationName` values.
 pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMusicPlayerControllerNowPlayingItemDidChangeNotification",
-        HostConstant::NSString(MPMusicPlayerControllerNowPlayingItemDidChangeNotification),
+        HostConstant::NSString(
+            MPMusicPlayerControllerNowPlayingItemDidChangeNotification,
+        ),
     ),
     (
         "_MPMusicPlayerControllerPlaybackStateDidChangeNotification",
-        HostConstant::NSString(MPMusicPlayerControllerPlaybackStateDidChangeNotification),
+        HostConstant::NSString(
+            MPMusicPlayerControllerPlaybackStateDidChangeNotification,
+        ),
+    ),
+    (
+        "_MPMediaItemPropertyPersistentID",
+        HostConstant::NSString(MPMediaItemPropertyPersistentID),
     ),
 ];
 
