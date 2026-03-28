@@ -39,6 +39,7 @@ pub struct CFGregorianDate {
 unsafe impl SafeRead for CFGregorianDate {}
 impl_GuestRet_for_large_struct!(CFGregorianDate);
 
+// Добавляем структуру Units (она отличается типами полей от Date)
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C, packed)]
 pub struct CFGregorianUnits {
@@ -91,24 +92,12 @@ pub fn CFAbsoluteTimeGetGregorianDate(
     }
 }
 
-fn CFAbsoluteTimeGetDayOfWeek(
-    _env: &mut Environment,
-    at: CFAbsoluteTime,
-    tz: CFTimeZoneRef,
-) -> i32 {
+fn CFAbsoluteTimeGetDayOfWeek(env: &mut Environment, at: CFAbsoluteTime, tz: CFTimeZoneRef) -> i32 {
     assert!(tz.is_null());
-    let time64 = apple_epoch()
-        .add(Duration::from_secs_f64(at))
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let time = time64 as time_t;
-    let tm = timestamp_to_calendar_date(time);
-    // CF: 1=Sunday, 2=Monday, ..., 7=Saturday
-    // tm_wday: 0=Sunday, 1=Monday, ..., 6=Saturday
-    (tm.tm_wday + 1) as i32
+    CFAbsoluteTimeGetGregorianDate(env, at, tz).day.into()
 }
 
+// Реализация недостающей функции
 fn CFAbsoluteTimeGetDifferenceAsGregorianUnits(
     _env: &mut Environment,
     at1: CFAbsoluteTime,
@@ -126,6 +115,7 @@ fn CFAbsoluteTimeGetDifferenceAsGregorianUnits(
         seconds: 0.0,
     };
 
+    // Упрощенный расчет интервалов (средние значения для игр обычно достаточно)
     if diff.abs() >= 31536000.0 {
         units.years = (diff / 31536000.0) as i32;
         diff -= units.years as f64 * 31536000.0;
@@ -156,5 +146,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFTimeZoneCopySystem()),
     export_c_func!(CFAbsoluteTimeGetGregorianDate(_, _)),
     export_c_func!(CFAbsoluteTimeGetDayOfWeek(_, _)),
+    // Регистрируем новую функцию здесь
     export_c_func!(CFAbsoluteTimeGetDifferenceAsGregorianUnits(_, _, _, _)),
 ];
