@@ -129,15 +129,19 @@ fn AudioComponentFindNext(
     // Only RemoteIO output units are supported. For any other type
     // (e.g. mixer "aumx") log a warning and return null so the caller
     // can handle the missing component gracefully instead of panicking.
-    if audio_comp_descr.component_type != kAudioUnitType_Output
-        || audio_comp_descr.component_sub_type != kAudioUnitSubType_RemoteIO
-        || audio_comp_descr.component_manufacturer != kAudioUnitManufacturer_Apple
+    // Copy fields from packed struct to locals to avoid E0793.
+    let comp_type = audio_comp_descr.component_type;
+    let comp_sub_type = audio_comp_descr.component_sub_type;
+    let comp_manufacturer = audio_comp_descr.component_manufacturer;
+    if comp_type != kAudioUnitType_Output
+        || comp_sub_type != kAudioUnitSubType_RemoteIO
+        || comp_manufacturer != kAudioUnitManufacturer_Apple
     {
         log!(
-            "AudioComponentFindNext: unsupported component type={:#010x} sub_type={:#010x} manufacturer={:#010x}, returning null",
-            audio_comp_descr.component_type,
-            audio_comp_descr.component_sub_type,
-            audio_comp_descr.component_manufacturer,
+            "AudioComponentFindNext: unsupported component              type={:#010x} sub_type={:#010x} manufacturer={:#010x},              returning null",
+            comp_type,
+            comp_sub_type,
+            comp_manufacturer,
         );
         return MutPtr::null();
     }
