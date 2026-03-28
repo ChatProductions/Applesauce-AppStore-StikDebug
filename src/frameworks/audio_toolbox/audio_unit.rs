@@ -300,7 +300,10 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         .map(|f| f.sample_rate)
         .unwrap_or(current_hardware_sample_rate);
 
-    let al_source = al_source.unwrap();
+    // Return early if the unit is not fully initialised yet.
+    let Some(al_source) = al_source else { return; };
+    let Some(last_render_time) = last_render_time else { return; };
+    let Some(callback) = render_callback else { return; };
     let mut al_buffers = Vec::new();
 
     // Scope the context borrow so it ends before the guest callback.
@@ -325,7 +328,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     }
 
     let now = Instant::now();
-    let elapsed_time = now.duration_since(last_render_time.unwrap());
+    let elapsed_time = now.duration_since(last_render_time);
     let number_frames =
         ((elapsed_time.as_secs_f64() * sample_rate) as u32).min(2048);
     let bytes_per_chan = stream_format.bits_per_channel / 8;
@@ -346,7 +349,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
 
     // Copy fields from packed struct to locals — taking a reference to a
     // field of a packed struct is undefined behaviour (E0793).
-    let callback = render_callback.unwrap();
     let input_proc = callback.input_proc;
     let input_proc_ref_con = callback.input_proc_ref_con;
 
@@ -403,14 +405,15 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     env.mem.free(buffer_data.cast_void());
     env.mem.free(abl_ptr.cast_void());
 
-    let obj = env.framework_state
+    if let Some(obj) = env.framework_state
         .audio_toolbox
         .audio_components
         .audio_component_instances
         .get_mut(&audio_unit)
-        .unwrap();
-    obj.last_render_time = Some(now);
-    obj.is_running_handler = false;
+    {
+        obj.last_render_time = Some(now);
+        obj.is_running_handler = false;
+    }
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -422,3 +425,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioOutputUnitStop(_)),
     export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
+
