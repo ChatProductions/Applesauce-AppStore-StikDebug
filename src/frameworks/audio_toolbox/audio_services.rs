@@ -27,11 +27,12 @@ fn AudioServicesGetProperty(
     _io_property_data_size: MutPtr<u32>,
     _out_property_data: MutVoidPtr,
 ) -> OSStatus {
+    // Некоторые игры (например, Crash Bandicoot) запрашивают этот ID.
     if in_property_id == 0xfff {
         kAudioServicesUnsupportedPropertyError
     } else {
-        log!("AudioServicesGetProperty: property {} is unimplemented", in_property_id);
-        0 // Возвращаем Success, чтобы не падать
+        log!("AudioServicesGetProperty: property {} is unimplemented, returning 0", in_property_id);
+        0 // Возвращаем Success (noErr), чтобы избежать паники в игре
     }
 }
 
@@ -42,7 +43,7 @@ fn AudioServicesCreateSystemSoundID(
 ) -> OSStatus {
     log!("AudioToolbox: AudioServicesCreateSystemSoundID stubbed");
     if !out_system_sound_id.is_null() {
-        // Записываем фейковый ID (например, 1001)
+        // Записываем фейковый ID (например, 1001), чтобы игра получила валидный дескриптор
         env.mem.write(out_system_sound_id, 1001);
     }
     0 // noErr
@@ -52,6 +53,7 @@ fn AudioServicesDisposeSystemSoundID(
     _env: &mut Environment,
     _in_system_sound_id: SystemSoundID,
 ) -> OSStatus {
+    // Просто заглушка для очистки ресурсов
     0 // noErr
 }
 
@@ -59,13 +61,14 @@ fn AudioServicesPlaySystemSound(_env: &mut Environment, in_system_sound_id: Syst
     if in_system_sound_id == kSystemSoundID_Vibrate {
         log!("TODO: vibration (AudioServicesPlaySystemSound)");
     } else {
-        log!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
+        log!("AudioToolbox: Playing system sound ID: {} (stub)", in_system_sound_id);
     }
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioServicesGetProperty(_, _, _, _, _, _)),
-    export_c_func!(AudioServicesCreateSystemSoundID(_, _, _)),
-    export_c_func!(AudioServicesDisposeSystemSoundID(_, _)),
-    export_c_func!(AudioServicesPlaySystemSound(_, _)),
+    // Количество "_" соответствует количеству аргументов ПОСЛЕ "env"
+    export_c_func!(AudioServicesGetProperty(_, _, _, _, _)),      // 5 аргументов
+    export_c_func!(AudioServicesCreateSystemSoundID(_, _)),       // 2 аргумента
+    export_c_func!(AudioServicesDisposeSystemSoundID(_)),         // 1 аргумент
+    export_c_func!(AudioServicesPlaySystemSound(_)),              // 1 аргумент
 ];
