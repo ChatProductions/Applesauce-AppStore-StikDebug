@@ -67,7 +67,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)parse {
     let data = env.objc.borrow::<NSXMLParserHostObject>(this).data;
     
-    // ИСПРАВЛЕНИЕ: Вместо вылета с паникой просто возвращаем false, если данных нет
+    // ИСПРАВЛЕНИЕ: Вместо вылета с паникой просто возвращаем false, 
+    // если данных нет.
     if data == nil {
         log_error!("NSXMLParser: data is nil, cannot parse!");
         return false;
@@ -90,7 +91,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             Ok(Event::Eof) => break,
             Ok(e) => events.push(e.into_owned()),
             Err(e) => {
-                log_error!("XML Parse Error at position {}: {:?}", reader.error_position(), e);
+                log_error!("XML Parse Error at position {}: {:?}", 
+                           reader.error_position(), e);
                 return false;
             },
         }
@@ -215,13 +217,13 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this foundComment:comment];
                 }
             }
-            _ => {} // Игнорируем остальные типы событий (декларации и т.д.)
+            _ => {} 
         }
     }
     let sel: SEL = env
         .objc
         .register_host_selector("parserDidEndDocument:".to_string(), &mut env.mem);
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
+    let responds: bool = msg![env; delegate parserDidEndDocument:this];
     if responds {
         () = msg![env; delegate parserDidEndDocument:this];
     }
@@ -255,4 +257,3 @@ fn build_attributes_dict(env: &mut Environment, e: BytesStart) -> id {
     }
     autorelease(env, dict)
 }
-
