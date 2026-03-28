@@ -92,7 +92,13 @@ fn AudioUnitSetProperty(
     in_data: ConstVoidPtr,
     in_data_size: u32,
 ) -> OSStatus {
-    assert!(in_element == 0);
+    if in_element != 0 {
+        log_dbg!(
+            "AudioUnitSetProperty: ignoring non-zero element {}",
+            in_element
+        );
+        return 0;
+    }
 
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
@@ -147,7 +153,13 @@ fn AudioUnitGetProperty(
     out_data: MutVoidPtr,
     io_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    assert!(in_element == 0);
+    if in_element != 0 {
+        log_dbg!(
+            "AudioUnitGetProperty: ignoring non-zero element {}",
+            in_element
+        );
+        return 0;
+    }
 
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
@@ -410,4 +422,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioOutputUnitStop(_)),
     export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
-
