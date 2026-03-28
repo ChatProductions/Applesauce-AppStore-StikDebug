@@ -188,6 +188,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
+// FIX FOR PANIC: "does not respond to selector setContentVerticalAlignment:"
+- (())setContentVerticalAlignment:(NSInteger)alignment {
+    todo_objc_setter!(this, alignment);
+}
+
+- (NSInteger)contentVerticalAlignment {
+    0 // Default (top)
+}
+
 // weak/non-retaining
 - (())setDelegate:(id)delegate { // something implementing UITextFieldDelegate
     log_dbg!("setDelegate:{:?}", delegate);
