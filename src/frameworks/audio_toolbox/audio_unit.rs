@@ -36,7 +36,7 @@ type AudioUnitPropertyID = u32;
 type AudioUnitScope = u32;
 type AudioUnitElement = u32;
 
-// --- ОБНОВЛЕННЫЙ БЛОК: СТРУКТУРЫ СДЕЛАНЫ ПУБЛИЧНЫМИ ---
+// --- СТРУКТУРЫ ---
 
 #[repr(C, packed)]
 pub struct AudioBufferList<const COUNT: usize> {
@@ -55,7 +55,6 @@ pub struct AudioBuffer {
 
 // -----------------------------------------------------
 
-// TODO: Other scopes
 const kAudioUnitScope_Global: AudioUnitScope = 0;
 const kAudioUnitScope_Input: AudioUnitScope = 1;
 const kAudioUnitScope_Output: AudioUnitScope = 2;
@@ -124,7 +123,6 @@ fn AudioUnitSetProperty(
             assert_eq!(in_scope, kAudioUnitScope_Output);
             assert_eq!(in_data_size, guest_size_of::<u32>());
             let enabled = env.mem.read(in_data.cast::<u32>());
-            // Output is enabled by default.
             assert_eq!(enabled, 1);
             result = 0;
             log_dbg!("AudioUnitSetProperty({:?}, kAudioOutputUnitProperty_EnableIO, {:?}, {:?}, {:?}, {:?}) -> {:?}", in_unit, in_scope, in_element, enabled, in_data_size, result);
@@ -258,9 +256,19 @@ fn AudioOutputUnitStop(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     result
 }
 
+// --- НОВАЯ ФУНКЦИЯ-ЗАГЛУШКА ---
+fn AudioUnitAddRenderNotify(
+    _env: &mut Environment,
+    in_unit: AudioUnit,
+    in_proc: ConstVoidPtr,
+    in_proc_ref_con: ConstVoidPtr,
+) -> OSStatus {
+    log_dbg!("STUB: AudioUnitAddRenderNotify({:?}, {:?}, {:?}) -> 0", in_unit, in_proc, in_proc_ref_con);
+    0 // Возвращаем успех, чтобы игра не вылетала
+}
+
 pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     if env.bundle.bundle_identifier().starts_with("com.ea.simcity") {
-        // If enabled, we have some random crashes inside AURenderCallback ;(
         log_dbg!("Applying game-specific hack for SimCity: skipping rendering of audio units");
         return;
     }
@@ -334,7 +342,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
 
     let buffer_size = number_frames * actual_bytes_per_frame;
 
-    // Alloc callback arguments
     let action_flags = env.mem.alloc_and_write(0);
 
     let (audio_buffer_list, buffer1_data, buffer2_data): (
@@ -381,7 +388,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         )
     };
 
-    // Run render callback
     let AURenderCallbackStruct {
         input_proc,
         input_proc_ref_con,
@@ -458,4 +464,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioUnitGetProperty(_, _, _, _, _, _)),
     export_c_func!(AudioOutputUnitStart(_)),
     export_c_func!(AudioOutputUnitStop(_)),
+    export_c_func!(AudioUnitAddRenderNotify(_, _, _, _)), // <-- РЕГИСТРАЦИЯ ТУТ
 ];
+
