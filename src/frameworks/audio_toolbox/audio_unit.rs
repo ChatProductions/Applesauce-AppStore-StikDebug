@@ -275,7 +275,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let abl_ptr = env.mem.alloc_and_write(audio_buffer_list);
 
     let callback = audio_unit_host_object.render_callback.unwrap();
-    // ИСПРАВЛЕНИЕ: явно указан тип для .cast() — компилятор не мог вывести U самостоятельно
+    // Explicit type for .cast() — compiler cannot infer U otherwise.
     callback.input_proc.call_from_host(env, (callback.input_proc_ref_con, action_flags, nil.cast_void().cast_const(), 0u32, number_frames, abl_ptr.cast::<AudioBufferList<1>>()));
 
     let (al_format, _, processed_data) = decode_buffer(&env.mem, &stream_format, buffer_data.cast(), buffer_size);
@@ -313,4 +313,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioOutputUnitStop(_)),
     export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
-
