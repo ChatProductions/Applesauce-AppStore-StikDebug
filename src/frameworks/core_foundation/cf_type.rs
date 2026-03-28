@@ -13,6 +13,7 @@ use crate::{msg, objc};
 use crate::{msg_class, Environment};
 
 pub type CFTypeRef = objc::id;
+pub type CFTypeID = CFIndex;
 
 pub fn CFRetain(env: &mut Environment, object: CFTypeRef) -> CFTypeRef {
     assert!(!object.is_null()); // not allowed, unlike for normal objc objects
@@ -27,7 +28,11 @@ pub fn CFGetRetainCount(env: &mut Environment, object: CFTypeRef) -> CFIndex {
     count as CFIndex
 }
 
-pub fn CFEqual(env: &mut Environment, object1: CFTypeRef, object2: CFTypeRef) -> bool {
+pub fn CFEqual(
+    env: &mut Environment,
+    object1: CFTypeRef,
+    object2: CFTypeRef,
+) -> bool {
     if object1 == object2 {
         return true;
     }
@@ -45,10 +50,25 @@ pub fn CFHash(env: &mut Environment, object: CFTypeRef) -> CFHashCode {
     msg![env; object hash]
 }
 
+/// Returns a type identifier for the given object.
+/// touchHLE does not maintain a real CF type registry, so we return the
+/// object's class pointer cast to CFTypeID as a stable unique-per-class value.
+/// This is sufficient for apps that only use the result for equality checks
+/// (e.g. comparing CFGetTypeID(x) == CFStringGetTypeID()).
+fn CFGetTypeID(env: &mut Environment, cf: CFTypeRef) -> CFTypeID {
+    if cf.is_null() {
+        log_dbg!("CFGetTypeID: called with null, returning 0");
+        return 0;
+    }
+    let class: Class = msg![env; cf class];
+    class.to_bits() as CFTypeID
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFRetain(_)),
     export_c_func!(CFRelease(_)),
     export_c_func!(CFGetRetainCount(_)),
     export_c_func!(CFEqual(_, _)),
     export_c_func!(CFHash(_)),
+    export_c_func!(CFGetTypeID(_)),
 ];
