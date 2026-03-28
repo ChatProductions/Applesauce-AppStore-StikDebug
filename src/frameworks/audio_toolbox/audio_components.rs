@@ -138,7 +138,7 @@ fn AudioComponentFindNext(
         || comp_manufacturer != kAudioUnitManufacturer_Apple
     {
         log!(
-            "AudioComponentFindNext: unsupported component              type={:#010x} sub_type={:#010x} manufacturer={:#010x},              returning null",
+            "AudioComponentFindNext: unsupported component type={:#010x} sub_type={:#010x} manufacturer={:#010x}, returning null",
             comp_type,
             comp_sub_type,
             comp_manufacturer,
