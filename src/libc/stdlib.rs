@@ -137,6 +137,16 @@ const RAND_MAX: i32 = i32::MAX;
 fn srand(env: &mut Environment, seed: u32) {
     env.libc_state.stdlib.rand = seed;
 }
+
+/// BSD function that seeds rand() from a random source (/dev/random).
+/// Stubbed: seeds using arc4random so the game gets a non-deterministic seed
+/// without requiring actual /dev/random access.
+fn sranddev(env: &mut Environment) {
+    let seed = arc4random(env);
+    env.libc_state.stdlib.rand = seed;
+    log!("sranddev() stubbed: seeded rand with {}", seed);
+}
+
 fn rand(env: &mut Environment) -> i32 {
     env.libc_state.stdlib.rand = prng(env.libc_state.stdlib.rand);
     (env.libc_state.stdlib.rand as i32) & RAND_MAX
@@ -460,6 +470,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(atof(_)),
     export_c_func!(strtod(_, _)),
     export_c_func!(srand(_)),
+    export_c_func!(sranddev()),
     export_c_func!(rand()),
     export_c_func!(srandom(_)),
     export_c_func!(random()),
@@ -698,3 +709,4 @@ where
     };
     Ok((res, whitespace_len + len))
 }
+
