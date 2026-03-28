@@ -5,7 +5,7 @@
  */
 //! NSXMLParser.
 
-use super::ns_string::from_rust_string; // Убрал to_rust_string
+use super::ns_string::from_rust_string;
 use super::NSUInteger;
 use crate::environment::Environment;
 use crate::mem::ConstVoidPtr;
@@ -67,7 +67,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)parse {
     let data = env.objc.borrow::<NSXMLParserHostObject>(this).data;
     
-    // Вместо вылета с паникой просто возвращаем false, если данных нет.
     if data == nil {
         log!("NSXMLParser: data is nil, cannot parse!");
         return false;
@@ -98,27 +97,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let delegate = env.objc.borrow::<NSXMLParserHostObject>(this).delegate;
-    let sel: SEL = env
+    let _sel: SEL = env
         .objc
         .register_host_selector("parserDidStartDocument:".to_string(), &mut env.mem);
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-    if responds {
+    
+    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
         () = msg![env; delegate parserDidStartDocument:this];
     }
+
     for event in events {
         match event {
             Event::Empty(e) => {
                 let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
                 let name: id = from_rust_string(env, name);
                 let name = autorelease(env, name);
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector(
+                let _sel: SEL = env.objc.register_host_selector(
                         "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
                         &mut env.mem
                     );
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
                     let dict = build_attributes_dict(env, e);
                     () = msg![env; delegate parser:this
                                    didStartElement:name
@@ -126,14 +123,11 @@ pub const CLASSES: ClassExports = objc_classes! {
                                      qualifiedName:nil
                                         attributes:dict];
                 }
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector(
+                let _sel: SEL = env.objc.register_host_selector(
                         "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
                         &mut env.mem
                     );
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
                     () = msg![env; delegate parser:this
                                      didEndElement:name
                                       namespaceURI:nil
@@ -143,11 +137,9 @@ pub const CLASSES: ClassExports = objc_classes! {
             Event::Text(e) => {
                 let text = e.decode().unwrap().to_string();
                 if text != "\0" {
-                    let sel: SEL = env
-                        .objc
-                        .register_host_selector("parser:foundCharacters:".to_string(), &mut env.mem);
-                    let responds: bool = msg![env; delegate respondsToSelector:sel];
-                    if responds {
+                    let _sel: SEL = env.objc.register_host_selector(
+                        "parser:foundCharacters:".to_string(), &mut env.mem);
+                    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
                         let chars = from_rust_string(env, text);
                         let chars = autorelease(env, chars);
                         () = msg![env; delegate parser:this foundCharacters:chars];
@@ -156,19 +148,16 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
             Event::Start(e) => {
                 let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector(
+                let _sel: SEL = env.objc.register_host_selector(
                         "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
                         &mut env.mem
                     );
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
-                    let name: id = from_rust_string(env, name);
-                    let name = autorelease(env, name);
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+                    let name_id: id = from_rust_string(env, name);
+                    let name_id = autorelease(env, name_id);
                     let dict = build_attributes_dict(env, e);
                     () = msg![env; delegate parser:this
-                                   didStartElement:name
+                                   didStartElement:name_id
                                       namespaceURI:nil
                                      qualifiedName:nil
                                         attributes:dict];
@@ -176,56 +165,49 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
             Event::End(e) => {
                 let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector(
+                let _sel: SEL = env.objc.register_host_selector(
                         "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
                         &mut env.mem
                     );
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
-                    let name: id = from_rust_string(env, name);
-                    let name = autorelease(env, name);
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+                    let name_id: id = from_rust_string(env, name);
+                    let name_id = autorelease(env, name_id);
                     () = msg![env; delegate parser:this
-                                     didEndElement:name
+                                     didEndElement:name_id
                                       namespaceURI:nil
                                      qualifiedName:nil];
                 }
             }
             Event::CData(e) => {
                 let text = e.decode().unwrap().to_string();
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector("parser:foundCharacters:".to_string(), &mut env.mem);
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
-                    let text = from_rust_string(env, text);
-                    let text = autorelease(env, text);
-                    () = msg![env; delegate parser:this foundCharacters:text];
+                let _sel: SEL = env.objc.register_host_selector(
+                    "parser:foundCharacters:".to_string(), &mut env.mem);
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+                    let text_id = from_rust_string(env, text);
+                    let text_id = autorelease(env, text_id);
+                    () = msg![env; delegate parser:this foundCharacters:text_id];
                 }
             }
             Event::Comment(e) => {
                 let comment = e.decode().unwrap().to_string();
-                let sel: SEL = env
-                    .objc
-                    .register_host_selector("parser:foundComment:".to_string(), &mut env.mem);
-                let responds: bool = msg![env; delegate respondsToSelector:sel];
-                if responds {
-                    let comment = from_rust_string(env, comment);
-                    let comment = autorelease(env, comment);
-                    () = msg![env; delegate parser:this foundComment:comment];
+                let _sel: SEL = env.objc.register_host_selector(
+                    "parser:foundComment:".to_string(), &mut env.mem);
+                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+                    let comment_id = from_rust_string(env, comment);
+                    let comment_id = autorelease(env, comment_id);
+                    () = msg![env; delegate parser:this foundComment:comment_id];
                 }
             }
             _ => {} 
         }
     }
-    let sel: SEL = env
-        .objc
-        .register_host_selector("parserDidEndDocument:".to_string(), &mut env.mem);
-    let responds: bool = msg![env; delegate parserDidEndDocument:this];
-    if responds {
+
+    let _sel: SEL = env.objc.register_host_selector(
+        "parserDidEndDocument:".to_string(), &mut env.mem);
+    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
         () = msg![env; delegate parserDidEndDocument:this];
     }
+
     true
 }
 
