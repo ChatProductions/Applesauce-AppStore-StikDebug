@@ -5,7 +5,7 @@
  */
 //! `AudioUnit.h` (Audio Unit Services)
 
-// Позволяем компилятору игнорировать мелкие предупреждения, чтобы сборка не прерывалась
+// Allow compiler to ignore warnings to prevent build failure on strict CI
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![allow(dead_code)]
@@ -39,7 +39,7 @@ type AudioUnitPropertyID = u32;
 type AudioUnitScope = u32;
 type AudioUnitElement = u32;
 
-// --- СТРУКТУРЫ ---
+// --- STRUCTURES ---
 
 #[repr(C, packed)]
 pub struct AudioBufferList<const COUNT: usize> {
@@ -72,14 +72,14 @@ const kAudioOutputUnitProperty_EnableIO: AudioUnitPropertyID = 2003;
 fn AudioUnitInitialize(env: &mut Environment, in_unit: AudioUnit) -> OSStatus {
     let run_loop = CFRunLoopGetMain(env);
     ns_run_loop::add_audio_unit(env, run_loop, in_unit);
-    0 
+    0
 }
 
 fn AudioUnitUninitialize(env: &mut Environment, in_unit: AudioUnit) -> OSStatus {
     let run_loop = CFRunLoopGetMain(env);
     match ns_run_loop::remove_audio_unit(env, run_loop, in_unit) {
         Ok(_) => 0,
-        Err(_) => paramErr, 
+        Err(_) => paramErr,
     }
 }
 
@@ -107,7 +107,6 @@ fn AudioUnitSetProperty(
             let render_callback = env.mem.read(in_data.cast::<AURenderCallbackStruct>());
             host_object.render_callback = Some(render_callback);
             result = 0;
-            log_dbg!("AudioUnitSetProperty({:?}, kAudioUnitProperty_SetRenderCallback, ...)", in_unit);
         }
         kAudioUnitProperty_StreamFormat => {
             assert_eq!(in_data_size, guest_size_of::<AudioStreamBasicDescription>());
@@ -176,7 +175,7 @@ fn AudioUnitGetProperty(
         }
         _ => return -1,
     };
-    0 
+    0
 }
 
 fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
@@ -211,7 +210,7 @@ fn AudioOutputUnitStop(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     }
 }
 
-// --- ТА САМАЯ ЗАГЛУШКА ---
+// STUB: For games calling AddRenderNotify (e.g. SimCity)
 fn AudioUnitAddRenderNotify(
     _env: &mut Environment,
     in_unit: AudioUnit,
@@ -219,7 +218,7 @@ fn AudioUnitAddRenderNotify(
     in_proc_ref_con: ConstVoidPtr,
 ) -> OSStatus {
     log_dbg!("STUB: AudioUnitAddRenderNotify called");
-    0 
+    0
 }
 
 pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
@@ -260,7 +259,8 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let now = Instant::now();
     let elapsed_time = now.duration_since(audio_unit_host_object.last_render_time.unwrap());
     let number_frames = ((elapsed_time.as_secs_f64() * sample_rate) as u32).min(2048);
-    let buffer_size = number_frames * stream_format.channels_per_frame * (stream_format.bits_per_channel / 8);
+    let bytes_per_chan = stream_format.bits_per_channel / 8;
+    let buffer_size = number_frames * stream_format.channels_per_frame * bytes_per_chan;
 
     let action_flags = env.mem.alloc_and_write(0u32);
     let buffer_data = env.mem.alloc(buffer_size);
@@ -310,6 +310,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioUnitGetProperty(_, _, _, _, _, _)),
     export_c_func!(AudioOutputUnitStart(_)),
     export_c_func!(AudioOutputUnitStop(_)),
-    export_c_func!(AudioUnitAddRenderNotify(_, _, _)), // ИСПРАВЛЕНО: 3 аргумента после env
+    export_c_func!(AudioUnitAddRenderNotify(_, _, _)),
 ];
 
