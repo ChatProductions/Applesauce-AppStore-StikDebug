@@ -168,6 +168,16 @@ fn AudioComponentInstanceNew(
     in_component: AudioComponent,
     out_instance: MutPtr<AudioComponentInstance>,
 ) -> OSStatus {
+    // If AudioComponentFindNext returned null (unsupported component),
+    // refuse to create an instance so callers get a clear error code
+    // instead of a later unwrap() panic.
+    if in_component.is_null() {
+        log_dbg!(
+            "AudioComponentInstanceNew: in_component is null,              returning paramErr"
+        );
+        return paramErr;
+    }
+
     let host_object = AudioComponentInstanceHostObject::default();
 
     let guest_instance: AudioComponentInstance = env
@@ -215,3 +225,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioComponentInstanceNew(_, _)),
     export_c_func!(AudioComponentInstanceDispose(_)),
 ];
+
