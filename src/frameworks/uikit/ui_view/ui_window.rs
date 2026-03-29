@@ -128,6 +128,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setHidden:false];
 }
 
+// Legacy iOS 2/3 pattern: [window setContentView:someView]
+// Semantically equivalent to addSubview: for UIWindow.
+- (())setContentView:(id)view {
+    log_dbg!("[(UIWindow*){:?} setContentView:{:?}]", this, view);
+    () = msg![env; this addSubview:view];
+}
+
+// Returns the first subview as the content view (legacy behaviour).
+- (id)contentView {
+    let subviews = &env.objc.borrow::<UIViewHostObject>(this).subviews;
+    subviews.first().copied().unwrap_or(nil)
+}
+
 // UIResponder implementation
 // From the Apple UIView docs regarding [UIResponder nextResponder]:
 // "UIWindow returns the application object."

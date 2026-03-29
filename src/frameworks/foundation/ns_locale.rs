@@ -13,11 +13,18 @@ use crate::window::{get_preferred_country_codes, get_preferred_language_codes};
 use crate::Environment;
 
 const NSLocaleCountryCode: &str = "NSLocaleCountryCode";
+const NSLocaleIdentifier: &str = "kCFLocaleIdentifierKey";
 
-pub const CONSTANTS: ConstantExports = &[(
-    "_NSLocaleCountryCode",
-    HostConstant::NSString(NSLocaleCountryCode),
-)];
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_NSLocaleCountryCode",
+        HostConstant::NSString(NSLocaleCountryCode),
+    ),
+    (
+        "_NSLocaleIdentifier",
+        HostConstant::NSString(NSLocaleIdentifier),
+    ),
+];
 
 #[derive(Default)]
 pub struct State {
@@ -63,6 +70,16 @@ fn get_preferred_countries(env: &mut Environment) -> Vec<String> {
     }
 }
 
+/// Extract the language subtag from a locale identifier.
+/// Handles "ru", "ru_RU", "ru-RU", "en_US" etc.
+fn language_from_locale_identifier(identifier: &str) -> &str {
+    let sep = identifier.find('_').or_else(|| identifier.find('-'));
+    match sep {
+        Some(idx) => &identifier[..idx],
+        None => identifier,
+    }
+}
+
 struct NSLocaleHostObject {
     /// `NSString *`
     country_code: id,
@@ -85,10 +102,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// The documentation isn't clear about what the format of the strings should be,
-// but Super Monkey Ball does `isEqualToString:` against "fr", "es", "de", "it"
-// and "ja", and its locale detection works properly, so presumably they do not
-// usually have region suffixes.
+// The documentation is not clear about what the format of the strings should
+// be, but Super Monkey Ball does isEqualToString against "fr", "es", "de",
+// "it" and "ja", and its locale detection works properly, so presumably they
+// do not usually have region suffixes.
 + (id)preferredLanguages {
     if let Some(existing) = State::get(env).preferred_languages {
         existing
@@ -147,14 +164,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithLocaleIdentifier:(id)string { // NSString *
     let str = ns_string::to_rust_string(env, string);
     log_dbg!("[(NSLocale *){:?} initWithLocaleIdentifier:'{}']", this, str);
-    retain(env, string);
-    // Loosely assume 2-char lang code here
-    // TODO: locale identifier parsing
-    assert_eq!(2, str.len());
-    assert!(str.to_lowercase().eq(&str));
-    assert!(!str.contains('_') && !str.contains('-'));
+    // Locale identifiers may be "ru", "ru_RU", "en-US", etc.
+    // Use a helper outside the macro to avoid closure syntax inside
+    // objc_classes!
+    let lang = language_from_locale_identifier(&str).to_string();
+    let lang_ns_string = ns_string::from_rust_string(env, lang);
     assert!(env.objc.borrow::<NSLocaleHostObject>(this).language_code == nil);
-    env.objc.borrow_mut::<NSLocaleHostObject>(this).language_code = string;
+    env.objc.borrow_mut::<NSLocaleHostObject>(this).language_code = lang_ns_string;
     this
 }
 
@@ -170,12 +186,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, this)
 }
 
+- (id)displayNameForKey:(id)key value:(id)value {
+    // Return the value string as-is as a safe stub.
+    // A full implementation would return a localized display name.
+    log_dbg!(
+        "TODO: [(NSLocale*){:?} displayNameForKey:{:?} value:{:?}]",
+        this,
+        key,
+        value
+    );
+    value
+}
+
 - (id)objectForKey:(id)key {
     let key_str: &str = &ns_string::to_rust_string(env, key);
     match key_str {
         // Note: this is not the cleanest separation between NS and CF parts
         // But it does work on the iOS Simulator
-        // TODO: Define NSLocaleCountryCode _as_ kCFLocaleCountryCode
+        // TODO: Define NSLocaleCountryCode as kCFLocaleCountryCode
         NSLocaleCountryCode | kCFLocaleCountryCode => {
             let &NSLocaleHostObject { country_code, .. } = env.objc.borrow(this);
             country_code
@@ -187,3 +215,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+

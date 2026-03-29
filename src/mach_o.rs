@@ -718,4 +718,4 @@ impl MachO {
     pub fn get_section<P: SectionPredicate>(&self, by: P) -> Option<&Section> {
         self.sections.iter().find(|section| by.test(section))
     }
-}
+            }

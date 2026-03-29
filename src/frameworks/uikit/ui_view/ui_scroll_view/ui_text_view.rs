@@ -8,7 +8,7 @@
 use crate::frameworks::core_graphics::cg_context::CGContextSetRGBFillColor;
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::frameworks::uikit::ui_color;
 use crate::frameworks::uikit::ui_font::{
     UILineBreakModeTailTruncation, UITextAlignment, UITextAlignmentLeft,
@@ -22,6 +22,10 @@ use crate::objc::{
 use crate::Environment;
 
 type UIDataDetectorTypes = NSUInteger;
+type UIKeyboardType = NSInteger;
+type UIKeyboardAppearance = NSInteger;
+type UITextAutocapitalizationType = NSInteger;
+type UITextAutocorrectionType = NSInteger;
 
 pub struct UITextViewHostObject {
     superclass: super::UIScrollViewHostObject,
@@ -186,6 +190,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, type_);
 }
 
+- (())setKeyboardType:(UIKeyboardType)type_ {
+    todo_objc_setter!(this, type_);
+}
+
+- (())setKeyboardAppearance:(UIKeyboardAppearance)appearance {
+    todo_objc_setter!(this, appearance);
+}
+
+- (())setAutocapitalizationType:(UITextAutocapitalizationType)type_ {
+    todo_objc_setter!(this, type_);
+}
+
+- (())setAutocorrectionType:(UITextAutocorrectionType)type_ {
+    todo_objc_setter!(this, type_);
+}
+
 - (())setDataDetectorTypes:(UIDataDetectorTypes)types {
     todo_objc_setter!(this, types);
 }
@@ -227,3 +247,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+

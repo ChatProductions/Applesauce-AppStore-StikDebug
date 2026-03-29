@@ -38,6 +38,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [(UIAlertView*){:?} show]", this);
 }
 
+- (())dismissWithClickedButtonIndex:(i32)buttonIndex animated:(bool)animated {
+    log!("TODO: [(UIAlertView*){:?} dismissWithClickedButtonIndex:{} animated:{}]", this, buttonIndex, animated);
+}
+
 @end
 
 };

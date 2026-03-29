@@ -114,6 +114,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, style);
 }
 
+- (())setStatusBarStyle:(UIStatusBarStyle)style
+               animated:(bool)_animated {
+    msg![env; this setStatusBarStyle:style]
+}
+
 - (UIInterfaceOrientation)statusBarOrientation {
     match env.window().current_rotation() {
         DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
@@ -121,6 +126,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight
     }
 }
+
+- (f64)statusBarOrientationAnimationDuration {
+    0.3
+}
+
 - (())setStatusBarOrientation:(UIInterfaceOrientation)orientation {
     env.on_parent_stack_in_coroutine(|window, _| {window.rotate_device(match orientation {
         UIDeviceOrientationPortrait => DeviceOrientation::Portrait,
@@ -151,15 +161,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         echo!("App opened URL {:?}, exiting.", url_string);
     }
 
-    // iPhone OS doesn't really do multitasking, so the app expects to close
-    // when a URL is opened, e.g. Super Monkey Ball keeps opening the URL every
-    // frame! Super Monkey Ball also doesn't check whether opening failed, so
-    // it's probably best to always exit.
     exit(env);
     true
 }
 
-// TODO: ignore touches
 -(())beginIgnoringInteractionEvents {
     log!("TODO: ignoring beginIgnoringInteractionEvents");
 }
@@ -214,17 +219,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: ignoring setApplicationIconBadgeNumber:{}", bn);
 }
 
-// UIResponder implementation
-// From the Apple UIView docs regarding [UIResponder nextResponder]:
-// "The shared UIApplication object normally returns nil, but it returns its
-//  app delegate if that object is a subclass of UIResponder and hasn’t
-//  already been called to handle the event."
 - (id)nextResponder {
     let delegate = msg![env; this delegate];
     let app_delegate_class = msg![env; delegate class];
     let ui_responder_class = env.objc.get_known_class("UIResponder", &mut env.mem);
     if env.objc.class_is_subclass_of(app_delegate_class, ui_responder_class) {
-        // TODO: Send nil if it's already been called to handle the event
         delegate
     } else {
         nil
@@ -236,8 +235,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 };
 
 /// `UIApplicationMain`, the entry point of the application.
-///
-/// This function should never return.
 pub(super) fn UIApplicationMain(
     env: &mut Environment,
     _argc: i32,
@@ -245,10 +242,6 @@ pub(super) fn UIApplicationMain(
     principal_class_name: id, // NSString*
     delegate_class_name: id,  // NSString*
 ) {
-    // UIKit creates and drains autorelease pools when handling events.
-    // It's not clear what granularity this should happen with, but this
-    // granularity has already caught several bugs. :)
-
     let ui_application = {
         let pool: id = msg_class![env; NSAutoreleasePool new];
 
@@ -261,11 +254,13 @@ pub(super) fn UIApplicationMain(
         let ui_application: id = msg![env; principal_class new];
 
         let device_family = env.options.device_family;
-        if let Some(main_nib_filename) = env.bundle.main_nib_filename(device_family) {
-            let ns_main_nib_filename = from_rust_string(env, main_nib_filename.to_string());
-            // We need to check first if main nib file exists,
-            // as `UINib nibWithNibName:bundle:` will crash on nonexistent
-            // nib otherwise
+
+        if let Some(main_nib_filename) = env
+            .bundle
+            .main_nib_filename(device_family)
+            .map(str::to_owned)
+        {
+            let ns_main_nib_filename = from_rust_string(env, main_nib_filename);
             let type_: id = get_static_str(env, "nib");
             let bundle: id = msg_class![env; NSBundle mainBundle];
             let res: id = msg![env; bundle pathForResource:ns_main_nib_filename ofType:type_];
@@ -275,10 +270,7 @@ pub(super) fn UIApplicationMain(
                 let _: id = msg![env; nib instantiateWithOwner:ui_application
                                                options:nil];
             } else {
-                log!(
-                    "Warning: couldn't load main nib file {:?}",
-                    env.bundle.main_nib_filename(device_family)
-                );
+                log!("Warning: couldn't load main nib file.");
             }
         }
 
@@ -288,9 +280,6 @@ pub(super) fn UIApplicationMain(
 
         let delegate: id = msg![env; ui_application delegate];
         if delegate != nil {
-            // The delegate was created while loading the nib file.
-            // Retain it so it doesn't get deallocated when the autorelease pool
-            // is drained. (See discussion in `setDelegate:`.)
             env.objc
                 .borrow_mut::<UIApplicationHostObject>(ui_application)
                 .delegate_is_retained = true;
@@ -298,195 +287,109 @@ pub(super) fn UIApplicationMain(
         } else {
             assert!(delegate_class_name != nil);
             if msg![env; delegate_class_name isEqual:principal_class_name] {
-                // If same non-nil class name is used for both principal and
-                // delegate, it means that app is using itself as a delegate
                 let _: () = msg![env; ui_application setDelegate:ui_application];
             } else {
-                // We have to construct the delegate.
                 let name = ns_string::to_rust_string(env, delegate_class_name);
                 let class = env.objc.get_known_class(&name, &mut env.mem);
                 let delegate: id = msg![env; class new];
                 let _: () = msg![env; ui_application setDelegate:delegate];
-                assert!(delegate != nil);
             }
         };
-        // We can't hang on to the delegate, the guest app may change it at any
-        // time.
 
         let _: () = msg![env; pool drain];
-
         ui_application
     };
 
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        // iOS 3+ apps usually use application:didFinishLaunchingWithOptions:,
-        // and it seems to be prioritized over applicationDidFinishLaunching:.
-        if env.objc.object_has_method_named(
-            &env.mem,
-            delegate,
-            "application:didFinishLaunchingWithOptions:",
-        ) {
+        if env.objc.object_has_method_named(&env.mem, delegate, "application:didFinishLaunchingWithOptions:") {
             let empty_dict: id = msg_class![env; NSDictionary dictionary];
             () = msg![env; delegate application:ui_application didFinishLaunchingWithOptions:empty_dict];
-        } else if env.objc.object_has_method_named(
-            &env.mem,
-            delegate,
-            "applicationDidFinishLaunching:",
-        ) {
+        } else if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidFinishLaunching:") {
             () = msg![env; delegate applicationDidFinishLaunching:ui_application];
         }
 
         let center: id = msg_class![env; NSNotificationCenter defaultCenter];
         let notif_name = get_static_str(env, UIApplicationDidFinishLaunchingNotification);
-        // TODO: launch options in `userInfo` if it'll ever become a concern
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
 
         let _: () = msg![env; pool drain];
     }
 
-    // Call layoutSubviews on all views in the view hierarchy.
-    // See https://medium.com/geekculture/uiview-lifecycle-part-5-faa2d44511c9
     let views = env.framework_state.uikit.ui_view.views.clone();
     for view in views {
         () = msg![env; view layoutSubviews];
     }
 
-    // Send applicationDidBecomeActive now that the application is ready to
-    // become active.
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        if env
-            .objc
-            .object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:")
-        {
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:") {
             () = msg![env; delegate applicationDidBecomeActive:ui_application];
         }
-
         let center: id = msg_class![env; NSNotificationCenter defaultCenter];
         let notif_name = get_static_str(env, UIApplicationDidBecomeActiveNotification);
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
-
         let _: () = msg![env; pool drain];
     }
 
-    // FIXME: There are more messages we should send.
-
-    // TODO: It might be nicer to return from this function (even though it's
-    // conceptually noreturn) and set some global flag that changes how the
-    // execution works from this point onwards, though the only real advantages
-    // would be a prettier backtrace and maybe the quit button not having to
-    // panic.
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let _: () = msg![env; run_loop run];
 }
 
-/// Tell the app it's about to quit and then exit.
 pub(super) fn exit(env: &mut Environment) {
     let ui_application: id = msg_class![env; UIApplication sharedApplication];
-
     let center: id = msg_class![env; NSNotificationCenter defaultCenter];
 
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
-
-        // Skip NSUserDefaults code while in the app picker, otherwise we get
-        // a strange error when existing touchHLE due to the fake bundle.
         if !env.is_app_picker {
-            // Apple's docs (used to) vaguely mention that `synchronize` is
-            // invoked on periodic intervals.
-            // Second best - and implemented here - is to save before app exits.
-            // TODO: call `synchronize` periodically
             let user_defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
             let _: bool = msg![env; user_defaults synchronize];
         }
-
         let delegate: id = msg![env; ui_application delegate];
-        if env
-            .objc
-            .object_has_method_named(&env.mem, delegate, "applicationWillResignActive:")
-        {
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillResignActive:") {
             () = msg![env; delegate applicationWillResignActive:ui_application];
         }
-
         let notif_name = get_static_str(env, UIApplicationWillResignActiveNotification);
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
-
         let _: () = msg![env; pool drain];
     };
 
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        if env
-            .objc
-            .object_has_method_named(&env.mem, delegate, "applicationWillTerminate:")
-        {
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillTerminate:") {
             () = msg![env; delegate applicationWillTerminate:ui_application];
         }
-
         let notif_name = get_static_str(env, UIApplicationWillTerminateNotification);
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
-
         let _: () = msg![env; pool drain];
     };
 
     std::process::exit(0);
 }
 
-/// App life-cycle notifications
-const UIApplicationDidFinishLaunchingNotification: &str =
-    "UIApplicationDidFinishLaunchingNotification";
+const UIApplicationDidFinishLaunchingNotification: &str = "UIApplicationDidFinishLaunchingNotification";
 const UIApplicationDidBecomeActiveNotification: &str = "UIApplicationDidBecomeActiveNotification";
-const UIApplicationDidEnterBackgroundNotification: &str =
-    "UIApplicationDidEnterBackgroundNotification";
-const UIApplicationWillEnterForegroundNotification: &str =
-    "UIApplicationWillEnterForegroundNotification";
+const UIApplicationDidEnterBackgroundNotification: &str = "UIApplicationDidEnterBackgroundNotification";
+const UIApplicationWillEnterForegroundNotification: &str = "UIApplicationWillEnterForegroundNotification";
 const UIApplicationWillResignActiveNotification: &str = "UIApplicationWillResignActiveNotification";
 const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminateNotification";
-/// Other app notifications
-const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
-    "UIApplicationLaunchOptionsRemoteNotificationKey";
-const UIApplicationDidReceiveMemoryWarningNotification: &str =
-    "UIApplicationDidReceiveMemoryWarningNotification";
+const UIApplicationLaunchOptionsRemoteNotificationKey: &str = "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationDidReceiveMemoryWarningNotification: &str = "UIApplicationDidReceiveMemoryWarningNotification";
 
-/// `UIApplicationLaunchOptionsKey` and `NSNotificationName` values.
-/// (Both types are strings)
 pub const CONSTANTS: ConstantExports = &[
-    (
-        "_UIApplicationDidFinishLaunchingNotification",
-        HostConstant::NSString(UIApplicationDidFinishLaunchingNotification),
-    ),
-    (
-        "_UIApplicationDidBecomeActiveNotification",
-        HostConstant::NSString(UIApplicationDidBecomeActiveNotification),
-    ),
-    (
-        "_UIApplicationDidEnterBackgroundNotification",
-        HostConstant::NSString(UIApplicationDidEnterBackgroundNotification),
-    ),
-    (
-        "_UIApplicationWillEnterForegroundNotification",
-        HostConstant::NSString(UIApplicationWillEnterForegroundNotification),
-    ),
-    (
-        "_UIApplicationWillResignActiveNotification",
-        HostConstant::NSString(UIApplicationWillResignActiveNotification),
-    ),
-    (
-        "_UIApplicationWillTerminateNotification",
-        HostConstant::NSString(UIApplicationWillTerminateNotification),
-    ),
-    (
-        "_UIApplicationDidReceiveMemoryWarningNotification",
-        HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification),
-    ),
-    (
-        "_UIApplicationLaunchOptionsRemoteNotificationKey",
-        HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
-    ),
+    ("_UIApplicationDidFinishLaunchingNotification", HostConstant::NSString(UIApplicationDidFinishLaunchingNotification)),
+    ("_UIApplicationDidBecomeActiveNotification", HostConstant::NSString(UIApplicationDidBecomeActiveNotification)),
+    ("_UIApplicationDidEnterBackgroundNotification", HostConstant::NSString(UIApplicationDidEnterBackgroundNotification)),
+    ("_UIApplicationWillEnterForegroundNotification", HostConstant::NSString(UIApplicationWillEnterForegroundNotification)),
+    ("_UIApplicationWillResignActiveNotification", HostConstant::NSString(UIApplicationWillResignActiveNotification)),
+    ("_UIApplicationWillTerminateNotification", HostConstant::NSString(UIApplicationWillTerminateNotification)),
+    ("_UIApplicationDidReceiveMemoryWarningNotification", HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification)),
+    ("_UIApplicationLaunchOptionsRemoteNotificationKey", HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey)),
 ];
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
+

@@ -66,8 +66,6 @@ fn thread_get_state(
         env.threads[thread_id].blocked_by,
         ThreadBlock::Suspended(_, _)
     ));
-    let ctx = env.threads[thread_id].guest_context.as_ref().unwrap();
-    let state = arm_thread_state {
         r: ctx.regs[..13].try_into().unwrap(),
         sp: ctx.regs[crate::cpu::Cpu::SP],
         lr: ctx.regs[crate::cpu::Cpu::LR],

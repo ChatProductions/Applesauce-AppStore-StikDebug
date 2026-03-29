@@ -129,6 +129,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let text_label = env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label;
     msg![env; text_label text]
 }
+
 - (())setText:(id)text { // NSString*
     let text_label = env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label;
     () = msg![env; text_label setText:text];
@@ -179,12 +180,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, position);
 }
 
+- (())setBackground:(id)background { // UIImage*
+    todo_objc_setter!(this, background);
+}
+
+- (id)background {
+    nil
+}
+
+// FIX FOR PANIC: "does not respond to selector setContentVerticalAlignment:"
+- (())setContentVerticalAlignment:(NSInteger)alignment {
+    todo_objc_setter!(this, alignment);
+}
+
+- (NSInteger)contentVerticalAlignment {
+    0 // Default (top)
+}
+
 // weak/non-retaining
 - (())setDelegate:(id)delegate { // something implementing UITextFieldDelegate
     log_dbg!("setDelegate:{:?}", delegate);
     let host_object = env.objc.borrow_mut::<UITextFieldHostObject>(this);
     host_object.delegate = delegate;
 }
+
 - (id)delegate {
     env.objc.borrow::<UITextFieldHostObject>(this).delegate
 }
@@ -420,3 +439,4 @@ pub fn handle_return(env: &mut Environment, text_field: id) {
         () = msg![env; delegate textFieldShouldReturn:text_field];
     }
 }
+

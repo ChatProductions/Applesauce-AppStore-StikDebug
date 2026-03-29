@@ -22,6 +22,7 @@ use crate::fs::{Fs, GuestPath};
 use std::io::Cursor;
 
 #[derive(Debug)]
+#[allow(dead_code)] // ИСПРАВЛЕНИЕ: Разрешаем неиспользуемые варианты ошибок
 pub enum AudioFileOpenError {
     FileReadError,
     FileDecodeError,
@@ -56,6 +57,7 @@ enum AudioFileInner {
     Symphonia(symphonia_formats::SymphoniaDecodedToPcm),
 }
 
+#[allow(dead_code)] // ИСПРАВЛЕНИЕ: Разрешаем неиспользуемые методы внутри имплементации
 impl AudioFile {
     pub fn open_for_reading<P: AsRef<GuestPath>>(
         path: P,
@@ -329,4 +331,4 @@ impl AudioFile {
             }
         }
     }
-}
+                    }

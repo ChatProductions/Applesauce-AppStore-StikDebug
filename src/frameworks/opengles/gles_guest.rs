@@ -1651,4 +1651,4 @@ fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
         unsafe { gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut buffer_size) }
         buffer_size
     })
-}
+    }

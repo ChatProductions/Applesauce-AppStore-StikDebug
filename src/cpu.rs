@@ -299,4 +299,4 @@ impl Cpu {
             svc => CpuState::Svc(svc as u32),
         }
     }
-}
+                }

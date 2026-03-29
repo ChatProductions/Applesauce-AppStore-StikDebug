@@ -1234,6 +1234,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setString:new];
 }
 
+- (())insertString:(id)a_string atIndex:(NSUInteger)loc {
+    assert_ne!(a_string, nil);
+    let left: id = msg![env; this substringToIndex:loc];
+    let right: id = msg![env; this substringFromIndex:loc];
+    let mid: id = msg![env; left stringByAppendingString:a_string];
+    let res: id = msg![env; mid stringByAppendingString:right];
+    () = msg![env; this setString:res];
+}
+
+- (())replaceCharactersInRange:(NSRange)range withString:(id)a_string {
+    assert_ne!(a_string, nil);
+    let loc = range.location;
+    let len = range.length;
+    let left: id = msg![env; this substringToIndex:loc];
+    let right: id = msg![env; this substringFromIndex:(loc + len)];
+    let mid: id = msg![env; left stringByAppendingString:a_string];
+    let res: id = msg![env; mid stringByAppendingString:right];
+    () = msg![env; this setString:res];
+}
+
 - (())deleteCharactersInRange:(NSRange)range {
     let location = range.location;
     let length = range.length;
@@ -2048,3 +2068,4 @@ fn string_by_replacing_occurrences_inner(
     *env.objc.borrow_mut(result_ns_string) = StringHostObject::Utf16(result);
     autorelease(env, result_ns_string)
 }
+
