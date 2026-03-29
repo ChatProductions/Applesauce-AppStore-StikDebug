@@ -144,14 +144,10 @@ pub enum ThreadBlock {
     Condition(pthread_cond_t),
     // Thread is waiting for another thread to finish (joining).
     Joining(ThreadId, MutPtr<MutVoidPtr>),
-    // Thread is explicitly suspended via thread_suspend().
-    // Fields: (suspend_count, ())
-    Suspended(u32, ()),
     // Thread has hit a cpu error, and is waiting to be debugged.
     WaitingForDebugger(Option<cpu::CpuError>),
-    // Thread is suspended. We keep a suspend count and a previous thread state
-    // (boxed to avoid cyclic dependency), which would be restored upon
-    // resuming.
+    // Thread is suspended. We keep a suspend count and a previous thread
+    // state (boxed to avoid cyclic dependency), which is restored on resume.
     Suspended(usize, Box<ThreadBlock>),
 }
 
@@ -1007,19 +1003,22 @@ impl Environment {
     }
 
     pub fn suspend_thread(&mut self, thread: ThreadId) {
-        match &mut self.threads[thread].blocked_by {
-            ThreadBlock::Suspended(count, _) => {
-                *count += 1;
-            }
-            _ => {
-                let previous_thread_state = std::mem::replace(
-                    &mut self.threads[thread].blocked_by,
-                    ThreadBlock::NotBlocked,
-                );
-                log_dbg!("Suspend thread {} from {:?}", thread, previous_thread_state);
-                self.threads[thread].blocked_by =
-                    ThreadBlock::Suspended(1, Box::new(previous_thread_state));
-            }
+        if let ThreadBlock::Suspended(count, _) =
+            &mut self.threads[thread].blocked_by
+        {
+            *count += 1;
+            return;
+        }
+        let previous_state = std::mem::replace(
+            &mut self.threads[thread].blocked_by,
+            ThreadBlock::NotBlocked,
+        );
+        log_dbg!("Suspend thread {} from {:?}", thread, previous_state);
+        let new_state = ThreadBlock::Suspended(1, Box::new(previous_state));
+        if thread == self.current_thread {
+            self.yield_thread(new_state);
+        } else {
+            self.threads[thread].blocked_by = new_state;
         }
     }
 
@@ -1598,32 +1597,6 @@ impl Environment {
         assert!(!self.threads[self.current_thread].is_blocked());
     }
 
-    /// Suspend a thread. Increments suspend count. If the target is the
-    /// current thread, yields immediately.
-    pub fn suspend_thread(&mut self, id: ThreadId) {
-        let count = match self.threads[id].blocked_by {
-            ThreadBlock::Suspended(n, _) => n + 1,
-            _ => 1,
-        };
-        if id == self.current_thread {
-            self.yield_thread(ThreadBlock::Suspended(count, ()));
-        } else {
-            self.threads[id].blocked_by = ThreadBlock::Suspended(count, ());
-        }
-    }
-
-    /// Resume a suspended thread. Decrements suspend count; unblocks when
-    /// count reaches zero.
-    pub fn resume_thread(&mut self, id: ThreadId) {
-        if let ThreadBlock::Suspended(count, _) = self.threads[id].blocked_by {
-            if count <= 1 {
-                self.threads[id].blocked_by = ThreadBlock::NotBlocked;
-            } else {
-                self.threads[id].blocked_by = ThreadBlock::Suspended(count - 1, ());
-            }
-        }
-    }
-
     /// Read-only access to a thread's saved CPU context (None if currently
     /// executing).
     pub fn thread_guest_context(&self, id: ThreadId) -> Option<&cpu::CpuContext> {
@@ -1739,9 +1712,6 @@ impl Environment {
                         return thread_id;
                     }
                     ThreadBlock::WaitingForDebugger(_) => unreachable!(),
-                    ThreadBlock::Suspended(cnt, _) => {
-                        assert!(cnt > 0);
-                    }
                 }
             }
 
@@ -2036,4 +2006,5 @@ mod dylib_sorting_tests {
         );
     }
 }
+
 
