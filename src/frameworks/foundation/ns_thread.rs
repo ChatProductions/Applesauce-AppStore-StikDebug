@@ -206,6 +206,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
++ (bool)isMainThread {
+    env.current_thread == 0
+}
+
 - (id)initWithTarget:(id)target
             selector:(SEL)selector
               object:(id)object {
