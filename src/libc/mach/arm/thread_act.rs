@@ -92,7 +92,21 @@ fn task_set_exception_ports(
     KERN_SUCCESS
 }
 
+fn thread_suspend(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
+    let thread_id = (thread - 1) as usize;
+    env.suspend_thread(thread_id);
+    KERN_SUCCESS
+}
+
+fn thread_resume(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
+    let thread_id = (thread - 1) as usize;
+    env.resume_thread(thread_id);
+    KERN_SUCCESS
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(task_threads(_, _, _)),
     export_c_func!(task_set_exception_ports(_, _, _, _, _)),
+    export_c_func!(thread_suspend(_)),
+    export_c_func!(thread_resume(_)),
 ];
