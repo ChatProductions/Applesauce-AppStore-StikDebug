@@ -24,6 +24,7 @@ pub type thread_inspect_t = mach_port_t;
 type thread_flavor_t = natural_t;
 type thread_info_t = MutPtr<integer_t>;
 pub type thread_state_flavor_t = i32;
+#[allow(dead_code)]
 pub type thread_state_t = MutPtr<natural_t>;
 pub type mach_msg_type_number_t = natural_t;
 
