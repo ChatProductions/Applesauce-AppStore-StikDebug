@@ -148,6 +148,7 @@ pub enum ThreadBlock {
     WaitingForDebugger(Option<cpu::CpuError>),
     // Thread is suspended. We keep a suspend count and a previous thread
     // state (boxed to avoid cyclic dependency), which is restored on resume.
+    #[allow(dead_code)]
     Suspended(usize, Box<ThreadBlock>),
 }
 
@@ -1002,6 +1003,7 @@ impl Environment {
         self.yield_thread(ThreadBlock::Sleeping(until));
     }
 
+    #[allow(dead_code)]
     pub fn suspend_thread(&mut self, thread: ThreadId) {
         if let ThreadBlock::Suspended(count, _) =
             &mut self.threads[thread].blocked_by
@@ -1022,6 +1024,7 @@ impl Environment {
         }
     }
 
+    #[allow(dead_code)]
     pub fn resume_thread(&mut self, thread: ThreadId) {
         let old = std::mem::replace(
             &mut self.threads[thread].blocked_by,
@@ -1599,6 +1602,7 @@ impl Environment {
 
     /// Read-only access to a thread's saved CPU context (None if currently
     /// executing).
+    #[allow(dead_code)]
     pub fn thread_guest_context(&self, id: ThreadId) -> Option<&cpu::CpuContext> {
         self.threads[id].guest_context.as_deref()
     }
@@ -2006,5 +2010,3 @@ mod dylib_sorting_tests {
         );
     }
 }
-
-
