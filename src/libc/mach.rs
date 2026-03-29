@@ -25,6 +25,7 @@ pub mod mach_port;
 pub mod message;
 pub mod port;
 pub mod semaphore;
+pub mod thread_act;
 pub mod thread_info;
 pub mod time;
 pub mod vm_map;
