@@ -144,6 +144,9 @@ pub enum ThreadBlock {
     Condition(pthread_cond_t),
     // Thread is waiting for another thread to finish (joining).
     Joining(ThreadId, MutPtr<MutVoidPtr>),
+    // Thread is explicitly suspended via thread_suspend().
+    // Fields: (suspend_count, ())
+    Suspended(u32, ()),
     // Thread has hit a cpu error, and is waiting to be debugged.
     WaitingForDebugger(Option<cpu::CpuError>),
 }
@@ -1554,6 +1557,38 @@ impl Environment {
         assert!(!self.threads[self.current_thread].is_blocked());
     }
 
+    /// Suspend a thread. Increments suspend count. If the target is the
+    /// current thread, yields immediately.
+    pub fn suspend_thread(&mut self, id: ThreadId) {
+        let count = match self.threads[id].blocked_by {
+            ThreadBlock::Suspended(n, _) => n + 1,
+            _ => 1,
+        };
+        if id == self.current_thread {
+            self.yield_thread(ThreadBlock::Suspended(count, ()));
+        } else {
+            self.threads[id].blocked_by = ThreadBlock::Suspended(count, ());
+        }
+    }
+
+    /// Resume a suspended thread. Decrements suspend count; unblocks when
+    /// count reaches zero.
+    pub fn resume_thread(&mut self, id: ThreadId) {
+        if let ThreadBlock::Suspended(count, _) = self.threads[id].blocked_by {
+            if count <= 1 {
+                self.threads[id].blocked_by = ThreadBlock::NotBlocked;
+            } else {
+                self.threads[id].blocked_by = ThreadBlock::Suspended(count - 1, ());
+            }
+        }
+    }
+
+    /// Read-only access to a thread's saved CPU context (None if currently
+    /// executing).
+    pub fn thread_guest_context(&self, id: ThreadId) -> Option<&cpu::CpuContext> {
+        self.threads[id].guest_context.as_deref()
+    }
+
     /// Find the next thread to execute, and set it up to be switched to.
     ///
     /// This also handles all the required bookkeeping (unlocking mutexes,
@@ -1655,6 +1690,9 @@ impl Environment {
                             self.threads[thread_id].blocked_by = ThreadBlock::NotBlocked;
                             return thread_id;
                         }
+                    }
+                    ThreadBlock::Suspended(_, _) => {
+                        // Explicitly suspended; skip until resumed.
                     }
                     ThreadBlock::NotBlocked => {
                         return thread_id;
@@ -1954,3 +1992,4 @@ mod dylib_sorting_tests {
         );
     }
 }
+
