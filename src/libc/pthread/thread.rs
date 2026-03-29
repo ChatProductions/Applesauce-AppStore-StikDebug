@@ -353,7 +353,30 @@ type mach_port_t = u32;
 /// is used by apps as a unique thread ID.
 fn pthread_mach_thread_np(env: &mut Environment, thread: pthread_t) -> mach_port_t {
     let host_object = State::get(env).threads.get(&thread).unwrap();
-    host_object.thread_id.try_into().unwrap()
+    // Must return thread_id + 1 to match mach_thread_self()
+    // (Plus 1 is to avoid having MACH_PORT_NULL for the main thread)
+    (host_object.thread_id + 1).try_into().unwrap()
+}
+
+/// Undocumented Darwin function that returns stack's "bottom" address
+fn pthread_get_stackaddr_np(env: &mut Environment, thread: pthread_t) -> MutVoidPtr {
+    let thread_id = State::get(env).threads.get(&thread).unwrap().thread_id;
+    Ptr::from_bits(*env.threads[thread_id].stack.as_ref().unwrap().end())
+}
+/// Undocumented Darwin function that returns stack's size
+fn pthread_get_stacksize_np(env: &mut Environment, thread: pthread_t) -> GuestUSize {
+    let thread_id = State::get(env).threads.get(&thread).unwrap().thread_id;
+    let start_unadjusted = env.threads[thread_id].stack.as_ref().unwrap().start();
+    let start = if thread_id == 0 {
+        // As tested on iPhone 3GS with iOS 4.0.1, for the main thread
+        // the reported stack size is one short of a page size. Presumably,
+        // the first stack page is guarded and not reported as usable.
+        *start_unadjusted + PAGE_SIZE
+    } else {
+        *start_unadjusted
+    };
+    let end = env.threads[thread_id].stack.as_ref().unwrap().end();
+    end.wrapping_add(1).wrapping_sub(start)
 }
 
 /// Undocumented Darwin function that returns stack's "bottom" address

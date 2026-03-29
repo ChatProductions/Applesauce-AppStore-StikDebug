@@ -53,7 +53,7 @@ pub struct Thread {
     /// When a thread is currently executing, its state is stored directly in
     /// the CPU, rather than in a context object. In that case, this field is
     /// None. See also: [std::mem::take] and [cpu::Cpu::swap_context].
-    guest_context: Option<Box<cpu::CpuContext>>,
+    pub guest_context: Option<Box<cpu::CpuContext>>,
     /// The coroutine associated with this thread.
     ///
     /// In more typical rust, this is equivalent to to a [std::future::Future].
@@ -130,7 +130,7 @@ enum ThreadNextAction {
 }
 
 /// If/what a thread is blocked by.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ThreadBlock {
     // Default state. (thread is not blocked)
     NotBlocked,
@@ -140,7 +140,7 @@ pub enum ThreadBlock {
     Mutex(MutexId),
     // Thread is waiting on a semaphore.
     Semaphore(MutPtr<sem_t>),
-    // Thread is wating on a condition variable
+    // Thread is waiting on a condition variable
     Condition(pthread_cond_t),
     // Thread is waiting for another thread to finish (joining).
     Joining(ThreadId, MutPtr<MutVoidPtr>),
@@ -149,6 +149,10 @@ pub enum ThreadBlock {
     Suspended(u32, ()),
     // Thread has hit a cpu error, and is waiting to be debugged.
     WaitingForDebugger(Option<cpu::CpuError>),
+    // Thread is suspended. We keep a suspend count and a previous thread state
+    // (boxed to avoid cyclic dependency), which would be restored upon
+    // resuming.
+    Suspended(usize, Box<ThreadBlock>),
 }
 
 struct BinaryDependencyNode {
@@ -1002,6 +1006,43 @@ impl Environment {
         self.yield_thread(ThreadBlock::Sleeping(until));
     }
 
+    pub fn suspend_thread(&mut self, thread: ThreadId) {
+        match &mut self.threads[thread].blocked_by {
+            ThreadBlock::Suspended(count, _) => {
+                *count += 1;
+            }
+            _ => {
+                let previous_thread_state = std::mem::replace(
+                    &mut self.threads[thread].blocked_by,
+                    ThreadBlock::NotBlocked,
+                );
+                log_dbg!("Suspend thread {} from {:?}", thread, previous_thread_state);
+                self.threads[thread].blocked_by =
+                    ThreadBlock::Suspended(1, Box::new(previous_thread_state));
+            }
+        }
+    }
+
+    pub fn resume_thread(&mut self, thread: ThreadId) {
+        let old = std::mem::replace(
+            &mut self.threads[thread].blocked_by,
+            ThreadBlock::NotBlocked,
+        );
+        match old {
+            ThreadBlock::Suspended(count, previous_thread_state) => {
+                assert!(count > 0);
+                if count > 1 {
+                    self.threads[thread].blocked_by =
+                        ThreadBlock::Suspended(count - 1, previous_thread_state);
+                } else {
+                    log_dbg!("Resume thread {} to {:?}", thread, previous_thread_state);
+                    self.threads[thread].blocked_by = *previous_thread_state;
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
     /// Block the current thread until the given mutex unlocks.
     ///
     /// Other threads also blocking on this mutex may get access first.
@@ -1698,6 +1739,9 @@ impl Environment {
                         return thread_id;
                     }
                     ThreadBlock::WaitingForDebugger(_) => unreachable!(),
+                    ThreadBlock::Suspended(cnt, _) => {
+                        assert!(cnt > 0);
+                    }
                 }
             }
 
