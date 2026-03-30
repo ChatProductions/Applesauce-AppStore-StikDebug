@@ -1411,32 +1411,36 @@ fn setup_quick_options(
     }
 }
 
-fn host_CCCrypt(env: &mut Environment) -> u32 {
-    // В ARM первые 4 аргумента в R0-R3, остальные на стеке (SP)
-    let sp = env.cpu.read_reg(Reg::SP);
+fn host_CCCrypt(
+    env: &mut Environment,
+    _op: u32,
+    _alg: u32,
+    _options: u32,
+    _key_ptr: u32,
+    _key_len: u32,
+    _iv_ptr: u32,
+    data_in_ptr: u32,
+    data_in_len: u32,
+    data_out_ptr: u32,
+    data_out_available: u32,
+    data_out_moved_ptr: u32,
+) -> u32 {
+    use crate::mem::{Ptr, MutPtr};
 
-    // Вытаскиваем нужные нам указатели на данные из стека
-    // _CCCrypt имеет 11 аргументов. dataIn - 7-й, dataOut - 9-й.
-    // Смещение на стеке: arg5=+0, arg6=+4, arg7=+8, и т.д.
-    let data_in_ptr: u32 = env.mem.read(Ptr::new(sp + 8));
-    let data_in_len: u32 = env.mem.read(Ptr::new(sp + 12));
-    let data_out_ptr: u32 = env.mem.read(Ptr::new(sp + 16));
-    let data_out_available: u32 = env.mem.read(Ptr::new(sp + 20));
-    let data_out_moved_ptr: u32 = env.mem.read(Ptr::new(sp + 24));
-
+    // Определяем объем копирования
     let copy_len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
 
-    // Побайтовое копирование (эмуляция "шифрования")
-    if data_in_ptr != 0 && data_out_ptr != 0 {
+    // Побайтовое копирование через систему памяти эмулятора
+    if data_in_ptr != 0 && data_out_ptr != 0 && copy_len > 0 {
         for i in 0..copy_len {
-            // Читаем байт из гостевой памяти
-            let b: u8 = env.mem.read(Ptr::new(data_in_ptr + i));
-            // Пишем байт обратно в гостевую память
-            env.mem.write(MutPtr::new(data_out_ptr + i), b);
+            // Читаем байт из памяти эмулятора (адрес в ARM)
+            let byte: u8 = env.mem.read(Ptr::new(data_in_ptr + i));
+            // Пишем байт в память эмулятора
+            env.mem.write(MutPtr::new(data_out_ptr + i), byte);
         }
     }
 
-    // Записываем, сколько байт "обработано"
+    // Сообщаем игре, сколько байт мы "обработали"
     if data_out_moved_ptr != 0 {
         env.mem.write(MutPtr::new(data_out_moved_ptr), copy_len);
     }
