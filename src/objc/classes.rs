@@ -279,7 +279,7 @@ fn substitute_classes(
     if !(name.starts_with("AdMob")
         || name.starts_with("AltAds")
         || name.starts_with("Mobclix")
-        || name.starts_with("FB") 
+        || name.starts_with("FB")
         || name.starts_with("Flurry")
         || name.starts_with("OpenFeint")
         || name.starts_with("Tapjoy"))
@@ -357,13 +357,19 @@ impl ObjC {
             class_host_object = Box::new(ClassHostObject::from_template(
                 template,
                 false,
-                template.superclass.map(|name| self.link_class(name, false, mem)).unwrap_or(nil),
+                template
+                    .superclass
+                    .map(|name| self.link_class(name, false, mem))
+                    .unwrap_or(nil),
                 self,
             ));
             metaclass_host_object = Box::new(ClassHostObject::from_template(
                 template,
                 true,
-                template.superclass.map(|name| self.link_class(name, true, mem)).unwrap_or(nil),
+                template
+                    .superclass
+                    .map(|name| self.link_class(name, true, mem))
+                    .unwrap_or(nil),
                 self,
             ));
         } else {
@@ -371,29 +377,14 @@ impl ObjC {
                 panic!("Missing implementation for class {name}!");
             }
 
-            // --- КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ДЛЯ AVAudioSession ---
-            // Если класс системный и мы его не знаем, используем FakeClass,
-            // чтобы избежать паники в сообщениях.
-            if name == "AVAudioSession" || name == "AVAudioPlayer" || name == "AVAudioRecorder" {
-                log!("Note: substituting fake system class for {} to prevent panic", name);
-                class_host_object = Box::new(FakeClass {
-                    name: name.to_string(),
-                    is_metaclass: false,
-                });
-                metaclass_host_object = Box::new(FakeClass {
-                    name: name.to_string(),
-                    is_metaclass: true,
-                });
-            } else {
-                class_host_object = Box::new(UnimplementedClass {
-                    name: name.to_string(),
-                    is_metaclass: false,
-                });
-                metaclass_host_object = Box::new(UnimplementedClass {
-                    name: name.to_string(),
-                    is_metaclass: true,
-                });
-            }
+            class_host_object = Box::new(UnimplementedClass {
+                name: name.to_string(),
+                is_metaclass: false,
+            });
+            metaclass_host_object = Box::new(UnimplementedClass {
+                name: name.to_string(),
+                is_metaclass: true,
+            });
         }
 
         let metaclass = if name == "NSObject" {
@@ -556,24 +547,48 @@ impl ObjC {
             let comma = if i == self.classes.len() - 1 { "" } else { "," };
             let host_obj = self.get_host_object(*o).unwrap();
 
-            if let Some(ClassHostObject { name, superclass: sup, .. }) = host_obj.as_any().downcast_ref() {
+            if let Some(ClassHostObject { name, superclass: sup, .. }) =
+                host_obj.as_any().downcast_ref()
+            {
                 if *sup == nil {
-                    writeln!(file, "        {{ \"name\": \"{name}\", \"class_type\": \"normal\" }}{comma}")?;
+                    writeln!(
+                        file,
+                        "        {{ \"name\": \"{name}\", \
+                         \"class_type\": \"normal\" }}{comma}"
+                    )?;
                 } else {
-                    writeln!(file, "        {{ \"name\": \"{}\", \"super\": \"{}\", \"class_type\": \"normal\" }}{}",
-                        name, self.get_class_name(*sup), comma)?;
+                    writeln!(
+                        file,
+                        "        {{ \"name\": \"{}\", \"super\": \"{}\", \
+                         \"class_type\": \"normal\" }}{}",
+                        name,
+                        self.get_class_name(*sup),
+                        comma
+                    )?;
                 }
-            } else if let Some(UnimplementedClass { name, .. }) = host_obj.as_any().downcast_ref() {
-                writeln!(file, "        {{ \"name\": \"{name}\", \"class_type\": \"unimplemented\" }}{comma}")?;
+            } else if let Some(UnimplementedClass { name, .. }) =
+                host_obj.as_any().downcast_ref()
+            {
+                writeln!(
+                    file,
+                    "        {{ \"name\": \"{name}\", \
+                     \"class_type\": \"unimplemented\" }}{comma}"
+                )?;
             } else if let Some(FakeClass { name, .. }) = host_obj.as_any().downcast_ref() {
-                writeln!(file, "        {{ \"name\": \"{name}\", \"class_type\": \"fake\" }}{comma}")?;
+                writeln!(
+                    file,
+                    "        {{ \"name\": \"{name}\", \
+                     \"class_type\": \"fake\" }}{comma}"
+                )?;
             }
         }
         writeln!(file, "    ]\n}}")
     }
 
     pub fn register_bin_categories(&mut self, bin: &MachO, mem: &mut Mem) {
-        let Some(list) = bin.get_section("__objc_catlist") else { return; };
+        let Some(list) = bin.get_section("__objc_catlist") else {
+            return;
+        };
         assert!(list.size % 4 == 0);
         let base: ConstPtr<ConstPtr<category_t>> = Ptr::from_bits(list.addr);
         for i in 0..(list.size / 4) {
@@ -582,10 +597,17 @@ impl ObjC {
             let class = data.class;
             let metaclass = Self::read_isa(class, mem);
 
-            for (target_class, methods) in [(class, data.instance_methods), (metaclass, data.class_methods)] {
-                if methods.is_null() { continue; }
+            for (target_class, methods) in [
+                (class, data.instance_methods),
+                (metaclass, data.class_methods),
+            ] {
+                if methods.is_null() {
+                    continue;
+                }
                 let any = self.get_host_object(target_class).unwrap().as_any();
-                if any.is::<FakeClass>() || any.is::<UnimplementedClass>() { continue; }
+                if any.is::<FakeClass>() || any.is::<UnimplementedClass>() {
+                    continue;
+                }
 
                 let mut host_obj = std::mem::replace(
                     self.borrow_mut::<ClassHostObject>(target_class),
@@ -606,12 +628,18 @@ impl ObjC {
     }
 
     pub fn class_is_subclass_of(&self, class: Class, superclass: Class) -> bool {
-        if class == superclass { return true; }
+        if class == superclass {
+            return true;
+        }
         let mut curr = class;
         loop {
             let &ClassHostObject { superclass: next, .. } = self.borrow(curr);
-            if next == nil { return false; }
-            if next == superclass { return true; }
+            if next == nil {
+                return false;
+            }
+            if next == superclass {
+                return true;
+            }
             curr = next;
         }
     }
@@ -628,10 +656,14 @@ impl ObjC {
     pub fn try_get_class_name(&self, class: Class) -> Option<&str> {
         let host_object = self.get_host_object(class)?;
         let any = host_object.as_any();
-        if let Some(c) = any.downcast_ref::<ClassHostObject>() { Some(&c.name) }
-        else if let Some(u) = any.downcast_ref::<UnimplementedClass>() { Some(&u.name) }
-        else if let Some(f) = any.downcast_ref::<FakeClass>() { Some(&f.name) }
-        else { None }
+        if let Some(c) = any.downcast_ref::<ClassHostObject>() {
+            Some(&c.name)
+        } else if let Some(u) = any.downcast_ref::<UnimplementedClass>() {
+            Some(&u.name)
+        } else if let Some(f) = any.downcast_ref::<FakeClass>() {
+            Some(&f.name)
+        } else {
+            None
+        }
     }
 }
-
