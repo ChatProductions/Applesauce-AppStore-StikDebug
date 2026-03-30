@@ -72,7 +72,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (())setDelegate:(id)_delegate {
+// ИСПРАВЛЕНИЕ: Заменил - (()) на - () для корректной работы парсера макроса
+- ()setDelegate:(id)_delegate {
     log!("TODO: AVAudioSession setDelegate:");
 }
 
@@ -104,6 +105,7 @@ type AudioSessionInterruptionListener = GuestFunction;
 type AudioSessionPropertyListener = GuestFunction;
 
 const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
+const kAudioSessionUnimplementedError: OSStatus = fourcc(b"unim") as _;
 
 /// Usually a FourCC.
 type AudioSessionPropertyID = u32;
@@ -129,15 +131,11 @@ pub struct State {
 }
 impl Default for State {
     fn default() -> Self {
-        // TODO: Check values from a real device
         State {
-            // This is the default value.
             audio_session_category: kAudioSessionCategory_SoloAmbientSound,
-            // Values taken from an iOS 2 simulator
             current_hardware_sample_rate: 44100.0,
             current_hardware_output_number_channels: 2,
             current_hardware_output_volume: 1.0,
-            // Value was checked on both iOS Simulator and iPhone 3GS
             current_hardware_io_buffer_duration: 0.023220,
         }
     }
@@ -168,6 +166,9 @@ fn AudioSessionGetPropertySize(
     out_data_size: MutPtr<u32>,
 ) -> OSStatus {
     let size = get_audio_session_property_size(in_ID);
+    if size == 0 {
+        return kAudioSessionUnimplementedError; // Возвращаем ошибку вместо паники
+    }
     env.mem.write(out_data_size, size);
     0 // Success
 }
@@ -179,9 +180,15 @@ fn AudioSessionGetProperty(
     out_data: MutVoidPtr,
 ) -> OSStatus {
     let required_size = get_audio_session_property_size(in_ID);
+    
+    // ИСПРАВЛЕНИЕ: Мягко обрабатываем неизвестные свойства
+    if required_size == 0 {
+        return kAudioSessionUnimplementedError;
+    }
+
     let io_data_size_value = env.mem.read(io_data_size);
     if io_data_size_value != required_size {
-        log!("Warning: AudioSessionGetProperty() failed");
+        log!("Warning: AudioSessionGetProperty() failed, size mismatch");
         return kAudioSessionBadPropertySizeError;
     }
 
@@ -211,7 +218,10 @@ fn AudioSessionGetProperty(
             let value: f32 = state.current_hardware_io_buffer_duration;
             env.mem.write(out_data.cast(), value);
         }
-        _ => unreachable!(),
+        _ => {
+            log!("Warning: Unhandled AudioSessionGetProperty ID: {}", debug_fourcc(in_ID));
+            return kAudioSessionUnimplementedError;
+        }
     }
 
     let result = 0; // success
@@ -233,16 +243,22 @@ fn AudioSessionSetProperty(
     in_data_size: u32,
     in_data: ConstVoidPtr,
 ) -> OSStatus {
+    // ИСПРАВЛЕНИЕ: Убрали unimplemented!, чтобы эмулятор не вылетал с паникой
     let required_size: GuestUSize = match in_ID {
         kAudioSessionProperty_AudioCategory => guest_size_of::<u32>(),
         kAudioSessionProperty_PreferredHardwareIOBufferDuration => guest_size_of::<f32>(),
         kAudioSessionProperty_PreferredHardwareSampleRate => guest_size_of::<f64>(),
-        _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
+        _ => {
+            log!("Warning: Unimplemented AudioSessionSetProperty ID: {}", debug_fourcc(in_ID));
+            return kAudioSessionUnimplementedError; 
+        }
     };
+    
     if in_data_size != required_size {
-        log!("Warning: AudioSessionSetProperty() failed");
+        log!("Warning: AudioSessionSetProperty() failed due to size mismatch");
         return kAudioSessionBadPropertySizeError;
     }
+    
     if in_ID == kAudioSessionProperty_PreferredHardwareSampleRate {
         env.framework_state
             .audio_toolbox
@@ -318,7 +334,11 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
         kAudioSessionProperty_CurrentHardwareOutputNumberChannels => guest_size_of::<u32>(),
         kAudioSessionProperty_CurrentHardwareOutputVolume => guest_size_of::<f32>(),
         kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
-        _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
+        // ИСПРАВЛЕНИЕ: Возвращаем 0 вместо паники, чтобы вызывающая функция могла вернуть ошибку
+        _ => {
+            log!("Warning: Unimplemented property size ID: {}", debug_fourcc(in_ID));
+            0
+        }
     }
 }
 
@@ -331,3 +351,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
+
