@@ -4,6 +4,7 @@
 //! on Android, where the command-line way to view license text doesn't exist.
 
 use crate::bundle::Bundle;
+use crate::cpu::Reg;
 use crate::frameworks::core_graphics::cg_bitmap_context::{
     CGBitmapContextCreate, CGBitmapContextCreateImage,
 };
@@ -28,7 +29,7 @@ use crate::frameworks::uikit::ui_view::ui_control::{
 };
 use crate::fs::BundleData;
 use crate::image::Image;
-use crate::mem::Ptr;
+use crate::mem::{Ptr, MutPtr};
 use crate::objc::{id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject};
 use crate::options::Options;
 use crate::paths;
@@ -157,7 +158,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     class_exports: &[CLASSES],
     constant_exports: &[],
     function_exports: &[
-        ("_CCCrypt", &host_CCCrypt), // Теперь передаем ссылку на совместимую функцию
+        ("_CCCrypt", &host_CCCrypt as &dyn crate::abi::CallFromGuest),
     ],
 };
 
@@ -1410,34 +1411,34 @@ fn setup_quick_options(
     }
 }
 
-// Новая версия, совместимая с CallFromGuest
-fn host_CCCrypt(env: &mut Environment, args: &crate::abi::Args) -> u32 {
-    // Вытаскиваем аргументы по порядку из регистров ARM
-    // Индексы соответствуют порядку в оригинальной функции _CCCrypt
-    let _op: u32 = args.get(0);
-    let _alg: u32 = args.get(1);
-    let _options: u32 = args.get(2);
-    let _key_ptr: u32 = args.get(3);
-    let _key_len: u32 = args.get(4);
-    let _iv_ptr: u32 = args.get(5);
-    let data_in_ptr: u32 = args.get(6);
-    let data_in_len: u32 = args.get(7);
-    let data_out_ptr: u32 = args.get(8);
-    let data_out_available: u32 = args.get(9);
-    let data_out_moved_ptr: u32 = args.get(10);
+fn host_CCCrypt(env: &mut Environment) -> u32 {
+    // В ARM первые 4 аргумента в R0-R3, остальные на стеке (SP)
+    let sp = env.cpu.read_reg(Reg::SP);
 
-    // Логика "прозрачного" копирования данных
+    // Вытаскиваем нужные нам указатели на данные из стека
+    // _CCCrypt имеет 11 аргументов. dataIn - 7-й, dataOut - 9-й.
+    // Смещение на стеке: arg5=+0, arg6=+4, arg7=+8, и т.д.
+    let data_in_ptr: u32 = env.mem.read(Ptr::new(sp + 8));
+    let data_in_len: u32 = env.mem.read(Ptr::new(sp + 12));
+    let data_out_ptr: u32 = env.mem.read(Ptr::new(sp + 16));
+    let data_out_available: u32 = env.mem.read(Ptr::new(sp + 20));
+    let data_out_moved_ptr: u32 = env.mem.read(Ptr::new(sp + 24));
+
     let copy_len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
 
-    if data_in_ptr != 0 && data_out_ptr != 0 && copy_len > 0 {
-        // Читаем из памяти эмулятора и пишем обратно (имитация работы)
-        let mut buffer = vec![0u8; copy_len as usize];
-        env.mem.read(data_in_ptr, &mut buffer);
-        env.mem.write(data_out_ptr, &buffer);
+    // Побайтовое копирование (эмуляция "шифрования")
+    if data_in_ptr != 0 && data_out_ptr != 0 {
+        for i in 0..copy_len {
+            // Читаем байт из гостевой памяти
+            let b: u8 = env.mem.read(Ptr::new(data_in_ptr + i));
+            // Пишем байт обратно в гостевую память
+            env.mem.write(MutPtr::new(data_out_ptr + i), b);
+        }
     }
 
+    // Записываем, сколько байт "обработано"
     if data_out_moved_ptr != 0 {
-        env.mem.write_u32(data_out_moved_ptr, copy_len);
+        env.mem.write(MutPtr::new(data_out_moved_ptr), copy_len);
     }
 
     0 // kCCSuccess
