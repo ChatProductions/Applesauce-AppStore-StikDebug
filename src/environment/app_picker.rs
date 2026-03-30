@@ -4,7 +4,6 @@
 //! on Android, where the command-line way to view license text doesn't exist.
 
 use crate::bundle::Bundle;
-use crate::cpu::Reg;
 use crate::frameworks::core_graphics::cg_bitmap_context::{
     CGBitmapContextCreate, CGBitmapContextCreateImage,
 };
@@ -29,7 +28,7 @@ use crate::frameworks::uikit::ui_view::ui_control::{
 };
 use crate::fs::BundleData;
 use crate::image::Image;
-use crate::mem::{Ptr, MutPtr};
+use crate::mem::Ptr;
 use crate::objc::{id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject};
 use crate::options::Options;
 use crate::paths;
@@ -153,13 +152,13 @@ struct AppPickerDelegateHostObject {
 impl HostObject for AppPickerDelegateHostObject {}
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
-    path: "/System/Library/PrivateFrameworks/AppPicker.framework/AppPicker",
-    aliases: &["/.touchHLE/AppPickerHelpers.dylib"],
+    // Not a real iOS dylib obviously. This shouldn't really be in the list of
+    // dylibs if we can avoid it somehow (TODO?).
+    path: "/.touchHLE/AppPickerHelpers.dylib",
+    aliases: &[],
     class_exports: &[CLASSES],
     constant_exports: &[],
-    function_exports: &[
-        ("_CCCrypt", &host_CCCrypt as &dyn crate::abi::CallFromGuest),
-    ],
+    function_exports: &[],
 };
 
 /// Be careful! These classes go in the normal class list, just like everything
@@ -1409,41 +1408,4 @@ fn setup_quick_options(
         scale_hack_buttons: button_rows[0][..].try_into().unwrap(),
         orientation_buttons: button_rows[1][..].try_into().unwrap(),
     }
-}
-
-fn host_CCCrypt(
-    env: &mut Environment,
-    _op: u32,
-    _alg: u32,
-    _options: u32,
-    _key_ptr: u32,
-    _key_len: u32,
-    _iv_ptr: u32,
-    data_in_ptr: u32,
-    data_in_len: u32,
-    data_out_ptr: u32,
-    data_out_available: u32,
-    data_out_moved_ptr: u32,
-) -> u32 {
-    use crate::mem::{Ptr, MutPtr};
-
-    // Определяем объем копирования
-    let copy_len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
-
-    // Побайтовое копирование через систему памяти эмулятора
-    if data_in_ptr != 0 && data_out_ptr != 0 && copy_len > 0 {
-        for i in 0..copy_len {
-            // Читаем байт из памяти эмулятора (адрес в ARM)
-            let byte: u8 = env.mem.read(Ptr::new(data_in_ptr + i));
-            // Пишем байт в память эмулятора
-            env.mem.write(MutPtr::new(data_out_ptr + i), byte);
-        }
-    }
-
-    // Сообщаем игре, сколько байт мы "обработали"
-    if data_out_moved_ptr != 0 {
-        env.mem.write(MutPtr::new(data_out_moved_ptr), copy_len);
-    }
-
-    0 // kCCSuccess
 }
