@@ -3,40 +3,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! CommonCrypto (`/usr/lib/libcommonCrypto.dylib` etc.)
-//!
-//! Minimal implementation of CCCrypt and related functions.
+//! CommonCrypto
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr};
+use crate::mem::{ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr};
 use crate::Environment;
-
-// CCCrypt operation codes
-const kCCEncrypt: u32 = 0;
-const kCCDecrypt: u32 = 1;
-
-// CCAlgorithm
-const kCCAlgorithmAES128: u32 = 0;
-const kCCAlgorithmDES: u32 = 1;
-const kCCAlgorithm3DES: u32 = 2;
-const kCCAlgorithmCAST: u32 = 3;
-const kCCAlgorithmRC4: u32 = 4;
-const kCCAlgorithmRC2: u32 = 5;
-const kCCAlgorithmBlowfish: u32 = 6;
-
-// CCOptions
-const kCCOptionPKCS7Padding: u32 = 0x0001;
-const kCCOptionECBMode: u32 = 0x0002;
 
 // CCCryptorStatus
 const kCCSuccess: i32 = 0;
-const kCCParamError: i32 = -4300;
 const kCCBufferTooSmall: i32 = -4301;
-const kCCMemoryFailure: i32 = -4302;
-const kCCAlignmentError: i32 = -4303;
-const kCCDecodeError: i32 = -4304;
-const kCCUnimplemented: i32 = -4305;
 
+// Split CCCrypt into a wrapper that reads stack args manually.
+// ARM ABI: R0-R3 = first 4 args, rest on stack.
+// CCCrypt has 12 args total.
+// We expose first 8 params as normal, then read remaining 4 from stack.
 #[allow(non_snake_case)]
 fn CCCrypt(
     env: &mut Environment,
@@ -44,31 +24,32 @@ fn CCCrypt(
     alg: u32,
     options: u32,
     key: ConstVoidPtr,
-    key_length: u32,
+    key_length: GuestUSize,
     iv: ConstVoidPtr,
     data_in: ConstVoidPtr,
-    data_in_length: u32,
-    data_out: MutVoidPtr,
-    data_out_available: u32,
-    data_out_moved: MutPtr<u32>,
+    data_in_length: GuestUSize,
 ) -> i32 {
+    // Read remaining 4 args from guest stack
+    let sp = env.cpu.regs()[13]; // SP
+    let data_out = crate::mem::Ptr::from_bits(env.mem.read(crate::mem::Ptr::<u32, false>::from_bits(sp)));
+    let data_out_available: u32 = env.mem.read(crate::mem::Ptr::<u32, false>::from_bits(sp + 4));
+    let data_out_moved_ptr = crate::mem::Ptr::<u32, true>::from_bits(env.mem.read(crate::mem::Ptr::<u32, false>::from_bits(sp + 8)));
+
     log!(
         "CCCrypt(op={}, alg={}, options={:#x}, keyLen={}, dataLen={})",
         op, alg, options, key_length, data_in_length
     );
 
-    // Check if output buffer is large enough
     if data_out_available < data_in_length {
         return kCCBufferTooSmall;
     }
 
-    // For RC4 (stream cipher, no padding needed) — XOR with key stream
-    if alg == kCCAlgorithmRC4 {
-        let input = env.mem.bytes_at(data_in.cast(), data_in_length);
-        let key_bytes = env.mem.bytes_at(key.cast(), key_length);
+    // RC4 stream cipher
+    if alg == 4 {
+        let input = env.mem.bytes_at(data_in.cast(), data_in_length).to_vec();
+        let key_bytes = env.mem.bytes_at(key.cast(), key_length).to_vec();
         let mut output = vec![0u8; data_in_length as usize];
 
-        // Simple RC4
         let mut s: Vec<u8> = (0..=255u8).collect();
         let mut j: usize = 0;
         for i in 0..256usize {
@@ -84,19 +65,16 @@ fn CCCrypt(
             let k = s[(s[i] as usize + s[j] as usize) % 256];
             output[idx] = byte ^ k;
         }
-
-        env.mem.bytes_at_mut(data_out.cast(), data_in_length).copy_from_slice(&output);
-        env.mem.write(data_out_moved, data_in_length);
+        env.mem.bytes_at_mut(data_out, data_in_length).copy_from_slice(&output);
+        env.mem.write(data_out_moved_ptr, data_in_length);
         return kCCSuccess;
     }
 
-    // For other algorithms — just copy data as-is (TODO: implement properly)
-    // This allows apps to at least not crash, even if crypto is wrong
+    // Other algorithms: copy as-is (TODO: implement AES/DES properly)
     let input = env.mem.bytes_at(data_in.cast(), data_in_length).to_vec();
-    env.mem.bytes_at_mut(data_out.cast(), data_in_length).copy_from_slice(&input);
-    env.mem.write(data_out_moved, data_in_length);
-
-    log!("CCCrypt: WARNING: alg={} not properly implemented, data copied as-is", alg);
+    env.mem.bytes_at_mut(data_out, data_in_length).copy_from_slice(&input);
+    env.mem.write(data_out_moved_ptr, data_in_length);
+    log!("CCCrypt: alg={} not implemented, data copied as-is", alg);
     kCCSuccess
 }
 
@@ -105,13 +83,11 @@ fn CCKeyDerivationPBKDF(
     _env: &mut Environment,
     _algorithm: u32,
     _password: ConstVoidPtr,
-    _password_len: u32,
+    _password_len: GuestUSize,
     _salt: ConstVoidPtr,
-    _salt_len: u32,
+    _salt_len: GuestUSize,
     _prf: u32,
     _rounds: u32,
-    _derived_key: MutVoidPtr,
-    _derived_key_len: u32,
 ) -> i32 {
     log!("TODO: CCKeyDerivationPBKDF");
     kCCSuccess
@@ -122,17 +98,17 @@ fn CCHmac(
     _env: &mut Environment,
     _algorithm: u32,
     _key: ConstVoidPtr,
-    _key_length: u32,
+    _key_length: GuestUSize,
     _data: ConstVoidPtr,
-    _data_length: u32,
+    _data_length: GuestUSize,
     _mac_out: MutVoidPtr,
 ) {
     log!("TODO: CCHmac");
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _, _)),
-    export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(CCCrypt(_, _, _, _, _, _, _, _)),
+    export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _, _)),
     export_c_func!(CCHmac(_, _, _, _, _, _, _)),
 ];
 
