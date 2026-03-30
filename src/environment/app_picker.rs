@@ -152,14 +152,16 @@ struct AppPickerDelegateHostObject {
 impl HostObject for AppPickerDelegateHostObject {}
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
-    // Not a real iOS dylib obviously. This shouldn't really be in the list of
-    // dylibs if we can avoid it somehow (TODO?).
-    path: "/.touchHLE/AppPickerHelpers.dylib",
-    aliases: &[],
+    // Используем официальный путь, чтобы игра точно нашла библиотеку
+    path: "/System/Library/PrivateFrameworks/AppPicker.framework/AppPicker",
+    aliases: &["/.touchHLE/AppPickerHelpers.dylib"], 
     class_exports: &[CLASSES],
     constant_exports: &[],
-    function_exports: &[],
+    function_exports: &[
+        ("_CCCrypt", host_CCCrypt as usize as *const u8),
+    ],
 };
+
 
 /// Be careful! These classes go in the normal class list, just like everything
 /// else, so an app could try to instantiate them. Don't give them special
@@ -1408,4 +1410,20 @@ fn setup_quick_options(
         scale_hack_buttons: button_rows[0][..].try_into().unwrap(),
         orientation_buttons: button_rows[1][..].try_into().unwrap(),
     }
+}
+
+#[no_mangle]
+pub extern "C" fn host_CCCrypt(
+    _op: u32, _alg: u32, _options: u32, _key: *const u8, _key_len: usize, _iv: *const u8,
+    data_in: *const u8, data_in_len: usize, data_out: *mut u8, data_out_available: usize,
+    data_out_moved: *mut usize,
+) -> i32 {
+    unsafe {
+        let len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
+        if !data_in.is_null() && !data_out.is_null() && len > 0 {
+            std::ptr::copy_nonoverlapping(data_in, data_out, len);
+        }
+        if !data_out_moved.is_null() { *data_out_moved = len; }
+    }
+    0 // kCCSuccess
 }
