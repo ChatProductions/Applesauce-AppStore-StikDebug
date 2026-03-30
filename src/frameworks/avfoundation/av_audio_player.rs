@@ -430,14 +430,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSTimeInterval)currentTime {
     let host_object = env.objc.borrow::<AVAudioPlayerHostObject>(this);
-    let current_time = if let Some(audio_desc) = host_object.audio_desc {
+    if let Some(audio_desc) = host_object.audio_desc {
         let current_frame = (host_object.current_packet as f64)
             * (audio_desc.frames_per_packet as f64);
         current_frame / audio_desc.sample_rate
     } else {
         0.0
-    };
-    current_time
+    }
 }
 
 - (())setCurrentTime:(NSTimeInterval)currentTime {
@@ -596,3 +595,4 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
         }
     }
 }
+
