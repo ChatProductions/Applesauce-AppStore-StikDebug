@@ -30,6 +30,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::store_kit::DYLIB,
     &frameworks::system_configuration::DYLIB,
     &frameworks::uikit::DYLIB,
+    &frameworks::common_crypto::DYLIB,
 ];
 
 #[cfg(test)]
