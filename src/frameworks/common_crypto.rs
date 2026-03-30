@@ -6,7 +6,7 @@
 //! CommonCrypto
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr};
+use crate::mem::{ConstVoidPtr, GuestUSize, MutVoidPtr};
 use crate::Environment;
 
 // CCCryptorStatus
@@ -25,7 +25,7 @@ fn CCCrypt(
     options: u32,
     key: ConstVoidPtr,
     key_length: GuestUSize,
-    iv: ConstVoidPtr,
+    _iv: ConstVoidPtr,
     data_in: ConstVoidPtr,
     data_in_length: GuestUSize,
 ) -> i32 {
@@ -108,8 +108,8 @@ fn CCHmac(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _)),
-    export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _, _)),
-    export_c_func!(CCHmac(_, _, _, _, _, _, _)),
+    export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)), 
+    export_c_func!(CCHmac(_, _, _, _, _, _)),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
