@@ -152,16 +152,14 @@ struct AppPickerDelegateHostObject {
 impl HostObject for AppPickerDelegateHostObject {}
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
-    // Используем официальный путь, чтобы игра точно нашла библиотеку
     path: "/System/Library/PrivateFrameworks/AppPicker.framework/AppPicker",
-    aliases: &["/.touchHLE/AppPickerHelpers.dylib"], 
+    aliases: &["/.touchHLE/AppPickerHelpers.dylib"],
     class_exports: &[CLASSES],
     constant_exports: &[],
     function_exports: &[
-        ("_CCCrypt", host_CCCrypt as usize as *const u8),
+        ("_CCCrypt", &host_CCCrypt), // Теперь передаем ссылку на совместимую функцию
     ],
 };
-
 
 /// Be careful! These classes go in the normal class list, just like everything
 /// else, so an app could try to instantiate them. Don't give them special
@@ -1412,18 +1410,35 @@ fn setup_quick_options(
     }
 }
 
-#[no_mangle]
-pub extern "C" fn host_CCCrypt(
-    _op: u32, _alg: u32, _options: u32, _key: *const u8, _key_len: usize, _iv: *const u8,
-    data_in: *const u8, data_in_len: usize, data_out: *mut u8, data_out_available: usize,
-    data_out_moved: *mut usize,
-) -> i32 {
-    unsafe {
-        let len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
-        if !data_in.is_null() && !data_out.is_null() && len > 0 {
-            std::ptr::copy_nonoverlapping(data_in, data_out, len);
-        }
-        if !data_out_moved.is_null() { *data_out_moved = len; }
+// Новая версия, совместимая с CallFromGuest
+fn host_CCCrypt(env: &mut Environment, args: &crate::abi::Args) -> u32 {
+    // Вытаскиваем аргументы по порядку из регистров ARM
+    // Индексы соответствуют порядку в оригинальной функции _CCCrypt
+    let _op: u32 = args.get(0);
+    let _alg: u32 = args.get(1);
+    let _options: u32 = args.get(2);
+    let _key_ptr: u32 = args.get(3);
+    let _key_len: u32 = args.get(4);
+    let _iv_ptr: u32 = args.get(5);
+    let data_in_ptr: u32 = args.get(6);
+    let data_in_len: u32 = args.get(7);
+    let data_out_ptr: u32 = args.get(8);
+    let data_out_available: u32 = args.get(9);
+    let data_out_moved_ptr: u32 = args.get(10);
+
+    // Логика "прозрачного" копирования данных
+    let copy_len = if data_in_len < data_out_available { data_in_len } else { data_out_available };
+
+    if data_in_ptr != 0 && data_out_ptr != 0 && copy_len > 0 {
+        // Читаем из памяти эмулятора и пишем обратно (имитация работы)
+        let mut buffer = vec![0u8; copy_len as usize];
+        env.mem.read(data_in_ptr, &mut buffer);
+        env.mem.write(data_out_ptr, &buffer);
     }
+
+    if data_out_moved_ptr != 0 {
+        env.mem.write_u32(data_out_moved_ptr, copy_len);
+    }
+
     0 // kCCSuccess
 }
