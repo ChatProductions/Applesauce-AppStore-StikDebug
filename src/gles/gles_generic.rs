@@ -437,6 +437,55 @@ pub trait GLES {
     unsafe fn DeleteFramebuffersOES(&mut self, n: GLsizei, framebuffers: *const GLuint);
     unsafe fn DeleteRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *const GLuint);
     unsafe fn GenerateMipmapOES(&mut self, target: GLenum);
+
+    // Non-OES aliases for OES_framebuffer_object functions.
+    // Some GLES1 apps call the suffix-free ES2-style names directly.
+    unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint);
+    unsafe fn GenRenderbuffers(&mut self, n: GLsizei, renderbuffers: *mut GLuint);
+    unsafe fn IsFramebuffer(&mut self, framebuffer: GLuint) -> GLboolean;
+    unsafe fn IsRenderbuffer(&mut self, renderbuffer: GLuint) -> GLboolean;
+    unsafe fn BindFramebuffer(&mut self, target: GLenum, framebuffer: GLuint);
+    unsafe fn BindRenderbuffer(&mut self, target: GLenum, renderbuffer: GLuint);
+    unsafe fn RenderbufferStorage(
+        &mut self,
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    );
+    unsafe fn FramebufferRenderbuffer(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    );
+    unsafe fn FramebufferTexture2D(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: i32,
+    );
+    unsafe fn CheckFramebufferStatus(&mut self, target: GLenum) -> GLenum;
+    unsafe fn DeleteFramebuffers(&mut self, n: GLsizei, framebuffers: *const GLuint);
+    unsafe fn DeleteRenderbuffers(&mut self, n: GLsizei, renderbuffers: *const GLuint);
+    unsafe fn GenerateMipmap(&mut self, target: GLenum);
+    unsafe fn GetFramebufferAttachmentParameteriv(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    );
+    unsafe fn GetRenderbufferParameteriv(
+        &mut self,
+        target: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    );
+
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint);
     unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid;
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean;
