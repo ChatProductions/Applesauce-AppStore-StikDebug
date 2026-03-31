@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Passthrough for a native OpenGL ES 1.1 driver.
@@ -25,6 +26,7 @@ pub struct GLES1NativeContext {
     gl_ctx: GLContext,
     is_loaded: bool,
 }
+
 impl GLESContext for GLES1NativeContext {
     fn description() -> &'static str {
         "Native OpenGL ES 1.1"
@@ -828,6 +830,89 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GenerateMipmapOES(&mut self, target: GLenum) {
         gles11::GenerateMipmapOES(target)
     }
+
+    // Non-OES aliases for OES_framebuffer_object functions.
+    unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
+        self.GenFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn GenRenderbuffers(&mut self, n: GLsizei, renderbuffers: *mut GLuint) {
+        self.GenRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn IsFramebuffer(&mut self, framebuffer: GLuint) -> GLboolean {
+        self.IsFramebufferOES(framebuffer)
+    }
+    unsafe fn IsRenderbuffer(&mut self, renderbuffer: GLuint) -> GLboolean {
+        self.IsRenderbufferOES(renderbuffer)
+    }
+    unsafe fn BindFramebuffer(&mut self, target: GLenum, framebuffer: GLuint) {
+        self.BindFramebufferOES(target, framebuffer)
+    }
+    unsafe fn BindRenderbuffer(&mut self, target: GLenum, renderbuffer: GLuint) {
+        self.BindRenderbufferOES(target, renderbuffer)
+    }
+    unsafe fn RenderbufferStorage(
+        &mut self,
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        self.RenderbufferStorageOES(target, internalformat, width, height)
+    }
+    unsafe fn FramebufferRenderbuffer(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    ) {
+        self.FramebufferRenderbufferOES(
+            target,
+            attachment,
+            renderbuffertarget,
+            renderbuffer,
+        )
+    }
+    unsafe fn FramebufferTexture2D(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: i32,
+    ) {
+        self.FramebufferTexture2DOES(target, attachment, textarget, texture, level)
+    }
+    unsafe fn CheckFramebufferStatus(&mut self, target: GLenum) -> GLenum {
+        self.CheckFramebufferStatusOES(target)
+    }
+    unsafe fn DeleteFramebuffers(&mut self, n: GLsizei, framebuffers: *const GLuint) {
+        self.DeleteFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn DeleteRenderbuffers(&mut self, n: GLsizei, renderbuffers: *const GLuint) {
+        self.DeleteRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn GenerateMipmap(&mut self, target: GLenum) {
+        self.GenerateMipmapOES(target)
+    }
+    unsafe fn GetFramebufferAttachmentParameteriv(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        self.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params)
+    }
+    unsafe fn GetRenderbufferParameteriv(
+        &mut self,
+        target: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        self.GetRenderbufferParameterivOES(target, pname, params)
+    }
+
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
         gles11::GetBufferParameteriv(target, pname, params)
     }
@@ -837,4 +922,4 @@ impl GLES for GLES1Native<'_> {
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean {
         gles11::UnmapBufferOES(target)
     }
-            }
+}
