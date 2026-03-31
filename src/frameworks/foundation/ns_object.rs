@@ -308,6 +308,23 @@ forUndefinedKey:(id)key { // NSString*
     // no-op
 }
 
+- (())performSelector:(SEL)sel
+           onThread:(id)_thread
+         withObject:(id)arg
+      waitUntilDone:(bool)_wait {
+    log_dbg!("performSelector:{} onThread:withObject:waitUntilDone: — scheduling on main thread instead", sel.as_str(&env.mem));
+    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
+}
+
+- (())performSelector:(SEL)sel
+           onThread:(id)_thread
+         withObject:(id)arg
+      waitUntilDone:(bool)_wait
+              modes:(id)_modes {
+    log_dbg!("performSelector:{} onThread:withObject:waitUntilDone:modes: — scheduling on main thread instead", sel.as_str(&env.mem));
+    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
+}
+
 @end
 
 };
