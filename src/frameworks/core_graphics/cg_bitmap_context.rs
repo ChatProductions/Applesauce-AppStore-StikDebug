@@ -80,8 +80,8 @@ pub fn CGBitmapContextCreate(
             color_space,
             alpha_info: bitmap_info & kCGBitmapAlphaInfoMask,
         }),
-        // TODO: is this the correct default?
         rgb_fill_color: (0.0, 0.0, 0.0, 0.0),
+        rgb_stroke_color: (0.0, 0.0, 0.0, 1.0), // Добавлено (черный по умолчанию)
         transform: CGAffineTransformIdentity,
         state_stack: Vec::new(),
     };
