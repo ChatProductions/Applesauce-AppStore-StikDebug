@@ -212,6 +212,68 @@ fn CGContextSetTextPosition(
 ) {
 }
 
+fn CGContextSetTextDrawingMode(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _mode: i32,
+) {
+}
+
+fn CGContextSetCharacterSpacing(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _spacing: CGFloat,
+) {
+}
+
+fn CGContextSetTextMatrix(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _t: CGAffineTransform,
+) {
+}
+
+fn CGContextSelectFont(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _name: crate::mem::ConstPtr<u8>,
+    _size: CGFloat,
+    _encoding: i32,
+) {
+}
+
+fn CGContextShowTextAtPoint(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _x: CGFloat,
+    _y: CGFloat,
+    _string: crate::mem::ConstPtr<u8>,
+    _length: u32,
+) {
+}
+
+fn CGContextShowText(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _string: crate::mem::ConstPtr<u8>,
+    _length: u32,
+) {
+}
+
+fn CGContextSetFontSize(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _size: CGFloat,
+) {
+}
+
+fn CGContextSetFont(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _font: crate::mem::ConstVoidPtr,
+) {
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -232,4 +294,12 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetInterpolationQuality(_, _)),
     export_c_func!(CGContextGetTextPosition(_)),
     export_c_func!(CGContextSetTextPosition(_, _, _)),
+    export_c_func!(CGContextSetTextDrawingMode(_, _)),
+    export_c_func!(CGContextSetCharacterSpacing(_, _)),
+    export_c_func!(CGContextSetTextMatrix(_, _)),
+    export_c_func!(CGContextSelectFont(_, _, _, _)),
+    export_c_func!(CGContextShowTextAtPoint(_, _, _, _, _)),
+    export_c_func!(CGContextShowText(_, _, _)),
+    export_c_func!(CGContextSetFontSize(_, _)),
+    export_c_func!(CGContextSetFont(_, _)),
 ];
