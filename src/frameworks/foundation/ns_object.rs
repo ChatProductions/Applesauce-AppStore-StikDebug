@@ -277,9 +277,6 @@ forUndefinedKey:(id)key { // NSString*
     }
 
     if wait {
-        // Called from background thread with wait=true.
-        // True cross-thread waiting is not implemented, so we schedule
-        // the selector on the main run loop and proceed without blocking.
         log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
     }
 
