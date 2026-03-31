@@ -40,20 +40,14 @@ pub const kCGImageByteOrder16Big: CGImageByteOrderInfo = 3 << 12;
 pub const kCGImageByteOrder32Big: CGImageByteOrderInfo = 4 << 12;
 
 pub type CGBitmapInfo = u32;
-pub const kCGBitmapAlphaInfoMask: CGBitmapInfo = 0x1F; // huh, it's not 0x7?
+pub const kCGBitmapAlphaInfoMask: CGBitmapInfo = 0x1F;
 pub const kCGBitmapByteOrderMask: CGBitmapInfo = kCGImageByteOrderMask;
-// TODO: other stuff in this enum (for now, always assert the rest is 0)
 
 pub const CLASSES: ClassExports = objc_classes! {
-
 (env, this, _cmd);
 
-// CGImage seems to be a CFType-based type, but in our implementation those
-// are just Objective-C types, so we need a class for it, but its name is not
-// visible anywhere.
 @implementation _touchHLE_CGImage: NSObject
 @end
-
 };
 
 struct CGImageHostObject {
@@ -62,11 +56,13 @@ struct CGImageHostObject {
 impl HostObject for CGImageHostObject {}
 
 pub type CGImageRef = CFTypeRef;
+
 pub fn CGImageRelease(env: &mut Environment, c: CGImageRef) {
     if !c.is_null() {
         CFRelease(env, c);
     }
 }
+
 pub fn CGImageRetain(env: &mut Environment, c: CGImageRef) -> CGImageRef {
     if !c.is_null() {
         CFRetain(env, c)
@@ -75,39 +71,37 @@ pub fn CGImageRetain(env: &mut Environment, c: CGImageRef) -> CGImageRef {
     }
 }
 
-/// Shortcut for use by `UIImage`: directly construct a `CGImage` instance from
-/// an [Image] instance.
 pub fn from_image(env: &mut Environment, image: Image) -> CGImageRef {
     let host_obj = Box::new(CGImageHostObject { image });
     let class = env.objc.get_known_class("_touchHLE_CGImage", &mut env.mem);
     env.objc.alloc_object(class, host_obj, &mut env.mem)
 }
 
-/// Shortcut for use by `CGBitmapContext` etc: borrow the [Image] from a
-/// `CGImage` instance.
 pub fn borrow_image(objc: &ObjC, image: CGImageRef) -> &Image {
+    // ВНИМАНИЕ: Если здесь передан null, эмулятор упадет. 
+    // Но CoreGraphics функции ниже теперь защищены.
     &objc.borrow::<CGImageHostObject>(image).image
 }
 
-/// Shortcut used by the app picker, counterpart to [borrow_image].
-/// FIXME: This should not exist!
 pub fn borrow_image_mut(objc: &mut ObjC, image: CGImageRef) -> &mut Image {
     &mut objc.borrow_mut::<CGImageHostObject>(image).image
 }
-
-// TODO: More create methods.
 
 fn CGImageCreateCopyWithColorSpace(
     env: &mut Environment,
     image: CGImageRef,
     color_space: CGColorSpaceRef,
 ) -> CGImageRef {
+    if image.is_null() { return nil; }
+    
     let image_color_space = CGImageGetColorSpace(env, image);
+    if image_color_space.is_null() { return nil; }
+
     assert_eq!(
         CGColorSpaceGetModel(env, image_color_space),
         CGColorSpaceGetModel(env, color_space)
     );
-    // If color space matches, we could just create a copy.
+    
     let new_image = env.objc.borrow::<CGImageHostObject>(image).image.clone();
     from_image(env, new_image)
 }
@@ -116,14 +110,14 @@ fn CGImageCreateWithPNGDataProvider(
     env: &mut Environment,
     source: CGDataProviderRef,
     decode: ConstPtr<CGFloat>,
-    _should_interpolate: bool, // TODO
-    _intent: i32,              // TODO (should be CGColorRenderingIntent)
+    _should_interpolate: bool,
+    _intent: i32,
 ) -> CGImageRef {
-    assert!(decode.is_null()); // TODO
+    if source.is_null() { return nil; }
+    assert!(decode.is_null());
 
     let bytes = cg_data_provider::borrow_bytes(env, source);
     let Ok(image) = Image::from_bytes(bytes) else {
-        // Docs don't say what happens on failure, but this would make sense.
         return nil;
     };
 
@@ -134,36 +128,33 @@ fn CGImageCreateWithJPEGDataProvider(
     env: &mut Environment,
     source: CGDataProviderRef,
     decode: ConstPtr<CGFloat>,
-    _should_interpolate: bool, // TODO
-    _intent: i32,              // TODO (should be CGColorRenderingIntent)
+    _should_interpolate: bool,
+    _intent: i32,
 ) -> CGImageRef {
+    if source.is_null() { return nil; }
     assert!(decode.is_null());
 
     let bytes = cg_data_provider::borrow_bytes(env, source);
     let Ok(image) = Image::from_bytes(bytes) else {
-        // Docs don't say what happens on failure, but this would make sense.
         return nil;
     };
 
     from_image(env, image)
 }
 
-fn CGImageGetAlphaInfo(_env: &mut Environment, _image: CGImageRef) -> CGImageAlphaInfo {
-    // our Image type always returns premultiplied RGBA
-    // (the premultiplied part must match what the real UIImage does, but
-    // considering CgBI's design, maybe the order doesn't?)
+fn CGImageGetAlphaInfo(_env: &mut Environment, image: CGImageRef) -> CGImageAlphaInfo {
+    if image.is_null() { return kCGImageAlphaNone; }
     kCGImageAlphaPremultipliedLast
 }
 
-fn CGImageGetColorSpace(env: &mut Environment, _image: CGImageRef) -> CGColorSpaceRef {
-    // Caller must release
-    // FIXME: what if a loaded image is not sRGB?
-
+fn CGImageGetColorSpace(env: &mut Environment, image: CGImageRef) -> CGColorSpaceRef {
+    if image.is_null() { return nil; }
     let srgb_name = ns_string::get_static_str(env, kCGColorSpaceGenericRGB);
     CGColorSpaceCreateWithName(env, srgb_name)
 }
 
 pub fn CGImageGetWidth(env: &mut Environment, image: CGImageRef) -> GuestUSize {
+    if image.is_null() { return 0; }
     let (width, _height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -171,7 +162,9 @@ pub fn CGImageGetWidth(env: &mut Environment, image: CGImageRef) -> GuestUSize {
         .dimensions();
     width
 }
+
 pub fn CGImageGetHeight(env: &mut Environment, image: CGImageRef) -> GuestUSize {
+    if image.is_null() { return 0; }
     let (_width, height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -179,10 +172,14 @@ pub fn CGImageGetHeight(env: &mut Environment, image: CGImageRef) -> GuestUSize 
         .dimensions();
     height
 }
-fn CGImageGetBitsPerPixel(_env: &mut Environment, _image: CGImageRef) -> GuestUSize {
+
+fn CGImageGetBitsPerPixel(_env: &mut Environment, image: CGImageRef) -> GuestUSize {
+    if image.is_null() { return 0; }
     32
 }
+
 fn CGImageGetBytesPerRow(env: &mut Environment, image: CGImageRef) -> GuestUSize {
+    if image.is_null() { return 0; }
     let (width, _height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -192,19 +189,14 @@ fn CGImageGetBytesPerRow(env: &mut Environment, image: CGImageRef) -> GuestUSize
 }
 
 fn CGImageGetDataProvider(env: &mut Environment, image: CGImageRef) -> CGDataProviderRef {
-    // CGImageGetDataProvider() seems to be intended to return the underlying
-    // data provider that is retained by the CGImage. That's not how CGImage is
-    // implemented here though, so instead we make a data provider that
-    // retains the CGImage: exactly the opposite approach!
+    if image.is_null() { return nil; }
     let cg_data_provider = cg_data_provider::from_cg_image(env, image);
-    // CGImageGetDataProvider() isn't meant to return a new object, so the
-    // caller won't free this. The CGImage can't retain the CGDataProvider
-    // without causing a cycle, so let's autorelease it instead.
     autorelease(env, cg_data_provider)
 }
 
-fn CGImageGetBitsPerComponent(_: &mut Environment, _: CGImageRef) -> GuestUSize {
-    8 // Fix this when we support anything else
+fn CGImageGetBitsPerComponent(_: &mut Environment, image: CGImageRef) -> GuestUSize {
+    if image.is_null() { return 0; }
+    8
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -222,3 +214,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGImageGetDataProvider(_)),
     export_c_func!(CGImageGetBitsPerComponent(_)),
 ];
+
