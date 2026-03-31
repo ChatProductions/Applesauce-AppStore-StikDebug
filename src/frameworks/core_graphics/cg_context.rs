@@ -91,28 +91,25 @@ pub fn CGContextSetRGBFillColor(
         .rgb_fill_color = color;
 }
 
+// 1. Убедись, что функция принимает 5 параметров (+ env)
 pub fn CGContextSetRGBStrokeColor(
-    env: &mut crate::Environment,
-    context: u32, // В touchHLE это обычно id или указатель
+    env: &mut Environment,
+    context_handle: id, // В touchHLE контекст передается как id (указатель)
     red: f32,
     green: f32,
     blue: f32,
     alpha: f32,
 ) {
-    if context == 0 {
-        return; // Поведение реальной iOS: если контекст nil, просто ничего не делаем
-    }
-
-    // Достаем объект контекста из памяти эмулятора и честно сохраняем цвет!
-    // ВНИМАНИЕ: Точный синтаксис зависит от твоего форка. 
-    // Если метод get_context_mut не сработает, посмотри, как достается контекст 
-    // в соседней функции CGContextSetRGBFillColor, и скопируй этот паттерн.
-    if let Some(mut cg_context) = env.core_graphics.get_context_mut(context) {
+    // 2. Правильный способ достать контекст через objc.borrow_mut
+    // Мы пытаемся интерпретировать id как объект типа CGContext
+    if let Some(mut cg_context) = env.objc.borrow_mut::<CGContext>(context_handle) {
         
+        // Записываем цвет в состояние контекста
         cg_context.state.stroke_color = [red, green, blue, alpha];
         
     } else {
-        println!("[CoreGraphics] Warning: CGContextSetRGBStrokeColor called with invalid context 0x{:x}", context);
+        // Опционально: лог для отладки, если вдруг пришел битый указатель
+        // println!("[CoreGraphics] Warning: Invalid context id 0x{:x}", context_handle);
     }
 }
 
@@ -304,7 +301,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRelease(_)),
     export_c_func!(CGContextSetFillColorWithColor(_, _)),
     export_c_func!(CGContextSetRGBFillColor(_, _, _, _, _)),
-    export_c_func!(CGContextSetRGBStrokeColor(_, _, _, _, _, _)),
+    export_c_func!(CGContextSetRGBStrokeColor(_, _, _, _, _)),
     export_c_func!(CGContextSetGrayFillColor(_, _, _)),
     export_c_func!(CGContextFillRect(_, _)),
     export_c_func!(CGContextClearRect(_, _)),
