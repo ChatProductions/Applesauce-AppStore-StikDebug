@@ -107,6 +107,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// ДОБАВЛЕННЫЙ МЕТОД: Заглушка для инициализации из Data
+- (id)initWithData:(id)data error:(MutPtr<id>)outError {
+    log_dbg!("[(AVAudioPlayer*){:?} initWithData:{:?} outError:{:?}] (STUB)", this, data, outError);
+    
+    // Возвращаем nil, чтобы приложение понимало, что плеер не инициализирован, 
+    // и не пыталось вызывать у него методы play/stop
+    nil
+}
+
 - (())setDelegate:(id)delegate {
     todo_objc_setter!(this, delegate);
 }
