@@ -14,6 +14,7 @@ use crate::frameworks::core_graphics::cg_bitmap_context::{
     CGBitmapContextGetHeight, CGBitmapContextGetWidth,
 };
 use crate::frameworks::core_graphics::cg_color::CGColorRef;
+use crate::frameworks::core_graphics::CGContextHostObject; 
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::objc::{objc_classes, ClassExports, HostObject, id};
 use crate::Environment;
@@ -93,22 +94,22 @@ pub fn CGContextSetRGBFillColor(
 
 pub fn CGContextSetRGBStrokeColor(
     env: &mut Environment,
-    context_handle: id, 
-    red: f32,
-    green: f32,
-    blue: f32,
-    alpha: f32,
+    context_handle: id,
+    red: f32, green: f32, blue: f32, alpha: f32,
 ) {
-    // В touchHLE объекты часто именуются без префикса CG во внутренней логике.
-    // Попробуй заимствовать как CGContextRef, если это структура, 
-    // или посмотри, как называется struct в начале этого файла (cg_context.rs).
-    if let Some(mut cg_context) = env.objc.borrow_mut::<CGContextRef>(context_handle) {
-        
-        // ВНИМАНИЕ: Проверь, как называется поле состояния. 
-        // Если .state не подходит, попробуй напрямую .stroke_color
-        cg_context.state.stroke_color = [red, green, blue, alpha];
-        
+    // 1. Проверка на null (nil), чтобы не паниковать раньше времени
+    if context_handle.is_null() {
+        return;
     }
+
+    // 2. Используем CGContextHostObject — это реальный тип данных в памяти
+    // В твоем форке borrow_mut возвращает &mut T напрямую, а не Option
+    let cg_context = env.objc.borrow_mut::<CGContextHostObject>(context_handle);
+
+    // 3. Устанавливаем цвет в состояние контекста
+    // Если компилятор скажет, что поля .state нет, 
+    // попробуй cg_context.stroke_color = ...
+    cg_context.state.stroke_color = [red, green, blue, alpha];
 }
 
 fn CGContextSetGrayFillColor(
