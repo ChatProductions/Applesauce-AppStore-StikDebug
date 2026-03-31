@@ -149,11 +149,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 // ---------------------------------------------------------------------------
 // NSConditionLock
 // ---------------------------------------------------------------------------
-// Uses std::sync::{Arc, Mutex, Condvar} directly because touchHLE's
-// env.mutex_state has no condvar support. The Arc is cloned before
-// dropping the ObjC borrow so that blocking waits never hold a live
-// borrow on env.objc.
-// ---------------------------------------------------------------------------
 
 @implementation NSConditionLock: NSObject
 
@@ -188,7 +183,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         .borrow::<NSConditionLockHostObject>(this)
         .inner
         .clone();
-    inner.0.lock().unwrap().condition
+    // Фикс: сохраняем в переменную, чтобы замок (guard) освободился ДО того,
+    // как переменная 'inner' выйдет из области видимости.
+    let current_cond = inner.0.lock().unwrap().condition;
+    current_cond
 }
 
 // Acquires the lock unconditionally, blocking until available.
@@ -295,10 +293,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         .inner
         .clone();
     let (mutex, condvar) = &*inner;
-    let mut state = condvar
-        .wait_while(mutex.lock().unwrap(), |s| s.locked)
-        .unwrap();
-    state.locked = true;
+    // Фикс: используем блок, чтобы MutexGuard удалился до того, как 'inner' выйдет из области видимости.
+    {
+        let mut state = condvar
+            .wait_while(mutex.lock().unwrap(), |s| s.locked)
+            .unwrap();
+        state.locked = true;
+    }
     true
 }
 
@@ -309,12 +310,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         .inner
         .clone();
     let (mutex, condvar) = &*inner;
-    let mut state = condvar
-        .wait_while(mutex.lock().unwrap(), |s| {
-            s.locked || s.condition != condition
-        })
-        .unwrap();
-    state.locked = true;
+    // Фикс: используем блок для своевременного освобождения замка.
+    {
+        let mut state = condvar
+            .wait_while(mutex.lock().unwrap(), |s| {
+                s.locked || s.condition != condition
+            })
+            .unwrap();
+        state.locked = true;
+    }
     true
 }
 
@@ -326,4 +330,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
