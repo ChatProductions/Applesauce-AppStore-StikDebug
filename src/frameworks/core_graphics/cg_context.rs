@@ -14,7 +14,6 @@ use crate::frameworks::core_graphics::cg_bitmap_context::{
     CGBitmapContextGetHeight, CGBitmapContextGetWidth,
 };
 use crate::frameworks::core_graphics::cg_color::CGColorRef;
-use crate::frameworks::core_graphics::CGContextHostObject; 
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::objc::{objc_classes, ClassExports, HostObject, id};
 use crate::Environment;
@@ -47,10 +46,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 pub(super) struct CGContextHostObject {
     pub(super) subclass: CGContextSubclass,
     pub(super) rgb_fill_color: (CGFloat, CGFloat, CGFloat, CGFloat),
-    /// Current transform.
+    pub(super) rgb_stroke_color: (CGFloat, CGFloat, CGFloat, CGFloat), // Добавлено
     pub(super) transform: CGAffineTransform,
-    // TODO: keep more states saved once they are implemented
-    pub(super) state_stack: Vec<((CGFloat, CGFloat, CGFloat, CGFloat), CGAffineTransform)>,
+    // Обновляем стек: теперь он хранит два цвета и трансформацию
+    pub(super) state_stack: Vec<((CGFloat, CGFloat, CGFloat, CGFloat), (CGFloat, CGFloat, CGFloat, CGFloat), CGAffineTransform)>,
 }
 impl HostObject for CGContextHostObject {}
 
@@ -94,22 +93,17 @@ pub fn CGContextSetRGBFillColor(
 
 pub fn CGContextSetRGBStrokeColor(
     env: &mut Environment,
-    context_handle: id,
-    red: f32, green: f32, blue: f32, alpha: f32,
+    context: CGContextRef, // Используем стандартный для файла тип
+    red: CGFloat,
+    green: CGFloat,
+    blue: CGFloat,
+    alpha: CGFloat,
 ) {
-    // 1. Проверка на null (nil), чтобы не паниковать раньше времени
-    if context_handle.is_null() {
+    if context.is_null() {
         return;
     }
-
-    // 2. Используем CGContextHostObject — это реальный тип данных в памяти
-    // В твоем форке borrow_mut возвращает &mut T напрямую, а не Option
-    let cg_context = env.objc.borrow_mut::<CGContextHostObject>(context_handle);
-
-    // 3. Устанавливаем цвет в состояние контекста
-    // Если компилятор скажет, что поля .state нет, 
-    // попробуй cg_context.stroke_color = ...
-    cg_context.state.stroke_color = [red, green, blue, alpha];
+    let mut host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
+    host_obj.rgb_stroke_color = (red, green, blue, alpha);
 }
 
 fn CGContextSetGrayFillColor(
@@ -194,16 +188,20 @@ pub fn CGContextDrawImage(
 
 fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
     let host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
-    host_obj
-        .state_stack
-        .push((host_obj.rgb_fill_color, host_obj.transform));
+    host_obj.state_stack.push((
+        host_obj.rgb_fill_color,
+        host_obj.rgb_stroke_color, // Сохраняем обводку
+        host_obj.transform,
+    ));
 }
 
 fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     let host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
-    let state = host_obj.state_stack.pop().unwrap();
-    host_obj.rgb_fill_color = state.0;
-    host_obj.transform = state.1;
+    if let Some(state) = host_obj.state_stack.pop() {
+        host_obj.rgb_fill_color = state.0;
+        host_obj.rgb_stroke_color = state.1; // Восстанавливаем обводку
+        host_obj.transform = state.2;
+    }
 }
 
 fn CGContextSetInterpolationQuality(
