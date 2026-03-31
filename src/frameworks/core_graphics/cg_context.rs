@@ -7,7 +7,7 @@
 
 use super::cg_affine_transform::CGAffineTransform;
 use super::cg_image::CGImageRef;
-use super::{cg_bitmap_context, cg_color, CGFloat, CGRect};
+use super::{cg_bitmap_context, cg_color, CGFloat, CGPoint, CGRect};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_bitmap_context::{
@@ -197,6 +197,21 @@ fn CGContextSetInterpolationQuality(
     );
 }
 
+fn CGContextGetTextPosition(
+    _env: &mut Environment,
+    _context: CGContextRef,
+) -> CGPoint {
+    CGPoint { x: 0.0, y: 0.0 }
+}
+
+fn CGContextSetTextPosition(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _x: CGFloat,
+    _y: CGFloat,
+) {
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -215,4 +230,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSaveGState(_)),
     export_c_func!(CGContextRestoreGState(_)),
     export_c_func!(CGContextSetInterpolationQuality(_, _)),
+    export_c_func!(CGContextGetTextPosition(_)),
+    export_c_func!(CGContextSetTextPosition(_, _, _)),
 ];
