@@ -48,7 +48,7 @@ pub(super) struct CGContextHostObject {
     pub(super) rgb_fill_color: (CGFloat, CGFloat, CGFloat, CGFloat),
     pub(super) rgb_stroke_color: (CGFloat, CGFloat, CGFloat, CGFloat), // Добавлено
     pub(super) transform: CGAffineTransform,
-    // Обновляем стек: теперь он хранит два цвета и трансформацию
+    // Стек теперь хранит кортеж из двух цветов и трансформации
     pub(super) state_stack: Vec<((CGFloat, CGFloat, CGFloat, CGFloat), (CGFloat, CGFloat, CGFloat, CGFloat), CGAffineTransform)>,
 }
 impl HostObject for CGContextHostObject {}
@@ -93,7 +93,7 @@ pub fn CGContextSetRGBFillColor(
 
 pub fn CGContextSetRGBStrokeColor(
     env: &mut Environment,
-    context: CGContextRef, // Используем стандартный для файла тип
+    context: CGContextRef,
     red: CGFloat,
     green: CGFloat,
     blue: CGFloat,
@@ -102,8 +102,8 @@ pub fn CGContextSetRGBStrokeColor(
     if context.is_null() {
         return;
     }
-    let mut host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
-    host_obj.rgb_stroke_color = (red, green, blue, alpha);
+    // Пишем напрямую в поле структуры через borrow_mut
+    env.objc.borrow_mut::<CGContextHostObject>(context).rgb_stroke_color = (red, green, blue, alpha);
 }
 
 fn CGContextSetGrayFillColor(
@@ -190,7 +190,7 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
     let host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
     host_obj.state_stack.push((
         host_obj.rgb_fill_color,
-        host_obj.rgb_stroke_color, // Сохраняем обводку
+        host_obj.rgb_stroke_color, // Сохраняем цвет обводки
         host_obj.transform,
     ));
 }
@@ -199,7 +199,7 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     let host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
     if let Some(state) = host_obj.state_stack.pop() {
         host_obj.rgb_fill_color = state.0;
-        host_obj.rgb_stroke_color = state.1; // Восстанавливаем обводку
+        host_obj.rgb_stroke_color = state.1; // Восстанавливаем цвет обводки
         host_obj.transform = state.2;
     }
 }
