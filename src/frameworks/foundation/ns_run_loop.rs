@@ -76,6 +76,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (()) release {}
 - (id) autorelease { this }
 
+- (bool)runMode:(id)_mode beforeDate:(id)_limit_date {
+    // Мы просто говорим игре, что цикл "прокрутился".
+    // Этого обычно достаточно, чтобы сетевые запросы не вешали игру.
+    true
+}
+
 - (CFRunLoopRef)getCFRunLoop {
     // In our implementation these are the same type (they aren't in Apple's).
     this
