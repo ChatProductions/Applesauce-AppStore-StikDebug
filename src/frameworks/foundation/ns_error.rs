@@ -64,6 +64,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<ErrorHostObject>(this).code
 }
 
+- (id)localizedDescription {
+    env.objc.borrow::<ErrorHostObject>(this).domain
+}
+
 @end
 
 };
