@@ -64,7 +64,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<ErrorHostObject>(this).code
 }
 
+// Заглушка 1: добавленная ранее
 - (id)localizedDescription {
+    env.objc.borrow::<ErrorHostObject>(this).domain
+}
+
+// Заглушка 2: НОВАЯ для localizedFailureReason
+- (id)localizedFailureReason {
     env.objc.borrow::<ErrorHostObject>(this).domain
 }
 
