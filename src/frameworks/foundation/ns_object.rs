@@ -198,13 +198,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setValue:(id)_value
 forUndefinedKey:(id)key { // NSString*
     let class: Class = ObjC::read_isa(this, &env.mem);
-    let class_name_string = env.objc.get_class_name(class).to_owned(); // TODO: Avoid copying
+    let class_name_string = env.objc.get_class_name(class).to_owned();
     let key_string = to_rust_string(env, key);
-    panic!("Object {:?} of class {:?} ({:?}) does not have a setter for {} ({:?})\
-        \nAvailable selectors: {}\nAvailable ivars: {}",
-        this, class_name_string, class, key_string, key,
-        env.objc.debug_all_class_selectors_as_strings(&env.mem, class).join(", "),
-        env.objc.debug_all_class_ivars_as_strings(class).join(", "));
+    log!("Warning: Object {:?} of class {:?} does not have a setter for {} — ignoring",
+        this, class_name_string, key_string);
 }
 
 - (bool)respondsToSelector:(SEL)selector {
@@ -277,6 +274,9 @@ forUndefinedKey:(id)key { // NSString*
     }
 
     if wait {
+        // Called from background thread with wait=true.
+        // True cross-thread waiting is not implemented, so we schedule
+        // the selector on the main run loop and proceed without blocking.
         log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
     }
 
