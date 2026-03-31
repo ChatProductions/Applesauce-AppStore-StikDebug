@@ -211,6 +211,10 @@ forUndefinedKey:(id)key { // NSString*
     env.objc.object_has_method(&env.mem, this, selector)
 }
 
+- (bool)conformsToProtocol:(id)_protocol {
+    true
+}
+    
 // Возвращаем u32 (адрес), так как IMP не реализует GuestRet
 - (u32)methodForSelector:(SEL)_selector {
     log!("Warning: methodForSelector: for {:?} is stubbed", _selector);
