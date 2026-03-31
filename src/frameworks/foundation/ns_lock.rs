@@ -13,12 +13,34 @@ use crate::environment::MutexType::PTHREAD_MUTEX_RECURSIVE;
 use crate::environment::{MutexId, PTHREAD_MUTEX_DEFAULT};
 use crate::msg;
 use crate::objc::{id, nil, objc_classes, ClassExports, HostObject};
+use std::sync::{Arc, Condvar, Mutex};
+
+// NSInteger is i32 on 32-bit ARM.
+type NSInteger = i32;
 
 struct NSLockHostObject {
     mutex_id: MutexId,
     name: id,
 }
 impl HostObject for NSLockHostObject {}
+
+// ---------------------------------------------------------------------------
+// NSConditionLock
+// ---------------------------------------------------------------------------
+
+struct NSConditionLockState {
+    locked: bool,
+    condition: NSInteger,
+}
+
+struct NSConditionLockHostObject {
+    /// Arc lets lock methods clone the reference, drop the ObjC borrow,
+    /// and then block on the condvar without holding a borrow on env.objc.
+    inner: Arc<(Mutex<NSConditionLockState>, Condvar)>,
+}
+impl HostObject for NSConditionLockHostObject {}
+
+// ---------------------------------------------------------------------------
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -124,4 +146,184 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+// ---------------------------------------------------------------------------
+// NSConditionLock
+// ---------------------------------------------------------------------------
+// Uses std::sync::{Arc, Mutex, Condvar} directly because touchHLE's
+// env.mutex_state has no condvar support. The Arc is cloned before
+// dropping the ObjC borrow so that blocking waits never hold a live
+// borrow on env.objc.
+// ---------------------------------------------------------------------------
+
+@implementation NSConditionLock: NSObject
+
++ (id)alloc {
+    log_dbg!("[NSConditionLock alloc]");
+    let inner = Arc::new((
+        Mutex::new(NSConditionLockState {
+            locked: false,
+            condition: 0,
+        }),
+        Condvar::new(),
+    ));
+    let host_obj = NSConditionLockHostObject { inner };
+    env.objc.alloc_object(this, Box::new(host_obj), &mut env.mem)
+}
+
+- (id)init {
+    this
+}
+
+- (id)initWithCondition:(NSInteger)condition {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    inner.0.lock().unwrap().condition = condition;
+    this
+}
+
+- (NSInteger)condition {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    inner.0.lock().unwrap().condition
+}
+
+// Acquires the lock unconditionally, blocking until available.
+- (())lock {
+    log_dbg!("[(NSConditionLock *){:?} lock]", this);
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    let mut state = condvar
+        .wait_while(mutex.lock().unwrap(), |s| s.locked)
+        .unwrap();
+    state.locked = true;
+}
+
+// Acquires the lock without blocking. Returns true on success.
+- (bool)tryLock {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let mut state = inner.0.lock().unwrap();
+    if state.locked {
+        false
+    } else {
+        state.locked = true;
+        true
+    }
+}
+
+// Blocks until the lock is free AND condition matches, then acquires.
+- (())lockWhenCondition:(NSInteger)condition {
+    log_dbg!(
+        "[(NSConditionLock *){:?} lockWhenCondition:{}]",
+        this,
+        condition
+    );
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    let mut state = condvar
+        .wait_while(mutex.lock().unwrap(), |s| {
+            s.locked || s.condition != condition
+        })
+        .unwrap();
+    state.locked = true;
+}
+
+// Non-blocking conditional acquire. Returns true on success.
+- (bool)tryLockWhenCondition:(NSInteger)condition {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let mut state = inner.0.lock().unwrap();
+    if !state.locked && state.condition == condition {
+        state.locked = true;
+        true
+    } else {
+        false
+    }
+}
+
+// Releases the lock without changing the condition.
+- (())unlock {
+    log_dbg!("[(NSConditionLock *){:?} unlock]", this);
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    mutex.lock().unwrap().locked = false;
+    condvar.notify_all();
+}
+
+// Releases the lock and sets the condition to a new value.
+- (())unlockWithCondition:(NSInteger)condition {
+    log_dbg!(
+        "[(NSConditionLock *){:?} unlockWithCondition:{}]",
+        this,
+        condition
+    );
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    {
+        let mut state = mutex.lock().unwrap();
+        state.locked = false;
+        state.condition = condition;
+    }
+    condvar.notify_all();
+}
+
+// Timed variants: NSDate* limit is ignored; we wait unconditionally
+// and always return true. Sufficient for most game use-cases.
+- (bool)lockBeforeDate:(id)_limit {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    let mut state = condvar
+        .wait_while(mutex.lock().unwrap(), |s| s.locked)
+        .unwrap();
+    state.locked = true;
+    true
+}
+
+- (bool)lockWhenCondition:(NSInteger)condition
+         beforeDate:(id)_limit {
+    let inner = env.objc
+        .borrow::<NSConditionLockHostObject>(this)
+        .inner
+        .clone();
+    let (mutex, condvar) = &*inner;
+    let mut state = condvar
+        .wait_while(mutex.lock().unwrap(), |s| {
+            s.locked || s.condition != condition
+        })
+        .unwrap();
+    state.locked = true;
+    true
+}
+
+- (())dealloc {
+    log_dbg!("[(NSConditionLock *){:?} dealloc]", this);
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+@end
+
 };
+
