@@ -1,6 +1,6 @@
 use super::ns_string;
 use super::NSInteger;
-use crate::objc::{autorelease, id, objc_classes, ClassExports, HostObject};
+use crate::objc::{autorelease, id, objc_classes, ClassExports, HostObject, SEL};
 
 struct NSAssertionHandlerHostObject {}
 impl HostObject for NSAssertionHandlerHostObject {}
