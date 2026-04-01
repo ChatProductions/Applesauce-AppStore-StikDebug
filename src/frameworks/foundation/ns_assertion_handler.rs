@@ -24,10 +24,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                description:(id)description {
     let file_str = ns_string::to_rust_string(env, file);
     let desc_str = ns_string::to_rust_string(env, description);
-    panic!(
-        "NSAssert failed at {}:{} — {}",
-        file_str, line, desc_str
-    );
+    log!("Warning: NSAssert failed at {}:{} — {}", file_str, line, desc_str);
 }
 
 - (())handleFailureInFunction:(id)function_name
@@ -37,10 +34,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let func_str = ns_string::to_rust_string(env, function_name);
     let file_str = ns_string::to_rust_string(env, file);
     let desc_str = ns_string::to_rust_string(env, description);
-    panic!(
-        "NSCAssert failed in {} at {}:{} — {}",
-        func_str, file_str, line, desc_str
-    );
+    log!("Warning: NSCAssert failed in {} at {}:{} — {}", func_str, file_str, line, desc_str);
 }
 
 @end
