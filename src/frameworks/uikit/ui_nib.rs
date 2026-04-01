@@ -89,21 +89,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)instantiateWithOwner:(id)owner
                    options:(id)options { // NSDictionary *
-    assert!(owner != nil); // TODO
+    assert!(owner != nil);
+    // TODO
     assert!(options == nil); // TODO
 
     let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
     let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
     let type_: id = get_static_str(env, "nib");
     let path: id  = msg![env; bundle pathForResource:nib_name ofType:type_];
-
     assert!(path != nil);
     assert!(msg![env; path isAbsolutePath]);
     let nib_path = to_rust_string(env, path).to_string();
 
     assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
     env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
-
     let unarchiver = load_nib_file(env, this, GuestPathBuf::from(nib_path)).unwrap();
     let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
     let top_level_objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
@@ -147,6 +146,18 @@ pub const CLASSES: ClassExports = objc_classes! {
         let file_owner = env.objc.borrow::<UINibHostObject>(delegate).file_owner;
         assert!(file_owner != nil);
         file_owner
+    } else if id == "IBFirstResponder" {
+        // Временная заглушка для IBFirstResponder
+        log!("touchHLE: Bypassing IBFirstResponder replacement with dummy NSObject");
+        
+        let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
+        let dummy: id = msg![env; ns_object_class alloc];
+        let dummy_init: id = msg![env; dummy init];
+        
+        // Освобождаем оригинальную заглушку proxy, так как мы ее заменяем
+        release(env, this); 
+        
+        dummy_init
     } else {
         log!("TODO: UIProxyObject replacement for {}, instance {:?} left unreplaced", id, this);
         this
@@ -155,9 +166,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
-// Another undocumented type used by nib files. This one seems to be used to
+// Another undocumented type used by nib files.
+// This one seems to be used to
 // instantiate types that don't implement NSCoding (i.e. don't respond to
-// initWithCoder:). See the link at the top of this file.
+// initWithCoder:).
+// See the link at the top of this file.
 @implementation UIClassSwapper: NSObject
 
 // NSCoding implementation
@@ -172,7 +185,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let orig = to_rust_string(env, orig_nss);
 
     let class = env.objc.get_known_class(&name, &mut env.mem);
-
     let object: id = msg![env; class alloc];
     let object: id = if orig == "UICustomObject" {
         msg![env; object init]
@@ -214,7 +226,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     host_obj.destination = destination;
     host_obj.label = label;
     host_obj.source = source;
-
     this
 }
 
@@ -267,7 +278,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         superclass: _,
         event_mask
     } = env.objc.borrow(this);
-
     let selector = to_rust_string(env, label);
     let action = env.objc.lookup_selector(&selector).unwrap();
 
@@ -277,7 +287,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSCoding implementation
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder: coder];
-
     let event_mask_key = get_static_str(env, "UIEventMask");
     let event_mask: i32 = msg![env; coder decodeIntForKey: event_mask_key];
 
@@ -317,7 +326,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         label,
         source
     } = env.objc.borrow(this);
-
     () = msg![env; source setValue:destination forKey:label];
 }
 
@@ -365,7 +373,6 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     // ensures everything else is deserialized.
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
-
     // Connect all the outlets with UIRuntimeOutletConnection
     let conns_key = get_static_str(env, "UINibConnectionsKey");
     let conns: id = msg![env; unarchiver decodeObjectForKey:conns_key];
