@@ -252,8 +252,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let ns_number_class = env.objc.get_known_class("NSNumber", &mut env.mem);
     if env.objc.class_is_subclass_of(val_class, ns_number_class) {
-        let string_val: id = msg![env; val stringValue];
-        return string_val;
+        log!("Warning: stringForKey called on NSNumber, but stringValue is unimplemented. Returning nil.");
+        return nil;
     }
     nil
 }
