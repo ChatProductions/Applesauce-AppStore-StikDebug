@@ -58,8 +58,17 @@ fn pthread_setspecific(env: &mut Environment, key: pthread_key_t, value: ConstVo
     0 // success
 }
 
+// --- НАША НОВАЯ ЗАГЛУШКА ---
+fn pthread_key_delete(_env: &mut Environment, key: pthread_key_t) -> i32 {
+    log!("Warning: pthread_key_delete({}) called (stubbed)", key);
+    // Просто возвращаем 0 (успех), чтобы успокоить игру
+    0 
+}
+
+// --- ОБНОВЛЕННЫЙ СПИСОК ЭКСПОРТА ---
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_key_create(_, _)),
     export_c_func!(pthread_getspecific(_)),
     export_c_func!(pthread_setspecific(_, _)),
+    export_c_func!(pthread_key_delete(_)), // Регистрируем новую функцию
 ];
