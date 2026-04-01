@@ -169,12 +169,16 @@ fn arc4random(env: &mut Environment) -> u32 {
 
 fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
+    let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
+    
     let Some(&value) = env.env_vars.get(name_cstr) else {
-        log!(
-            "Warning: getenv() for {:?} ({:?}) unhandled",
-            name,
-            std::str::from_utf8(name_cstr)
-        );
+        if name_str != "LUA_PATH" && name_str != "LUA_CPATH" {
+            log!(
+                "Warning: getenv() for {:?} ({:?}) unhandled",
+                name,
+                name_str
+            );
+        }
         return Ptr::null();
     };
     log_dbg!("getenv({:?}) => {:?}", name, value);
@@ -211,6 +215,11 @@ fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
     echo!("App called exit(), exiting.");
     std::process::exit(exit_code);
+}
+
+fn abort(_env: &mut Environment) {
+    echo!("App called abort()! The guest application encountered a fatal error.");
+    std::process::exit(1);
 }
 
 fn bsearch(
@@ -479,6 +488,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(setenv(_, _, _)),
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
+    export_c_func!(abort()),
+    export_c_func_aliased!("_abort", abort()),
     export_c_func!(bsearch(_, _, _, _, _)),
     export_c_func!(strtof(_, _)),
     export_c_func!(strtoul(_, _, _)),
@@ -594,7 +605,7 @@ fn strtol_inner(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn str_to_int_inner_generic<T, U, Q, F1, F2, F3, F4>(
+pub pub fn str_to_int_inner_generic<T, U, Q, F1, F2, F3, F4>(
     env: &mut Environment,
     getc_fn: F1,
     ungetc_fn: F2,
@@ -709,4 +720,3 @@ where
     };
     Ok((res, whitespace_len + len))
 }
-
