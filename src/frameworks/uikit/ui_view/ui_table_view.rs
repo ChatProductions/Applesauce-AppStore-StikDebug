@@ -79,6 +79,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+@implementation UITableView: UIScrollView
+    
 - (id)initWithFrame:(CGRect)frame style:(i32)_style {
     msg_super![env; this initWithFrame:frame]
 }
