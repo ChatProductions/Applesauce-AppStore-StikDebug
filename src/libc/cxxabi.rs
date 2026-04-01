@@ -51,9 +51,6 @@ fn _Unwind_SjLj_Unregister(_env: &mut Environment, _context: MutVoidPtr) {
 fn _Unwind_SjLj_Resume(_env: &mut Environment, _context: MutVoidPtr) {
 }
 
-fn _Znwm(_env: &mut Environment, _context: MutVoidPtr) {
-}
-
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_atexit(_, _, _)),
     export_c_func!(__cxa_finalize(_)),
@@ -62,5 +59,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_Resume(_)),
-    export_c_func!(_Znwm(_)),
 ];
