@@ -26,7 +26,7 @@ pub mod ui_image_picker_controller;
 pub mod ui_nib;
 pub mod ui_responder;
 pub mod ui_screen;
-pub mod ui_tab_bar_controller
+pub mod ui_tab_bar_controller;
 pub mod ui_touch;
 pub mod ui_view;
 pub mod ui_view_controller;
