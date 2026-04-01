@@ -548,7 +548,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGSize)sizeThatFits:(CGSize)size { size }
 - (())sizeToFit {
-    let size: CGSize = msg![env; this bounds].size;
+    let bounds: CGRect = msg![env; this bounds];
+    let size: CGSize = bounds.size;
     let new_size: CGSize = msg![env; this sizeThatFits:size];
     () = msg![env; this setBounds:(CGRect { origin: CGPoint::default(), size: new_size })];
 }
@@ -556,3 +557,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
