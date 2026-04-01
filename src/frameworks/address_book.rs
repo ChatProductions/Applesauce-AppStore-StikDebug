@@ -6,6 +6,8 @@
 //! AddressBook.framework stub
 
 use crate::dyld::{export_c_func, FunctionExports, HostDylib};
+use crate::frameworks::core_foundation::CFIndex;
+use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::mem::{MutVoidPtr, Ptr};
 use crate::objc::id;
 use crate::Environment;
