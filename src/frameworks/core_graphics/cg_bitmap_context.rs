@@ -92,7 +92,7 @@ pub fn CGBitmapContextCreate(
         .alloc_object(isa, Box::new(host_object), &mut env.mem)
 }
 
-fn CGBitmapContextGetData(env: &mut Environment, context: CGContextRef) -> MutVoidPtr {
+pub fn CGBitmapContextGetData(env: &mut Environment, context: CGContextRef) -> MutVoidPtr {
     let host_obj = env.objc.borrow::<CGContextHostObject>(context);
     let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;
     bitmap_data.data
