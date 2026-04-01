@@ -1,7 +1,6 @@
 use super::ns_string;
 use super::NSInteger;
 use crate::objc::{autorelease, id, objc_classes, ClassExports, HostObject};
-use crate::msg_class;
 
 struct NSAssertionHandlerHostObject {}
 impl HostObject for NSAssertionHandlerHostObject {}
@@ -12,16 +11,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation NSAssertionHandler: NSObject
 
-/// Returns the assertion handler for the current thread.
-/// Real Cocoa stores one per NSThread; we use a fresh autoreleased instance
-/// (sufficient for a single-threaded guest).
 + (id)currentHandler {
     let host = Box::new(NSAssertionHandlerHostObject {});
     let new = env.objc.alloc_object(this, host, &mut env.mem);
     autorelease(env, new)
 }
 
-/// Raised by NSAssert / NSParameterAssert (ObjC method context).
 - (())handleFailureInMethod:(SEL)_selector
                     object:(id)_object
                       file:(id)file
@@ -35,7 +30,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     );
 }
 
-/// Raised by NSCAssert / NSCParameterAssert (C function context).
 - (())handleFailureInFunction:(id)function_name
                          file:(id)file
                    lineNumber:(NSInteger)line
