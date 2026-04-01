@@ -31,6 +31,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::system_configuration::DYLIB,
     &frameworks::uikit::DYLIB,
     &frameworks::common_crypto::DYLIB,
+    &frameworks::address_book::DYLIB, // Добавлен наш фреймворк AddressBook
 ];
 
 #[cfg(test)]
