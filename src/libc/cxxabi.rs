@@ -34,7 +34,22 @@ fn __cxa_finalize(_env: &mut Environment, d: MutVoidPtr) {
     log!("TODO: __cxa_finalize({:?}) (unimplemented)", d);
 }
 
+// --- ДОБАВЛЕННЫЕ ЗАГЛУШКИ ДЛЯ SjLj ИСКЛЮЧЕНИЙ ---
+
+fn __Unwind_SjLj_Register(_env: &mut Environment, _context: MutVoidPtr) {
+    // Мы намеренно ничего не делаем и не выводим в лог, 
+    // так как игра вызывает это ОЧЕНЬ часто (при каждом try-блоке),
+    // и логи будут сильно тормозить эмулятор.
+}
+
+fn __Unwind_SjLj_Unregister(_env: &mut Environment, _context: MutVoidPtr) {
+    // Аналогично, просто пустая функция-заглушка.
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_atexit(_, _, _)),
     export_c_func!(__cxa_finalize(_)),
+    // --- РЕГИСТРАЦИЯ НОВЫХ ФУНКЦИЙ ---
+    export_c_func!(__Unwind_SjLj_Register(_)),
+    export_c_func!(__Unwind_SjLj_Unregister(_)),
 ];
