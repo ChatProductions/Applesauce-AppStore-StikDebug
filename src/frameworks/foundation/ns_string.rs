@@ -521,13 +521,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (NSRange)rangeOfString:(id)search_string
                  options:(NSStringCompareOptions)options
                    range:(NSRange)search_range { // NSString *
-    log_dbg!(
-        "[(NSString *){} rangeOfString:{} options:{} range.location:{} range.length:{}]",
-        to_rust_string(env, this), to_rust_string(env, search_string), options, search_range.location, search_range.length
-    );
-
+                   
+    // Сначала копируем значения упакованной структуры в локальные переменные
     let search_loc = search_range.location;
     let search_len = search_range.length;
+    
+    // Затем логируем уже локальные переменные, чтобы избежать ошибки E0793
+    log_dbg!(
+        "[(NSString *){} rangeOfString:{} options:{} range.location:{} range.length:{}]",
+        to_rust_string(env, this), to_rust_string(env, search_string), options, search_loc, search_len
+    );
+
     let len: NSUInteger = msg![env; this length];
     let len_search: NSUInteger = msg![env; search_string length];
 
