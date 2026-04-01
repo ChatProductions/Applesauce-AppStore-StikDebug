@@ -277,6 +277,27 @@ fn CGRectIntersectsRect(_env: &mut Environment, rect1: CGRect, rect2: CGRect) ->
             <= (rect1.origin.y + rect1.size.height).min(rect2.origin.y + rect2.size.height)
 }
 
+fn CGRectIntersection(_env: &mut Environment, r1: CGRect, r2: CGRect) -> CGRect {
+    let x1 = r1.origin.x.max(r2.origin.x);
+    let y1 = r1.origin.y.max(r2.origin.y);
+    
+    let x2 = (r1.origin.x + r1.size.width).min(r2.origin.x + r2.size.width);
+    let y2 = (r1.origin.y + r1.size.height).min(r2.origin.y + r2.size.height);
+
+    // Если ширина или высота меньше либо равна нулю, прямоугольники не пересекаются
+    if x2 <= x1 || y2 <= y1 {
+        return CGRectNull;
+    }
+
+    CGRect {
+        origin: CGPoint { x: x1, y: y1 },
+        size: CGSize {
+            width: x2 - x1,
+            height: y2 - y1,
+        },
+    }
+}
+
 fn CGRectGetMinX(_env: &mut Environment, rect: CGRect) -> CGFloat {
     rect.origin.x
 }
@@ -371,6 +392,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGRectEqualToRect(_, _)),
     export_c_func!(CGRectContainsPoint(_, _)),
     export_c_func!(CGRectIntersectsRect(_, _)),
+    export_c_func!(CGRectIntersection(_, _)),
     export_c_func!(CGRectGetMinX(_)),
     export_c_func!(CGRectGetMidX(_)),
     export_c_func!(CGRectGetMaxX(_)),
