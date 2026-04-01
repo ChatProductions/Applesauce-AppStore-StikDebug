@@ -5,6 +5,7 @@
  */
 //! `GKScore`.
 
+use std::borrow::Cow;
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
@@ -15,18 +16,13 @@ type GKLeaderboardTimeScope = i32;
 type GKLeaderboardPlayerScope = i32;
 
 struct GKScoreHostObject {
-    /// `NSString*` — legacy category identifier
     category: id,
-    /// `NSString*` — iOS 7+ leaderboard identifier
     leaderboard_identifier: id,
-    /// `NSString*` — player ID who owns this score
     player_id: id,
-    /// `NSString*` — formatted score string (read-only, set by server normally)
     formatted_value: id,
     value: i64,
     rank: i64,
     context: u64,
-    /// `NSDate*`
     date: id,
     should_set_default_leaderboard: bool,
 }
@@ -53,42 +49,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (())reportScores:(id)_scores // NSArray<GKScore*>*
-withCompletionHandler:(id)_completion_handler {
-    log!("GKScore reportScores:withCompletionHandler: stubbed");
-}
-
-// MARK: - Init
-
-- (id)initWithCategory:(id)category { // NSString*
+- (id)initWithCategory:(id)category {
     retain(env, category);
     env.objc.borrow_mut::<GKScoreHostObject>(this).category = category;
-
-    // Mirror category into leaderboard_identifier for unified access.
     retain(env, category);
     env.objc.borrow_mut::<GKScoreHostObject>(this).leaderboard_identifier = category;
-
-    // Default formatted value
     let fmt = ns_string::from_rust_string(env, "0".to_string());
     env.objc.borrow_mut::<GKScoreHostObject>(this).formatted_value = fmt;
-
     this
 }
 
-- (id)initWithLeaderboardIdentifier:(id)identifier { // NSString*
+- (id)initWithLeaderboardIdentifier:(id)identifier {
     msg![env; this initWithCategory:identifier]
 }
 
-- (id)initWithLeaderboardIdentifier:(id)identifier
-                             player:(id)player { // GKPlayer*
+- (id)initWithLeaderboardIdentifier:(id)identifier player:(id)player {
     let this: id = msg![env; this initWithLeaderboardIdentifier:identifier];
-    // Store player ID string from GKPlayer if possible, else store object as-is.
     retain(env, player);
     env.objc.borrow_mut::<GKScoreHostObject>(this).player_id = player;
     this
 }
-
-// MARK: - Dealloc
 
 - (())dealloc {
     let host = env.objc.borrow::<GKScoreHostObject>(this);
@@ -100,8 +80,6 @@ withCompletionHandler:(id)_completion_handler {
         host.date,
     );
     release(env, category);
-    // Avoid double-release when category and leaderboard_identifier point to
-    // the same object (set by initWithCategory:).
     if leaderboard_identifier != category {
         release(env, leaderboard_identifier);
     }
@@ -110,8 +88,6 @@ withCompletionHandler:(id)_completion_handler {
     release(env, date);
     env.objc.dealloc_object(this, &mut env.mem)
 }
-
-// MARK: - Properties: identifiers
 
 - (id)category {
     env.objc.borrow::<GKScoreHostObject>(this).category
@@ -135,15 +111,12 @@ withCompletionHandler:(id)_completion_handler {
     env.objc.borrow_mut::<GKScoreHostObject>(this).leaderboard_identifier = identifier;
 }
 
-// MARK: - Properties: score data
-
 - (i64)value {
     env.objc.borrow::<GKScoreHostObject>(this).value
 }
 
 - (())setValue:(i64)value {
     env.objc.borrow_mut::<GKScoreHostObject>(this).value = value;
-    // Update formatted_value to reflect new value.
     let old_fmt = env.objc.borrow::<GKScoreHostObject>(this).formatted_value;
     release(env, old_fmt);
     let fmt = ns_string::from_rust_string(env, value.to_string());
@@ -171,7 +144,6 @@ withCompletionHandler:(id)_completion_handler {
 }
 
 - (id)player {
-    // Return stored player object (or nil if only playerID string was set).
     env.objc.borrow::<GKScoreHostObject>(this).player_id
 }
 
@@ -187,15 +159,13 @@ withCompletionHandler:(id)_completion_handler {
     env.objc.borrow_mut::<GKScoreHostObject>(this).should_set_default_leaderboard = value;
 }
 
-// MARK: - Reporting
-
 - (())reportScoreWithCompletionHandler:(id)_completion_handler {
     let value = env.objc.borrow::<GKScoreHostObject>(this).value;
     let cat   = env.objc.borrow::<GKScoreHostObject>(this).category;
-    let cat_str = if cat != nil {
+    let cat_str: Cow<str> = if cat != nil {
         ns_string::to_rust_string(env, cat)
     } else {
-        "<nil>".to_string()
+        Cow::Borrowed("<nil>")
     };
     log!(
         "GKScore reportScoreWithCompletionHandler: stubbed (category={}, value={})",
@@ -203,15 +173,13 @@ withCompletionHandler:(id)_completion_handler {
     );
 }
 
-// MARK: - NSObject
-
 - (id)description {
     let value = env.objc.borrow::<GKScoreHostObject>(this).value;
     let cat   = env.objc.borrow::<GKScoreHostObject>(this).category;
-    let cat_str = if cat != nil {
+    let cat_str: Cow<str> = if cat != nil {
         ns_string::to_rust_string(env, cat)
     } else {
-        "<nil>".to_string()
+        Cow::Borrowed("<nil>")
     };
     let desc = format!("<GKScore: category={} value={}>", cat_str, value);
     let ns = ns_string::from_rust_string(env, desc);
