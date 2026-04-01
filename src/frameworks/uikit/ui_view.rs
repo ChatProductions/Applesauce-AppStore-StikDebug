@@ -103,7 +103,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.get_known_class("CALayer", &mut env.mem)
 }
 
-// --- Методы анимации (Заглушки для предотвращения паники) ---
+// --- Animation Methods ---
 
 + (())beginAnimations:(id)animationID context:(MutPtr<()>)context {
     log!("TODO: [UIView beginAnimations:{:?} context:{:?}]", animationID, context);
@@ -133,15 +133,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationWillStartSelector:{:?}]", selector);
 }
 
-+ (())setAnimationBeginsFromCurrentState:(bool)fromCurrentState {
-    log!("TODO: [UIView setAnimationBeginsFromCurrentState:{}]", fromCurrentState);
++ (())setAnimationBeginsFromCurrentState:(bool)from {
+    log!("TODO: [UIView setAnimationBeginsFromCurrentState:{}]", from);
 }
 
 + (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache {
     log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
 }
 
-// -----------------------------------------------------------
+// -------------------------
 
 - (id)init {
     msg![env; this initWithFrame:(<CGRect as Default>::default())]
@@ -150,15 +150,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithFrame:(CGRect)frame {
     let this = init_common(env, this);
     () = msg![env; this setFrame:frame];
-
-    log_dbg!(
-        "[(UIView*){:?} initWithFrame:{:?}] => bounds {:?}, center {:?}",
-        this,
-        frame,
-        { let bounds: CGRect = msg![env; this bounds]; bounds },
-        { let center: CGPoint = msg![env; this center]; center },
-    );
-
     this
 }
 
@@ -190,20 +181,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let subviews: id = msg![env; coder decodeObjectForKey:key_ns_string];
     let subview_count: NSUInteger = msg![env; subviews count];
 
-    log_dbg!(
-        "[(UIView*){:?} initWithCoder:{:?}] => bounds {}, center {}, hidden {}, bg color {:?}, tag {}, opaque {}, multi touch enabled {}, {} subviews",
-        this,
-        coder,
-        bounds,
-        center,
-        hidden,
-        bg_color,
-        tag,
-        opaque,
-        multi_touch_enabled,
-        subview_count,
-    );
-
     () = msg![env; this setBounds:bounds];
     () = msg![env; this setCenter:center];
     () = msg![env; this setHidden:hidden];
@@ -228,18 +205,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)viewWithTag:(NSInteger)tag {
-    let &UIViewHostObject {
-        ref subviews,
-        tag: view_tag,
-        ..
-    } = env.objc.borrow(this);
-    if view_tag == tag {
-        return this;
-    }
+    let &UIViewHostObject { ref subviews, tag: view_tag, .. } = env.objc.borrow(this);
+    if view_tag == tag { return this; }
     for view in subviews {
-        if env.objc.borrow::<UIViewHostObject>(*view).tag == tag {
-            return *view;
-        }
+        if env.objc.borrow::<UIViewHostObject>(*view).tag == tag { return *view; }
     }
     nil
 }
@@ -273,9 +242,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let window_class = env.objc.get_known_class("UIWindow", &mut env.mem);
     while window != nil {
         let current_class: Class = msg![env; window class];
-        if env.objc.class_is_subclass_of(current_class, window_class) {
-            break;
-        }
+        if env.objc.class_is_subclass_of(current_class, window_class) { break; }
         window = env.objc.borrow::<UIViewHostObject>(window).superview;
     }
     window
@@ -283,9 +250,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)subviews {
     let views = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
-    for view in &views {
-        retain(env, *view);
-    }
+    for view in &views { retain(env, *view); }
     let subs = ns_array::from_vec(env, views);
     autorelease(env, subs)
 }
@@ -578,11 +543,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this_layer convertRect:rect toLayer:other_layer]
 }
 
-- ((())setAutoresizingMask:(NSUInteger)mask { todo_objc_setter!(this, mask); }
-- ((())setAutoresizesSubviews:(bool)enabled { todo_objc_setter!(this, enabled); }
+- (())setAutoresizingMask:(NSUInteger)mask { todo_objc_setter!(this, mask); }
+- (())setAutoresizesSubviews:(bool)enabled { todo_objc_setter!(this, enabled); }
 
 - (CGSize)sizeThatFits:(CGSize)size { size }
-- ((())sizeToFit {
+- (())sizeToFit {
     let size: CGSize = msg![env; this bounds].size;
     let new_size: CGSize = msg![env; this sizeThatFits:size];
     () = msg![env; this setBounds:(CGRect { origin: CGPoint::default(), size: new_size })];
@@ -591,4 +556,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
