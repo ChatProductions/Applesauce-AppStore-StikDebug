@@ -85,15 +85,25 @@ fn sysctl(
         newp,
         newlen
     );
-    assert_eq!(name_len, 2);
+    // MIB arrays with more than 2 components are valid (e.g. used by Mono).
+    // We only key on the first two elements; extra elements are ignored.
+    if name_len < 2 {
+        log!("sysctl(): name_len {} < 2, returning -1", name_len);
+        return -1;
+    }
     let (name0, name1) = (env.mem.read(name), env.mem.read(name + 1));
     sysctl_generic(
         env,
         |_| {
             let Some(val) = INT_MAP.get(&(name0, name1)).cloned() else {
-                unimplemented!("Unknown sysctl parameter ({name0}, {name1})!")
+                log!(
+                    "sysctl(): unknown parameter ({}, {}), returning -1",
+                    name0,
+                    name1
+                );
+                return None;
             };
-            val
+            Some(val)
         },
         oldp,
         oldlenp,
@@ -127,9 +137,13 @@ fn sysctlbyname(
         |env| {
             let name_str = env.mem.cstr_at_utf8(name).unwrap();
             let Some((name_str, val)) = STRING_MAP.get_key_value(name_str) else {
-                unimplemented!("Unknown sysctlbyname parameter {name_str}!")
+                log!(
+                    "sysctlbyname(): unknown parameter {}, returning -1",
+                    name_str
+                );
+                return None;
             };
-            (name_str, val.clone())
+            Some((name_str, val.clone()))
         },
         oldp,
         oldlenp,
@@ -140,7 +154,7 @@ fn sysctlbyname(
 
 fn sysctl_generic<F>(
     env: &mut Environment,
-    // Returns the name and value of the property (or exits)
+    // Returns the name and value of the property, or None if unknown.
     name_lookup: F,
     oldp: MutVoidPtr,
     oldlenp: MutPtr<GuestUSize>,
@@ -148,12 +162,14 @@ fn sysctl_generic<F>(
     newlen: GuestUSize,
 ) -> i32
 where
-    F: FnOnce(&mut Environment) -> (&'static str, SysInfoType),
+    F: FnOnce(&mut Environment) -> Option<(&'static str, SysInfoType)>,
 {
     assert!(newp.is_null());
     assert_eq!(newlen, 0);
 
-    let (name_str, val) = name_lookup(env);
+    let Some((name_str, val)) = name_lookup(env) else {
+        return -1;
+    };
     let len: GuestUSize = match val {
         String(str) => str.len() as GuestUSize + 1,
         SysInfoType::Int32(_) => guest_size_of::<i32>(),
