@@ -37,11 +37,11 @@ fn objc_msgSend_inner(
     super2: Option<Class>,
     tolerate_type_mismatch: bool,
 ) {
-    log!(
-    "Dispatching {} for {:?}",
-    selector.as_str(&env.mem),
-    receiver
-);
+    log_dbg!(
+        "Dispatching {} for {:?}",
+        selector.as_str(&env.mem),
+        receiver
+    );
     let message_type_info = env.objc.message_type_info.take();
 
     if receiver == nil {
