@@ -19,7 +19,7 @@ use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::frameworks::foundation::NSUInteger;
 use crate::fs::GuestPath;
 use crate::mem::{ConstVoidPtr, GuestUSize, MutVoidPtr};
-use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, HostObject};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
 pub type CGDataProviderRef = CFTypeRef;
