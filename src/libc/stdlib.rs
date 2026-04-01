@@ -605,7 +605,7 @@ fn strtol_inner(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub pub fn str_to_int_inner_generic<T, U, Q, F1, F2, F3, F4>(
+pub fn str_to_int_inner_generic<T, U, Q, F1, F2, F3, F4>(
     env: &mut Environment,
     getc_fn: F1,
     ungetc_fn: F2,
