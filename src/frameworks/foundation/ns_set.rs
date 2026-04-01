@@ -48,7 +48,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)setWithArray:(id)array {
-    assert!(msg![env; array isKindOfClass:env.objc.get_known_class("NSArray", &mut env.mem)]);
     let count: NSUInteger = msg![env; array count];
     let new: id = msg![env; this alloc];
     let mut dict = <DictionaryHostObject as Default>::default();
