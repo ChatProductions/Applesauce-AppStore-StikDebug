@@ -518,6 +518,74 @@ pub const CLASSES: ClassExports = objc_classes! {
     NSRange { location: NSNotFound as NSUInteger, length: 0 }
 }
 
+- (NSRange)rangeOfString:(id)search_string
+                 options:(NSStringCompareOptions)options
+                   range:(NSRange)search_range { // NSString *
+    log_dbg!(
+        "[(NSString *){} rangeOfString:{} options:{} range.location:{} range.length:{}]",
+        to_rust_string(env, this), to_rust_string(env, search_string), options, search_range.location, search_range.length
+    );
+
+    let search_loc = search_range.location;
+    let search_len = search_range.length;
+    let len: NSUInteger = msg![env; this length];
+    let len_search: NSUInteger = msg![env; search_string length];
+
+    if len_search == 0 || search_loc >= len || search_len == 0 {
+        return NSRange { location: NSNotFound as NSUInteger, length: 0 };
+    }
+
+    let end_bound = (search_loc + search_len).min(len);
+    let max_start = end_bound.saturating_sub(len_search);
+
+    if search_loc > max_start {
+        return NSRange { location: NSNotFound as NSUInteger, length: 0 };
+    }
+
+    let is_case_insensitive = (options & NSCaseInsensitiveSearch) != 0;
+    let is_backwards = (options & NSBackwardsSearch) != 0;
+
+    if is_backwards {
+        for i in (search_loc..=max_start).rev() {
+            if is_case_insensitive {
+                let compare = |a: u16, b: u16| {
+                    let (Some(a_c), Some(b_c)) = (char::from_u32(a as u32), char::from_u32(b as u32)) else {
+                        return a == b;
+                    };
+                    a_c.to_lowercase().eq(b_c.to_lowercase())
+                };
+                if is_match_at_position(env, this, search_string, i, len, len_search, compare) {
+                    return NSRange { location: i, length: len_search };
+                }
+            } else {
+                if is_match_at_position(env, this, search_string, i, len, len_search, |a, b| a == b) {
+                    return NSRange { location: i, length: len_search };
+                }
+            }
+        }
+    } else {
+        for i in search_loc..=max_start {
+            if is_case_insensitive {
+                let compare = |a: u16, b: u16| {
+                    let (Some(a_c), Some(b_c)) = (char::from_u32(a as u32), char::from_u32(b as u32)) else {
+                        return a == b;
+                    };
+                    a_c.to_lowercase().eq(b_c.to_lowercase())
+                };
+                if is_match_at_position(env, this, search_string, i, len, len_search, compare) {
+                    return NSRange { location: i, length: len_search };
+                }
+            } else {
+                if is_match_at_position(env, this, search_string, i, len, len_search, |a, b| a == b) {
+                    return NSRange { location: i, length: len_search };
+                }
+            }
+        }
+    }
+
+    NSRange { location: NSNotFound as NSUInteger, length: 0 }
+}
+
 - (id)description {
     this
 }
