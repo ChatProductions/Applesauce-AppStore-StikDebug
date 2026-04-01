@@ -14,7 +14,6 @@ pub mod ui_image_view;
 pub mod ui_label;
 pub mod ui_picker_view;
 pub mod ui_scroll_view;
-pub mod ui_table_view;
 pub mod ui_web_view;
 pub mod ui_window;
 
@@ -417,7 +416,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         layer,
         superview,
         subviews,
-        view_controller,
+        view_controller: _,
         tag: _,
         clears_context_before_drawing: _,
         user_interaction_enabled: _,
@@ -425,7 +424,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = std::mem::take(env.objc.borrow_mut(this));
 
     release(env, layer);
-    assert!(view_controller == nil);
     assert!(superview == nil);
     for subview in subviews {
         env.objc.borrow_mut::<UIViewHostObject>(subview).superview = nil;
