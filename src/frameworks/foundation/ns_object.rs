@@ -322,6 +322,35 @@ forUndefinedKey:(id)key { // NSString*
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
+- (id)valueForKey:(id)key {
+    // Try getter selector first
+    let key_str = super::ns_string::to_rust_string(env, key);
+    let sel_name = key_str.to_string();
+    if let Some(sel) = env.objc.lookup_selector(&sel_name) {
+        if env.objc.object_has_method(&env.mem, this, sel) {
+            return msg_send(env, (this, sel));
+        }
+    }
+    // Try isX for bool properties
+    let is_sel_name = format!("is{}{}", &key_str[..1].to_uppercase(), &key_str[1..]);
+    if let Some(sel) = env.objc.lookup_selector(&is_sel_name) {
+        if env.objc.object_has_method(&env.mem, this, sel) {
+            return msg_send(env, (this, sel));
+        }
+    }
+    log!("Warning: valueForKey:{} not found on {:?} — returning nil", key_str, this);
+    nil
+}
+
+- (id)valueForKeyPath:(id)key_path {
+    // Simple implementation: treat as valueForKey: (no path traversal)
+    msg![env; this valueForKey:key_path]
+}
+
+- (())setValue:(id)value forKeyPath:(id)key_path {
+    msg![env; this setValue:value forKey:key_path]
+}
+
 @end
 
 };
