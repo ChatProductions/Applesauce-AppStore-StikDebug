@@ -51,7 +51,6 @@ fn _Unwind_SjLj_Unregister(_env: &mut Environment, _context: MutVoidPtr) {
 fn _Unwind_SjLj_Resume(_env: &mut Environment, _context: MutVoidPtr) {
 }
 
-#[allow(non_snake_case)]
 fn _Znwm(_env: &mut Environment, _context: MutVoidPtr) {
 }
 
