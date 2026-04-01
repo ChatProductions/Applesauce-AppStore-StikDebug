@@ -47,6 +47,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, set)
 }
 
++ (id)setWithArray:(id)array {
+    assert!(msg![env; array isKindOfClass:env.objc.get_known_class("NSArray", &mut env.mem)]);
+    let count: NSUInteger = msg![env; array count];
+    let new: id = msg![env; this alloc];
+    let mut dict = <DictionaryHostObject as Default>::default();
+
+    for i in 0..count {
+        let object: id = msg![env; array objectAtIndex:i];
+        let null: id = msg_class![env; NSNull null];
+        dict.insert(env, object, null, /* copy_key: */ false);
+    }
+    env.objc.borrow_mut::<SetHostObject>(new).dict = dict;
+    autorelease(env, new)
+}
+
 + (id)setWithObject:(id)object {
     assert!(object != nil);
     let new: id = msg![env; this alloc];
