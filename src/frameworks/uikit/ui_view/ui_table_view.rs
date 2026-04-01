@@ -6,7 +6,7 @@
 //! `UITableView`, `UITableViewCell`.
 
 use crate::frameworks::core_graphics::CGRect;
-use crate::objc::{id, msg_super, nil, objc_classes, ClassExports};
+use crate::objc::{id, msg_super, nil, objc_classes, ClassExports, NSZonePtr};
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -53,7 +53,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
-@implementation UITableView: UIScrollView
+@implementation UIProgressView: UIView
+
+- (id)initWithFrame:(CGRect)frame {
+    msg_super![env; this initWithFrame:frame]
+}
+
+- (id)initWithProgressViewStyle:(i32)_style {
+    msg_super![env; this init]
+}
+
+- (f32)progress { 0.0 }
+- (())setProgress:(f32)_progress {}
+- (())setProgress:(f32)_progress animated:(bool)_animated {}
+- (i32)progressViewStyle { 0 }
+- (())setProgressViewStyle:(i32)_style {}
+- (id)progressTintColor { nil }
+- (())setProgressTintColor:(id)_color {}
+- (id)trackTintColor { nil }
+- (())setTrackTintColor:(id)_color {}
+- (id)progressImage { nil }
+- (())setProgressImage:(id)_image {}
+- (id)trackImage { nil }
+- (())setTrackImage:(id)_image {}
+
+@end
 
 - (id)initWithFrame:(CGRect)frame style:(i32)_style {
     msg_super![env; this initWithFrame:frame]
