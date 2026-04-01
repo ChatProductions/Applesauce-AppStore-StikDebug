@@ -1,29 +1,33 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! Заглушка для AddressBook.framework
+//! AddressBook.framework stub
 
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, FunctionExports, HostDylib};
 use crate::mem::{MutVoidPtr, Ptr};
 use crate::Environment;
 
-// Самая частая функция, которую вызывают игры для проверки адресной книги
 fn ABAddressBookCreate(_env: &mut Environment) -> MutVoidPtr {
     log!("Stubbed ABAddressBookCreate called. Returning NULL.");
-    // Возвращаем NULL, чтобы игра думала, что доступ к контактам запрещен или пуст
-    Ptr::null() 
+    Ptr::null()
 }
 
-// Заглушка для получения количества контактов
 fn ABAddressBookGetPersonCount(_env: &mut Environment, _address_book: MutVoidPtr) -> i32 {
     log!("Stubbed ABAddressBookGetPersonCount called. Returning 0.");
     0
 }
 
-// Экспортируем наши функции-заглушки
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ABAddressBookCreate()),
     export_c_func!(ABAddressBookGetPersonCount(_, _)),
 ];
 
+pub const DYLIB: HostDylib = HostDylib {
+    path: "/System/Library/Frameworks/AddressBook.framework/AddressBook",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[FUNCTIONS],
+};
