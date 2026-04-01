@@ -121,10 +121,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, this);
         return nil;
     };
-    // TODO: Real error handling. For now, most errors are likely to be caused
-    //       by a functionality gap in touchHLE, not the app actually trying to
-    //       load a broken file, so panicking is most useful.
-    let image = Image::from_bytes(&bytes).unwrap();
+    let Ok(image) = Image::from_bytes(&bytes) else {
+        log!("Warning: couldn't decode image file at {:?}, returning nil", path);
+        release(env, this);
+        return nil;
+    };
     let cg_image = cg_image::from_image(env, image);
     env.objc.borrow_mut::<UIImageHostObject>(this).cg_image = cg_image;
     this
@@ -132,8 +133,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithData:(id)data { // NSData*
     let slice = ns_data::to_rust_slice(env, data);
-    // TODO: refactor common parts
-    let image = Image::from_bytes(slice).unwrap();
+    let Ok(image) = Image::from_bytes(slice) else {
+        log!("Warning: couldn't decode image from NSData, returning nil");
+        release(env, this);
+        return nil;
+    };
     let cg_image = cg_image::from_image(env, image);
     env.objc.borrow_mut::<UIImageHostObject>(this).cg_image = cg_image;
     this
