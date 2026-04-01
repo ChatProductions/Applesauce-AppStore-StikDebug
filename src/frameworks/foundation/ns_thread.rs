@@ -216,7 +216,10 @@ type NSThreadRef = CFTypeRef;
 pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: NSThreadRef) {
     let class: Class = msg![env; ns_thread_obj class];
     let thread_class = env.objc.get_known_class("NSThread", &mut env.mem);
-    assert!(env.objc.class_is_subclass_of(class, thread_class));
+        if !env.objc.class_is_subclass_of(class, thread_class) {
+        log!("Warning: _touchHLE_NSThreadInvocationHelper called with unexpected class, skipping");
+        return;
+    }
 
     // Устанавливаем статус выполнения
     env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj).executing = true;
@@ -239,7 +242,9 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
 
     let pthread = pthread_self(env);
     let res = State::get(env).ns_threads.remove(&pthread);
-    assert!(res.is_some());
+    if res.is_none() {
+        log!("Warning: _touchHLE_NSThreadInvocationHelper: pthread {:?} not found in ns_threads map", pthread);
+    }
 
     if owned {
         release(env, ns_thread_obj);
