@@ -104,9 +104,26 @@ fn thread_resume(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
     KERN_SUCCESS
 }
 
+// --- НАША НОВАЯ ЗАГЛУШКА ---
+// 5 — это стандартный код ошибки KERN_FAILURE в системах Apple.
+const KERN_FAILURE: kern_return_t = 5; 
+
+fn thread_get_state(
+    _env: &mut Environment,
+    _target_act: thread_act_t,
+    _flavor: thread_state_flavor_t,
+    _old_state: MutPtr<u32>,
+    _old_state_cnt: MutPtr<mach_msg_type_number_t>,
+) -> kern_return_t {
+    log!("Warning: thread_get_state called (stubbed)");
+    KERN_FAILURE
+}
+
+// --- ОБНОВЛЕННЫЙ СПИСОК ЭКСПОРТА ---
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(task_threads(_, _, _)),
     export_c_func!(task_set_exception_ports(_, _, _, _, _)),
     export_c_func!(thread_suspend(_)),
     export_c_func!(thread_resume(_)),
+    export_c_func!(thread_get_state(_, _, _, _)), // 4 аргумента для игры
 ];
