@@ -211,19 +211,18 @@ fn CGDataProviderCreateWithFilename(
     log_dbg!("CGDataProviderCreateWithFilename: {}", path_str);
     let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
         log!("Warning: CGDataProviderCreateWithFilename: couldn't read {:?}", path_str);
-        return std::ptr::null();
+        return nil; // <- was std::ptr::null()
     };
     let len: GuestUSize = bytes.len().try_into().unwrap();
     let buf = env.mem.alloc(len);
     env.mem.bytes_at_mut(buf.cast(), len).copy_from_slice(&bytes);
 
-    // Use a null release callback — we own the buffer via the allocator.
     CGDataProviderCreateWithData(
         env,
         MutVoidPtr::null(),
         buf.cast_const().cast(),
         len,
-        GuestFunction::from_ptr(crate::mem::Ptr::null()),
+        GuestFunction::null_ptr(), // <- was GuestFunction::from_ptr(...)
     )
 }
 
@@ -257,7 +256,7 @@ fn CGDataProviderCreateSequential(
     _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
     log!("Warning: CGDataProviderCreateSequential is not supported, returning null");
-    std::ptr::null()
+    nil // <- was std::ptr::null()
 }
 
 fn CGDataProviderCreateDirect(
@@ -267,7 +266,7 @@ fn CGDataProviderCreateDirect(
     _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
     log!("Warning: CGDataProviderCreateDirect is not supported, returning null");
-    std::ptr::null()
+    nil // <- was std::ptr::null()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
