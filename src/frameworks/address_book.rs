@@ -21,7 +21,8 @@ fn ABAddressBookGetPersonCount(_env: &mut Environment, _address_book: MutVoidPtr
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ABAddressBookCreate()),
-    export_c_func!(ABAddressBookGetPersonCount(_, _)),
+    // Исправлено: теперь здесь только одно подчеркивание, так как первый аргумент (env) макрос подставляет сам
+    export_c_func!(ABAddressBookGetPersonCount(_)),
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
