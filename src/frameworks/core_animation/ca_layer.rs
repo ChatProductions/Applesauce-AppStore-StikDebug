@@ -64,6 +64,8 @@ pub(super) struct CALayerHostObject {
     pub(super) gles_texture_is_up_to_date: bool,
     pub(super) animations: HashMap<String, id>, // CAAnimation*
     pub(super) anonymous_animations: HashSet<id>, // CAAnimation*
+    pub(super) name: Option<String>,
+    pub(super) mask: id,
 }
 impl HostObject for CALayerHostObject {}
 
@@ -136,6 +138,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         gles_texture_is_up_to_date: false,
         animations: HashMap::new(),
         anonymous_animations: HashSet::new(),
+        name: None,
+        mask: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -151,6 +155,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         contents,
         superlayer,
         cg_context,
+        mask,
         ref mut sublayers,
         ..
     } = env.objc.borrow_mut(this);
@@ -162,6 +167,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     if contents != nil {
         release(env, contents);
+    }
+
+    if mask != nil {
+        release(env, mask);
     }
 
     if let Some(cg_context) = cg_context {
@@ -479,6 +488,41 @@ pub const CLASSES: ClassExports = objc_classes! {
     let old_contents = std::mem::replace(&mut host_obj.contents, new_contents);
     retain(env, new_contents);
     release(env, old_contents);
+}
+
+- (id)name { // NSString*
+    if let Some(ref name) = env.objc.borrow::<CALayerHostObject>(this).name {
+        let string_id = ns_string::from_rust_string(env, name.clone());
+        autorelease(env, string_id)
+    } else {
+        nil
+    }
+}
+
+- (())setName:(id)name { // NSString*
+    let name_str = if name != nil {
+        Some(ns_string::to_rust_string(env, name).into_owned())
+    } else {
+        None
+    };
+    env.objc.borrow_mut::<CALayerHostObject>(this).name = name_str;
+}
+
+- (id)mask { // CALayer*
+    env.objc.borrow::<CALayerHostObject>(this).mask
+}
+
+- (())setMask:(id)mask { // CALayer*
+    let old_mask = env.objc.borrow::<CALayerHostObject>(this).mask;
+    if mask != old_mask {
+        if mask != nil {
+            retain(env, mask);
+        }
+        env.objc.borrow_mut::<CALayerHostObject>(this).mask = mask;
+        if old_mask != nil {
+            release(env, old_mask);
+        }
+    }
 }
 
 - (())setEdgeAntialiasingMask:(u32)mask {
