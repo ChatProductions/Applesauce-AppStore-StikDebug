@@ -42,6 +42,7 @@ struct NSThreadHostObject {
     thread_dictionary: id,
     owned: bool,
     finished: bool,
+    executing: bool, // Добавлено для отслеживания состояния
     stack_size: NSUInteger,
     tolerate_type_mismatch: bool,
 }
@@ -61,6 +62,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         thread_dictionary: nil,
         owned: false,
         finished: false,
+        executing: false, // Инициализация
         stack_size: Mem::SECONDARY_THREAD_DEFAULT_STACK_SIZE,
         tolerate_type_mismatch: false,
     });
@@ -68,9 +70,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (bool)isMultiThreaded {
-    // Note: this doesn't account for non-Cocoa APIs,
-    // only for `detachNewThreadSelector:toTarget:withObject:` and
-    // `start` methods (according to the docs)
     env.framework_state.foundation.ns_thread.is_multi_threaded
 }
 
@@ -84,13 +83,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)currentThread {
-    // TODO: use ThreadId as key for lookup
-    // `pthread_self` internally is O(num of threads) time
     let pthread = pthread_self(env);
-    // Clippy suggestion for this warning will not build!
     #[allow(clippy::map_entry)]
     if !State::get(env).ns_threads.contains_key(&pthread) {
-        // We lazily instantiate NSThreads for POSIX threads
         let ns_thread: id = msg_class![env; NSThread alloc];
         let ns_thread: id = msg![env; ns_thread init];
         State::get(env).ns_threads.insert(pthread, ns_thread);
@@ -148,12 +143,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     State::get(env).ns_threads.insert(pthread, this);
 
     env.framework_state.foundation.ns_thread.is_multi_threaded = true;
-    // TODO: post NSWillBecomeMultiThreadedNotification
 }
 
 - (())main {
-    // Default implementation.
-    // Subclasses can override this method
     let &NSThreadHostObject {
         target,
         selector,
@@ -169,13 +161,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)threadDictionary {
-    // Initialize lazily in case the thread is started with pthread_create
     let thread_dictionary = env.objc.borrow::<NSThreadHostObject>(this).thread_dictionary;
     if thread_dictionary == nil {
         let thread_dictionary = msg_class![env; NSMutableDictionary new];
-        // TODO: Store the thread's default NSConnection
-        // and NSAssertionHandler instances
-        // https://developer.apple.com/documentation/foundation/nsthread/1411433-threaddictionary
         env.objc.borrow_mut::<NSThreadHostObject>(this).thread_dictionary = thread_dictionary;
         thread_dictionary
     } else {
@@ -192,11 +180,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
-// "To change the stack size, you must set this property before starting your
-// thread. Setting the stack size after the thread has started changes the
-// attribute size (which is reflected by the stackSize method), but it does
-// not affect the actual number of pages set aside for the thread."
-// https://developer.apple.com/documentation/foundation/thread/stacksize?language=objc
 - (NSUInteger)stackSize {
     env.objc.borrow::<NSThreadHostObject>(this).stack_size
 }
@@ -206,6 +189,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)isFinished {
     env.objc.borrow::<NSThreadHostObject>(this).finished
+}
+
+- (bool)isExecuting {
+    env.objc.borrow::<NSThreadHostObject>(this).executing
 }
 
 - (bool)isCancelled {
@@ -228,18 +215,17 @@ type NSThreadRef = CFTypeRef;
 
 pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: NSThreadRef) {
     let class: Class = msg![env; ns_thread_obj class];
-    log_dbg!(
-        "_touchHLE_NSThreadInvocationHelper on object of class: {}",
-        env.objc.get_class_name(class)
-    );
     let thread_class = env.objc.get_known_class("NSThread", &mut env.mem);
     assert!(env.objc.class_is_subclass_of(class, thread_class));
 
+    // Устанавливаем статус выполнения
+    env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj).executing = true;
+
     () = msg![env; ns_thread_obj main];
 
-    env.objc
-        .borrow_mut::<NSThreadHostObject>(ns_thread_obj)
-        .finished = true;
+    let mut host_obj = env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj);
+    host_obj.finished = true;
+    host_obj.executing = false; // Поток завершен
 
     let &NSThreadHostObject {
         target,
@@ -247,8 +233,7 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         owned,
         ..
     } = env.objc.borrow(ns_thread_obj);
-    // The objects target and argument are retained during the execution
-    // of the detached thread. They are released when the thread finally exits.
+    
     release(env, object);
     release(env, target);
 
@@ -257,12 +242,8 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
     assert!(res.is_some());
 
     if owned {
-        // Releasing only if the object was owned
-        // e.g. created with `detachNewThreadSelector:toTarget:withObject:`
         release(env, ns_thread_obj);
     }
-
-    // TODO: NSThread exit
 }
 
 pub fn detach_new_thread_inner(
@@ -277,14 +258,8 @@ pub fn detach_new_thread_inner(
                                       selector:selector
                                         object:object];
 
-    // We own this thread and need to release it after it's finished
     env.objc.borrow_mut::<NSThreadHostObject>(new).owned = true;
-
-    env.objc
-        .borrow_mut::<NSThreadHostObject>(new)
-        .tolerate_type_mismatch = tolerate_type_mismatch;
-
-    // Redundant with `start`, but we do it for the sake of completeness
+    env.objc.borrow_mut::<NSThreadHostObject>(new).tolerate_type_mismatch = tolerate_type_mismatch;
     env.framework_state.foundation.ns_thread.is_multi_threaded = true;
 
     msg![env; new start]
