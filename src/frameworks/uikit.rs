@@ -26,6 +26,7 @@ pub mod ui_image_picker_controller;
 pub mod ui_nib;
 pub mod ui_responder;
 pub mod ui_screen;
+pub mod ui_tab_bar_controller
 pub mod ui_touch;
 pub mod ui_view;
 pub mod ui_view_controller;
@@ -46,6 +47,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_nib::CLASSES,
         ui_responder::CLASSES,
         ui_screen::CLASSES,
+        ui_tab_bar_controller::CLASSES,
         ui_touch::CLASSES,
         ui_view::CLASSES,
         ui_view::ui_alert_view::CLASSES,
