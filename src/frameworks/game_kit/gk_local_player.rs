@@ -66,6 +66,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     crate::objc::autorelease(env, player)
 }
 
+// MARK: - Score / achievement convenience (class-level)
+
++ (())setDefaultLeaderboardIdentifier:(id)_identifier
+               withCompletionHandler:(id)_handler {
+    log!("GKLocalPlayer setDefaultLeaderboardIdentifier:withCompletionHandler: stubbed");
+}
+
++ (())loadDefaultLeaderboardIdentifierWithCompletionHandler:(id)_handler {
+    log!("GKLocalPlayer loadDefaultLeaderboardIdentifierWithCompletionHandler: stubbed");
+}
+
 // MARK: - Init / dealloc
 
 - (id)init {
@@ -126,19 +137,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())loadFriendsWithCompletionHandler:(id)_completion_handler {
     log!("GKLocalPlayer loadFriendsWithCompletionHandler: stubbed (no friends)");
 }
-
-// MARK: - Score / achievement convenience (class-level)
-
-+ (())setDefaultLeaderboardIdentifier:(id)_identifier
-               withCompletionHandler:(id)_handler {
-    log!("GKLocalPlayer setDefaultLeaderboardIdentifier:withCompletionHandler: stubbed");
-}
-
-+ (())loadDefaultLeaderboardIdentifierWithCompletionHandler:(id)_handler {
-    log!("GKLocalPlayer loadDefaultLeaderboardIdentifierWithCompletionHandler: stubbed");
-}
-
-// MARK: - NSObject overrides
 
 - (id)description {
     let player_id = env.objc.borrow::<GKLocalPlayerHostObject>(this).player_id;
