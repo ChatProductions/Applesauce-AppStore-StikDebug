@@ -15,7 +15,7 @@ use crate::frameworks::core_graphics::cg_bitmap_context::{
 };
 use crate::frameworks::core_graphics::cg_color::CGColorRef;
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
-use crate::objc::{objc_classes, ClassExports, HostObject, id};
+use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
 type CGInterpolationQuality = i32;
