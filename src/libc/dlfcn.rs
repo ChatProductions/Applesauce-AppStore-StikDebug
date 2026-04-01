@@ -35,16 +35,15 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
     );
     // For some reason, the symbols passed to dlsym() don't have the leading _.
     let symbol = format!("_{}", env.mem.cstr_at_utf8(symbol).unwrap());
-    // TODO: error handling. dlsym() should just return NULL in this case, but
-    // currently it's probably more useful to have the emulator crash if there's
-    // no symbol found, since it most likely indicates a missing host function.
-    // TODO: Symbol lookup should be scoped to the specific library requested,
-    // where appropriate!
-    let addr = env
-        .dyld
-        .create_proc_address(&mut env.mem, &mut env.cpu, &symbol)
-        .unwrap_or_else(|_| panic!("dlsym() for unimplemented function {symbol}"));
-    Ptr::from_bits(addr.addr_with_thumb_bit())
+    
+    // Пытаемся найти функцию. Если её нет - не паникуем, а просто возвращаем NULL.
+    match env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, &symbol) {
+        Ok(addr) => Ptr::from_bits(addr.addr_with_thumb_bit()),
+        Err(_) => {
+            log!("Warning: dlsym() returning NULL for unimplemented function {}", symbol);
+            Ptr::null()
+        }
+    }
 }
 
 fn dlclose(env: &mut Environment, handle: MutVoidPtr) -> i32 {
