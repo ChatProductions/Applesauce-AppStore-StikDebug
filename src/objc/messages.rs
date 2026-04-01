@@ -53,7 +53,7 @@ fn objc_msgSend_inner(
 
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
     
-    // ИСПРАВЛЕНИЕ: Вместо assert!(orig_class != nil) используем мягкую проверку
+    // ИСПРАВЛЕНИЕ 1: Мягкая проверка, если orig_class == nil
     if orig_class == nil {
         log!("touchHLE: Warning! orig_class is nil for receiver {:?}, selector {}. Bypassing to avoid crash.", 
              receiver, selector.as_str(&env.mem));
@@ -75,8 +75,9 @@ fn objc_msgSend_inner(
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
 
-            panic!(
-                "{} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"!",
+            // ИСПРАВЛЕНИЕ 2: Замена panic! на мягкое логирование и возврат (для unrecognized selector)
+            log!(
+                "touchHLE: Warning! {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Bypassing to avoid crash.",
                 if is_metaclass { "Class" } else { "Object" },
                 receiver,
                 if is_metaclass { "meta" } else { "" },
@@ -89,6 +90,8 @@ fn objc_msgSend_inner(
                 },
                 selector.as_str(&env.mem),
             );
+            env.cpu.regs_mut()[0..2].fill(0);
+            return;
         }
 
         let host_object = env.objc.get_host_object(class).unwrap();
@@ -479,4 +482,3 @@ pub fn autorelease(env: &mut Environment, object: id) -> id {
     }
     msg![env; object autorelease]
 }
-
