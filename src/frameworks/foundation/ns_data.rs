@@ -7,6 +7,7 @@
 use super::ns_string::to_rust_string;
 use super::NSUInteger;
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_data;
+use crate::frameworks::foundation::NSRange; // <-- ДОБАВЛЕНО: импорт NSRange
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
@@ -259,6 +260,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     let to_copy = length.min(host_object.length);
     if to_copy > 0 && !host_object.bytes.is_null() {
         env.mem.memmove(buffer, host_object.bytes.cast_const(), to_copy);
+    }
+}
+
+// <-- ДОБАВЛЕНО: реализация getBytes:range:
+- (())getBytes:(MutVoidPtr)buffer range:(NSRange)range {
+    let host_object = env.objc.borrow::<NSDataHostObject>(this);
+    
+    if range.location + range.length <= host_object.length {
+        if range.length > 0 && !host_object.bytes.is_null() {
+            let bytes_ptr = host_object.bytes.cast_const().cast::<u8>();
+            let offset_ptr = bytes_ptr + range.location;
+            env.mem.memmove(buffer, offset_ptr.cast_void(), range.length);
+        }
+    } else {
+        log_dbg!("Warning: NSData getBytes:range: out of bounds! Location: {}, Length: {}, Data Length: {}", 
+                 range.location, range.length, host_object.length);
     }
 }
 
