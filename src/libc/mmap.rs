@@ -94,7 +94,14 @@ fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
     0 // success
 }
 
+// --- НАША НОВАЯ ЗАГЛУШКА ---
+fn shm_open(_env: &mut Environment, _name: u32, _oflag: i32, _mode: u32) -> i32 {
+    log!("Warning: _shm_open called (stubbed)");
+    -1
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mmap(_, _, _, _, _, _)),
     export_c_func!(munmap(_, _)),
+    export_c_func!(shm_open(_, _, _)),
 ];
