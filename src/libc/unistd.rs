@@ -20,6 +20,12 @@ const F_OK: i32 = 0; // file existence
 const X_OK: i32 = 1; // execute/search permission
 const W_OK: i32 = 2; // write permission
 const R_OK: i32 = 4; // read permission
+const B_OK: i32 = 5;
+const T_OK: i32 = 6;
+const P_OK: i32 = 7;
+const A_OK: i32 = 8;
+const C_OK: i32 = 9;
+const D_OK: i32 = 10;
 
 type SysConfName = i32;
 const _SC_ARG_MAX:           SysConfName = 1;
@@ -136,6 +142,60 @@ fn access(env: &mut Environment, path: ConstPtr<u8>, mode: i32) -> i32 {
             }
         }
         R_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }
+        B_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }
+        T_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }      
+        P_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }
+        A_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }
+        C_OK => {
+            if read {
+                0
+            } else {
+                // TODO: is it the correct error?
+                set_errno(env, EACCES);
+                -1
+            }
+        }
+        D_OK => {
             if read {
                 0
             } else {
