@@ -342,10 +342,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let h_slice = env.mem.bytes_at(h_ptr, h_len);
     let n_slice = env.mem.bytes_at(n_ptr, n_len);
 
-    let search_slice = &h_slice[search_start..search_end];
-    for i in 0..=(search_slice.len().saturating_sub(n_len)) {
-        if search_slice[i..i + n_len] == *n_slice {
-            return NSRange { location: search_start + i, length: n_len };
+    let search_slice = &h_slice[(search_start as usize)..(search_end as usize)];
+    for i in 0..=(search_slice.len().saturating_sub(n_len as usize)) {
+        if search_slice[i..i + (n_len as usize)] == *n_slice {
+            return NSRange { location: search_start + (i as u32), length: n_len };
         }
     }
     not_found
@@ -438,7 +438,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
     let bytes = env.mem.bytes_at(ptr, length);
-    let mut hex = String::with_capacity(2 + length * 2 + (length / 4));
+    let mut hex = String::with_capacity((2 + length * 2 + (length / 4)) as usize);
     hex.push('<');
     for (i, b) in bytes.iter().enumerate() {
         if i > 0 && i % 4 == 0 {
@@ -672,3 +672,4 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
+
