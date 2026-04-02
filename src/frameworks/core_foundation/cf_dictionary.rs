@@ -110,6 +110,90 @@ fn CFDictionaryGetCount(env: &mut Environment, dict: CFDictionaryRef) -> CFIndex
     count.try_into().unwrap()
 }
 
+/// Creates an immutable dictionary.
+fn CFDictionaryCreate(
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
+    keys: ConstPtr<ConstVoidPtr>,
+    values: ConstPtr<ConstVoidPtr>,
+    num_values: CFIndex,
+    key_callbacks: ConstPtr<CFDictionaryKeyCallBacks>,
+    value_callbacks: ConstPtr<CFDictionaryValueCallBacks>,
+) -> CFDictionaryRef {
+    assert_eq!(allocator, kCFAllocatorDefault);
+    
+    // We can reuse the mutable logic and just return it as a CFDictionaryRef (immutable)
+    // as is common in many emulated environments.
+    let dict = CFDictionaryCreateMutable(env, allocator, 0, key_callbacks, value_callbacks);
+    
+    for i in 0..num_values {
+        let key = env.mem.read(keys.add(i as usize));
+        let value = env.mem.read(values.add(i as usize));
+        CFDictionaryAddValue(env, dict, key, value);
+    }
+    dict
+}
+
+/// Returns the value associated with a given key, with a boolean indicating success.
+fn CFDictionaryGetValueIfPresent(
+    env: &mut Environment,
+    dict: CFDictionaryRef,
+    key: ConstVoidPtr,
+    value: MutVoidPtr, // void **
+) -> bool {
+    let key_id: id = key.cast().cast_mut();
+    let res: id = msg![env; dict objectForKey:key_id];
+    
+    if res != nil {
+        if !value.is_null() {
+            let out_ptr: ConstPtr<MutVoidPtr> = value.cast();
+            env.mem.write(out_ptr.cast_mut(), res.cast());
+        }
+        true
+    } else {
+        false
+    }
+}
+
+/// Returns whether a given key is in the dictionary.
+fn CFDictionaryContainsKey(
+    env: &mut Environment, 
+    dict: CFDictionaryRef, 
+    key: ConstVoidPtr
+) -> bool {
+    let key_id: id = key.cast().cast_mut();
+    let res: id = msg![env; dict objectForKey:key_id];
+    res != nil
+}
+
+/// Returns whether a given value is in the dictionary.
+fn CFDictionaryContainsValue(
+    env: &mut Environment,
+    dict: CFDictionaryRef,
+    value: ConstVoidPtr
+) -> bool {
+    let val_id: id = value.cast().cast_mut();
+    let keys: id = msg![env; dict allKeysForObject:val_id];
+    let count: NSUInteger = msg![env; keys count];
+    count > 0
+}
+
+/// Replaces an existing value in the dictionary. 
+/// Does nothing if the key does not exist.
+fn CFDictionaryReplaceValue(
+    env: &mut Environment,
+    dict: CFMutableDictionaryRef,
+    key: ConstVoidPtr,
+    value: ConstVoidPtr,
+) {
+    let key_id: id = key.cast().cast_mut();
+    let res: id = msg![env; dict objectForKey:key_id];
+    if res != nil {
+        let value_id: id = value.cast().cast_mut();
+        msg![env; dict setObject:value_id forKey:key_id];
+    }
+}
+
 fn CFDictionaryGetKeysAndValues(
     env: &mut Environment,
     dict: CFDictionaryRef,
@@ -265,4 +349,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFDictionaryGetValue(_, _)),
     export_c_func!(CFDictionaryGetCount(_)),
     export_c_func!(CFDictionaryGetKeysAndValues(_, _, _)),
+    export_c_func!(CFDictionaryCreate(_, _, _, _, _, _)),
+    export_c_func!(CFDictionaryGetValueIfPresent(_, _, _)),
+    export_c_func!(CFDictionaryContainsKey(_, _)),
+    export_c_func!(CFDictionaryContainsValue(_, _)),
+    export_c_func!(CFDictionaryReplaceValue(_, _, _)),
 ];
