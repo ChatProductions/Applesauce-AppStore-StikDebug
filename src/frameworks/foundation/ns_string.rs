@@ -725,6 +725,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (NSComparisonResult)localizedCaseInsensitiveCompare:(id)other { // NSString*
+    // В идеале здесь должна учитываться текущая локаль (NSLocale).
+    // Но так как touchHLE пока сводит локализованное сравнение к обычному,
+    // мы используем стандартное посимвольное сравнение без учета регистра,
+    // которое честно реализовано ниже в compare:options:
+    assert!(to_rust_string(env, this).is_ascii());
+    assert!(to_rust_string(env, other).is_ascii());
+    msg![env; this compare:other options:NSCaseInsensitiveSearch]
+}
+    
 // NSCopying implementation
 - (id)copyWithZone:(NSZonePtr)_zone {
     retain(env, this)
