@@ -164,9 +164,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         kind,
     };
     
-    // В Objective-C первые 4 байта объекта (isa) — это всегда указатель на его класс.
-    // Читаем его напрямую из памяти!
-    let class_ptr = env.mem.read_u32(this).unwrap();
+    // Получаем указатель на класс UIFont безопасным встроенным методом эмулятора
+    let class_ptr = env.objc.get_known_class("UIFont", &mut env.mem);
     
     // Выделяем память под новый объект и отдаем его игре
     let new_font = env.objc.alloc_object(class_ptr, Box::new(host_object), &mut env.mem);
@@ -463,3 +462,4 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
         _ => None,
     }
 }
+
