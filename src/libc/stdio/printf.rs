@@ -588,6 +588,19 @@ fn vsnprintf(
     res.len().try_into().unwrap()
 }
 
+fn __vsnprintf_chk(
+    env: &mut Environment,
+    s: MutPtr<u8>,
+    maxlen: GuestUSize,
+    _flag: i32,
+    _os: GuestUSize,
+    format: ConstPtr<u8>,
+    ap: VaList,
+) -> i32 {
+    vsnprintf(env, s, maxlen, format, ap)
+}
+
+
 fn vsprintf(env: &mut Environment, dest: MutPtr<u8>, format: ConstPtr<u8>, arg: VaList) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -1233,6 +1246,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vasprintf(_, _, _)),
     export_c_func!(vprintf(_, _)),
     export_c_func!(vsnprintf(_, _, _, _)),
+    export_c_func!(__vsnprintf_chk(_, _, _, _, _, _)),
     export_c_func!(vsprintf(_, _, _)),
     export_c_func!(__sprintf_chk(_, _, _, _, _)),
     export_c_func!(sprintf(_, _, _)),
