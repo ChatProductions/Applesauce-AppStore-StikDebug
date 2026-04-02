@@ -50,14 +50,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)pasteboardWithName:(id)name create:(bool)_create {
-    // Выделяем память и инициализируем новый буфер обмена.
     let instance: id = msg_class![env; UIPasteboard alloc];
     let instance: id = msg![env; instance init];
 
-    // Сохраняем переданное имя
-    let host = env.objc.borrow_mut::<UIPasteboardHostObject>(instance);
+    // 1. Сначала делаем retain, пока env свободен
     retain(env, name);
-    host.name = name;
+
+    // 2. Затем заимствуем и сразу записываем (без сохранения переменной host)
+    env.objc.borrow_mut::<UIPasteboardHostObject>(instance).name = name;
 
     instance
 }
@@ -90,9 +90,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setString:(id)string { // NSString*
+    // Достаем старое значение, чтобы освободить его
     let old = env.objc.borrow::<UIPasteboardHostObject>(this).string;
+    
+    // Выполняем операции управления памятью
     release(env, old);
     retain(env, string);
+    
+    // Записываем новое значение
     env.objc.borrow_mut::<UIPasteboardHostObject>(this).string = string;
 }
 
