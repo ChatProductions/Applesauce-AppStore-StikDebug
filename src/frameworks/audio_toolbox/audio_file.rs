@@ -134,6 +134,23 @@ fn effective_client_asbd(
         .unwrap_or_else(|| get_asbd(host_object))
 }
 
+type AudioFormatPropertyID = u32;
+
+pub fn AudioFormatGetPropertyInfo(
+    _env: &mut Environment,
+    property_id: AudioFormatPropertyID,
+    _specifier_size: u32,
+    _specifier: ConstPtr<u8>,
+    _out_property_data_size: MutPtr<u32>,
+) -> OSStatus {
+    log_once!(
+        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        debug_fourcc(property_id)
+    );
+    // Return paramErr to indicate the property/format info is not available.
+    -50
+}
+
 pub fn AudioFileOpenURL(
     _env: &mut Environment,
     _in_url: CFURLRef,
@@ -450,4 +467,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileOpenWithCallbacks(_, _, _, _, _, _, _)),
     export_c_func!(AudioFileClose(_)),
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
+    export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
+
