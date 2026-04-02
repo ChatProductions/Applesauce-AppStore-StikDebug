@@ -69,20 +69,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-- (id)init {
-    this
-}
-
-- (())dealloc {
-    let host = env.objc.borrow::<UIImagePickerControllerHostObject>(this);
-    let (delegate, media_types, camera_overlay_view) =
-        (host.delegate, host.media_types, host.camera_overlay_view);
-    release(env, delegate);
-    release(env, media_types);
-    release(env, camera_overlay_view);
-    env.objc.dealloc_object(this, &mut env.mem)
-}
-
 // MARK: - Source type
 
 + (bool)isSourceTypeAvailable:(UIImagePickerControllerSourceType)_source_type {
@@ -104,6 +90,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)availableCaptureModesForCameraDevice:(UIImagePickerControllerCameraDevice)_device {
     msg_class![env; NSArray new]
+}
+
+- (id)init {
+    this
+}
+
+- (())dealloc {
+    let host = env.objc.borrow::<UIImagePickerControllerHostObject>(this);
+    let (delegate, media_types, camera_overlay_view) =
+        (host.delegate, host.media_types, host.camera_overlay_view);
+    release(env, delegate);
+    release(env, media_types);
+    release(env, camera_overlay_view);
+    env.objc.dealloc_object(this, &mut env.mem)
 }
 
 - (UIImagePickerControllerSourceType)sourceType {
