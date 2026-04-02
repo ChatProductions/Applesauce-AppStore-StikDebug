@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `GKScore`.
 
 use std::borrow::Cow;
@@ -54,6 +56,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<GKScoreHostObject>(this).category = category;
     retain(env, category);
     env.objc.borrow_mut::<GKScoreHostObject>(this).leaderboard_identifier = category;
+
     let fmt = ns_string::from_rust_string(env, "0".to_string());
     env.objc.borrow_mut::<GKScoreHostObject>(this).formatted_value = fmt;
     this
@@ -72,6 +75,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host = env.objc.borrow::<GKScoreHostObject>(this);
+
     let (category, leaderboard_identifier, player_id, formatted_value, date) = (
         host.category,
         host.leaderboard_identifier,
@@ -79,6 +83,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.formatted_value,
         host.date,
     );
+
     release(env, category);
     if leaderboard_identifier != category {
         release(env, leaderboard_identifier);
@@ -86,6 +91,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, player_id);
     release(env, formatted_value);
     release(env, date);
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -96,6 +102,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setCategory:(id)category {
     let old = env.objc.borrow::<GKScoreHostObject>(this).category;
     release(env, old);
+
     retain(env, category);
     env.objc.borrow_mut::<GKScoreHostObject>(this).category = category;
 }
@@ -106,6 +113,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setLeaderboardIdentifier:(id)identifier {
     let old = env.objc.borrow::<GKScoreHostObject>(this).leaderboard_identifier;
+
     release(env, old);
     retain(env, identifier);
     env.objc.borrow_mut::<GKScoreHostObject>(this).leaderboard_identifier = identifier;
@@ -117,6 +125,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setValue:(i64)value {
     env.objc.borrow_mut::<GKScoreHostObject>(this).value = value;
+
     let old_fmt = env.objc.borrow::<GKScoreHostObject>(this).formatted_value;
     release(env, old_fmt);
     let fmt = ns_string::from_rust_string(env, value.to_string());
@@ -162,11 +171,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())reportScoreWithCompletionHandler:(id)_completion_handler {
     let value = env.objc.borrow::<GKScoreHostObject>(this).value;
     let cat   = env.objc.borrow::<GKScoreHostObject>(this).category;
+
     let cat_str: Cow<str> = if cat != nil {
         ns_string::to_rust_string(env, cat)
     } else {
         Cow::Borrowed("<nil>")
     };
+
     log!(
         "GKScore reportScoreWithCompletionHandler: stubbed (category={}, value={})",
         cat_str, value
@@ -176,11 +187,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)description {
     let value = env.objc.borrow::<GKScoreHostObject>(this).value;
     let cat   = env.objc.borrow::<GKScoreHostObject>(this).category;
+
     let cat_str: Cow<str> = if cat != nil {
         ns_string::to_rust_string(env, cat)
     } else {
         Cow::Borrowed("<nil>")
     };
+
     let desc = format!("<GKScore: category={} value={}>", cat_str, value);
     let ns = ns_string::from_rust_string(env, desc);
     autorelease(env, ns)
