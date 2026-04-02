@@ -733,17 +733,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let name_str = ns_string::to_rust_string(env, class_name);
     log_dbg!("[NSBundle classNamed:{}]", name_str);
+
     // Look up via the ObjC runtime.
     let class = env.objc.get_known_class(&name_str, &mut env.mem);
-    match class {
-        Ok(cls) => cls,
-        Err(_) => {
-            log!(
-                "Warning: [NSBundle classNamed:{}] — class not found",
-                name_str
-            );
-            nil
-        }
+
+    if class == nil {  // или if !class.is_null() в зависимости от твоей обёртки
+        log!(
+            "Warning: [NSBundle classNamed:{}] — class not found",
+            name_str
+        );
+        nil
+    } else {
+        class
     }
 }
 
