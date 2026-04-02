@@ -30,6 +30,7 @@ const kAudioSessionProperty_PreferredHardwareIOBufferDuration: AudioSessionPrope
     fourcc(b"iobd");
 const kAudioSessionProperty_PreferredHardwareSampleRate: AudioSessionPropertyID = fourcc(b"hwsr");
 const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
+const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID = fourcc(b"rout");
 
 const kAudioSessionCategory_SoloAmbientSound: u32 = fourcc(b"solo");
 const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 = fourcc(b"chbd");
@@ -127,6 +128,12 @@ fn AudioSessionGetProperty(
         }
         kAudioSessionProperty_AudioInputAvailable => {
             let value: u32 = 1; // 1 = audio input is available
+            env.mem.write(out_data.cast(), value);
+        }
+        kAudioSessionProperty_AudioRoute => {
+            // Игра ждет строку (CFStringRef), например "Speaker".
+            // Возврат 0 (nil) безопасен и указывает на стандартный маршрут.
+            let value: u32 = 0;
             env.mem.write(out_data.cast(), value);
         }
         _ => unreachable!(),
@@ -239,6 +246,7 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
         kAudioSessionProperty_CurrentHardwareOutputVolume => guest_size_of::<f32>(),
         kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
         kAudioSessionProperty_AudioInputAvailable => guest_size_of::<u32>(),
+        kAudioSessionProperty_AudioRoute => guest_size_of::<u32>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
     }
 }
@@ -252,3 +260,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
+
