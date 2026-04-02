@@ -6,6 +6,7 @@
 //! `UITabBarItem`.
 
 use crate::frameworks::foundation::NSInteger;
+use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::objc::{
     id, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
 };
