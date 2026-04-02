@@ -154,6 +154,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     font.line_gap(host_object.size)
 }
 
+- (id)fontWithSize:(CGFloat)size {
+    // Узнаем семейство (kind) текущего шрифта. 
+    // borrow автоматически освободит ссылку сразу после чтения.
+    let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
+    
+    // Создаем внутреннюю структуру для нового шрифта с нужным размером
+    let host_object = UIFontHostObject {
+        size,
+        kind,
+    };
+    
+    // В методах экземпляра (-) this указывает на сам объект.
+    // Чтобы выделить память (alloc), нам нужен указатель на сам класс UIFont.
+    let class_ptr = env.objc.get_class("UIFont").unwrap();
+    
+    // Выделяем память под новый объект и отдаем его игре, добавляя в autorelease pool
+    let new_font = env.objc.alloc_object(class_ptr, Box::new(host_object), &mut env.mem);
+    autorelease(env, new_font)
+}
+
 @end
 
 };
