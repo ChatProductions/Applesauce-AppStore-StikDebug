@@ -46,7 +46,7 @@ use crate::mem::ConstVoidPtr;
 use crate::Environment;
 use classes::{ClassHostObject, FakeClass, UnimplementedClass};
 use messages::{
-    objc_msgSend, objc_msgSendSuper2, objc_msgSend_stret, MsgSendSignature, MsgSendSuperSignature,
+    objc_msgSend, objc_msgSendSuper2, objc_msgSend_stret, objc_msgSendSuper2_stret, MsgSendSignature, MsgSendSuperSignature,
 };
 use methods::method_list_t;
 use objects::{objc_object, HostObjectEntry};
@@ -130,6 +130,7 @@ fn _Block_object_dispose(_env: &mut Environment, object: ConstVoidPtr, flags: i3
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_msgSend(_, _)),
     export_c_func!(objc_msgSend_stret(_, _, _)),
+    export_c_func!(objc_msgSendSuper2_stret(_, _)),
     export_c_func!(objc_msgSendSuper2(_, _)),
     export_c_func!(objc_getProperty(_, _, _, _)),
     export_c_func!(objc_setProperty(_, _, _, _, _, _)),
