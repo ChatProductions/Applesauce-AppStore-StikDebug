@@ -29,6 +29,7 @@ const kAudioSessionProperty_CurrentHardwareOutputVolume: AudioSessionPropertyID 
 const kAudioSessionProperty_PreferredHardwareIOBufferDuration: AudioSessionPropertyID =
     fourcc(b"iobd");
 const kAudioSessionProperty_PreferredHardwareSampleRate: AudioSessionPropertyID = fourcc(b"hwsr");
+const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
 
 const kAudioSessionCategory_SoloAmbientSound: u32 = fourcc(b"solo");
 const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 = fourcc(b"chbd");
@@ -124,6 +125,10 @@ fn AudioSessionGetProperty(
             let value: f32 = state.current_hardware_io_buffer_duration;
             env.mem.write(out_data.cast(), value);
         }
+        kAudioSessionProperty_AudioInputAvailable => {
+            let value: u32 = 1; // 1 = audio input is available
+            env.mem.write(out_data.cast(), value);
+        }
         _ => unreachable!(),
     }
 
@@ -152,10 +157,12 @@ fn AudioSessionSetProperty(
         kAudioSessionProperty_PreferredHardwareSampleRate => guest_size_of::<f64>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
     };
+
     if in_data_size != required_size {
         log!("Warning: AudioSessionSetProperty() failed");
         return kAudioSessionBadPropertySizeError;
     }
+
     if in_ID == kAudioSessionProperty_PreferredHardwareSampleRate {
         env.framework_state
             .audio_toolbox
@@ -204,6 +211,7 @@ fn AudioSessionAddPropertyListener(
     );
     result
 }
+
 fn AudioSessionRemovePropertyListenerWithUserData(
     _env: &mut Environment,
     in_property_id: AudioSessionPropertyID,
@@ -230,6 +238,7 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
         kAudioSessionProperty_CurrentHardwareOutputNumberChannels => guest_size_of::<u32>(),
         kAudioSessionProperty_CurrentHardwareOutputVolume => guest_size_of::<f32>(),
         kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
+        kAudioSessionProperty_AudioInputAvailable => guest_size_of::<u32>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
     }
 }
