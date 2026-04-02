@@ -23,6 +23,7 @@ use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, ConstVoidPtr, Mem, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
+use std::ops::Add;
 
 pub type CFDictionaryRef = super::CFTypeRef;
 pub type CFMutableDictionaryRef = super::CFTypeRef;
