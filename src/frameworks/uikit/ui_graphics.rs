@@ -14,7 +14,7 @@ use crate::frameworks::core_graphics::cg_context::{
 };
 use crate::frameworks::core_graphics::{CGFloat, CGRect, CGSize};
 use crate::mem::MutVoidPtr;
-use crate::objc::{id, msg, msg_class, nil};
+use crate::objc::{id, msg_class, nil};
 use crate::Environment;
 
 #[derive(Default)]
@@ -237,3 +237,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(UIRectFrame(_)),
     export_c_func!(UIRectClip(_)),
 ];
+
