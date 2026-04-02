@@ -8,7 +8,7 @@
 use crate::frameworks::foundation::ns_string::{self, to_rust_string};
 use crate::frameworks::core_graphics::CGRect;
 use crate::msg;
-use crate::objc::{id, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr};
 use std::borrow::Cow;
 
 struct UIWebViewHostObject {
@@ -190,3 +190,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
