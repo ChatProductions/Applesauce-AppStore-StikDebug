@@ -5,7 +5,6 @@
  */
 //! `SKPaymentQueue` — StoreKit in-app purchase queue stub.
 
-use crate::frameworks::foundation::{NSInteger, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr, TrivialHostObject,
@@ -196,68 +195,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)originalTransaction {
     nil
-}
-
-@end
-
-// MARK: - SKProduct (stub)
-
-@implementation SKProduct: NSObject
-
-- (id)productIdentifier {
-    ns_string::get_static_str(env, "")
-}
-
-- (id)localizedTitle {
-    ns_string::get_static_str(env, "")
-}
-
-- (id)localizedDescription {
-    ns_string::get_static_str(env, "")
-}
-
-- (id)price {
-    // Return NSDecimalNumber zero.
-    msg_class![env; NSDecimalNumber zero]
-}
-
-- (id)priceLocale {
-    msg_class![env; NSLocale currentLocale]
-}
-
-- (bool)isDownloadable {
-    false
-}
-
-- (id)downloadContentLengths {
-    msg_class![env; NSArray new]
-}
-
-@end
-
-// MARK: - SKProductsRequest / SKProductsResponse (stub)
-
-@implementation SKProductsRequest: NSObject
-
-+ (id)alloc {
-    let new = env.objc.alloc_object(this, Box::new(TrivialHostObject), &mut env.mem);
-    new
-}
-
-- (id)initWithProductIdentifiers:(id)_identifiers {
-    this
-}
-
-- (())setDelegate:(id)_delegate {
-    log!("SKProductsRequest setDelegate: stubbed");
-}
-
-- (())start {
-    log!("SKProductsRequest start: stubbed — request will never complete");
-}
-
-- (())cancel {
-    log!("SKProductsRequest cancel: stubbed");
 }
 
 @end
