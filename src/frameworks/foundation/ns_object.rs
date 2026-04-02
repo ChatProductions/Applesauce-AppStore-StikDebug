@@ -1,16 +1,21 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `NSObject`, the root of most class hierarchies in Objective-C.
 //!
 //! Resources:
 //! - Apple's [Advanced Memory Management Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/MemoryMgmt.html)
-//!   explains how reference counting works. Note that we are interested in what
+//!
+//! explains how reference counting works. Note that we are interested in what
 //!   it calls "manual retain-release", not ARC.
+//!
 //! - Apple's [Key-Value Coding Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/KeyValueCoding/SearchImplementation.html)
 //!   explains the algorithm `setValue:forKey:` should follow.
+//!
 //!
 //! See also: [crate::objc], especially the `objects` module.
 
@@ -86,6 +91,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this description]
 }
 
++ (())cancelPreviousPerformRequestsWithTarget:(id)target
+                                     selector:(SEL)selector
+                                       object:(id)object {
+    log!("TODO: [NSObject cancelPreviousPerformRequestsWithTarget:selector:object:] stubbed");
+}
+
 - (id)init {
     this
 }
@@ -151,18 +162,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSKeyValueCoding
 - (())setValue:(id)value
        forKey:(id)key { // NSString*
-    let key_string = to_rust_string(env, key); // TODO: avoid copy?
+    let key_string = to_rust_string(env, key);
+    // TODO: avoid copy?
     assert!(key_string.is_ascii()); // TODO: do we have to handle non-ASCII keys?
     let camel_case_key_string = format!("{}{}", key_string.as_bytes()[0].to_ascii_uppercase() as char, &key_string[1..]);
 
     let class = msg![env; this class];
 
     assert!(value != nil);
-
     let value_class = msg![env; value class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
     assert!(!env.objc.class_is_subclass_of(value_class, ns_value_class));
-
     if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
         if env.objc.class_has_method(class, sel) {
             () = msg_send(env, (this, sel, value));
@@ -243,19 +253,19 @@ forUndefinedKey:(id)key { // NSString*
 
 - (())performSelector:(SEL)sel withObject:(id)arg afterDelay:(NSTimeInterval)delay {
     log_dbg!("performSelector:{} withObject:{:?} afterDelay:{}", sel.as_str(&env.mem), arg, delay);
-
     let sel_key: id = get_static_str(env, "SEL");
     let sel_str = from_rust_string(env, sel.as_str(&env.mem).to_string());
     let arg_key: id = get_static_str(env, "arg");
     let dict = dict_from_keys_and_objects(env, &[(sel_key, sel_str), (arg_key, arg)]);
 
     let selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
-    let timer:id = msg_class![env; NSTimer timerWithTimeInterval:delay
+    let timer:id = msg_class![env;
+    NSTimer timerWithTimeInterval:delay
                                               target:this
                                             selector:selector
-                                            userInfo:dict
+         
+                                             userInfo:dict
                                              repeats:false];
-
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let mode: id = get_static_str(env, NSDefaultRunLoopMode);
     () = msg![env; run_loop addTimer:timer forMode:mode];
@@ -280,12 +290,12 @@ forUndefinedKey:(id)key { // NSString*
         log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
     }
 
-    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
+    msg![env;
+    this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
 - (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
     let dict: id = msg![env; which userInfo];
-
     let sel_key: id = get_static_str(env, "SEL");
     let sel_str_id: id = msg![env; dict objectForKey:sel_key];
     let sel_str = to_rust_string(env, sel_str_id);
@@ -293,7 +303,6 @@ forUndefinedKey:(id)key { // NSString*
 
     let arg_key: id = get_static_str(env, "arg");
     let arg: id = msg![env; dict objectForKey:arg_key];
-
     if sel.as_str(&env.mem).ends_with(':') {
         () = msg_send(env, (this, sel, arg));
     } else {
@@ -344,7 +353,8 @@ forUndefinedKey:(id)key { // NSString*
 
 - (id)valueForKeyPath:(id)key_path {
     // Simple implementation: treat as valueForKey: (no path traversal)
-    msg![env; this valueForKey:key_path]
+    msg![env;
+    this valueForKey:key_path]
 }
 
 - (())setValue:(id)value forKeyPath:(id)key_path {
@@ -354,4 +364,3 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
-
