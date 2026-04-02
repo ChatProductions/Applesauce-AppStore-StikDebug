@@ -6,7 +6,6 @@
 //! StoreKit
 
 mod sk_payment_queue;
-mod sk_product;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/StoreKit.framework/StoreKit",
