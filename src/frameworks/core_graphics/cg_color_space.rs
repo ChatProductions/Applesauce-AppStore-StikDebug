@@ -205,12 +205,12 @@ fn CGColorSpaceCopyName(env: &mut Environment, cs: CGColorSpaceRef) -> CFStringR
     crate::objc::autorelease(env, ns)
 }
 
-fn CGColorSpaceIsWideGamutRGB(env: &mut Environment, cs: CGColorSpaceRef) -> bool {
+fn CGColorSpaceIsWideGamutRGB(_env: &mut Environment, _cs: CGColorSpaceRef) -> bool {
     // touchHLE only models sRGB-equivalent spaces — never wide gamut.
     false
 }
 
-fn CGColorSpaceSupportsOutput(env: &mut Environment, cs: CGColorSpaceRef) -> bool {
+fn CGColorSpaceSupportsOutput(_env: &mut Environment, cs: CGColorSpaceRef) -> bool {
     !cs.is_null()
 }
 
@@ -267,3 +267,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGColorSpaceIsWideGamutRGB(_)),
     export_c_func!(CGColorSpaceSupportsOutput(_)),
 ];
+
