@@ -4,11 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::mem::MutPtr;
 use crate::objc::{
     id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr, SEL,
 };
-use crate::Environment;
 
 #[derive(Debug, Default)]
 struct NSInvocationOperationHostObject {
