@@ -184,36 +184,62 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
         log!("Ignoring O_NOFOLLOW when opening {:?}", path_string);
     }
 
-    // --- RETINA CASE-INSENSITIVE FALLBACK ---
+    // --- RETINA DEEP CASE-INSENSITIVE FALLBACK ---
     let mut actual_path_string = path_string.clone();
 
-    // Сначала проверяем, существует ли файл с точным совпадением регистра
     if !env.fs.exists(GuestPath::new(&actual_path_string)) {
-        let rust_path = std::path::Path::new(&actual_path_string);
-        if let (Some(parent), Some(file_name)) = (rust_path.parent(), rust_path.file_name()) {
-            let parent_str = parent.to_str().unwrap_or("");
-            let target_name = file_name.to_str().unwrap_or("").to_lowercase();
-            let parent_guest_path = crate::fs::GuestPath::new(parent_str);
+        let is_absolute = actual_path_string.starts_with('/');
+        let parts: Vec<&str> = actual_path_string.split('/').filter(|s| !s.is_empty()).collect();
+        
+        let mut current_path = if is_absolute { String::from("/") } else { String::new() };
 
-            let mut found_path = None;
-            // Ищем файл без учета регистра
-            if let Ok(entries) = env.fs.enumerate(parent_guest_path) {
-                for entry in entries {
-                    let entry_path = std::path::Path::new(entry);
-                    if let Some(entry_name) = entry_path.file_name() {
-                        if entry_name.to_str().unwrap_or("").to_lowercase() == target_name {
-                            found_path = Some(entry.to_string());
-                            break;
+        for (i, part) in parts.iter().enumerate() {
+            let mut test_path = current_path.clone();
+            if !test_path.is_empty() && !test_path.ends_with('/') {
+                test_path.push('/');
+            }
+            test_path.push_str(part);
+
+            // Если текущий кусок пути существует, идем дальше
+            if env.fs.exists(GuestPath::new(&test_path)) {
+                current_path = test_path;
+            } else {
+                // Если не существует, ищем его без учета регистра
+                let parent_to_search = if current_path.is_empty() { "." } else { &current_path };
+                let target_lower = part.to_lowercase();
+                let mut found_match = None;
+
+                if let Ok(entries) = env.fs.enumerate(GuestPath::new(parent_to_search)) {
+                    for entry in entries {
+                        let entry_path = std::path::Path::new(&entry);
+                        if let Some(file_name) = entry_path.file_name() {
+                            if file_name.to_str().unwrap_or("").to_lowercase() == target_lower {
+                                found_match = Some(file_name.to_str().unwrap_or("").to_string());
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            // Если нашли - подменяем путь на реальный
-            if let Some(p) = found_path {
-                actual_path_string = p;
+                if let Some(m) = found_match {
+                    if !current_path.is_empty() && !current_path.ends_with('/') {
+                        current_path.push('/');
+                    }
+                    current_path.push_str(&m);
+                } else {
+                    // Если совсем ничего не нашли, восстанавливаем остаток пути и прерываем поиск
+                    current_path = test_path;
+                    for remaining_part in parts.iter().skip(i + 1) {
+                        if !current_path.ends_with('/') {
+                            current_path.push('/');
+                        }
+                        current_path.push_str(remaining_part);
+                    }
+                    break;
+                }
             }
         }
+        actual_path_string = current_path;
     }
     // --- КОНЕЦ ПАТЧА ---
 
@@ -715,6 +741,7 @@ _)),
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
 ];
+
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env.libc_state.posix_io.files.iter().position(|f| f.is_none()) {
         env.libc_state.posix_io.files[free_idx] = Some(host_object);
