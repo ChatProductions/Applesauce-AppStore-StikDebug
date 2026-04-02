@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! POSIX I/O functions (`fcntl.h`, parts of `unistd.h`, etc)
@@ -61,8 +62,8 @@ pub const STDOUT_FILENO: FileDescriptor = 1;
 pub const STDERR_FILENO: FileDescriptor = 2;
 const NORMAL_FILENO_BASE: FileDescriptor = STDERR_FILENO + 1;
 
-/// Flags bitfield for `open`. This alias is for readability, POSIX just uses
-/// `int`.
+/// Flags bitfield for `open`.
+/// This alias is for readability, POSIX just uses `int`.
 pub type OpenFlag = i32;
 pub const O_RDONLY: OpenFlag = 0x0;
 pub const O_WRONLY: OpenFlag = 0x1;
@@ -182,9 +183,43 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
     if flags & O_NOFOLLOW != 0 {
         log!("Ignoring O_NOFOLLOW when opening {:?}", path_string);
     }
+
+    // --- RETINA CASE-INSENSITIVE FALLBACK ---
+    let mut actual_path_string = path_string.clone();
+
+    // Сначала проверяем, существует ли файл с точным совпадением регистра
+    if !env.fs.exists(GuestPath::new(&actual_path_string)) {
+        let rust_path = std::path::Path::new(&actual_path_string);
+        if let (Some(parent), Some(file_name)) = (rust_path.parent(), rust_path.file_name()) {
+            let parent_str = parent.to_str().unwrap_or("");
+            let target_name = file_name.to_str().unwrap_or("").to_lowercase();
+            let parent_guest_path = crate::fs::GuestPath::new(parent_str);
+
+            let mut found_path = None;
+            // Ищем файл без учета регистра
+            if let Ok(entries) = env.fs.enumerate(parent_guest_path) {
+                for entry in entries {
+                    let entry_path = std::path::Path::new(entry);
+                    if let Some(entry_name) = entry_path.file_name() {
+                        if entry_name.to_str().unwrap_or("").to_lowercase() == target_name {
+                            found_path = Some(entry.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Если нашли - подменяем путь на реальный
+            if let Some(p) = found_path {
+                actual_path_string = p;
+            }
+        }
+    }
+    // --- КОНЕЦ ПАТЧА ---
+
     let res = match env
         .fs
-        .open_with_options(GuestPath::new(&path_string), options)
+        .open_with_options(GuestPath::new(&actual_path_string), options)
     {
         Ok(file) => {
             let host_object = PosixFileHostObject {
@@ -193,13 +228,13 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
                 reached_eof: false,
                 flags: 0,
             };
-
             find_or_create_fd(env, host_object)
         }
         Err(()) => {
             -1
         }
     };
+
     if res != -1 && (flags & O_SHLOCK) != 0 {
         flock(env, res, LOCK_SH);
     }
@@ -214,7 +249,6 @@ pub fn read(
     size: GuestUSize,
 ) -> GuestISize {
     set_errno(env, 0);
-
     if buffer.is_null() {
         return -1;
     }
@@ -273,7 +307,6 @@ pub fn pread(
     let bytes_read = read(env, fd, buffer, size);
 
     assert!(lseek(env, fd, original_position, SEEK_SET) != -1);
-
     bytes_read
 }
 
@@ -309,9 +342,9 @@ pub fn write(
     size: GuestUSize,
 ) -> GuestISize {
     set_errno(env, 0);
-
     // ПЕРЕХВАТ КОНСОЛИ! Ловим stdout и stderr от Unity.
-    if fd == STDOUT_FILENO || fd == STDERR_FILENO {
+    if fd == STDOUT_FILENO ||
+        fd == STDERR_FILENO {
         let buffer_slice = env.mem.bytes_at(buffer.cast(), size);
         let msg = String::from_utf8_lossy(buffer_slice);
         print!("{}", msg);
@@ -383,6 +416,7 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Ok(pos) => pos,
             Err(seek_error) => {
                 match seek_error.kind() {
+                   
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
                     _ => unimplemented!("Unexpected seek error {:?}", seek_error),
                 }
@@ -394,6 +428,7 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Err(seek_error) => {
                 match seek_error.kind() {
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
+           
                     _ => unimplemented!("Unexpected seek error {:?}", seek_error),
                 }
                 return -1;
@@ -412,14 +447,14 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             let (error_msg, errno) = if offset >= 0 {
                 ("Seek position does not fit in off_t.", EOVERFLOW)
             } else {
-                ("Negative seek position.", EINVAL)
+         
+               ("Negative seek position.", EINVAL)
             };
             log!("Warning: lseek({:?}, {:#x}, {}) => -1. {}", fd, offset, whence, error_msg);
             set_errno(env, errno);
             return -1;
         }
     };
-
     if seek_position > off_t::MAX as u64 {
         log!("Warning: lseek({:?}, {:#x}, {}) => -1. Seek position does not fit in off_t.", fd, offset, whence);
         set_errno(env, EOVERFLOW);
@@ -436,6 +471,7 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
                 std::io::ErrorKind::InvalidInput => set_errno(env, EINVAL),
                 std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
                 _ => unimplemented!("Unexpected seek error {:?}", seek_error),
+        
             }
             log!("Warning: lseek({:?}, {:#x}, {}) failed with error: {:?}, returning -1", fd, offset, whence, seek_error);
             return -1;
@@ -447,13 +483,13 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
 
 pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
     set_errno(env, 0);
-
     if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
         log_dbg!("close({:?}) => 0", fd);
         return 0;
     }
 
-    if fd < 0 || env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
+    if fd < 0 ||
+        env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
         set_errno(env, EBADF);
         log!("Warning: close({:?}) failed, returning -1", fd);
         return -1;
@@ -470,10 +506,12 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
                 _ => {
                     if !file.needs_flush {
                         0
+                    
                     } else {
                         match file.file.sync_all() {
                             Ok(()) => 0,
                             Err(_) => -1
+            
                         }
                     }
                 }
@@ -484,7 +522,6 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
             -1
         }
     };
-
     if result == 0 {
         log_dbg!("close({:?}) => 0", fd);
     } else {
@@ -495,7 +532,6 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
 
 fn rename(env: &mut Environment, old: ConstPtr<u8>, new: ConstPtr<u8>) -> i32 {
     set_errno(env, 0);
-
     let old_str = env.mem.cstr_at_utf8(old).unwrap_or_default();
     let new_str = env.mem.cstr_at_utf8(new).unwrap_or_default();
     let res = match env.fs.rename(GuestPath::new(&old_str), GuestPath::new(&new_str)) {
@@ -522,7 +558,6 @@ pub fn getcwd(env: &mut Environment, buf_ptr: MutPtr<u8>, buf_size: GuestUSize) 
     }
 
     let res_size: GuestUSize = u32::try_from(working_directory.len()).unwrap_or(0) + 1;
-
     if buf_size < res_size {
         log!("Warning: getcwd({:?}, {:#x}) failed, returning NULL", buf_ptr, buf_size);
         return Ptr::null();
@@ -560,7 +595,6 @@ fn fcntl(
     args: DotDotDot,
 ) -> i32 {
     set_errno(env, 0);
-
     if fd >= NORMAL_FILENO_BASE && env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
         set_errno(env, EBADF);
         return -1;
@@ -568,7 +602,8 @@ fn fcntl(
 
     match cmd {
         F_GETFD => {
-            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return -1; };
+            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return -1;
+            };
             return file.flags;
         }
         F_SETFD => {
@@ -653,7 +688,6 @@ fn fsync(env: &mut Environment, fd: FileDescriptor) -> i32 {
 
 fn ftruncate(env: &mut Environment, fd: FileDescriptor, len: off_t) -> i32 {
     set_errno(env, 0);
-
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         set_errno(env, EBADF);
         return -1;
@@ -676,11 +710,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(getcwd(_, _)),
     export_c_func!(chdir(_)),
     export_c_func!(fcntl(_, _, _)),
-    export_c_func!(flock(_, _)),
+    export_c_func!(flock(_, 
+_)),
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
 ];
-
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env.libc_state.posix_io.files.iter().position(|f| f.is_none()) {
         env.libc_state.posix_io.files[free_idx] = Some(host_object);
@@ -724,12 +758,14 @@ fn validate_lock(env: &mut Environment, fd: FileDescriptor, lock: &flock) -> Res
     let lock_start = match whence {
         SEEK_SET => lock.start,
         SEEK_CUR => {
-            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return Err(EBADF); };
+            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return Err(EBADF);
+            };
             let file_position = file.file.stream_position().unwrap_or(0);
             file_position as i64 + lock.start
         }
         SEEK_END => {
-            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return Err(EBADF); };
+            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return Err(EBADF);
+            };
             let size: i64 = file.file.stream_len().unwrap_or(0).try_into().unwrap_or(0);
             size + lock.start
         }
