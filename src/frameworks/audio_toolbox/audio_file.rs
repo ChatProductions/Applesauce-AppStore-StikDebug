@@ -140,14 +140,15 @@ pub fn AudioFormatGetPropertyInfo(
     _env: &mut Environment,
     property_id: AudioFormatPropertyID,
     _specifier_size: u32,
-    _specifier: ConstPtr<u8>,
+    _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    log_once!(
+    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
+    log!(
         "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
         debug_fourcc(property_id)
     );
-    // Return paramErr to indicate the property/format info is not available.
+    // Return paramErr (-50) to indicate the property/format info is not available.
     -50
 }
 
@@ -469,4 +470,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
-
