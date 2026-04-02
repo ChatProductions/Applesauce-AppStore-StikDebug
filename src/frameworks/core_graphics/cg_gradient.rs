@@ -9,9 +9,9 @@ use crate::dyld::FunctionExports;
 use crate::export_c_func;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_color_space::CGColorSpaceRef;
-use crate::frameworks::core_graphics::{CGFloat, CGPoint};
+use crate::frameworks::core_graphics::{CGFloat};
 use crate::mem::{ConstPtr, GuestUSize};
-use crate::objc::{nil, objc_classes, ClassExports, HostObject};
+use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
 pub type CGGradientRef = CFTypeRef;
