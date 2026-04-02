@@ -44,6 +44,7 @@ pub struct UIScrollViewHostObject {
     zoom_scale: CGFloat,
     keyboard_dismiss_mode: UIScrollViewKeyboardDismissMode,
     decelerates: bool,
+    scrolls_to_top: bool, // <-- ДОБАВЛЕНО
 }
 impl_HostObject_with_superclass!(UIScrollViewHostObject);
 
@@ -76,6 +77,7 @@ impl Default for UIScrollViewHostObject {
             zoom_scale: 1.0,
             keyboard_dismiss_mode: UIScrollViewKeyboardDismissModeNone,
             decelerates: true,
+            scrolls_to_top: true, // <-- ДОБАВЛЕНО (по умолчанию в iOS это YES)
         }
     }
 }
@@ -145,6 +147,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setScrollEnabled:(bool)enabled {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).scroll_enabled = enabled;
+}
+
+// MARK: - Scroll to top
+
+- (bool)scrollsToTop {
+    env.objc.borrow::<UIScrollViewHostObject>(this).scrolls_to_top
+}
+
+- (())setScrollsToTop:(bool)value {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).scrolls_to_top = value;
 }
 
 - (bool)bounces {
