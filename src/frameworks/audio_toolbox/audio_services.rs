@@ -1,9 +1,12 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `AudioServices.h` (Audio Services)
+
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::OSStatus;
 use crate::frameworks::core_audio_types::fourcc;
@@ -17,6 +20,7 @@ type AudioServicesSystemSoundCompletionProc = u32; // guest function pointer
 
 const kAudioServicesUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
 const kAudioServicesBadSystemSoundIDError: OSStatus = fourcc(b"!ids") as _;
+
 const kSystemSoundID_Vibrate: SystemSoundID = 0x00000FFF;
 const kSystemSoundID_UserPreferredAlert: SystemSoundID = 0x00001000;
 
