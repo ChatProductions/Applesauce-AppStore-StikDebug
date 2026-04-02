@@ -5,8 +5,7 @@
  */
 //! `UINavigationBar`.
 
-use crate::frameworks::core_graphics::{CGFloat, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string;
+use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
