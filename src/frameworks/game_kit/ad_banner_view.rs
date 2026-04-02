@@ -25,9 +25,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - ADBannerView
 
-struct_not_available! {
-    // iAd is not available in touchHLE — banners never load.
+struct ADBannerViewHostObject {
+    delegate: id,
+    ad_type: ADAdType,
+    banner_loaded: bool,
+    action_in_progress: bool,
+    required_content_size_identifiers: id,
+    current_content_size_identifier: id,
 }
+impl crate::objc::HostObject for ADBannerViewHostObject {}
+
+struct ADInterstitialAdHostObject {
+    delegate: id,
+    loaded: bool,
+}
+impl crate::objc::HostObject for ADInterstitialAdHostObject {}
 
 @implementation ADBannerView: UIView
 
@@ -235,21 +247,3 @@ struct_not_available! {
 @end
 
 };
-
-// MARK: - Host objects (defined outside the macro)
-
-struct ADBannerViewHostObject {
-    delegate: id,
-    ad_type: ADAdType,
-    banner_loaded: bool,
-    action_in_progress: bool,
-    required_content_size_identifiers: id,
-    current_content_size_identifier: id,
-}
-impl crate::objc::HostObject for ADBannerViewHostObject {}
-
-struct ADInterstitialAdHostObject {
-    delegate: id,
-    loaded: bool,
-}
-impl crate::objc::HostObject for ADInterstitialAdHostObject {}
