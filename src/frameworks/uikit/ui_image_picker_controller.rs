@@ -5,7 +5,7 @@
  */
 //! `UIImagePickerController`
 
-use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
+use crate::frameworks::foundation::{NSInteger};
 use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
 
 type UIImagePickerControllerSourceType = NSInteger;
