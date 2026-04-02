@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 
@@ -189,3 +189,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
