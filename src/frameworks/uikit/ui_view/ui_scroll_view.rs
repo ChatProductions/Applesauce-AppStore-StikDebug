@@ -44,7 +44,8 @@ pub struct UIScrollViewHostObject {
     zoom_scale: CGFloat,
     keyboard_dismiss_mode: UIScrollViewKeyboardDismissMode,
     decelerates: bool,
-    scrolls_to_top: bool, // <-- ДОБАВЛЕНО
+    scrolls_to_top: bool, // (с прошлого фикса)
+    can_cancel_content_touches: bool, // <-- ДОБАВЛЕНО
 }
 impl_HostObject_with_superclass!(UIScrollViewHostObject);
 
@@ -77,7 +78,8 @@ impl Default for UIScrollViewHostObject {
             zoom_scale: 1.0,
             keyboard_dismiss_mode: UIScrollViewKeyboardDismissModeNone,
             decelerates: true,
-            scrolls_to_top: true, // <-- ДОБАВЛЕНО (по умолчанию в iOS это YES)
+            scrolls_to_top: true,
+            can_cancel_content_touches: true, // <-- ДОБАВЛЕНО
         }
     }
 }
@@ -149,6 +151,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).scroll_enabled = enabled;
 }
 
+// MARK: - Touch handling properties
+
+- (bool)canCancelContentTouches {
+    env.objc.borrow::<UIScrollViewHostObject>(this).can_cancel_content_touches
+}
+
+- (())setCanCancelContentTouches:(bool)value {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).can_cancel_content_touches = value;
+}
+    
 // MARK: - Scroll to top
 
 - (bool)scrollsToTop {
