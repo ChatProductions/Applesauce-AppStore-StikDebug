@@ -205,7 +205,7 @@ fn UIRectFillUsingBlendMode(
 fn UIRectFrame(env: &mut Environment, rect: CGRect) {
     let ctx = UIGraphicsGetCurrentContext(env);
     if ctx.is_null() { return; }
-    crate::frameworks::core_graphics::cg_context::CGContextStrokeRect(env, ctx, rect);
+    crate::frameworks::core_graphics::cg_context::CGContextClearRect(env, ctx, rect);
 }
 
 fn UIRectClip(env: &mut Environment, rect: CGRect) {
