@@ -7,7 +7,7 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr};
 
 struct GKLocalPlayerHostObject {
     /// `NSString*`
