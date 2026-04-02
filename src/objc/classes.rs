@@ -731,6 +731,18 @@ pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, obj: id) -> Class 
     objc_obj.isa
 }
 
+pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, obj: id) -> Class {
+    if obj.is_null() {
+        return nil;
+    }
+    
+    // В Objective-C любой объект в памяти (id) начинается с указателя isa.
+    // Приводим указатель, читаем из памяти гостя структуру objc_object 
+    // и просто возвращаем её поле isa.
+    let objc_obj: objc_object = env.mem.read(obj.cast());
+    objc_obj.isa
+}
+
 pub fn class_getSuperclass(env: &mut crate::Environment, cls: Class) -> Class {
     // По спецификации Objective-C, если передать nil, возвращается nil.
     if cls.is_null() {
