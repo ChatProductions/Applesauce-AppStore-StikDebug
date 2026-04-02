@@ -162,7 +162,7 @@ fn UIGraphicsBeginPDFContextToData(
     log!("UIGraphicsBeginPDFContextToData: stubbed");
 }
 
-fn UIGraphicsEndPDFContext(env: &mut Environment) {
+fn UIGraphicsEndPDFContext(_env: &mut Environment) {
     log!("UIGraphicsEndPDFContext: stubbed");
 }
 
@@ -237,4 +237,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(UIRectFrame(_)),
     export_c_func!(UIRectClip(_)),
 ];
+
 
