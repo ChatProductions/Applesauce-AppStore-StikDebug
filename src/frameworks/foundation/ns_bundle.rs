@@ -156,24 +156,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         None
     };
-
     let subpath_str = if subpath != nil {
         ns_string::to_rust_string(env, subpath)
     } else {
         std::borrow::Cow::Borrowed("")
     };
-
     let bundle_path: id = msg![env; this bundlePath];
     let base_path = ns_string::to_rust_string(env, bundle_path);
     let mut search_dir_str = base_path.into_owned();
-    
     if !subpath_str.is_empty() {
         search_dir_str.push('/');
         search_dir_str.push_str(&subpath_str);
     }
 
     let search_dir = crate::fs::GuestPath::new(&search_dir_str);
-
     // Шаг 1: Собираем пути во временный вектор Rust (здесь env читается)
     let mut temp_paths = Vec::new();
     if let Ok(iterator) = env.fs.enumerate(search_dir) {
@@ -182,7 +178,6 @@ pub const CLASSES: ClassExports = objc_classes! {
                 Some(extension) => path.ends_with(extension.as_ref()),
                 None => true,
             };
-
             if matches {
                 let mut full_path = search_dir_str.clone();
                 full_path.push('/');
@@ -207,7 +202,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)pathForResource:(id)name // NSString*
                ofType:(id)extension // NSString*
           inDirectory:(id)directory { // NSString*
-    assert!(name != nil); // TODO
+    assert!(name != nil);
+    // TODO
 
     // TODO: cache result of lookups
 
@@ -300,18 +296,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     // TODO: support arbitrary bundles, not only main one
     assert_eq!(this, env.framework_state.foundation.ns_bundle.main_bundle.unwrap());
+    
     let dict = if let Some(&table_dict) = env.framework_state.foundation.ns_bundle.localization_tables.get(&name) {
         table_dict
     } else {
         let extension = ns_string::get_static_str(env, "strings");
         let dict_url: id = msg![env; this URLForResource:name withExtension:extension];
         let dict: id = msg_class![env; NSDictionary dictionaryWithContentsOfURL:dict_url];
-        assert!(dict != nil);
+        
+        // --- БЕЗОПАСНЫЙ ВОЗВРАТ ЕСЛИ СЛОВАРЬ НЕ НАЙДЕН ---
+        if dict == nil {
+            if value == nil || value == empty_str {
+                return key;
+            }
+            return value;
+        }
+
         retain(env, name);
         retain(env, dict);
         env.framework_state.foundation.ns_bundle.localization_tables.insert(name, dict);
         dict
     };
+    
     let res: id = msg![env; dict objectForKey:key];
     if res == nil {
         if value == nil || value == empty_str {
@@ -435,7 +441,7 @@ fn path_for_resource_helper(
         if let Ok(entries) = env.fs.enumerate(parent_guest_path) {
             for entry in entries {
                 // E0658 fix: используем entry напрямую, без .as_str()
-                let entry_path = std::path::Path::new(entry); 
+                let entry_path = std::path::Path::new(entry);
                 if let Some(entry_name) = entry_path.file_name() {
                     if entry_name.to_str().unwrap_or("").to_lowercase() == target_name {
                         found_path = Some(entry.to_string());
