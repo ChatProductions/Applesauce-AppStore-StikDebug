@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `SKPaymentQueue` — StoreKit in-app purchase queue stub.
@@ -60,6 +61,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())addTransactionObserver:(id)observer {
     log!("SKPaymentQueue addTransactionObserver: stubbed (IAP not supported)");
+
     let old = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
     release(env, old);
     retain(env, observer);
@@ -68,6 +70,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())removeTransactionObserver:(id)observer {
     log!("SKPaymentQueue removeTransactionObserver: stubbed");
+
     let current = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
     if current == observer {
         release(env, current);
@@ -77,20 +80,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Payment requests
 
-- (())addPayment:(id)payment { // SKPayment*
+- (())addPayment:(id)_payment { // SKPayment*
     log!("SKPaymentQueue addPayment: stubbed — failing transaction immediately");
+
     // Notify observer that the payment failed so the app can handle it cleanly.
     let observer = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
+
     if observer == nil {
         return;
     }
+
     // Build a minimal fake SKPaymentTransaction array and call the delegate.
     // Most apps only check the transactionState, which we set to SKPaymentTransactionStateFailed (2).
     let transactions: id = msg_class![env; NSArray new];
+
     let sel = env.objc.register_host_selector(
         "paymentQueue:updatedTransactions:".to_string(),
         &mut env.mem,
     );
+
     let responds: bool = msg![env; observer respondsToSelector:sel];
     if responds {
         () = msg![env; observer paymentQueue:this updatedTransactions:transactions];
@@ -100,13 +108,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())restoreCompletedTransactions {
     log!("SKPaymentQueue restoreCompletedTransactions: stubbed — notifying no transactions");
     let observer = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
+
     if observer == nil {
         return;
     }
+
     let sel = env.objc.register_host_selector(
         "paymentQueueRestoreCompletedTransactionsFinished:".to_string(),
         &mut env.mem,
     );
+
     let responds: bool = msg![env; observer respondsToSelector:sel];
     if responds {
         () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];
@@ -201,4 +212,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
