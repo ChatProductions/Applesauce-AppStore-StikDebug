@@ -124,7 +124,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 - (id)init {
-    // Zero-length empty data — bytes stays null, length stays 0.
     this
 }
 
@@ -304,7 +303,6 @@ pub const CLASSES: ClassExports = objc_classes! {
              (location={}, length={}, data_length={})",
             loc, len, host_object.length
         );
-        // Return empty data rather than crashing.
         return msg_class![env; NSData data];
     }
     if len == 0 {
@@ -339,20 +337,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let h_ptr: ConstPtr<u8> = haystack.bytes.cast_const().cast();
     let n_ptr: ConstPtr<u8> = needle.bytes.cast_const().cast();
-    let h_slice = env.mem.bytes_at(h_ptr, h_len);
-    let n_slice = env.mem.bytes_at(n_ptr, n_len);
+    let h_slice: &[u8] = env.mem.bytes_at(h_ptr, h_len);
+    let n_slice: &[u8] = env.mem.bytes_at(n_ptr, n_len);
 
-    let search_slice = &h_slice[(search_start as usize)..(search_end as usize)];
-    for i in 0..=(search_slice.len().saturating_sub(n_len as usize)) {
-        if search_slice[i..i + (n_len as usize)] == *n_slice {
-            return NSRange { location: search_start + (i as u32), length: n_len };
+    // NSUInteger is u32; cast to usize for all slice indexing.
+    let s_start = search_start as usize;
+    let s_end   = search_end as usize;
+    let n_len_u = n_len as usize;
+
+    let search_slice = &h_slice[s_start..s_end];
+    for i in 0..=(search_slice.len().saturating_sub(n_len_u)) {
+        if search_slice[i..i + n_len_u] == *n_slice {
+            return NSRange {
+                location: search_start + i as NSUInteger,
+                length: n_len,
+            };
         }
     }
     not_found
 }
 
 // =========================================================================
-// MARK: - Equality / hashing
+// MARK: - Equality
 // =========================================================================
 
 - (bool)isEqualToData:(id)other {
@@ -368,7 +374,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     if other == nil {
         return false;
     }
-    // Check if other responds to isEqualToData: (i.e. is an NSData).
     msg![env; this isEqualToData:other]
 }
 
@@ -429,16 +434,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 - (id)description {
-    // Returns a hex-encoded string like Apple's implementation: <deadbeef ...>
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     let length = host_object.length;
     if length == 0 || host_object.bytes.is_null() {
-        let s = "<>";
-        return msg_class![env; NSString stringWithUTF8String:(env.mem.alloc_and_write_cstr(s.as_bytes()))];
+        let cstr = env.mem.alloc_and_write_cstr(b"<>");
+        return msg_class![env; NSString stringWithUTF8String:cstr];
     }
     let ptr: ConstPtr<u8> = host_object.bytes.cast_const().cast();
     let bytes = env.mem.bytes_at(ptr, length);
-    let mut hex = String::with_capacity((2 + length * 2 + (length / 4)) as usize);
+    // NSUInteger is u32; cast to usize for String::with_capacity arithmetic.
+    let len = length as usize;
+    let mut hex = String::with_capacity(2 + len * 2 + len / 4);
     hex.push('<');
     for (i, b) in bytes.iter().enumerate() {
         if i > 0 && i % 4 == 0 {
@@ -479,7 +485,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithCapacity:(NSUInteger)capacity {
-    // Pre-allocate but leave length at 0.
     if capacity > 0 {
         let alloc = env.mem.alloc(capacity);
         let host_object = env.objc.borrow_mut::<NSDataHostObject>(this);
@@ -500,7 +505,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// copyWithZone: for NSMutableData must return a *mutable* copy.
 - (id)mutableCopyWithZone:(NSZonePtr)_zone {
     let bytes: ConstVoidPtr = msg![env; this bytes];
     let length: NSUInteger = msg![env; this length];
@@ -550,7 +554,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
     let current_length: NSUInteger = msg![env; this length];
-    msg![env; this setLength:(current_length + extra_length)]
+    let _: () = msg![env; this setLength:(current_length + extra_length)];
 }
 
 - (())appendBytes:(ConstVoidPtr)bytes length:(NSUInteger)length {
@@ -559,7 +563,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let old_length: NSUInteger = msg![env; this length];
     let new_length = old_length + length;
-    msg![env; this setLength:new_length];
+    let _: () = msg![env; this setLength:new_length];
     let host_object = env.objc.borrow::<NSDataHostObject>(this);
     let dest: MutVoidPtr = (host_object.bytes.cast::<u8>() + old_length).cast_void();
     env.mem.memmove(dest, bytes, length);
@@ -568,7 +572,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())appendData:(id)other {
     let bytes: ConstVoidPtr = msg![env; other bytes];
     let length: NSUInteger = msg![env; other length];
-    msg![env; this appendBytes:bytes length:length]
+    let _: () = msg![env; this appendBytes:bytes length:length];
 }
 
 - (())replaceBytesInRange:(NSRange)range withBytes:(ConstVoidPtr)replacement_bytes {
@@ -594,8 +598,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())replaceBytesInRange:(NSRange)range
                withBytes:(ConstVoidPtr)replacement_bytes
                   length:(NSUInteger)replacement_length {
-    let loc       = range.location;
-    let old_len   = range.length;
+    let loc     = range.location;
+    let old_len = range.length;
     let cur_len: NSUInteger = msg![env; this length];
 
     if loc + old_len > cur_len {
@@ -608,22 +612,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let new_total = cur_len - old_len + replacement_length;
-    // Shift tail bytes to make (or close) the gap.
     if old_len != replacement_length && loc + old_len < cur_len {
         let tail_len = cur_len - (loc + old_len);
         let src: ConstVoidPtr = {
             let h = env.objc.borrow::<NSDataHostObject>(this);
             (h.bytes.cast_const().cast::<u8>() + (loc + old_len)).cast_void()
         };
-        // Resize first so the destination is valid.
-        msg![env; this setLength:new_total];
+        let _: () = msg![env; this setLength:new_total];
         let dest: MutVoidPtr = {
             let h = env.objc.borrow::<NSDataHostObject>(this);
             (h.bytes.cast::<u8>() + (loc + replacement_length)).cast_void()
         };
         env.mem.memmove(dest, src, tail_len);
     } else {
-        msg![env; this setLength:new_total];
+        let _: () = msg![env; this setLength:new_total];
     }
 
     if replacement_length > 0 {
@@ -656,8 +658,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setData:(id)data {
     let bytes: ConstVoidPtr = msg![env; data bytes];
     let length: NSUInteger = msg![env; data length];
-    msg![env; this setLength:0];
-    msg![env; this appendBytes:bytes length:length]
+    let _: () = msg![env; this setLength:0];
+    let _: () = msg![env; this appendBytes:bytes length:length];
 }
 
 @end
@@ -672,4 +674,3 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
-
