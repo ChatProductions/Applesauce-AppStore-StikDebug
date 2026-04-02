@@ -35,6 +35,22 @@ struct UINavigationBarHostObject {
 }
 impl HostObject for UINavigationBarHostObject {}
 
+// MARK: - UINavigationItem
+
+struct UINavigationItemHostObject {
+    title: id,            // NSString* — retained
+    title_view: id,       // UIView* — retained
+    prompt: id,           // NSString* — retained
+    back_button: id,      // UIBarButtonItem* — retained
+    left_button: id,      // UIBarButtonItem* — retained
+    right_button: id,     // UIBarButtonItem* — retained
+    left_items: id,       // NSArray* — retained
+    right_items: id,      // NSArray* — retained
+    hides_back_button: bool,
+    left_items_supplemented: bool,
+}
+impl HostObject for UINavigationItemHostObject {}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -182,7 +198,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setBackgroundImage:(id)image
          forBarPosition:(NSInteger)_position
              barMetrics:(NSInteger)_metrics {
-    msg![env; this setBackgroundImage:image forBarMetrics:_metrics]
+    () = msg![env; this setBackgroundImage:image forBarMetrics:_metrics];
 }
 
 // MARK: - Items stack
@@ -200,7 +216,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setItems:(id)items animated:(bool)_animated {
-    msg![env; this setItems:items]
+    () = msg![env; this setItems:items];
 }
 
 - (id)topItem {
@@ -231,7 +247,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     let items = env.objc.borrow::<UINavigationBarHostObject>(this).items;
-    msg![env; items addObject:item];
+    () = msg![env; items addObject:item];
 
     if delegate != nil {
         let sel = env.objc.register_host_selector(
@@ -263,7 +279,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    msg![env; items removeLastObject];
+    () = msg![env; items removeLastObject];
 
     if delegate != nil {
         let sel = env.objc.register_host_selector(
@@ -285,24 +301,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
-
-};
-
-// MARK: - UINavigationItem
-
-struct UINavigationItemHostObject {
-    title: id,            // NSString* — retained
-    title_view: id,       // UIView*   — retained
-    prompt: id,           // NSString* — retained
-    back_button: id,      // UIBarButtonItem* — retained
-    left_button: id,      // UIBarButtonItem* — retained
-    right_button: id,     // UIBarButtonItem* — retained
-    left_items: id,       // NSArray* — retained
-    right_items: id,      // NSArray* — retained
-    hides_back_button: bool,
-    left_items_supplemented: bool,
-}
-impl HostObject for UINavigationItemHostObject {}
 
 @implementation UINavigationItem: NSObject
 
@@ -406,7 +404,7 @@ impl HostObject for UINavigationItemHostObject {}
 }
 
 - (())setLeftBarButtonItem:(id)item animated:(bool)_animated {
-    msg![env; this setLeftBarButtonItem:item]
+    () = msg![env; this setLeftBarButtonItem:item];
 }
 
 - (id)rightBarButtonItem {
@@ -421,7 +419,7 @@ impl HostObject for UINavigationItemHostObject {}
 }
 
 - (())setRightBarButtonItem:(id)item animated:(bool)_animated {
-    msg![env; this setRightBarButtonItem:item]
+    () = msg![env; this setRightBarButtonItem:item];
 }
 
 - (id)leftBarButtonItems {
@@ -437,7 +435,7 @@ impl HostObject for UINavigationItemHostObject {}
     if items != nil {
         let count: u32 = msg![env; items count];
         let first: id = if count > 0 { msg![env; items objectAtIndex:0u32] } else { nil };
-        msg![env; this setLeftBarButtonItem:first]
+        () = msg![env; this setLeftBarButtonItem:first];
     }
 }
 
@@ -453,7 +451,7 @@ impl HostObject for UINavigationItemHostObject {}
     if items != nil {
         let count: u32 = msg![env; items count];
         let first: id = if count > 0 { msg![env; items objectAtIndex:0u32] } else { nil };
-        msg![env; this setRightBarButtonItem:first]
+        () = msg![env; this setRightBarButtonItem:first];
     }
 }
 
@@ -466,7 +464,7 @@ impl HostObject for UINavigationItemHostObject {}
 }
 
 - (())setHidesBackButton:(bool)value animated:(bool)_animated {
-    msg![env; this setHidesBackButton:value]
+    () = msg![env; this setHidesBackButton:value];
 }
 
 - (bool)leftItemsSupplementBackButton {
@@ -480,3 +478,4 @@ impl HostObject for UINavigationItemHostObject {}
 @end
 
 };
+
