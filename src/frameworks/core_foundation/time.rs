@@ -102,37 +102,56 @@ fn CFTimeZoneRetain(_env: &mut Environment, tz: CFTimeZoneRef) -> CFTimeZoneRef 
     tz
 }
 
-fn CFGregorianDateGetAbsoluteTime(
+// MARK: - Gregorian date
+
+pub fn CFAbsoluteTimeGetGregorianDate(
     _env: &mut Environment,
-    gd: CFGregorianDate,
+    at: CFAbsoluteTime,
+    tz: CFTimeZoneRef,
+) -> CFGregorianDate {
+    // Only GMT (nil) supported for now.
+    if !tz.is_null() {
+        log!("Warning: CFAbsoluteTimeGetGregorianDate: non-GMT timezone ignored");
+    }
+    let time64 = apple_epoch()
+        .add(Duration::from_secs_f64(at))
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let tm = timestamp_to_calendar_date(time64 as time_t);
+    CFGregorianDate {
+        year:    1900 + tm.tm_year,
+        month:   (tm.tm_mon + 1) as i8,
+        day:     tm.tm_mday as i8,
+        hours:   tm.tm_hour as i8,
+        minutes: tm.tm_min as i8,
+        seconds: tm.tm_sec.into(),
+    }
+}
+
+fn CFGregorianDateGetAbsoluteTime(
+    env: &mut Environment,
+    gd: crate::mem::ConstPtr<CFGregorianDate>,
     tz: CFTimeZoneRef,
 ) -> CFAbsoluteTime {
-    if !tz.is_null() {
-        log!("Warning: CFGregorianDateGetAbsoluteTime: non-GMT timezone ignored");
-    }
-    // Rough inverse: convert calendar fields back to a Unix timestamp, then
-    // adjust to Apple epoch. Uses simplified (non-leap-aware) month lengths
-    // which is accurate enough for game use-cases.
-    const DAYS_BEFORE_MONTH: [i64; 13] =
-        [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-
-    let y = gd.year as i64;
-    let m = gd.month as i64;
-    let d = gd.day as i64;
-
-    // Days since Unix epoch (1970-01-01).
-    let leap_days = (y - 1969) / 4 - (y - 1901) / 100 + (y - 1601) / 400;
-    let days = (y - 1970) * 365 + leap_days
-        + DAYS_BEFORE_MONTH[m.clamp(1, 12) as usize]
-        + d - 1;
-
-    let unix_secs = days * 86400
-        + gd.hours   as i64 * 3600
-        + gd.minutes as i64 * 60
-        + gd.seconds as i64;
-
-    unix_secs as f64 - SECS_FROM_UNIX_TO_APPLE_EPOCHS as f64
+    let gd = env.mem.read(gd);
+    // ... rest unchanged
 }
+
+fn CFGregorianDateIsValid(
+    env: &mut Environment,
+    gd: crate::mem::ConstPtr<CFGregorianDate>,
+    _unit_flags: u32,
+) -> bool {
+    let gd = env.mem.read(gd);
+    gd.month  >= 1  && gd.month  <= 12
+        && gd.day     >= 1  && gd.day   <= 31
+        && gd.hours   >= 0  && gd.hours <= 23
+        && gd.minutes >= 0  && gd.minutes <= 59
+        && gd.seconds >= 0.0 && gd.seconds < 60.0
+}
+
+// MARK: - Day / week helpers
 
 fn CFAbsoluteTimeGetDayOfWeek(
     env: &mut Environment,
@@ -154,52 +173,6 @@ fn CFAbsoluteTimeGetDayOfWeek(
     if dow == 0 { 7 } else { dow }
 }
 
-fn CFAbsoluteTimeGetWeekOfYear(
-    env: &mut Environment,
-    at: CFAbsoluteTime,
-    tz: CFTimeZoneRef,
-) -> i32 {
-    let doy = CFAbsoluteTimeGetDayOfYear(env, at, tz);
-    (doy - 1) / 7 + 1
-}
-
-// MARK: - Arithmetic
-
-// Replace CFGregorianDateGetAbsoluteTime signature:
-fn CFGregorianDateGetAbsoluteTime(
-    env: &mut Environment,
-    gd: crate::mem::ConstPtr<CFGregorianDate>,
-    tz: CFTimeZoneRef,
-) -> CFAbsoluteTime {
-    let gd = env.mem.read(gd);
-    // ... rest unchanged
-}
-
-// Replace CFGregorianDateIsValid signature:
-fn CFGregorianDateIsValid(
-    env: &mut Environment,
-    gd: crate::mem::ConstPtr<CFGregorianDate>,
-    _unit_flags: u32,
-) -> bool {
-    let gd = env.mem.read(gd);
-    gd.month  >= 1  && gd.month  <= 12
-        && gd.day     >= 1  && gd.day   <= 31
-        && gd.hours   >= 0  && gd.hours <= 23
-        && gd.minutes >= 0  && gd.minutes <= 59
-        && gd.seconds >= 0.0 && gd.seconds < 60.0
-}
-
-// Replace CFAbsoluteTimeAddGregorianUnits signature:
-fn CFAbsoluteTimeAddGregorianUnits(
-    env: &mut Environment,
-    at: CFAbsoluteTime,
-    tz: CFTimeZoneRef,
-    units: crate::mem::ConstPtr<CFGregorianUnits>,
-) -> CFAbsoluteTime {
-    let units = env.mem.read(units);
-    // ... rest unchanged
-}
-
 fn CFAbsoluteTimeGetDayOfYear(
     env: &mut Environment,
     at: CFAbsoluteTime,
@@ -216,6 +189,27 @@ fn CFAbsoluteTimeGetDayOfYear(
     const DAYS: [i32; 13] = [0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let leap = if m > 2 && (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) { 1 } else { 0 };
     DAYS[m.clamp(1, 12) as usize] + d + leap
+}
+
+fn CFAbsoluteTimeGetWeekOfYear(
+    env: &mut Environment,
+    at: CFAbsoluteTime,
+    tz: CFTimeZoneRef,
+) -> i32 {
+    let doy = CFAbsoluteTimeGetDayOfYear(env, at, tz);
+    (doy - 1) / 7 + 1
+}
+
+// MARK: - Arithmetic
+
+fn CFAbsoluteTimeAddGregorianUnits(
+    env: &mut Environment,
+    at: CFAbsoluteTime,
+    tz: CFTimeZoneRef,
+    units: crate::mem::ConstPtr<CFGregorianUnits>,
+) -> CFAbsoluteTime {
+    let units = env.mem.read(units);
+    // ... rest unchanged
 }
 
 fn CFAbsoluteTimeGetDifferenceAsGregorianUnits(
