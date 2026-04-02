@@ -126,7 +126,7 @@ pub fn CGContextClearRect(env: &mut Environment, context: CGContextRef, rect: CG
     cg_bitmap_context::fill_rect(env, context, rect, /* clear: */ true);
 }
 
-fn CGContextClipToRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
+pub fn CGContextClipToRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
     if rect.origin == CGPointZero
         && rect.size.height == CGBitmapContextGetHeight(env, context) as f32
         && rect.size.width == CGBitmapContextGetWidth(env, context) as f32
