@@ -122,6 +122,16 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
     }
 }
 
+fn freopen(env: &mut Environment, _filename: ConstPtr<u8>, _mode: ConstPtr<u8>, stream: MutPtr<FILE>) -> MutPtr<FILE> {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    log!("Warning: freopen() is stubbed and does not actually reopen the file!");
+    
+    // Возвращаем указатель на тот же поток
+    stream
+}
+
 fn fread(
     env: &mut Environment,
     mut buffer: MutVoidPtr,
@@ -573,6 +583,7 @@ pub const CONSTANTS: ConstantExports = &[
 pub const FUNCTIONS: FunctionExports = &[
     // Standard C functions
     export_c_func!(fopen(_, _)),
+    export_c_func!(freopen(_, _, _)),
     export_c_func!(fread(_, _, _, _)),
     export_c_func!(fgetc(_)),
     export_c_func!(getc(_)),
