@@ -145,10 +145,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - OS version
 // =========================================================================
 
-/// Returns an NSOperatingSystemVersion struct {major, minor, patch} packed
-/// into three consecutive NSUInteger fields. We return it as three separate
-/// values via an opaque struct id — most callers use
-/// `isOperatingSystemAtLeastVersion:` instead.
+// Returns an NSOperatingSystemVersion struct {major, minor, patch} packed
+// into three consecutive NSUInteger fields. We return it as three separate
+// values via an opaque struct id — most callers use
+// `isOperatingSystemAtLeastVersion:` instead.
 - (id)operatingSystemVersion {
     // Not easily representable without a struct return; log and return nil.
     assert_process_info_singleton(env, this);
@@ -169,10 +169,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; NSString stringWithUTF8String:cstr]
 }
 
-/// NSOperatingSystemVersion is {major: NSInteger, minor: NSInteger, patch: NSInteger}.
-/// We receive it as three stacked guest integers; Objective-C ABI passes structs
-/// by value on the stack after the implicit (self, _cmd) arguments, so we model
-/// it as three separate NSUInteger parameters here.
+// NSOperatingSystemVersion is {major: NSInteger, minor: NSInteger, patch: NSInteger}.
+// We receive it as three stacked guest integers; Objective-C ABI passes structs
+// by value on the stack after the implicit (self, _cmd) arguments, so we model
+// it as three separate NSUInteger parameters here.
 - (bool)isOperatingSystemAtLeastVersion:(u64)major
                                   minor:(u64)minor   // part of struct, named for clarity
                                   patch:(u64)patch {
@@ -187,7 +187,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Thermal state (iOS 11+)
 // =========================================================================
 
-/// NSProcessInfoThermalStateNominal = 0
+// NSProcessInfoThermalStateNominal = 0
 - (i64)thermalState {
     assert_process_info_singleton(env, this);
     0 // NSProcessInfoThermalStateNominal
@@ -206,9 +206,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Activity assertions (iOS 7+ / macOS 10.9+)
 // =========================================================================
 
-/// NSActivityOptions is a bitmask; we accept it as u64.
-/// Returns an opaque token that the caller is expected to release when done.
-/// We hand back `self` as a cheap non-nil token and ignore the hint.
+// NSActivityOptions is a bitmask; we accept it as u64.
+// Returns an opaque token that the caller is expected to release when done.
+// We hand back `self` as a cheap non-nil token and ignore the hint.
 - (id)beginActivityWithOptions:(u64)_options reason:(id)_reason {
     assert_process_info_singleton(env, this);
     log!("TODO: [NSProcessInfo beginActivityWithOptions:reason:] — returning stub token");
@@ -260,3 +260,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
