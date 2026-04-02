@@ -185,11 +185,9 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
     for i in 0..touches_count {
         let touch: id = msg![env; touches_arr objectAtIndex:i];
-        let &UITouchHostObject { mut location, .. } = env.objc.borrow(touch);
+        let &UITouchHostObject { location, .. } = env.objc.borrow(touch);
 
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
-
-        // МЫ УДАЛИЛИ БЛОК С "FIX: Clamped Y", КОТОРЫЙ ЛОМАЛ КООРДИНАТЫ!
 
         let found_window = windows.iter().rev().find_map(|&window| {
             let location_in_window: CGPoint = msg![env; window
@@ -201,22 +199,24 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             }
         });
 
-        // SUPER HACK: Если координата немного "вылезла" за экран и окно ее отвергло, мы СИЛОЙ отдаем касание главному окну
+        // SUPER HACK: Если окно отвергло касание, силой отправляем его в главное окно!
         let Some((window, location_in_window)) = found_window.or_else(|| {
             windows.last().map(|&window| {
-                log!("SUPER HACK: Forcing rejected touch at ({}, {}) into window", location.x, location.y);
+                let lx = location.x;
+                let ly = location.y;
+                log!("SUPER HACK: Forcing rejected touch at ({}, {}) into window", lx, ly);
                 let loc: CGPoint = msg![env; window convertPoint:location fromWindow:nil];
                 (window, loc)
             })
         }) else {
-            let (lx, ly) = (location.x, location.y);
+            let lx = location.x;
+            let ly = location.y;
             log!("Couldn't find ANY window for touch at ({}, {}), discarding", lx, ly);
             continue;
         };
 
         let mut view: id = msg![env; window hitTest:location_in_window withEvent:event];
         if view == nil {
-            // SUPER HACK 2: Если игра не нашла конкретную кнопку (View), отдаем клик всему окну целиком
             log!("SUPER HACK: hitTest failed, forcing touch directly into the window");
             view = window;
         } else {
@@ -368,3 +368,4 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
     release(env, pool);
 }
+
