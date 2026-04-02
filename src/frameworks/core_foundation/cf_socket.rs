@@ -238,7 +238,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFSocketCreate(_, _, _, _, _, _, _)),
     export_c_func!(CFSocketCreateWithNative(_, _, _, _, _)),
     export_c_func!(CFSocketCreateWithSocketSignature(_, _, _, _, _)),
-    export_c_func!(CFSocketCreateConnectedToSocketSignature(_, _, _, _, _, _, _)),
+    export_c_func!(CFSocketCreateConnectedToSocketSignature(_, _, _, _, _, _)),
     export_c_func!(CFSocketGetNative(_)),
     export_c_func!(CFSocketEnableCallBacks(_, _)),
     export_c_func!(CFSocketDisableCallBacks(_, _)),
