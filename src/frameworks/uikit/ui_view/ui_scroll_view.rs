@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `UIScrollView`.
 
 pub mod ui_text_view;
@@ -106,6 +108,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setContentOffset:(CGPoint)offset {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).content_offset = offset;
+
     let mut bounds: CGRect = msg![env; this bounds];
     bounds.origin = offset;
     () = msg![env; this setBounds:bounds];
@@ -126,6 +129,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // UIEdgeInsets passed as four floats (top, left, bottom, right) on the stack.
 // We store them individually to avoid needing a SafeRead impl here.
+
 - (CGFloat)contentInsetTop {
     env.objc.borrow::<UIScrollViewHostObject>(this).content_inset.top
 }
@@ -322,6 +326,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     new_offset.y = new_offset.y
         .min(content_size.height - bounds.size.height)
         .max(0.0);
+
     new_offset.x = new_offset.x
         .min(content_size.width - bounds.size.width)
         .max(0.0);
@@ -337,6 +342,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 "scrollViewDidScroll:".to_string(),
                 &mut env.mem,
             );
+
             let responds: bool = msg![env; delegate respondsToSelector:sel];
             if responds {
                 () = msg![env; delegate scrollViewDidScroll:this];
@@ -352,6 +358,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             "scrollViewDidEndDecelerating:".to_string(),
             &mut env.mem,
         );
+
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             () = msg![env; delegate scrollViewDidEndDecelerating:this];
@@ -366,6 +373,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             "scrollViewDidEndScrollingAnimation:".to_string(),
             &mut env.mem,
         );
+
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             () = msg![env; delegate scrollViewDidEndScrollingAnimation:this];
@@ -376,3 +384,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
