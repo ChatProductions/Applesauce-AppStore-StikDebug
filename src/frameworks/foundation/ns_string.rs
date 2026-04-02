@@ -17,7 +17,6 @@ use super::{
 };
 use crate::abi::VaList;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string;
 use crate::frameworks::uikit::ui_font::{
     self, UILineBreakMode, UILineBreakModeWordWrap, UITextAlignment, UITextAlignmentLeft,
 };
@@ -1596,8 +1595,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)stringByReplacingCharactersInRange:(NSRange)range
                               withString:(id)replacement { // NSString*
-    let string = ns_string::to_rust_string(env, this);
-    let repl   = ns_string::to_rust_string(env, replacement);
+    let string = to_rust_string(env, this);
+    let repl   = to_rust_string(env, replacement);
 
     // Convert NSRange (character index) to a Rust byte range safely.
     // NSString uses UTF-16 code units; our internal strings are UTF-8,
@@ -1608,18 +1607,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         char_indices
             .nth(range.location as usize - 1)
-            .map(|(i, c)| i + c.len_utf8())
+            .map(|(i, c): (usize, char)| i + c.len_utf8())
             .unwrap_or(string.len())
     };
     // Advance past `range.length` more chars from start position.
-    let mut byte_pos = start_byte;
     let mut remaining = string[start_byte..].char_indices();
     let end_byte = if range.length == 0 {
         start_byte
     } else {
         remaining
             .nth(range.length as usize - 1)
-            .map(|(i, c): (_, _)| start_byte + i + c.len_utf8())
+            .map(|(i, c): (usize, char)| start_byte + i + c.len_utf8())
             .unwrap_or(string.len())
     };
 
@@ -1630,7 +1628,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     result.push_str(&repl);
     result.push_str(&string[end_byte..]);
 
-    let ns = ns_string::from_rust_string(env, result);
+    let ns = from_rust_string(env, result);
     autorelease(env, ns)
 }
 
@@ -2181,4 +2179,5 @@ fn string_by_replacing_occurrences_inner(
     *env.objc.borrow_mut(result_ns_string) = StringHostObject::Utf16(result);
     autorelease(env, result_ns_string)
 }
+
 
