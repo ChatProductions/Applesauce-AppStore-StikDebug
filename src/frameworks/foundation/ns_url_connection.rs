@@ -5,6 +5,7 @@
  */
 //! `NSURLConnection`.
 
+use crate::mem::MutPtr;
 use crate::objc::{autorelease, id, msg, nil, objc_classes, release, ClassExports};
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -12,6 +13,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 (env, this, _cmd);
 
 @implementation NSURLConnection: NSObject
+
++ (id)sendSynchronousRequest:(id)request
+           returningResponse:(MutPtr<id>)response
+                       error:(MutPtr<id>)error {
+    log!("TODO: [NSURLConnection sendSynchronousRequest:returningResponse:error:] stubbed");
+    
+    // Если игра передала указатель для ответа, записываем туда nil
+    if !response.is_null() {
+        env.mem.write(response, nil);
+    }
+    
+    // Если игра передала указатель для ошибки, тоже записываем nil
+    if !error.is_null() {
+        env.mem.write(error, nil);
+    }
+    
+    // Возвращаем nil (пустой NSData), так как ничего не скачалось
+    nil
+}
 
 + (id)connectionWithRequest:(id)request // NSURLRequest *
                    delegate:(id)delegate {
