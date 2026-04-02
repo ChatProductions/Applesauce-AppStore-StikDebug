@@ -40,6 +40,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     class_exports: &[
         cf_run_loop_timer::CLASSES, // Special internal classes.
         cf_host::CLASSES,
+        cf_uuid::CLASSES,
     ],
     constant_exports: &[
         cf_allocator::CONSTANTS,
