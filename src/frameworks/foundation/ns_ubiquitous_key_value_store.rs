@@ -19,7 +19,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSUbiquitousKeyValueStore: NSObject
 
 + (id)defaultStore {
-    // Паттерн синглтона по аналогии с NSFileManager
+    // Паттерн синглтона, как в NSFileManager
     if let Some(existing) = env.framework_state.foundation.ns_ubiquitous_key_value_store.default_store {
         existing
     } else {
@@ -30,14 +30,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)synchronize {
-    // Перенаправляем синхронизацию в локальный NSUserDefaults
+    // Используем локальное хранилище вместо iCloud
     let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
     msg![env; defaults synchronize]
-}
-
-- (id)dictionaryRepresentation {
-    let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
-    msg![env; defaults dictionaryRepresentation]
 }
 
 - (id)objectForKey:(id)key {
@@ -50,27 +45,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; defaults setObject:obj forKey:key]
 }
 
-- (bool)boolForKey:(id)key {
-    let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
-    msg![env; defaults boolForKey:key]
-}
-
-- (())setBool:(bool)value forKey:(id)key {
-    let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
-    msg![env; defaults setBool:value forKey:key]
-}
-
-- (id)stringForKey:(id)key {
-    let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
-    msg![env; defaults stringForKey:key]
-}
-
-- (())setString:(id)value forKey:(id)key {
-    let defaults: id = msg_class![env; NSUserDefaults standardUserDefaults];
-    msg![env; defaults setObject:value forKey:key]
-}
-
-// Cut the Rope и другие игры часто используют 64-битные числа для очков
 - (i64)longLongForKey:(id)key {
     let obj: id = msg![env; this objectForKey:key];
     if obj != crate::objc::nil {
