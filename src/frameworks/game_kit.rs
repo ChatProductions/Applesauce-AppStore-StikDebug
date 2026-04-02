@@ -18,7 +18,7 @@ mod gk_score;
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/GameKit.framework/GameKit",
     aliases: &[],
-    class_exports: &[ad_banner_view:CLASSES, gk_leaderboard_view_controller::CLASSES, gk_local_player::CLASSES, gk_score::CLASSES],
+    class_exports: &[ad_banner_view::CLASSES, gk_leaderboard_view_controller::CLASSES, gk_local_player::CLASSES, gk_score::CLASSES],
     constant_exports: &[gk_local_player::CONSTANTS],
     function_exports: &[],
 };
