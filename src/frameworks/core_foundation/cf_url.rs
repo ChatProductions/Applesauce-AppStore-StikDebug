@@ -20,7 +20,7 @@ use crate::frameworks::foundation::ns_string::{
 };
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, MutPtr, Ptr};
-use crate::objc::{id, msg, msg_class, release};
+use crate::objc::{id, msg, msg_class, release, retain};
 use crate::Environment;
 
 pub type CFURLRef = super::CFTypeRef;
@@ -182,6 +182,22 @@ fn CFURLHasDirectoryPath(env: &mut Environment, url: CFURLRef) -> bool {
         || msg![env; last isEqual:(get_static_str(env, ".."))]
 }
 
+fn CFURLCreateStringByAddingPercentEscapes(
+    env: &mut Environment,
+    _allocator: CFAllocatorRef,
+    original_string: CFStringRef,
+    _characters_to_leave_unescaped: CFStringRef,
+    _legal_url_characters_to_be_escaped: CFStringRef,
+    _encoding: u32,
+) -> CFStringRef {
+    log_once!("Stubbed CFURLCreateStringByAddingPercentEscapes");
+    
+    // As a stub, we just return the original string.
+    // Retain it because "Create" or "Copy" functions in CoreFoundation 
+    // transfer ownership to the caller.
+    retain(env, original_string)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetFileSystemRepresentation(_, _, _, _)),
     export_c_func!(CFURLCreateFromFileSystemRepresentation(_, _, _, _)),
@@ -192,4 +208,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCreateCopyAppendingPathComponent(_, _, _, _)),
     export_c_func!(CFURLCreateCopyDeletingLastPathComponent(_, _)),
     export_c_func!(CFURLHasDirectoryPath(_)),
+    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
 ];
