@@ -9,6 +9,7 @@ use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
+use crate::frameworks::core_graphics::{CGRect, CGPoint, CGSize};
 use crate::frameworks::foundation::ns_string;
 use crate::mem::{ConstPtr, SafeRead};
 use crate::objc::{autorelease, nil, objc_classes, ClassExports, HostObject};
@@ -174,8 +175,21 @@ fn CFUUIDCreateFromString(
 fn CFUUIDCreateFromUUIDBytes(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    bytes: CFUUIDBytes,
+    w0: u32, w1: u32, w2: u32, w3: u32,
 ) -> CFUUIDRef {
+    let mut raw = [0u8; 16];
+    raw[0..4].copy_from_slice(&w0.to_le_bytes());
+    raw[4..8].copy_from_slice(&w1.to_le_bytes());
+    raw[8..12].copy_from_slice(&w2.to_le_bytes());
+    raw[12..16].copy_from_slice(&w3.to_le_bytes());
+
+    let bytes = CFUUIDBytes {
+        byte0: raw[0], byte1: raw[1], byte2: raw[2], byte3: raw[3],
+        byte4: raw[4], byte5: raw[5], byte6: raw[6], byte7: raw[7],
+        byte8: raw[8], byte9: raw[9], byte10: raw[10], byte11: raw[11],
+        byte12: raw[12], byte13: raw[13], byte14: raw[14], byte15: raw[15],
+    };
+    
     alloc_uuid(env, bytes)
 }
 
@@ -195,16 +209,30 @@ fn CFUUIDCreateString(
     autorelease(env, ns)
 }
 
-fn CFUUIDGetUUIDBytes(env: &mut Environment, uuid: CFUUIDRef) -> CFUUIDBytes {
-    if uuid.is_null() {
-        return CFUUIDBytes {
+// 2. Return a CGRect (16 bytes) which already implements GuestRet
+fn CFUUIDGetUUIDBytes(env: &mut Environment, uuid: CFUUIDRef) -> CGRect {
+    let b = if uuid.is_null() {
+        CFUUIDBytes {
             byte0: 0, byte1: 0, byte2: 0, byte3: 0,
             byte4: 0, byte5: 0, byte6: 0, byte7: 0,
             byte8: 0, byte9: 0, byte10: 0, byte11: 0,
             byte12: 0, byte13: 0, byte14: 0, byte15: 0,
-        };
+        }
+    } else {
+        env.objc.borrow::<CFUUIDHostObject>(uuid).bytes
+    };
+
+    // Pack the 16 bytes into four 32-bit words
+    let w0 = u32::from_le_bytes([b.byte0, b.byte1, b.byte2, b.byte3]);
+    let w1 = u32::from_le_bytes([b.byte4, b.byte5, b.byte6, b.byte7]);
+    let w2 = u32::from_le_bytes([b.byte8, b.byte9, b.byte10, b.byte11]);
+    let w3 = u32::from_le_bytes([b.byte12, b.byte13, b.byte14, b.byte15]);
+
+    // Disguise it as a CGRect to satisfy the GuestRet trait
+    CGRect {
+        origin: CGPoint { x: f32::from_bits(w0), y: f32::from_bits(w1) },
+        size: CGSize { width: f32::from_bits(w2), height: f32::from_bits(w3) }
     }
-    env.objc.borrow::<CFUUIDHostObject>(uuid).bytes
 }
 
 fn CFUUIDGetConstantUUIDWithBytes(
