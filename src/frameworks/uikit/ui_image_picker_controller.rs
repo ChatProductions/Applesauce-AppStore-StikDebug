@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `UIImagePickerController`
 
 use crate::frameworks::foundation::{NSInteger};
@@ -98,11 +100,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host = env.objc.borrow::<UIImagePickerControllerHostObject>(this);
+
     let (delegate, media_types, camera_overlay_view) =
         (host.delegate, host.media_types, host.camera_overlay_view);
+
     release(env, delegate);
     release(env, media_types);
     release(env, camera_overlay_view);
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
