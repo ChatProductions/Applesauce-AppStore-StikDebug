@@ -19,6 +19,7 @@ pub const EIO: i32 = 5;
 pub const EBADF: i32 = 9;
 pub const ECHILD: i32 = 10;
 pub const EDEADLK: i32 = 11;
+pub const ENOSYS: i32 = 12;
 pub const EACCES: i32 = 13;
 pub const EBUSY: i32 = 16;
 pub const EEXIST: i32 = 17;
