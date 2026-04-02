@@ -170,7 +170,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_array::from_vec(env, ns_codes)
 }
 
-/// Returns a list of all available ISO country codes (ISO 3166-1).
+// Returns a list of all available ISO country codes (ISO 3166-1).
 + (id)ISOCountryCodes {
     let codes = vec![
         "US", "CA", "GB", "DE", "FR", "CN", "JP", "KR", "BR", "AU", "RU", "IN"
@@ -181,7 +181,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_array::from_vec(env, ns_codes)
 }
 
-/// Returns a list of all available ISO currency codes (ISO 4217).
+// Returns a list of all available ISO currency codes (ISO 4217).
 + (id)ISOCurrencyCodes {
     let codes = vec![
         "USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY", "HKD", "NZD"
@@ -192,12 +192,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_array::from_vec(env, ns_codes)
 }
 
-/// Returns a list of common ISO currency codes (usually the same as ISOCurrencyCodes).
+// Returns a list of common ISO currency codes (usually the same as ISOCurrencyCodes).
 + (id)commonISOCurrencyCodes {
     msg_send![this, ISOCurrencyCodes]
 }
 
-/// A helper to convert a locale identifier to a canonical form.
+// A helper to convert a locale identifier to a canonical form.
 + (id)canonicalLocaleIdentifierFromString:(id)string {
     let raw = ns_string::to_rust_string(env, string);
     // Canonical format usually replaces hyphens with underscores: "en-us" -> "en_US"
@@ -206,7 +206,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_string::from_rust_string(env, canonical)
 }
 
-/// A helper to convert a language identifier to a canonical form.
+// A helper to convert a language identifier to a canonical form.
 + (id)canonicalLanguageIdentifierFromString:(id)string {
     let raw = ns_string::to_rust_string(env, string);
     // e.g., "English" -> "en" or "en-US" -> "en"
@@ -238,7 +238,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-/// Returns the identifier for the locale.
+// Returns the identifier for the locale.
 - (id)localeIdentifier {
     let &NSLocaleHostObject { language_code, country_code } = env.objc.borrow(this);
     if country_code == nil {
@@ -251,13 +251,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_string::from_rust_string(env, format!("{}_{}", lang, country))
 }
 
-/// Returns the language code of the locale.
+// Returns the language code of the locale.
 - (id)languageCode {
     let &NSLocaleHostObject { language_code, .. } = env.objc.borrow(this);
     language_code
 }
 
-/// Returns the country code of the locale.
+// Returns the country code of the locale.
 - (id)countryCode {
     let &NSLocaleHostObject { country_code, .. } = env.objc.borrow(this);
     country_code
