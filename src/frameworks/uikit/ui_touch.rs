@@ -189,21 +189,9 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
 
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
 
-        for (idx, &w_id) in windows.iter().enumerate() {
-            let f: CGRect = msg![env; w_id frame];
-            let cur_y = location.y;
-            let win_h = f.size.height;
+        // МЫ УДАЛИЛИ БЛОК С "FIX: Clamped Y", КОТОРЫЙ ЛОМАЛ КООРДИНАТЫ!
 
-            log_dbg!("Window {} frame: {:?}. Touch at: {:?}", idx, f, location);
-
-            if cur_y >= win_h {
-                location.y = win_h - 1.0;
-                let new_y = location.y;
-                log!("FIX: Clamped Y to {} for window {}", new_y, idx);
-            }
-        }
-
-        let Some((window, location_in_window)) = windows.into_iter().rev().find_map(|window| {
+        let found_window = windows.iter().rev().find_map(|&window| {
             let location_in_window: CGPoint = msg![env; window
                 convertPoint:location fromWindow:nil];
             if msg![env; window pointInside:location_in_window withEvent:event] {
@@ -211,15 +199,26 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             } else {
                 None
             }
+        });
+
+        // SUPER HACK: Если координата немного "вылезла" за экран и окно ее отвергло, мы СИЛОЙ отдаем касание главному окну
+        let Some((window, location_in_window)) = found_window.or_else(|| {
+            windows.last().map(|&window| {
+                log!("SUPER HACK: Forcing rejected touch at ({}, {}) into window", location.x, location.y);
+                let loc: CGPoint = msg![env; window convertPoint:location fromWindow:nil];
+                (window, loc)
+            })
         }) else {
             let (lx, ly) = (location.x, location.y);
-            log!("Couldn't find window for touch at ({}, {}), discarding", lx, ly);
+            log!("Couldn't find ANY window for touch at ({}, {}), discarding", lx, ly);
             continue;
         };
 
-        let view: id = msg![env; window hitTest:location_in_window withEvent:event];
+        let mut view: id = msg![env; window hitTest:location_in_window withEvent:event];
         if view == nil {
-            continue;
+            // SUPER HACK 2: Если игра не нашла конкретную кнопку (View), отдаем клик всему окну целиком
+            log!("SUPER HACK: hitTest failed, forcing touch directly into the window");
+            view = window;
         } else {
             let f: CGRect = msg![env; view frame];
             log_dbg!("Found view {:?} with frame {:?} for touch", view, f);
@@ -369,4 +368,3 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
     release(env, pool);
 }
-
