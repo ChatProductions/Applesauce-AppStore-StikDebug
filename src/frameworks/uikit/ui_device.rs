@@ -6,7 +6,7 @@
 //! `UIDevice`.
 
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
+use crate::frameworks::foundation::{ns_string, NSInteger};
 use crate::objc::{id, msg, msg_class, objc_classes, todo_objc_setter, ClassExports, TrivialHostObject};
 use crate::window::{get_battery_status, BatteryState, DeviceOrientation};
 
@@ -217,3 +217,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
