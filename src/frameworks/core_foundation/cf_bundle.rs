@@ -64,10 +64,12 @@ fn CFBundleGetBundleWithIdentifier(
     // it matches; otherwise return nil.
     let main: CFBundleRef = msg_class![env; NSBundle mainBundle];
     let main_id: id = CFBundleGetIdentifier(env, main);
+
     if main_id == nil || bundle_id == nil {
         return nil;
     }
     let equal: bool = msg![env; main_id isEqualToString:bundle_id];
+
     if equal { main } else { nil }
 }
 
@@ -91,6 +93,7 @@ fn CFBundleCopyInfoDictionaryForURL(
         return nil;
     }
     let bundle: id = msg_class![env; NSBundle bundleWithURL:url];
+
     if bundle == nil {
         return nil;
     }
@@ -128,11 +131,14 @@ fn CFBundleGetVersionNumber(env: &mut Environment, bundle: CFBundleRef) -> u32 {
     let mut result: u32 = 1 << 15;
     let major: u32 = parts[0].parse().unwrap_or(0);
     assert!(major <= 99);
+
     result |= (major / 10) << 28;
     result |= (major % 10) << 24;
+
     if parts.len() >= 2 {
         let minor: u32 = parts[1].parse().unwrap_or(0);
         assert!(minor <= 9);
+
         result |= minor << 20;
     }
     if parts.len() == 3 {
@@ -220,6 +226,7 @@ fn CFBundleCopyResourceURLInDirectory(
         return nil;
     }
     let bundle: id = msg_class![env; NSBundle bundleWithURL:bundle_url];
+
     if bundle == nil {
         return nil;
     }
@@ -248,10 +255,12 @@ pub fn CFBundleCopyBundleLocalizations(env: &mut Environment, bundle: CFBundleRe
         .iter()
         .map(|value| value.as_string().unwrap().to_string())
         .collect::<Vec<String>>();
+
     let guest_bundle_localizations = bundle_localizations
         .iter()
         .map(|loc| ns_string::from_rust_string(env, loc.to_owned()))
         .collect::<Vec<id>>();
+
     let loc_array = ns_array::from_vec(env, guest_bundle_localizations);
     log_dbg!(
         "CFBundleCopyBundleLocalizations({:?}) => {:?} ({})",
@@ -259,6 +268,7 @@ pub fn CFBundleCopyBundleLocalizations(env: &mut Environment, bundle: CFBundleRe
         loc_array,
         bundle_localizations.join(", ")
     );
+
     loc_array
 }
 
@@ -272,6 +282,7 @@ pub fn CFBundleCopyPreferredLocalizationsFromArray(
 
     let loc_count: NSUInteger = msg![env; loc_array count];
     let pref_loc_count: NSUInteger = msg![env; preferred_languages count];
+
     for loc_index in 0..loc_count {
         let loc: id = msg![env; loc_array objectAtIndex:loc_index];
         for pref_loc_index in 0..pref_loc_count {
@@ -297,11 +308,13 @@ pub fn CFBundleCopyPreferredLocalizationsFromArray(
     };
 
     let result = ns_array::from_vec(env, result);
+
     log_dbg!(
         "CFBundleCopyPreferredLocalizationsFromArray({:?}) => {:?}",
         loc_array,
         result
     );
+
     result
 }
 
@@ -318,7 +331,7 @@ fn CFBundleCopyLocalizedString(
 
 // MARK: - Load state
 
-fn CFBundleIsExecutableLoaded(env: &mut Environment, bundle: CFBundleRef) -> bool {
+fn CFBundleIsExecutableLoaded(_env: &mut Environment, bundle: CFBundleRef) -> bool {
     // In touchHLE the guest executable is always considered loaded.
     let _ = bundle;
     true
@@ -335,12 +348,12 @@ fn CFBundlePreflightExecutable(
     bundle == main
 }
 
-fn CFBundleLoadExecutable(env: &mut Environment, bundle: CFBundleRef) -> bool {
+fn CFBundleLoadExecutable(_env: &mut Environment, bundle: CFBundleRef) -> bool {
     log!("TODO: CFBundleLoadExecutable({:?}) — returning false", bundle);
     false
 }
 
-fn CFBundleUnloadExecutable(env: &mut Environment, bundle: CFBundleRef) {
+fn CFBundleUnloadExecutable(_env: &mut Environment, bundle: CFBundleRef) {
     log!("TODO: CFBundleUnloadExecutable({:?}) — ignored", bundle);
 }
 
@@ -352,11 +365,13 @@ fn CFBundleGetFunctionPointerForName(
     function_name: CFStringRef,
 ) -> CFTypeRef /* void* */ {
     let name = ns_string::to_rust_string(env, function_name);
+
     log!(
         "TODO: CFBundleGetFunctionPointerForName({:?}, {:?}) — returning NULL",
         bundle,
         name
     );
+
     nil
 }
 
@@ -393,3 +408,4 @@ pub const FUNCTIONS: FunctionExports = &[
     // Symbol lookup
     export_c_func!(CFBundleGetFunctionPointerForName(_, _)),
 ];
+
