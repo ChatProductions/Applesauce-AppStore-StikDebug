@@ -5,10 +5,10 @@
  */
 //! `CFSocket`
 
-use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
+use super::cf_allocator::{CFAllocatorRef};
 use super::{CFRelease, CFRetain, CFTypeRef};
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstVoidPtr, MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -74,7 +74,7 @@ pub fn CFSocketRelease(env: &mut Environment, s: CFSocketRef) {
 // MARK: - Constructors
 
 fn CFSocketCreate(
-    env: &mut Environment,
+    _env: &mut Environment,
     _allocator: CFAllocatorRef,
     protocol_family: i32,
     socket_type: i32,
@@ -253,3 +253,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFSocketIsValid(_)),
     export_c_func!(CFSocketInvalidate(_)),
 ];
+
