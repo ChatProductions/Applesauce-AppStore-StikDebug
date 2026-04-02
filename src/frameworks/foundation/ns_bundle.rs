@@ -149,6 +149,58 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, exec_path)
 }
 
+- (id)pathsForResourcesOfType:(id)ext // NSString*
+                  inDirectory:(id)subpath { // NSString*
+    let mut res_paths = Vec::new();
+
+    let ext_str = if ext != nil {
+        Some(ns_string::to_rust_string(env, ext))
+    } else {
+        None
+    };
+
+    let subpath_str = if subpath != nil {
+        ns_string::to_rust_string(env, subpath)
+    } else {
+        std::borrow::Cow::Borrowed("")
+    };
+
+    let bundle_path: id = msg![env; this bundlePath];
+    let base_path = ns_string::to_rust_string(env, bundle_path);
+    let mut search_dir_str = base_path.into_owned();
+    
+    if !subpath_str.is_empty() {
+        search_dir_str.push('/');
+        search_dir_str.push_str(&subpath_str);
+    }
+
+    let search_dir = crate::fs::GuestPath::new(&search_dir_str);
+
+    if let Ok(iterator) = env.fs.enumerate(search_dir) {
+        for path in iterator {
+            let matches = match &ext_str {
+                Some(extension) => path.ends_with(extension.as_ref()),
+                None => true,
+            };
+
+            if matches {
+                let mut full_path = search_dir_str.clone();
+                full_path.push('/');
+                full_path.push_str(path);
+                res_paths.push(ns_string::from_rust_string(
+                    env,
+                    full_path,
+                ));
+            }
+        }
+    } else {
+        log!("Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?}", search_dir);
+    }
+
+    let array: id = crate::frameworks::foundation::ns_array::from_vec(env, res_paths);
+    autorelease(env, array)
+}
+
 - (id)pathForResource:(id)name // NSString*
                ofType:(id)extension // NSString*
           inDirectory:(id)directory { // NSString*
@@ -398,4 +450,3 @@ fn path_for_resource_helper(
 
     nil
 }
-
