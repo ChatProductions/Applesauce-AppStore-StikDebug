@@ -18,8 +18,8 @@ struct UITabBarHostObject {
     /// Currently selected `UITabBarItem*` (weak — owned by `items`)
     selected_item: id,
     delegate: id,
-    bar_tint_color: id,   // UIColor*
-    tint_color: id,       // UIColor*
+    bar_tint_color: id,  // UIColor*
+    tint_color: id,      // UIColor*
     translucent: bool,
 }
 impl HostObject for UITabBarHostObject {}
@@ -91,7 +91,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setItems:(id)items animated:(bool)_animated {
-    msg![env; this setItems:items]
+    let _: () = msg![env; this setItems:items];
 }
 
 // MARK: Selection
@@ -124,7 +124,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UITabBarHostObject>(this).delegate;
     if delegate != nil {
-        msg![env; delegate tabBar:this didSelectItem:item]
+        let _: () = msg![env; delegate tabBar:this didSelectItem:item];
     }
 }
 
@@ -202,7 +202,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UITabBar setSelectionIndicatorImage:] — ignored");
 }
 
-// MARK: Custom items editing (UITabBarController uses these)
+// MARK: Custom items editing
 
 - (())beginCustomizingItems:(id)_items {
     log!("TODO: [UITabBar beginCustomizingItems:] — ignored");
@@ -278,29 +278,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     while i < count {
         let vc: id = msg![env; view_controllers objectAtIndex:i];
         let item: id = msg![env; vc tabBarItem];
-        msg![env; items addObject:item];
+        let _: () = msg![env; items addObject:item];
         i += 1;
     }
     let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
-    msg![env; tab_bar setItems:items];
+    let _: () = msg![env; tab_bar setItems:items];
     release(env, items);
 
     // Reset / clamp selected index.
     let idx = env.objc.borrow::<UITabBarControllerHostObject>(this).selected_index;
     if count == 0 {
         env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = 0;
-        msg![env; tab_bar setSelectedItem:nil];
+        let _: () = msg![env; tab_bar setSelectedItem:nil];
     } else {
         let clamped = if idx >= count { 0 } else { idx };
         env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = clamped;
         let vc: id = msg![env; view_controllers objectAtIndex:clamped];
         let item: id = msg![env; vc tabBarItem];
-        msg![env; tab_bar setSelectedItem:item];
+        let _: () = msg![env; tab_bar setSelectedItem:item];
     }
 }
 
 - (())setViewControllers:(id)view_controllers animated:(bool)_animated {
-    msg![env; this setViewControllers:view_controllers]
+    let _: () = msg![env; this setViewControllers:view_controllers];
 }
 
 // MARK: - Selected index / controller
@@ -321,16 +321,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = index;
 
-    // Keep tab bar in sync.
+    // Keep tab bar in sync — write directly to avoid double-firing delegate.
     let vc: id = msg![env; vcs objectAtIndex:index];
     let item: id = msg![env; vc tabBarItem];
     let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
-    // Set directly to avoid re-triggering delegate via UITabBar.
     env.objc.borrow_mut::<UITabBarHostObject>(tab_bar).selected_item = item;
 
     let delegate = env.objc.borrow::<UITabBarControllerHostObject>(this).delegate;
     if delegate != nil {
-        msg![env; delegate tabBarController:this didSelectViewController:vc]
+        let _: () = msg![env; delegate tabBarController:this didSelectViewController:vc];
     }
 }
 
@@ -358,7 +357,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         i += 1;
     }
     if let Some(index) = found_index {
-        msg![env; this setSelectedIndex:index]
+        let _: () = msg![env; this setSelectedIndex:index];
     } else {
         log!("Warning: [UITabBarController setSelectedViewController:] view controller not found in list");
     }
@@ -377,7 +376,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).delegate = delegate;
 }
 
-// MARK: - Tab bar accessor (now returns a real object)
+// MARK: - Tab bar accessor
 
 - (id)tabBar {
     env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar
@@ -393,27 +392,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())viewDidLoad {
     let vc: id = msg![env; this selectedViewController];
-    if vc != nil { msg![env; vc viewDidLoad] }
+    if vc != nil {
+        let _: () = msg![env; vc viewDidLoad];
+    }
 }
 
 - (())viewWillAppear:(bool)animated {
     let vc: id = msg![env; this selectedViewController];
-    if vc != nil { msg![env; vc viewWillAppear:animated] }
+    if vc != nil {
+        let _: () = msg![env; vc viewWillAppear:animated];
+    }
 }
 
 - (())viewDidAppear:(bool)animated {
     let vc: id = msg![env; this selectedViewController];
-    if vc != nil { msg![env; vc viewDidAppear:animated] }
+    if vc != nil {
+        let _: () = msg![env; vc viewDidAppear:animated];
+    }
 }
 
 - (())viewWillDisappear:(bool)animated {
     let vc: id = msg![env; this selectedViewController];
-    if vc != nil { msg![env; vc viewWillDisappear:animated] }
+    if vc != nil {
+        let _: () = msg![env; vc viewWillDisappear:animated];
+    }
 }
 
 - (())viewDidDisappear:(bool)animated {
     let vc: id = msg![env; this selectedViewController];
-    if vc != nil { msg![env; vc viewDidDisappear:animated] }
+    if vc != nil {
+        let _: () = msg![env; vc viewDidDisappear:animated];
+    }
 }
 
 @end
