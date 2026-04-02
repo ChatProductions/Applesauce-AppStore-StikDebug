@@ -326,10 +326,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Identifier
 
+// Pattern to fix all three occurrences —
+// copy the ids out first, then drop the borrow, then use env freely.
+
+// For localeIdentifier (line ~330):
 - (id)localeIdentifier {
     let host = env.objc.borrow::<NSLocaleHostObject>(this);
-    let lang    = ns_string::to_rust_string(env, host.language_code).into_owned();
-    let country = ns_string::to_rust_string(env, host.country_code).into_owned();
+    let (language_code, country_code) = (host.language_code, host.country_code);
+    drop(host);
+    let lang    = ns_string::to_rust_string(env, language_code).into_owned();
+    let country = ns_string::to_rust_string(env, country_code).into_owned();
     let id_str  = locale_identifier(&lang, &country);
     let ns = ns_string::from_rust_string(env, id_str);
     autorelease(env, ns)
@@ -347,13 +353,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     match key_str.as_str() {
         NSLocaleCountryCode | kCFLocaleCountryCode => host.country_code,
         NSLocaleLanguageCode | kCFLocaleLanguageCode => host.language_code,
+        // For objectForKey: NSLocaleIdentifier branch (line ~346-353):
         NSLocaleIdentifier | kCFLocaleIdentifier => {
-            let lang    = ns_string::to_rust_string(env, host.language_code).into_owned();
-            let country = ns_string::to_rust_string(env, host.country_code).into_owned();
-            drop(host);
-            let id_str = locale_identifier(&lang, &country);
-            let ns = ns_string::from_rust_string(env, id_str);
-            autorelease(env, ns)
+        let host = env.objc.borrow::<NSLocaleHostObject>(this);
+        let (language_code, country_code) = (host.language_code, host.country_code);
+        drop(host);
+        let lang    = ns_string::to_rust_string(env, language_code).into_owned();
+        let country = ns_string::to_rust_string(env, country_code).into_owned();
+        let id_str  = locale_identifier(&lang, &country);
+        let ns = ns_string::from_rust_string(env, id_str);
+        autorelease(env, ns)
         }
         NSLocaleDecimalSeparator  => {
             drop(host);
