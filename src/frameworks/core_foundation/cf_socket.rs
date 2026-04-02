@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `CFSocket`
 
 use super::cf_allocator::{CFAllocatorRef};
@@ -14,6 +16,7 @@ use crate::Environment;
 
 pub type CFSocketRef       = CFTypeRef;
 pub type CFSocketNativeHandle = i32;
+
 pub type CFSocketCallBackType = u32;
 pub type CFSocketError        = i32;
 
