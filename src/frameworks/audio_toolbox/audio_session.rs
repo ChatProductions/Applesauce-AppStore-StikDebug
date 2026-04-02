@@ -127,12 +127,12 @@ fn AudioSessionGetProperty(
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioInputAvailable => {
-            let value: u32 = 1; // 1 = audio input is available
+            // ИЗМЕНЕНО: Возвращаем 0, чтобы игра думала, что на устройстве нет микрофона.
+            // Это предотвратит попытки игры инициализировать запись и падать.
+            let value: u32 = 0; 
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioRoute => {
-            // Игра ждет строку (CFStringRef), например "Speaker".
-            // Возврат 0 (nil) безопасен и указывает на стандартный маршрут.
             let value: u32 = 0;
             env.mem.write(out_data.cast(), value);
         }
