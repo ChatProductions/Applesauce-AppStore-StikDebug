@@ -19,11 +19,7 @@ const ADAdTypeMediumRectangle: ADAdType = 1;
 
 type ADBannerContentSizeIdentifier = id; // NSString*
 
-pub const CLASSES: ClassExports = objc_classes! {
-
-(env, this, _cmd);
-
-// MARK: - ADBannerView
+// MARK: - Host Objects (Moved OUTSIDE the macro)
 
 struct ADBannerViewHostObject {
     delegate: id,
@@ -40,6 +36,14 @@ struct ADInterstitialAdHostObject {
     loaded: bool,
 }
 impl crate::objc::HostObject for ADInterstitialAdHostObject {}
+
+// MARK: - Classes
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+// MARK: - ADBannerView
 
 @implementation ADBannerView: UIView
 
