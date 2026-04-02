@@ -8,7 +8,7 @@
 use crate::frameworks::foundation::{NSInteger, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr, TrivialHostObject,
+    NSZonePtr,
 };
 
 struct SKPaymentQueueHostObject {
@@ -201,3 +201,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
