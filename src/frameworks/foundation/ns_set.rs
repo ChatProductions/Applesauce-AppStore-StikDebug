@@ -110,6 +110,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; _touchHLE_NSMutableSet allocWithZone:zone]
 }
 
++ (id)setWithCapacity:(NSUInteger)numItems {
+    assert!(this == env.objc.get_known_class("NSMutableSet", &mut env.mem));
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithCapacity:numItems];
+    autorelease(env, new)
+}
+
 + (id)setWithObjects:(id)first_obj, ...args {
     assert!(this == env.objc.get_known_class("NSMutableSet", &mut env.mem));
     let new: id = msg![env; this alloc];
@@ -209,6 +216,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         dict: Default::default(),
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)initWithCapacity:(NSUInteger)_numItems {
+    // We ignore the requested capacity as Rust's internal data structures handle resizing automatically.
+    env.objc.borrow_mut::<SetHostObject>(this).dict = Default::default();
+    this
 }
 
 - (id)initWithObject:(id)object {
