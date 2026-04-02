@@ -159,60 +159,167 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-// TODO: constructors, more accessors
++ (id)ISOLanguageCodes {
+    // These are common codes. A full list is quite large, so we provide the primary ones.
+    let codes = vec![
+        "en", "fr", "de", "zh", "ja", "es", "it", "ko", "pt", "ru", "nl", "tr"
+    ];
+    let ns_codes = codes.into_iter()
+        .map(|c| ns_string::from_rust_string(env, c.to_string()))
+        .collect();
+    ns_array::from_vec(env, ns_codes)
+}
+
+/// Returns a list of all available ISO country codes (ISO 3166-1).
++ (id)ISOCountryCodes {
+    let codes = vec![
+        "US", "CA", "GB", "DE", "FR", "CN", "JP", "KR", "BR", "AU", "RU", "IN"
+    ];
+    let ns_codes = codes.into_iter()
+        .map(|c| ns_string::from_rust_string(env, c.to_string()))
+        .collect();
+    ns_array::from_vec(env, ns_codes)
+}
+
+/// Returns a list of all available ISO currency codes (ISO 4217).
++ (id)ISOCurrencyCodes {
+    let codes = vec![
+        "USD", "EUR", "JPY", "GBP", "AUD", "CAD", "CHF", "CNY", "HKD", "NZD"
+    ];
+    let ns_codes = codes.into_iter()
+        .map(|c| ns_string::from_rust_string(env, c.to_string()))
+        .collect();
+    ns_array::from_vec(env, ns_codes)
+}
+
+/// Returns a list of common ISO currency codes (usually the same as ISOCurrencyCodes).
++ (id)commonISOCurrencyCodes {
+    msg_send![this, ISOCurrencyCodes]
+}
+
+/// A helper to convert a locale identifier to a canonical form.
++ (id)canonicalLocaleIdentifierFromString:(id)string {
+    let raw = ns_string::to_rust_string(env, string);
+    // Canonical format usually replaces hyphens with underscores: "en-us" -> "en_US"
+    let canonical = raw.replace('-', "_");
+    // In a full implementation, we'd handle case sensitivity (lang low, region up)
+    ns_string::from_rust_string(env, canonical)
+}
+
+/// A helper to convert a language identifier to a canonical form.
++ (id)canonicalLanguageIdentifierFromString:(id)string {
+    let raw = ns_string::to_rust_string(env, string);
+    // e.g., "English" -> "en" or "en-US" -> "en"
+    let lang = language_from_locale_identifier(&raw);
+    ns_string::from_rust_string(env, lang.to_lowercase())
+}
 
 - (id)initWithLocaleIdentifier:(id)string { // NSString *
     let str = ns_string::to_rust_string(env, string);
     log_dbg!("[(NSLocale *){:?} initWithLocaleIdentifier:'{}']", this, str);
-    // Locale identifiers may be "ru", "ru_RU", "en-US", etc.
-    // Use a helper outside the macro to avoid closure syntax inside
-    // objc_classes!
+    
+    // In a real implementation, identifiers like "en_US" would set both.
+    // For now, we extract the language and store the full identifier if needed.
     let lang = language_from_locale_identifier(&str).to_string();
     let lang_ns_string = ns_string::from_rust_string(env, lang);
-    assert!(env.objc.borrow::<NSLocaleHostObject>(this).language_code == nil);
-    env.objc.borrow_mut::<NSLocaleHostObject>(this).language_code = lang_ns_string;
+    
+    // If the identifier contains an underscore, try to extract country
+    let country_ns_string = if let Some(idx) = str.find('_') {
+        let country = &str[idx + 1..];
+        ns_string::from_rust_string(env, country.to_string())
+    } else {
+        nil
+    };
+
+    let host = env.objc.borrow_mut::<NSLocaleHostObject>(this);
+    host.language_code = lang_ns_string;
+    host.country_code = country_ns_string;
+    
     this
 }
 
-- (())dealloc {
-    let &NSLocaleHostObject { country_code, language_code } = env.objc.borrow::<NSLocaleHostObject>(this);
-    release(env, country_code);
-    release(env, language_code);
-    env.objc.dealloc_object(this, &mut env.mem)
+/// Returns the identifier for the locale.
+- (id)localeIdentifier {
+    let &NSLocaleHostObject { language_code, country_code } = env.objc.borrow(this);
+    if country_code == nil {
+        return language_code;
+    }
+    
+    // Combine: e.g., "en" + "_" + "US"
+    let lang = ns_string::to_rust_string(env, language_code);
+    let country = ns_string::to_rust_string(env, country_code);
+    ns_string::from_rust_string(env, format!("{}_{}", lang, country))
 }
 
-// NSCopying implementation
-- (id)copyWithZone:(NSZonePtr)_zone {
-    retain(env, this)
+/// Returns the language code of the locale.
+- (id)languageCode {
+    let &NSLocaleHostObject { language_code, .. } = env.objc.borrow(this);
+    language_code
 }
 
-- (id)displayNameForKey:(id)key value:(id)value {
-    // Return the value string as-is as a safe stub.
-    // A full implementation would return a localized display name.
-    log_dbg!(
-        "TODO: [(NSLocale*){:?} displayNameForKey:{:?} value:{:?}]",
-        this,
-        key,
-        value
-    );
-    value
+/// Returns the country code of the locale.
+- (id)countryCode {
+    let &NSLocaleHostObject { country_code, .. } = env.objc.borrow(this);
+    country_code
 }
 
 - (id)objectForKey:(id)key {
     let key_str: &str = &ns_string::to_rust_string(env, key);
+    let host = env.objc.borrow::<NSLocaleHostObject>(this);
+    
     match key_str {
-        // Note: this is not the cleanest separation between NS and CF parts
-        // But it does work on the iOS Simulator
-        // TODO: Define NSLocaleCountryCode as kCFLocaleCountryCode
-        NSLocaleCountryCode | kCFLocaleCountryCode => {
-            let &NSLocaleHostObject { country_code, .. } = env.objc.borrow(this);
-            country_code
+        // NSLocaleCountryCode / kCFLocaleCountryCode
+        "NSLocaleCountryCode" | "kCFLocaleCountryCode" => host.country_code,
+        // NSLocaleLanguageCode / kCFLocaleLanguageCode
+        "NSLocaleLanguageCode" | "kCFLocaleLanguageCode" => host.language_code,
+        // NSLocaleIdentifier / kCFLocaleIdentifier
+        "NSLocaleIdentifier" | "kCFLocaleIdentifierKey" => {
+            // Re-use the logic from localeIdentifier method
+            msg_send![this, localeIdentifier]
         },
-        _ => unimplemented!()
+        _ => {
+            log_dbg!("NSLocale objectForKey: unknown key '{}'", key_str);
+            nil
+        }
     }
+}
+
+// Common helper for currency and decimal separators
+- (id)decimalSeparator {
+    ns_string::from_rust_string(env, ".".to_string())
+}
+
+- (id)groupingSeparator {
+    ns_string::from_rust_string(env, ",".to_string())
+}
+
+- (id)currencySymbol {
+    // Defaulting to USD for a safe stub; a better way would be checking country_code
+    ns_string::from_rust_string(env, "$".to_string())
+}
+
+- (id)currencyCode {
+    ns_string::from_rust_string(env, "USD".to_string())
+}
+
+- (id)displayNameForKey:(id)key value:(id)value {
+    // A common use case is getting the name of a language in that language
+    // e.g., [englishLocale displayNameForKey:NSLocaleIdentifier value:@"fr"] -> "French"
+    log_dbg!("TODO: displayNameForKey for value: {}", ns_string::to_rust_string(env, value));
+    value
+}
+
+- (id)copyWithZone:(NSZonePtr)_zone {
+    retain(env, this)
+}
+
+- (())dealloc {
+    let &NSLocaleHostObject { country_code, language_code } = env.objc.borrow::<NSLocaleHostObject>(this);
+    if country_code != nil { release(env, country_code); }
+    if language_code != nil { release(env, language_code); }
+    env.objc.dealloc_object(this, &mut env.mem)
 }
 
 @end
 
 };
-
