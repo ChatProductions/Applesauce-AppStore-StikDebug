@@ -301,7 +301,8 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
             NSNumberHostObject::LongLong(ll) => Value::from(*ll),
             NSNumberHostObject::Short(s) => Value::from(*s),
             NSNumberHostObject::Char(c) => Value::from(*c),
-            _ => todo!("num {:?}", num),
+            NSNumberHostObject::UnsignedLongLong(ull) => Value::from(*ull),
+            NSNumberHostObject::UnsignedShort(us) => Value::from(*us),
         }
     } else if class == env.objc.get_known_class("NSData", &mut env.mem) {
         let data = env.objc.borrow::<NSDataHostObject>(plist);
