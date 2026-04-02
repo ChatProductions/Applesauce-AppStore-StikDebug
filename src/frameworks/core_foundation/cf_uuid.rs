@@ -250,7 +250,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFUUIDCreate(_)),
     export_c_func!(CFUUIDCreateWithBytes(_, _)),
     export_c_func!(CFUUIDCreateFromString(_, _)),
-    export_c_func!(CFUUIDCreateFromUUIDBytes(_, _)),
+    export_c_func!(CFUUIDCreateFromUUIDBytes(_, _, _, _, _)),
     export_c_func!(CFUUIDCreateString(_, _)),
     export_c_func!(CFUUIDGetUUIDBytes(_)),
     export_c_func!(CFUUIDGetConstantUUIDWithBytes(_, _)),
