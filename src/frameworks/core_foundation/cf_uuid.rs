@@ -10,7 +10,7 @@ use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::foundation::ns_string;
-use crate::mem::ConstPtr;
+use crate::mem::{ConstPtr, SafeRead};
 use crate::objc::{autorelease, nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -18,12 +18,14 @@ pub type CFUUIDRef = CFTypeRef;
 
 /// 16-byte UUID stored as raw bytes.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(C, packed)]
 pub struct CFUUIDBytes {
     pub byte0:  u8, pub byte1:  u8, pub byte2:  u8, pub byte3:  u8,
     pub byte4:  u8, pub byte5:  u8, pub byte6:  u8, pub byte7:  u8,
     pub byte8:  u8, pub byte9:  u8, pub byte10: u8, pub byte11: u8,
     pub byte12: u8, pub byte13: u8, pub byte14: u8, pub byte15: u8,
 }
+unsafe impl SafeRead for CFUUIDBytes {}
 
 struct CFUUIDHostObject {
     bytes: CFUUIDBytes,
@@ -140,21 +142,15 @@ fn CFUUIDCreate(env: &mut Environment, _allocator: CFAllocatorRef) -> CFUUIDRef 
     alloc_uuid(env, bytes)
 }
 
+// Replace both functions:
+
 fn CFUUIDCreateWithBytes(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    b0: u8, b1: u8, b2: u8, b3: u8,
-    b4: u8, b5: u8, b6: u8, b7: u8,
-    b8: u8, b9: u8, b10: u8, b11: u8,
-    b12: u8, b13: u8, b14: u8, b15: u8,
+    bytes: crate::mem::ConstPtr<CFUUIDBytes>,
 ) -> CFUUIDRef {
-    let bytes = CFUUIDBytes {
-        byte0:  b0,  byte1:  b1,  byte2:  b2,  byte3:  b3,
-        byte4:  b4,  byte5:  b5,  byte6:  b6,  byte7:  b7,
-        byte8:  b8,  byte9:  b9,  byte10: b10, byte11: b11,
-        byte12: b12, byte13: b13, byte14: b14, byte15: b15,
-    };
-    alloc_uuid(env, bytes)
+    let b = env.mem.read(bytes);
+    alloc_uuid(env, b)
 }
 
 fn CFUUIDCreateFromString(
@@ -214,28 +210,20 @@ fn CFUUIDGetUUIDBytes(env: &mut Environment, uuid: CFUUIDRef) -> CFUUIDBytes {
 fn CFUUIDGetConstantUUIDWithBytes(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    b0: u8, b1: u8, b2: u8, b3: u8,
-    b4: u8, b5: u8, b6: u8, b7: u8,
-    b8: u8, b9: u8, b10: u8, b11: u8,
-    b12: u8, b13: u8, b14: u8, b15: u8,
+    bytes: crate::mem::ConstPtr<CFUUIDBytes>,
 ) -> CFUUIDRef {
-    // Real CF interns these; we just allocate a new one each time — fine for
-    // game use-cases where identity comparison on constant UUIDs is rare.
-    CFUUIDCreateWithBytes(
-        env, _allocator,
-        b0, b1, b2, b3, b4, b5, b6, b7,
-        b8, b9, b10, b11, b12, b13, b14, b15,
-    )
+    let b = env.mem.read(bytes);
+    alloc_uuid(env, b)
 }
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFUUIDRetain(_)),
     export_c_func!(CFUUIDRelease(_)),
     export_c_func!(CFUUIDCreate(_)),
-    export_c_func!(CFUUIDCreateWithBytes(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(CFUUIDCreateWithBytes(_, _)),
     export_c_func!(CFUUIDCreateFromString(_, _)),
     export_c_func!(CFUUIDCreateFromUUIDBytes(_, _)),
     export_c_func!(CFUUIDCreateString(_, _)),
     export_c_func!(CFUUIDGetUUIDBytes(_)),
-    export_c_func!(CFUUIDGetConstantUUIDWithBytes(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(CFUUIDGetConstantUUIDWithBytes(_, _)),
 ];
