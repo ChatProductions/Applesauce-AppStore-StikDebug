@@ -8,7 +8,7 @@
 use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
+use crate::mem::{MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -220,3 +220,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFHostGetReachability(_, _)),
     export_c_func!(CFHostIsInfoResolved(_, _)),
 ];
+
