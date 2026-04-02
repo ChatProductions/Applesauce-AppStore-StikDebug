@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `UIDevice`.
 
 use crate::dyld::{ConstantExports, HostConstant};
@@ -14,22 +16,23 @@ pub const UIDeviceOrientationDidChangeNotification: &str =
     "UIDeviceOrientationDidChangeNotification";
 pub const UIDeviceBatteryLevelDidChangeNotification: &str =
     "UIDeviceBatteryLevelDidChangeNotification";
+
 pub const UIDeviceBatteryStateDidChangeNotification: &str =
     "UIDeviceBatteryStateDidChangeNotification";
 pub const UIDeviceProximityStateDidChangeNotification: &str =
     "UIDeviceProximityStateDidChangeNotification";
 
 pub type UIDeviceOrientation = NSInteger;
-#[allow(dead_code)]
+
 pub const UIDeviceOrientationUnknown:           UIDeviceOrientation = 0;
 pub const UIDeviceOrientationPortrait:          UIDeviceOrientation = 1;
-#[allow(dead_code)]
+
 pub const UIDeviceOrientationPortraitUpsideDown: UIDeviceOrientation = 2;
 pub const UIDeviceOrientationLandscapeLeft:     UIDeviceOrientation = 3;
 pub const UIDeviceOrientationLandscapeRight:    UIDeviceOrientation = 4;
-#[allow(dead_code)]
+
 pub const UIDeviceOrientationFaceUp:            UIDeviceOrientation = 5;
-#[allow(dead_code)]
+
 pub const UIDeviceOrientationFaceDown:          UIDeviceOrientation = 6;
 
 pub type UIDeviceBatteryState = NSInteger;
@@ -91,6 +94,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())beginGeneratingDeviceOrientationNotifications {
     log!("TODO: beginGeneratingDeviceOrientationNotifications");
 }
+
 - (())endGeneratingDeviceOrientationNotifications {
     log!("TODO: endGeneratingDeviceOrientationNotifications");
 }
@@ -158,6 +162,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setProximityMonitoringEnabled:(bool)_enabled {
     log!("TODO: UIDevice setProximityMonitoringEnabled: (stubbed)");
 }
+
 - (bool)proximityState {
     // Proximity sensor never triggered.
     false
