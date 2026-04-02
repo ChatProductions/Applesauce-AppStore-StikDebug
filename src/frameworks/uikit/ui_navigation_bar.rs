@@ -286,6 +286,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+};
+
 // MARK: - UINavigationItem
 
 struct UINavigationItemHostObject {
