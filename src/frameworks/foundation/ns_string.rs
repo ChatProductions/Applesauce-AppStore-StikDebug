@@ -1618,7 +1618,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         remaining
             .nth(range.length as usize - 1)
-            .map(|(i, c)| start_byte + i + c.len_utf8())
+            .map(|(i, c): (_, _)| start_byte + i + c.len_utf8())
             .unwrap_or(string.len())
     };
 
