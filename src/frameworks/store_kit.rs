@@ -10,7 +10,7 @@ mod sk_payment_queue;
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/StoreKit.framework/StoreKit",
     aliases: &[],
-    class_exports: &[sk_payment_queue::CLASSES, sk_product::CLASSES],
+    class_exports: &[sk_payment_queue::CLASSES],
     constant_exports: &[],
     function_exports: &[],
 };
