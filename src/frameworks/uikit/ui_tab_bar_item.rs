@@ -7,7 +7,7 @@
 
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, msg_super, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
+    id, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
 };
 
 // MARK: - UITabBarItem host object
@@ -48,10 +48,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// NSCoding implementation
 - (id)initWithCoder:(id)coder {
-    log!("[(UITabBarItem*){:?} initWithCoder:{:?}] TODO: Implement UITabBarItem. The control won't be rendered.", this, coder);
-    msg_super![env; this initWithCoder:coder]
+    let key_ns_string = get_static_str(env, "UIView");
+    let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
+
+    () = msg![env; this setView:view];
+
+    this
 }
 
 - (id)initWithTitle:(id)title image:(id)image tag:(NSInteger)tag {
