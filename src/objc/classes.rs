@@ -737,7 +737,7 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
                     // и не выделяет под них память в гостевом пространстве, 
                     // возврат указателя на сам класс — это безопасный способ дать 
                     // приложению "валидный" (читаемый) адрес, означающий, что метод существует.
-                    return curr.cast();
+                    return curr.cast_const().cast();
                 }
             }
         }
@@ -755,3 +755,4 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
     // Если прошли всю цепочку и ничего не нашли, метод не существует
     ConstVoidPtr::null()
 }
+
