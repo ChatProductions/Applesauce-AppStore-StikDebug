@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSFileManager` etc.
@@ -66,14 +67,14 @@ fn NSSearchPathForDirectoriesInDomains(
         NSApplicationDirectory => {
             // This might not actually be correct. I haven't bothered to
             // test it because I can't think of a good reason an iPhone OS app
-            // would have to request this;
-            // Wolfenstein 3D requests it but never uses it.
+            // would have to request this; Wolfenstein 3D requests it but never uses it.
             GuestPath::new(crate::fs::APPLICATIONS).to_owned()
         }
         NSDocumentDirectory => env.fs.home_directory().join("Documents"),
         NSLibraryDirectory => env.fs.home_directory().join("Library"),
         _ => todo!("NSSearchPathDirectory {}", directory),
     };
+
     let dir = ns_string::from_rust_string(env, String::from(dir));
     let dir_list = ns_array::from_vec(env, vec![dir]);
     autorelease(env, dir_list)
@@ -244,15 +245,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)createDirectoryAtPath:(id)path // NSString *
   withIntermediateDirectories:(bool)with_intermediates
-                   attributes:(id)attributes // NSDictionary*
+                   attributes:(id)_attributes // NSDictionary*
                         error:(MutPtr<id>)error { // NSError**
     // Ignore attributes for now
-    let path_str = ns_string::to_rust_string(env, path); 
+    let path_str = ns_string::to_rust_string(env, path);
+
     let res = if with_intermediates {
         env.fs.create_dir_all(GuestPath::new(&path_str))
     } else {
         env.fs.create_dir(GuestPath::new(&path_str))
     };
+
     match res {
         Ok(()) => {
             log_dbg!("createDirectoryAtPath {} => true", path_str);
@@ -283,6 +286,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(NSDirectoryEnumeratorHostObject {
         iterator: paths.into_iter(),
     });
+
     let class = env.objc.get_known_class("NSDirectoryEnumerator", &mut env.mem);
     let enumerator = env.objc.alloc_object(class, host_object, &mut env.mem);
     autorelease(env, enumerator)
@@ -296,11 +300,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let paths: Vec<GuestPathBuf> = paths
         .map(|path| GuestPathBuf::from(GuestPath::new(path)))
         .collect();
+
     log_dbg!("directoryContentsAtPath {}: {:?}", path, paths);
     let path_strings = paths
         .iter()
         .map(|name| ns_string::from_rust_string(env, name.as_str().to_string()))
         .collect();
+
     let res = ns_array::from_vec(env, path_strings);
     autorelease(env, res)
 }
@@ -384,6 +390,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             return false;
         }
     };
+
     if env.fs.write(GuestPath::new(dst.as_ref()), &data).is_err() {
         if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -407,35 +414,34 @@ pub const CLASSES: ClassExports = objc_classes! {
               traverseLink:(bool)traverse {
     // TODO: other attributes
     log_once!("Warning: NSFileManager fileAttributesAtPath:traverseLink: returns only NSFileType, NSFileModificationDate and NSFileSize attributes!");
-
     let path = ns_string::to_rust_string(env, path); // TODO: avoid copy
     // TODO: traverse link
     log_dbg!("[(NSFileManager *){:?} fileAttributesAtPath:{} traverse:{}]", this, path, traverse);
+
     let guest_path = GuestPath::new(&path);
 
     file_attributes_common(env, guest_path)
 }
 
 - (id)attributesOfItemAtPath:(id)path // NSString *
-                       error:(MutPtr<id>)error { // NSError **
+                       error:(MutPtr<id>)_error { // NSError **
     // Removed assert!(error.is_null()) to prevent crashes
 
     // TODO: other attributes
     log_once!("Warning: NSFileManager attributesOfItemAtPath:error: returns only NSFileType, NSFileModificationDate and NSFileSize attributes!");
-
     let path = ns_string::to_rust_string(env, path); // TODO: avoid copy
     // TODO: traverse link
-    log_dbg!("[(NSFileManager *){:?} attributesOfItemAtPath:{} error:{:?}]", this, path, error);
+    log_dbg!("[(NSFileManager *){:?} attributesOfItemAtPath:{} error:{:?}]", this, path, _error);
+
     let guest_path = GuestPath::new(&path);
 
     file_attributes_common(env, guest_path)
 }
 
 - (id)attributesOfFileSystemForPath:(id)_path
-                              error:(MutPtr<id>)error {
+                              error:(MutPtr<id>)_error {
     // TODO: other attributes
     log_once!("Warning: NSFileManager attributesOfFileSystemForPath:error: returns only NSFileSystemFreeSize attribute!");
-
     let dict = msg_class![env; NSMutableDictionary new];
 
     // Reporting 1 Gb of free space should be enough
@@ -501,3 +507,4 @@ fn file_attributes_common(env: &mut Environment, guest_path: &GuestPath) -> id {
     release(env, dict);
     autorelease(env, dict_imm)
 }
+
