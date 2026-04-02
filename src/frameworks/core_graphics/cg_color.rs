@@ -203,7 +203,7 @@ pub fn CGColorGetComponents(env: &mut Environment, color: CGColorRef) -> ConstPt
     buf.cast_const()
 }
 
-fn CGColorGetNumberOfComponents(env: &mut Environment, color: CGColorRef) -> crate::frameworks::foundation::NSUInteger {
+fn CGColorGetNumberOfComponents(_env: &mut Environment, color: CGColorRef) -> crate::frameworks::foundation::NSUInteger {
     if color.is_null() {
         return 0;
     }
@@ -211,7 +211,7 @@ fn CGColorGetNumberOfComponents(env: &mut Environment, color: CGColorRef) -> cra
     4
 }
 
-fn CGColorIsValid(env: &mut Environment, color: CGColorRef) -> bool {
+fn CGColorIsValid(_env: &mut Environment, color: CGColorRef) -> bool {
     !color.is_null()
 }
 
@@ -260,3 +260,4 @@ pub fn to_rgba(objc: &ObjC, color: CGColorRef) -> (CGFloat, CGFloat, CGFloat, CG
     assert_eq!(color_space_name, kCGColorSpaceGenericRGB);
     (r, g, b, a)
 }
+
