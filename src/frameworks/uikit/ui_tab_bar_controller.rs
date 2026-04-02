@@ -5,7 +5,6 @@
  */
 //! `UITabBarController`.
 
-use crate::frameworks::foundation::ns_string;
 use crate::frameworks::foundation::NSUInteger;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
@@ -201,3 +200,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
