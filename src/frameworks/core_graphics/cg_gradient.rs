@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `CGGradient.h`
 
 use crate::dyld::FunctionExports;
@@ -86,6 +88,7 @@ pub fn gradient_color_at(
     for i in 0..stops.len() - 1 {
         let lo = &stops[i];
         let hi = &stops[i + 1];
+
         if t >= lo.location && t <= hi.location {
             let span = hi.location - lo.location;
             let f = if span > 0.0 { (t - lo.location) / span } else { 0.0 };
@@ -146,6 +149,7 @@ fn CGGradientCreateWithColorComponents(
         };
 
     let mut stops = Vec::with_capacity(count as usize);
+
     for i in 0..count as usize {
         let loc: CGFloat = if locations.is_null() {
             // Evenly spaced when no locations are provided.
@@ -155,6 +159,7 @@ fn CGGradientCreateWithColorComponents(
         };
 
         let base = i * components_per_color;
+
         let (r, g, b, a) = if components_per_color >= 4 {
             (
                 env.mem.read(components + (base    ) as u32),
@@ -174,6 +179,7 @@ fn CGGradientCreateWithColorComponents(
 
     // Ensure stops are sorted by location.
     stops.sort_by(|a, b| a.location.partial_cmp(&b.location).unwrap());
+
     alloc_gradient(env, stops)
 }
 
@@ -194,6 +200,7 @@ fn CGGradientCreateWithColors(
     }
 
     let mut stops = Vec::with_capacity(count as usize);
+
     for i in 0..count as usize {
         let color: crate::objc::id = msg![env; colors objectAtIndex:(i as GuestUSize)];
         let comps: ConstPtr<CGFloat> = CGColorGetComponents(env, color);
@@ -208,10 +215,12 @@ fn CGGradientCreateWithColors(
         let g = env.mem.read(comps + 1);
         let b = env.mem.read(comps + 2);
         let a = env.mem.read(comps + 3);
+
         stops.push(ColorStop { location: loc, r, g, b, a });
     }
 
     stops.sort_by(|a, b| a.location.partial_cmp(&b.location).unwrap());
+
     alloc_gradient(env, stops)
 }
 
@@ -226,3 +235,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGGradientCreateWithColorComponents(_, _, _, _)),
     export_c_func!(CGGradientCreateWithColors(_, _, _)),
 ];
+
