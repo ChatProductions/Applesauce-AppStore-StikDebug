@@ -30,6 +30,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation UIPasteboard: NSObject
 
+// =========================================================================
+// МЕТОДЫ КЛАССА (+)
+// =========================================================================
+
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIPasteboardHostObject {
         name: nil,
@@ -37,6 +41,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
+
++ (id)generalPasteboard {
+    // В большинстве игр используется для быстрого копирования текста. 
+    // Создаем базовый инстанс.
+    let instance: id = msg_class![env; UIPasteboard alloc];
+    msg![env; instance init]
+}
+
++ (id)pasteboardWithName:(id)name create:(bool)_create {
+    // Выделяем память и инициализируем новый буфер обмена.
+    let instance: id = msg_class![env; UIPasteboard alloc];
+    let instance: id = msg![env; instance init];
+
+    // Сохраняем переданное имя
+    let host = env.objc.borrow_mut::<UIPasteboardHostObject>(instance);
+    retain(env, name);
+    host.name = name;
+
+    instance
+}
+
+// =========================================================================
+// МЕТОДЫ ЭКЗЕМПЛЯРА (-)
+// =========================================================================
 
 - (id)init {
     this
@@ -52,32 +80,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     env.objc.dealloc_object(this, &mut env.mem)
 }
-
-// MARK: - Инициализация и получение инстансов
-
-+ (id)generalPasteboard {
-    // В большинстве игр используется для быстрого копирования текста. 
-    // Создаем базовый инстанс.
-    let instance: id = msg_class![env; UIPasteboard alloc];
-    msg![env; instance init]
-}
-
-+ (id)pasteboardWithName:(id)name create:(bool)_create {
-    // Выделяем память и инициализируем новый буфер обмена.
-    // Для полноценной работы эмулятора в рамках одного сеанса игры
-    // этого достаточно, так как приложение получает валидный объект.
-    let instance: id = msg_class![env; UIPasteboard alloc];
-    let instance: id = msg![env; instance init];
-
-    // Сохраняем переданное имя
-    let host = env.objc.borrow_mut::<UIPasteboardHostObject>(instance);
-    retain(env, name);
-    host.name = name;
-
-    instance
-}
-
-// MARK: - Свойства
 
 - (id)name { // NSString*
     env.objc.borrow::<UIPasteboardHostObject>(this).name
@@ -97,4 +99,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-  
