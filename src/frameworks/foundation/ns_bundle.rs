@@ -375,16 +375,24 @@ fn path_for_resource_helper(
 
         let parent_guest_path = crate::fs::GuestPath::new(parent_str);
 
+        // Шаг 1: Ищем совпадение, не мутируя env. Сохраняем результат в локальную переменную.
+        let mut found_path = None;
         if let Ok(entries) = env.fs.enumerate(parent_guest_path) {
             for entry in entries {
-                let entry_path = std::path::Path::new(entry.as_str());
+                // E0658 fix: используем entry напрямую, без .as_str()
+                let entry_path = std::path::Path::new(entry); 
                 if let Some(entry_name) = entry_path.file_name() {
                     if entry_name.to_str().unwrap_or("").to_lowercase() == target_name {
-                        let found_path = entry.as_str().to_string();
-                        return ns_string::from_rust_string(env, found_path);
+                        found_path = Some(entry.to_string());
+                        break;
                     }
                 }
             }
+        } // Здесь итератор entries уничтожается, и неизменяемая ссылка на env освобождается
+
+        // Шаг 2: Теперь можно безопасно брать изменяемую ссылку на env
+        if let Some(p) = found_path {
+            return ns_string::from_rust_string(env, p);
         }
     }
 
