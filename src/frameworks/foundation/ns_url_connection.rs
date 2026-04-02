@@ -6,7 +6,7 @@
 //! `NSURLConnection`.
 
 use crate::mem::MutPtr;
-use crate::objc::{autorelease, id, msg, nil, objc_classes, release, ClassExports};
+use crate::objc::{autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports};
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -29,8 +29,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.mem.write(error, nil);
     }
     
-    // Возвращаем nil (пустой NSData), так как ничего не скачалось
-    nil
+    // Создаем пустой объект NSData, чтобы игра думала, что запрос успешен, но данных нет
+    let data: id = msg_class![env; NSData alloc];
+    let data: id = msg![env; data init];
+    autorelease(env, data)
 }
 
 + (id)connectionWithRequest:(id)request // NSURLRequest *
