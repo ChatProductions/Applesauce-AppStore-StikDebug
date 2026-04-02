@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `GKLeaderboardViewController` and `GKAchievementViewController`.
@@ -115,12 +116,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("GKLeaderboardViewController viewDidLoad: stubbed (UI not shown)");
 }
 
-- (())viewWillAppear:(bool)animated {
+- (())viewWillAppear:(bool)_animated {
     log!("GKLeaderboardViewController viewWillAppear: stubbed");
     // Immediately dismiss so the app doesn't hang waiting for user interaction.
     let delegate = env.objc
         .borrow::<GKLeaderboardViewControllerHostObject>(this)
         .leaderboard_delegate;
+
     if delegate != nil {
         let sel = env.objc.register_host_selector(
             "leaderboardViewControllerDidFinish:".to_string(),
@@ -193,6 +195,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let delegate = env.objc
         .borrow::<GKAchievementViewControllerHostObject>(this)
         .achievement_delegate;
+
     if delegate != nil {
         let sel = env.objc.register_host_selector(
             "achievementViewControllerDidFinish:".to_string(),
@@ -220,4 +223,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
