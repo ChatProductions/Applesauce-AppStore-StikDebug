@@ -706,3 +706,14 @@ pub fn object_getClass(env: &mut crate::Environment, obj: id) -> Class {
     let objc_obj: objc_object = env.mem.read(obj.cast());
     objc_obj.isa
 }
+
+pub fn class_getSuperclass(env: &mut crate::Environment, cls: Class) -> Class {
+    // По спецификации Objective-C, если передать nil, возвращается nil.
+    if cls.is_null() {
+        return nil;
+    }
+    
+    // В touchHLE уже есть внутренняя функция для получения суперкласса, 
+    // просто проксируем вызов в неё:
+    env.objc.get_superclass(cls)
+}
