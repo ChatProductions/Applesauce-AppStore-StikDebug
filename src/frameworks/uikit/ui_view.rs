@@ -141,6 +141,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationRepeatAutoreverses:{}]", repeatAutoreverses);
 }
 
++ (())setAnimationRepeatCount:(f32)repeatCount {
+    log!("TODO: [UIView setAnimationRepeatCount:{}]", repeatCount);
+}
+
 + (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache {
     log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
 }
@@ -563,4 +567,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
