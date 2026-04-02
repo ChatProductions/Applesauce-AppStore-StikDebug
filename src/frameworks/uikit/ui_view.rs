@@ -92,7 +92,6 @@ fn init_common(env: &mut Environment, this: id) -> id {
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
-
 @implementation UIView: UIResponder
 
 + (id)allocWithZone:(NSZonePtr)_zone {
@@ -138,6 +137,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationBeginsFromCurrentState:{}]", from);
 }
 
++ (())setAnimationRepeatAutoreverses:(bool)repeatAutoreverses {
+    log!("TODO: [UIView setAnimationRepeatAutoreverses:{}]", repeatAutoreverses);
+}
+
 + (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache {
     log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
 }
@@ -156,7 +159,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCoder:(id)coder {
     let this = init_common(env, this);
-
     let key_ns_string = get_static_str(env, "UIBounds");
     let bounds: CGRect = msg![env; coder decodeCGRectForKey:key_ns_string];
 
@@ -165,7 +167,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_ns_string = get_static_str(env, "UIHidden");
     let hidden: bool = msg![env; coder decodeBoolForKey:key_ns_string];
-
     let key_ns_string = get_static_str(env, "UIOpaque");
     let opaque: bool = msg![env; coder decodeBoolForKey:key_ns_string];
 
@@ -174,7 +175,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_ns_string = get_static_str(env, "UITag");
     let tag: NSInteger = msg![env; coder decodeIntegerForKey:key_ns_string];
-
     let key_ns_string = get_static_str(env, "UIMultipleTouchEnabled");
     let multi_touch_enabled: bool = msg![env; coder decodeBoolForKey:key_ns_string];
 
@@ -189,7 +189,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBackgroundColor:bg_color];
     () = msg![env; this setTag:tag];
     () = msg![env; this setMultipleTouchEnabled:multi_touch_enabled];
-
     for i in 0..subview_count {
         let subview: id = msg![env; subviews objectAtIndex:i];
         () = msg![env; this addSubview:subview];
