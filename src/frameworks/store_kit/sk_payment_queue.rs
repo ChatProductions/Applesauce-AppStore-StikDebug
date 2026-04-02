@@ -5,6 +5,7 @@
  */
 //! `SKPaymentQueue` — StoreKit in-app purchase queue stub.
 
+use crate::frameworks::foundation::{NSInteger, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr, TrivialHostObject,
