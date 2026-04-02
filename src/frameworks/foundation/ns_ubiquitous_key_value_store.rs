@@ -5,7 +5,6 @@
 //! `NSUbiquitousKeyValueStore`
 
 use crate::objc::{id, msg, msg_class, objc_classes, ClassExports};
-use crate::Environment;
 
 #[derive(Default)]
 pub struct State {
