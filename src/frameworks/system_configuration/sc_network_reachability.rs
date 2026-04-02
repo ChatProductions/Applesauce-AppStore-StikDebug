@@ -1,17 +1,18 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! SCNetworkReachability
 
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
+use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::libc::sys::socket::sockaddr;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
-use crate::objc::{msg, objc_classes, Class, ClassExports, HostObject};
+use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
 use std::net::SocketAddrV4;
 
@@ -89,6 +90,7 @@ fn SCNetworkReachabilityCreateWithName(
     let isa = env
         .objc
         .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem);
+
     let res = env.objc.alloc_object(
         isa,
         Box::new(SCNetworkReachabilityHostObject {
@@ -99,6 +101,7 @@ fn SCNetworkReachabilityCreateWithName(
         }),
         &mut env.mem,
     );
+
     log!("SCNetworkReachabilityCreateWithName({:?}) -> {:?}", name_str, res);
     res
 }
@@ -110,9 +113,11 @@ fn SCNetworkReachabilityCreateWithAddress(
 ) -> SCNetworkReachabilityRef {
     let address_val = env.mem.read(address);
     let sock_addr   = address_val.to_sockaddr_v4();
+
     let isa = env
         .objc
         .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem);
+
     let res = env.objc.alloc_object(
         isa,
         Box::new(SCNetworkReachabilityHostObject {
@@ -123,10 +128,12 @@ fn SCNetworkReachabilityCreateWithAddress(
         }),
         &mut env.mem,
     );
+
     log_dbg!(
         "SCNetworkReachabilityCreateWithAddress({}) -> {:?}",
         sock_addr, res
     );
+
     res
 }
 
@@ -142,15 +149,19 @@ fn SCNetworkReachabilityCreateWithAddressPair(
     } else {
         local_address
     };
+
     if addr.is_null() {
         log!("SCNetworkReachabilityCreateWithAddressPair: both addresses null, returning NULL");
         return Ptr::null();
     }
+
     let address_val = env.mem.read(addr);
     let sock_addr   = address_val.to_sockaddr_v4();
+
     let isa = env
         .objc
         .get_known_class("_touchHLE_SCNetworkReachability", &mut env.mem);
+
     let res = env.objc.alloc_object(
         isa,
         Box::new(SCNetworkReachabilityHostObject {
@@ -161,6 +172,7 @@ fn SCNetworkReachabilityCreateWithAddressPair(
         }),
         &mut env.mem,
     );
+
     log_dbg!("SCNetworkReachabilityCreateWithAddressPair({}) -> {:?}", sock_addr, res);
     res
 }
@@ -230,6 +242,7 @@ fn SCNetworkReachabilitySetCallback(
     let host = env.objc.borrow_mut::<SCNetworkReachabilityHostObject>(target);
     host.callout = Some(callout);
     host.context = context;
+
     // Return false — callback will never fire since we don't run a real
     // network stack.
     false
