@@ -364,5 +364,30 @@ fn path_for_resource_helper(
     if file_exists {
         return path;
     }
+
+    // --- RETINA CASE-INSENSITIVE FALLBACK ---
+    let path_str = ns_string::to_rust_string(env, path);
+    let rust_path = std::path::Path::new(path_str.as_ref());
+
+    if let (Some(parent), Some(file_name)) = (rust_path.parent(), rust_path.file_name()) {
+        let parent_str = parent.to_str().unwrap_or("");
+        let target_name = file_name.to_str().unwrap_or("").to_lowercase();
+
+        let parent_guest_path = crate::fs::GuestPath::new(parent_str);
+
+        if let Ok(entries) = env.fs.enumerate(parent_guest_path) {
+            for entry in entries {
+                let entry_path = std::path::Path::new(entry.as_str());
+                if let Some(entry_name) = entry_path.file_name() {
+                    if entry_name.to_str().unwrap_or("").to_lowercase() == target_name {
+                        let found_path = entry.as_str().to_string();
+                        return ns_string::from_rust_string(env, found_path);
+                    }
+                }
+            }
+        }
+    }
+
     nil
 }
+
