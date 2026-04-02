@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! `CGPath.h`
 
 use crate::dyld::FunctionExports;
@@ -129,12 +131,14 @@ fn CGPathCreateWithRect(
     let tr = CGPoint { x: origin.x + size.width, y: origin.y };
     let br = CGPoint { x: origin.x + size.width, y: origin.y + size.height };
     let bl = CGPoint { x: origin.x,              y: origin.y + size.height };
-    let elems = env.objc.borrow_mut::<CGPathHostObject>(path);
-    elems.elements.push(PathElement::MoveTo(tl));
-    elems.elements.push(PathElement::LineTo(tr));
-    elems.elements.push(PathElement::LineTo(br));
-    elems.elements.push(PathElement::LineTo(bl));
-    elems.elements.push(PathElement::Close);
+
+    let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
+    elems.push(PathElement::MoveTo(tl));
+    elems.push(PathElement::LineTo(tr));
+    elems.push(PathElement::LineTo(br));
+    elems.push(PathElement::LineTo(bl));
+    elems.push(PathElement::Close);
+
     path
 }
 
@@ -150,6 +154,7 @@ fn CGPathCreateWithEllipseInRect(
     let cy = rect.origin.y + rect.size.height * 0.5;
     let rx = rect.size.width  * 0.5;
     let ry = rect.size.height * 0.5;
+
     let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
     elems.push(PathElement::MoveTo(CGPoint { x: cx + rx, y: cy }));
     elems.push(PathElement::CurveTo {
@@ -173,6 +178,7 @@ fn CGPathCreateWithEllipseInRect(
         to: CGPoint { x: cx + rx,      y: cy },
     });
     elems.push(PathElement::Close);
+
     path
 }
 
@@ -261,6 +267,7 @@ fn CGPathAddRect(
     let tr = CGPoint { x: origin.x + size.width, y: origin.y };
     let br = CGPoint { x: origin.x + size.width, y: origin.y + size.height };
     let bl = CGPoint { x: origin.x,              y: origin.y + size.height };
+
     let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
     elems.push(PathElement::MoveTo(tl));
     elems.push(PathElement::LineTo(tr));
@@ -317,6 +324,7 @@ fn CGPathGetBoundingBox(env: &mut Environment, path: CGPathRef) -> CGRect {
             size: crate::frameworks::core_graphics::CGSize { width: 0.0, height: 0.0 },
         };
     }
+
     let mut min_x = CGFloat::MAX;
     let mut min_y = CGFloat::MAX;
     let mut max_x = CGFloat::MIN;
@@ -331,7 +339,8 @@ fn CGPathGetBoundingBox(env: &mut Environment, path: CGPathRef) -> CGRect {
 
     for elem in env.objc.borrow::<CGPathHostObject>(path).elements.iter() {
         match *elem {
-            PathElement::MoveTo(p) | PathElement::LineTo(p) => update(p),
+            PathElement::MoveTo(p) |
+            PathElement::LineTo(p) => update(p),
             PathElement::QuadCurveTo { control, to } => { update(control); update(to); }
             PathElement::CurveTo { c1, c2, to } => { update(c1); update(c2); update(to); }
             PathElement::Close => {}
@@ -406,3 +415,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPathContainsPoint(_, _, _, _)),
     export_c_func!(CGPathEqualToPath(_, _)),
 ];
+
