@@ -8,7 +8,7 @@
 use crate::frameworks::foundation::NSInteger;
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::objc::{
-    id, msg, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
+    id, nil, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
 };
 
 // MARK: - UITabBarItem host object
@@ -50,12 +50,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithCoder:(id)coder {
-    let key_ns_string = get_static_str(env, "UIView");
-    let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
-
-    () = msg![env; this setView:view];
-
-    this
+    nil
 }
 
 - (id)initWithTitle:(id)title image:(id)image tag:(NSInteger)tag {
