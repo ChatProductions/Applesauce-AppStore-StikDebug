@@ -331,7 +331,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let UIViewHostObject { layer, superview, subviews, .. } = std::mem::take(env.objc.borrow_mut(this));
+    let UIViewHostObject { layer, superview: _, subviews, .. } = std::mem::take(env.objc.borrow_mut(this));
     release(env, layer);
     for subview in subviews {
         env.objc.borrow_mut::<UIViewHostObject>(subview).superview = nil;
