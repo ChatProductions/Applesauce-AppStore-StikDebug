@@ -60,27 +60,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)processName {
     assert_process_info_singleton(env, this);
-    // CFBundleName is the canonical display name on iOS/macOS.
     let main_bundle: id = msg_class![env; NSBundle mainBundle];
     let name_key: id = ns_string::get_static_str(env, "CFBundleName");
     msg![env; main_bundle objectForInfoDictionaryKey:name_key]
 }
 
 - (())setProcessName:(id)_name {
-    // Documented as having no effect on iOS; silently ignore.
     assert_process_info_singleton(env, this);
     log!("TODO: [NSProcessInfo setProcessName:] — ignored");
 }
 
 - (i32)processIdentifier {
     assert_process_info_singleton(env, this);
-    // Return a plausible fake PID.
     1234
 }
 
 - (id)globallyUniqueString {
     assert_process_info_singleton(env, this);
-    // Format: <pid>-<uptime_ns>-<counter>  (just needs to be unique per call)
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let uptime_ns = Instant::now()
@@ -101,13 +97,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)arguments {
-    // Return an empty NSArray — guest apps rarely rely on argv.
     assert_process_info_singleton(env, this);
     msg_class![env; NSArray array]
 }
 
 - (id)environment {
-    // Return an empty NSDictionary — no host env vars are exposed.
     assert_process_info_singleton(env, this);
     msg_class![env; NSDictionary dictionary]
 }
@@ -123,7 +117,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (u32)processorCount {
     assert_process_info_singleton(env, this);
-    // Pretend to be a single-core device (iPhone 3G era baseline).
     1
 }
 
@@ -148,9 +141,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // Returns an NSOperatingSystemVersion struct {major, minor, patch} packed
 // into three consecutive NSUInteger fields. We return it as three separate
 // values via an opaque struct id — most callers use
-// `isOperatingSystemAtLeastVersion:` instead.
+// isOperatingSystemAtLeastVersion: instead.
 - (id)operatingSystemVersion {
-    // Not easily representable without a struct return; log and return nil.
     assert_process_info_singleton(env, this);
     log!(
         "TODO: [NSProcessInfo operatingSystemVersion] — returning nil \
@@ -174,7 +166,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // by value on the stack after the implicit (self, _cmd) arguments, so we model
 // it as three separate NSUInteger parameters here.
 - (bool)isOperatingSystemAtLeastVersion:(u64)major
-                                  minor:(u64)minor   // part of struct, named for clarity
+                                  minor:(u64)minor
                                   patch:(u64)patch {
     assert_process_info_singleton(env, this);
     let (maj, min, pat) = (OS_VERSION_MAJOR, OS_VERSION_MINOR, OS_VERSION_PATCH);
@@ -190,7 +182,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSProcessInfoThermalStateNominal = 0
 - (i64)thermalState {
     assert_process_info_singleton(env, this);
-    0 // NSProcessInfoThermalStateNominal
+    0
 }
 
 // =========================================================================
@@ -203,29 +195,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 // =========================================================================
-// MARK: - Activity assertions (iOS 7+ / macOS 10.9+)
+// MARK: - Activity assertions (iOS 7+)
 // =========================================================================
 
-// NSActivityOptions is a bitmask; we accept it as u64.
-// Returns an opaque token that the caller is expected to release when done.
-// We hand back `self` as a cheap non-nil token and ignore the hint.
 - (id)beginActivityWithOptions:(u64)_options reason:(id)_reason {
     assert_process_info_singleton(env, this);
     log!("TODO: [NSProcessInfo beginActivityWithOptions:reason:] — returning stub token");
-    this // non-nil token; caller will pass it back to endActivity:
+    this
 }
 
 - (())endActivity:(id)_activity {
     assert_process_info_singleton(env, this);
-    // No-op — we never actually started any activity.
 }
 
 - (())performActivityWithOptions:(u64)_options
                           reason:(id)_reason
-                       usingBlock:(id)block {
+                      usingBlock:(id)block {
     assert_process_info_singleton(env, this);
-    // Just invoke the block immediately — no deferral is needed.
-    msg![env; block invoke]
+    let _: () = msg![env; block invoke];
 }
 
 // =========================================================================
@@ -260,4 +247,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
