@@ -10,7 +10,7 @@ use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::cf_string::CFStringRef;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{id, HostObject};
+use crate::objc::{id, nil, HostObject};
 use crate::Environment;
 
 pub type CFUUIDRef = super::CFTypeRef;
