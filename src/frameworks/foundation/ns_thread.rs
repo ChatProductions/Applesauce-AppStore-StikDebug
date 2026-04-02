@@ -226,7 +226,7 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
 
     () = msg![env; ns_thread_obj main];
 
-    let mut host_obj = env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj);
+    let host_obj = env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj);
     host_obj.finished = true;
     host_obj.executing = false; // Поток завершен
 
@@ -269,3 +269,4 @@ pub fn detach_new_thread_inner(
 
     msg![env; new start]
 }
+
