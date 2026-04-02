@@ -162,8 +162,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let scale:  CGFloat = msg![env; this scale];
     let desc = format!(
         "<UIScreen: bounds=({}, {}, {}, {}) scale={}>",
-        bounds.origin.x, bounds.origin.y,
-        bounds.size.width, bounds.size.height,
+        let origin_x = bounds.origin.x;
+        let origin_y = bounds.origin.y;
+        let size_width = bounds.size.width;
+       let size_height = bounds.size.height;
+       log_dbg!(
+          "bounds: ({}, {}, {}, {})",
+       origin_x, origin_y, size_width, size_height,
+    );
         scale
     );
     let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, desc);
