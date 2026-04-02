@@ -9,10 +9,10 @@ use crate::dyld::FunctionExports;
 use crate::export_c_func;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_bitmap_context::{
-    CGBitmapContextCreate, CGBitmapContextGetData,
+    CGBitmapContextCreate,
 };
 use crate::frameworks::core_graphics::cg_context::CGContextRef;
-use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
+use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::mem::MutVoidPtr;
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
@@ -64,7 +64,7 @@ pub fn CGLayerRelease(env: &mut Environment, layer: CGLayerRef) {
 
 fn CGLayerCreateWithContext(
     env: &mut Environment,
-    context: CGContextRef,
+    _context: CGContextRef,
     size: CGSize,
     _auxiliaryInfo: MutVoidPtr, // CFDictionaryRef — always NULL in practice
 ) -> CGLayerRef {
