@@ -54,6 +54,7 @@ pub(super) struct UIViewHostObject {
     clears_context_before_drawing: bool,
     user_interaction_enabled: bool,
     multiple_touch_enabled: bool,
+    delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -67,6 +68,7 @@ impl Default for UIViewHostObject {
             clears_context_before_drawing: true,
             user_interaction_enabled: true,
             multiple_touch_enabled: false,
+            delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
         }
     }
 }
@@ -209,6 +211,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewHostObject>(this).tag = tag;
 }
 
+- (id)delegate {
+    env.objc.borrow::<UIViewHostObject>(this).delegate
+}
+- (())setDelegate:(id)delegate {
+    env.objc.borrow_mut::<UIViewHostObject>(this).delegate = delegate;
+}
+    
 - (id)viewWithTag:(NSInteger)tag {
     let &UIViewHostObject { ref subviews, tag: view_tag, .. } = env.objc.borrow(this);
     if view_tag == tag { return this; }
