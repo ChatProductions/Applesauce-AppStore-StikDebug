@@ -4,6 +4,7 @@
  * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
 //! SCNetworkReachability
 
 use crate::abi::GuestFunction;
@@ -239,6 +240,7 @@ fn SCNetworkReachabilitySetCallback(
         "SCNetworkReachabilitySetCallback({:?}, {:?}, {:?}) stubbed -> false",
         target, callout, context
     );
+
     let host = env.objc.borrow_mut::<SCNetworkReachabilityHostObject>(target);
     host.callout = Some(callout);
     host.context = context;
@@ -291,3 +293,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(SCNetworkReachabilityUnscheduleFromRunLoop(_, _, _)),
     export_c_func!(SCNetworkReachabilitySetDispatchQueue(_, _)),
 ];
+
