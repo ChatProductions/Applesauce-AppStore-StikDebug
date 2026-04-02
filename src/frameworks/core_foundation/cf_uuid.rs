@@ -187,7 +187,7 @@ fn CFUUIDCreateString(
     if uuid.is_null() {
         return nil;
     }
-    let bytes = *env.objc.borrow::<CFUUIDHostObject>(uuid);
+    let bytes = env.objc.borrow::<CFUUIDHostObject>(uuid);
     let s = bytes_to_string(&bytes.bytes);
     let ns = ns_string::from_rust_string(env, s);
     // CFCreateString returns +1; autorelease so callers that CFRelease it
