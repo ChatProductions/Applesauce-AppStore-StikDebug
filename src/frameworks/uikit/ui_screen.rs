@@ -155,27 +155,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     point
 }
 
-// MARK: - Description
-
-- (id)description {
-    let bounds: CGRect = msg![env; this bounds];
-    let scale:  CGFloat = msg![env; this scale];
-    let desc = format!(
-        "<UIScreen: bounds=({}, {}, {}, {}) scale={}>",
-        let origin_x = bounds.origin.x;
-        let origin_y = bounds.origin.y;
-        let size_width = bounds.size.width;
-       let size_height = bounds.size.height;
-       log_dbg!(
-          "bounds: ({}, {}, {}, {})",
-       origin_x, origin_y, size_width, size_height,
-    );
-        scale
-    );
-    let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, desc);
-    crate::objc::autorelease(env, ns)
-}
-
 @end
 
 };
