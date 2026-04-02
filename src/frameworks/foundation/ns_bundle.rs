@@ -151,8 +151,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)pathsForResourcesOfType:(id)ext // NSString*
                   inDirectory:(id)subpath { // NSString*
-    let mut res_paths = Vec::new();
-
     let ext_str = if ext != nil {
         Some(ns_string::to_rust_string(env, ext))
     } else {
@@ -176,6 +174,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let search_dir = crate::fs::GuestPath::new(&search_dir_str);
 
+    // Шаг 1: Собираем пути во временный вектор Rust (здесь env читается)
+    let mut temp_paths = Vec::new();
     if let Ok(iterator) = env.fs.enumerate(search_dir) {
         for path in iterator {
             let matches = match &ext_str {
@@ -187,14 +187,17 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let mut full_path = search_dir_str.clone();
                 full_path.push('/');
                 full_path.push_str(path);
-                res_paths.push(ns_string::from_rust_string(
-                    env,
-                    full_path,
-                ));
+                temp_paths.push(full_path);
             }
         }
     } else {
         log!("Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?}", search_dir);
+    }
+
+    // Шаг 2: Теперь env свободен. Превращаем строки Rust в NSString (здесь env изменяется)
+    let mut res_paths = Vec::new();
+    for path in temp_paths {
+        res_paths.push(ns_string::from_rust_string(env, path));
     }
 
     let array: id = crate::frameworks::foundation::ns_array::from_vec(env, res_paths);
