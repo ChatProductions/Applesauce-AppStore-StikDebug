@@ -66,6 +66,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.framework_state.uikit.ui_application.shared_application.unwrap_or(nil)
 }
 
+- (())setNetworkActivityIndicatorVisible:(bool)visible {
+    // touchHLE doesn't render the iOS status bar, so we just stub this
+    // and ignore the request to show/hide the spinner.
+    log_dbg!("Stubbed setNetworkActivityIndicatorVisible: {}", visible);
+}
+
+- (bool)isNetworkActivityIndicatorVisible {
+    // Always report that it's hidden.
+    false
+}
+
 // This should only be called by UIApplicationMain
 - (id)init {
     assert!(env.framework_state.uikit.ui_application.shared_application.is_none());
