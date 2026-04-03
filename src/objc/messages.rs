@@ -53,7 +53,7 @@ fn objc_msgSend_inner(
 
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
     
-    // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: убираем панику и добавляем мягкий выход ---
+    // Мягкий выход, если isa равен nil
     if orig_class == nil {
         log!("Warning: receiver {:?} has nil isa! Ignoring message \"{}\".", receiver, selector.as_str(&env.mem));
         env.cpu.regs_mut()[0..2].fill(0);
@@ -74,8 +74,9 @@ fn objc_msgSend_inner(
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
 
-            panic!(
-                "{} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"!",
+            // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменяем panic! на предупреждение и возврат 0 ---
+            log!(
+                "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
                 if is_metaclass { "Class" } else { "Object" },
                 receiver,
                 if is_metaclass { "meta" } else { "" },
@@ -88,6 +89,11 @@ fn objc_msgSend_inner(
                 },
                 selector.as_str(&env.mem),
             );
+            
+            // Имитируем возврат nil/0, чтобы приложение продолжило работу
+            env.cpu.regs_mut()[0..2].fill(0);
+            return;
+            // ------------------------------------------------------------------------
         }
 
         let host_object = env.objc.get_host_object(class).unwrap();
