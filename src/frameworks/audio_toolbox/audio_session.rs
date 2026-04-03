@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! `AudioSession.h` (Audio Session) // TODO: is this the real name?
 
 use crate::abi::GuestFunction;
@@ -42,6 +43,7 @@ pub struct State {
     current_hardware_output_volume: f32,
     current_hardware_io_buffer_duration: f32,
 }
+
 impl Default for State {
     fn default() -> Self {
         // TODO: Check values from a real device
@@ -95,12 +97,14 @@ fn AudioSessionGetProperty(
 ) -> OSStatus {
     let required_size = get_audio_session_property_size(in_ID);
     let io_data_size_value = env.mem.read(io_data_size);
+
     if io_data_size_value != required_size {
         log!("Warning: AudioSessionGetProperty() failed");
         return kAudioSessionBadPropertySizeError;
     }
 
     let state = &env.framework_state.audio_toolbox.audio_session;
+
     match in_ID {
         kAudioSessionProperty_OtherAudioIsPlaying => {
             let value: u32 = 0;
@@ -127,9 +131,9 @@ fn AudioSessionGetProperty(
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioInputAvailable => {
-            // ИЗМЕНЕНО: Возвращаем 0, чтобы игра думала, что на устройстве нет микрофона.
-            // Это предотвратит попытки игры инициализировать запись и падать.
-            let value: u32 = 0; 
+            // ИЗМЕНЕНО: Возвращаем 1, чтобы игра думала, что микрофон ЕСТЬ.
+            // Это предотвратит экстренное завершение работы игры (abort) из-за проверок outfit7.
+            let value: u32 = 1; 
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioRoute => {
@@ -260,4 +264,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
-
