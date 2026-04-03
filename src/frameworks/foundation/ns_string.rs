@@ -1576,6 +1576,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_static_object(this, host_object, &mut env.mem)
 }
 
+- (())layoutSubviews {
+    // no-op
+}
 - (id) retain { this }
 - (()) release {}
 - (id) autorelease { this }
