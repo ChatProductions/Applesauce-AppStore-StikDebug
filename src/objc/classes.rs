@@ -695,6 +695,33 @@ pub fn objc_getClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class 
     nil
 }
 
+pub fn objc_exception_throw(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    if name.is_null() {
+        return nil;
+    }
+    
+    // Читаем C-строку имени класса из памяти гостя и КОПИРУЕМ её в String (.to_string()),
+    // чтобы освободить неизменяемое заимствование (borrow) env.mem.
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s.to_string(),
+        Err(_) => return nil,
+    };
+
+    // Проверяем, зарегистрирован ли уже этот класс (среди известных)
+    // Обратите внимание на амперсанд & перед name_str
+    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
+        return class;
+    }
+
+    // Если класса еще нет, но у нас есть для него хост-шаблон, линкуем его
+    if ObjC::find_template(&name_str).is_some() {
+        return env.objc.link_class(&name_str, false, &mut env.mem);
+    }
+
+    // Стандартное поведение objc_getClass: если класс не найден, возвращаем nil
+    nil
+}
+
 pub fn object_getClass(env: &mut crate::Environment, obj: id) -> Class {
     if obj.is_null() {
         return nil;
@@ -707,40 +734,85 @@ pub fn object_getClass(env: &mut crate::Environment, obj: id) -> Class {
     objc_obj.isa
 }
 
-pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, obj: id) -> Class {
-    if obj.is_null() {
+pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    if name.is_null() {
         return nil;
     }
     
-    // В Objective-C любой объект в памяти (id) начинается с указателя isa.
-    // Приводим указатель, читаем из памяти гостя структуру objc_object 
-    // и просто возвращаем её поле isa.
-    let objc_obj: objc_object = env.mem.read(obj.cast());
-    objc_obj.isa
+    // Читаем C-строку имени класса из памяти гостя и КОПИРУЕМ её в String (.to_string()),
+    // чтобы освободить неизменяемое заимствование (borrow) env.mem.
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s.to_string(),
+        Err(_) => return nil,
+    };
+
+    // Проверяем, зарегистрирован ли уже этот класс (среди известных)
+    // Обратите внимание на амперсанд & перед name_str
+    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
+        return class;
+    }
+
+    // Если класса еще нет, но у нас есть для него хост-шаблон, линкуем его
+    if ObjC::find_template(&name_str).is_some() {
+        return env.objc.link_class(&name_str, false, &mut env.mem);
+    }
+
+    // Стандартное поведение objc_getClass: если класс не найден, возвращаем nil
+    nil
 }
 
-pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, obj: id) -> Class {
-    if obj.is_null() {
+pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    if name.is_null() {
         return nil;
     }
     
-    // В Objective-C любой объект в памяти (id) начинается с указателя isa.
-    // Приводим указатель, читаем из памяти гостя структуру objc_object 
-    // и просто возвращаем её поле isa.
-    let objc_obj: objc_object = env.mem.read(obj.cast());
-    objc_obj.isa
+    // Читаем C-строку имени класса из памяти гостя и КОПИРУЕМ её в String (.to_string()),
+    // чтобы освободить неизменяемое заимствование (borrow) env.mem.
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s.to_string(),
+        Err(_) => return nil,
+    };
+
+    // Проверяем, зарегистрирован ли уже этот класс (среди известных)
+    // Обратите внимание на амперсанд & перед name_str
+    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
+        return class;
+    }
+
+    // Если класса еще нет, но у нас есть для него хост-шаблон, линкуем его
+    if ObjC::find_template(&name_str).is_some() {
+        return env.objc.link_class(&name_str, false, &mut env.mem);
+    }
+
+    // Стандартное поведение objc_getClass: если класс не найден, возвращаем nil
+    nil
 }
 
-pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, obj: id) -> Class {
-    if obj.is_null() {
+pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    if name.is_null() {
         return nil;
     }
     
-    // В Objective-C любой объект в памяти (id) начинается с указателя isa.
-    // Приводим указатель, читаем из памяти гостя структуру objc_object 
-    // и просто возвращаем её поле isa.
-    let objc_obj: objc_object = env.mem.read(obj.cast());
-    objc_obj.isa
+    // Читаем C-строку имени класса из памяти гостя и КОПИРУЕМ её в String (.to_string()),
+    // чтобы освободить неизменяемое заимствование (borrow) env.mem.
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s.to_string(),
+        Err(_) => return nil,
+    };
+
+    // Проверяем, зарегистрирован ли уже этот класс (среди известных)
+    // Обратите внимание на амперсанд & перед name_str
+    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
+        return class;
+    }
+
+    // Если класса еще нет, но у нас есть для него хост-шаблон, линкуем его
+    if ObjC::find_template(&name_str).is_some() {
+        return env.objc.link_class(&name_str, false, &mut env.mem);
+    }
+
+    // Стандартное поведение objc_getClass: если класс не найден, возвращаем nil
+    nil
 }
 
 pub fn class_getSuperclass(env: &mut crate::Environment, cls: Class) -> Class {
