@@ -70,6 +70,7 @@ struct AudioQueueHostObject {
     aq_is_running_proc: Option<AudioQueuePropertyListenerProc>,
     aq_is_running_user_data: Option<MutVoidPtr>,
     is_running_handler: bool,
+    is_input: bool, // Флаг: это микрофон (ввод)?
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -176,6 +177,7 @@ pub fn AudioQueueNewOutput(
         aq_is_running_proc: None,
         aq_is_running_user_data: None,
         is_running_handler: false,
+        is_input: false, // Это очередь вывода (динамик)
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -205,7 +207,7 @@ pub fn AudioQueueNewInput(
     in_flags: u32,
     out_aq: MutPtr<AudioQueueRef>,
 ) -> OSStatus {
-    log!("TODO: AudioQueueNewInput(...) stubbed");
+    log!("TODO: AudioQueueNewInput(...) stubbed to prevent crash");
     assert!(in_flags == 0);
 
     let in_callback_run_loop = if in_callback_run_loop.is_null() {
@@ -230,6 +232,7 @@ pub fn AudioQueueNewInput(
         aq_is_running_proc: None,
         aq_is_running_user_data: None,
         is_running_handler: false,
+        is_input: true, // Флаг: это очередь ввода (микрофон)
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -430,8 +433,8 @@ fn AudioQueueGetPropertySize(
         }
         None => {
             log!("Warning: AudioQueueGetPropertySize unknown property {}, returning fake size 4", debug_fourcc(in_property_id));
-            env.mem.write(out_data_size, 4); 
-            0 
+            env.mem.write(out_data_size, 4); // Имитируем размер
+            0 // Возвращаем 0 (Успех) вместо ошибки
         }
     }
 }
@@ -452,7 +455,7 @@ fn AudioQueueGetProperty(
             if provided_size >= 4 && !out_property_data.is_null() {
                 env.mem.write(out_property_data.cast::<u32>(), 0u32);
             }
-            return 0; 
+            return 0; // Возвращаем 0 (Успех) вместо kAudioQueueErr_InvalidProperty
         }
     };
 
@@ -645,6 +648,12 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         &mut env.framework_state, &mut env.openal_manager);
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    
+    // ВАЖНО: Если это микрофон, нам не нужно создавать OpenAL источник (динамик)!
+    if host_object.is_input {
+        return; 
+    }
+    
     if !is_supported_audio_format(&host_object.format) { return; }
 
     if host_object.al_source.is_none() {
@@ -653,7 +662,6 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         let mut al_source = 0;
         unsafe {
             context.GenSources(1, &mut al_source);
-
             context.Sourcef(al_source, al::AL_MAX_GAIN, volume);
         };
         host_object.al_source = Some(al_source);
@@ -665,11 +673,9 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
         unsafe {
             context.GetSourcei(al_source, al::AL_BUFFERS_QUEUED, &mut al_queued);
-
             context.GetSourcei(al_source, al::AL_BUFFERS_PROCESSED, &mut al_processed);
         }
         if (al_queued - al_processed) > 1 ||
-
             al_queued as usize == host_object.buffer_queue.len() { break; }
 
         let next_buffer_ref = host_object.buffer_queue[al_queued as usize];
@@ -698,13 +704,10 @@ fn unqueue_buffers<F: FnMut(ALuint)>(al_source: ALuint, context: &OpenAL<'_>, mu
         let mut processed = 0;
 
         unsafe { context.GetSourcei(al_source, al::AL_BUFFERS_PROCESSED, &mut processed); }
-        if processed == 0 { break;
-
-        }
+        if processed == 0 { break; }
+        
         let mut b = 0;
-        unsafe { context.SourceUnqueueBuffers(al_source, 1, &mut b);
-
-        }
+        unsafe { context.SourceUnqueueBuffers(al_source, 1, &mut b); }
         callback(b);
     }
 }
@@ -713,7 +716,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let mut to_reuse = Vec::new();
     let mut callback_info: Option<(AudioQueueOutputCallback, MutVoidPtr)> = None;
     let mut al_source_id: Option<ALuint> = None;
-    let mut is_input = false; // Добавлен флаг очереди микрофона
+    let mut is_input_queue = false;
 
     // Шаг 1: Работаем с состоянием
     {
@@ -721,30 +724,14 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
             &mut env.framework_state, &mut env.openal_manager);
 
         let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+        is_input_queue = host_object.is_input;
         
-        if let Some(al_source) = host_object.al_source {
-            // Очередь вывода (Динамик)
-            if !host_object.is_running_handler {
-                host_object.is_running_handler = true;
-                al_source_id = Some(al_source);
-
-                unqueue_buffers(al_source, &context, |b| {
-                    host_object.al_unused_buffers.push(b);
-                    if let Some(buf) = host_object.buffer_queue.pop_front() {
-                        to_reuse.push(buf);
-                    }
-                });
-
-                callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
-            }
-        } else {
-            // Очередь ввода (Микрофон)
+        if is_input_queue {
+            // Очередь ввода (Микрофон) - симулируем получение данных
             if host_object.is_running == AudioQueueIsRunning::Running {
-                is_input = true;
                 if !host_object.is_running_handler {
                     host_object.is_running_handler = true;
                     
-                    // Симулируем запись: берем 1 пустой буфер, который игра дала нам для заполнения
                     if let Some(buf) = host_object.buffer_queue.pop_front() {
                         to_reuse.push(buf);
                     }
@@ -752,14 +739,31 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
                     callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
                 }
             }
+        } else {
+            // Очередь вывода (Динамик)
+            if let Some(al_source) = host_object.al_source {
+                if !host_object.is_running_handler {
+                    host_object.is_running_handler = true;
+                    al_source_id = Some(al_source);
+
+                    unqueue_buffers(al_source, &context, |b| {
+                        host_object.al_unused_buffers.push(b);
+                        if let Some(buf) = host_object.buffer_queue.pop_front() {
+                            to_reuse.push(buf);
+                        }
+                    });
+
+                    callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
+                }
+            }
         }
     }
 
-    // Шаг 2: Вызовы колбэков (env свободен)
+    // Шаг 2: Вызовы колбэков (env свободен от блокировок памяти)
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
-            if is_input {
-                // Если это микрофон, сообщаем игре, что буфер заполнен (тишиной)
+            if is_input_queue {
+                // Если это микрофон, сообщаем игре, что буфер заполнен до краев (тишиной)
                 let mut buffer_struct = env.mem.read(buf);
                 buffer_struct.audio_data_byte_size = buffer_struct.audio_data_bytes_capacity;
                 env.mem.write(buf, buffer_struct);
@@ -776,7 +780,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     prime_audio_queue(env, in_aq);
 
-    // Шаг 3: Финальные операции OpenAL
+    // Шаг 3: Финальные операции OpenAL (только для вывода)
     if let Some(al_source) = al_source_id {
         let mut needs_play = false;
         let mut is_stopping = false;
@@ -808,7 +812,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         }
     }
 
-    // Сбрасываем флаг обработчика для обеих очередей
+    // Сбрасываем флаг обработчика
     if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
         host_object.is_running_handler = false;
     }
@@ -816,7 +820,6 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
 fn AudioQueuePrime(env: &mut Environment, in_aq: AudioQueueRef, _: u32, _: MutPtr<u32>) -> OSStatus {
     return_if_null!(in_aq);
-
     prime_audio_queue(env, in_aq);
     0
 }
@@ -829,7 +832,6 @@ fn notify_aq_is_running(env: &mut Environment, in_aq: AudioQueueRef) {
                                        host_object.aq_is_running_user_data) {
         <GuestFunction as CallFromHost<(), (MutVoidPtr, Ptr<OpaqueAudioQueue, true>, u32)>>::
         call_from_host(&proc, env, (data, in_aq, kAudioQueueProperty_IsRunning));
-
     }
 }
 
@@ -857,9 +859,7 @@ pub fn AudioQueuePause(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
 
     host_object.is_running = AudioQueueIsRunning::Stopped;
-    if let Some(src) = host_object.al_source { unsafe { context.SourcePause(src);
-
-    } }
+    if let Some(src) = host_object.al_source { unsafe { context.SourcePause(src); } }
     0
 }
 
@@ -869,7 +869,6 @@ fn finish_stopping_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq)
         .unwrap().is_running = AudioQueueIsRunning::Stopped;
     notify_aq_is_running(env, in_aq);
-
 }
 
 pub fn AudioQueueStop(env: &mut Environment, in_aq: AudioQueueRef, immediate: bool) -> OSStatus {
@@ -880,15 +879,12 @@ pub fn AudioQueueStop(env: &mut Environment, in_aq: AudioQueueRef, immediate: bo
             &mut env.framework_state, &mut env.openal_manager);
 
         let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
-        if let Some(src) = host_object.al_source { unsafe { context.SourceStop(src);
-
-        } }
+        if let Some(src) = host_object.al_source { unsafe { context.SourceStop(src); } }
         finish_stopping_audio_queue(env, in_aq);
 
     } else {
         let state = State::get(&mut env.framework_state);
         state.audio_queues.get_mut(&in_aq).unwrap().is_running = AudioQueueIsRunning::Stopping;
-
     }
     0
 }
@@ -901,14 +897,11 @@ fn AudioQueueReset(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
 
     if let Some(src) = host_object.al_source {
-        unsafe { context.SourceStop(src);
-
-        }
+        unsafe { context.SourceStop(src); }
         unqueue_buffers(src, &context, |b| {
             host_object.al_unused_buffers.push(b);
             host_object.buffer_queue.pop_front();
         });
-
     }
     host_object.buffer_queue.clear();
     0
@@ -922,9 +915,7 @@ fn AudioQueueFreeBuffer(env: &mut Environment, in_aq: AudioQueueRef,
 
     let host_object = State::get(&mut env.framework_state).audio_queues
         .get_mut(&in_aq).unwrap();
-    if host_object.buffer_queue.contains(&in_buffer) { return kAudioQueueErr_BufferInQueue;
-
-    }
+    if host_object.buffer_queue.contains(&in_buffer) { return kAudioQueueErr_BufferInQueue; }
 
     if let Some(idx) = host_object.buffers.iter().position(|x| x == &in_buffer) {
         host_object.buffers.remove(idx);
@@ -947,21 +938,15 @@ pub fn AudioQueueDispose(env: &mut Environment, in_aq: AudioQueueRef, _: bool) -
 
     for b_ptr in host_object.buffers {
         let b = env.mem.read(b_ptr);
-
         env.mem.free(b.audio_data);
         env.mem.free(b_ptr.cast());
     }
 
     if let Some(src) = host_object.al_source {
-        unsafe { context.SourceStop(src);
-
-        }
+        unsafe { context.SourceStop(src); }
         unqueue_buffers(src, &context, |b| host_object.al_unused_buffers.push(b));
-
         unsafe { context.DeleteBuffers(host_object.al_unused_buffers.len() as i32, 
-                                       host_object.al_unused_buffers.as_ptr());
-
-        }
+                                       host_object.al_unused_buffers.as_ptr()); }
     }
     ns_run_loop::remove_audio_queue(env, host_object.run_loop, in_aq);
 
