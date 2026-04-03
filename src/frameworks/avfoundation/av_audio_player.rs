@@ -177,7 +177,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         if !outError.is_null() {
             let domain = ns_string::get_static_str(env, NSOSStatusErrorDomain);
             let error = msg_class![env; NSError alloc];
-            let error = msg![env; error initWithDomain:domain code:status userInfo:nil];
+            let error_code: NSInteger = status; // Возвращаем реальный статус ошибки
+            let error = msg![env; error initWithDomain:domain code:error_code userInfo:nil];
             env.mem.write(outError, error);
         }
         return nil;
@@ -216,7 +217,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if !outError.is_null() {
         let domain = ns_string::get_static_str(env, NSOSStatusErrorDomain);
         let error = msg_class![env; NSError alloc];
-        let error = msg![env; error initWithDomain:domain code:-1 userInfo:nil];
+        let error_code: NSInteger = -1; // ИСПРАВЛЕНИЕ ТУТ: Вынесли -1 в переменную
+        let error = msg![env; error initWithDomain:domain code:error_code userInfo:nil];
         env.mem.write(outError, error);
     }
     nil
