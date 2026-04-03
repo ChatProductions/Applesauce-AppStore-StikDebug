@@ -139,48 +139,6 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         }
         dest
     }
-    pub(super) fn strcspn(
-        env: &mut Environment,
-        dest: MutPtr<T>,
-        src: ConstPtr<T>,
-        bufsz: GuestUSize,
-    ) -> MutPtr<T> {
-        {
-            let dest_len = Self::strlen(env, dest.cast_const());
-            let dest = dest + dest_len;
-            let remaining = bufsz.checked_sub(dest_len).expect("strcat overflowed");
-            Self::strcpy(env, dest, src, remaining);
-        }
-        dest
-    }
-    pub(super) fn strspn(
-        env: &mut Environment,
-        dest: MutPtr<T>,
-        src: ConstPtr<T>,
-        bufsz: GuestUSize,
-    ) -> MutPtr<T> {
-        {
-            let dest_len = Self::strlen(env, dest.cast_const());
-            let dest = dest + dest_len;
-            let remaining = bufsz.checked_sub(dest_len).expect("strcat overflowed");
-            Self::strcpy(env, dest, src, remaining);
-        }
-        dest
-    }
-    pub(super) fn strlcat(
-        env: &mut Environment,
-        dest: MutPtr<T>,
-        src: ConstPtr<T>,
-        bufsz: GuestUSize,
-    ) -> MutPtr<T> {
-        {
-            let dest_len = Self::strlen(env, dest.cast_const());
-            let dest = dest + dest_len;
-            let remaining = bufsz.checked_sub(dest_len).expect("strcat overflowed");
-            Self::strcpy(env, dest, src, remaining);
-        }
-        dest
-    }
     pub(super) fn strcat(
         env: &mut Environment,
         dest: MutPtr<T>,
