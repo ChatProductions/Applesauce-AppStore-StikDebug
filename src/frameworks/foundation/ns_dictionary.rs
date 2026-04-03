@@ -749,19 +749,20 @@ pub const CLASSES: ClassExports = objc_classes! {
         //   "NS.objects" => [ objects here ]
         // }
         let host = env.objc.borrow::<DictionaryHostObject>(this);
-        let pairs: Vec<(id, id)> = host.map.iter().map(|(&k, &v)| (k, v)).collect();
-        drop(host);
+        let pairs: Vec<(id, id)> = host.map.values()
+           .flat_map(|v| v.iter().copied())
+           .collect();
+            drop(host);
 
-        // Build NS.keys array
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];
 
-        for (key, val) in &pairs {
-            let k = *key;
-            let v = *val;
-            () = msg![env; keys_array addObject:k];
-            () = msg![env; objects_array addObject:v];
-        }
+        for (k, v) in &pairs {
+        let key = *k;
+        let val = *v;
+        () = msg![env; keys_array addObject:key];
+        () = msg![env; objects_array addObject:val];
+    }
 
         let keys_str = from_rust_string(env, "NS.keys".to_string());
         let objects_str = from_rust_string(env, "NS.objects".to_string());
