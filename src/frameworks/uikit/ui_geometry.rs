@@ -9,6 +9,11 @@ use crate::mem::MutVoidPtr;
 use crate::objc::{autorelease, id};
 use crate::Environment;
 
+pub struct State {
+    pub default_malloc_zone: Option<MutVoidPtr>,
+    // ...
+}
+
 // Apple's documentation says all of these return zeroes if the input is not
 // well-formed.
 pub fn CGPointFromString(env: &mut Environment, string: id) -> CGPoint {
@@ -43,13 +48,14 @@ pub fn NSStringFromCGRect(env: &mut Environment, rect: CGRect) -> id {
     autorelease(env, s)
 }
 
-
-fn NSDefaultMallocZone(_env: &mut Environment) -> MutVoidPtr {
-    // Real implementation returns a malloc_zone_t* — we return null since
-    // we don't implement malloc zones. Apps that only call this to pass the
-    // result to NSAllocateMemoryPages or similar will handle null gracefully.
-    log!("NSDefaultMallocZone: stubbed, returning null");
-    MutVoidPtr::null()
+fn NSDefaultMallocZone(env: &mut Environment) -> MutVoidPtr {
+    if let Some(ptr) = env.framework_state.uikit.default_malloc_zone {
+        return ptr;
+    }
+    let ptr = env.mem.alloc(4);
+    env.framework_state.env.framework_state.uikit_state.foundation.default_malloc_zone = Some(ptr);
+    log_dbg!("NSDefaultMallocZone: allocated dummy zone at {:?}", ptr);
+    ptr
 }
 
 pub const FUNCTIONS: FunctionExports = &[
