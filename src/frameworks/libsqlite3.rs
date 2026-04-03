@@ -15,17 +15,25 @@ lazy_static::lazy_static! {
 
 // int sqlite3_open(const char *filename, sqlite3 **ppDb);
 pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 {
-    // Читаем путь из памяти гостя. 
-    // Примечание: если в твоем mem.rs метод называется иначе (например, read_c_string_to_rust_string), 
-    // замени на актуальный.
-    let filename = match env.mem.read_c_string(filename_ptr) {
-        Ok(s) => s,
-        Err(_) => return SQLITE_ERROR,
-    };
+    // Читаем путь из памяти гостя вручную, байт за байтом, до нуль-терминатора
+    let mut filename_bytes = Vec::new();
+    let mut current_addr = filename_ptr;
+    loop {
+        let ptr: Ptr<u8> = Ptr::from_bits(current_addr);
+        let byte: u8 = env.mem.read(ptr);
+        if byte == 0 { 
+            break; // Конец C-строки
+        }
+        filename_bytes.push(byte);
+        current_addr += 1;
+    }
+    
+    // Конвертируем прочитанные байты в строку Rust
+    let filename = String::from_utf8_lossy(&filename_bytes).into_owned();
 
     // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора безопасно
     let safe_name = filename.replace("/", "_");
-    // Сохраняем базу в директорию приложения (подставь нужный путь, если в Environment есть менеджер ФС)
+    // Сохраняем базу в директорию приложения
     let path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}", safe_name);
 
     match Connection::open(&path) {
@@ -38,7 +46,7 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 
             handles.insert(handle, conn);
             
             // Пишем handle обратно в память по адресу ppDb
-            let pp_db_ptr: MutPtr<u32> = Ptr::from_bits(ppDb);
+            let pp_db_ptr: MutPtr<u32> = MutPtr::from_bits(ppDb);
             env.mem.write(pp_db_ptr, handle);
             
             SQLITE_OK
@@ -61,9 +69,10 @@ pub fn sqlite3_close(_env: &mut Environment, p_db: u32) -> u32 {
 }
 
 // Экспортируем функции через макрос из dyld.rs
+// Количество подчеркиваний равно количеству аргументов, НЕ СЧИТАЯ env
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(sqlite3_open(_, _, _)),
-    export_c_func!(sqlite3_close(_, _)),
+    export_c_func!(sqlite3_open(_, _)),
+    export_c_func!(sqlite3_close(_)),
 ];
 
 // Собираем всё в HostDylib, как требует архитектура dyld
