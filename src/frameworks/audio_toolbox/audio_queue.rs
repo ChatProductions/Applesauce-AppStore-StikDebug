@@ -111,7 +111,7 @@ type AudioQueueParameterValue = f32;
 pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
 const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
-const kAudioQueueProperty_StreamDescription: AudioQueuePropertyID = fourcc(b"aqfd");
+const kAudioQueueProperty_StreamDescription: AudioQueuePropertyID = fourcc(b"aqft");
 
 type AudioQueuePropertyListenerProc = GuestFunction;
 
