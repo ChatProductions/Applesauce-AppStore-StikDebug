@@ -27,8 +27,6 @@ type CFStreamError = u64; // two i32s packed; we never inspect it
 pub(crate) struct CFHostHostObject {
     pub(crate) address: Option<SocketAddrV4>,
     pub(crate) name: Option<String>,
-    pub(crate) callout: Option<GuestFunction>,
-    pub(crate) context: MutVoidPtr,
 }
 
 impl HostObject for CFHostHostObject {}
