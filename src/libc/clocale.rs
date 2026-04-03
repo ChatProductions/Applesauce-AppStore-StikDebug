@@ -36,11 +36,17 @@ pub fn setlocale(
         LC_ALL | LC_COLLATE | LC_CTYPE | LC_MONETARY | LC_NUMERIC | LC_TIME | LC_MESSAGES
     ));
     if !locale.is_null() {
-        // TODO: Handle empty locale string and ensure the combination of
-        // category and locale is valid.
+        // Читаем строку локали из памяти
         let locale_cstr = env.mem.cstr_at(locale).to_owned();
-        assert_ne!(locale_cstr.len(), 0);
-        let new_locale = env.mem.alloc_and_write_cstr(locale_cstr.as_slice());
+        
+        // Вместо краша при пустой строке, подставляем базовую локаль "C"
+        let locale_to_use = if locale_cstr.is_empty() {
+            b"C"
+        } else {
+            locale_cstr.as_slice()
+        };
+        
+        let new_locale = env.mem.alloc_and_write_cstr(locale_to_use);
         if let Some(old_locale) = env.libc_state.clocale.locale.insert(category, new_locale) {
             env.mem.free(old_locale.cast())
         };
