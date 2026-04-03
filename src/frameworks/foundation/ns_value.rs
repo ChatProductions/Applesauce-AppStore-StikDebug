@@ -484,6 +484,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     from_rust_ordering(ordering)
 }
 
+// Returns the Objective-C type encoding for the wrapped number.
+- (ConstVoidPtr)objCType {
+    let typ: &[u8; 2] = match env.objc.borrow::<NSNumberHostObject>(this) {
+        NSNumberHostObject::Bool(_) | NSNumberHostObject::Char(_) => b"c\0",
+        NSNumberHostObject::UnsignedLongLong(_) => b"Q\0",
+        NSNumberHostObject::UnsignedInt(_) => b"I\0",
+        NSNumberHostObject::Int(_) => b"i\0",
+        NSNumberHostObject::LongLong(_) => b"q\0",
+        NSNumberHostObject::Float(_) => b"f\0",
+        NSNumberHostObject::Double(_) => b"d\0",
+        NSNumberHostObject::Short(_) => b"s\0",
+        NSNumberHostObject::UnsignedShort(_) => b"S\0",
+    };
+    // Allocate the C-string inside guest memory and return its pointer.
+    env.mem.alloc_and_write(*typ).cast_void().cast_const()
+}
+
 // TODO: accessors etc
 
 @end
@@ -513,3 +530,4 @@ pub fn is_conversion_lossless(env: &mut Environment, this: id, type_: CFNumberTy
     };
     msg![env; this isEqualToNumber:num2]
 }
+
