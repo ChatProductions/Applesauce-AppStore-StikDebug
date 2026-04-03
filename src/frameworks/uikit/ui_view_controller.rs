@@ -24,6 +24,9 @@ use crate::Environment;
 
 pub mod ui_navigation_controller;
 
+pub type UIModalTransitionStyle = i32;
+pub type UIModalPresentationStyle = i32;
+
 #[derive(Default)]
 struct UIViewControllerHostObject {
     /// The root view.
@@ -85,7 +88,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     () = msg![env; this setView:view];
 
-    // ИСПРАВЛЕНИЕ: Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
+    // Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
     let nib_name_key = get_static_str(env, "UINibName");
     let nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
     if nib_name != nil {
@@ -116,7 +119,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, view);
     release(env, nib_name);
     release(env, bundle);
-    release(env, title); // ИСПРАВЛЕНИЕ: предотвращаем утечку памяти
+    release(env, title); // предотвращаем утечку памяти
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -254,7 +257,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)title {
-    // ИСПРАВЛЕНИЕ: Возвращаем сохраненный title, если он есть
     let stored_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
     if stored_title != nil {
         stored_title
