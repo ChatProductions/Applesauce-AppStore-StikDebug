@@ -202,6 +202,183 @@ pub const CLASSES: ClassExports = objc_classes! {
     next_responder
 }
 
+- (id)title {
+    let class: Class = msg![env; this class];
+    NSStringFromClass(env, class)
+}
+
+- (bool)isViewLoaded {
+    env.objc.borrow::<UIViewControllerHostObject>(this).view != nil
+}
+
+- (id)nibName {
+    env.objc.borrow::<UIViewControllerHostObject>(this).nib_name
+}
+
+- (id)nibBundle {
+    env.objc.borrow::<UIViewControllerHostObject>(this).bundle
+}
+
+- (())viewDidUnload {
+    log_dbg!("[(UIViewController*){:?} viewDidUnload]", this);
+}
+
+- (())viewWillLayoutSubviews {
+    log_dbg!("[(UIViewController*){:?} viewWillLayoutSubviews]", this);
+}
+
+- (())viewDidLayoutSubviews {
+    log_dbg!("[(UIViewController*){:?} viewDidLayoutSubviews]", this);
+}
+
+- (bool)isEditing {
+    false
+}
+
+- (())setEditing:(bool)editing animated:(bool)_animated {
+    msg![env; this setEditing:editing]
+}
+
+- (id)editButtonItem {
+    // Return a stub bar button item.
+    msg_class![env; UIBarButtonItem new]
+}
+
+- (())presentModalViewController:(id)modal_vc animated:(bool)animated {
+    log_dbg!(
+        "[(UIViewController*){:?} presentModalViewController:{:?} animated:{}]",
+        this, modal_vc, animated
+    );
+    () = msg![env; modal_vc viewWillAppear:animated];
+    () = msg![env; modal_vc viewDidAppear:animated];
+}
+
+- (id)modalViewController {
+    nil
+}
+
+- (id)parentViewController {
+    nil
+}
+
+- (id)presentingViewController {
+    nil
+}
+
+- (id)presentedViewController {
+    nil
+}
+
+- (())presentViewController:(id)vc
+                  animated:(bool)animated
+                completion:(id)_completion {
+    msg![env; this presentModalViewController:vc animated:animated]
+}
+
+- (())dismissViewControllerAnimated:(bool)animated
+                         completion:(id)_completion {
+    msg![env; this dismissModalViewControllerAnimated:animated]
+}
+
+- (bool)wantsFullScreenLayout {
+    false
+}
+
+- (bool)hidesBottomBarWhenPushed {
+    false
+}
+
+- (())setHidesBottomBarWhenPushed:(bool)_value {
+    // TODO
+}
+
+- (id)tabBarItem {
+    msg_class![env; UITabBarItem new]
+}
+
+- (())setTabBarItem:(id)_item {
+    // TODO
+}
+
+- (id)tabBarController {
+    nil
+}
+
+- (id)navigationItem {
+    // Return a stub navigation item with the VC's class name as title.
+    let class: Class = msg![env; this class];
+    let class_name: id = NSStringFromClass(env, class);
+    let item: id = msg_class![env; UINavigationItem alloc];
+    let item: id = msg![env; item initWithTitle:class_name];
+    crate::objc::autorelease(env, item)
+}
+
+- (id)navigationController {
+    nil
+}
+
+- (())didReceiveMemoryWarning {
+    log_dbg!("[(UIViewController*){:?} didReceiveMemoryWarning]", this);
+    // Release view if it doesn't have a superview.
+    let view = env.objc.borrow::<UIViewControllerHostObject>(this).view;
+    if view != nil {
+        let superview: id = msg![env; view superview];
+        if superview == nil {
+            () = msg![env; this viewDidUnload];
+            () = msg![env; this setView:nil];
+        }
+    }
+}
+
+- (bool)shouldAutorotate {
+    true
+}
+
+- (NSUInteger)supportedInterfaceOrientations {
+    // UIInterfaceOrientationMaskAll = 0xFF
+    0xFF
+}
+
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
+    UIInterfaceOrientationPortrait
+}
+
+- (id)childViewControllers {
+    msg_class![env; NSArray new]
+}
+
+- (())addChildViewController:(id)_child {
+    log_dbg!("[(UIViewController*){:?} addChildViewController:]", this);
+}
+
+- (())removeFromParentViewController {
+    log_dbg!("[(UIViewController*){:?} removeFromParentViewController]", this);
+}
+
+- (())willMoveToParentViewController:(id)_parent {
+    // TODO
+}
+
+- (())didMoveToParentViewController:(id)_parent {
+    // TODO
+}
+
+- (())beginAppearanceTransition:(bool)_appearing animated:(bool)_animated {
+    // TODO
+}
+
+- (())endAppearanceTransition {
+    // TODO
+}
+
+- (bool)automaticallyForwardAppearanceAndRotationMethodsToChildViewControllers {
+    true
+}
+
+- (bool)shouldAutomaticallyForwardAppearanceMethods {
+    true
+}
+
 @end
 
 };
