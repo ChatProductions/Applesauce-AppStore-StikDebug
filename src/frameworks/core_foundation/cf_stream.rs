@@ -433,25 +433,17 @@ fn CFWriteStreamUnscheduleFromRunLoop(
 fn CFStreamCreatePairWithSocketToCFHost(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    host: CFTypeRef, // CFHostRef
+    host: CFTypeRef,
     port: i32,
     read_stream:  MutPtr<CFReadStreamRef>,
     write_stream: MutPtr<CFWriteStreamRef>,
 ) {
-    // Extract the hostname from the CFHost object for logging if possible.
     let host_str = if !host.is_null() {
-        // CFHostRef is our _touchHLE_CFHost — try to read the stored name.
-        // We borrow via the raw ObjC layer; if the cast fails we just log "<unknown>".
-        let name_id = env
-            .objc
+        env.objc
             .borrow::<crate::frameworks::core_foundation::cf_host::CFHostHostObject>(host)
             .name
-            .unwrap_or(crate::objc::nil);
-        if name_id != crate::objc::nil {
-            ns_string::to_rust_string(env, name_id).into_owned()
-        } else {
-            "<address>".to_string()
-        }
+            .clone()
+            .unwrap_or_else(|| "<address>".to_string())
     } else {
         "<nil>".to_string()
     };
