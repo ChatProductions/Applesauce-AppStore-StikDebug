@@ -13,6 +13,7 @@ use crate::libc::errno::{set_errno, EINVAL};
 use crate::libc::string::strlen;
 use crate::libc::wchar::wchar_t;
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::objc::id;
 use crate::Environment;
 use std::str::FromStr;
 
