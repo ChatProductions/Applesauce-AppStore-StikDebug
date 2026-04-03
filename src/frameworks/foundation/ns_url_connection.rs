@@ -18,7 +18,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)sendSynchronousRequest:(id)request
            returningResponse:(MutPtr<id>)response
                        error:(MutPtr<id>)error {
-    log!("TODO: [NSURLConnection sendSynchronousRequest:returningResponse:error:] stubbed");
+    log!("FAKE: [NSURLConnection sendSynchronousRequest:returningResponse:error:] returning empty NSData");
     
     // Если игра передала указатель для ответа, записываем туда nil
     if !response.is_null() {
@@ -30,8 +30,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.mem.write(error, nil);
     }
     
-    // Возвращаем nil, чтобы сымитировать сбой сети и избежать чтения отсутствующих данных
-    nil
+    // Возвращаем пустой объект NSData, чтобы игра не падала от нулевого указателя (nil)
+    let empty_data: id = msg_class![env; NSData data];
+    empty_data
 }
 
 + (id)connectionWithRequest:(id)request // NSURLRequest *
