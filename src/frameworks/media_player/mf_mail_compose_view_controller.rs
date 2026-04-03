@@ -197,12 +197,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // and dismiss ourselves, since there is no real mail UI in touchHLE.
 
 - (())viewWillAppear:(bool)animated {
-    let _: () = msg![env; super viewWillAppear:animated];
-
     let delegate = env.objc.borrow::<MFMailComposeViewControllerHostObject>(this)
         .mail_compose_delegate;
     if delegate != nil {
-        // NSError* — pass nil, result is Cancelled so no error needed.
         let error: id = nil;
         let _: () = msg![env; delegate mailComposeController:this
                                          didFinishWithResult:MF_MAIL_COMPOSE_RESULT_CANCELLED
@@ -211,9 +208,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())viewDidAppear:(bool)animated {
-    let _: () = msg![env; super viewDidAppear:animated];
-
-    // Dismiss ourselves so the presenting controller isn't left hanging.
     let presenting: id = msg![env; this presentingViewController];
     if presenting != nil {
         let _: () = msg![env; presenting dismissViewControllerAnimated:animated completion:nil];
