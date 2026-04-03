@@ -101,10 +101,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         ns_string::to_rust_string(env, mode),
     );
 
+    // FIX: Check if the timer is already in the list. If it is, exit early to 
+    // prevent duplicate entries and subsequent assertion panics on removal.
+    if env.objc.borrow::<NSRunLoopHostObject>(this).timers.contains(&timer) {
+        log_dbg!("Timer {:?} is already in run loop {:?}, ignoring duplicate addition.", timer, this);
+        return;
+    }
+
     retain(env, timer);
 
     let host_object = env.objc.borrow_mut::<NSRunLoopHostObject>(this);
-    // assert!(!host_object.timers.contains(&timer)); // TODO: what do we do here?
     host_object.timers.push(timer);
     ns_timer::set_run_loop(env, timer, this);
 }
@@ -356,3 +362,4 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
         .get(&thread_id)
         .unwrap()
 }
+
