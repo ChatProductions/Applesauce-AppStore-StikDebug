@@ -210,7 +210,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if key_str == "view" {
         () = msg![env; this setView:value];
     } else {
-        msg_super![env; this setValue:value forKey:key];
+        // ИСПРАВЛЕНИЕ: Явно указываем `() =`, чтобы Rust понял тип возвращаемого значения макроса
+        () = msg_super![env; this setValue:value forKey:key];
     }
 }
 
@@ -494,8 +495,11 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     }
     let type_: id = get_static_str(env, "nib");
     
+    // ИСПРАВЛЕНИЕ: Явно указываем тип :id для результатов макроса, чтобы избежать ошибки E0283
+    
     // 1. Точное совпадение
-    if msg![env; bundle pathForResource:base_name ofType:type_] != nil {
+    let exact_path: id = msg![env; bundle pathForResource:base_name ofType:type_];
+    if exact_path != nil {
         retain(env, base_name);
         return base_name;
     }
@@ -505,7 +509,8 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     // 2. Ищем версию ~iphone
     let iphone_name = format!("{}~iphone", base_name_str);
     let iphone_ns: id = from_rust_string(env, iphone_name);
-    if msg![env; bundle pathForResource:iphone_ns ofType:type_] != nil {
+    let iphone_path: id = msg![env; bundle pathForResource:iphone_ns ofType:type_];
+    if iphone_path != nil {
         retain(env, iphone_ns); // Сохраняем строку для функции-вызывателя
         return iphone_ns;
     }
@@ -513,7 +518,8 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     // 3. Ищем версию ~ipad
     let ipad_name = format!("{}~ipad", base_name_str);
     let ipad_ns: id = from_rust_string(env, ipad_name);
-    if msg![env; bundle pathForResource:ipad_ns ofType:type_] != nil {
+    let ipad_path: id = msg![env; bundle pathForResource:ipad_ns ofType:type_];
+    if ipad_path != nil {
         retain(env, ipad_ns);
         return ipad_ns;
     }
