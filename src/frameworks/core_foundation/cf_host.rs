@@ -29,6 +29,8 @@ type CFStreamError = u64; // two i32s packed; we never inspect it
 pub(crate) struct CFHostHostObject {
     pub(crate) address: Option<SocketAddrV4>,
     pub(crate) name: Option<String>,
+    pub(crate) callout: Option<GuestFunction>,
+    pub(crate) context: MutVoidPtr,
 }
 
 impl HostObject for CFHostHostObject {}
@@ -37,12 +39,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
+// Fix dealloc — no release needed, fields are plain Rust values:
 @implementation _touchHLE_CFHost: NSObject
 - (())dealloc {
-    let host = env.objc.borrow::<CFHostHostObject>(this);
-    let (name, address) = (host.name, host.address);
-    crate::objc::release(env, name);
-    crate::objc::release(env, address);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 @end
@@ -53,13 +52,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 fn alloc_cfhost(
     env: &mut Environment,
-    name: crate::objc::id,
-    address: crate::objc::id,
+    name: Option<String>,
+    address: Option<SocketAddrV4>,
 ) -> CFHostRef {
     let class = env.objc.get_known_class("_touchHLE_CFHost", &mut env.mem);
     env.objc.alloc_object(
         class,
-        Box::new(CFHostHostObject { name, address }),
+        Box::new(CFHostHostObject {
+            name,
+            address,
+            callout: None,
+            context: MutVoidPtr::null(),
+        }),
         &mut env.mem,
     )
 }
@@ -81,10 +85,9 @@ fn CFHostCreateWithName(
     _allocator: CFAllocatorRef,
     hostname: CFTypeRef, // CFStringRef
 ) -> CFHostRef {
-    crate::objc::retain(env, hostname);
-    let host = alloc_cfhost(env, hostname, nil);
-    log_dbg!("CFHostCreateWithName: stubbed");
-    host
+    let name_str = ns_string::to_rust_string(env, hostname).into_owned();
+    log_dbg!("CFHostCreateWithName: {}", name_str);
+    alloc_cfhost(env, Some(name_str), None)
 }
 
 fn CFHostCreateWithAddress(
@@ -92,10 +95,9 @@ fn CFHostCreateWithAddress(
     _allocator: CFAllocatorRef,
     addr: CFTypeRef, // CFDataRef
 ) -> CFHostRef {
-    crate::objc::retain(env, addr);
-    let host = alloc_cfhost(env, nil, addr);
     log_dbg!("CFHostCreateWithAddress: stubbed");
-    host
+    // We don't parse the sockaddr bytes — store None for address.
+    alloc_cfhost(env, None, None)
 }
 
 fn CFHostCreateCopy(
@@ -107,26 +109,24 @@ fn CFHostCreateCopy(
         return nil;
     }
     let h = env.objc.borrow::<CFHostHostObject>(host);
-    let (name, address) = (h.name, h.address);
-    crate::objc::retain(env, name);
-    crate::objc::retain(env, address);
+    let name    = h.name.clone();
+    let address = h.address;
+    drop(h);
     alloc_cfhost(env, name, address)
 }
-
-// MARK: - Resolution (always fails — no real DNS)
 
 fn CFHostStartInfoResolution(
     env: &mut Environment,
     host: CFHostRef,
     info: CFHostInfoType,
-    _error: MutVoidPtr, // CFStreamError*
+    _error: MutVoidPtr,
 ) -> bool {
-    let name = env.objc.borrow::<CFHostHostObject>(host).name;
-    let name_str = if name != nil {
-        crate::frameworks::foundation::ns_string::to_rust_string(env, name).into_owned()
-    } else {
-        "<address>".to_string()
-    };
+    let name_str = env
+        .objc
+        .borrow::<CFHostHostObject>(host)
+        .name
+        .clone()
+        .unwrap_or_else(|| "<address>".to_string());
     log!(
         "CFHostStartInfoResolution: host={} info={} — stubbed, returning false",
         name_str, info
