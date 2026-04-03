@@ -8,6 +8,8 @@
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
+use crate::frameworks::foundation::ns_string;
+use std::collections::HashMap;
 
 // MARK: - UIPasteboard host object
 
@@ -16,6 +18,8 @@ struct UIPasteboardHostObject {
     name: id,
     /// Содержимое буфера в виде строки (NSString*)
     string: id,
+    /// Хранилище данных по типам (UTI -> NSData)
+    data_by_type: HashMap<String, id>,
 }
 
 impl HostObject for UIPasteboardHostObject {}
@@ -38,6 +42,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(UIPasteboardHostObject {
         name: nil,
         string: nil,
+        data_by_type: HashMap::new(),
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -71,12 +76,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let host = env.objc.borrow::<UIPasteboardHostObject>(this);
-    let name = host.name;
-    let string = host.string;
+    // Забираем данные, чтобы потом освободить их вне заимствования
+    let (name, string, data_by_type) = {
+        let host = env.objc.borrow_mut::<UIPasteboardHostObject>(this);
+        (
+            host.name,
+            host.string,
+            std::mem::take(&mut host.data_by_type),
+        )
+    };
     
     release(env, name);
     release(env, string);
+    for (_, data) in data_by_type {
+        release(env, data);
+    }
     
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -99,6 +113,50 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Записываем новое значение
     env.objc.borrow_mut::<UIPasteboardHostObject>(this).string = string;
+}
+
+// MARK: - Работа с данными (NSData)
+
+- (id)dataForPasteboardType:(id)pasteboard_type { // NSData*, NSString*
+    if pasteboard_type == nil {
+        return nil;
+    }
+    
+    let type_str = ns_string::to_rust_string(env, pasteboard_type);
+    let host = env.objc.borrow::<UIPasteboardHostObject>(this);
+    
+    if let Some(&data) = host.data_by_type.get(&type_str) {
+        data
+    } else {
+        nil
+    }
+}
+
+- (())setData:(id)data forPasteboardType:(id)pasteboard_type { // NSData*, NSString*
+    if pasteboard_type == nil {
+        return;
+    }
+    
+    let type_str = ns_string::to_rust_string(env, pasteboard_type);
+    
+    if data != nil {
+        retain(env, data);
+    }
+    
+    // Безопасно обновляем HashMap и забираем старое значение
+    let old_data = {
+        let host = env.objc.borrow_mut::<UIPasteboardHostObject>(this);
+        if data != nil {
+            host.data_by_type.insert(type_str, data)
+        } else {
+            host.data_by_type.remove(&type_str)
+        }
+    };
+    
+    // Освобождаем старое значение вне borrow_mut (чтобы не заблокировать env.mem)
+    if let Some(old) = old_data {
+        release(env, old);
+    }
 }
 
 @end
