@@ -207,7 +207,7 @@ fn wcstok(
         }
         if is_delim {
             // Null-terminate and save position after delimiter.
-            env.mem.write(start + i, 0wchar_t);
+            env.mem.write(start + i, wchar_t);
             env.mem.write(saveptr, start + i + 1);
             return token_start;
         }
@@ -265,7 +265,7 @@ fn wcslcat(
         let c = env.mem.read(src + i);
         env.mem.write(dst + dst_len + i, c);
     }
-    env.mem.write(dst + dst_len + copy_len, 0wchar_t);
+    env.mem.write(dst + dst_len + copy_len, wchar_t);
     total
 }
 
