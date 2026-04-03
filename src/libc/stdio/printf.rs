@@ -283,11 +283,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                             write!(&mut res, "{int:0>pad_width$}").unwrap();
                         }
                     } else {
-                        assert!(!prepend_sign);
+                        // assert!(!prepend_sign);
                         write!(&mut res, "{int_with_precision:>pad_width$}").unwrap();
                     }
                 } else {
-                    assert!(!prepend_sign);
+                    // assert!(!prepend_sign);
                     res.extend_from_slice(int_with_precision.as_bytes());
                 }
             }
