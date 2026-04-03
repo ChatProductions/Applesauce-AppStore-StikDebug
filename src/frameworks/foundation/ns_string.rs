@@ -1648,12 +1648,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
 
     if env.objc.class_is_subclass_of(class, keyed_arch_class) {
-        // Get the UTF-8 string content from host object
         let host = env.objc.borrow::<StringHostObject>(this);
-        let rust_str = host.string.clone();
+        let rust_str = match &*host {
+            StringHostObject::Utf8(s) => s.to_string(),
+            StringHostObject::Utf16(s) => s.to_string(),
+        };
         drop(host);
 
-        // NSKeyedArchiver stores NSString as "NS.string" key
         let content = from_rust_string(env, rust_str);
         let key = from_rust_string(env, "NS.string".to_string());
         () = msg![env; coder encodeObject:content forKey:key];
