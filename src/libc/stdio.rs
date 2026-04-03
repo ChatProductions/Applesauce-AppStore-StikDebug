@@ -128,7 +128,6 @@ fn freopen(env: &mut Environment, _filename: ConstPtr<u8>, _mode: ConstPtr<u8>, 
 
     log!("Warning: freopen() is stubbed and does not actually reopen the file!");
     
-    // Возвращаем указатель на тот же поток
     stream
 }
 
@@ -535,6 +534,59 @@ fn remove(env: &mut Environment, path: ConstPtr<u8>) -> i32 {
     }
 }
 
+fn tmpfile(env: &mut Environment) -> MutPtr<FILE> {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    // Generate a unique path under /tmp using a process-wide counter and the
+    // host PID, making collisions extremely unlikely.
+    static TMPFILE_COUNTER: std::sync::atomic::AtomicU32 =
+        std::sync::atomic::AtomicU32::new(0);
+    let count = TMPFILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp_path = format!(
+        "/tmp/touchHLE_tmp_{}_{}\0",
+        std::process::id(),
+        count
+    );
+
+    // Write the path string into guest memory so fopen/remove can use it.
+    let path_len = tmp_path.len() as GuestUSize;
+    let path_ptr: MutPtr<u8> = env.mem.alloc(path_len).cast();
+    env.mem
+        .bytes_at_mut(path_ptr.cast(), path_len)
+        .copy_from_slice(tmp_path.as_bytes());
+
+    // "w+b": read/write, create, truncate — matches the C standard requirement
+    // for tmpfile().
+    let mode = b"w+b\0";
+    let mode_ptr: MutPtr<u8> = env.mem.alloc(mode.len() as GuestUSize).cast();
+    env.mem
+        .bytes_at_mut(mode_ptr.cast(), mode.len() as GuestUSize)
+        .copy_from_slice(mode);
+
+    let file_ptr = fopen(env, path_ptr.cast_const(), mode_ptr.cast_const());
+
+    env.mem.free(path_ptr.cast());
+    env.mem.free(mode_ptr.cast());
+
+    if file_ptr.is_null() {
+        log!("tmpfile() failed to create temporary file");
+        return Ptr::null();
+    }
+
+    // Unlink the file immediately so it is automatically deleted when the last
+    // file descriptor referencing it is closed (POSIX semantics).
+    let path_ptr2: MutPtr<u8> = env.mem.alloc(path_len).cast();
+    env.mem
+        .bytes_at_mut(path_ptr2.cast(), path_len)
+        .copy_from_slice(tmp_path.as_bytes());
+    remove(env, path_ptr2.cast_const());
+    env.mem.free(path_ptr2.cast());
+
+    log_dbg!("tmpfile() => {:?}", file_ptr);
+    file_ptr
+}
+
 fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -606,6 +658,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(puts(_)),
     export_c_func!(putchar(_)),
     export_c_func!(remove(_)),
+    export_c_func!(tmpfile()),
     export_c_func!(setbuf(_, _)),
     // POSIX-specific functions
     export_c_func!(fileno(_)),
