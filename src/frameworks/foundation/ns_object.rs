@@ -90,6 +90,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     ptr.to_bits() | 1
 }
 
+// --- ИСПРАВЛЕНИЕ: Добавлена заглушка для запроса сигнатур методов класса ---
++ (id)instanceMethodSignatureForSelector:(SEL)_selector {
+    log!("Warning: stubbed instanceMethodSignatureForSelector: for {:?} — returning nil", _selector.as_str(&env.mem));
+    nil
+}
+
 + (bool)accessInstanceVariablesDirectly {
     true
 }
@@ -256,6 +262,12 @@ forUndefinedKey:(id)key { // NSString*
     env.mem.write(ptr, 0x4770);
     // Младший бит должен быть равен 1 для режима Thumb
     ptr.to_bits() | 1
+}
+
+// --- ИСПРАВЛЕНИЕ: Добавлена заглушка для запроса сигнатур методов экземпляра ---
+- (id)methodSignatureForSelector:(SEL)_selector {
+    log!("Warning: stubbed methodSignatureForSelector: for {:?} — returning nil", _selector.as_str(&env.mem));
+    nil
 }
 
 - (id)performSelector:(SEL)sel {
