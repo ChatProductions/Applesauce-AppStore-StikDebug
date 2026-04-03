@@ -47,6 +47,7 @@ pub const NSMacOSRomanStringEncoding: NSUInteger = 30;
 pub const NSUTF16StringEncoding: NSUInteger = NSUnicodeStringEncoding;
 pub const NSUTF16BigEndianStringEncoding: NSUInteger = 0x90000100;
 pub const NSUTF16LittleEndianStringEncoding: NSUInteger = 0x94000100;
+pub const NSSymbolStringEncoding: NSUInteger = 0x9c000100;
 
 pub type NSStringCompareOptions = NSUInteger;
 pub const NSCaseInsensitiveSearch: NSUInteger = 1;
@@ -120,6 +121,11 @@ impl StringHostObject {
             }
             NSUTF8StringEncoding => {
                 let string = String::from_utf8(bytes.into_owned()).unwrap();
+                StringHostObject::Utf8(Cow::Owned(string))
+            }
+            NSSymbolStringEncoding => {
+                // TODO: use encoding_rs
+                let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSWindowsCP1252StringEncoding => {
@@ -831,7 +837,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: other encodings
     let bytes: Vec<u8> = match encoding {
         NSASCIIStringEncoding |
-        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding => {
+        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSSymbolStringEncoding => {
             // TODO: properly support Mac OS Roman and ISO Latin 1 encodings.
             // The first 128 characters are identical to the ASCII
             assert!(string.as_bytes().iter().all(|byte| byte.is_ascii()));
@@ -845,7 +851,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     let null_size: GuestUSize = match encoding {
         NSUTF8StringEncoding | NSASCIIStringEncoding | NSMacOSRomanStringEncoding |
-        NSISOLatin1StringEncoding => 1,
+        NSISOLatin1StringEncoding | NSSymbolStringEncoding => 1,
         NSUTF16LittleEndianStringEncoding => 2,
         _ => unimplemented!()
     };
