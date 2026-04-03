@@ -56,6 +56,7 @@ pub(super) struct UIViewHostObject {
     multiple_touch_enabled: bool,
     delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
     animation_interval: f64,
+    is_animating: bool,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -71,6 +72,7 @@ impl Default for UIViewHostObject {
             multiple_touch_enabled: false,
             delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
             animation_interval: 1.0 / 60.0,
+            is_animating: false,
         }
     }
 }
@@ -244,6 +246,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewHostObject>(this).user_interaction_enabled = enabled;
 }
 
+- (bool)isAnimating {
+    env.objc.borrow::<UIViewHostObject>(this).is_animating
+}
+
+- (())startAnimation {
+    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    if !host.is_animating {
+        host.is_animating = true;
+        
+        // Примечание: В оригинальном коде iOS здесь создается NSTimer, который 
+        // дергает метод drawView. В touchHLE цикл рендеринга OpenGL часто 
+        // работает на уровне самого эмулятора, поэтому честного переключения 
+        // внутреннего state (is_animating) достаточно для корректной работы логики игры.
+    }
+}
+
+- (())stopAnimation {
+    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    if host.is_animating {
+        host.is_animating = false;
+    }
+}
+    
 - (bool)isMultipleTouchEnabled {
     env.objc.borrow::<UIViewHostObject>(this).multiple_touch_enabled
 }
