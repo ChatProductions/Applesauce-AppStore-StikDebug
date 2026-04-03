@@ -279,9 +279,9 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) -> ! {
+pub fn pthread_exit(env: &mut Environment, retval: MutVoidPtr) -> ! {
     log_dbg!("pthread_exit({:?})", retval);
-    log_dbg!("TODO: pthread_exit called with {:?}", retval);
+    env.exit_current_thread(retval)
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {
