@@ -7,6 +7,7 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
+use crate::mem::MutPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports,
     TrivialHostObject,
