@@ -757,8 +757,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         let objects_array: id = msg_class![env; NSMutableArray new];
 
         for (key, val) in &pairs {
-            () = msg![env; keys_array addObject:*key];
-            () = msg![env; objects_array addObject:*val];
+            let k = *key;
+            let v = *val;
+            () = msg![env; keys_array addObject:k];
+            () = msg![env; objects_array addObject:v];
         }
 
         let keys_str = from_rust_string(env, "NS.keys".to_string());
