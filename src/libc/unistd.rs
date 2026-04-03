@@ -208,6 +208,14 @@ fn access(env: &mut Environment, path: ConstPtr<u8>, mode: i32) -> i32 {
     }
 }
 
+fn fork(env: &mut Environment) -> i32 {
+    // fork() is not supported in touchHLE — iOS does not support forking
+    // Return -1 and set errno to ENOSYS
+    log!("Warning: fork() called but is not supported on iOS, returning -1");
+    set_errno(env, ENOSYS);
+    -1
+}
+
 fn unlink(env: &mut Environment, path: ConstPtr<u8>) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -322,4 +330,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(getdtablesize()),
     export_c_func!(sysconf(_)),
     export_c_func!(pipe(_)),
+    export_c_func!(fork()),
 ];
