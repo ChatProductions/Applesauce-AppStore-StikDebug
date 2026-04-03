@@ -118,9 +118,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Работа с данными (NSData)
 
 - (id)dataForPasteboardType:(id)pasteboard_type { // NSData*, NSString*
-// MARK: - Работа с данными (NSData)
-
-- (id)dataForPasteboardType:(id)pasteboard_type { // NSData*, NSString*
     if pasteboard_type == nil {
         return nil;
     }
