@@ -160,16 +160,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Description
 
 - (id)description {
-    let host = env.objc.borrow::<MPMediaPickerControllerHostObject>(this);
+    let (allowed_media_types, allows_picking_multiple_items, prompt) = {
+        let host = env.objc.borrow::<MPMediaPickerControllerHostObject>(this);
+        (host.allowed_media_types, host.allows_picking_multiple_items, host.prompt)
+    }; // immutable borrow ends here
+
+    let prompt_str = if prompt != nil {
+        ns_string::to_rust_string(env, prompt).into_owned()
+    } else {
+        "(null)".to_string()
+    };
     let s = format!(
         "<MPMediaPickerController: mediaTypes={:#x} multipleItems={} prompt={}>",
-        host.allowed_media_types,
-        host.allows_picking_multiple_items,
-        if host.prompt != nil {
-            ns_string::to_rust_string(env, host.prompt).into_owned()
-        } else {
-            "(null)".to_string()
-        }
+        allowed_media_types, allows_picking_multiple_items, prompt_str
     );
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     let desc: id = msg_class![env; NSString stringWithUTF8String:cstr];
