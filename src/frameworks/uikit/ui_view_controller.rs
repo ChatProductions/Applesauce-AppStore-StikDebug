@@ -17,7 +17,7 @@ use crate::frameworks::uikit::ui_application::{
 };
 use crate::frameworks::uikit::ui_view::set_view_controller;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
     HostObject, NSZonePtr,
 };
 use crate::Environment;
@@ -191,6 +191,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, new_view);
     release(env, old_view);
 }
+
 - (id)view {
     let view = env.objc.borrow_mut::<UIViewControllerHostObject>(this).view;
     if view == nil {
@@ -200,6 +201,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         view
     } else {
         view
+    }
+}
+
+// Перехватываем NIB-соединение (KVC) для свойства view
+- (())setValue:(id)value forKey:(id)key {
+    let key_str = to_rust_string(env, key);
+    if key_str == "view" {
+        () = msg![env; this setView:value];
+    } else {
+        msg_super![env; this setValue:value forKey:key];
     }
 }
 
@@ -444,16 +455,13 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
         .objc
         .borrow::<UIViewControllerHostObject>(view_controller)
         .nib_name;
+        
     if provider_nib_name != nil {
-        // TODO: it's not clear how to handle situation when
-        // provided nib name do not exist in the bundle.
-        // It probably means that our bundle resource loading
-        // is faulty, to check
-        assert!(check_nib_exists(env, bundle, provider_nib_name));
-
-        retain(env, provider_nib_name);
-        return provider_nib_name;
-    };
+        let resolved = check_and_resolve_nib(env, bundle, provider_nib_name);
+        if resolved != nil {
+            return resolved;
+        }
+    }
 
     let class: Class = msg![env; view_controller class];
     let class_name: id = NSStringFromClass(env, class);
@@ -461,25 +469,55 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
 
     if let Some(name) = class_name_str.strip_suffix("Controller") {
         let ns_name: id = from_rust_string(env, name.to_string());
-        if check_nib_exists(env, bundle, ns_name) {
+        let resolved = check_and_resolve_nib(env, bundle, ns_name);
+        if resolved != nil {
+            // Освобождаем class_name, так как мы нашли совпадение по имени без суффикса Controller
             release(env, class_name);
-            return ns_name;
+            return resolved;
         }
     }
 
-    if check_nib_exists(env, bundle, class_name) {
-        class_name
-    } else {
-        release(env, class_name);
-        nil
+    let resolved = check_and_resolve_nib(env, bundle, class_name);
+    if resolved != nil {
+        return resolved;
     }
+
+    // Если ничего не нашли, освобождаем базовое имя класса, чтобы не было утечки памяти
+    release(env, class_name);
+    nil
 }
 
-/// A helper function to check if `nib_name` NIB actually
-/// existing in the `bundle`
-fn check_nib_exists(env: &mut Environment, bundle: id, nib_name: id) -> bool {
+/// Помощник, который проверяет наличие NIB файла с базовым именем, а также с суффиксами устройств
+fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id {
+    if base_name == nil {
+        return nil;
+    }
     let type_: id = get_static_str(env, "nib");
-    let res: id = msg![env; bundle pathForResource:nib_name ofType:type_];
-    res != nil
+    
+    // 1. Точное совпадение
+    if msg![env; bundle pathForResource:base_name ofType:type_] != nil {
+        retain(env, base_name);
+        return base_name;
+    }
+    
+    let base_name_str = to_rust_string(env, base_name);
+    
+    // 2. Ищем версию ~iphone
+    let iphone_name = format!("{}~iphone", base_name_str);
+    let iphone_ns: id = from_rust_string(env, iphone_name);
+    if msg![env; bundle pathForResource:iphone_ns ofType:type_] != nil {
+        retain(env, iphone_ns); // Сохраняем строку для функции-вызывателя
+        return iphone_ns;
+    }
+    
+    // 3. Ищем версию ~ipad
+    let ipad_name = format!("{}~ipad", base_name_str);
+    let ipad_ns: id = from_rust_string(env, ipad_name);
+    if msg![env; bundle pathForResource:ipad_ns ofType:type_] != nil {
+        retain(env, ipad_ns);
+        return ipad_ns;
+    }
+    
+    nil
 }
 
