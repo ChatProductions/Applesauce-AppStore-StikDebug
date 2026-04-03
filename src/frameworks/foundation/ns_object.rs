@@ -32,8 +32,8 @@ use crate::objc::{
     retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
 };
 
-// Хранилище для отмененных таймеров (target, selector)
-pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, u32)> = std::vec::Vec::new();
+// Хранилище для отмененных таймеров (target, имя селектора в виде строки)
+pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> = std::vec::Vec::new();
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -96,19 +96,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this description]
 }
 
-// ИЗМЕНЕНО: Теперь мы реально отменяем таймеры
+// ИЗМЕНЕНО: Теперь мы реально отменяем таймеры, сохраняя строковое имя селектора
 + (())cancelPreviousPerformRequestsWithTarget:(id)target
                                      selector:(SEL)selector
                                        object:(id)object {
+    let sel_str = selector.as_str(&env.mem).to_string();
     unsafe {
-        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), selector.to_bits()));
+        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), Some(sel_str)));
     }
 }
 
 // ИЗМЕНЕНО: Поддержка глобальной отмены для объекта
 + (())cancelPreviousPerformRequestsWithTarget:(id)target {
     unsafe {
-        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), 0));
+        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), None));
     }
 }
 
@@ -311,7 +312,7 @@ forUndefinedKey:(id)key { // NSString*
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
-// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании
+// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании с проверкой по строке
 - (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
     let dict: id = msg![env; which userInfo];
     let sel_key: id = get_static_str(env, "SEL");
@@ -323,14 +324,14 @@ forUndefinedKey:(id)key { // NSString*
     let arg: id = msg![env; dict objectForKey:arg_key];
 
     let target_bits = this.to_bits();
-    let sel_bits = sel.to_bits();
     let mut cancelled = false;
     
     unsafe {
-        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| *x == (target_bits, sel_bits)) {
+        // Проверяем, не было ли отмены по конкретному селектору или глобальной отмены
+        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_ref() == Some(&sel_str)) {
             crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
             cancelled = true;
-        } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| *x == (target_bits, 0)) {
+        } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.is_none()) {
             cancelled = true;
         }
     }
@@ -400,4 +401,3 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
-
