@@ -12,7 +12,9 @@ use crate::libc::clocale::{setlocale, LC_CTYPE};
 use crate::libc::errno::{set_errno, EINVAL};
 use crate::libc::string::strlen;
 use crate::libc::wchar::wchar_t;
-use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::mem::{
+    ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, ZoneId, DEFAULT_ZONE_ID,
+};
 use crate::Environment;
 use std::str::FromStr;
 
@@ -26,8 +28,14 @@ pub struct State {
 }
 
 fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
+    // TODO: handle errno properly
     set_errno(env, 0);
-    env.mem.alloc(size)
+
+    malloc_zone_malloc(env, DEFAULT_ZONE_ID, size)
+}
+
+fn malloc_zone_malloc(env: &mut Environment, zone: ZoneId, size: GuestUSize) -> MutVoidPtr {
+    env.mem.zone_alloc(zone, size)
 }
 
 fn malloc_size(env: &mut Environment, ptr: ConstVoidPtr) -> GuestUSize {
@@ -35,13 +43,17 @@ fn malloc_size(env: &mut Environment, ptr: ConstVoidPtr) -> GuestUSize {
 }
 
 fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoidPtr {
+    // TODO: handle errno properly
     set_errno(env, 0);
+
     let total = size.checked_mul(count).unwrap();
     env.mem.calloc(total)
 }
 
 fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
+    // TODO: handle errno properly
     set_errno(env, 0);
+
     if ptr.is_null() {
         return malloc(env, size);
     }
@@ -49,6 +61,7 @@ fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidP
 }
 
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
+    // We need to catch situations of freeing NSObjects early!
     if env.objc.get_host_object(ptr.cast()).is_some() {
         log!(
             "App attempted to call free({:?}) on an object, calling dealloc_object() instead!",
@@ -57,16 +70,37 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
         env.objc.dealloc_object(ptr.cast(), &mut env.mem);
         return;
     }
-    set_errno(env, 0);
-    if ptr.is_null() {
-        return;
-    }
-    env.mem.free(ptr);
+    malloc_zone_free(env, DEFAULT_ZONE_ID, ptr);
 }
 
-fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
+fn malloc_zone_free(env: &mut Environment, zone: ZoneId, ptr: MutVoidPtr) {
+    if ptr.is_null() {
+        // "If ptr is a NULL pointer, no operation is performed."
+        return;
+    }
+    env.mem.zone_free(zone, ptr);
+}
+
+fn malloc_create_zone(env: &mut Environment, _start_size: GuestUSize, _flags: u32) -> ZoneId {
+    env.mem.create_zone(Mem::ZONE_SIZE)
+}
+
+fn malloc_destroy_zone(env: &mut Environment, zone: ZoneId) {
+    env.mem.destroy_zone(zone);
+}
+
+fn malloc_set_zone_name(env: &mut Environment, zone: ZoneId, name: ConstPtr<u8>) {
+    env.mem.set_zone_name(zone, name);
+}
+
+fn atexit(
+    _env: &mut Environment,
+    func: GuestFunction, // void (*func)(void)
+) -> i32 {
+    // TODO: when this is implemented, make sure it's properly compatible with
+    // __cxa_atexit.
     log!("TODO: atexit({:?}) (unimplemented)", func);
-    0
+    0 // success
 }
 
 fn count_whitespace_generic<
