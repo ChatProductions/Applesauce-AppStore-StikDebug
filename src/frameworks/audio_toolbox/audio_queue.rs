@@ -71,7 +71,7 @@ struct AudioQueueHostObject {
     aq_is_running_user_data: Option<MutVoidPtr>,
     is_running_handler: bool,
     is_input: bool,
-    input_delay: u32, // Задержка для защиты игры от перегрузки коллбэками
+    input_delay: u32,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -770,16 +770,18 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
             if is_input_queue {
-                // Записываем данные для микрофона
+                // Читаем структуру буфера
                 let mut buffer_struct = env.mem.read(buf);
                 buffer_struct.audio_data_byte_size = buffer_struct.audio_data_bytes_capacity;
-                env.mem.write(buf, buffer_struct);
 
-                // ФЕЙКОВЫЙ ШУМ: пишем немного единичек вместо абсолютного нуля, 
-                // чтобы спасти игру от математической ошибки "деления на ноль"
+                // ФЕЙКОВЫЙ ШУМ: пишем немного единичек вместо абсолютного нуля
+                // Делаем это ДО сохранения структуры, пока она принадлежит нам
                 if buffer_struct.audio_data_bytes_capacity >= 4 {
                     env.mem.write(buffer_struct.audio_data.cast::<u32>(), 0x01010101u32);
                 }
+
+                // Безопасно отдаем обновленную структуру обратно в память
+                env.mem.write(buf, buffer_struct);
 
                 // Вызываем коллбэк ввода (сигнатура на 6 аргументов)
                 <GuestFunction as CallFromHost<(), (MutVoidPtr, AudioQueueRef, AudioQueueBufferRef, ConstVoidPtr, u32, ConstVoidPtr)>>::
