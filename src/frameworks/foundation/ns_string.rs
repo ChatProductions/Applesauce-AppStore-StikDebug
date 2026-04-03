@@ -1643,6 +1643,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, ns)
 }
 
+- (())encodeWithCoder:(id)coder {
+    // Проверяем, какой тип кодера используется
+    let is_keyed: bool = msg![env; coder allowsKeyedCoding];
+    let count: NSUInteger = msg![env; this count];
+
+    if is_keyed {
+        // Полноценная реализация для NSKeyedArchiver
+        let count_key = from_rust_string(env, "NS.count".to_string());
+        () = msg![env; coder encodeInt:count forKey:count_key];
+        release(env, count_key);
+
+        for i in 0..count {
+            let obj: id = msg![env; this objectAtIndex:i];
+            let key = from_rust_string(env, format!("NS.objects.{}", i));
+            () = msg![env; coder encodeObject:obj forKey:key];
+            release(env, key);
+        }
+    } else {
+        // Fallback для обычных NSCoder (например, NSArchiver)
+        for i in 0..count {
+            let obj: id = msg![env; this objectAtIndex:i];
+            () = msg![env; coder encodeObject:obj];
+        }
+    }
+}
+
 @end
 
 @implementation _touchHLE_NSString_CFConstantString_UTF16: _touchHLE_NSString_Static
