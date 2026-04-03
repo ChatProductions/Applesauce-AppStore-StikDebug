@@ -547,14 +547,14 @@ fn rint(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    arg.rint()
+    arg.log10()
 }
 
 fn rintf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    arg.rint()
+    arg.log10()
 }
 
 // Other
