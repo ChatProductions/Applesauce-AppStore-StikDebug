@@ -279,9 +279,9 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-pub fn pthread_exit(env: &mut Environment, retval: MutVoidPtr) -> ! {
+pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) -> ! {
     log_dbg!("pthread_exit({:?})", retval);
-    env.exit_current_thread(retval)
+    panic!("pthread_exit({:?}): thread exit not yet implemented", retval)
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {
@@ -408,11 +408,9 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
 }
 
 fn pthread_testcancel(env: &mut Environment) {
-    // Acts as a deferred cancellation point.
     let self_t = pthread_self(env);
     let host_obj = State::get(env).threads.get(&self_t).unwrap();
-    if host_obj.cancel_disabled ||
-        !host_obj.cancel_requested {
+    if host_obj.cancel_disabled || !host_obj.cancel_requested {
         return;
     }
     log_dbg!("pthread_testcancel: cancelling current thread");
