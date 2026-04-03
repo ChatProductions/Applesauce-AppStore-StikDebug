@@ -5,6 +5,7 @@
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string;
+use crate::mem::MutVoidPtr;
 use crate::objc::{autorelease, id};
 use crate::Environment;
 
@@ -42,6 +43,15 @@ pub fn NSStringFromCGRect(env: &mut Environment, rect: CGRect) -> id {
     autorelease(env, s)
 }
 
+
+fn NSDefaultMallocZone(_env: &mut Environment) -> MutVoidPtr {
+    // Real implementation returns a malloc_zone_t* — we return null since
+    // we don't implement malloc zones. Apps that only call this to pass the
+    // result to NSAllocateMemoryPages or similar will handle null gracefully.
+    log!("NSDefaultMallocZone: stubbed, returning null");
+    MutVoidPtr::null()
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPointFromString(_)),
     export_c_func!(CGSizeFromString(_)),
@@ -49,4 +59,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromCGPoint(_)),
     export_c_func!(NSStringFromCGSize(_)),
     export_c_func!(NSStringFromCGRect(_)),
+    export_c_func!(NSDefaultMallocZone()),
 ];
