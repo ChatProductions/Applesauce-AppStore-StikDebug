@@ -4,174 +4,131 @@
  * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+#![allow(dead_code)]
+//! `AudioServices.h` (Audio Services)
 
-//! `AudioSession.h` (Audio Session)
-
-use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::OSStatus;
-use crate::frameworks::core_audio_types::{debug_fourcc, fourcc};
-use crate::frameworks::core_foundation::cf_run_loop::{CFRunLoopMode, CFRunLoopRef};
-use crate::mem::{guest_size_of, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr};
+use crate::frameworks::core_audio_types::fourcc;
+use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr};
+use crate::objc::id;
 use crate::Environment;
+use std::collections::HashMap;
 
-type AudioSessionInterruptionListener = GuestFunction;
-type AudioSessionPropertyListener = GuestFunction;
+type AudioServicesPropertyID = u32;
+type SystemSoundID = u32;
+type AudioServicesSystemSoundCompletionProc = u32;
 
-const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
+const kAudioServicesUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
+const kAudioServicesBadSystemSoundIDError: OSStatus = fourcc(b"!ids") as _;
+const kSystemSoundID_Vibrate: SystemSoundID = 0x00000FFF;
+const kSystemSoundID_UserPreferredAlert: SystemSoundID = 0x00001000;
 
-type AudioSessionPropertyID = u32;
-const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
-const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID = fourcc(b"acat");
-const kAudioSessionProperty_CurrentHardwareSampleRate: AudioSessionPropertyID = fourcc(b"chsr");
-const kAudioSessionProperty_CurrentHardwareOutputNumberChannels: AudioSessionPropertyID = fourcc(b"choc");
-const kAudioSessionProperty_CurrentHardwareOutputVolume: AudioSessionPropertyID = fourcc(b"chov");
-const kAudioSessionProperty_PreferredHardwareIOBufferDuration: AudioSessionPropertyID = fourcc(b"iobd");
-const kAudioSessionProperty_PreferredHardwareSampleRate: AudioSessionPropertyID = fourcc(b"hwsr");
-const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
-const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID = fourcc(b"rout");
-
-const kAudioSessionCategory_SoloAmbientSound: u32 = fourcc(b"solo");
-const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 = fourcc(b"chbd");
-
+// ДОБАВЛЕНО: Состояние для хранения звуков
+#[derive(Default)]
 pub struct State {
-    audio_session_category: u32,
-    pub current_hardware_sample_rate: f64,
-    pub current_hardware_output_number_channels: u32,
-    current_hardware_output_volume: f32,
-    current_hardware_io_buffer_duration: f32,
-    pub interruption_listener: AudioSessionInterruptionListener,
-    pub client_data: MutVoidPtr,
-    pub is_initialized: bool,
+    next_sound_id: u32,
+    sounds: HashMap<SystemSoundID, u32>, // В будущем u32 заменится на реальный ALuint буфер OpenAL
 }
 
-impl Default for State {
-    fn default() -> Self {
-        State {
-            audio_session_category: kAudioSessionCategory_SoloAmbientSound,
-            current_hardware_sample_rate: 44100.0,
-            current_hardware_output_number_channels: 2,
-            current_hardware_output_volume: 1.0,
-            current_hardware_io_buffer_duration: 0.023220,
-            interruption_listener: GuestFunction::null_ptr(), // Исправлено: используем null_ptr()
-            client_data: MutVoidPtr::null(),
-            is_initialized: false,
-        }
+fn AudioServicesGetProperty(
+    _env: &mut Environment,
+    in_property_id: AudioServicesPropertyID,
+    _in_specifier_size: u32,
+    _in_specifier: ConstVoidPtr,
+    _io_property_data_size: MutPtr<u32>,
+    _out_property_data: MutVoidPtr,
+) -> OSStatus {
+    if in_property_id == 0xfff {
+        kAudioServicesUnsupportedPropertyError
+    } else {
+        log!("AudioServicesGetProperty: property {} is unimplemented", in_property_id);
+        0
     }
 }
 
-fn AudioSessionInitialize(
-    env: &mut Environment,
-    in_run_loop: CFRunLoopRef,
-    in_run_loop_mode: CFRunLoopMode,
-    in_interruption_listener: AudioSessionInterruptionListener,
-    in_client_data: MutVoidPtr,
+fn AudioServicesSetProperty(
+    _env: &mut Environment,
+    in_property_id: AudioServicesPropertyID,
+    _in_specifier_size: u32,
+    _in_specifier: ConstVoidPtr,
+    _in_property_data_size: u32,
+    _in_property_data: ConstVoidPtr,
 ) -> OSStatus {
-    let state = &mut env.framework_state.audio_toolbox.audio_session;
-    state.interruption_listener = in_interruption_listener;
-    state.client_data = in_client_data;
-    state.is_initialized = true;
-
-    log!(
-        "AudioSessionInitialize({:?}, {:?}, {:?}, {:?}) -> 0",
-        in_run_loop,
-        in_run_loop_mode,
-        in_interruption_listener,
-        in_client_data
-    );
+    log!("AudioServicesSetProperty: property {} is unimplemented", in_property_id);
     0
 }
 
-fn AudioSessionGetPropertySize(
+fn AudioServicesCreateSystemSoundID(
     env: &mut Environment,
-    in_ID: AudioSessionPropertyID,
-    out_data_size: MutPtr<u32>,
+    _in_file_url: id,
+    out_system_sound_id: MutPtr<SystemSoundID>,
 ) -> OSStatus {
-    let size = get_audio_session_property_size(in_ID);
-    env.mem.write(out_data_size, size);
+    let state = &mut env.framework_state.audio_toolbox.audio_services;
+    
+    // Генерируем новый уникальный ID для каждого звука
+    let new_id = state.next_sound_id + 1000;
+    state.next_sound_id += 1;
+    
+    // Регистрируем его
+    state.sounds.insert(new_id, 0);
+
+    if !out_system_sound_id.is_null() {
+        env.mem.write(out_system_sound_id, new_id);
+    }
+    
+    log!("AudioToolbox: AudioServicesCreateSystemSoundID created ID {}", new_id);
     0
 }
 
-fn AudioSessionGetProperty(
+fn AudioServicesDisposeSystemSoundID(
     env: &mut Environment,
-    in_ID: AudioSessionPropertyID,
-    io_data_size: MutPtr<u32>,
-    out_data: MutVoidPtr,
+    in_system_sound_id: SystemSoundID,
 ) -> OSStatus {
-    let required_size = get_audio_session_property_size(in_ID);
-    let io_data_size_value = env.mem.read(io_data_size);
-
-    if io_data_size_value != required_size {
-        log!("Warning: AudioSessionGetProperty() failed");
-        return kAudioSessionBadPropertySizeError;
-    }
-
-    let state = &env.framework_state.audio_toolbox.audio_session;
-
-    match in_ID {
-        kAudioSessionProperty_OtherAudioIsPlaying => env.mem.write(out_data.cast(), 0u32),
-        kAudioSessionProperty_AudioCategory => env.mem.write(out_data.cast(), state.audio_session_category),
-        kAudioSessionProperty_CurrentHardwareSampleRate => env.mem.write(out_data.cast(), state.current_hardware_sample_rate),
-        kAudioSessionProperty_CurrentHardwareOutputNumberChannels => env.mem.write(out_data.cast(), state.current_hardware_output_number_channels),
-        kAudioSessionProperty_CurrentHardwareOutputVolume => env.mem.write(out_data.cast(), state.current_hardware_output_volume),
-        kAudioSessionProperty_CurrentHardwareIOBufferDuration => env.mem.write(out_data.cast(), state.current_hardware_io_buffer_duration),
-        kAudioSessionProperty_AudioInputAvailable => env.mem.write(out_data.cast(), 1u32),
-        kAudioSessionProperty_AudioRoute => env.mem.write(out_data.cast(), 0u32),
-        _ => {
-            log!("AudioSessionGetProperty() unimplemented property: {} -> returning 0", debug_fourcc(in_ID));
-            env.mem.write(out_data.cast::<u32>(), 0u32);
-        }
-    }
+    let state = &mut env.framework_state.audio_toolbox.audio_services;
+    state.sounds.remove(&in_system_sound_id);
     0
 }
 
-fn AudioSessionSetProperty(
-    env: &mut Environment,
-    in_ID: AudioSessionPropertyID,
-    in_data_size: u32,
-    in_data: ConstVoidPtr,
+fn AudioServicesPlaySystemSound(_env: &mut Environment, in_system_sound_id: SystemSoundID) {
+    if in_system_sound_id == kSystemSoundID_Vibrate {
+        log!("TODO: vibration (AudioServicesPlaySystemSound)");
+    } else if in_system_sound_id == kSystemSoundID_UserPreferredAlert {
+        log!("TODO: alert sound (AudioServicesPlaySystemSound)");
+    } else {
+        log!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
+        // В будущем здесь будет вызов OpenAL: alSourcePlay(buffer)
+    }
+}
+
+fn AudioServicesPlayAlertSound(env: &mut Environment, in_system_sound_id: SystemSoundID) {
+    AudioServicesPlaySystemSound(env, in_system_sound_id);
+}
+
+fn AudioServicesAddSystemSoundCompletion(
+    _env: &mut Environment,
+    _in_system_sound_id: SystemSoundID,
+    _in_run_loop: MutVoidPtr,
+    _in_run_loop_mode: MutVoidPtr,
+    _in_completion_routine: AudioServicesSystemSoundCompletionProc,
+    _in_client_data: MutVoidPtr,
 ) -> OSStatus {
-    let required_size: GuestUSize = match in_ID {
-        kAudioSessionProperty_AudioCategory => guest_size_of::<u32>(),
-        kAudioSessionProperty_PreferredHardwareIOBufferDuration => guest_size_of::<f32>(),
-        kAudioSessionProperty_PreferredHardwareSampleRate => guest_size_of::<f64>(),
-        _ => return 0,
-    };
-
-    if in_data_size != required_size {
-        return kAudioSessionBadPropertySizeError;
-    }
-
-    if in_ID == kAudioSessionProperty_PreferredHardwareSampleRate {
-        env.framework_state.audio_toolbox.audio_session.current_hardware_sample_rate = env.mem.read(in_data.cast::<f64>());
-    }
     0
 }
 
-fn AudioSessionSetActive(_env: &mut Environment, _active: bool) -> OSStatus { 0 }
-fn AudioSessionAddPropertyListener(_env: &mut Environment, _inID: AudioSessionPropertyID, _inProc: AudioSessionPropertyListener, _inClientData: MutVoidPtr) -> OSStatus { 0 }
-fn AudioSessionRemovePropertyListenerWithUserData(_env: &mut Environment, _in_property_id: AudioSessionPropertyID, _in_listener: AudioSessionPropertyListener, _in_client_data: MutVoidPtr) -> OSStatus { 0 }
-
-fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize {
-    match in_ID {
-        kAudioSessionProperty_OtherAudioIsPlaying |
-        kAudioSessionProperty_AudioCategory |
-        kAudioSessionProperty_CurrentHardwareOutputNumberChannels |
-        kAudioSessionProperty_AudioInputAvailable |
-        kAudioSessionProperty_AudioRoute => guest_size_of::<u32>(),
-        kAudioSessionProperty_CurrentHardwareSampleRate => guest_size_of::<f64>(),
-        kAudioSessionProperty_CurrentHardwareOutputVolume |
-        kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
-        _ => 4, // БЕЗОПАСНЫЙ ФОЛЛБЕК
-    }
+fn AudioServicesRemoveSystemSoundCompletion(
+    _env: &mut Environment,
+    _in_system_sound_id: SystemSoundID,
+) {
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioSessionInitialize(_, _, _, _)),
-    export_c_func!(AudioSessionGetProperty(_, _, _)),
-    export_c_func!(AudioSessionGetPropertySize(_, _)),
-    export_c_func!(AudioSessionSetProperty(_, _, _)),
-    export_c_func!(AudioSessionSetActive(_)),
-    export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
-    export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
+    export_c_func!(AudioServicesGetProperty(_, _, _, _, _)),
+    export_c_func!(AudioServicesSetProperty(_, _, _, _, _)),
+    export_c_func!(AudioServicesCreateSystemSoundID(_, _)),
+    export_c_func!(AudioServicesDisposeSystemSoundID(_)),
+    export_c_func!(AudioServicesPlaySystemSound(_)),
+    export_c_func!(AudioServicesPlayAlertSound(_)),
+    export_c_func!(AudioServicesAddSystemSoundCompletion(_, _, _, _, _)),
+    export_c_func!(AudioServicesRemoveSystemSoundCompletion(_)),
 ];
