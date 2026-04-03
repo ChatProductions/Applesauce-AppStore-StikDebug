@@ -14,7 +14,6 @@ use crate::objc;
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &libc::DYLIB,
-    &libc::libsqlite3::DYLIB,
     &objc::DYLIB,
     &crate::environment::app_picker::DYLIB, // Not a real library; special internal classes.
     &frameworks::audio_toolbox::DYLIB,
@@ -32,6 +31,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::store_kit::DYLIB,
     &frameworks::system_configuration::DYLIB,
     &frameworks::uikit::DYLIB,
+    &frameworks::libsqlite3::DYLIB,
     &frameworks::common_crypto::DYLIB,
     &frameworks::address_book::DYLIB, // Добавлен наш фреймворк AddressBook
 ];
