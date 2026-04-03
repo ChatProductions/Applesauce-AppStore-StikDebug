@@ -59,11 +59,11 @@ fn NSDefaultMallocZone(env: &mut Environment) -> MutVoidPtr {
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(CGPointFromString(_, _)),
-    export_c_func!(CGSizeFromString(_, _)),
-    export_c_func!(CGRectFromString(_, _)),
-    export_c_func!(NSStringFromCGPoint(_, _)),
-    export_c_func!(NSStringFromCGSize(_, _)),
-    export_c_func!(NSStringFromCGRect(_, _)),
-    export_c_func!(NSDefaultMallocZone(_)),
+    export_c_func!(CGPointFromString(_)),
+    export_c_func!(CGSizeFromString(_)),
+    export_c_func!(CGRectFromString(_)),
+    export_c_func!(NSStringFromCGPoint(_)),
+    export_c_func!(NSStringFromCGSize(_)),
+    export_c_func!(NSStringFromCGRect(_)),
+    export_c_func!(NSDefaultMallocZone()),
 ];
