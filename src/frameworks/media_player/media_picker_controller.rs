@@ -140,9 +140,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())viewWillAppear:(bool)animated {
-    let _: () = msg![env; super viewWillAppear:animated];
+    // No super call needed — UIViewController's default is a no-op.
 
-    // Immediately fire mediaPickerDidCancel: so the app can clean up.
     let delegate = env.objc.borrow::<MPMediaPickerControllerHostObject>(this).delegate;
     if delegate != nil {
         let _: () = msg![env; delegate mediaPickerDidCancel:this];
@@ -150,9 +149,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())viewDidAppear:(bool)animated {
-    let _: () = msg![env; super viewDidAppear:animated];
+    // No super call needed — UIViewController's default is a no-op.
 
-    // Dismiss ourselves — we have no UI to show.
     let presenting: id = msg![env; this presentingViewController];
     if presenting != nil {
         let _: () = msg![env; presenting dismissViewControllerAnimated:animated completion:nil];
