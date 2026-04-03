@@ -131,16 +131,23 @@ fn AudioSessionGetProperty(
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioInputAvailable => {
-            // ИЗМЕНЕНО: Возвращаем 1, чтобы игра думала, что микрофон ЕСТЬ.
-            // Это предотвратит экстренное завершение работы игры (abort) из-за проверок outfit7.
-            let value: u32 = 1; 
+            // Return 1 so game thinks microphone exists.
+            // Prevents abort() from Outfit7 SDK audio checks.
+            let value: u32 = 1;
             env.mem.write(out_data.cast(), value);
         }
         kAudioSessionProperty_AudioRoute => {
             let value: u32 = 0;
             env.mem.write(out_data.cast(), value);
         }
-        _ => unreachable!(),
+        _ => {
+            // Safe fallback instead of unreachable!() panic
+            log!(
+                "TODO: AudioSessionGetProperty() unimplemented property: {} -> returning 0",
+                debug_fourcc(in_ID)
+            );
+            env.mem.write(out_data.cast::<u32>(), 0u32);
+        }
     }
 
     let result = 0; // success
@@ -166,7 +173,14 @@ fn AudioSessionSetProperty(
         kAudioSessionProperty_AudioCategory => guest_size_of::<u32>(),
         kAudioSessionProperty_PreferredHardwareIOBufferDuration => guest_size_of::<f32>(),
         kAudioSessionProperty_PreferredHardwareSampleRate => guest_size_of::<f64>(),
-        _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(in_ID)),
+        _ => {
+            log!(
+                "TODO: AudioSessionSetProperty() unimplemented property: {} (size: {}) -> ignoring",
+                debug_fourcc(in_ID),
+                in_data_size
+            );
+            return 0; // silently succeed instead of panicking
+        }
     };
 
     if in_data_size != required_size {
