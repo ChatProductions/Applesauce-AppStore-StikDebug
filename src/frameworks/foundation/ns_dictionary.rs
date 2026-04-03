@@ -737,6 +737,47 @@ pub const CLASSES: ClassExports = objc_classes! {
     res
 }
 
+// NSCoding implementation
+- (())encodeWithCoder:(id)coder {
+    let class: Class = msg![env; coder class];
+    let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
+
+    if env.objc.class_is_subclass_of(class, keyed_arch_class) {
+        // Mirror of initWithCoder: decode format:
+        // {
+        //   "NS.keys" => [ keys here ]
+        //   "NS.objects" => [ objects here ]
+        // }
+        let host = env.objc.borrow::<DictionaryHostObject>(this);
+        let pairs: Vec<(id, id)> = host.map.iter().map(|(&k, &v)| (k, v)).collect();
+        drop(host);
+
+        // Build NS.keys array
+        let keys_array: id = msg_class![env; NSMutableArray new];
+        let objects_array: id = msg_class![env; NSMutableArray new];
+
+        for (key, val) in &pairs {
+            () = msg![env; keys_array addObject:*key];
+            () = msg![env; objects_array addObject:*val];
+        }
+
+        let keys_str = from_rust_string(env, "NS.keys".to_string());
+        let objects_str = from_rust_string(env, "NS.objects".to_string());
+
+        () = msg![env; coder encodeObject:keys_array forKey:keys_str];
+        () = msg![env; coder encodeObject:objects_array forKey:objects_str];
+
+        release(env, keys_str);
+        release(env, objects_str);
+        release(env, keys_array);
+        release(env, objects_array);
+    } else {
+        log!(
+            "Warning: NSMutableDictionary encodeWithCoder: unsupported coder class, skipping"
+        );
+    }
+}
+
 // NSFastEnumeration implementation
 - (NSUInteger)countByEnumeratingWithState:(MutPtr<NSFastEnumerationState>)state
                                   objects:(MutPtr<id>)stackbuf
