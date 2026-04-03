@@ -16,3 +16,8 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[av_audio_session::CONSTANTS],
     function_exports: &[],
 };
+
+#[derive(Default)]
+pub struct State {
+    av_audio_session: av_audio_session::State,
+}
