@@ -1039,15 +1039,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)stringByAddingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
     assert!(encoding == NSASCIIStringEncoding || encoding == NSUTF8StringEncoding);
-    // TODO: other encodings
-    // TODO: implement escaping as per RFC 2396
+    
     let str = to_rust_string(env, this);
-    // FIXME: figure out why '[' and ']' are escaped on iOS simulator
-    assert!(str.as_bytes().iter().all(|byte| {
-        (byte.is_ascii_alphanumeric() || b"-_.~".contains(byte)) // unreserved
-        || b"!*'();:@&=+$,/?%#".contains(byte) // reserved
-    }));
-    let new: id = msg![env; this copy];
+    // Выделяем память с запасом, так как строка может увеличиться
+    let mut escaped = String::with_capacity(str.len());
+
+    for byte in str.as_bytes() {
+        // Проверяем, является ли символ разрешенным в URL
+        if byte.is_ascii_alphanumeric() 
+            || b"-_.~".contains(byte) 
+            || b"!*'();:@&=+$,/?%#".contains(byte) 
+        {
+            // Оставляем как есть
+            escaped.push(*byte as char);
+        } else {
+            // Кодируем все остальные символы (включая кириллицу и пробелы) в формат %XX
+            use std::fmt::Write;
+            write!(&mut escaped, "%{:02X}", byte).unwrap();
+        }
+    }
+
+    let new: id = from_rust_string(env, escaped);
     autorelease(env, new)
 }
 
