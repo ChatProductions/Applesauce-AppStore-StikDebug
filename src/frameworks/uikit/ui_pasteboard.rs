@@ -118,6 +118,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Работа с данными (NSData)
 
 - (id)dataForPasteboardType:(id)pasteboard_type { // NSData*, NSString*
+// MARK: - Работа с данными (NSData)
+
+- (id)dataForPasteboardType:(id)pasteboard_type { // NSData*, NSString*
     if pasteboard_type == nil {
         return nil;
     }
@@ -125,7 +128,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let type_str = ns_string::to_rust_string(env, pasteboard_type);
     let host = env.objc.borrow::<UIPasteboardHostObject>(this);
     
-    if let Some(&data) = host.data_by_type.get(&type_str) {
+    // Используем .as_ref() чтобы передать &str вместо &Cow
+    if let Some(&data) = host.data_by_type.get(type_str.as_ref()) {
         data
     } else {
         nil
@@ -147,13 +151,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let old_data = {
         let host = env.objc.borrow_mut::<UIPasteboardHostObject>(this);
         if data != nil {
-            host.data_by_type.insert(type_str, data)
+            // Превращаем Cow во владеющий String через .into_owned()
+            host.data_by_type.insert(type_str.into_owned(), data)
         } else {
-            host.data_by_type.remove(&type_str)
+            // Используем .as_ref() чтобы передать &str вместо &Cow
+            host.data_by_type.remove(type_str.as_ref())
         }
     };
     
-    // Освобождаем старое значение вне borrow_mut (чтобы не заблокировать env.mem)
+    // Освобождаем старое значение вне borrow_mut
     if let Some(old) = old_data {
         release(env, old);
     }
