@@ -73,6 +73,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.framework_state.foundation.ns_thread.is_multi_threaded
 }
 
++ (bool)isMainThread {
+    env.current_thread == 0
+}
+
 + (f64)threadPriority {
     let thread: id = msg![env; this currentThread];
     msg![env; thread threadPriority]
@@ -127,7 +131,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let gf = env
         .dyld
         .create_guest_function(&mut env.mem, symb, hf);
-
     let attr: MutPtr<pthread_attr_t> = env.mem.alloc(guest_size_of::<pthread_attr_t>()).cast();
     pthread_attr_init(env, attr);
 
@@ -210,7 +213,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
 type NSThreadRef = CFTypeRef;
 
 pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: NSThreadRef) {
@@ -225,10 +227,10 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
     env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj).executing = true;
 
     () = msg![env; ns_thread_obj main];
-
     let host_obj = env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj);
     host_obj.finished = true;
-    host_obj.executing = false; // Поток завершен
+    host_obj.executing = false;
+    // Поток завершен
 
     let &NSThreadHostObject {
         target,
@@ -236,7 +238,6 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         owned,
         ..
     } = env.objc.borrow(ns_thread_obj);
-    
     release(env, object);
     release(env, target);
 
@@ -262,7 +263,6 @@ pub fn detach_new_thread_inner(
     let new: id = msg![env; new initWithTarget:target
                                       selector:selector
                                         object:object];
-
     env.objc.borrow_mut::<NSThreadHostObject>(new).owned = true;
     env.objc.borrow_mut::<NSThreadHostObject>(new).tolerate_type_mismatch = tolerate_type_mismatch;
     env.framework_state.foundation.ns_thread.is_multi_threaded = true;
