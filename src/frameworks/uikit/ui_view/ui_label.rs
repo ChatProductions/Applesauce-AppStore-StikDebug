@@ -33,6 +33,8 @@ pub struct UILabelHostObject {
     text_alignment: UITextAlignment,
     line_break_mode: UILineBreakMode,
     number_of_lines: NSInteger,
+    enabled: bool,
+    
 }
 impl_HostObject_with_superclass!(UILabelHostObject);
 impl Default for UILabelHostObject {
@@ -46,6 +48,7 @@ impl Default for UILabelHostObject {
             text_alignment: UITextAlignmentLeft,
             line_break_mode: UILineBreakModeTailTruncation,
             number_of_lines: 1,
+            enabled: true,
         }
     }
 }
@@ -113,6 +116,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text_alignment: _,
         line_break_mode: _,
         number_of_lines: _,
+        enabled: _,
     } = env.objc.borrow(this);
     release(env, text);
     release(env, font);
@@ -164,6 +168,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setAdjustsFontSizeToFitWidth:(bool)adjusts {
     assert!(!adjusts); // TODO
+}
+
+- (bool)isEnabled {
+    env.objc.borrow::<UILabelHostObject>(this).enabled
+}
+
+- (())setEnabled:(bool)enabled {
+    env.objc.borrow_mut::<UILabelHostObject>(this).enabled = enabled;
+    // При изменении состояния (включен/выключен) UIKit требует перерисовки элемента,
+    // поэтому отправляем сигнал setNeedsDisplay.
+    () = msg![env; this setNeedsDisplay];
 }
 
 - (id)textColor {
@@ -265,6 +280,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text_alignment,
         line_break_mode,
         number_of_lines,
+        enabled: _,
     } = env.objc.borrow_mut(this);
 
     let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
