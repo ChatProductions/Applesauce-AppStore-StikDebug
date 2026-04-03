@@ -17,6 +17,10 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     function_exports: &[],
 };
 
+pub struct FrameworkState {
+    pub avfoundation: avfoundation::State,
+}
+
 #[derive(Default)]
 pub struct State {
     pub av_audio_session: av_audio_session::State,
