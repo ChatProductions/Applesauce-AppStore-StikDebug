@@ -1,405 +1,272 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//!
-//! `NSObject`, the root of most class hierarchies in Objective-C.
-//!
-//! Resources:
-//!
-//! - Apple's [Advanced Memory Management Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/MemoryMgmt.html)
-//!
-//! explains how reference counting works. Note that we are interested in what
-//!
-//! it calls "manual retain-release", not ARC.
-//!
-//! - Apple's [Key-Value Coding Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/KeyValueCoding/SearchImplementation.html)
-//!   explains the algorithm `setValue:forKey:` should follow.
-//!
-//!
-//! See also: [crate::objc], especially the `objects` module.
+//! `NSThread`.
 
-use super::ns_dictionary::dict_from_keys_and_objects;
-use super::ns_run_loop::NSDefaultRunLoopMode;
-use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
-use super::{NSTimeInterval, NSUInteger};
-use crate::frameworks::foundation::ns_thread::detach_new_thread_inner;
-use crate::mem::MutVoidPtr;
-use crate::objc::{
-    autorelease, id, msg, msg_class, msg_send, msg_send_no_type_checking, nil, objc_classes,
-    retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
+use super::NSTimeInterval;
+use crate::dyld::HostFunction;
+use crate::frameworks::core_foundation::CFTypeRef;
+use crate::frameworks::foundation::NSUInteger;
+use crate::libc::pthread::thread::{
+    pthread_attr_init, pthread_attr_setdetachstate, pthread_attr_setstacksize, pthread_attr_t,
+    pthread_create, pthread_self, pthread_t, PTHREAD_CREATE_DETACHED,
 };
+use crate::mem::{guest_size_of, Mem, MutPtr};
+use crate::objc::{
+    id, msg_send, msg_send_no_type_checking, nil, objc_classes, release, retain, todo_objc_setter,
+    Class, ClassExports, HostObject, NSZonePtr, SEL,
+};
+use crate::Environment;
+use crate::{msg, msg_class};
+use std::collections::HashMap;
+use std::time::Duration;
 
-// Хранилище для отмененных таймеров (target, имя селектора в виде строки)
-pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> = std::vec::Vec::new();
+#[derive(Default)]
+pub struct State {
+    is_multi_threaded: bool,
+    ns_threads: HashMap<pthread_t, id>,
+}
+impl State {
+    fn get(env: &mut Environment) -> &mut Self {
+        &mut env.framework_state.foundation.ns_thread
+    }
+}
+
+struct NSThreadHostObject {
+    target: id,
+    selector: Option<SEL>,
+    object: id,
+    /// `NSMutableDictionary*`
+    thread_dictionary: id,
+    owned: bool,
+    finished: bool,
+    executing: bool, // Добавлено для отслеживания состояния
+    stack_size: NSUInteger,
+    tolerate_type_mismatch: bool,
+}
+impl HostObject for NSThreadHostObject {}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
-@implementation NSObject
+@implementation NSThread: NSObject
 
-+ (id)alloc {
-    msg![env; this allocWithZone:(MutVoidPtr::null())]
-}
-+ (id)allocWithZone:(NSZonePtr)_zone { // struct _NSZone*
-    log_dbg!("[{:?} allocWithZone:]", this);
-    env.objc.alloc_object(this, Box::new(TrivialHostObject), &mut env.mem)
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(NSThreadHostObject {
+        target: nil,
+        selector: None,
+        object: nil,
+        thread_dictionary: nil,
+        owned: false,
+        finished: false,
+        executing: false, // Инициализация
+        stack_size: Mem::SECONDARY_THREAD_DEFAULT_STACK_SIZE,
+        tolerate_type_mismatch: false,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (id)new {
-    let new_object: id = msg![env; this alloc];
-    msg![env; new_object init]
++ (bool)isMultiThreaded {
+    env.framework_state.foundation.ns_thread.is_multi_threaded
 }
 
-+ (Class)class {
++ (bool)isMainThread {
+    env.current_thread == 0
+}
+
++ (f64)threadPriority {
+    let thread: id = msg![env; this currentThread];
+    msg![env; thread threadPriority]
+}
++ (bool)setThreadPriority:(f64)priority {
+    let thread: id = msg![env; this currentThread];
+    msg![env; thread setThreadPriority:priority]
+}
+
++ (id)currentThread {
+    let pthread = pthread_self(env);
+    #[allow(clippy::map_entry)]
+    if !State::get(env).ns_threads.contains_key(&pthread) {
+        let ns_thread: id = msg_class![env; NSThread alloc];
+        let ns_thread: id = msg![env; ns_thread init];
+        State::get(env).ns_threads.insert(pthread, ns_thread);
+    }
+    *State::get(env).ns_threads.get(&pthread).unwrap()
+}
+
++ (id)callStackReturnAddresses {
+    log!("WARNING: [NSThread callStackReturnAddresses] is called, returning an empty array!");
+    msg_class![env; NSArray new]
+}
+
++ (())sleepForTimeInterval:(NSTimeInterval)ti {
+    log_dbg!("[NSThread sleepForTimeInterval:{:?}]", ti);
+    env.sleep(Duration::from_secs_f64(ti));
+}
+
++ (())detachNewThreadSelector:(SEL)selector
+                     toTarget:(id)target
+                   withObject:(id)object {
+    detach_new_thread_inner(env, selector, target, object, /* tolerate_type_mismatch: */ false)
+}
+
+- (id)initWithTarget:(id)target
+            selector:(SEL)selector
+              object:(id)object {
+    env.objc.borrow_mut::<NSThreadHostObject>(this).target = target;
+    retain(env, target);
+    env.objc.borrow_mut::<NSThreadHostObject>(this).selector = Some(selector);
+    env.objc.borrow_mut::<NSThreadHostObject>(this).object = object;
+    retain(env, object);
+
     this
 }
-+ (bool)isSubclassOfClass:(Class)class {
-    env.objc.class_is_subclass_of(this, class)
+
+- (())start {
+    let symb = "__touchHLE_NSThreadInvocationHelper";
+    let hf: HostFunction = &(_touchHLE_NSThreadInvocationHelper as fn(&mut Environment, _) -> _);
+    let gf = env
+        .dyld
+        .create_guest_function(&mut env.mem, symb, hf);
+    let attr: MutPtr<pthread_attr_t> = env.mem.alloc(guest_size_of::<pthread_attr_t>()).cast();
+    pthread_attr_init(env, attr);
+
+    let stack_size = env.objc.borrow::<NSThreadHostObject>(this).stack_size;
+    pthread_attr_setstacksize(env, attr, stack_size);
+    pthread_attr_setdetachstate(env, attr, PTHREAD_CREATE_DETACHED);
+    let thread_ptr: MutPtr<pthread_t> = env.mem.alloc(guest_size_of::<pthread_t>()).cast();
+
+    pthread_create(env, thread_ptr, attr.cast_const(), gf, this.cast());
+
+    let pthread = env.mem.read(thread_ptr);
+    assert!(!State::get(env).ns_threads.contains_key(&pthread));
+    State::get(env).ns_threads.insert(pthread, this);
+
+    env.framework_state.foundation.ns_thread.is_multi_threaded = true;
 }
 
-// See the instance method section for the normal versions of these.
-+ (id)retain {
-    this // classes are not refcounted
-}
-+ (())release {
-    // classes are not refcounted
-}
-+ (())autorelease {
-    // classes are not refcounted
-}
-
-+ (bool)instancesRespondToSelector:(SEL)selector {
-    env.objc.class_has_method(this, selector)
-}
-
-// Возвращаем u32 (адрес), так как IMP не реализует GuestRet
-+ (u32)instanceMethodForSelector:(SEL)_selector {
-    log!("Warning: instanceMethodForSelector: for {:?} is stubbed", _selector);
-    0
+- (())main {
+    let &NSThreadHostObject {
+        target,
+        selector,
+        object,
+        tolerate_type_mismatch,
+        ..
+    } = env.objc.borrow(this);
+    if tolerate_type_mismatch {
+        () = msg_send_no_type_checking(env, (target, selector.unwrap(), object));
+    } else {
+        () = msg_send(env, (target, selector.unwrap(), object));
+    }
 }
 
-+ (bool)accessInstanceVariablesDirectly {
+- (id)threadDictionary {
+    let thread_dictionary = env.objc.borrow::<NSThreadHostObject>(this).thread_dictionary;
+    if thread_dictionary == nil {
+        let thread_dictionary = msg_class![env; NSMutableDictionary new];
+        env.objc.borrow_mut::<NSThreadHostObject>(this).thread_dictionary = thread_dictionary;
+        thread_dictionary
+    } else {
+        thread_dictionary
+    }
+}
+
+- (f64)threadPriority {
+    log!("TODO: [(NSThread *){:?} threadPriority] (not implemented yet)", this);
+    1.0
+}
+- (bool)setThreadPriority:(f64)priority {
+    todo_objc_setter!(this, priority);
     true
 }
 
-+ (id)description {
-    let name = env.objc.get_class_name(this);
-    let str = from_rust_string(env, name.to_string());
-    autorelease(env, str)
+- (NSUInteger)stackSize {
+    env.objc.borrow::<NSThreadHostObject>(this).stack_size
+}
+- (())setStackSize:(NSUInteger)size {
+    env.objc.borrow_mut::<NSThreadHostObject>(this).stack_size = size;
 }
 
-+ (id)debugDescription {
-    msg![env; this description]
+- (bool)isFinished {
+    env.objc.borrow::<NSThreadHostObject>(this).finished
 }
 
-// ИЗМЕНЕНО: Теперь мы реально отменяем таймеры, сохраняя строковое имя селектора
-+ (())cancelPreviousPerformRequestsWithTarget:(id)target
-                                     selector:(SEL)selector
-                                       object:(id)object {
-    let sel_str = selector.as_str(&env.mem).to_string();
-    unsafe {
-        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), Some(sel_str)));
-    }
+- (bool)isExecuting {
+    env.objc.borrow::<NSThreadHostObject>(this).executing
 }
 
-// ИЗМЕНЕНО: Поддержка глобальной отмены для объекта
-+ (())cancelPreviousPerformRequestsWithTarget:(id)target {
-    unsafe {
-        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), None));
-    }
-}
-
-- (id)init {
-    this
-}
-
-- (NSUInteger)retainCount {
-    env.objc.get_refcount(this).into()
-}
-
-- (id)retain {
-    log_dbg!("[{:?} retain]", this);
-    env.objc.increment_refcount(this);
-    this
-}
-- (())release {
-    log_dbg!("[{:?} release]", this);
-    if env.objc.decrement_refcount(this) {
-        () = msg![env; this dealloc];
-    }
-}
-- (id)autorelease {
-    () = msg_class![env; NSAutoreleasePool addObject:this];
-    this
+- (bool)isCancelled {
+    log!("TODO: [(NSThread *){:?} isCancelled]", this);
+    false
 }
 
 - (())dealloc {
-    log_dbg!("[{:?} dealloc]", this);
+    log_dbg!("[(NSThread*){:?} dealloc]", this);
+    let host_object = env.objc.borrow::<NSThreadHostObject>(this);
+    release(env, host_object.thread_dictionary);
     env.objc.dealloc_object(this, &mut env.mem)
-}
-
-- (Class)class {
-    ObjC::read_isa(this, &env.mem)
-}
-- (bool)isMemberOfClass:(Class)class {
-    let this_class: Class = msg![env; this class];
-    class == this_class
-}
-- (bool)isKindOfClass:(Class)class {
-    let this_class: Class = msg![env; this class];
-    env.objc.class_is_subclass_of(this_class, class)
-}
-
-- (NSUInteger)hash {
-    this.to_bits()
-}
-
-// To not confuse with isEqualTo:, which is
-// a category of NSWhoseSpecifier!
-// Reference https://nshipster.com/equality
-- (bool)isEqual:(id)other {
-    this == other
-}
-
-// Helper for NSCopying
-- (id)copy {
-    msg![env; this copyWithZone:(MutVoidPtr::null())]
-}
-
-// Helper for NSMutableCopying
-- (id)mutableCopy {
-    msg![env; this mutableCopyWithZone:(MutVoidPtr::null())]
-}
-
-// NSKeyValueCoding
-- (())setValue:(id)value
-       forKey:(id)key { // NSString*
-    let key_string = to_rust_string(env, key);
-    // TODO: avoid copy?
-    assert!(key_string.is_ascii()); // TODO: do we have to handle non-ASCII keys?
-    let camel_case_key_string = format!("{}{}", key_string.as_bytes()[0].to_ascii_uppercase() as char, &key_string[1..]);
-
-    let class = msg![env; this class];
-
-    assert!(value != nil);
-    let value_class = msg![env; value class];
-    let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
-    assert!(!env.objc.class_is_subclass_of(value_class, ns_value_class));
-
-    if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
-        if env.objc.class_has_method(class, sel) {
-            () = msg_send(env, (this, sel, value));
-            return;
-        }
-    }
-
-    if let Some(sel) = env.objc.lookup_selector(&format!("_set{camel_case_key_string}:")) {
-        if env.objc.class_has_method(class, sel) {
-            () = msg_send(env, (this, sel, value));
-            return;
-        }
-    }
-
-    let sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
-    let accessInstanceVariablesDirectly = msg_send(env, (class, sel));
-
-    if accessInstanceVariablesDirectly {
-        if let Some(ivar_ptr) = env.objc.object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
-            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("_is{camel_case_key_string}")))
-            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("{key_string}")))
-            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("is{camel_case_key_string}"))
-        ) {
-            retain(env, value);
-            env.mem.write(ivar_ptr.cast(), value);
-            return;
-        }
-    }
-
-    let sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
-    () = msg_send(env, (this, sel, value, key));
-}
-
-- (())setValue:(id)_value
-forUndefinedKey:(id)key { // NSString*
-    let class: Class = ObjC::read_isa(this, &env.mem);
-    let class_name_string = env.objc.get_class_name(class).to_owned();
-    let key_string = to_rust_string(env, key);
-    log!("Warning: Object {:?} of class {:?} does not have a setter for {} — ignoring",
-        this, class_name_string, key_string);
-}
-
-- (bool)respondsToSelector:(SEL)selector {
-    env.objc.object_has_method(&env.mem, this, selector)
-}
-
-- (bool)conformsToProtocol:(id)_protocol {
-    true
-}
-    
-// Возвращаем u32 (адрес), так как IMP не реализует GuestRet
-- (u32)methodForSelector:(SEL)_selector {
-    log!("Warning: methodForSelector: for {:?} is stubbed", _selector);
-    0
-}
-
-- (id)performSelector:(SEL)sel {
-    assert!(!sel.is_null());
-    msg_send_no_type_checking(env, (this, sel))
-}
-
-- (id)performSelector:(SEL)sel
-           withObject:(id)o1 {
-    assert!(!sel.is_null());
-    msg_send_no_type_checking(env, (this, sel, o1))
-}
-
-- (id)performSelector:(SEL)sel
-           withObject:(id)o1
-           withObject:(id)o2 {
-    assert!(!sel.is_null());
-    msg_send_no_type_checking(env, (this, sel, o1, o2))
-}
-
-- (())performSelectorInBackground:(SEL)sel
-                       withObject:(id)arg {
-    detach_new_thread_inner(env, sel, this, arg, /* tolerate_type_mismatch: */ true)
-}
-
-- (())performSelector:(SEL)sel withObject:(id)arg afterDelay:(NSTimeInterval)delay {
-    log_dbg!("performSelector:{} withObject:{:?} afterDelay:{}", sel.as_str(&env.mem), arg, delay);
-    let sel_key: id = get_static_str(env, "SEL");
-    let sel_str = from_rust_string(env, sel.as_str(&env.mem).to_string());
-    let arg_key: id = get_static_str(env, "arg");
-    let dict = dict_from_keys_and_objects(env, &[(sel_key, sel_str), (arg_key, arg)]);
-
-    let selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
-    let timer:id = msg_class![env;
-        NSTimer timerWithTimeInterval:delay
-                               target:this
-                             selector:selector
-                             userInfo:dict
-                              repeats:false];
-    
-    let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
-    let mode: id = get_static_str(env, NSDefaultRunLoopMode);
-    () = msg![env; run_loop addTimer:timer forMode:mode];
-}
-
-- (())performSelectorOnMainThread:(SEL)sel withObject:(id)arg waitUntilDone:(bool)wait {
-    log_dbg!("performSelectorOnMainThread:{} withObject:{:?} waitUntilDone:{}", sel.as_str(&env.mem), arg, wait);
-
-    if wait && env.current_thread == 0 {
-        if sel.as_str(&env.mem).ends_with(':') {
-            () = msg_send(env, (this, sel, arg));
-        } else {
-            assert!(arg.is_null());
-            () = msg_send(env, (this, sel));
-        }
-        return;
-    }
-
-    if wait {
-        // Called from background thread with wait=true.
-        // True cross-thread waiting is not implemented, so we schedule
-        // the selector on the main run loop and proceed without blocking.
-        log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
-    }
-
-    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
-}
-
-// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании с безопасным сравнением
-- (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
-    let dict: id = msg![env; which userInfo];
-    let sel_key: id = get_static_str(env, "SEL");
-    let sel_str_id: id = msg![env; dict objectForKey:sel_key];
-    let sel_str = to_rust_string(env, sel_str_id);
-    let sel = env.objc.lookup_selector(&sel_str).unwrap();
-
-    let arg_key: id = get_static_str(env, "arg");
-    let arg: id = msg![env; dict objectForKey:arg_key];
-
-    let target_bits = this.to_bits();
-    let mut cancelled = false;
-    
-    unsafe {
-        // Проверяем, не было ли отмены по конкретному селектору или глобальной отмены.
-        // Используем .as_deref() и .as_ref(), чтобы безопасно сравнивать &str и &str.
-        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_ref())) {
-            crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
-            cancelled = true;
-        } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.is_none()) {
-            cancelled = true;
-        }
-    }
-
-    // Если игра отменила таймер, мы просто пропускаем его вызов!
-    if cancelled {
-        return;
-    }
-
-    if sel.as_str(&env.mem).ends_with(':') {
-        () = msg_send(env, (this, sel, arg));
-    } else {
-        () = msg_send(env, (this, sel));
-    }
-}
-
-- (())awakeFromNib {
-    // no-op
-}
-
-- (())performSelector:(SEL)sel
-           onThread:(id)_thread
-         withObject:(id)arg
-      waitUntilDone:(bool)_wait {
-    log_dbg!("performSelector:{} onThread:withObject:waitUntilDone: — scheduling on main thread instead", sel.as_str(&env.mem));
-    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
-}
-
-- (())performSelector:(SEL)sel
-           onThread:(id)_thread
-         withObject:(id)arg
-      waitUntilDone:(bool)_wait
-              modes:(id)_modes {
-    log_dbg!("performSelector:{} onThread:withObject:waitUntilDone:modes: — scheduling on main thread instead", sel.as_str(&env.mem));
-    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
-}
-
-- (id)valueForKey:(id)key {
-    // Try getter selector first
-    let key_str = super::ns_string::to_rust_string(env, key);
-    let sel_name = key_str.to_string();
-    if let Some(sel) = env.objc.lookup_selector(&sel_name) {
-        if env.objc.object_has_method(&env.mem, this, sel) {
-            return msg_send(env, (this, sel));
-        }
-    }
-    // Try isX for bool properties
-    let is_sel_name = format!("is{}{}", &key_str[..1].to_uppercase(), &key_str[1..]);
-    if let Some(sel) = env.objc.lookup_selector(&is_sel_name) {
-        if env.objc.object_has_method(&env.mem, this, sel) {
-            return msg_send(env, (this, sel));
-        }
-    }
-    log!("Warning: valueForKey:{} not found on {:?} — returning nil", key_str, this);
-    nil
-}
-
-- (id)valueForKeyPath:(id)key_path {
-    // Simple implementation: treat as valueForKey: (no path traversal)
-    msg![env; this valueForKey:key_path]
-}
-
-- (())setValue:(id)value forKeyPath:(id)key_path {
-    msg![env; this setValue:value forKey:key_path]
 }
 
 @end
 
 };
+type NSThreadRef = CFTypeRef;
+
+pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: NSThreadRef) {
+    let class: Class = msg![env; ns_thread_obj class];
+    let thread_class = env.objc.get_known_class("NSThread", &mut env.mem);
+        if !env.objc.class_is_subclass_of(class, thread_class) {
+        log!("Warning: _touchHLE_NSThreadInvocationHelper called with unexpected class, skipping");
+        return;
+    }
+
+    // Устанавливаем статус выполнения
+    env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj).executing = true;
+
+    () = msg![env; ns_thread_obj main];
+    let host_obj = env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj);
+    host_obj.finished = true;
+    host_obj.executing = false;
+    // Поток завершен
+
+    let &NSThreadHostObject {
+        target,
+        object,
+        owned,
+        ..
+    } = env.objc.borrow(ns_thread_obj);
+    release(env, object);
+    release(env, target);
+
+    let pthread = pthread_self(env);
+    let res = State::get(env).ns_threads.remove(&pthread);
+    if res.is_none() {
+        log!("Warning: _touchHLE_NSThreadInvocationHelper: pthread {:?} not found in ns_threads map", pthread);
+    }
+
+    if owned {
+        release(env, ns_thread_obj);
+    }
+}
+
+pub fn detach_new_thread_inner(
+    env: &mut Environment,
+    selector: SEL,
+    target: id,
+    object: id,
+    tolerate_type_mismatch: bool,
+) {
+    let new: id = msg_class![env; NSThread alloc];
+    let new: id = msg![env; new initWithTarget:target
+                                      selector:selector
+                                        object:object];
+    env.objc.borrow_mut::<NSThreadHostObject>(new).owned = true;
+    env.objc.borrow_mut::<NSThreadHostObject>(new).tolerate_type_mismatch = tolerate_type_mismatch;
+    env.framework_state.foundation.ns_thread.is_multi_threaded = true;
+
+    msg![env; new start]
+}
 
