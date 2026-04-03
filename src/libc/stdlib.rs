@@ -434,7 +434,7 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
                         0
                     }
                     Err(e) => {
-                        log!("system: mkdir {:?} => error: {:?}", e);
+                        log!("system: mkdir {:?} => error: {:?}", path, e);
                         1
                     }
                 }
@@ -721,7 +721,5 @@ where
         return Err(());
     };
     Ok((res, whitespace_len + len))
-}
-
 }
 
