@@ -553,6 +553,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     res
 }
 
+// РЕАЛИЗАЦИЯ УДАЛЕНИЯ ПО МАССИВУ КЛЮЧЕЙ
+- (())removeObjectsForKeys:(id)key_array { // NSArray *
+    if key_array == nil {
+        return;
+    }
+    let count: NSUInteger = msg![env; key_array count];
+    for i in 0..count {
+        let key: id = msg![env; key_array objectAtIndex:i];
+        () = msg![env; this removeObjectForKey:key];
+    }
+}
+
 @end
 
 // Our private subclass that is the single implementation of NSDictionary for
@@ -995,3 +1007,4 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     release(env, desc);
     autorelease(env, desc_imm)
 }
+
