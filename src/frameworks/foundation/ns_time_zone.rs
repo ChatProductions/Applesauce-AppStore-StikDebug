@@ -133,8 +133,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this timeZoneWithName:tz_name]
 }
 
-/// Returns an NSArray<NSString*> of every IANA name in our table (deduplicated,
-/// abbreviation-alias rows excluded).
+// Returns an NSArray<NSString*> of every IANA name in our table (deduplicated,
+// abbreviation-alias rows excluded).
 + (id)knownTimeZoneNames {
     let names: Vec<id> = ZONE_TABLE
         .iter()
@@ -149,7 +149,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array)
 }
 
-/// Returns an NSDictionary<NSString*, NSString*> mapping abbreviation → IANA name.
+// Returns an NSDictionary<NSString*, NSString*> mapping abbreviation → IANA name.
 + (id)abbreviationDictionary {
     let mut keys: Vec<id> = Vec::new();
     let mut vals: Vec<id> = Vec::new();
@@ -199,8 +199,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_string::get_static_str(env, abbr)
 }
 
-/// Returns the same abbreviation as -abbreviation, ignoring the date argument
-/// (DST not modelled).
+// Returns the same abbreviation as -abbreviation, ignoring the date argument
+// (DST not modelled).
 - (id)abbreviationForDate:(_date: id) {
     msg![env; this abbreviation]
 }
@@ -209,33 +209,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSTimeZoneHostObject>(this).seconds_from_gmt as NSInteger
 }
 
-/// Returns the same offset as -secondsFromGMT, ignoring the date argument
-/// (DST not modelled).
+// Returns the same offset as -secondsFromGMT, ignoring the date argument
+// (DST not modelled).
 - (NSInteger)secondsFromGMTForDate:(_date: id) {
     msg![env; this secondsFromGMT]
 }
 
-/// DST is not modelled; always returns false.
+// DST is not modelled; always returns false.
 - (bool)isDaylightSavingTime {
     false
 }
 
-/// DST is not modelled; always returns false for any date.
+// DST is not modelled; always returns false for any date.
 - (bool)isDaylightSavingTimeForDate:(_date: id) {
     false
 }
 
-/// DST is not modelled; returns nil (no known transition).
+// DST is not modelled; returns nil (no known transition).
 - (id)nextDaylightSavingTimeTransition {
     nil
 }
 
-/// DST is not modelled; returns nil for any date.
+// DST is not modelled; returns nil for any date.
 - (id)nextDaylightSavingTimeTransitionAfterDate:(_date: id) {
     nil
 }
 
-/// DST offset is always 0 since DST is not modelled.
+// DST offset is always 0 since DST is not modelled.
 - (NSInteger)daylightSavingTimeOffset {
     0
 }
