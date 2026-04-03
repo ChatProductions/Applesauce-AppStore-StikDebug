@@ -449,9 +449,9 @@ fn AudioQueueGetProperty(
         None => {
             log!("Warning: AudioQueueGetProperty unknown property {}, pretending success", debug_fourcc(in_property_id));
             let provided_size = env.mem.read(io_data_size);
-            if provided_size > 0 && !out_property_data.is_null() {
-                let zeroes = vec![0u8; provided_size as usize];
-                env.mem.write_bytes(out_property_data.cast(), &zeroes);
+            // Вместо write_bytes пишем обычный u32 ноль (4 байта), так как write поддерживает базовые типы
+            if provided_size >= 4 && !out_property_data.is_null() {
+                env.mem.write(out_property_data.cast::<u32>(), 0u32);
             }
             return 0; // Возвращаем 0 (Успех) вместо kAudioQueueErr_InvalidProperty
         }
