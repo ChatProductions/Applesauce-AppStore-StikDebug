@@ -1651,7 +1651,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let host = env.objc.borrow::<StringHostObject>(this);
         let rust_str = match &*host {
             StringHostObject::Utf8(s) => s.to_string(),
-            StringHostObject::Utf16(s) => s.to_string(),
+            StringHostObject::Utf16(s) => String::from_utf16_lossy(s).to_string(),
         };
         drop(host);
 
