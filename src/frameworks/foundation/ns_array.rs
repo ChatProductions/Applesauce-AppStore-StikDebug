@@ -775,8 +775,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// Add to @implementation _touchHLE_NSMutableArray:
-
 - (id)initWithObjects:(id)firstObj, ...args {
     retain(env, firstObj);
     let mut objects = vec![firstObj];
@@ -833,6 +831,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.objc.borrow_mut::<ArrayHostObject>(arr).array = array;
     arr
+}
+
+- (())encodeWithCoder:(id)coder {
+    let class: Class = msg![env; coder class];
+    let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
+
+    if env.objc.class_is_subclass_of(class, keyed_arch_class) {
+        let array = env.objc.borrow::<ArrayHostObject>(this).array.clone();
+
+        // NSKeyedArchiver stores arrays as NS.objects.0, NS.objects.1 ...
+        for (i, obj) in array.iter().enumerate() {
+            let key = from_rust_string(env, format!("NS.objects.{}", i));
+            () = msg![env; coder encodeObject:obj forKey:key];
+            release(env, key);
+        }
+
+        // Encode total count so decoder knows how many to read
+        let count_key = from_rust_string(env, "NS.count".to_string());
+        let count = array.len() as NSUInteger;
+        () = msg![env; coder encodeInt:count forKey:count_key];
+        release(env, count_key);
+    } else {
+        log!(
+            "Warning: _touchHLE_NSMutableArray encodeWithCoder: unsupported coder class, skipping"
+        );
+    }
 }
 
 // NSMutableCopying implementation
