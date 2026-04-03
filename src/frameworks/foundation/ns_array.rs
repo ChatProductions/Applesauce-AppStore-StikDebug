@@ -842,7 +842,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let array = env.objc.borrow::<ArrayHostObject>(this).array.clone();
 
         // NSKeyedArchiver stores arrays as NS.objects.0, NS.objects.1 ...
-        for (i, obj) in array.iter().enumerate() {
+        for (i, obj) in array.iter().copied().enumerate() {
             let key = from_rust_string(env, format!("NS.objects.{}", i));
             () = msg![env; coder encodeObject:obj forKey:key];
             release(env, key);
