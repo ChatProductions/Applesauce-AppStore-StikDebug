@@ -7,12 +7,14 @@
 #![allow(dead_code)]
 //! `CFHost` — CFNetwork host resolution stub.
 
+use crate::abi::GuestFunction;
 use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
+use std::net::SocketAddrV4;
 
 pub type CFHostRef = CFTypeRef;
 
