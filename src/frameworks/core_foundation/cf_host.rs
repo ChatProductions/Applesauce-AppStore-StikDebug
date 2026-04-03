@@ -24,12 +24,13 @@ const kCFHostReachability: CFHostInfoType = 2;
 // CFStreamError — simple stub struct (domain + error)
 type CFStreamError = u64; // two i32s packed; we never inspect it
 
-struct CFHostHostObject {
-    /// `NSString*` hostname or nil if created from address
-    name: crate::objc::id,
-    /// `NSData*` address or nil if created from name
-    address: crate::objc::id,
+pub(crate) struct CFHostHostObject {
+    pub(crate) address: Option<SocketAddrV4>,
+    pub(crate) name: Option<String>,
+    pub(crate) callout: Option<GuestFunction>,
+    pub(crate) context: MutVoidPtr,
 }
+
 impl HostObject for CFHostHostObject {}
 
 pub const CLASSES: ClassExports = objc_classes! {
