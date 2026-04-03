@@ -103,8 +103,10 @@ impl Image {
 
     pub fn from_pixels(width: u32, height: u32, pixels: Vec<u8>) -> Self {
         assert_eq!(pixels.len(), (width * height * 4) as usize);
-        Image { width, height, pixels }
-
+        Image {
+             dimensions: (width, height),
+             // set the pixels field to whatever your Image struct actually uses
+        }
     }
     
     pub fn dimensions(&self) -> (u32, u32) {
