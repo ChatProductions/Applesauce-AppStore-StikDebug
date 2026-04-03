@@ -210,7 +210,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     if key_str == "view" {
         () = msg![env; this setView:value];
     } else {
-        // ИСПРАВЛЕНИЕ: Явно указываем `() =`, чтобы Rust понял тип возвращаемого значения макроса
         () = msg_super![env; this setValue:value forKey:key];
     }
 }
@@ -472,7 +471,6 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
         let ns_name: id = from_rust_string(env, name.to_string());
         let resolved = check_and_resolve_nib(env, bundle, ns_name);
         if resolved != nil {
-            // Освобождаем class_name, так как мы нашли совпадение по имени без суффикса Controller
             release(env, class_name);
             return resolved;
         }
@@ -483,45 +481,36 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
         return resolved;
     }
 
-    // Если ничего не нашли, освобождаем базовое имя класса, чтобы не было утечки памяти
     release(env, class_name);
     nil
 }
 
-/// Помощник, который проверяет наличие NIB файла с базовым именем, а также с суффиксами устройств
+/// Умный помощник для поиска NIB файлов. Учитывает регистр букв (важно для Android) 
+/// и все возможные варианты суффиксов устройств (~iphone, -iPhone и т.д.)
 fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id {
     if base_name == nil {
         return nil;
     }
     let type_: id = get_static_str(env, "nib");
-    
-    // ИСПРАВЛЕНИЕ: Явно указываем тип :id для результатов макроса, чтобы избежать ошибки E0283
-    
-    // 1. Точное совпадение
-    let exact_path: id = msg![env; bundle pathForResource:base_name ofType:type_];
-    if exact_path != nil {
-        retain(env, base_name);
-        return base_name;
-    }
-    
     let base_name_str = to_rust_string(env, base_name);
     
-    // 2. Ищем версию ~iphone
-    let iphone_name = format!("{}~iphone", base_name_str);
-    let iphone_ns: id = from_rust_string(env, iphone_name);
-    let iphone_path: id = msg![env; bundle pathForResource:iphone_ns ofType:type_];
-    if iphone_path != nil {
-        retain(env, iphone_ns); // Сохраняем строку для функции-вызывателя
-        return iphone_ns;
-    }
+    // Проверяем как оригинальное имя (с большими буквами), так и полностью в нижнем регистре
+    let bases = [base_name_str.clone(), base_name_str.to_lowercase()];
     
-    // 3. Ищем версию ~ipad
-    let ipad_name = format!("{}~ipad", base_name_str);
-    let ipad_ns: id = from_rust_string(env, ipad_name);
-    let ipad_path: id = msg![env; bundle pathForResource:ipad_ns ofType:type_];
-    if ipad_path != nil {
-        retain(env, ipad_ns);
-        return ipad_ns;
+    // Перебираем все варианты окончаний, которые использовали старые игры
+    let suffixes = ["", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad"];
+    
+    for base in &bases {
+        for suffix in &suffixes {
+            let candidate = format!("{}{}", base, suffix);
+            let candidate_ns: id = from_rust_string(env, candidate);
+            let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
+            
+            if path != nil {
+                retain(env, candidate_ns);
+                return candidate_ns;
+            }
+        }
     }
     
     nil
