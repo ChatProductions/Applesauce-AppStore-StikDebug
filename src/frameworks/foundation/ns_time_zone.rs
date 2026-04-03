@@ -72,7 +72,8 @@ struct NSTimeZoneHostObject {
 }
 impl HostObject for NSTimeZoneHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 (env, this, _cmd);
 
 @implementation NSTimeZone: NSObject
@@ -151,17 +152,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Returns an NSDictionary<NSString*, NSString*> mapping abbreviation → IANA name.
 + (id)abbreviationDictionary {
-    let mut keys: Vec<id> = Vec::new();
-    let mut vals: Vec<id> = Vec::new();
+    // ИЗМЕНЕНО: Используем один вектор пар (ключ, значение)
+    let mut keys_and_vals: Vec<(id, id)> = Vec::new();
+    
     // Collect unique abbreviations (first occurrence wins).
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for (iana, _, abbr) in ZONE_TABLE {
+    for &(iana, _, abbr) in ZONE_TABLE {
         if seen.insert(abbr) {
-            keys.push(ns_string::get_static_str(env, abbr));
-            vals.push(ns_string::get_static_str(env, iana));
+            keys_and_vals.push((
+                ns_string::get_static_str(env, abbr),
+                ns_string::get_static_str(env, iana),
+            ));
         }
     }
-    let dict = ns_dictionary::dict_from_keys_and_objects(env, &keys, &vals);
+    
+    let dict = ns_dictionary::dict_from_keys_and_objects(env, &keys_and_vals);
     autorelease(env, dict)
 }
 
@@ -243,3 +248,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
