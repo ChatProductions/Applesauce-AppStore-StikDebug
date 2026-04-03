@@ -36,6 +36,18 @@ struct GKLeaderboardViewControllerHostObject {
 }
 impl HostObject for GKLeaderboardViewControllerHostObject {}
 
+// MARK: - GKFriendRequestComposeViewController
+
+struct GKFriendRequestComposeViewControllerHostObject {
+    /// GKFriendRequestComposeViewControllerDelegate — weak reference
+    compose_view_delegate: id,
+    /// NSString*
+    message: id,
+    /// NSInteger
+    max_recipients: NSInteger,
+}
+impl HostObject for GKFriendRequestComposeViewControllerHostObject {}
+
 // MARK: - GKAchievementViewController
 
 struct GKAchievementViewControllerHostObject {
@@ -150,6 +162,118 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+// =========================================================================
+// GKFriendRequestComposeViewController
+// =========================================================================
+
+@implementation GKFriendRequestComposeViewController: UIViewController
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(GKFriendRequestComposeViewControllerHostObject {
+        compose_view_delegate: nil,
+        message: nil,
+        max_recipients: 0,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)init {
+    this
+}
+
+- (())dealloc {
+    let host = env.objc.borrow::<GKFriendRequestComposeViewControllerHostObject>(this);
+    let message = host.message;
+    release(env, message);
+    // delegate is weak — no release
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+// MARK: Delegate
+
+- (id)composeViewDelegate {
+    env.objc.borrow::<GKFriendRequestComposeViewControllerHostObject>(this).compose_view_delegate
+}
+
+- (())setComposeViewDelegate:(id)delegate {
+    // Weak reference — no retain.
+    env.objc.borrow_mut::<GKFriendRequestComposeViewControllerHostObject>(this)
+        .compose_view_delegate = delegate;
+}
+
+// MARK: Properties
+
+- (id)message {
+    env.objc.borrow::<GKFriendRequestComposeViewControllerHostObject>(this).message
+}
+
+- (())setMessage:(id)message {
+    let old = env.objc.borrow::<GKFriendRequestComposeViewControllerHostObject>(this).message;
+    release(env, old);
+    retain(env, message);
+    env.objc.borrow_mut::<GKFriendRequestComposeViewControllerHostObject>(this).message = message;
+}
+
+- (NSInteger)maxRecipients {
+    env.objc.borrow::<GKFriendRequestComposeViewControllerHostObject>(this).max_recipients
+}
+
+- (())setMaxRecipients:(NSInteger)max_recipients {
+    env.objc.borrow_mut::<GKFriendRequestComposeViewControllerHostObject>(this).max_recipients = max_recipients;
+}
+
+// MARK: Add Recipients
+
+- (())addRecipientsWithPlayerIDs:(id)_playerIDs {
+    // В эмуляторе реальная отправка не происходит, поэтому мы просто принимаем данные
+}
+
+- (())addRecipientsWithEmailAddresses:(id)_emailAddresses {
+}
+
+- (())addRecipientWithPlayerID:(id)_playerID {
+}
+
+// MARK: Presentation & Lifecycle
+
+- (())viewDidLoad {
+    log!("GKFriendRequestComposeViewController viewDidLoad: stubbed (UI not shown)");
+}
+
+- (())viewWillAppear:(bool)_animated {
+    log!("GKFriendRequestComposeViewController viewWillAppear: stubbed");
+    
+    // Эмуляция закрытия окна сразу после "открытия", чтобы игра не висела
+    let delegate = env.objc
+        .borrow::<GKFriendRequestComposeViewControllerHostObject>(this)
+        .compose_view_delegate;
+
+    if delegate != nil {
+        let sel = env.objc.register_host_selector(
+            "friendRequestComposeViewControllerDidFinish:".to_string(),
+            &mut env.mem,
+        );
+        let responds: bool = msg![env; delegate respondsToSelector:sel];
+        if responds {
+            () = msg![env; delegate friendRequestComposeViewControllerDidFinish:this];
+        }
+    }
+}
+
+- (())viewDidAppear:(bool)_animated {
+    // Уже "закрыто" в viewWillAppear — ничего не делаем.
+}
+
+- (())presentModalViewController:(id)_vc animated:(bool)_animated {
+    log!("GKFriendRequestComposeViewController presentModalViewController: stubbed");
+}
+
+- (())dismissModalViewControllerAnimated:(bool)_animated {
+    log!("GKFriendRequestComposeViewController dismissModalViewControllerAnimated: stubbed");
+}
+
+@end
+    
 // =========================================================================
 // GKAchievementViewController
 // =========================================================================
