@@ -53,7 +53,7 @@ impl Default for State {
             current_hardware_output_number_channels: 2,
             current_hardware_output_volume: 1.0,
             current_hardware_io_buffer_duration: 0.023220,
-            interruption_listener: GuestFunction::null(),
+            interruption_listener: GuestFunction::null_ptr(), // Исправлено: используем null_ptr()
             client_data: MutVoidPtr::null(),
             is_initialized: false,
         }
@@ -162,7 +162,7 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
         kAudioSessionProperty_CurrentHardwareSampleRate => guest_size_of::<f64>(),
         kAudioSessionProperty_CurrentHardwareOutputVolume |
         kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
-        _ => 4, // БЕЗОПАСНЫЙ ФОЛЛБЕК: возвращаем 4 байта вместо паники эмулятора
+        _ => 4, // БЕЗОПАСНЫЙ ФОЛЛБЕК
     }
 }
 
@@ -175,3 +175,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
+
