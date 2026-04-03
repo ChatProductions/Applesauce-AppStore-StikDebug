@@ -122,11 +122,15 @@ pub fn CGContextFillRect(
     env: &mut Environment,
     context: CGContextRef,
     rect: CGRect,
-) {
-    if context.is_null() {
-        log!("Warning: CGContextFillRect called with null context, skipping");
+) {                                    // ← opens function
+    if context.is_null() {             // ← opens if
+        log!(
+            "Warning: CGContextFillRect called with null context, skipping"
+        );
         return;
-}
+    }                                  // ← closes if
+    cg_bitmap_context::fill_rect(env, context, rect, /* clear: */ false);
+}                      
 
 pub fn CGContextClearRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
     cg_bitmap_context::fill_rect(env, context, rect, /* clear: */ true);
@@ -188,13 +192,15 @@ pub fn CGContextDrawImage(
     context: CGContextRef,
     rect: CGRect,
     image: CGImageRef,
-) {
-    if context.is_null() {
-        log!("Warning: CGContextDrawImage called with null context, skipping");
-        return; // safely ignore instead of crashing
-    }
+) {                                    // ← opens function
+    if context.is_null() {             // ← opens if
+        log!(
+            "Warning: CGContextDrawImage called with null context, skipping"
+        );
+        return;
+    }                                  // ← closes if
     cg_bitmap_context::draw_image(env, context, rect, image);
-}
+}                                      // ← closes function ← THIS IS MISSING OR WRONG
 
 fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
     let host_obj = env.objc.borrow_mut::<CGContextHostObject>(context);
