@@ -45,6 +45,14 @@ fn NSZoneMalloc(env: &mut Environment, _zone: id, size: GuestUSize) -> MutVoidPt
     env.mem.alloc(size)
 }
 
+fn NSZoneRealloc(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
+    env.mem.realloc(ptr, size)
+}
+
+fn NSZoneFree(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr) {
+    env.mem.free(ptr)
+}
+
 fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if ptr.is_null() {
@@ -507,6 +515,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mbstowcs(_, _, _)),
     export_c_func!(wcstombs(_, _, _)),
     export_c_func!(NSZoneMalloc(_, _)),
+    export_c_func!(NSZoneFree(_, _)),
+    export_c_func!(NSZoneRealloc(_, _, _)),
     export_c_func!(system(_)),
     export_c_func_aliased!("___assert_rtn", ___assert_rtn(_, _, _, _)),
 ];
