@@ -312,7 +312,7 @@ forUndefinedKey:(id)key { // NSString*
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
-// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании с проверкой по строке
+// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании с безопасным сравнением
 - (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
     let dict: id = msg![env; which userInfo];
     let sel_key: id = get_static_str(env, "SEL");
@@ -327,8 +327,9 @@ forUndefinedKey:(id)key { // NSString*
     let mut cancelled = false;
     
     unsafe {
-        // Проверяем, не было ли отмены по конкретному селектору или глобальной отмены
-        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_ref() == Some(&sel_str)) {
+        // Проверяем, не было ли отмены по конкретному селектору или глобальной отмены.
+        // Используем .as_deref() и .as_ref(), чтобы безопасно сравнивать &str и &str.
+        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_ref())) {
             crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
             cancelled = true;
         } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.is_none()) {
@@ -401,3 +402,4 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
+
