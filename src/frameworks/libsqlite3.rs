@@ -1,5 +1,5 @@
-use crate::dyld::{export_c_func, ConstantExports, ClassExports, FunctionExports, HostDylib};
-use crate::mem::{Mem, MutPtr, Ptr};
+use crate::dyld::{export_c_func, FunctionExports, HostDylib};
+use crate::mem::{ConstPtr, MutPtr};
 use crate::Environment;
 use rusqlite::Connection;
 use std::collections::HashMap;
@@ -19,7 +19,8 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 
     let mut filename_bytes = Vec::new();
     let mut current_addr = filename_ptr;
     loop {
-        let ptr: Ptr<u8> = Ptr::from_bits(current_addr);
+        // Используем ConstPtr для безопасного чтения
+        let ptr: ConstPtr<u8> = ConstPtr::from_bits(current_addr);
         let byte: u8 = env.mem.read(ptr);
         if byte == 0 { 
             break; // Конец C-строки
@@ -45,7 +46,7 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 
             *next_id += 4;
             handles.insert(handle, conn);
             
-            // Пишем handle обратно в память по адресу ppDb
+            // Пишем handle обратно в память по адресу ppDb (тут нужен MutPtr)
             let pp_db_ptr: MutPtr<u32> = MutPtr::from_bits(ppDb);
             env.mem.write(pp_db_ptr, handle);
             
@@ -69,7 +70,6 @@ pub fn sqlite3_close(_env: &mut Environment, p_db: u32) -> u32 {
 }
 
 // Экспортируем функции через макрос из dyld.rs
-// Количество подчеркиваний равно количеству аргументов, НЕ СЧИТАЯ env
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_open(_, _)),
     export_c_func!(sqlite3_close(_)),
