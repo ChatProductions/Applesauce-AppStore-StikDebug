@@ -20,7 +20,6 @@ use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::uikit::ui_font::{
     self, UILineBreakMode, UILineBreakModeWordWrap, UITextAlignment, UITextAlignmentLeft,
 };
-use crate::frameworks::foundation::ns_array::ArrayHostObject;
 use crate::fs::GuestPath;
 use crate::mach_o::MachO;
 use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
@@ -1649,20 +1648,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
 
     if env.objc.class_is_subclass_of(class, keyed_arch_class) {
-        let array = env.objc.borrow::<ArrayHostObject>(this).array.clone();
+        // Get the UTF-8 string content from host object
+        let host = env.objc.borrow::<StringHostObject>(this);
+        let rust_str = host.string.clone();
+        drop(host);
 
-        // NSKeyedArchiver stores arrays as NS.objects.0, NS.objects.1 ...
-        for (i, obj) in array.iter().copied().enumerate() {
-            let key = from_rust_string(env, format!("NS.objects.{}", i));
-            () = msg![env; coder encodeObject:obj forKey:key];
-            release(env, key);
-        }
-
-        // Encode total count so decoder knows how many to read
-        let count_key = from_rust_string(env, "NS.count".to_string());
-        let count = array.len() as NSUInteger;
-        () = msg![env; coder encodeInt:count forKey:count_key];
-        release(env, count_key);
+        // NSKeyedArchiver stores NSString as "NS.string" key
+        let content = from_rust_string(env, rust_str);
+        let key = from_rust_string(env, "NS.string".to_string());
+        () = msg![env; coder encodeObject:content forKey:key];
+        release(env, content);
+        release(env, key);
     } else {
         log!(
             "Warning: _touchHLE_NSString_CFConstantString_UTF8 encodeWithCoder: unsupported coder class, skipping"
