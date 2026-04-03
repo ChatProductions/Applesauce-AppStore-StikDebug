@@ -494,8 +494,8 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     let type_: id = get_static_str(env, "nib");
     let base_name_str = to_rust_string(env, base_name);
     
-    // Проверяем как оригинальное имя (с большими буквами), так и полностью в нижнем регистре
-    let bases = [base_name_str.clone(), base_name_str.to_lowercase()];
+    // ИСПРАВЛЕНИЕ: Используем .to_string() вместо .clone(), чтобы типы в массиве совпадали
+    let bases = [base_name_str.to_string(), base_name_str.to_lowercase()];
     
     // Перебираем все варианты окончаний, которые использовали старые игры
     let suffixes = ["", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad"];
