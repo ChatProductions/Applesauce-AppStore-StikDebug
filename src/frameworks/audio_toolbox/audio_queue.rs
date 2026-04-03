@@ -70,7 +70,8 @@ struct AudioQueueHostObject {
     aq_is_running_proc: Option<AudioQueuePropertyListenerProc>,
     aq_is_running_user_data: Option<MutVoidPtr>,
     is_running_handler: bool,
-    is_input: bool, // Флаг: это микрофон (ввод)?
+    is_input: bool,
+    input_delay: u32, // Задержка для защиты игры от перегрузки коллбэками
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -177,7 +178,8 @@ pub fn AudioQueueNewOutput(
         aq_is_running_proc: None,
         aq_is_running_user_data: None,
         is_running_handler: false,
-        is_input: false, // Это очередь вывода (динамик)
+        is_input: false,
+        input_delay: 0,
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -232,7 +234,8 @@ pub fn AudioQueueNewInput(
         aq_is_running_proc: None,
         aq_is_running_user_data: None,
         is_running_handler: false,
-        is_input: true, // Флаг: это очередь ввода (микрофон)
+        is_input: true,
+        input_delay: 0,
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -649,7 +652,6 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
     
-    // ВАЖНО: Если это микрофон, нам не нужно создавать OpenAL источник (динамик)!
     if host_object.is_input {
         return; 
     }
@@ -727,16 +729,21 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         is_input_queue = host_object.is_input;
         
         if is_input_queue {
-            // Очередь ввода (Микрофон) - симулируем получение данных
+            // Очередь ввода (Микрофон)
             if host_object.is_running == AudioQueueIsRunning::Running {
-                if !host_object.is_running_handler {
-                    host_object.is_running_handler = true;
-                    
-                    if let Some(buf) = host_object.buffer_queue.pop_front() {
-                        to_reuse.push(buf);
+                // Искусственная задержка: не отправляем звук мгновенно каждый тик, чтобы не убить игру
+                host_object.input_delay += 1;
+                if host_object.input_delay >= 3 {
+                    host_object.input_delay = 0;
+                    if !host_object.is_running_handler {
+                        host_object.is_running_handler = true;
+                        
+                        if let Some(buf) = host_object.buffer_queue.pop_front() {
+                            to_reuse.push(buf);
+                        }
+                        
+                        callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
                     }
-                    
-                    callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
                 }
             }
         } else {
@@ -759,14 +766,20 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         }
     }
 
-    // Шаг 2: Вызовы колбэков (env свободен от блокировок памяти)
+    // Шаг 2: Вызовы колбэков
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
             if is_input_queue {
-                // Если это микрофон, сообщаем игре, что буфер заполнен до краев (тишиной)
+                // Записываем данные для микрофона
                 let mut buffer_struct = env.mem.read(buf);
                 buffer_struct.audio_data_byte_size = buffer_struct.audio_data_bytes_capacity;
                 env.mem.write(buf, buffer_struct);
+
+                // ФЕЙКОВЫЙ ШУМ: пишем немного единичек вместо абсолютного нуля, 
+                // чтобы спасти игру от математической ошибки "деления на ноль"
+                if buffer_struct.audio_data_bytes_capacity >= 4 {
+                    env.mem.write(buffer_struct.audio_data.cast::<u32>(), 0x01010101u32);
+                }
 
                 // Вызываем коллбэк ввода (сигнатура на 6 аргументов)
                 <GuestFunction as CallFromHost<(), (MutVoidPtr, AudioQueueRef, AudioQueueBufferRef, ConstVoidPtr, u32, ConstVoidPtr)>>::
