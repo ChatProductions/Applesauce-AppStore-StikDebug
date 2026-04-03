@@ -7,7 +7,7 @@
 //! The AVFoundation framework.
 
 mod av_audio_player;
-mod av_audio_session;
+pub mod av_audio_session;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/AVFoundation.framework/AVFoundation",
@@ -16,3 +16,8 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[av_audio_session::CONSTANTS],
     function_exports: &[],
 };
+
+#[derive(Default)]
+pub struct State {
+    pub av_audio_session: av_audio_session::State,
+}
