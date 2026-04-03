@@ -37,12 +37,6 @@ struct UIViewControllerHostObject {
     /// of the nib by name, may be nil.
     /// `NSBundle*`
     bundle: id,
-    title: id,                   // Для хранения строки заголовка
-    parent_view_controller: id,  // Для связи с родительским VC
-    navigation_controller: id,   // Для фикса ошибки "does not respond to selector"
-    // ---------------------------
-    modal_transition_style: UIModalTransitionStyle,
-    modal_presentation_style: UIModalPresentationStyle,
 }
 impl HostObject for UIViewControllerHostObject {}
 
@@ -55,14 +49,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::<UIViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
-}
-
-- (id)navigationController {
-    env.objc.borrow::<UIViewControllerHostObject>(this).navigation_controller
-}
-
-- (id)parentViewController {
-    env.objc.borrow::<UIViewControllerHostObject>(this).parent_view_controller
 }
 
 // TODO: this should be a designated initializer
@@ -85,6 +71,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     () = msg![env; this setView:view];
 
+    // Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
+    let nib_name_key = get_static_str(env, "UINibName");
+    let nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
+    if nib_name != nil {
+        retain(env, nib_name);
+        let host_obj = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
+        let old_nib_name = host_obj.nib_name;
+        host_obj.nib_name = nib_name;
+        release(env, old_nib_name);
+    }
+    
+    // Также на всякий случай вытягиваем Bundle
+    let bundle_key = get_static_str(env, "UIBundleName");
+    let bundle: id = msg![env; coder decodeObjectForKey:bundle_key];
+    if bundle != nil {
+        retain(env, bundle);
+        let host_obj = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
+        let old_bundle = host_obj.bundle;
+        host_obj.bundle = bundle;
+        release(env, old_bundle);
+    }
+
     this
 }
 
@@ -96,16 +104,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, bundle);
 
     env.objc.dealloc_object(this, &mut env.mem);
-}
-
-- (())setParentViewController:(id)parent {
-    env.objc.borrow_mut::<UIViewControllerHostObject>(this).parent_view_controller = parent;
-}
-
-- (())setNavigationController:(id)nav_controller {
-    // Используем прямое присваивание (weak reference в iOS), 
-    // чтобы не создавать циклов сильных ссылок
-    env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_controller = nav_controller;
 }
 
 - (())loadView {
@@ -194,13 +192,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[(UIViewController*){:?} viewDidDisappear:{}]", this, animated);
 }
 
-// Было: заглушка или log_todo!
-// Стало:
-- (())setTitle:(id)title {
-    let old_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
-    release(env, old_title); // Освобождаем старую строку
-    retain(env, title);      // Удерживаем новую
-    env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
+- (())setTitle:(id)title { // NSString *
+    todo_objc_setter!(this, to_rust_string(env, title));
 }
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
@@ -461,3 +454,6 @@ fn check_nib_exists(env: &mut Environment, bundle: id, nib_name: id) -> bool {
     let res: id = msg![env; bundle pathForResource:nib_name ofType:type_];
     res != nil
 }
+
+}
+
