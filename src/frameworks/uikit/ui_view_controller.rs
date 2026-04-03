@@ -37,6 +37,12 @@ struct UIViewControllerHostObject {
     /// of the nib by name, may be nil.
     /// `NSBundle*`
     bundle: id,
+    title: id,                   // Для хранения строки заголовка
+    parent_view_controller: id,  // Для связи с родительским VC
+    navigation_controller: id,   // Для фикса ошибки "does not respond to selector"
+    // ---------------------------
+    modal_transition_style: UIModalTransitionStyle,
+    modal_presentation_style: UIModalPresentationStyle,
 }
 impl HostObject for UIViewControllerHostObject {}
 
@@ -49,6 +55,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::<UIViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)navigationController {
+    env.objc.borrow::<UIViewControllerHostObject>(this).navigation_controller
+}
+
+- (id)parentViewController {
+    env.objc.borrow::<UIViewControllerHostObject>(this).parent_view_controller
 }
 
 // TODO: this should be a designated initializer
@@ -82,6 +96,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, bundle);
 
     env.objc.dealloc_object(this, &mut env.mem);
+}
+
+- (())setParentViewController:(id)parent {
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).parent_view_controller = parent;
+}
+
+- (())setNavigationController:(id)nav_controller {
+    // Используем прямое присваивание (weak reference в iOS), 
+    // чтобы не создавать циклов сильных ссылок
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_controller = nav_controller;
 }
 
 - (())loadView {
@@ -170,8 +194,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[(UIViewController*){:?} viewDidDisappear:{}]", this, animated);
 }
 
-- (())setTitle:(id)title { // NSString *
-    todo_objc_setter!(this, to_rust_string(env, title));
+// Было: заглушка или log_todo!
+// Стало:
+- (())setTitle:(id)title {
+    let old_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
+    release(env, old_title); // Освобождаем старую строку
+    retain(env, title);      // Удерживаем новую
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
 }
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
