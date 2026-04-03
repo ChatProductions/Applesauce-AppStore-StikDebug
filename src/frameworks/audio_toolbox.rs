@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! The Audio Toolbox framework.
@@ -47,12 +48,14 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 
 #[derive(Default)]
 pub struct State {
-    audio_file: audio_file::State,
-    audio_queue: audio_queue::State,
-    audio_components: audio_components::State,
-    audio_session: audio_session::State,
-    al_context: LazyALContext,
+    pub audio_file: audio_file::State,
+    pub audio_queue: audio_queue::State,
+    pub audio_components: audio_components::State,
+    pub audio_session: audio_session::State,
+    pub audio_services: audio_services::State, // ДОБАВЛЕНО: Связь с AudioServices
+    pub al_context: LazyALContext,
 }
+
 impl State {
     pub fn make_al_context_current<'s, 'manager: 's>(
         &'s mut self,
