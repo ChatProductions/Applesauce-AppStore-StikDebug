@@ -430,8 +430,8 @@ fn AudioQueueGetPropertySize(
         }
         None => {
             log!("Warning: AudioQueueGetPropertySize unknown property {}, returning fake size 4", debug_fourcc(in_property_id));
-            env.mem.write(out_data_size, 4); // Имитируем размер
-            0 // Возвращаем 0 (Успех) вместо ошибки
+            env.mem.write(out_data_size, 4); 
+            0 
         }
     }
 }
@@ -449,11 +449,10 @@ fn AudioQueueGetProperty(
         None => {
             log!("Warning: AudioQueueGetProperty unknown property {}, pretending success", debug_fourcc(in_property_id));
             let provided_size = env.mem.read(io_data_size);
-            // Вместо write_bytes пишем обычный u32 ноль (4 байта), так как write поддерживает базовые типы
             if provided_size >= 4 && !out_property_data.is_null() {
                 env.mem.write(out_property_data.cast::<u32>(), 0u32);
             }
-            return 0; // Возвращаем 0 (Успех) вместо kAudioQueueErr_InvalidProperty
+            return 0; 
         }
     };
 
@@ -712,9 +711,9 @@ fn unqueue_buffers<F: FnMut(ALuint)>(al_source: ALuint, context: &OpenAL<'_>, mu
 
 pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let mut to_reuse = Vec::new();
-
     let mut callback_info: Option<(AudioQueueOutputCallback, MutVoidPtr)> = None;
     let mut al_source_id: Option<ALuint> = None;
+    let mut is_input = false; // Добавлен флаг очереди микрофона
 
     // Шаг 1: Работаем с состоянием
     {
@@ -724,9 +723,9 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
         
         if let Some(al_source) = host_object.al_source {
+            // Очередь вывода (Динамик)
             if !host_object.is_running_handler {
                 host_object.is_running_handler = true;
-
                 al_source_id = Some(al_source);
 
                 unqueue_buffers(al_source, &context, |b| {
@@ -738,65 +737,80 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
                 callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
             }
+        } else {
+            // Очередь ввода (Микрофон)
+            if host_object.is_running == AudioQueueIsRunning::Running {
+                is_input = true;
+                if !host_object.is_running_handler {
+                    host_object.is_running_handler = true;
+                    
+                    // Симулируем запись: берем 1 пустой буфер, который игра дала нам для заполнения
+                    if let Some(buf) = host_object.buffer_queue.pop_front() {
+                        to_reuse.push(buf);
+                    }
+                    
+                    callback_info = Some((host_object.callback_proc, host_object.callback_user_data));
+                }
+            }
         }
     }
 
     // Шаг 2: Вызовы колбэков (env свободен)
     if let Some((callback, user_data)) = callback_info {
         for buf in to_reuse {
-            let _: () = callback.call_from_host(env, (user_data, in_aq, buf));
+            if is_input {
+                // Если это микрофон, сообщаем игре, что буфер заполнен (тишиной)
+                let mut buffer_struct = env.mem.read(buf);
+                buffer_struct.audio_data_byte_size = buffer_struct.audio_data_bytes_capacity;
+                env.mem.write(buf, buffer_struct);
 
+                // Вызываем коллбэк ввода (сигнатура на 6 аргументов)
+                <GuestFunction as CallFromHost<(), (MutVoidPtr, AudioQueueRef, AudioQueueBufferRef, ConstVoidPtr, u32, ConstVoidPtr)>>::
+                call_from_host(&callback, env, (user_data, in_aq, buf, ConstVoidPtr::null(), 0, ConstVoidPtr::null()));
+            } else {
+                // Вызываем обычный коллбэк вывода (сигнатура на 3 аргумента)
+                let _: () = callback.call_from_host(env, (user_data, in_aq, buf));
+            }
         }
     }
 
     prime_audio_queue(env, in_aq);
 
-    // Шаг 3: Финальные операции OpenAL (разводим заимствования вручную)
+    // Шаг 3: Финальные операции OpenAL
     if let Some(al_source) = al_source_id {
         let mut needs_play = false;
-
         let mut is_stopping = false;
         let mut al_state = 0;
 
         {
-            // Берем контекст и состояние одновременно через хелпер
             let (state_ref, context) = State::get_with_context(
                 &mut env.framework_state, &mut env.openal_manager);
 
             if let Some(host_object) = state_ref.audio_queues.get_mut(&in_aq) {
-                unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut al_state);
-
-                }
+                unsafe { context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut al_state); }
                 
                 if host_object.is_running != AudioQueueIsRunning::Stopped && al_state == al::AL_STOPPED {
                     needs_play = true;
-
                 }
                 if host_object.is_running == AudioQueueIsRunning::Stopping {
                     is_stopping = true;
-
                 }
             }
         }
 
-        // Выполняем действия, если нужно
-        if needs_play ||
-
-            (is_stopping && al_state == al::AL_STOPPED) {
+        if needs_play || (is_stopping && al_state == al::AL_STOPPED) {
             let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
 
             if needs_play { unsafe { context.SourcePlay(al_source); } }
             if is_stopping && al_state == al::AL_STOPPED {
                 finish_stopping_audio_queue(env, in_aq);
-
             }
         }
+    }
 
-        // Сбрасываем флаг обработчика
-        if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
-            host_object.is_running_handler = false;
-
-        }
+    // Сбрасываем флаг обработчика для обеих очередей
+    if let Some(host_object) = State::get(&mut env.framework_state).audio_queues.get_mut(&in_aq) {
+        host_object.is_running_handler = false;
     }
 }
 
@@ -979,3 +993,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueFreeBuffer(_, _)),
     export_c_func!(AudioQueueDispose(_, _)),
 ];
+
