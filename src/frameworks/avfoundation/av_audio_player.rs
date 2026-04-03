@@ -153,7 +153,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         // Фоллбек: Если стандартный AudioFile не смог прочитать (например, это MP3), 
         // читаем файл напрямую и декодируем через Symphonia!
         log_dbg!("AudioFileOpenURL failed, falling back to Symphonia for {}", path_str);
-        if let Ok(file_data) = std::fs::read(&path_str) {
+        
+        // ИСПРАВЛЕНИЕ E0277: Добавлено .as_ref()
+        if let Ok(file_data) = std::fs::read(path_str.as_ref()) {
             if let Some((pcm_out, sample_rate, channels)) = decode_to_pcm(&file_data) {
                 let audio_desc = AudioStreamBasicDescription {
                     sample_rate,
@@ -217,7 +219,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if !outError.is_null() {
         let domain = ns_string::get_static_str(env, NSOSStatusErrorDomain);
         let error = msg_class![env; NSError alloc];
-        let error_code: NSInteger = -1; // ИСПРАВЛЕНИЕ ТУТ: Вынесли -1 в переменную
+        let error_code: NSInteger = -1; // Возвращаем универсальную ошибку
         let error = msg![env; error initWithDomain:domain code:error_code userInfo:nil];
         env.mem.write(outError, error);
     }
@@ -543,44 +545,58 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     if !is_playing { return; }
 
     // ЛОГИКА 1: Загрузка прямо из памяти (Symphonia)
+    // ИСПРАВЛЕНИЕ E0499: Изолируем чтения и запись в память от долгих блокировок (borrows)
     let has_pcm = env.objc.borrow::<AVAudioPlayerHostObject>(av_audio_player).pcm_data.is_some();
     if has_pcm {
-        let mut host_obj = env.objc.borrow_mut::<AVAudioPlayerHostObject>(av_audio_player);
-        let pcm = host_obj.pcm_data.as_ref().unwrap();
-        let current_byte = host_obj.current_packet as usize;
-        let bytes_to_read = host_obj.num_packets_to_read as usize * host_obj.audio_desc.unwrap().bytes_per_packet as usize;
+        // Сначала собираем все нужные переменные и отпускаем Borrow!
+        let (pcm_len, current_byte, bytes_to_read, aq, num_of_loops) = {
+            let host_obj = env.objc.borrow::<AVAudioPlayerHostObject>(av_audio_player);
+            let pcm_len = host_obj.pcm_data.as_ref().unwrap().len();
+            let current_byte = host_obj.current_packet as usize;
+            let bytes_to_read = host_obj.num_packets_to_read as usize * host_obj.audio_desc.unwrap().bytes_per_packet as usize;
+            (pcm_len, current_byte, bytes_to_read, host_obj.audio_queue.unwrap(), host_obj.num_of_loops)
+        };
         
         let mut audio_queue_buffer = env.mem.read(in_buf);
         
-        if current_byte < pcm.len() {
-            let bytes_copied = std::cmp::min(bytes_to_read, pcm.len() - current_byte);
-            let slice = &pcm[current_byte .. current_byte + bytes_copied];
+        if current_byte < pcm_len {
+            let bytes_copied = std::cmp::min(bytes_to_read, pcm_len - current_byte);
+            
+            // Копируем срез в отдельный вектор, чтобы не держать Borrow
+            let slice_data = {
+                let host_obj = env.objc.borrow::<AVAudioPlayerHostObject>(av_audio_player);
+                let pcm = host_obj.pcm_data.as_ref().unwrap();
+                pcm[current_byte .. current_byte + bytes_copied].to_vec()
+            };
             
             // Пишем данные из вектора в память эмулятора
             let dst = env.mem.bytes_at_mut(audio_queue_buffer.audio_data.cast(), bytes_copied as u32);
-            dst.copy_from_slice(slice);
+            dst.copy_from_slice(&slice_data);
             
             audio_queue_buffer.audio_data_byte_size = bytes_copied as u32;
             env.mem.write(in_buf, audio_queue_buffer);
             
-            let aq = host_obj.audio_queue.unwrap();
             let status = AudioQueueEnqueueBuffer(env, aq, in_buf, 0, Ptr::null());
             assert_eq!(status, 0);
             
+            // Снова берем Borrow только на время прибавления
+            let mut host_obj = env.objc.borrow_mut::<AVAudioPlayerHostObject>(av_audio_player);
             host_obj.current_packet += bytes_copied as i64;
         } else {
             // Конец файла (EOF)
-            let number_of_loops = host_obj.num_of_loops;
-            if number_of_loops == 0 {
-                let aq = host_obj.audio_queue.unwrap();
+            if num_of_loops == 0 {
                 AudioQueueStop(env, aq, false);
+                let mut host_obj = env.objc.borrow_mut::<AVAudioPlayerHostObject>(av_audio_player);
                 host_obj.is_playing = false;
             } else {
-                if number_of_loops > 0 {
-                    host_obj.num_of_loops -= 1;
+                {
+                    let mut host_obj = env.objc.borrow_mut::<AVAudioPlayerHostObject>(av_audio_player);
+                    if host_obj.num_of_loops > 0 {
+                        host_obj.num_of_loops -= 1;
+                    }
+                    host_obj.current_packet = 0;
                 }
-                host_obj.current_packet = 0;
-                drop(host_obj); // Освобождаем перед рекурсивным вызовом
+                // Рекурсивный вызов делаем, когда нет Borrow
                 _touchHLE_AVAudioPlayerOutputBufferHelper(env, in_user_data, in_aq, in_buf);
             }
         }
