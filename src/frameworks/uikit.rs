@@ -28,6 +28,7 @@ pub mod ui_nib;
 pub mod ui_pasteboard;
 pub mod ui_responder;
 pub mod ui_screen;
+pub mod ui_split_view_controller;
 pub mod ui_tab_bar_item;
 pub mod ui_tab_bar_controller;
 pub mod ui_touch;
@@ -52,6 +53,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_pasteboard::CLASSES,
         ui_responder::CLASSES,
         ui_screen::CLASSES,
+        ui_split_view_controller::CLASSES,
         ui_tab_bar_item::CLASSES,
         ui_tab_bar_controller::CLASSES,
         ui_touch::CLASSES,
