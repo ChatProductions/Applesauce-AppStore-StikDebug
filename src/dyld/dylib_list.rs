@@ -6,6 +6,7 @@
 //! Separate module just for the dylib list, so it gets its own git history.
 
 use crate::frameworks;
+use crate::frameworks::libsqlite3;
 use crate::libc;
 use crate::objc;
 
@@ -13,6 +14,7 @@ use crate::objc;
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &libc::DYLIB,
+    &libc::libsqlite3::DYLIB,
     &objc::DYLIB,
     &crate::environment::app_picker::DYLIB, // Not a real library; special internal classes.
     &frameworks::audio_toolbox::DYLIB,
