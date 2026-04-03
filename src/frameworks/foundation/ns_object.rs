@@ -8,10 +8,12 @@
 //! `NSObject`, the root of most class hierarchies in Objective-C.
 //!
 //! Resources:
+//!
 //! - Apple's [Advanced Memory Management Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/MemoryMgmt.html)
 //!
 //! explains how reference counting works. Note that we are interested in what
-//!   it calls "manual retain-release", not ARC.
+//!
+//! it calls "manual retain-release", not ARC.
 //!
 //! - Apple's [Key-Value Coding Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/KeyValueCoding/SearchImplementation.html)
 //!   explains the algorithm `setValue:forKey:` should follow.
@@ -173,6 +175,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let value_class = msg![env; value class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
     assert!(!env.objc.class_is_subclass_of(value_class, ns_value_class));
+
     if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
         if env.objc.class_has_method(class, sel) {
             () = msg_send(env, (this, sel, value));
@@ -189,6 +192,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
     let accessInstanceVariablesDirectly = msg_send(env, (class, sel));
+
     if accessInstanceVariablesDirectly {
         if let Some(ivar_ptr) = env.objc.object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
             .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("_is{camel_case_key_string}")))
@@ -260,12 +264,12 @@ forUndefinedKey:(id)key { // NSString*
 
     let selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
     let timer:id = msg_class![env;
-    NSTimer timerWithTimeInterval:delay
-                                              target:this
-                                            selector:selector
-         
-                                             userInfo:dict
-                                             repeats:false];
+        NSTimer timerWithTimeInterval:delay
+                               target:this
+                             selector:selector
+                             userInfo:dict
+                              repeats:false];
+    
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let mode: id = get_static_str(env, NSDefaultRunLoopMode);
     () = msg![env; run_loop addTimer:timer forMode:mode];
@@ -273,6 +277,7 @@ forUndefinedKey:(id)key { // NSString*
 
 - (())performSelectorOnMainThread:(SEL)sel withObject:(id)arg waitUntilDone:(bool)wait {
     log_dbg!("performSelectorOnMainThread:{} withObject:{:?} waitUntilDone:{}", sel.as_str(&env.mem), arg, wait);
+
     if wait && env.current_thread == 0 {
         if sel.as_str(&env.mem).ends_with(':') {
             () = msg_send(env, (this, sel, arg));
@@ -290,8 +295,7 @@ forUndefinedKey:(id)key { // NSString*
         log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
     }
 
-    msg![env;
-    this performSelector:sel withObject:arg afterDelay:0.0]
+    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
 - (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
@@ -303,6 +307,7 @@ forUndefinedKey:(id)key { // NSString*
 
     let arg_key: id = get_static_str(env, "arg");
     let arg: id = msg![env; dict objectForKey:arg_key];
+
     if sel.as_str(&env.mem).ends_with(':') {
         () = msg_send(env, (this, sel, arg));
     } else {
@@ -353,8 +358,7 @@ forUndefinedKey:(id)key { // NSString*
 
 - (id)valueForKeyPath:(id)key_path {
     // Simple implementation: treat as valueForKey: (no path traversal)
-    msg![env;
-    this valueForKey:key_path]
+    msg![env; this valueForKey:key_path]
 }
 
 - (())setValue:(id)value forKeyPath:(id)key_path {
@@ -364,3 +368,4 @@ forUndefinedKey:(id)key { // NSString*
 @end
 
 };
+
