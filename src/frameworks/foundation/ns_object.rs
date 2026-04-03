@@ -82,8 +82,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Возвращаем u32 (адрес), так как IMP не реализует GuestRet
 + (u32)instanceMethodForSelector:(SEL)_selector {
-    log!("Warning: instanceMethodForSelector: for {:?} is stubbed", _selector);
-    0
+    log!("Warning: instanceMethodForSelector: for {:?} returning dummy IMP", _selector);
+    // Выделяем 2 байта под инструкцию Thumb "bx lr" (возврат из функции)
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x4770);
+    // Младший бит должен быть равен 1 для режима Thumb
+    ptr.to_bits() | 1
 }
 
 + (bool)accessInstanceVariablesDirectly {
@@ -246,8 +250,12 @@ forUndefinedKey:(id)key { // NSString*
     
 // Возвращаем u32 (адрес), так как IMP не реализует GuestRet
 - (u32)methodForSelector:(SEL)_selector {
-    log!("Warning: methodForSelector: for {:?} is stubbed", _selector);
-    0
+    log!("Warning: methodForSelector: for {:?} returning dummy IMP", _selector);
+    // Выделяем 2 байта под инструкцию Thumb "bx lr" (возврат из функции)
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x4770);
+    // Младший бит должен быть равен 1 для режима Thumb
+    ptr.to_bits() | 1
 }
 
 - (id)performSelector:(SEL)sel {
