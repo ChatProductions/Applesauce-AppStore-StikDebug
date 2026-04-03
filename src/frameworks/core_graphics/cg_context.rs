@@ -118,8 +118,14 @@ fn CGContextSetGrayFillColor(
         .rgb_fill_color = color;
 }
 
-pub fn CGContextFillRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
-    cg_bitmap_context::fill_rect(env, context, rect, /* clear: */ false);
+pub fn CGContextFillRect(
+    env: &mut Environment,
+    context: CGContextRef,
+    rect: CGRect,
+) {
+    if context.is_null() {
+        log!("Warning: CGContextFillRect called with null context, skipping");
+        return;
 }
 
 pub fn CGContextClearRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
@@ -183,6 +189,10 @@ pub fn CGContextDrawImage(
     rect: CGRect,
     image: CGImageRef,
 ) {
+    if context.is_null() {
+        log!("Warning: CGContextDrawImage called with null context, skipping");
+        return; // safely ignore instead of crashing
+    }
     cg_bitmap_context::draw_image(env, context, rect, image);
 }
 
