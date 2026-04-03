@@ -28,6 +28,8 @@ pub struct UILabelHostObject {
     font: id,
     /// `UIColor*`
     text_color: id,
+    /// `UIColor*`
+    highlighted_text_color: id,
     text_alignment: UITextAlignment,
     line_break_mode: UILineBreakMode,
     number_of_lines: NSInteger,
@@ -40,6 +42,7 @@ impl Default for UILabelHostObject {
             text: nil,
             font: nil,
             text_color: nil,
+            highlighted_text_color: nil,
             text_alignment: UITextAlignmentLeft,
             line_break_mode: UILineBreakModeTailTruncation,
             number_of_lines: 1,
@@ -106,6 +109,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text,
         font,
         text_color,
+        highlighted_text_color,
         text_alignment: _,
         line_break_mode: _,
         number_of_lines: _,
@@ -113,6 +117,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, text);
     release(env, font);
     release(env, text_color);
+    release(env, highlighted_text_color);
     msg_super![env; this dealloc]
 }
 
@@ -164,7 +169,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)textColor {
     env.objc.borrow::<UILabelHostObject>(this).text_color
 }
-- (())setTextColor:(id)new_text_color { // UIFont*
+- (())setTextColor:(id)new_text_color { // UIColor*
     let new_text_color: id = if new_text_color == nil {
         msg_class![env; UIColor blackColor]
     } else {
@@ -177,6 +182,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     );
     retain(env, new_text_color);
     release(env, old_text_color);
+
+    () = msg![env; this setNeedsDisplay];
+}
+
+- (id)highlightedTextColor {
+    env.objc.borrow::<UILabelHostObject>(this).highlighted_text_color
+}
+- (())setHighlightedTextColor:(id)new_color { // UIColor*
+    let old_color = std::mem::replace(
+        &mut env.objc.borrow_mut::<UILabelHostObject>(this).highlighted_text_color,
+        new_color
+    );
+    retain(env, new_color);
+    release(env, old_color);
 
     () = msg![env; this setNeedsDisplay];
 }
@@ -242,6 +261,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         text,
         font,
         text_color,
+        highlighted_text_color: _,
         text_alignment,
         line_break_mode,
         number_of_lines,
