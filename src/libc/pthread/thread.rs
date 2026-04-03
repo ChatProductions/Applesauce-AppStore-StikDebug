@@ -279,9 +279,10 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) -> ! {
+// ИЗМЕНЕНО: Возвращаемый тип `-> !` удален, чтобы макрос не выдавал ошибку.
+pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) {
     log_dbg!("pthread_exit({:?})", retval);
-    panic!("pthread_exit({:?}): thread exit not yet implemented", retval)
+    panic!("pthread_exit({:?}): thread exit not yet implemented", retval);
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {
@@ -351,7 +352,6 @@ fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i3
     }
     let self_t = pthread_self(env);
     
-    // Сначала читаем старое значение, не блокируя память
     let prev = {
         let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
         if host_obj.cancel_disabled {
@@ -361,12 +361,10 @@ fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i3
         }
     };
     
-    // Записываем старое значение
     if !oldstate.is_null() {
         env.mem.write(oldstate, prev);
     }
     
-    // Обновляем состояние
     let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_disabled = state == PTHREAD_CANCEL_DISABLE;
     log_dbg!("pthread_setcancelstate({})", state);
@@ -379,7 +377,6 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
     }
     let self_t = pthread_self(env);
     
-    // Читаем старое значение
     let prev = {
         let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
         if host_obj.cancel_async {
@@ -389,12 +386,10 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
         }
     };
     
-    // Записываем
     if !oldtype.is_null() {
         env.mem.write(oldtype, prev);
     }
     
-    // Обновляем
     let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_async = cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS;
     if cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS {
