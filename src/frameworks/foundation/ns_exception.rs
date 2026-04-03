@@ -4,9 +4,110 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use super::ns_string::from_rust_string;
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
 use crate::mem::MutVoidPtr;
 use crate::{export_c_func, Environment};
+use crate::objc::{
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
+    ClassExports, HostObject, NSZonePtr,
+};
+
+struct NSExceptionHostObject {
+    name: id,       // NSString*
+    reason: id,     // NSString*
+    user_info: id,  // NSDictionary*
+}
+impl HostObject for NSExceptionHostObject {}
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+@implementation NSException: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(NSExceptionHostObject {
+        name: nil,
+        reason: nil,
+        user_info: nil,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
++ (id)exceptionWithName:(id)name      // NSString*
+                 reason:(id)reason    // NSString*
+               userInfo:(id)user_info // NSDictionary*
+{
+    let obj: id = msg_class![env; NSException alloc];
+    let obj: id = msg![env; obj initWithName:name
+                                      reason:reason
+                                    userInfo:user_info];
+    autorelease(env, obj)
+}
+
++ (())raise:(id)name      // NSString*
+       format:(id)format  // NSString* (treated as plain string, no formatting)
+{
+    // Convenience: raise an exception directly by name with a reason string
+    let exc: id = msg_class![env; NSException exceptionWithName:name
+                                                         reason:format
+                                                       userInfo:nil];
+    () = msg![env; exc raise];
+}
+
+- (id)initWithName:(id)name      // NSString*
+            reason:(id)reason    // NSString*
+          userInfo:(id)user_info // NSDictionary*
+{
+    retain(env, name);
+    retain(env, reason);
+    retain(env, user_info);
+    let host = env.objc.borrow_mut::<NSExceptionHostObject>(this);
+    host.name = name;
+    host.reason = reason;
+    host.user_info = user_info;
+    this
+}
+
+- (id)name {
+    env.objc.borrow::<NSExceptionHostObject>(this).name
+}
+
+- (id)reason {
+    env.objc.borrow::<NSExceptionHostObject>(this).reason
+}
+
+- (id)userInfo {
+    env.objc.borrow::<NSExceptionHostObject>(this).user_info
+}
+
+- (())raise {
+    let name = env.objc.borrow::<NSExceptionHostObject>(this).name;
+    let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
+
+    // Convert to Rust strings for panic message
+    let name_str: id = msg![env; name description];
+    let reason_str: id = msg![env; reason description];
+
+    let name_rust = super::ns_string::to_rust_string(env, name_str);
+    let reason_rust = super::ns_string::to_rust_string(env, reason_str);
+
+    log!("NSException raised — name: {}, reason: {}", name_rust, reason_rust);
+}
+
+- (())dealloc {
+    let &NSExceptionHostObject { name, reason, user_info, .. } =
+        env.objc.borrow(this);
+    release(env, name);
+    release(env, reason);
+    release(env, user_info);
+    env.objc.dealloc_object(this, &mut env.mem);
+}
+
+@end
+
+};
 
 // All constants are NSExceptionName
 pub const CONSTANTS: ConstantExports = &[
