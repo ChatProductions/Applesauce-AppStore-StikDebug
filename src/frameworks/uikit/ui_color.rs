@@ -217,6 +217,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 @implementation UIDeviceRGBColor: UIColor
 @end
+@implementation UICachedDeviceWhiteColor: UIColor
+@end
 
 @implementation _touchHLE_UIColor_Static: UIColor
 
