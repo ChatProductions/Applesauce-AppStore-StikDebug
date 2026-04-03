@@ -129,7 +129,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNavigationController:(id)nav_controller {
-    // Используем прямое присваивание (weak reference в iOS), 
+    // Используем прямое присваивание (weak reference в iOS),
     // чтобы не создавать циклов сильных ссылок
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_controller = nav_controller;
 }
@@ -166,16 +166,21 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     };
 
-    // As a last resort, use plain UIVIew for the root view
+    // As a last resort, use plain UIVIew for the root view.
+    // Use full screen bounds (not applicationFrame) so that the view
+    // covers the entire window — games using OpenGL ES expect a
+    // full-screen surface, and using applicationFrame would shift the
+    // view down by the status-bar height (20 px), breaking hit-testing
+    // and touch-coordinate calculations.
     let class: Class = msg![env; this class];
     log!("Unable to load {:?} {} view controller's view by nib, using plain UIView", this, env.objc.get_class_name(class).to_string());
     let view: id = msg_class![env; UIView alloc];
-    // Docs are saying that "an empty UIView" is created,
-    // but testing reveals that frame matches the screen one
-    // (at least on the simulator)
     let screen: id = msg_class![env; UIScreen mainScreen];
-    let app_frame: CGRect = msg![env; screen applicationFrame];
-    let view: id = msg![env; view initWithFrame:app_frame];
+    // FIX: use bounds (full 320×480) instead of applicationFrame (320×460
+    // starting at y=20) so OpenGL games get a correctly-sized root view
+    // and touch coordinates are not offset by the status-bar height.
+    let screen_bounds: CGRect = msg![env; screen bounds];
+    let view: id = msg![env; view initWithFrame:screen_bounds];
     () = msg![env; this setView:view];
 }
 
@@ -258,7 +263,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // UIResponder implementation
 // From the Apple UIView docs regarding [UIResponder nextResponder]:
 // "UIViewController similarly implements the method
-// and returns its view’s superview."
+// and returns its view's superview."
 // https://developer.apple.com/documentation/uikit/uiresponder/next?language=objc
 - (id)nextResponder {
     let view = msg![env; this view];
@@ -478,6 +483,8 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
 
     let resolved = check_and_resolve_nib(env, bundle, class_name);
     if resolved != nil {
+        // FIX: release class_name before returning — previously leaked here
+        release(env, class_name);
         return resolved;
     }
 
@@ -485,8 +492,9 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
     nil
 }
 
-/// Умный помощник для поиска NIB файлов. Учитывает регистр букв (важно для Android) 
-/// и все возможные варианты суффиксов устройств (~iphone, -iPhone и т.д.)
+/// Умный помощник для поиска NIB файлов. Учитывает регистр букв (важно для
+/// Android) и все возможные варианты суффиксов устройств
+/// (~iphone, -iPhone и т.д.)
 fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id {
     if base_name == nil {
         return nil;
@@ -494,7 +502,8 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     let type_: id = get_static_str(env, "nib");
     let base_name_str = to_rust_string(env, base_name);
     
-    // ИСПРАВЛЕНИЕ: Используем .to_string() вместо .clone(), чтобы типы в массиве совпадали
+    // ИСПРАВЛЕНИЕ: Используем .to_string() вместо .clone(),
+    // чтобы типы в массиве совпадали
     let bases = [base_name_str.to_string(), base_name_str.to_lowercase()];
     
     // Перебираем все варианты окончаний, которые использовали старые игры
