@@ -32,6 +32,9 @@ use crate::objc::{
     retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
 };
 
+// Хранилище для отмененных таймеров (target, selector)
+pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, u32)> = std::vec::Vec::new();
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -93,10 +96,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this description]
 }
 
+// ИЗМЕНЕНО: Теперь мы реально отменяем таймеры
 + (())cancelPreviousPerformRequestsWithTarget:(id)target
                                      selector:(SEL)selector
                                        object:(id)object {
-    log!("TODO: [NSObject cancelPreviousPerformRequestsWithTarget:selector:object:] stubbed");
+    unsafe {
+        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), selector.to_bits()));
+    }
+}
+
+// ИЗМЕНЕНО: Поддержка глобальной отмены для объекта
++ (())cancelPreviousPerformRequestsWithTarget:(id)target {
+    unsafe {
+        crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), 0));
+    }
 }
 
 - (id)init {
@@ -298,6 +311,7 @@ forUndefinedKey:(id)key { // NSString*
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
+// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании
 - (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
     let dict: id = msg![env; which userInfo];
     let sel_key: id = get_static_str(env, "SEL");
@@ -307,6 +321,24 @@ forUndefinedKey:(id)key { // NSString*
 
     let arg_key: id = get_static_str(env, "arg");
     let arg: id = msg![env; dict objectForKey:arg_key];
+
+    let target_bits = this.to_bits();
+    let sel_bits = sel.to_bits();
+    let mut cancelled = false;
+    
+    unsafe {
+        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| *x == (target_bits, sel_bits)) {
+            crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
+            cancelled = true;
+        } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| *x == (target_bits, 0)) {
+            cancelled = true;
+        }
+    }
+
+    // Если игра отменила таймер, мы просто пропускаем его вызов!
+    if cancelled {
+        return;
+    }
 
     if sel.as_str(&env.mem).ends_with(':') {
         () = msg_send(env, (this, sel, arg));
