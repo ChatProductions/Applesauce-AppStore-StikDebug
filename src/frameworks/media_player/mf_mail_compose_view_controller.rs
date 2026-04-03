@@ -217,15 +217,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Description
 
 - (id)description {
-    let host = env.objc.borrow::<MFMailComposeViewControllerHostObject>(this);
-    let subject_str = if host.subject != nil {
-        ns_string::to_rust_string(env, host.subject).into_owned()
+    let (subject, body_is_html) = {
+        let host = env.objc.borrow::<MFMailComposeViewControllerHostObject>(this);
+        (host.subject, host.body_is_html)
+    }; // immutable borrow ends here
+
+    let subject_str = if subject != nil {
+        ns_string::to_rust_string(env, subject).into_owned()
     } else {
         "(null)".to_string()
     };
     let s = format!(
         "<MFMailComposeViewController: subject=\"{}\" bodyIsHTML={}>",
-        subject_str, host.body_is_html
+        subject_str, body_is_html
     );
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
