@@ -141,18 +141,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation AVAudioSession: NSObject
 
 + (id)sharedInstance {
-    // alloc_static_object returns the same object if called multiple times
-    // for the same class — use the class itself as the singleton key.
-    let existing = env.objc.get_static_object(this);
-    if !existing.is_null() {
-        return existing;
-    }
     env.objc.alloc_static_object(
         this,
         Box::new(TrivialHostObject),
         &mut env.mem,
     )
 }
+
 
 // MARK: - Category
 
