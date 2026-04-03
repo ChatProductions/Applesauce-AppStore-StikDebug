@@ -67,6 +67,7 @@ pub type pthread_t = MutPtr<OpaqueThread>;
 // Cancellation state constants
 const PTHREAD_CANCEL_ENABLE:       i32 = 0;
 const PTHREAD_CANCEL_DISABLE:      i32 = 1;
+
 // Cancellation type constants
 const PTHREAD_CANCEL_DEFERRED:     i32 = 0;
 const PTHREAD_CANCEL_ASYNCHRONOUS: i32 = 1;
@@ -166,7 +167,8 @@ pub fn pthread_attr_setstacksize(
     attr: MutPtr<pthread_attr_t>,
     stacksize: GuestUSize,
 ) -> i32 {
-    if attr.is_null() || stacksize < PTHREAD_STACK_MIN || !stacksize.is_multiple_of(PAGE_SIZE) {
+    if attr.is_null() ||
+        stacksize < PTHREAD_STACK_MIN || !stacksize.is_multiple_of(PAGE_SIZE) {
         return EINVAL;
     }
     check_magic!(env, attr, MAGIC_ATTR);
@@ -235,7 +237,6 @@ pub fn pthread_create(
     } else {
         DEFAULT_ATTR
     };
-
     let thread_id = env.new_thread(start_routine, user_data, attr.stacksize);
 
     let opaque = env.mem.alloc_and_write(OpaqueThread { magic: MAGIC_THREAD });
@@ -243,7 +244,6 @@ pub fn pthread_create(
 
     assert!(!State::get(env).threads.contains_key(&opaque));
     State::get(env).threads.insert(opaque, ThreadHostObject::new(thread_id, attr));
-
     log_dbg!(
         "pthread_create({:?}, {:?}, {:?}, {:?}) => 0, pthread_t={:?} thread_id={}",
         thread, attr, start_routine, user_data, opaque, thread_id
@@ -263,7 +263,6 @@ fn pthread_equal(env: &mut Environment, thread1: pthread_t, thread2: pthread_t) 
 
 pub fn pthread_self(env: &mut Environment) -> pthread_t {
     let current_thread = env.current_thread;
-
     if current_thread == 0 && !State::get(env).main_thread_object_created {
         State::get(env).main_thread_object_created = true;
         let opaque = env.mem.alloc_and_write(OpaqueThread { magic: MAGIC_THREAD });
@@ -280,9 +279,9 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-pub fn pthread_exit(env: &mut Environment, retval: MutVoidPtr) -> ! {
+pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) -> ! {
     log_dbg!("pthread_exit({:?})", retval);
-    env.exit_current_thread(retval);
+    panic!("TODO: pthread_exit called with {:?}", retval);
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {
@@ -291,7 +290,6 @@ fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoid
     let joinee_thread = State::get(env).threads.get_mut(&thread).unwrap().thread_id;
 
     assert!(joinee_thread != 0);
-
     if joinee_thread == current_thread {
         log_dbg!("Thread attempted join with self, returning EDEADLK!");
         return EDEADLK;
@@ -352,15 +350,24 @@ fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i3
         return EINVAL;
     }
     let self_t = pthread_self(env);
-    let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
-    if !oldstate.is_null() {
-        let prev = if host_obj.cancel_disabled {
+    
+    // Сначала читаем старое значение, не блокируя память
+    let prev = {
+        let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
+        if host_obj.cancel_disabled {
             PTHREAD_CANCEL_DISABLE
         } else {
             PTHREAD_CANCEL_ENABLE
-        };
+        }
+    };
+    
+    // Записываем старое значение
+    if !oldstate.is_null() {
         env.mem.write(oldstate, prev);
     }
+    
+    // Обновляем состояние
+    let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_disabled = state == PTHREAD_CANCEL_DISABLE;
     log_dbg!("pthread_setcancelstate({})", state);
     0
@@ -371,15 +378,24 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
         return EINVAL;
     }
     let self_t = pthread_self(env);
-    let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
-    if !oldtype.is_null() {
-        let prev = if host_obj.cancel_async {
+    
+    // Читаем старое значение
+    let prev = {
+        let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
+        if host_obj.cancel_async {
             PTHREAD_CANCEL_ASYNCHRONOUS
         } else {
             PTHREAD_CANCEL_DEFERRED
-        };
+        }
+    };
+    
+    // Записываем
+    if !oldtype.is_null() {
         env.mem.write(oldtype, prev);
     }
+    
+    // Обновляем
+    let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_async = cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS;
     if cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS {
         log!(
@@ -395,7 +411,8 @@ fn pthread_testcancel(env: &mut Environment) {
     // Acts as a deferred cancellation point.
     let self_t = pthread_self(env);
     let host_obj = State::get(env).threads.get(&self_t).unwrap();
-    if host_obj.cancel_disabled || !host_obj.cancel_requested {
+    if host_obj.cancel_disabled ||
+        !host_obj.cancel_requested {
         return;
     }
     log_dbg!("pthread_testcancel: cancelling current thread");
@@ -408,7 +425,6 @@ fn pthread_testcancel(env: &mut Environment) {
 
 #[allow(non_camel_case_types)]
 type mach_port_t = u32;
-
 fn pthread_mach_thread_np(env: &mut Environment, thread: pthread_t) -> mach_port_t {
     let host_object = State::get(env).threads.get(&thread).unwrap();
     (host_object.thread_id + 1).try_into().unwrap()
@@ -481,3 +497,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_getschedparam(_, _, _)),
     export_c_func!(pthread_setschedparam(_, _, _)),
 ];
+
