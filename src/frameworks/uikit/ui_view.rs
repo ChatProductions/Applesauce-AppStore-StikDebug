@@ -55,6 +55,7 @@ pub(super) struct UIViewHostObject {
     user_interaction_enabled: bool,
     multiple_touch_enabled: bool,
     delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
+    animation_interval: f64,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -69,6 +70,7 @@ impl Default for UIViewHostObject {
             user_interaction_enabled: true,
             multiple_touch_enabled: false,
             delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
+            animation_interval: 1.0 / 60.0,
         }
     }
 }
@@ -211,6 +213,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewHostObject>(this).tag = tag;
 }
 
+- (f64)animationInterval {
+    env.objc.borrow::<UIViewHostObject>(this).animation_interval
+}
+
+- (())setAnimationInterval:(f64)interval {
+    env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval;
+}
+    
 - (id)delegate {
     env.objc.borrow::<UIViewHostObject>(this).delegate
 }
