@@ -120,10 +120,12 @@ fn wcsspn(
         loop {
             let a = env.mem.read(accept + j);
             if a == 0 { break; }
-            if a == c { found = true; break; }
+            if a == c { found = true;
+            break; }
             j += 1;
         }
-        if !found { break; }
+        if !found { break;
+        }
         i += 1;
     }
     i
@@ -143,7 +145,8 @@ fn wcspbrk(
         loop {
             let a = env.mem.read(accept + j);
             if a == 0 { break; }
-            if a == c { return s + i; }
+            if a == c { return s + i;
+            }
             j += 1;
         }
         i += 1;
@@ -162,7 +165,6 @@ fn wcstok(
     } else {
         env.mem.read(saveptr)
     };
-
     if start.is_null() {
         return MutPtr::null();
     }
@@ -181,10 +183,12 @@ fn wcstok(
         loop {
             let d = env.mem.read(delimiters + j);
             if d == 0 { break; }
-            if d == c { is_delim = true; break; }
+            if d == c { is_delim = true;
+            break; }
             j += 1;
         }
-        if !is_delim { break; }
+        if !is_delim { break;
+        }
         i += 1;
     }
 
@@ -202,12 +206,13 @@ fn wcstok(
         loop {
             let d = env.mem.read(delimiters + j);
             if d == 0 { break; }
-            if d == c { is_delim = true; break; }
+            if d == c { is_delim = true;
+            break; }
             j += 1;
         }
         if is_delim {
             // Null-terminate and save position after delimiter.
-            env.mem.write(start + i, wchar_t);
+            env.mem.write(start + i, 0); // Исправлено: 0 вместо wchar_t
             env.mem.write(saveptr, start + i + 1);
             return token_start;
         }
@@ -229,7 +234,8 @@ fn wcsncasecmp(
         let la = if ca >= 'A' as i32 && ca <= 'Z' as i32 { ca + 32 } else { ca };
         let lb = if cb >= 'A' as i32 && cb <= 'Z' as i32 { cb + 32 } else { cb };
         if la != lb { return la - lb; }
-        if la == 0  { return 0; }
+        if la == 0  { return 0;
+        }
     }
     0
 }
@@ -265,7 +271,7 @@ fn wcslcat(
         let c = env.mem.read(src + i);
         env.mem.write(dst + dst_len + i, c);
     }
-    env.mem.write(dst + dst_len + copy_len, wchar_t);
+    env.mem.write(dst + dst_len + copy_len, 0); // Исправлено: 0 вместо wchar_t
     total
 }
 
@@ -280,7 +286,8 @@ fn wcswidth(
     for i in 0..n {
         let c = env.mem.read(s + i);
         if c == 0 { break; }
-        if c < 0x20 || c == 0x7F { return -1; }
+        if c < 0x20 ||
+        c == 0x7F { return -1; }
         width += 1;
     }
     width
@@ -288,8 +295,10 @@ fn wcswidth(
 
 /// wcwidth — column width of a single wide character.
 fn wcwidth(_env: &mut Environment, c: wchar_t) -> i32 {
-    if c == 0 { return 0; }
-    if c < 0x20 || c == 0x7F { return -1; }
+    if c == 0 { return 0;
+    }
+    if c < 0x20 || c == 0x7F { return -1;
+    }
     1
 }
 
@@ -318,8 +327,10 @@ fn wctomb(
     s: MutPtr<u8>,
     wc: wchar_t,
 ) -> i32 {
-    if s.is_null() { return 0; }
-    if wc < 0 || wc > 0x7F { return -1; }
+    if s.is_null() { return 0;
+    }
+    if wc < 0 || wc > 0x7F { return -1;
+    }
     env.mem.write(s, wc as u8);
     1
 }
@@ -338,7 +349,8 @@ fn mbstowcs(
         if !dest.is_null() {
             env.mem.write(dest + i, byte as wchar_t);
         }
-        if byte == 0 { return i; }
+        if byte == 0 { return i;
+        }
         i += 1;
     }
     i
@@ -355,14 +367,17 @@ fn wcstombs(
     loop {
         let wc = env.mem.read(src + i);
         if i == n { break; }
-        if wc < 0 || wc > 0x7F {
-            return GuestUSize::MAX; // encoding error
+        if wc < 0 ||
+        wc > 0x7F {
+            return GuestUSize::MAX;
+// encoding error
         }
         let byte = wc as u8;
         if !dest.is_null() {
             env.mem.write(dest + i, byte);
         }
-        if byte == 0 { return i; }
+        if byte == 0 { return i;
+        }
         i += 1;
     }
     i
@@ -380,12 +395,14 @@ fn wcstol(
     let mut i: GuestUSize = 0;
     loop {
         let wc = env.mem.read(s + i);
-        if wc == 0 || wc > 0x7F { break; }
+        if wc == 0 ||
+        wc > 0x7F { break; }
         buf.push(wc as u8 as char);
         i += 1;
     }
     let buf = buf.trim();
-    let result = if base == 0 || base == 10 {
+    let result = if base == 0 ||
+    base == 10 {
         buf.parse::<i32>().unwrap_or(0)
     } else if base == 16 {
         i32::from_str_radix(buf.trim_start_matches("0x"), 16).unwrap_or(0)
@@ -418,7 +435,8 @@ fn wcstod(
     let mut i: GuestUSize = 0;
     loop {
         let wc = env.mem.read(s + i);
-        if wc == 0 || wc > 0x7F { break; }
+        if wc == 0 || wc > 0x7F { break;
+        }
         buf.push(wc as u8 as char);
         i += 1;
     }
@@ -454,7 +472,8 @@ fn iswalpha(_env: &mut Environment, c: wint_t) -> i32 {
 
 /// iswalnum — test if wide char is ASCII alphanumeric.
 fn iswalnum(_env: &mut Environment, c: wint_t) -> i32 {
-    let is_alpha = (c >= 'a' as i32 && c <= 'z' as i32) || (c >= 'A' as i32 && c <= 'Z' as i32);
+    let is_alpha = (c >= 'a' as i32 && c <= 'z' as i32) ||
+    (c >= 'A' as i32 && c <= 'Z' as i32);
     let is_digit = c >= '0' as i32 && c <= '9' as i32;
     (is_alpha || is_digit) as i32
 }
@@ -478,8 +497,10 @@ fn iswprint(_env: &mut Environment, c: wint_t) -> i32 {
 fn iswpunct(_env: &mut Environment, c: wint_t) -> i32 {
     let is_print = c >= 0x20 && c != 0x7F;
     let is_alnum = (c >= 'a' as i32 && c <= 'z' as i32)
-        || (c >= 'A' as i32 && c <= 'Z' as i32)
-        || (c >= '0' as i32 && c <= '9' as i32);
+        ||
+    (c >= 'A' as i32 && c <= 'Z' as i32)
+        ||
+    (c >= '0' as i32 && c <= '9' as i32);
     (is_print && !is_alnum && c != ' ' as i32) as i32
 }
 
@@ -542,7 +563,8 @@ fn mbsrtowcs(
     // Count or convert up to `len` wide chars.
     let mut i: GuestUSize = 0;
     loop {
-        if i == len { break; }
+        if i == len { break;
+        }
         let byte = env.mem.read(src_ptr + i);
         if !dest.is_null() {
             env.mem.write(dest + i, byte as wchar_t);
@@ -626,3 +648,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ungetwc(_, _)),
     export_c_func!(mbsrtowcs(_, _, _, _)),
 ];
+
