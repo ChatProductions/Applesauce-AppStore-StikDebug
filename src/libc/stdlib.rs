@@ -40,6 +40,10 @@ fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoid
     env.mem.calloc(total)
 }
 
+fn NSZoneMalloc(env: &mut Environment, _zone: id, size: GuestUSize) -> MutVoidPtr {
+    env.mem.alloc(size)
+}
+
 fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if ptr.is_null() {
@@ -501,6 +505,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),
     export_c_func!(mbstowcs(_, _, _)),
     export_c_func!(wcstombs(_, _, _)),
+    export_c_func!(NSZoneMalloc(_, _)),
     export_c_func!(system(_)),
     export_c_func_aliased!("___assert_rtn", ___assert_rtn(_, _, _, _)),
 ];
