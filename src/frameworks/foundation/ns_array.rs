@@ -14,6 +14,7 @@ use super::{
     _nib_archive_decoder,
 };
 use crate::abi::{CallFromHost, GuestFunction};
+use crate::frameworks::foundation::ns_string::from_rust_string;
 use crate::fs::GuestPath;
 use crate::libc::stdlib::qsort::qsort_generic;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
