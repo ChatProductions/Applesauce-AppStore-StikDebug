@@ -213,8 +213,10 @@ fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
 
 fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
-    echo!("App called exit(), exiting.");
-    std::process::exit(exit_code);
+    // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
+    // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
+    echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
+    // std::process::exit(exit_code);
 }
 
 fn abort(_env: &mut Environment) {
@@ -432,7 +434,7 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
                         0
                     }
                     Err(e) => {
-                        log!("system: mkdir {:?} => error: {:?}", path, e);
+                        log!("system: mkdir {:?} => error: {:?}", e);
                         1
                     }
                 }
@@ -720,3 +722,6 @@ where
     };
     Ok((res, whitespace_len + len))
 }
+
+}
+
