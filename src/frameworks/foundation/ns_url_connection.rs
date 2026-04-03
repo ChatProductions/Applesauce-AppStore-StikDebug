@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! `NSURLConnection`.
 
 use crate::mem::MutPtr;
@@ -29,10 +30,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.mem.write(error, nil);
     }
     
-    // Создаем пустой объект NSData, чтобы игра думала, что запрос успешен, но данных нет
-    let data: id = msg_class![env; NSData alloc];
-    let data: id = msg![env; data init];
-    autorelease(env, data)
+    // Возвращаем nil, чтобы сымитировать сбой сети и избежать чтения отсутствующих данных
+    nil
 }
 
 + (id)connectionWithRequest:(id)request // NSURLRequest *
