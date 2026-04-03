@@ -353,28 +353,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())encodeWithCoder:(id)coder {
-    // Проверяем, какой тип кодера используется
-    let is_keyed: bool = msg![env; coder allowsKeyedCoding];
-    let count: NSUInteger = msg![env; this count];
+    let class: Class = msg![env; coder class];
+    let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
 
-    if is_keyed {
-        // Полноценная реализация для NSKeyedArchiver
-        let count_key = from_rust_string(env, "NS.count".to_string());
-        () = msg![env; coder encodeInt:count forKey:count_key];
-        release(env, count_key);
+    if env.objc.class_is_subclass_of(class, keyed_arch_class) {
+        let array = env.objc.borrow::<ArrayHostObject>(this).array.clone();
 
-        for i in 0..count {
-            let obj: id = msg![env; this objectAtIndex:i];
+        // NSKeyedArchiver stores arrays as NS.objects.0, NS.objects.1 ...
+        for (i, obj) in array.iter().copied().enumerate() {
             let key = from_rust_string(env, format!("NS.objects.{}", i));
             () = msg![env; coder encodeObject:obj forKey:key];
             release(env, key);
         }
+
+        // Encode total count so decoder knows how many to read
+        let count_key = from_rust_string(env, "NS.count".to_string());
+        let count = array.len() as NSUInteger;
+        () = msg![env; coder encodeInt:count forKey:count_key];
+        release(env, count_key);
     } else {
-        // Fallback для обычных NSCoder (например, NSArchiver)
-        for i in 0..count {
-            let obj: id = msg![env; this objectAtIndex:i];
-            () = msg![env; coder encodeObject:obj];
-        }
+        log!(
+            "Warning: NSArray encodeWithCoder: unsupported coder class, skipping"
+        );
     }
 }
 
