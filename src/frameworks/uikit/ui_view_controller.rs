@@ -37,6 +37,12 @@ struct UIViewControllerHostObject {
     /// of the nib by name, may be nil.
     /// `NSBundle*`
     bundle: id,
+    title: id,                   // Для хранения строки заголовка
+    parent_view_controller: id,  // Для связи с родительским VC
+    navigation_controller: id,   // Для фикса ошибки "does not respond to selector"
+    // ---------------------------
+    modal_transition_style: UIModalTransitionStyle,
+    modal_presentation_style: UIModalPresentationStyle,
 }
 impl HostObject for UIViewControllerHostObject {}
 
@@ -49,6 +55,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::<UIViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)navigationController {
+    env.objc.borrow::<UIViewControllerHostObject>(this).navigation_controller
+}
+
+- (id)parentViewController {
+    env.objc.borrow::<UIViewControllerHostObject>(this).parent_view_controller
 }
 
 // TODO: this should be a designated initializer
@@ -71,7 +85,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     () = msg![env; this setView:view];
 
-    // Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
+    // ИСПРАВЛЕНИЕ: Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
     let nib_name_key = get_static_str(env, "UINibName");
     let nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
     if nib_name != nil {
@@ -97,13 +111,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UIViewControllerHostObject { view, nib_name, bundle } = env.objc.borrow(this);
+    let &UIViewControllerHostObject { view, nib_name, bundle, title, .. } = env.objc.borrow(this);
 
     release(env, view);
     release(env, nib_name);
     release(env, bundle);
+    release(env, title); // ИСПРАВЛЕНИЕ: предотвращаем утечку памяти
 
     env.objc.dealloc_object(this, &mut env.mem);
+}
+
+- (())setParentViewController:(id)parent {
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).parent_view_controller = parent;
+}
+
+- (())setNavigationController:(id)nav_controller {
+    // Используем прямое присваивание (weak reference в iOS), 
+    // чтобы не создавать циклов сильных ссылок
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_controller = nav_controller;
 }
 
 - (())loadView {
@@ -192,8 +217,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[(UIViewController*){:?} viewDidDisappear:{}]", this, animated);
 }
 
-- (())setTitle:(id)title { // NSString *
-    todo_objc_setter!(this, to_rust_string(env, title));
+- (())setTitle:(id)title {
+    let old_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
+    release(env, old_title); // Освобождаем старую строку
+    retain(env, title);      // Удерживаем новую
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
 }
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
@@ -226,8 +254,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)title {
-    let class: Class = msg![env; this class];
-    NSStringFromClass(env, class)
+    // ИСПРАВЛЕНИЕ: Возвращаем сохраненный title, если он есть
+    let stored_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
+    if stored_title != nil {
+        stored_title
+    } else {
+        let class: Class = msg![env; this class];
+        NSStringFromClass(env, class)
+    }
 }
 
 - (bool)isViewLoaded {
@@ -277,10 +311,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)modalViewController {
-    nil
-}
-
-- (id)parentViewController {
     nil
 }
 
@@ -334,10 +364,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let item: id = msg_class![env; UINavigationItem alloc];
     let item: id = msg![env; item initWithTitle:class_name];
     crate::objc::autorelease(env, item)
-}
-
-- (id)navigationController {
-    nil
 }
 
 - (())didReceiveMemoryWarning {
@@ -453,7 +479,5 @@ fn check_nib_exists(env: &mut Environment, bundle: id, nib_name: id) -> bool {
     let type_: id = get_static_str(env, "nib");
     let res: id = msg![env; bundle pathForResource:nib_name ofType:type_];
     res != nil
-}
-
 }
 
