@@ -140,8 +140,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     match env.window().current_rotation() {
         DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
         DeviceOrientation::LandscapeLeft => UIDeviceOrientationLandscapeLeft,
-        DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight,
-        DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown
+        DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight
     }
 }
 
@@ -154,7 +153,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         UIDeviceOrientationPortrait => DeviceOrientation::Portrait,
         UIDeviceOrientationLandscapeLeft => DeviceOrientation::LandscapeLeft,
         UIDeviceOrientationLandscapeRight => DeviceOrientation::LandscapeRight,
-        UIDeviceOrientationPortraitUpsideDown => DeviceOrientation::PortraitUpsideDown,
         _ => unimplemented!("Orientation {} not handled yet", orientation),
     })});
 }
