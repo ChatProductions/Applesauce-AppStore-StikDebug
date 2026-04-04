@@ -4,12 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSKeyedArchiver` and serialization of its object graph format.
-//!
-//! Resources:
-//! - You can get a good intuitive grasp of how the format works just by staring
-//!   at a pretty-print of a simple archive file from something that can parse
-//!   plists, e.g. `plutil -p` or `println!("{:#?}", plist::Value::...);`.
-//! - Apple's [Archives and Serializations Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Archiving/Articles/archives.html)
 
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -18,7 +12,7 @@ use plist::{to_writer_binary, Dictionary, Uid, Value};
 
 use crate::frameworks::foundation::ns_keyed_unarchiver::NSKeyedArchiveRootObjectKey;
 use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
-use crate::frameworks::foundation::{NSInteger, NSUInteger}; // ИЗМЕНЕНО: Добавлен NSInteger
+use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
@@ -76,7 +70,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; data writeToFile:file atomically:true]
 }
 
-// ИЗМЕНЕНО: Добавлен метод инициализации, из-за которого происходил вылет
 - (id)initForWritingWithMutableData:(id)_data {
     log!("Warning: stubbed NSKeyedArchiver initForWritingWithMutableData:");
     this
@@ -88,8 +81,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     encode_object_for_key(env, this, object, key);
 }
 
-// --- ИЗМЕНЕНО: Добавлены методы для сохранения базовых типов ---
-- (())encodeInt:(i32)value forKey:(id)key { // NSString *
+// --- ИЗМЕНЕНО: Изменен тип i32 на u32 для решения проблемы Type mismatch ---
+- (())encodeInt:(u32)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+
+- (())encodeInt32:(i32)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+
+- (())encodeInt64:(i64)value forKey:(id)key { // NSString *
     let key = normalize_key(env, key);
     let scope = get_value_to_encode_for_current_key(env, this);
     assert!(!scope.contains_key(&key));
