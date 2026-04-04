@@ -90,10 +90,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     ptr.to_bits() | 1
 }
 
-// --- ИСПРАВЛЕНИЕ: Добавлена заглушка для запроса сигнатур методов класса ---
 + (id)instanceMethodSignatureForSelector:(SEL)_selector {
-    log!("Warning: stubbed instanceMethodSignatureForSelector: for {:?} — returning nil", _selector.as_str(&env.mem));
-    nil
+    msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())]
 }
 
 + (bool)accessInstanceVariablesDirectly {
@@ -264,12 +262,10 @@ forUndefinedKey:(id)key { // NSString*
     ptr.to_bits() | 1
 }
 
-// --- ИСПРАВЛЕНИЕ: Добавлена заглушка для запроса сигнатур методов экземпляра ---
 - (id)methodSignatureForSelector:(SEL)_selector {
-    log!("Warning: stubbed methodSignatureForSelector: for {:?} — returning nil", _selector.as_str(&env.mem));
-    nil
+    msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())]
 }
-
+    
 - (id)performSelector:(SEL)sel {
     assert!(!sel.is_null());
     msg_send_no_type_checking(env, (this, sel))
