@@ -35,6 +35,7 @@ pub mod core_motion;
 pub mod foundation;
 pub mod game_kit;
 pub mod libsqlite3;
+pub mod libxml2; // <-- ДОБАВЛЕНО ДЛЯ ПОДДЕРЖКИ XML (Rolando)
 pub mod media_player;
 pub mod openal;
 pub mod opengles;
