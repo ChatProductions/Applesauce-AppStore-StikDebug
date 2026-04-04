@@ -465,21 +465,60 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     }
 }
 
-fn ___assert_rtn(
+fn __assert_rtn(
     env: &mut Environment,
     func: ConstPtr<u8>,
     file: ConstPtr<u8>,
     line: i32,
-    msg: ConstPtr<u8>,
+    expr: ConstPtr<u8>,
 ) {
-    let func_str = env.mem.cstr_at_utf8(func).unwrap_or("unknown_func");
-    let file_str = env.mem.cstr_at_utf8(file).unwrap_or("unknown_file");
-    let msg_str = env.mem.cstr_at_utf8(msg).unwrap_or("no message");
-
-    panic!(
-        "\n[GUEST ASSERTION FAILED]\nMessage: \"{}\"\nFunction: {}\nFile: {}\nLine: {}\n",
-        msg_str, func_str, file_str, line
+    let func_str = read_cstr_safe(env, func);
+    let file_str = read_cstr_safe(env, file);
+    let expr_str = read_cstr_safe(env, expr);
+    log!(
+        "Assertion failed: ({}) in function {}, file {}, line {}.",
+        expr_str, func_str, file_str, line
     );
+}
+
+fn __assert(
+    env: &mut Environment,
+    expr: ConstPtr<u8>,
+    file: ConstPtr<u8>,
+    line: i32,
+) {
+    let expr_str = read_cstr_safe(env, expr);
+    let file_str = read_cstr_safe(env, file);
+    log!(
+        "Assertion failed: ({}) in file {}, line {}.",
+        expr_str, file_str, line
+    );
+}
+
+fn __assert_fail(
+    env: &mut Environment,
+    expr: ConstPtr<u8>,
+    file: ConstPtr<u8>,
+    line: u32,
+    func: ConstPtr<u8>,
+) {
+    let expr_str = read_cstr_safe(env, expr);
+    let file_str = read_cstr_safe(env, file);
+    let func_str = read_cstr_safe(env, func);
+    log!(
+        "Assertion failed: ({}) in function {}, file {}, line {}.",
+        expr_str, func_str, file_str, line
+    );
+}
+
+fn read_cstr_safe(env: &mut Environment, ptr: ConstPtr<u8>) -> String {
+    if ptr.is_null() {
+        return "(null)".to_string();
+    }
+    let bytes = env.mem.read_cstr(ptr);
+    std::str::from_utf8(bytes)
+        .unwrap_or("(invalid utf-8)")
+        .to_string()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -517,6 +556,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSZoneMalloc(_, _)),
     export_c_func!(NSZoneFree(_, _)),
     export_c_func!(NSZoneRealloc(_, _, _)),
+    export_c_func!(__assert_rtn(_, _, _, _)),
+    export_c_func!(__assert(_, _, _)),
+    export_c_func!(__assert_fail(_, _, _, _)),
     export_c_func!(system(_)),
     export_c_func_aliased!("___assert_rtn", ___assert_rtn(_, _, _, _)),
 ];
