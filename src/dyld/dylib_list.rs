@@ -32,8 +32,9 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::system_configuration::DYLIB,
     &frameworks::uikit::DYLIB,
     &frameworks::libsqlite3::DYLIB,
+    &frameworks::libxml2::DYLIB, // Добавлена поддержка libxml2 (необходима для Rolando)
     &frameworks::common_crypto::DYLIB,
-    &frameworks::address_book::DYLIB, // Добавлен наш фреймворк AddressBook
+    &frameworks::address_book::DYLIB,
 ];
 
 #[cfg(test)]
