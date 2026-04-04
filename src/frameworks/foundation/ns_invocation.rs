@@ -141,9 +141,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSInvocationHostObject>(this).target = target;
 }
 
-// Измените тип возвращаемого значения с (SEL) на (Option<SEL>)
-- (Option<SEL>)selector {
-    env.objc.borrow::<NSInvocationHostObject>(this).selector
+- (SEL)selector {
+    env.objc.borrow::<NSInvocationHostObject>(this).selector.unwrap_or_default()
 }
 
 - (())setSelector:(SEL)selector {
