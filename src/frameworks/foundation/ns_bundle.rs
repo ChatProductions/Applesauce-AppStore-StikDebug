@@ -144,7 +144,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)pathsForResources:(id)ext          // NSString*
-                  OfType:(id)type      // NSString*
+                  OfType:(id)r#type // NSString*
               inDirectory:(id)subpath { // NSString*
     // Prepend the lproj subdirectory when a localization is given, then
     // delegate to the non-localized variant.
