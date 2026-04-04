@@ -62,11 +62,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.class_has_method(this, selector)
 }
 
-// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address
+// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address (без логов)
 + (u32)instanceMethodForSelector:(SEL)selector {
-    let sel_str = selector.as_str(&env.mem);
-    log!("Warning: instanceMethodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
-    
     // Разделяем заимствования (borrows) чтобы компилятор Rust был счастлив
     let dyld = &mut env.dyld;
     let mem = &mut env.mem;
@@ -242,11 +239,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
     
-// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address
+// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address (без логов)
 - (u32)methodForSelector:(SEL)selector {
-    let sel_str = selector.as_str(&env.mem);
-    log!("Warning: methodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
-    
     // Разделяем заимствования (borrows) чтобы компилятор Rust был счастлив
     let dyld = &mut env.dyld;
     let mem = &mut env.mem;
