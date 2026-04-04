@@ -228,3 +228,88 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+/// Реализация `const char * NSGetSizeAndAlignment(const char *typePtr, NSUInteger *sizep, NSUInteger *alignp)`
+pub fn NSGetSizeAndAlignment(
+    env: &mut Environment,
+    type_ptr: ConstPtr<u8>,
+    size_p: MutPtr<u32>, // NSUInteger *
+    align_p: MutPtr<u32>, // NSUInteger *
+) -> ConstPtr<u8> {
+    if type_ptr.is_null() {
+        return ConstPtr::null();
+    }
+
+    // Читаем C-строку кодировки типа из памяти эмулятора
+    let mut type_str = String::new();
+    let mut current_ptr = type_ptr;
+    loop {
+        let b = env.mem.read(current_ptr);
+        if b == 0 {
+            break;
+        }
+        type_str.push(b as char);
+        current_ptr = current_ptr + 1;
+    }
+
+    let mut size: u32 = 0;
+    let mut align: u32 = 0;
+    let mut consumed: u32 = 0; // Сколько символов строки мы "съели"
+
+    let mut chars = type_str.chars().peekable();
+    
+    // 1. Пропускаем спецификаторы (const, in, out, bycopy и т.д.)
+    while let Some(&c) = chars.peek() {
+        if "rnNoORV".contains(c) {
+            chars.next();
+            consumed += 1;
+        } else {
+            break;
+        }
+    }
+
+    // 2. Читаем базовый тип
+    let core_type = chars.next().unwrap_or('\0');
+    consumed += 1;
+
+    match core_type {
+        'c' | 'C' | 'B' => { size = 1; align = 1; } // char, unsigned char, bool
+        's' | 'S' => { size = 2; align = 2; }       // short, unsigned short
+        'i' | 'I' | 'l' | 'L' | 'f' => { size = 4; align = 4; } // int, long, float (32-бит ARM)
+        'q' | 'Q' | 'd' => { size = 8; align = 4; } // long long, double (выравнивание часто 4 на 32-бит ARM)
+        '*' | '@' | '#' | ':' | '^' => { size = 4; align = 4; } // указатели: char*, id, Class, SEL, type*
+        'v' | '?' => { size = 0; align = 0; }       // void или неизвестный тип (часто указатель на функцию)
+        '{' => {
+            // Структуры: парсим до закрывающей скобки '}'
+            // Для идеальной реализации нужно парсить содержимое и считать сумму.
+            // Но базово даем размер указателя, чтобы игра не падала.
+            size = 4; align = 4; 
+            while let Some(c) = chars.next() {
+                consumed += 1;
+                if c == '}' { break; }
+            }
+        },
+        '[' => {
+            // Массивы: парсим до закрывающей скобки ']'
+            size = 4; align = 4;
+            while let Some(c) = chars.next() {
+                consumed += 1;
+                if c == ']' { break; }
+            }
+        },
+        _ => {
+            log!("Warning: NSGetSizeAndAlignment unknown type encoding '{}'", core_type);
+        }
+    }
+
+    // 3. Записываем результаты обратно в память гостя (если указатели не nil)
+    if !size_p.is_null() {
+        env.mem.write(size_p, size);
+    }
+    if !align_p.is_null() {
+        env.mem.write(align_p, align);
+    }
+
+    // 4. Функция обязана вернуть указатель на символ, следующий сразу за распарсенным типом
+    type_ptr + consumed
+}
