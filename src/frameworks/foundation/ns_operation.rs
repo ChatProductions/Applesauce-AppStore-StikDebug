@@ -5,16 +5,19 @@
  */
 
 use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr, SEL,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr, SEL,
 };
 
 #[derive(Debug, Default)]
-struct NSInvocationOperationHostObject {
+struct NSOperationHostObject {
+    dependencies: id,
+    // Поля для дочернего NSInvocationOperation хранятся здесь же
     target: id,
-    selector: Option<SEL>, // Используем Option, так как у SEL нет Default
+    selector: Option<SEL>,
     arg: id,
 }
-impl HostObject for NSInvocationOperationHostObject {}
+impl HostObject for NSOperationHostObject {}
 
 #[derive(Debug, Default)]
 struct NSOperationQueueHostObject {}
@@ -26,8 +29,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation NSOperation: NSObject
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(NSOperationHostObject::default());
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
 - (id)init {
     this
+}
+
+- (())dealloc {
+    // Извлекаем все свойства во временные переменные, чтобы не конфликтовать с borrow checker
+    let (deps, target, arg) = {
+        let host_object = env.objc.borrow::<NSOperationHostObject>(this);
+        (host_object.dependencies, host_object.target, host_object.arg)
+    };
+    
+    release(env, deps);
+    release(env, target);
+    release(env, arg);
+    env.objc.dealloc_object(this, &mut env.mem)
 }
 
 - (())start {
@@ -42,14 +63,49 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())cancel {
 }
 
+- (())addDependency:(id)op {
+    if op == nil {
+        return;
+    }
+    let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
+    
+    let deps_arr = if deps == nil {
+        let new_arr: id = msg_class![env; NSMutableArray alloc];
+        let new_arr: id = msg![env; new_arr init];
+        env.objc.borrow_mut::<NSOperationHostObject>(this).dependencies = new_arr;
+        new_arr
+    } else {
+        deps
+    };
+    
+    let _: () = msg![env; deps_arr addObject:op];
+}
+
+- (())removeDependency:(id)op {
+    if op == nil {
+        return;
+    }
+    let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
+    if deps != nil {
+        let _: () = msg![env; deps removeObject:op];
+    }
+}
+
+- (id)dependencies {
+    let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
+    if deps == nil {
+        msg_class![env; NSArray array]
+    } else {
+        let copy: id = msg![env; deps copy];
+        autorelease(env, copy)
+    }
+}
+
 @end
 
 @implementation NSInvocationOperation: NSOperation
 
-+ (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(NSInvocationOperationHostObject::default());
-    env.objc.alloc_object(this, host_object, &mut env.mem)
-}
+// allocWithZone: и dealloc теперь наследуются от NSOperation
 
 - (id)initWithTarget:(id)target selector:(SEL)sel object:(id)arg {
     let this: id = msg![env; this init];
@@ -57,7 +113,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         retain(env, target);
         retain(env, arg);
         
-        let host_object = env.objc.borrow_mut::<NSInvocationOperationHostObject>(this);
+        let host_object = env.objc.borrow_mut::<NSOperationHostObject>(this);
         host_object.target = target;
         host_object.selector = Some(sel);
         host_object.arg = arg;
@@ -65,23 +121,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (())dealloc {
-    // Используем временный блок { }, чтобы заимствование host_object завершилось
-    // до того, как мы вызовем release(env, ...), который требует монопольный доступ к env.
-    let (target, arg) = {
-        let host_object = env.objc.borrow::<NSInvocationOperationHostObject>(this);
-        (host_object.target, host_object.arg)
-    };
-    
-    release(env, target);
-    release(env, arg);
-    env.objc.dealloc_object(this, &mut env.mem)
-}
-
 - (())main {
-    // Извлекаем данные во временные переменные, чтобы освободить env для макроса msg!
     let (target, sel_opt, arg) = {
-        let host_object = env.objc.borrow::<NSInvocationOperationHostObject>(this);
+        let host_object = env.objc.borrow::<NSOperationHostObject>(this);
         (host_object.target, host_object.selector, host_object.arg)
     };
 
