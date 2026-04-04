@@ -38,6 +38,9 @@ struct ABPeoplePickerNavigationControllerHostObject {
 }
 impl HostObject for ABPeoplePickerNavigationControllerHostObject {}
 
+struct EmptyHostObject;
+impl HostObject for EmptyHostObject {}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -239,7 +242,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation ABUnknownPersonViewController: UIViewController
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    env.objc.alloc_object(this, Box::new(crate::objc::EmptyHostObject), &mut env.mem)
+    env.objc.alloc_object(this, Box::new(EmptyHostObject), &mut env.mem)
 }
 
 - (id)init { this }
@@ -289,7 +292,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation ABPersonViewController: UIViewController
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    env.objc.alloc_object(this, Box::new(crate::objc::EmptyHostObject), &mut env.mem)
+    env.objc.alloc_object(this, Box::new(EmptyHostObject), &mut env.mem)
 }
 
 - (id)init { this }
@@ -329,7 +332,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation ABNewPersonViewController: UIViewController
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    env.objc.alloc_object(this, Box::new(crate::objc::EmptyHostObject), &mut env.mem)
+    env.objc.alloc_object(this, Box::new(EmptyHostObject), &mut env.mem)
 }
 
 - (id)init { this }
