@@ -23,7 +23,6 @@ pub const ENOSYS: i32 = 12;
 pub const EACCES: i32 = 13;
 pub const EBUSY: i32 = 16;
 pub const EEXIST: i32 = 17;
-pub const ENOTCONN: i32 = 18;
 pub const EISDIR: i32 = 21;
 pub const EINVAL: i32 = 22;
 pub const ESPIPE: i32 = 29;
