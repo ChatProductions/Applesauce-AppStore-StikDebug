@@ -47,6 +47,11 @@ pub const UIInterfaceOrientationLandscapeRight: UIInterfaceOrientation =
 type UIRemoteNotificationType = NSUInteger;
 type UIStatusBarAnimation = NSInteger;
 type UIStatusBarStyle = NSInteger;
+pub type UIApplicationState = NSInteger;
+pub const UIApplicationStateActive:     UIApplicationState = 0;
+pub const UIApplicationStateInactive:   UIApplicationState = 1;
+pub const UIApplicationStateBackground: UIApplicationState = 2;
+
 
 pub const CLASSES: ClassExports = objc_classes! {
 
