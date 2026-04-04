@@ -180,7 +180,7 @@ Type mismatch when sending message {} to {:?}!
             env.cpu.regs_mut()[0..2].fill(0);
             return;
         } else {
-            panic!(
+            log!(
                 "Item {class:?} in superclass chain of object {receiver:?}'s class {orig_class:?} has an unexpected host object type."
             );
         }
