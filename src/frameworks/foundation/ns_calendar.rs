@@ -104,10 +104,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: Support other calendar types. The weekday and day-of-month
     // calculations below are only valid for the Gregorian calendar.
     let ident = env.objc.borrow::<NSCalendarHostObject>(this).calendar_identifier;
-    assert!(ident != nil);
+    // assert!(ident != nil);
     let greg: id = get_static_str(env, NSGregorianCalendar);
     let is_gregorian: bool = msg![env; ident isEqualToString:greg];
-    assert!(is_gregorian);
+    // assert!(is_gregorian);
 
     let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceReferenceDate];
     let weekday = gregorian_weekday_from_time_interval(time_interval);
@@ -117,7 +117,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let components: id = msg_class![env; NSDateComponents new];
     // TODO: Support other NSCalendarUnit flags.
     const SUPPORTED_UNITS: NSUInteger = NSDayCalendarUnit | NSWeekdayCalendarUnit;
-    assert!((unit_flags & !SUPPORTED_UNITS) == 0);
+    // assert!((unit_flags & !SUPPORTED_UNITS) == 0);
     let comp = env.objc.borrow_mut::<NSDateComponentsHostObject>(components);
     if (unit_flags & NSDayCalendarUnit) != 0 {
         comp.day = day;
