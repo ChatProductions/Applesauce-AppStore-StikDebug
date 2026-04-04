@@ -90,8 +90,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     ptr.to_bits() | 1
 }
 
-+ (id)instanceMethodSignatureForSelector:(SEL)_selector {
-    msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())]
++ (id)instanceMethodSignatureForSelector:(SEL)selector {
+    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    
+    // Считаем количество явных аргументов по количеству двоеточий в селекторе
+    let sel_str = selector.as_str(&env.mem);
+    let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
+    
+    // Прибавляем 2 скрытых аргумента (self и _cmd)
+    let total_args = explicit_args + 2;
+    () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
+    
+    sig
 }
 
 + (bool)accessInstanceVariablesDirectly {
@@ -262,8 +272,16 @@ forUndefinedKey:(id)key { // NSString*
     ptr.to_bits() | 1
 }
 
-- (id)methodSignatureForSelector:(SEL)_selector {
-    msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())]
+- (id)methodSignatureForSelector:(SEL)selector {
+    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    
+    let sel_str = selector.as_str(&env.mem);
+    let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
+    
+    let total_args = explicit_args + 2;
+    () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
+    
+    sig
 }
     
 - (id)performSelector:(SEL)sel {
