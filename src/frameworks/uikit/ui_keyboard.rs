@@ -266,15 +266,15 @@ pub fn post_keyboard_notifications(env: &mut crate::Environment, will_show: bool
     let app: crate::objc::id = msg_class![env; UIApplication sharedApplication];
     let center: crate::objc::id = msg_class![env; NSNotificationCenter defaultCenter];
 
-    // Build a minimal userInfo with zero keyboard frame.
     let user_info: crate::objc::id = msg_class![env; NSMutableDictionary new];
 
     for name in [will_name, did_name] {
         let ns_name = get_static_str(env, name);
-        msg![env; center postNotificationName:ns_name
-                                       object:app
-                                     userInfo:user_info];
+        let _: () = msg![env; center postNotificationName:ns_name
+                                                   object:app
+                                                 userInfo:user_info];
     }
 
     crate::objc::release(env, user_info);
 }
+
