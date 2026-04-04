@@ -372,11 +372,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &mut UIViewHostObject { ref mut superview, layer: this_layer, .. } = env.objc.borrow_mut(this);
     let superview = std::mem::take(superview);
     if superview == nil { return; }
-    () = msg![env; this_layer removeFromSuperlayer];
+    let _: () = msg![env; this_layer removeFromSuperlayer];
     let UIViewHostObject { ref mut subviews, .. } = env.objc.borrow_mut(superview);
-    let idx = subviews.iter().position(|&subview| subview == this).unwrap();
-    subviews.remove(idx);
-    release(env, this);
+    if let Some(idx) = subviews.iter().position(|&subview| subview == this) {
+        subviews.remove(idx);
+        release(env, this);
+    } else {
+        log_dbg!(
+            "Warning: [UIView removeFromSuperview] {:?} not found in superview's subviews — already removed?",
+            this
+        );
+    }
 }
 
 - (())dealloc {
