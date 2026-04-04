@@ -103,36 +103,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)mainThread {
-    // Return the NSThread object for thread ID 0, creating it if needed.
-    let main_pthread = {
-        // Find the pthread_t whose thread_id == 0 in the map, if any.
-        State::get(env)
-            .ns_threads
-            .iter()
-            .find(|(_, &ns_t)| {
-                env.objc.borrow::<NSThreadHostObject>(ns_t).is_main_thread
-            })
-            .map(|(&pt, _)| pt)
-    };
-    if let Some(_pt) = main_pthread {
-        // Already exists — currentThread will find and return it.
-    }
-    // Force creation by temporarily switching context isn't possible here;
-    // instead look up directly.
-    let found: Option<id> = State::get(env)
+    // Collect all (pthread_t, ns_thread id) pairs first to avoid holding
+    // the mutable borrow on env while also borrowing env.objc in the closure.
+    let pairs: Vec<(pthread_t, id)> = State::get(env)
         .ns_threads
-        .values()
-        .copied()
-        .find(|&ns_t| env.objc.borrow::<NSThreadHostObject>(ns_t).is_main_thread);
-    if let Some(ns_t) = found {
-        return ns_t;
+        .iter()
+        .map(|(&pt, &ns_t)| (pt, ns_t))
+        .collect();
+    // Mutable borrow on env via State::get ends here.
+
+    for (_pt, ns_t) in &pairs {
+        if env.objc.borrow::<NSThreadHostObject>(*ns_t).is_main_thread {
+            return *ns_t;
+        }
     }
+
     // Create the main thread object on demand.
     let ns_thread: id = msg_class![env; NSThread alloc];
     let ns_thread: id = msg![env; ns_thread init];
     env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
-    // We can't call pthread_self here for thread 0 without being on it,
-    // so just store with a sentinel key and let currentThread overwrite later.
     ns_thread
 }
 
