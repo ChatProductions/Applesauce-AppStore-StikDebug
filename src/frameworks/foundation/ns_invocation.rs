@@ -17,7 +17,10 @@ use std::collections::HashMap;
 // MARK: - NSMethodSignature Host Object
 // =========================================================================
 
-struct NSMethodSignatureHostObject {}
+struct NSMethodSignatureHostObject {
+    // ИСПРАВЛЕНИЕ 1: Добавили поле в структуру
+    number_of_arguments: NSUInteger,
+}
 impl HostObject for NSMethodSignatureHostObject {}
 
 // =========================================================================
@@ -44,7 +47,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSMethodSignature: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(NSMethodSignatureHostObject {});
+    let host_object = Box::new(NSMethodSignatureHostObject {
+        number_of_arguments: 2, // По умолчанию 2 аргумента (self, _cmd)
+    });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
@@ -68,16 +73,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSMethodSignatureHostObject>(this).number_of_arguments = count;
 }
     
+// ИСПРАВЛЕНИЕ 2: Вернули правильное выделение памяти без alloc_bytes
 - (crate::mem::ConstPtr<std::ffi::c_char>)methodReturnType {
     log!("Warning: stubbed NSMethodSignature methodReturnType — returning 'v' (void)");
-    let v_ptr = env.mem.alloc_bytes(b"v\0");
-    v_ptr.cast_const().cast()
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x0076);
+    ptr.cast_const().cast()
 }
 
+// ИСПРАВЛЕНИЕ 2: Вернули правильное выделение памяти без alloc_bytes
 - (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)_index {
     log!("Warning: stubbed NSMethodSignature getArgumentTypeAtIndex: — returning '@' (id)");
-    let id_ptr = env.mem.alloc_bytes(b"@\0");
-    id_ptr.cast_const().cast()
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x0040);
+    ptr.cast_const().cast()
 }
 
 // -----------------------------------------------------------------------
