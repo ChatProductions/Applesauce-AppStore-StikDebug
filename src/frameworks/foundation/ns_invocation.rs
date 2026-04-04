@@ -58,13 +58,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// --- ИСПРАВЛЕНИЯ ЗДЕСЬ: Добавлены заглушки для предотвращения паники ---
-
 - (NSUInteger)numberOfArguments {
-    log!("Warning: stubbed NSMethodSignature numberOfArguments — returning 2 (self, _cmd) by default");
-    2
+    env.objc.borrow::<NSMethodSignatureHostObject>(this).number_of_arguments
 }
 
+// Внутренний метод для touchHLE, чтобы мы могли задать количество аргументов 
+// при создании сигнатуры из ns_object.rs
+- (())_touchHLE_setNumberOfArguments:(NSUInteger)count {
+    env.objc.borrow_mut::<NSMethodSignatureHostObject>(this).number_of_arguments = count;
+}
+    
 - (crate::mem::ConstPtr<std::ffi::c_char>)methodReturnType {
     log!("Warning: stubbed NSMethodSignature methodReturnType — returning 'v' (void)");
     let v_ptr = env.mem.alloc_bytes(b"v\0");
