@@ -300,7 +300,11 @@ destructiveButtonTitle:(id)destructive_title // NSString*
 
     let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
     if delegate != nil {
-        let _: () = msg![env; delegate actionSheetCancel:this];
+        let sel_cancel = env.objc.lookup_selector("actionSheetCancel:").unwrap();
+        let responds: bool = msg![env; delegate respondsToSelector:sel_cancel];
+        if responds {
+            let _: () = msg![env; delegate actionSheetCancel:this];
+        }
     }
 
     let cancel_index = env.objc.borrow::<UIActionSheetHostObject>(this).cancel_button_index;
@@ -309,7 +313,7 @@ destructiveButtonTitle:(id)destructive_title // NSString*
     } else {
         0
     };
-    let _: () = msg![env; this dismissWithClickedButtonIndex:dismiss_index animated:false];
+    let _: () = msg![env; this dismissDidClickedButtonIndex:dismiss_index];
 }
 
 @end
