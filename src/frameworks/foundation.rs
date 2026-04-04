@@ -227,20 +227,44 @@ fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
 }
 
 #[allow(non_snake_case)]
-fn xmlFree(_env: &mut Environment, _ptr: u32) {
-}
+fn xmlFree(_env: &mut Environment, _ptr: u32) {}
 
-// НОВОЕ: Заглушка для чтения XML из памяти
 #[allow(non_snake_case)]
-fn xmlCtxtReadMemory(_env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 {
-    // Возвращаем 0 (NULL), сообщая игре, что XML пустой или не распарсился
-    0
-}
+fn xmlCtxtReadMemory(_env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { 0 }
+
+// НОВЫЕ ЗАГЛУШКИ ДЛЯ LIBXML2
+#[allow(non_snake_case)]
+fn xmlCtxtGetLastError(_env: &mut Environment, _ctxt: u32) -> u32 { 0 }
+
+#[allow(non_snake_case)]
+fn xmlFreeDoc(_env: &mut Environment, _doc: u32) {}
+
+#[allow(non_snake_case)]
+fn xmlCleanupParser(_env: &mut Environment) {}
+
+#[allow(non_snake_case)]
+fn xmlReadMemory(_env: &mut Environment, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { 0 }
+
+#[allow(non_snake_case)]
+fn xmlParseMemory(_env: &mut Environment, _buffer: u32, _size: u32) -> u32 { 0 }
+
+#[allow(non_snake_case)]
+fn xmlDocGetRootElement(_env: &mut Environment, _doc: u32) -> u32 { 0 }
+
+#[allow(non_snake_case)]
+fn xmlFreeParserCtxt(_env: &mut Environment, _ctxt: u32) {}
 
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlFree(_)),
-    export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)), // 6 аргументов
+    export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
+    export_c_func!(xmlCtxtGetLastError(_)),
+    export_c_func!(xmlFreeDoc(_)),
+    export_c_func!(xmlCleanupParser()),
+    export_c_func!(xmlReadMemory(_, _, _, _, _)),
+    export_c_func!(xmlParseMemory(_, _)),
+    export_c_func!(xmlDocGetRootElement(_)),
+    export_c_func!(xmlFreeParserCtxt(_)),
 ];
 
