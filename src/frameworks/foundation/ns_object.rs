@@ -80,14 +80,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.class_has_method(this, selector)
 }
 
-// Возвращаем u32 (адрес), так как IMP не реализует GuestRet
-+ (u32)instanceMethodForSelector:(SEL)_selector {
-    log!("Warning: instanceMethodForSelector: for {:?} returning dummy IMP", _selector);
-    // Выделяем 2 байта под инструкцию Thumb "bx lr" (возврат из функции)
-    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
-    env.mem.write(ptr, 0x4770);
-    // Младший бит должен быть равен 1 для режима Thumb
-    ptr.to_bits() | 1
+// ИЗМЕНЕНО: Заставляем приложение использовать fallback-механизм (возвращаем 0)
++ (u32)instanceMethodForSelector:(SEL)selector {
+    let sel_str = selector.as_str(&env.mem);
+    log!("Warning: instanceMethodForSelector: requested for '{}' — returning 0 to force fallback", sel_str);
+    0
 }
 
 + (id)instanceMethodSignatureForSelector:(SEL)selector {
@@ -262,14 +259,11 @@ forUndefinedKey:(id)key { // NSString*
     true
 }
     
-// Возвращаем u32 (адрес), так как IMP не реализует GuestRet
-- (u32)methodForSelector:(SEL)_selector {
-    log!("Warning: methodForSelector: for {:?} returning dummy IMP", _selector);
-    // Выделяем 2 байта под инструкцию Thumb "bx lr" (возврат из функции)
-    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
-    env.mem.write(ptr, 0x4770);
-    // Младший бит должен быть равен 1 для режима Thumb
-    ptr.to_bits() | 1
+// ИЗМЕНЕНО: Заставляем приложение использовать fallback-механизм (возвращаем 0)
+- (u32)methodForSelector:(SEL)selector {
+    let sel_str = selector.as_str(&env.mem);
+    log!("Warning: methodForSelector: requested for '{}' — returning 0 to force fallback", sel_str);
+    0
 }
 
 - (id)methodSignatureForSelector:(SEL)selector {
