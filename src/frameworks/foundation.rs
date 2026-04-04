@@ -11,7 +11,6 @@
 //! Being aware of this concept will make common types like `NSArray` and
 //! `NSString` easier to understand.
 
-// ИЗМЕНЕНО: Добавлены импорты HostConstant и ConstantExports
 use crate::dyld::{export_c_func, FunctionExports, HostConstant, ConstantExports};
 use crate::objc::id;
 use crate::Environment;
@@ -64,7 +63,6 @@ pub mod ns_user_defaults;
 pub mod ns_value;
 pub mod ns_xml_parser;
 
-// ИЗМЕНЕНО: Добавляем заглушки для констант, которые запрашивала Rolando
 pub const STUB_CONSTANTS: ConstantExports = &[
     ("_NSLocalizedFailureReasonErrorKey", HostConstant::NSString("NSLocalizedFailureReasonErrorKey")),
     ("_NSURLErrorDomain", HostConstant::NSString("NSURLErrorDomain")),
@@ -128,7 +126,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_keyed_unarchiver::CONSTANTS,
         ns_locale::CONSTANTS,
         ns_run_loop::CONSTANTS,
-        STUB_CONSTANTS, // ИЗМЕНЕНО: Экспортируем наши новые константы
+        STUB_CONSTANTS,
     ],
     function_exports: &[
         FUNCTIONS,
@@ -217,11 +215,8 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     (hash_u64 as u32) ^ ((hash_u64 >> 32) as u32)
 }
 
-// ИЗМЕНЕНО: Реализуем "фейковый" контекст, выделяя реальную память, чтобы игра не думала, что произошла ошибка
 #[allow(non_snake_case)]
 fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
-    crate::log!("Warning: xmlNewParserCtxt called — allocating dummy context memory");
-    
     // Размер структуры xmlParserCtxt в старых iOS был около 500-600 байт.
     // Выделяем 1024 байта с запасом.
     let size = 1024;
@@ -239,14 +234,13 @@ fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
 }
 
 #[allow(non_snake_case)]
-fn xmlFree(_env: &mut Environment, ptr: u32) {
-    crate::log!("Warning: stubbed xmlFree called for ptr {:#x}", ptr);
+fn xmlFree(_env: &mut Environment, _ptr: u32) {
     // В рамках эмуляции пока можем не освобождать память
 }
 
-// ИЗМЕНЕНО: Добавляем наши функции в список экспорта
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlFree(_)),
 ];
+
