@@ -40,6 +40,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
+// MARK: - Size hint
+
+// Returns the minimum size needed to display the dots for a given page count.
+// Matches UIKit's fixed 7pt dot size with 9pt spacing.
++ (id)sizeForNumberOfPages:(NSInteger)page_count { // returns CGSize
+    let width: f32 = (page_count.max(0) as f32) * 9.0 - 2.0; // 7pt dot + 2pt gap
+    let size = crate::frameworks::core_graphics::CGSize {
+        width: width.max(0.0),
+        height: 36.0,
+    };
+    msg_class![env; NSValue valueWithCGSize:size]
+}
+
 - (id)init {
     this
 }
@@ -138,19 +151,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, color);
     env.objc.borrow_mut::<UIPageControlHostObject>(this)
         .current_page_indicator_tint_color = color;
-}
-
-// MARK: - Size hint
-
-// Returns the minimum size needed to display the dots for a given page count.
-// Matches UIKit's fixed 7pt dot size with 9pt spacing.
-+ (id)sizeForNumberOfPages:(NSInteger)page_count { // returns CGSize
-    let width: f32 = (page_count.max(0) as f32) * 9.0 - 2.0; // 7pt dot + 2pt gap
-    let size = crate::frameworks::core_graphics::CGSize {
-        width: width.max(0.0),
-        height: 36.0,
-    };
-    msg_class![env; NSValue valueWithCGSize:size]
 }
 
 // MARK: - Description
