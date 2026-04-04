@@ -72,7 +72,6 @@ impl TryFrom<&str> for DeviceFamily {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DeviceOrientation {
     Portrait,
-    PortraitUpsideDown,
     LandscapeLeft,
     LandscapeRight,
 }
@@ -85,7 +84,6 @@ fn size_for_orientation(
     let scale_hack = scale_hack.get();
     match orientation {
         DeviceOrientation::Portrait => (width * scale_hack, height * scale_hack),
-        DeviceOrientation::PortraitUpsideDown => (width * scale_hack, height * scale_hack),
         DeviceOrientation::LandscapeLeft => (height * scale_hack, width * scale_hack),
         DeviceOrientation::LandscapeRight => (height * scale_hack, width * scale_hack),
     }
@@ -98,7 +96,6 @@ fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32
     };
     match orientation {
         DeviceOrientation::Portrait => (short_side, long_side),
-        DeviceOrientation::PortraitUpsideDown => (short_side, long_side),
         DeviceOrientation::LandscapeLeft | DeviceOrientation::LandscapeRight => {
             (long_side, short_side)
         }
@@ -111,7 +108,6 @@ fn set_sdl2_orientation(orientation: DeviceOrientation) {
         "SDL_IOS_ORIENTATIONS",
         match orientation {
             DeviceOrientation::Portrait => "Portrait",
-            DeviceOrientation::PortraitUpsideDown => "PortraitUpsideDown",
             // The inversion is deliberate. These probably correspond to
             // iPhone OS content orientations?
             DeviceOrientation::LandscapeLeft => "LandscapeRight",
