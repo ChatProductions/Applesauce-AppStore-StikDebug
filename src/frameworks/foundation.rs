@@ -207,17 +207,17 @@ pub type unichar = u16;
 fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     use std::hash::Hasher;
 
-    // Rust documentation says DefaultHasher::new() should always return the
-    // same instance, so this should give consistent hashes.
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     hashable.hash(&mut hasher);
     let hash_u64: u64 = hasher.finish();
     (hash_u64 as u32) ^ ((hash_u64 >> 32) as u32)
 }
 
+// ИЗМЕНЕНО: Универсальная функция для обмана игры.
+// Выделяет реальную память и забивает ее нулями, чтобы игра могла читать свойства узлов, не вызывая вылет на 0x0
 #[allow(non_snake_case)]
-fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
-    let size = 1024;
+fn alloc_fake_xml_obj(env: &mut Environment) -> u32 {
+    let size = 256;
     let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
     let slice = env.mem.bytes_at_mut(ptr, size);
     for byte in slice.iter_mut() {
@@ -226,13 +226,26 @@ fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
     ptr.to_bits()
 }
 
+// Все функции-парсинга теперь возвращают наш "фейковый", но безопасный объект
+#[allow(non_snake_case)]
+fn xmlNewParserCtxt(env: &mut Environment) -> u32 { alloc_fake_xml_obj(env) }
+
+#[allow(non_snake_case)]
+fn xmlCtxtReadMemory(env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { alloc_fake_xml_obj(env) }
+
+#[allow(non_snake_case)]
+fn xmlReadMemory(env: &mut Environment, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { alloc_fake_xml_obj(env) }
+
+#[allow(non_snake_case)]
+fn xmlParseMemory(env: &mut Environment, _buffer: u32, _size: u32) -> u32 { alloc_fake_xml_obj(env) }
+
+#[allow(non_snake_case)]
+fn xmlDocGetRootElement(env: &mut Environment, _doc: u32) -> u32 { alloc_fake_xml_obj(env) }
+
+// Остальные функции просто ничего не делают (возвращают 0 или void)
 #[allow(non_snake_case)]
 fn xmlFree(_env: &mut Environment, _ptr: u32) {}
 
-#[allow(non_snake_case)]
-fn xmlCtxtReadMemory(_env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { 0 }
-
-// НОВЫЕ ЗАГЛУШКИ ДЛЯ LIBXML2
 #[allow(non_snake_case)]
 fn xmlCtxtGetLastError(_env: &mut Environment, _ctxt: u32) -> u32 { 0 }
 
@@ -241,15 +254,6 @@ fn xmlFreeDoc(_env: &mut Environment, _doc: u32) {}
 
 #[allow(non_snake_case)]
 fn xmlCleanupParser(_env: &mut Environment) {}
-
-#[allow(non_snake_case)]
-fn xmlReadMemory(_env: &mut Environment, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { 0 }
-
-#[allow(non_snake_case)]
-fn xmlParseMemory(_env: &mut Environment, _buffer: u32, _size: u32) -> u32 { 0 }
-
-#[allow(non_snake_case)]
-fn xmlDocGetRootElement(_env: &mut Environment, _doc: u32) -> u32 { 0 }
 
 #[allow(non_snake_case)]
 fn xmlFreeParserCtxt(_env: &mut Environment, _ctxt: u32) {}
