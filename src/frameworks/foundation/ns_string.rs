@@ -363,6 +363,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// ИЗМЕНЕНО: Добавлена поддержка загрузки строки по URL
++ (id)stringWithContentsOfURL:(id)url // NSURL*
+                     encoding:(NSStringEncoding)encoding
+                        error:(MutPtr<id>)error { // NSError**
+    if url == nil {
+        return nil;
+    }
+    // Извлекаем обычный локальный путь из объекта NSURL
+    let path: id = msg![env; url path];
+    // Перенаправляем работу в уже готовый метод чтения из файла
+    msg![env; this stringWithContentsOfFile:path
+                                   encoding:encoding
+                                      error:error]
+}
+
 + (id)stringWithFormat:(id)format, // NSString*
                        ...args {
     let res = with_format(env, format, args.start());
