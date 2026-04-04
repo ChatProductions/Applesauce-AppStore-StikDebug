@@ -217,30 +217,30 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
 
 #[allow(non_snake_case)]
 fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
-    // Размер структуры xmlParserCtxt в старых iOS был около 500-600 байт.
-    // Выделяем 1024 байта с запасом.
     let size = 1024;
     let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
-    
-    // Обязательно заполняем нулями, чтобы игра не прочитала "мусор" из памяти 
-    // и не подумала, что там какие-то флаги ошибок
     let slice = env.mem.bytes_at_mut(ptr, size);
     for byte in slice.iter_mut() {
         *byte = 0;
     }
-    
-    // Возвращаем реальный адрес памяти вместо 0!
     ptr.to_bits()
 }
 
 #[allow(non_snake_case)]
 fn xmlFree(_env: &mut Environment, _ptr: u32) {
-    // В рамках эмуляции пока можем не освобождать память
+}
+
+// НОВОЕ: Заглушка для чтения XML из памяти
+#[allow(non_snake_case)]
+fn xmlCtxtReadMemory(_env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 {
+    // Возвращаем 0 (NULL), сообщая игре, что XML пустой или не распарсился
+    0
 }
 
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlFree(_)),
+    export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)), // 6 аргументов
 ];
 
