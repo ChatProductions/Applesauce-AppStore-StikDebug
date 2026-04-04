@@ -13,7 +13,7 @@ use crate::{msg, Environment};
 use std::time::Instant;
 
 pub mod ui_accelerometer;
-puh mod ui_action_sheet;
+pub mod ui_action_sheet;
 pub mod ui_activity_indicator_view;
 pub mod ui_application;
 pub mod ui_color;
