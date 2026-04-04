@@ -35,6 +35,7 @@ pub const UIKeyboardCenterEndUserInfoKey:   &str = "UIKeyboardCenterEndUserInfoK
 
 // MARK: - Keyboard type / appearance / return key
 
+type UIKeyboardType = NSInteger;
 const UIKeyboardTypeDefault:               UIKeyboardType = 0;
 const UIKeyboardTypeASCIICapable:          UIKeyboardType = 1;
 const UIKeyboardTypeNumbersAndPunctuation: UIKeyboardType = 2;
@@ -47,11 +48,13 @@ const UIKeyboardTypeDecimalPad:            UIKeyboardType = 8;
 const UIKeyboardTypeTwitter:               UIKeyboardType = 9;
 const UIKeyboardTypeWebSearch:             UIKeyboardType = 10;
 
+type UIKeyboardAppearance = NSInteger;
 const UIKeyboardAppearanceDefault:         UIKeyboardAppearance = 0;
 const UIKeyboardAppearanceDark:            UIKeyboardAppearance = 1;
 const UIKeyboardAppearanceLight:           UIKeyboardAppearance = 2;
 const UIKeyboardAppearanceAlert:           UIKeyboardAppearance = UIKeyboardAppearanceDark;
 
+type UIReturnKeyType = NSInteger;
 const UIReturnKeyDefault:                  UIReturnKeyType = 0;
 const UIReturnKeyGo:                       UIReturnKeyType = 1;
 const UIReturnKeyGoogle:                   UIReturnKeyType = 2;
@@ -65,11 +68,13 @@ const UIReturnKeyDone:                     UIReturnKeyType = 9;
 const UIReturnKeyEmergencyCall:            UIReturnKeyType = 10;
 const UIReturnKeyContinue:                 UIReturnKeyType = 11;
 
+type UITextAutocapitalizationType = NSInteger;
 const UITextAutocapitalizationTypeNone:          UITextAutocapitalizationType = 0;
 const UITextAutocapitalizationTypeWords:         UITextAutocapitalizationType = 1;
 const UITextAutocapitalizationTypeSentences:     UITextAutocapitalizationType = 2;
 const UITextAutocapitalizationTypeAllCharacters: UITextAutocapitalizationType = 3;
 
+type UITextAutocorrectionType = NSInteger;
 const UITextAutocorrectionTypeDefault: UITextAutocorrectionType = 0;
 const UITextAutocorrectionTypeNo:      UITextAutocorrectionType = 1;
 const UITextAutocorrectionTypeYes:     UITextAutocorrectionType = 2;
