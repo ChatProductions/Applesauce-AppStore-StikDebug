@@ -89,6 +89,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     ptr.cast_const().cast()
 }
 
+- (NSUInteger)methodReturnLength {
+    let ret_type_ptr: crate::mem::ConstPtr<std::ffi::c_char> = msg![env; this methodReturnType];
+    if ret_type_ptr.is_null() {
+        return 0;
+    }
+    
+    // Читаем строку типа из памяти и приводим указатель к нужному типу
+    let ret_type_str = env.mem.cstr_at_utf8(ret_type_ptr.cast()).unwrap_or("");
+    
+    // Пропускаем спецификаторы Objective-C (in, out, inout, const, oneway и т.д.)
+    let core_type = ret_type_str.trim_start_matches(|c| "rnNoORV".contains(c));
+    
+    // Честная калькуляция размера типа (в байтах) для 32-битного ARM
+    match core_type.chars().next() {
+        Some('v') => 0, // void
+        Some('c') | Some('C') | Some('B') => 1, // char, unsigned char, bool
+        Some('s') | Some('S') => 2, // short, unsigned short
+        Some('i') | Some('I') | Some('l') | Some('L') | Some('f') => 4, // int, long, float
+        Some('q') | Some('Q') | Some('d') => 8, // long long, unsigned long long, double
+        Some('@') | Some('#') | Some('*') | Some('^') | Some(':') | Some('?') => 4, // объекты, классы, указатели, SEL
+        Some('{') => {
+            // Для структур нужен парсинг вложенных типов, пока возвращаем 0, чтобы не упало
+            log!("Warning: methodReturnLength for struct {} is not fully calculated, returning 0", core_type);
+            0
+        }
+        _ => {
+            log!("Warning: methodReturnLength unknown type '{}', returning default 4", core_type);
+            4
+        }
+    }
+}
+    
 // -----------------------------------------------------------------------
 
 - (())dealloc {
