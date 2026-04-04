@@ -152,6 +152,44 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+    // MARK: - Fire Date
+
+    - (())setFireDate:(id)date {
+        // Запрашиваем интервал времени у NSDate ДО заимствования таймера,
+        // чтобы избежать потенциальной паники RefCell при вложенных вызовах.
+        let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceNow];
+        
+        let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
+        
+        // Согласно документации Apple, если таймер уже остановлен (invalidated),
+        // изменение fireDate игнорируется.
+        if timer.due_by.is_some() {
+            if time_interval.is_nan() || time_interval <= 0.0 {
+                timer.due_by = Some(Instant::now());
+            } else {
+                // Ограничиваем ~100 годами для защиты от паники Instant::checked_add, 
+                // когда передают что-то вроде [NSDate distantFuture].
+                let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
+                timer.due_by = Some(Instant::now() + Duration::from_secs_f64(safe_interval));
+            }
+        }
+    }
+
+    - (id)fireDate {
+        let timer = env.objc.borrow::<NSTimerHostObject>(this);
+        if let Some(due) = timer.due_by {
+            let now = Instant::now();
+            let time_interval: NSTimeInterval = if due > now {
+                due.duration_since(now).as_secs_f64()
+            } else {
+                -now.duration_since(due).as_secs_f64()
+            };
+            msg_class![env; NSDate dateWithTimeIntervalSinceNow:time_interval]
+        } else {
+            nil
+        }
+    }
+    
 // TODO: more constructors
 // TODO: more accessors
 
