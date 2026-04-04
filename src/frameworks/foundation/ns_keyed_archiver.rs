@@ -18,7 +18,7 @@ use plist::{to_writer_binary, Dictionary, Uid, Value};
 
 use crate::frameworks::foundation::ns_keyed_unarchiver::NSKeyedArchiveRootObjectKey;
 use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
-use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::foundation::{NSInteger, NSUInteger}; // ИЗМЕНЕНО: Добавлен NSInteger
 use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
@@ -87,6 +87,44 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key = normalize_key(env, key);
     encode_object_for_key(env, this, object, key);
 }
+
+// --- ИЗМЕНЕНО: Добавлены методы для сохранения базовых типов ---
+- (())encodeInt:(i32)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+
+- (())encodeInteger:(NSInteger)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+
+- (())encodeBool:(bool)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+
+- (())encodeFloat:(f32)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    // plist сохраняет дробные числа как f64
+    scope.insert(key, (value as f64).into());
+}
+
+- (())encodeDouble:(f64)value forKey:(id)key { // NSString *
+    let key = normalize_key(env, key);
+    let scope = get_value_to_encode_for_current_key(env, this);
+    assert!(!scope.contains_key(&key));
+    scope.insert(key, value.into());
+}
+// ---------------------------------------------------------------
 
 - (())encodeBytes:(ConstPtr<u8>)bytes
            length:(NSUInteger)length
