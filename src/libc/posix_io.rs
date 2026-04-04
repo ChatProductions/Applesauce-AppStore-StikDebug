@@ -121,6 +121,13 @@ pub const LOCK_NB: FLockFlag = 4;
 #[allow(dead_code)]
 pub const LOCK_UN: FLockFlag = 8;
 
+#[repr(C, packed)]
+struct iovec {
+    iov_base: ConstPtr<u8>,
+    iov_len: GuestUSize,
+}
+unsafe impl SafeRead for iovec {}
+
 fn open(env: &mut Environment, path: ConstPtr<u8>, flags: i32, _args: DotDotDot) -> FileDescriptor {
     set_errno(env, 0);
     self::open_direct(env, path, flags)
@@ -724,6 +731,26 @@ fn ftruncate(env: &mut Environment, fd: FileDescriptor, len: off_t) -> i32 {
     }
 }
 
+fn writev(
+    env: &mut Environment,
+    fd: FileDescriptor,
+    iov: ConstPtr<iovec>,
+    iovcnt: i32,
+) -> GuestISize {
+    let mut i = 0;
+    let mut written_bytes: GuestISize = 0;
+    while i != iovcnt {
+        let iovec = env.mem.read(iov + i as u32);
+        let bytes_written = write(env, fd, iovec.iov_base.cast(), iovec.iov_len);
+        if bytes_written == -1 {
+            return -1;
+        }
+        written_bytes += bytes_written;
+        i += 1
+    }
+    written_bytes
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(open(_, _, _)),
     export_c_func!(read(_, _, _)),
@@ -740,6 +767,7 @@ pub const FUNCTIONS: FunctionExports = &[
 _)),
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
+    export_c_func!(writev(_, _, _)),
 ];
 
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
