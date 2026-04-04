@@ -6,20 +6,6 @@
  */
 //!
 //! `NSObject`, the root of most class hierarchies in Objective-C.
-//!
-//! Resources:
-//!
-//! - Apple's [Advanced Memory Management Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/MemoryMgmt/Articles/MemoryMgmt.html)
-//!
-//! explains how reference counting works. Note that we are interested in what
-//!
-//! it calls "manual retain-release", not ARC.
-//!
-//! - Apple's [Key-Value Coding Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/KeyValueCoding/SearchImplementation.html)
-//!   explains the algorithm `setValue:forKey:` should follow.
-//!
-//!
-//! See also: [crate::objc], especially the `objects` module.
 
 use super::ns_dictionary::dict_from_keys_and_objects;
 use super::ns_run_loop::NSDefaultRunLoopMode;
@@ -44,7 +30,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)alloc {
     msg![env; this allocWithZone:(MutVoidPtr::null())]
 }
-+ (id)allocWithZone:(NSZonePtr)_zone { // struct _NSZone*
++ (id)allocWithZone:(NSZonePtr)_zone { 
     log_dbg!("[{:?} allocWithZone:]", this);
     env.objc.alloc_object(this, Box::new(TrivialHostObject), &mut env.mem)
 }
@@ -61,40 +47,41 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.class_is_subclass_of(this, class)
 }
 
-// See the instance method section for the normal versions of these.
 + (id)retain {
-    this // classes are not refcounted
+    this 
 }
 + (())release {
-    // classes are not refcounted
 }
 + (())autorelease {
-    // classes are not refcounted
 }
 
 + (())layoutSubviews {
-    // no-op
 }
 
 + (bool)instancesRespondToSelector:(SEL)selector {
     env.objc.class_has_method(this, selector)
 }
 
-// ИЗМЕНЕНО: Заставляем приложение использовать fallback-механизм (возвращаем 0)
+// ИЗМЕНЕНО: Гениальный хак! Возвращаем адрес диспетчера objc_msgSend
 + (u32)instanceMethodForSelector:(SEL)selector {
     let sel_str = selector.as_str(&env.mem);
-    log!("Warning: instanceMethodForSelector: requested for '{}' — returning 0 to force fallback", sel_str);
-    0
+    log!("Warning: instanceMethodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
+    
+    // Ищем адрес _objc_msgSend в памяти эмулятора
+    if let Some(addr) = env.dyld.resolve_symbol("_objc_msgSend") {
+        addr
+    } else {
+        log!("Error: _objc_msgSend not found! Returning 0.");
+        0
+    }
 }
 
 + (id)instanceMethodSignatureForSelector:(SEL)selector {
     let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
     
-    // Считаем количество явных аргументов по количеству двоеточий в селекторе
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
     
-    // Прибавляем 2 скрытых аргумента (self и _cmd)
     let total_args = explicit_args + 2;
     () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
     
@@ -115,7 +102,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this description]
 }
 
-// ИЗМЕНЕНО: Теперь мы реально отменяем таймеры, сохраняя строковое имя селектора
 + (())cancelPreviousPerformRequestsWithTarget:(id)target
                                      selector:(SEL)selector
                                        object:(id)object {
@@ -125,7 +111,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-// ИЗМЕНЕНО: Поддержка глобальной отмены для объекта
 + (())cancelPreviousPerformRequestsWithTarget:(id)target {
     unsafe {
         crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.push((target.to_bits(), None));
@@ -177,29 +162,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     this.to_bits()
 }
 
-// To not confuse with isEqualTo:, which is
-// a category of NSWhoseSpecifier!
-// Reference https://nshipster.com/equality
 - (bool)isEqual:(id)other {
     this == other
 }
 
-// Helper for NSCopying
 - (id)copy {
     msg![env; this copyWithZone:(MutVoidPtr::null())]
 }
 
-// Helper for NSMutableCopying
 - (id)mutableCopy {
     msg![env; this mutableCopyWithZone:(MutVoidPtr::null())]
 }
 
-// NSKeyValueCoding
-- (())setValue:(id)value
-       forKey:(id)key { // NSString*
+- (())setValue:(id)value forKey:(id)key { 
     let key_string = to_rust_string(env, key);
-    // TODO: avoid copy?
-    assert!(key_string.is_ascii()); // TODO: do we have to handle non-ASCII keys?
+    assert!(key_string.is_ascii()); 
     let camel_case_key_string = format!("{}{}", key_string.as_bytes()[0].to_ascii_uppercase() as char, &key_string[1..]);
 
     let class = msg![env; this class];
@@ -242,8 +219,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg_send(env, (this, sel, value, key));
 }
 
-- (())setValue:(id)_value
-forUndefinedKey:(id)key { // NSString*
+- (())setValue:(id)_value forUndefinedKey:(id)key { 
     let class: Class = ObjC::read_isa(this, &env.mem);
     let class_name_string = env.objc.get_class_name(class).to_owned();
     let key_string = to_rust_string(env, key);
@@ -259,11 +235,18 @@ forUndefinedKey:(id)key { // NSString*
     true
 }
     
-// ИЗМЕНЕНО: Заставляем приложение использовать fallback-механизм (возвращаем 0)
+// ИЗМЕНЕНО: Гениальный хак! Возвращаем адрес диспетчера objc_msgSend
 - (u32)methodForSelector:(SEL)selector {
     let sel_str = selector.as_str(&env.mem);
-    log!("Warning: methodForSelector: requested for '{}' — returning 0 to force fallback", sel_str);
-    0
+    log!("Warning: methodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
+    
+    // Ищем адрес _objc_msgSend в памяти эмулятора
+    if let Some(addr) = env.dyld.resolve_symbol("_objc_msgSend") {
+        addr
+    } else {
+        log!("Error: _objc_msgSend not found! Returning 0.");
+        0
+    }
 }
 
 - (id)methodSignatureForSelector:(SEL)selector {
@@ -283,21 +266,17 @@ forUndefinedKey:(id)key { // NSString*
     msg_send_no_type_checking(env, (this, sel))
 }
 
-- (id)performSelector:(SEL)sel
-           withObject:(id)o1 {
+- (id)performSelector:(SEL)sel withObject:(id)o1 {
     assert!(!sel.is_null());
     msg_send_no_type_checking(env, (this, sel, o1))
 }
 
-- (id)performSelector:(SEL)sel
-           withObject:(id)o1
-           withObject:(id)o2 {
+- (id)performSelector:(SEL)sel withObject:(id)o1 withObject:(id)o2 {
     assert!(!sel.is_null());
     msg_send_no_type_checking(env, (this, sel, o1, o2))
 }
 
-- (())performSelectorInBackground:(SEL)sel
-                       withObject:(id)arg {
+- (())performSelectorInBackground:(SEL)sel withObject:(id)arg {
     detach_new_thread_inner(env, sel, this, arg, /* tolerate_type_mismatch: */ true)
 }
 
@@ -335,17 +314,13 @@ forUndefinedKey:(id)key { // NSString*
     }
 
     if wait {
-        // Called from background thread with wait=true.
-        // True cross-thread waiting is not implemented, so we schedule
-        // the selector on the main run loop and proceed without blocking.
         log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
     }
 
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
-// ИЗМЕНЕНО: Обработка отмененных таймеров при их срабатывании с безопасным сравнением
-- (())_touchHLE_timerFireMethod:(id)which { // NSTimer *
+- (())_touchHLE_timerFireMethod:(id)which { 
     let dict: id = msg![env; which userInfo];
     let sel_key: id = get_static_str(env, "SEL");
     let sel_str_id: id = msg![env; dict objectForKey:sel_key];
@@ -359,8 +334,6 @@ forUndefinedKey:(id)key { // NSString*
     let mut cancelled = false;
     
     unsafe {
-        // Проверяем, не было ли отмены по конкретному селектору или глобальной отмены.
-        // Используем .as_deref() и .as_ref(), чтобы безопасно сравнивать &str и &str.
         if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_ref())) {
             crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
             cancelled = true;
@@ -369,7 +342,6 @@ forUndefinedKey:(id)key { // NSString*
         }
     }
 
-    // Если игра отменила таймер, мы просто пропускаем его вызов!
     if cancelled {
         return;
     }
@@ -382,28 +354,19 @@ forUndefinedKey:(id)key { // NSString*
 }
 
 - (())awakeFromNib {
-    // no-op
 }
 
-- (())performSelector:(SEL)sel
-           onThread:(id)_thread
-         withObject:(id)arg
-      waitUntilDone:(bool)_wait {
+- (())performSelector:(SEL)sel onThread:(id)_thread withObject:(id)arg waitUntilDone:(bool)_wait {
     log_dbg!("performSelector:{} onThread:withObject:waitUntilDone: — scheduling on main thread instead", sel.as_str(&env.mem));
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
-- (())performSelector:(SEL)sel
-           onThread:(id)_thread
-         withObject:(id)arg
-      waitUntilDone:(bool)_wait
-              modes:(id)_modes {
+- (())performSelector:(SEL)sel onThread:(id)_thread withObject:(id)arg waitUntilDone:(bool)_wait modes:(id)_modes {
     log_dbg!("performSelector:{} onThread:withObject:waitUntilDone:modes: — scheduling on main thread instead", sel.as_str(&env.mem));
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
 - (id)valueForKey:(id)key {
-    // Try getter selector first
     let key_str = super::ns_string::to_rust_string(env, key);
     let sel_name = key_str.to_string();
     if let Some(sel) = env.objc.lookup_selector(&sel_name) {
@@ -411,7 +374,6 @@ forUndefinedKey:(id)key { // NSString*
             return msg_send(env, (this, sel));
         }
     }
-    // Try isX for bool properties
     let is_sel_name = format!("is{}{}", &key_str[..1].to_uppercase(), &key_str[1..]);
     if let Some(sel) = env.objc.lookup_selector(&is_sel_name) {
         if env.objc.object_has_method(&env.mem, this, sel) {
@@ -423,7 +385,6 @@ forUndefinedKey:(id)key { // NSString*
 }
 
 - (id)valueForKeyPath:(id)key_path {
-    // Simple implementation: treat as valueForKey: (no path traversal)
     msg![env; this valueForKey:key_path]
 }
 
