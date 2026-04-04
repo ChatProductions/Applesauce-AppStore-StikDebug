@@ -54,7 +54,7 @@ pub(super) struct UIViewHostObject {
     clears_context_before_drawing: bool,
     user_interaction_enabled: bool,
     multiple_touch_enabled: bool,
-    delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
+    delegate: id,
     animation_interval: f64,
     is_animating: bool,
 }
@@ -70,7 +70,7 @@ impl Default for UIViewHostObject {
             clears_context_before_drawing: true,
             user_interaction_enabled: true,
             multiple_touch_enabled: false,
-            delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
+            delegate: nil,
             animation_interval: 1.0 / 60.0,
             is_animating: false,
         }
@@ -222,19 +222,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setAnimationInterval:(f64)interval {
     env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval;
 }
-    
+
 - (id)delegate {
     env.objc.borrow::<UIViewHostObject>(this).delegate
 }
 - (())setDelegate:(id)delegate {
     env.objc.borrow_mut::<UIViewHostObject>(this).delegate = delegate;
 }
-    
+
+// FIX 1: viewWithTag: was only one level deep. The real UIKit method searches
+// the entire subview hierarchy recursively. Without this, any game that calls
+// viewWithTag: on a view whose tagged descendant is more than one level down
+// will get nil back and likely crash or misbehave.
 - (id)viewWithTag:(NSInteger)tag {
-    let &UIViewHostObject { ref subviews, tag: view_tag, .. } = env.objc.borrow(this);
-    if view_tag == tag { return this; }
-    for view in subviews {
-        if env.objc.borrow::<UIViewHostObject>(*view).tag == tag { return *view; }
+    if env.objc.borrow::<UIViewHostObject>(this).tag == tag {
+        return this;
+    }
+    // Clone to avoid holding the borrow across the recursive msg! calls.
+    let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
+    for subview in subviews {
+        let result: id = msg![env; subview viewWithTag:tag];
+        if result != nil {
+            return result;
+        }
     }
     nil
 }
@@ -250,25 +260,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UIViewHostObject>(this).is_animating
 }
 
+// startAnimation / stopAnimation are a GLKView-style rendering loop control.
+// touchHLE drives the OpenGL render loop at the emulator level, so toggling
+// the is_animating flag is sufficient for game logic that checks it; no real
+// timer needs to be created here.
 - (())startAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
-    if !host.is_animating {
-        host.is_animating = true;
-        
-        // Примечание: В оригинальном коде iOS здесь создается NSTimer, который 
-        // дергает метод drawView. В touchHLE цикл рендеринга OpenGL часто 
-        // работает на уровне самого эмулятора, поэтому честного переключения 
-        // внутреннего state (is_animating) достаточно для корректной работы логики игры.
-    }
+    env.objc.borrow_mut::<UIViewHostObject>(this).is_animating = true;
 }
 
 - (())stopAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
-    if host.is_animating {
-        host.is_animating = false;
-    }
+    env.objc.borrow_mut::<UIViewHostObject>(this).is_animating = false;
 }
-    
+
 - (bool)isMultipleTouchEnabled {
     env.objc.borrow::<UIViewHostObject>(this).multiple_touch_enabled
 }
@@ -385,9 +388,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// FIX 2: dealloc previously released the layer without first clearing its
+// delegate pointer. If the layer is retained elsewhere (e.g. by a superlayer
+// during a transition) and outlives the view, it would later call delegate
+// methods on the freed UIView, causing a use-after-free. Nil the delegate
+// first so the layer cannot call back into this view after dealloc.
 - (())dealloc {
     let UIViewHostObject { layer, superview: _, subviews, .. } = std::mem::take(env.objc.borrow_mut(this));
-    release(env, layer);
+    if layer != nil {
+        () = msg![env; layer setDelegate:nil];
+        release(env, layer);
+    }
     for subview in subviews {
         env.objc.borrow_mut::<UIViewHostObject>(subview).superview = nil;
         release(env, subview);
