@@ -12,6 +12,7 @@
 //! `NSString` easier to understand.
 
 use crate::dyld::{export_c_func, FunctionExports, HostConstant, ConstantExports};
+use crate::frameworks::foundation::ns_string::CFStringGetCharactersPtr;
 use crate::objc::id;
 use crate::Environment;
 use crate::mem::{ConstPtr, MutPtr};
@@ -398,4 +399,5 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
     export_c_func!(NSGetSizeAndAlignment(_, _, _)),
+    export_c_func!(CFStringGetCharactersPtr(_)),
 ];
