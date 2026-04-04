@@ -249,6 +249,51 @@ destructiveButtonTitle:(id)destructive_title // NSString*
     let _: () = msg![env; delegate actionSheet:this didDismissWithButtonIndex:index];
 }
 
+- (())dismissWithClickedButtonIndex:(NSUInteger)index animated:(bool)_animated {
+    env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;
+
+    let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
+    if delegate == nil {
+        return;
+    }
+
+    let sel_clicked        = env.objc.lookup_selector("actionSheet:clickedButtonAtIndex:")       .unwrap();
+    let sel_will_dismiss   = env.objc.lookup_selector("actionSheet:willDismissWithButtonIndex:") .unwrap();
+    let sel_did_dismiss    = env.objc.lookup_selector("actionSheet:didDismissWithButtonIndex:")  .unwrap();
+
+    let responds_clicked: bool      = msg![env; delegate respondsToSelector:sel_clicked];
+    let responds_will:    bool      = msg![env; delegate respondsToSelector:sel_will_dismiss];
+    let responds_did:     bool      = msg![env; delegate respondsToSelector:sel_did_dismiss];
+
+    if responds_clicked {
+        let _: () = msg![env; delegate actionSheet:this clickedButtonAtIndex:index];
+    }
+    if responds_will {
+        let _: () = msg![env; delegate actionSheet:this willDismissWithButtonIndex:index];
+    }
+    if responds_did {
+        let _: () = msg![env; delegate actionSheet:this didDismissWithButtonIndex:index];
+    }
+}
+
+- (())dismissDidClickedButtonIndex:(NSUInteger)index {
+    env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;
+
+    let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
+    if delegate == nil {
+        return;
+    }
+
+    let sel_clicked = env.objc.lookup_selector("actionSheet:clickedButtonAtIndex:").unwrap();
+    let responds: bool = msg![env; delegate respondsToSelector:sel_clicked];
+    if responds {
+        let _: () = msg![env; delegate actionSheet:this clickedButtonAtIndex:index];
+    }
+
+    // Then fire the full dismiss sequence.
+    let _: () = msg![env; this dismissWithClickedButtonIndex:index animated:false];
+}
+
 // Private helper — dismiss via cancel button (or index 0 as fallback).
 - (())_touchHLE_dismiss {
     env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;
