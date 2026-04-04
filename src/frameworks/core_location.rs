@@ -375,13 +375,14 @@ const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)initWithCoordinate:(CLLocationDegrees)lat  // CLLocationCoordinate2D {lat,lon}
-              longitude:(CLLocationDegrees)lon    // (two f64 values)
-                altitude:(CLLocationDistance)alt
-      horizontalAccuracy:(CLLocationAccuracy)h_acc
-        verticalAccuracy:(CLLocationAccuracy)v_acc
-               timestamp:(id)ts {               // NSDate*
-    retain(env, ts);
+// Replace the 6-parameter init with two separate inits that are within
+// the HostIMP parameter limit.
+
+- (id)initWithCoordinate:(CLLocationDegrees)lat
+              longitude:(CLLocationDegrees)lon
+               altitude:(CLLocationDistance)alt
+     horizontalAccuracy:(CLLocationAccuracy)h_acc
+       verticalAccuracy:(CLLocationAccuracy)v_acc {
     {
         let host = env.objc.borrow_mut::<CLLocationHostObject>(this);
         host.latitude  = lat;
@@ -389,8 +390,9 @@ const CLASSES: ClassExports = objc_classes! {
         host.altitude  = alt;
         host.horizontal_accuracy = h_acc;
         host.vertical_accuracy   = v_acc;
-        host.timestamp = ts;
     }
+    let ts: id = msg_class![env; NSDate date];
+    env.objc.borrow_mut::<CLLocationHostObject>(this).timestamp = ts;
     this
 }
 
@@ -408,6 +410,16 @@ const CLASSES: ClassExports = objc_classes! {
 - (CLLocationSpeed)speed       { env.objc.borrow::<CLLocationHostObject>(this).speed }
 - (CLLocationDirection)course  { env.objc.borrow::<CLLocationHostObject>(this).course }
 - (id)timestamp                { env.objc.borrow::<CLLocationHostObject>(this).timestamp }
+
+// In the initializer above, use NSDate for the timestamp automatically.
+// Then expose a separate timestamp setter for callers that need it:
+
+- (())_setTimestamp:(id)ts { // NSDate* — private helper
+    let old = env.objc.borrow::<CLLocationHostObject>(this).timestamp;
+    release(env, old);
+    retain(env, ts);
+    env.objc.borrow_mut::<CLLocationHostObject>(this).timestamp = ts;
+}
 
 - (CLLocationDistance)distanceFromLocation:(id)other { // CLLocation*
     // Simple equirectangular approximation — sufficient for games.
