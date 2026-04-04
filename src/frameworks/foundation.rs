@@ -11,7 +11,8 @@
 //! Being aware of this concept will make common types like `NSArray` and
 //! `NSString` easier to understand.
 
-use crate::dyld::{export_c_func, FunctionExports};
+// ИЗМЕНЕНО: Добавлены импорты HostConstant и ConstantExports
+use crate::dyld::{export_c_func, FunctionExports, HostConstant, ConstantExports};
 use crate::objc::id;
 use crate::Environment;
 
@@ -62,6 +63,12 @@ pub mod ns_url_request;
 pub mod ns_user_defaults;
 pub mod ns_value;
 pub mod ns_xml_parser;
+
+// ИЗМЕНЕНО: Добавляем заглушки для констант, которые запрашивала Rolando
+pub const STUB_CONSTANTS: ConstantExports = &[
+    ("_NSLocalizedFailureReasonErrorKey", HostConstant::NSString("NSLocalizedFailureReasonErrorKey")),
+    ("_NSURLErrorDomain", HostConstant::NSString("NSURLErrorDomain")),
+];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/Foundation.framework/Foundation",
@@ -121,6 +128,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_keyed_unarchiver::CONSTANTS,
         ns_locale::CONSTANTS,
         ns_run_loop::CONSTANTS,
+        STUB_CONSTANTS, // ИЗМЕНЕНО: Экспортируем наши новые константы
     ],
     function_exports: &[
         FUNCTIONS,
@@ -209,5 +217,36 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     (hash_u64 as u32) ^ ((hash_u64 >> 32) as u32)
 }
 
-const FUNCTIONS: FunctionExports = &[export_c_func!(NSStringFromRange(_))];
+// ИЗМЕНЕНО: Реализуем "фейковый" контекст, выделяя реальную память, чтобы игра не думала, что произошла ошибка
+#[allow(non_snake_case)]
+fn xmlNewParserCtxt(env: &mut Environment) -> u32 {
+    crate::log!("Warning: xmlNewParserCtxt called — allocating dummy context memory");
+    
+    // Размер структуры xmlParserCtxt в старых iOS был около 500-600 байт.
+    // Выделяем 1024 байта с запасом.
+    let size = 1024;
+    let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
+    
+    // Обязательно заполняем нулями, чтобы игра не прочитала "мусор" из памяти 
+    // и не подумала, что там какие-то флаги ошибок
+    let slice = env.mem.bytes_at_mut(ptr, size);
+    for byte in slice.iter_mut() {
+        *byte = 0;
+    }
+    
+    // Возвращаем реальный адрес памяти вместо 0!
+    ptr.to_bits()
+}
 
+#[allow(non_snake_case)]
+fn xmlFree(_env: &mut Environment, ptr: u32) {
+    crate::log!("Warning: stubbed xmlFree called for ptr {:#x}", ptr);
+    // В рамках эмуляции пока можем не освобождать память
+}
+
+// ИЗМЕНЕНО: Добавляем наши функции в список экспорта
+const FUNCTIONS: FunctionExports = &[
+    export_c_func!(NSStringFromRange(_)),
+    export_c_func!(xmlNewParserCtxt()),
+    export_c_func!(xmlFree(_)),
+];
