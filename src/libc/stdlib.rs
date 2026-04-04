@@ -560,7 +560,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__assert(_, _, _)),
     export_c_func!(__assert_fail(_, _, _, _)),
     export_c_func!(system(_)),
-    export_c_func_aliased!("___assert_rtn", ___assert_rtn(_, _, _, _)),
 ];
 
 pub fn atof_inner(
