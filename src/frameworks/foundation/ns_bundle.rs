@@ -143,23 +143,56 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, preferred)
 }
 
-+ (id)pathsForResources:(id)ext          // NSString*
-                  OfType:(id)r#type // NSString*
-              inDirectory:(id)subpath { // NSString*
-    // Prepend the lproj subdirectory when a localization is given, then
-    // delegate to the non-localized variant.
-    let effective_subpath: id = if inDirectory != nil {
-        let lproj_suffix: id = ns_string::get_static_str(env, ".lproj");
-        let lproj_dir: id = msg![env; inDirectory stringByAppendingString:lproj_suffix];
-        if subpath != nil {
-            msg![env; lproj_dir stringByAppendingPathComponent:subpath]
++ (id)pathForResource:(id)name          // NSString*
+               ofType:(id)extension     // NSString*
+          inDirectory:(id)directory {   // NSString*
+    // assert!(name != nil);
+
+    let path = path_for_resource_helper(env, this, name, nil, directory, extension);
+    if path != nil {
+        return path;
+    }
+
+    // Try preferred languages in order.
+    let langs: id = msg_class![env; NSLocale preferredLanguages];
+    let lang_count: NSUInteger = msg![env; langs count];
+    let mut unknown_codes = HashSet::new();
+    for i in 0..lang_count {
+        let lang_code: id = msg![env; langs objectAtIndex:i];
+        let lang_code_str = ns_string::to_rust_string(env, lang_code);
+        if let Some(&(_, lprojs)) = LANG_ID_TO_LANG_PROJ
+            .iter()
+            .find(|&&(code, _)| code == lang_code_str)
+        {
+            for lproj in lprojs {
+                let lproj_ns: id = ns_string::get_static_str(env, lproj);
+                let localized_path =
+                    path_for_resource_helper(env, this, name, lproj_ns, directory, extension);
+                if localized_path != nil {
+                    return localized_path;
+                }
+            }
         } else {
-            lproj_dir
+            unknown_codes.insert(lang_code_str.into_owned());
         }
-    } else {
-        subpath
-    };
-    msg![env; this pathsForResourcesOfType:ext inDirectory:effective_subpath]
+    }
+
+    if !unknown_codes.is_empty() {
+        log!(
+            "TODO: language codes {:?} aren't mapped to a language name, falling back to English",
+            unknown_codes
+        );
+    }
+
+    // Fallback to English.
+    for lproj in ["English.lproj", "en.lproj"] {
+        let lproj_ns: id = ns_string::get_static_str(env, lproj);
+        let path = path_for_resource_helper(env, this, name, lproj_ns, directory, extension);
+        if path != nil {
+            return path;
+        }
+    }
+    nil
 }
 
 // =========================================================================
