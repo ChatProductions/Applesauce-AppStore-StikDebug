@@ -574,7 +574,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let title = env.objc.borrow::<UIButtonContentHostObject>(this).title;
     let title_color = env.objc.borrow::<UIButtonContentHostObject>(this).title_color;
     let s = format!("UIButtonContent({this:?}, title {title:?}, color {title_color:?})");
-    autorelease(env, from_rust_string(env, s))
+    let ns_str = from_rust_string(env, s);
+    autorelease(env, ns_str)
 }
 
 - (())dealloc {
