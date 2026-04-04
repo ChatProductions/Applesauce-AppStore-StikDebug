@@ -213,62 +213,6 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     (hash_u64 as u32) ^ ((hash_u64 >> 32) as u32)
 }
 
-// ИЗМЕНЕНО: Универсальная функция для обмана игры.
-// Выделяет реальную память и забивает ее нулями, чтобы игра могла читать свойства узлов, не вызывая вылет на 0x0
-#[allow(non_snake_case)]
-fn alloc_fake_xml_obj(env: &mut Environment) -> u32 {
-    let size = 256;
-    let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
-    let slice = env.mem.bytes_at_mut(ptr, size);
-    for byte in slice.iter_mut() {
-        *byte = 0;
-    }
-    ptr.to_bits()
-}
-
-// Все функции-парсинга теперь возвращают наш "фейковый", но безопасный объект
-#[allow(non_snake_case)]
-fn xmlNewParserCtxt(env: &mut Environment) -> u32 { alloc_fake_xml_obj(env) }
-
-#[allow(non_snake_case)]
-fn xmlCtxtReadMemory(env: &mut Environment, _ctxt: u32, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { alloc_fake_xml_obj(env) }
-
-#[allow(non_snake_case)]
-fn xmlReadMemory(env: &mut Environment, _buffer: u32, _size: u32, _url: u32, _encoding: u32, _options: u32) -> u32 { alloc_fake_xml_obj(env) }
-
-#[allow(non_snake_case)]
-fn xmlParseMemory(env: &mut Environment, _buffer: u32, _size: u32) -> u32 { alloc_fake_xml_obj(env) }
-
-#[allow(non_snake_case)]
-fn xmlDocGetRootElement(env: &mut Environment, _doc: u32) -> u32 { alloc_fake_xml_obj(env) }
-
-// Остальные функции просто ничего не делают (возвращают 0 или void)
-#[allow(non_snake_case)]
-fn xmlFree(_env: &mut Environment, _ptr: u32) {}
-
-#[allow(non_snake_case)]
-fn xmlCtxtGetLastError(_env: &mut Environment, _ctxt: u32) -> u32 { 0 }
-
-#[allow(non_snake_case)]
-fn xmlFreeDoc(_env: &mut Environment, _doc: u32) {}
-
-#[allow(non_snake_case)]
-fn xmlCleanupParser(_env: &mut Environment) {}
-
-#[allow(non_snake_case)]
-fn xmlFreeParserCtxt(_env: &mut Environment, _ctxt: u32) {}
-
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
-    export_c_func!(xmlNewParserCtxt()),
-    export_c_func!(xmlFree(_)),
-    export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
-    export_c_func!(xmlCtxtGetLastError(_)),
-    export_c_func!(xmlFreeDoc(_)),
-    export_c_func!(xmlCleanupParser()),
-    export_c_func!(xmlReadMemory(_, _, _, _, _)),
-    export_c_func!(xmlParseMemory(_, _)),
-    export_c_func!(xmlDocGetRootElement(_)),
-    export_c_func!(xmlFreeParserCtxt(_)),
 ];
-
