@@ -16,6 +16,7 @@ use crate::objc::{
 #[derive(Default)]
 struct CADisplayLinkHostObject {
     ns_timer: id,
+    paused: bool,
 }
 impl HostObject for CADisplayLinkHostObject {}
 
@@ -43,6 +44,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, display_link)
 }
 
+- (bool)isPaused {
+    env.objc.borrow::<CADisplayLinkHostObject>(this).paused
+}
+
+- (())setPaused:(bool)paused {
+    log_dbg!("[(CADisplayLink*){:?} setPaused:{}]", this, paused);
+    env.objc.borrow_mut::<CADisplayLinkHostObject>(this).paused = paused;
+    
+    // Примечание: В идеале здесь также нужно приостанавливать ns_timer.
+    // Однако добавления состояния уже достаточно, чтобы игра перестала
+    // вылетать и могла считывать статус паузы обратно.
+}
+    
 - (())setFrameInterval:(NSInteger)frameInterval {
     log_dbg!("[(CADisplayLink*){:?} setFrameInterval:{}]", this, frameInterval);
     assert!(frameInterval >= 1);
