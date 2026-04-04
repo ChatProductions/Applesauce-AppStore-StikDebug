@@ -62,19 +62,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.class_has_method(this, selector)
 }
 
-// ИЗМЕНЕНО: Ищем objc_msgSend через правильный метод dyld
+// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address
 + (u32)instanceMethodForSelector:(SEL)selector {
     let sel_str = selector.as_str(&env.mem);
     log!("Warning: instanceMethodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
     
-    // Используем symbol_address для вашей версии touchHLE
-    if let Some(addr) = env.dyld.symbol_address("_objc_msgSend") {
-        addr
-    } else {
-        log!("Error: _objc_msgSend not found! Returning dummy IMP.");
-        let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
-        env.mem.write(ptr, 0x4770); // Инструкция 'bx lr'
-        ptr.to_bits() | 1
+    // Разделяем заимствования (borrows) чтобы компилятор Rust был счастлив
+    let dyld = &mut env.dyld;
+    let mem = &mut env.mem;
+    let cpu = &mut env.cpu;
+    
+    match dyld.create_proc_address(mem, cpu, "_objc_msgSend") {
+        Ok(guest_func) => guest_func.addr_with_thumb_bit(),
+        Err(_) => {
+            log!("Error: _objc_msgSend not found! Returning dummy IMP.");
+            let ptr: crate::mem::MutPtr<u16> = mem.alloc(2).cast();
+            mem.write(ptr, 0x4770);
+            ptr.to_bits() | 1
+        }
     }
 }
 
@@ -237,19 +242,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
     
-// ИЗМЕНЕНО: Ищем objc_msgSend через правильный метод dyld
+// ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address
 - (u32)methodForSelector:(SEL)selector {
     let sel_str = selector.as_str(&env.mem);
     log!("Warning: methodForSelector: requested for '{}' — returning objc_msgSend", sel_str);
     
-    // Используем symbol_address для вашей версии touchHLE
-    if let Some(addr) = env.dyld.symbol_address("_objc_msgSend") {
-        addr
-    } else {
-        log!("Error: _objc_msgSend not found! Returning dummy IMP.");
-        let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
-        env.mem.write(ptr, 0x4770); // Инструкция 'bx lr'
-        ptr.to_bits() | 1
+    // Разделяем заимствования (borrows) чтобы компилятор Rust был счастлив
+    let dyld = &mut env.dyld;
+    let mem = &mut env.mem;
+    let cpu = &mut env.cpu;
+    
+    match dyld.create_proc_address(mem, cpu, "_objc_msgSend") {
+        Ok(guest_func) => guest_func.addr_with_thumb_bit(),
+        Err(_) => {
+            log!("Error: _objc_msgSend not found! Returning dummy IMP.");
+            let ptr: crate::mem::MutPtr<u16> = mem.alloc(2).cast();
+            mem.write(ptr, 0x4770);
+            ptr.to_bits() | 1
+        }
     }
 }
 
