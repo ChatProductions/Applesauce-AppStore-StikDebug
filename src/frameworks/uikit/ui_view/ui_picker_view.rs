@@ -109,19 +109,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Row size (delegate query)
 
-- (id)rowSizeForComponent:(NSUInteger)component { // returns CGSize
+- (id)rowSizeForComponent:(NSUInteger)component {
     let delegate = env.objc.borrow::<UIPickerViewHostObject>(this).delegate;
     if delegate != nil {
-        // Try the delegate's optional width/height methods.
-        // CGSize is returned as an id-sized struct; use CGSizeMake as fallback.
         let width:  f32 = msg![env; delegate pickerView:this widthForComponent:component];
         let height: f32 = msg![env; delegate pickerView:this rowHeightForComponent:component];
         if width > 0.0 && height > 0.0 {
-            return msg_class![env; NSValue valueWithCGSize:(width, height)];
+            let size = crate::frameworks::core_graphics::CGSize { width, height };
+            return msg_class![env; NSValue valueWithCGSize:size];
         }
     }
-    // Default row size matching UIKit's default.
-    msg_class![env; NSValue valueWithCGSize:(320.0f32, 44.0f32)]
+    let size = crate::frameworks::core_graphics::CGSize { width: 320.0, height: 44.0 };
+    msg_class![env; NSValue valueWithCGSize:size]
 }
 
 // MARK: - Selection
