@@ -76,6 +76,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; data writeToFile:file atomically:true]
 }
 
+// ИЗМЕНЕНО: Добавлен метод инициализации, из-за которого происходил вылет
+- (id)initForWritingWithMutableData:(id)_data {
+    log!("Warning: stubbed NSKeyedArchiver initForWritingWithMutableData:");
+    this
+}
+
 - (())encodeObject:(id)object // NSCoding *
             forKey:(id)key { // NSString *
     let key = normalize_key(env, key);
