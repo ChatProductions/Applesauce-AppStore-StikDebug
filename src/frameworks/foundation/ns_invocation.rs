@@ -87,7 +87,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     env.objc.borrow_mut::<NSInvocationHostObject>(inv).signature = sig;
     retain(env, sig);
-    
     autorelease(env, inv)
 }
 
@@ -142,7 +141,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (SEL)selector {
-    env.objc.borrow::<NSInvocationHostObject>(this).selector.unwrap_or_default()
+    env.objc.borrow::<NSInvocationHostObject>(this).selector.expect("NSInvocation selector not set")
 }
 
 - (())setSelector:(SEL)selector {
@@ -169,11 +168,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())invokeWithTarget:(id)target {
     let sel = env.objc.borrow::<NSInvocationHostObject>(this).selector.expect("NSInvocation invoked without a selector");
     let args = env.objc.borrow::<NSInvocationHostObject>(this).arguments.clone();
-    
     let sel_str = sel.as_str(&env.mem);
     let arg_count = sel_str.chars().filter(|&c| c == ':').count();
-
-    // В Objective-C индексы 0 и 1 заняты под `self` и `_cmd`. Аргументы пользователя начинаются с индекса 2.
+    
+    // В Objective-C индексы 0 и 1 заняты под `self` и `_cmd`.
+    // Аргументы пользователя начинаются с индекса 2.
     if arg_count == 0 {
         let _: u32 = crate::objc::msg_send_no_type_checking(env, (target, sel));
     } else if arg_count == 1 {
@@ -196,3 +195,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
