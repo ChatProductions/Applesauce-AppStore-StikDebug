@@ -24,6 +24,7 @@ pub mod ui_geometry;
 pub mod ui_graphics;
 pub mod ui_image;
 pub mod ui_image_picker_controller;
+pub mod ui_keyboard;
 pub mod ui_navigation_bar;
 pub mod ui_nib;
 pub mod ui_pasteboard;
@@ -50,6 +51,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_font::CLASSES,
         ui_image::CLASSES,
         ui_image_picker_controller::CLASSES,
+        ui_keyboard::CLASSES,
         ui_navigation_bar::CLASSES,
         ui_nib::CLASSES,
         ui_pasteboard::CLASSES,
@@ -84,6 +86,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[
         ui_application::CONSTANTS,
         ui_device::CONSTANTS,
+        ui_keyboard::CONSTANTS,
         ui_view::ui_control::ui_text_field::CONSTANTS,
         ui_view::ui_window::CONSTANTS,
     ],
