@@ -776,6 +776,18 @@ pub fn objc_exception_throw(env: &mut crate::Environment, name: ConstPtr<u8>) ->
     nil
 }
 
+pub fn object_getClassName(env: &mut crate::Environment, obj: id) -> Class {
+    if obj.is_null() {
+        return nil;
+    }
+    
+    // В Objective-C любой объект в памяти (id) начинается с указателя isa.
+    // Приводим указатель, читаем из памяти гостя структуру objc_object 
+    // и просто возвращаем её поле isa.
+    let objc_obj: objc_object = env.mem.read(obj.cast());
+    objc_obj.isa
+}
+
 pub fn object_getClass(env: &mut crate::Environment, obj: id) -> Class {
     if obj.is_null() {
         return nil;
