@@ -5,7 +5,7 @@
  */
 //! `NSInvocation` and `NSMethodSignature`.
 
-use crate::frameworks::foundation::NSInteger;
+use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::mem::MutVoidPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
@@ -57,6 +57,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)init {
     this
 }
+
+// --- ИСПРАВЛЕНИЯ ЗДЕСЬ: Добавлены заглушки для предотвращения паники ---
+
+- (NSUInteger)numberOfArguments {
+    log!("Warning: stubbed NSMethodSignature numberOfArguments — returning 2 (self, _cmd) by default");
+    2
+}
+
+- (crate::mem::ConstPtr<std::ffi::c_char>)methodReturnType {
+    log!("Warning: stubbed NSMethodSignature methodReturnType — returning 'v' (void)");
+    let v_ptr = env.mem.alloc_bytes(b"v\0");
+    v_ptr.cast_const().cast()
+}
+
+- (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)_index {
+    log!("Warning: stubbed NSMethodSignature getArgumentTypeAtIndex: — returning '@' (id)");
+    let id_ptr = env.mem.alloc_bytes(b"@\0");
+    id_ptr.cast_const().cast()
+}
+
+// -----------------------------------------------------------------------
 
 - (())dealloc {
     env.objc.dealloc_object(this, &mut env.mem)
@@ -195,4 +216,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
