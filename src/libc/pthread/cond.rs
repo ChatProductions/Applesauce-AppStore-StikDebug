@@ -7,7 +7,6 @@
 
 use super::mutex::pthread_mutex_t;
 use crate::dyld::FunctionExports;
-use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetCurrent;
 use crate::libc::pthread::mutex::pthread_mutex_unlock;
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::{export_c_func, Environment};
@@ -167,9 +166,11 @@ pub fn pthread_cond_timedwait(
     // Log the timeout for debugging but otherwise behave like cond_wait.
     if !abstime.is_null() {
         let ts = env.mem.read(abstime);
+        let sec = ts.tv_sec;
+        let nsec = ts.tv_nsec;
         log_dbg!(
             "pthread_cond_timedwait: timeout at tv_sec={} tv_nsec={} (ignored, treating as wait)",
-            ts.tv_sec, ts.tv_nsec
+            sec, nsec
         );
     }
     pthread_cond_wait(env, cond, mutex)
@@ -185,9 +186,11 @@ pub fn pthread_cond_timedwait_relative_np(
 ) -> i32 {
     if !reltime.is_null() {
         let ts = env.mem.read(reltime);
+        let sec = ts.tv_sec;
+        let nsec = ts.tv_nsec;
         log_dbg!(
             "pthread_cond_timedwait_relative_np: relative timeout tv_sec={} tv_nsec={} (ignored)",
-            ts.tv_sec, ts.tv_nsec
+            sec, nsec
         );
     }
     pthread_cond_wait(env, cond, mutex)
