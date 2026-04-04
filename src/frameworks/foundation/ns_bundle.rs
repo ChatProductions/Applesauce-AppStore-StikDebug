@@ -481,7 +481,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)pathForResource:(id)name          // NSString*
                ofType:(id)extension     // NSString*
           inDirectory:(id)directory {   // NSString*
-    assert!(name != nil);
+    if name != nil {
+        return name;
+    }
 
     let path = path_for_resource_helper(env, this, name, nil, directory, extension);
     if path != nil {
