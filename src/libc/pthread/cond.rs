@@ -7,6 +7,7 @@
 
 use super::mutex::pthread_mutex_t;
 use crate::dyld::FunctionExports;
+use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetCurrent;
 use crate::libc::pthread::mutex::pthread_mutex_unlock;
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::{export_c_func, Environment};
@@ -23,6 +24,13 @@ pub struct OpaqueCond {
     _unused: i32,
 }
 unsafe impl SafeRead for OpaqueCond {}
+
+#[repr(C, packed)]
+pub struct Timespec {
+    pub tv_sec:  u32,
+    pub tv_nsec: u32,
+}
+unsafe impl SafeRead for Timespec {}
 
 pub type pthread_cond_t = MutPtr<OpaqueCond>;
 
@@ -147,10 +155,118 @@ pub fn pthread_cond_destroy(env: &mut Environment, cond: MutPtr<pthread_cond_t>)
     0 // success
 }
 
+/// pthread_cond_timedwait — like pthread_cond_wait but with an absolute timeout.
+/// We ignore the timeout and treat it as a regular wait, which is safe for
+/// game use-cases (the thread will still be woken by signal/broadcast).
+pub fn pthread_cond_timedwait(
+    env: &mut Environment,
+    cond: MutPtr<pthread_cond_t>,
+    mutex: MutPtr<pthread_mutex_t>,
+    abstime: ConstPtr<Timespec>,
+) -> i32 {
+    // Log the timeout for debugging but otherwise behave like cond_wait.
+    if !abstime.is_null() {
+        let ts = env.mem.read(abstime);
+        log_dbg!(
+            "pthread_cond_timedwait: timeout at tv_sec={} tv_nsec={} (ignored, treating as wait)",
+            ts.tv_sec, ts.tv_nsec
+        );
+    }
+    pthread_cond_wait(env, cond, mutex)
+}
+
+/// pthread_cond_timedwait_relative_np — Apple extension with a relative timeout.
+/// Same stub approach as timedwait.
+pub fn pthread_cond_timedwait_relative_np(
+    env: &mut Environment,
+    cond: MutPtr<pthread_cond_t>,
+    mutex: MutPtr<pthread_mutex_t>,
+    reltime: ConstPtr<Timespec>,
+) -> i32 {
+    if !reltime.is_null() {
+        let ts = env.mem.read(reltime);
+        log_dbg!(
+            "pthread_cond_timedwait_relative_np: relative timeout tv_sec={} tv_nsec={} (ignored)",
+            ts.tv_sec, ts.tv_nsec
+        );
+    }
+    pthread_cond_wait(env, cond, mutex)
+}
+
+/// pthread_condattr_init — initialise a cond attr object (always default).
+pub fn pthread_condattr_init(
+    env: &mut Environment,
+    attr: MutPtr<pthread_condattr_t>,
+) -> i32 {
+    if !attr.is_null() {
+        env.mem.write(attr, pthread_condattr_t {});
+    }
+    0
+}
+
+/// pthread_condattr_destroy — destroy a cond attr object (no-op).
+pub fn pthread_condattr_destroy(
+    _env: &mut Environment,
+    _attr: MutPtr<pthread_condattr_t>,
+) -> i32 {
+    0
+}
+
+/// pthread_condattr_setpshared — set process-shared attribute (stub).
+pub fn pthread_condattr_setpshared(
+    _env: &mut Environment,
+    _attr: MutPtr<pthread_condattr_t>,
+    _pshared: i32,
+) -> i32 {
+    0
+}
+
+/// pthread_condattr_getpshared — get process-shared attribute (always private).
+pub fn pthread_condattr_getpshared(
+    env: &mut Environment,
+    _attr: ConstPtr<pthread_condattr_t>,
+    pshared: MutPtr<i32>,
+) -> i32 {
+    if !pshared.is_null() {
+        env.mem.write(pshared, 0); // PTHREAD_PROCESS_PRIVATE
+    }
+    0
+}
+
+/// pthread_condattr_setclock — set clock attribute (stub, always CLOCK_REALTIME).
+pub fn pthread_condattr_setclock(
+    _env: &mut Environment,
+    _attr: MutPtr<pthread_condattr_t>,
+    _clock_id: i32,
+) -> i32 {
+    0
+}
+
+/// pthread_condattr_getclock — get clock attribute (always CLOCK_REALTIME = 0).
+pub fn pthread_condattr_getclock(
+    env: &mut Environment,
+    _attr: ConstPtr<pthread_condattr_t>,
+    clock_id: MutPtr<i32>,
+) -> i32 {
+    if !clock_id.is_null() {
+        env.mem.write(clock_id, 0); // CLOCK_REALTIME
+    }
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_cond_init(_, _)),
     export_c_func!(pthread_cond_wait(_, _)),
+    export_c_func!(pthread_cond_timedwait(_, _, _)),
+    export_c_func!(pthread_cond_timedwait_relative_np(_, _, _)),
     export_c_func!(pthread_cond_signal(_)),
     export_c_func!(pthread_cond_broadcast(_)),
     export_c_func!(pthread_cond_destroy(_)),
+    export_c_func!(pthread_condattr_init(_)),
+    export_c_func!(pthread_condattr_destroy(_)),
+    export_c_func!(pthread_condattr_setpshared(_, _)),
+    export_c_func!(pthread_condattr_getpshared(_, _)),
+    export_c_func!(pthread_condattr_setclock(_, _)),
+    export_c_func!(pthread_condattr_getclock(_, _)),
 ];
+
