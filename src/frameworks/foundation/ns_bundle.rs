@@ -143,6 +143,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, preferred)
 }
 
++ (id)bundleURL {
+    if let Some(url) = env.objc.borrow::<NSBundleHostObject>(this).bundle_url {
+        url
+    } else {
+        let bundle_path: id = msg![env; this bundlePath];
+        let new: id = msg_class![env; NSURL alloc];
+        let new: id = msg![env; new initFileURLWithPath:bundle_path];
+        env.objc.borrow_mut::<NSBundleHostObject>(this).bundle_url = Some(new);
+        new
+    }
+}
+
++ (id)bundlePath {
+    env.objc.borrow::<NSBundleHostObject>(this).bundle_path
+}
+
++ (id)resourcePath {
+    msg![env; this bundlePath]
+}
+
++ (id)resourceURL {
+    msg![env; this bundleURL]
+}
+
++ (id)executablePath {
+    let exec_path_str = env.bundle.executable_path().as_str().to_string();
+    let exec_path = from_rust_string(env, exec_path_str);
+    autorelease(env, exec_path)
+}
+
++ (id)executableURL {
+    let exec_path: id = msg![env; this executablePath];
+    if exec_path == nil {
+        return nil;
+    }
+    let url: id = msg_class![env; NSURL alloc];
+    let url: id = msg![env; url initFileURLWithPath:exec_path];
+    autorelease(env, url)
+}
+
 + (id)pathForResource:(id)name          // NSString*
                ofType:(id)extension     // NSString*
           inDirectory:(id)directory {   // NSString*
