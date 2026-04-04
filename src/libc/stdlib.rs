@@ -515,10 +515,18 @@ fn read_cstr_safe(env: &mut Environment, ptr: ConstPtr<u8>) -> String {
     if ptr.is_null() {
         return "(null)".to_string();
     }
-    let bytes = env.mem.read_cstr(ptr);
-    std::str::from_utf8(bytes)
-        .unwrap_or("(invalid utf-8)")
-        .to_string()
+    // Read bytes until NUL terminator.
+    let mut bytes = Vec::new();
+    let mut offset = 0u32;
+    loop {
+        let b: u8 = env.mem.read(ptr + offset);
+        if b == 0 {
+            break;
+        }
+        bytes.push(b);
+        offset += 1;
+    }
+    String::from_utf8(bytes).unwrap_or_else(|_| "(invalid utf-8)".to_string())
 }
 
 pub const FUNCTIONS: FunctionExports = &[
