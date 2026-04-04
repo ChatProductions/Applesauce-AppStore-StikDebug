@@ -295,6 +295,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     new_num
 }
 
+// ИЗМЕНЕНО: Добавлена заглушка для сохранения числа, предотвращающая вылет (Panic)
+- (())encodeWithCoder:(id)_coder {
+    log!("Warning: stubbed NSNumber encodeWithCoder:");
+}
+
 - (id)initWithBool:(bool)value {
     *env.objc.borrow_mut(this) = NSNumberHostObject::Bool(value);
     this
