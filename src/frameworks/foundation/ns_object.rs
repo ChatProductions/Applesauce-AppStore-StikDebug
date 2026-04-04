@@ -400,6 +400,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this setValue:value forKey:key_path]
 }
 
+// MARK: - Key-Value Observing (KVO)
+
+- (())willChangeValueForKey:(id)_key {
+    // Базовая реализация NSObject: если нет активных наблюдателей, 
+    // методы willChange и didChange ничего не делают.
+}
+
+- (())didChangeValueForKey:(id)_key {
+}
+
+- (())addObserver:(id)_observer forKeyPath:(id)_keyPath options:(NSUInteger)_options context:(id)_context {
+    log!("Warning: NSObject addObserver:forKeyPath:options:context: is stubbed");
+}
+
+- (())removeObserver:(id)_observer forKeyPath:(id)_keyPath {
+    log!("Warning: NSObject removeObserver:forKeyPath: is stubbed");
+}
+
 @end
 
 };
