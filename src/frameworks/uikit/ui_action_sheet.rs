@@ -20,6 +20,7 @@ struct UIActionSheetHostObject {
     /// Tag for app use
     tag: i32,
     visible: bool,
+    action_sheet_style: i32
 }
 impl HostObject for UIActionSheetHostObject {}
 
@@ -38,6 +39,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         destructive_button_index: -1,
         tag: 0,
         visible: false,
+        action_sheet_style: -1,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -144,6 +146,14 @@ destructiveButtonTitle:(id)destructive_title // NSString*
 - (NSUInteger)numberOfButtons {
     let buttons = env.objc.borrow::<UIActionSheetHostObject>(this).button_titles;
     msg![env; buttons count]
+}
+
+- (i32)actionSheetStyle {
+    env.objc.borrow::<UIActionSheetHostObject>(this).action_sheet_style
+}
+
+- (())setActionSheetStyle:(i32)style {
+    env.objc.borrow_mut::<UIActionSheetHostObject>(this).action_sheet_style = style;
 }
 
 - (id)buttonTitleAtIndex:(NSUInteger)index { // NSString*
