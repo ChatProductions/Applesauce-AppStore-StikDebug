@@ -60,7 +60,7 @@ impl HostObject for ErrorHostObject {}
 // MARK: - Helper — read NSString* from userInfo for a given key
 // =========================================================================
 
-fn user_info_string(env: &mut crate::Environment, this: id, key: &str) -> id {
+fn user_info_string(env: &mut crate::Environment, this: id, key: &'static str) -> id {
     let user_info = env.objc.borrow::<ErrorHostObject>(this).user_info;
     if user_info == nil {
         return nil;
