@@ -42,6 +42,7 @@ pub mod ns_log;
 pub mod ns_notification;
 pub mod ns_notification_center;
 pub mod ns_null;
+pub mod ns_number_formatter;
 pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
@@ -92,6 +93,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_notification::CLASSES,
         ns_notification_center::CLASSES,
         ns_null::CLASSES,
+        ns_number_formatter::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,
         ns_process_info::CLASSES,
@@ -208,3 +210,4 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
 }
 
 const FUNCTIONS: FunctionExports = &[export_c_func!(NSStringFromRange(_))];
+
