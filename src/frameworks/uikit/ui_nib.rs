@@ -87,30 +87,42 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
-- (id)instantiateWithOwner:(id)owner
-                   options:(id)options { // NSDictionary *
-    assert!(owner != nil);
-    // TODO
-    assert!(options == nil); // TODO
+    - (id)instantiateWithOwner:(id)owner
+                       options:(id)options { // NSDictionary *
+        assert!(owner != nil);
+        // TODO
+        assert!(options == nil); // TODO
 
-    let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
-    let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
-    let type_: id = get_static_str(env, "nib");
-    let path: id  = msg![env; bundle pathForResource:nib_name ofType:type_];
-    assert!(path != nil);
-    assert!(msg![env; path isAbsolutePath]);
-    let nib_path = to_rust_string(env, path).to_string();
+        let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
+        let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
+        let type_: id = get_static_str(env, "nib");
+        let path: id  = msg![env; bundle pathForResource:nib_name ofType:type_];
+        
+        // Убираем жесткий assert!(path != nil) и assert!(msg![env; path isAbsolutePath])
+        if path == nil {
+            log!("Warning: UINib instantiateWithOwner: nib file {:?} not found", to_rust_string(env, nib_name));
+            return nil;
+        }
+        
+        let nib_path = to_rust_string(env, path).to_string();
 
-    assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
-    env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
-    let unarchiver = load_nib_file(env, this, GuestPathBuf::from(nib_path)).unwrap();
-    let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
-    let top_level_objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
-    release(env, unarchiver);
-    env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
+        assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
+        env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
+        
+        // Заменяем .unwrap() на безопасную обработку Result
+        let top_level_objects = if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
+            let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
+            let objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
+            release(env, unarchiver);
+            objects
+        } else {
+            nil
+        };
+        
+        env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
 
-    top_level_objects
-}
+        top_level_objects
+    }
 
 @end
 
@@ -340,7 +352,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// The unarchiver should later be manually [release]d
 fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Result<id, ()> {
     let path = ns_string::from_rust_string(env, path.as_str().to_string());
-    assert!(msg![env; path isAbsolutePath]);
+    //assert!(msg![env; path isAbsolutePath]);
     let ns_data: id = msg_class![env; NSData dataWithContentsOfFile:path];
     if ns_data == nil {
         // Apparently it's permitted to specify the nib file key in the
