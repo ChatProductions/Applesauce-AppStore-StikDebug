@@ -45,6 +45,7 @@ struct NSThreadHostObject {
     executing: bool, // Добавлено для отслеживания состояния
     stack_size: NSUInteger,
     tolerate_type_mismatch: bool,
+    is_main_thread: bool,
 }
 impl HostObject for NSThreadHostObject {}
 
@@ -65,6 +66,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         executing: false, // Инициализация
         stack_size: Mem::SECONDARY_THREAD_DEFAULT_STACK_SIZE,
         tolerate_type_mismatch: false,
+        is_main_thread: false,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -92,6 +94,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     if !State::get(env).ns_threads.contains_key(&pthread) {
         let ns_thread: id = msg_class![env; NSThread alloc];
         let ns_thread: id = msg![env; ns_thread init];
+        
+        // --- ДОБАВЬ ЭТОТ БЛОК ---
+        // Если объект создается для главного системного потока, помечаем его
+        if env.current_thread == 0 {
+            env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
+        }
+        // ------------------------
+
         State::get(env).ns_threads.insert(pthread, ns_thread);
     }
     *State::get(env).ns_threads.get(&pthread).unwrap()
@@ -183,6 +193,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
+- (bool)isMainThread {
+    env.objc.borrow::<NSThreadHostObject>(this).is_main_thread
+}
+    
 - (NSUInteger)stackSize {
     env.objc.borrow::<NSThreadHostObject>(this).stack_size
 }
