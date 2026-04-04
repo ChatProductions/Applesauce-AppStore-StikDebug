@@ -73,6 +73,29 @@ fn OSAtomicCompareAndSwapPtrBarrier(
     }
 }
 
+fn OSSpinLockLock(env: &mut Environment, lock: MutPtr<i32>) {
+    // Поскольку эмулятор работает в одном потоке, честная блокировка 
+    // сводится к простому захвату флага.
+    env.mem.write(lock, 1);
+}
+
+fn OSSpinLockUnlock(env: &mut Environment, lock: MutPtr<i32>) {
+    // Снимаем блокировку
+    env.mem.write(lock, 0);
+}
+
+fn OSSpinLockTry(env: &mut Environment, lock: MutPtr<i32>) -> bool {
+    // Честно читаем текущее состояние из памяти гостя.
+    if env.mem.read(lock) == 0 {
+        // Если свободно - занимаем и возвращаем true
+        env.mem.write(lock, 1);
+        true
+    } else {
+        // Если занято - возвращаем false
+        false
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(OSAtomicAdd32(_, _)),
     export_c_func!(OSAtomicAdd32Barrier(_, _)),
@@ -80,4 +103,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(OSAtomicCompareAndSwapIntBarrier(_, _, _)),
     export_c_func!(OSAtomicCompareAndSwap32Barrier(_, _, _)),
     export_c_func!(OSAtomicCompareAndSwapPtrBarrier(_, _, _)),
+    export_c_func!(OSSpinLockLock(_)),
+    export_c_func!(OSSpinLockUnlock(_)),
+    export_c_func!(OSSpinLockTry(_)),
 ];
