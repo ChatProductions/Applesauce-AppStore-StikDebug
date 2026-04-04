@@ -16,6 +16,7 @@ pub const ENOENT: i32 = 2;
 pub const ESRCH: i32 = 3;
 pub const EINTR: i32 = 4;
 pub const EIO: i32 = 5;
+pub const ENXIO: i32 = 6;
 pub const EBADF: i32 = 9;
 pub const ECHILD: i32 = 10;
 pub const EDEADLK: i32 = 11;
