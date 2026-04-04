@@ -14,6 +14,7 @@
 use crate::dyld::{export_c_func, FunctionExports, HostConstant, ConstantExports};
 use crate::objc::id;
 use crate::Environment;
+use crate::mem::{ConstPtr, MutPtr};
 
 pub mod _nib_archive_decoder;
 pub mod ns_array;
@@ -63,6 +64,185 @@ pub mod ns_user_defaults;
 pub mod ns_value;
 pub mod ns_xml_parser;
 
+pub fn NSGetSizeAndAlignment(
+    env: &mut Environment,
+    type_ptr: ConstPtr<u8>,
+    size_out: MutPtr<NSUInteger>,
+    align_out: MutPtr<NSUInteger>,
+) -> ConstPtr<u8> {
+    let (next_ptr, size, align) = parse_objc_type(env, type_ptr);
+    
+    if !size_out.is_null() {
+        env.mem.write(size_out, size as NSUInteger);
+    }
+    if !align_out.is_null() {
+        env.mem.write(align_out, align as NSUInteger);
+    }
+    
+    next_ptr
+}
+
+fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8>, u32, u32) {
+    // Пропускаем модификаторы типа (const, in, out, inout, bycopy, byref, oneway)
+    loop {
+        let c = env.mem.read(ptr) as char;
+        match c {
+            'r' | 'n' | 'N' | 'o' | 'O' | 'R' | 'V' => {
+                ptr = ptr + 1;
+            }
+            _ => break,
+        }
+    }
+
+    let c = env.mem.read(ptr) as char;
+    ptr = ptr + 1;
+
+    match c {
+        // Базовые типы
+        'c' | 'C' | 'B' => (ptr, 1, 1),
+        's' | 'S' => (ptr, 2, 2),
+        'i' | 'I' | 'l' | 'L' | 'f' | 'W' => (ptr, 4, 4),
+        'q' | 'Q' | 'd' => (ptr, 8, 8),
+        'v' => (ptr, 0, 1), // void
+        
+        // Указатели, объекты (id), классы (Class), селекторы (SEL), неизвестные указатели (?)
+        '*' | '@' | '#' | ':' | '?' => (ptr, 4, 4),
+        
+        // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип, на который он указывает
+        '^' => {
+            let (next_ptr, _, _) = parse_objc_type(env, ptr);
+            (next_ptr, 4, 4)
+        }
+        
+        // Массивы: [len+type]
+        '[' => {
+            let mut len = 0;
+            loop {
+                let c = env.mem.read(ptr) as char;
+                if c.is_ascii_digit() {
+                    len = len * 10 + c.to_digit(10).unwrap();
+                    ptr = ptr + 1;
+                } else {
+                    break;
+                }
+            }
+            let (mut next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+            if env.mem.read(next_ptr) as char == ']' {
+                next_ptr = next_ptr + 1;
+            }
+            (next_ptr, len * elem_size, elem_align)
+        }
+        
+        // Структуры: {name=types}
+        '{' => {
+            loop {
+                let c = env.mem.read(ptr) as char;
+                ptr = ptr + 1;
+                if c == '=' || c == '}' {
+                    if c == '}' { return (ptr, 0, 1); } // Opaque
+                    break;
+                }
+            }
+            let mut total_size = 0;
+            let mut max_align = 1;
+            loop {
+                let c = env.mem.read(ptr) as char;
+                if c == '}' {
+                    ptr = ptr + 1;
+                    break;
+                }
+                if c == '\0' { break; }
+                
+                // Пропускаем имена полей (например: "x"f)
+                if c == '"' {
+                    ptr = ptr + 1;
+                    loop {
+                        let nc = env.mem.read(ptr) as char;
+                        ptr = ptr + 1;
+                        if nc == '"' { break; }
+                    }
+                } else {
+                    let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+                    ptr = next_ptr;
+                    
+                    if elem_align > 0 {
+                        let rem = total_size % elem_align;
+                        if rem != 0 {
+                            total_size += elem_align - rem;
+                        }
+                        if elem_align > max_align {
+                            max_align = elem_align;
+                        }
+                    }
+                    total_size += elem_size;
+                }
+            }
+            if max_align > 0 {
+                let rem = total_size % max_align;
+                if rem != 0 {
+                    total_size += max_align - rem;
+                }
+            }
+            (ptr, total_size, max_align)
+        }
+        
+        // Объединения: (name=types)
+        '(' => {
+            loop {
+                let c = env.mem.read(ptr) as char;
+                ptr = ptr + 1;
+                if c == '=' || c == ')' {
+                    if c == ')' { return (ptr, 0, 1); }
+                    break;
+                }
+            }
+            let mut max_size = 0;
+            let mut max_align = 1;
+            loop {
+                let c = env.mem.read(ptr) as char;
+                if c == ')' {
+                    ptr = ptr + 1;
+                    break;
+                }
+                if c == '\0' { break; }
+                
+                if c == '"' {
+                    ptr = ptr + 1;
+                    loop {
+                        let nc = env.mem.read(ptr) as char;
+                        ptr = ptr + 1;
+                        if nc == '"' { break; }
+                    }
+                } else {
+                    let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+                    ptr = next_ptr;
+                    if elem_size > max_size { max_size = elem_size; }
+                    if elem_align > max_align { max_align = elem_align; }
+                }
+            }
+            (ptr, max_size, max_align)
+        }
+        
+        // Битовые поля: bNUM
+        'b' => {
+            let mut bits = 0;
+            loop {
+                let c = env.mem.read(ptr) as char;
+                if c.is_ascii_digit() {
+                    bits = bits * 10 + c.to_digit(10).unwrap();
+                    ptr = ptr + 1;
+                } else {
+                    break;
+                }
+            }
+            let bytes = (bits + 7) / 8;
+            (ptr, bytes, 1)
+        }
+        
+        _ => (ptr, 0, 1),
+    }
+                }
+                
 pub const STUB_CONSTANTS: ConstantExports = &[
     ("_NSLocalizedFailureReasonErrorKey", HostConstant::NSString("NSLocalizedFailureReasonErrorKey")),
     ("_NSURLErrorDomain", HostConstant::NSString("NSURLErrorDomain")),
@@ -215,4 +395,5 @@ fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
 
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromRange(_)),
+    export_c_func!(NSGetSizeAndAlignment(_, _, _)),
 ];
