@@ -143,6 +143,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, preferred)
 }
 
++ (id)pathsForResources:(id)ext          // NSString*
+                  OfType:(id)type      // NSString*
+              inDirectory:(id)subpath { // NSString*
+    // Prepend the lproj subdirectory when a localization is given, then
+    // delegate to the non-localized variant.
+    let effective_subpath: id = if localization != nil {
+        let lproj_suffix: id = ns_string::get_static_str(env, ".lproj");
+        let lproj_dir: id = msg![env; localization stringByAppendingString:lproj_suffix];
+        if subpath != nil {
+            msg![env; lproj_dir stringByAppendingPathComponent:subpath]
+        } else {
+            lproj_dir
+        }
+    } else {
+        subpath
+    };
+    msg![env; this pathsForResourcesOfType:ext inDirectory:effective_subpath]
+}
+
 // =========================================================================
 // MARK: - Initializers
 // =========================================================================
