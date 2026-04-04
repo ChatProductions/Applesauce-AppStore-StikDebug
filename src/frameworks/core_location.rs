@@ -130,16 +130,6 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-- (id)init {
-    this
-}
-
-- (())dealloc {
-    let delegate = env.objc.borrow::<CLLocationManagerHostObject>(this).delegate;
-    release(env, delegate);
-    env.objc.dealloc_object(this, &mut env.mem)
-}
-
 // MARK: Availability (class methods)
 
 + (bool)locationServicesEnabled {
@@ -165,6 +155,16 @@ const CLASSES: ClassExports = objc_classes! {
 + (CLAuthorizationStatus)authorizationStatus {
     // Report "denied" so apps that check will give up gracefully.
     CL_AUTHORIZATION_STATUS_DENIED
+}
+
+- (id)init {
+    this
+}
+
+- (())dealloc {
+    let delegate = env.objc.borrow::<CLLocationManagerHostObject>(this).delegate;
+    release(env, delegate);
+    env.objc.dealloc_object(this, &mut env.mem)
 }
 
 // MARK: Delegate
