@@ -2285,35 +2285,25 @@ fn string_by_replacing_occurrences_inner(
     autorelease(env, result_ns_string)
 }
 
-/// C-функция: CFStringGetCharactersPtr
-/// Возвращает прямой указатель на символы строки, если это возможно.
-/// По документации Apple может возвращать NULL, заставляя приложение использовать CFStringGetCharacters.
-pub fn CFStringGetCharactersPtr(env: &mut Environment, string: id) -> ConstPtr<unichar> {
-    if string == nil {
+// В самом низу файла ns_string.rs добавь:
+
+pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstPtr<unichar> {
+    if the_string == nil {
         return Ptr::null();
     }
 
-    let class: Class = msg![env; string class];
-    let utf16_const_class = env.objc.get_known_class("_touchHLE_NSString_CFConstantString_UTF16", &mut env.mem);
+    let class: Class = msg![env; the_string class];
+    let constant_utf16_class = env.objc.get_known_class("_touchHLE_NSString_CFConstantString_UTF16", &mut env.mem);
 
-    if class == utf16_const_class {
-        // Для константных строк UTF-16 данные лежат прямо в памяти гостя.
-        // Мы читаем твою структуру cfstringStruct и возвращаем реальный указатель!
-        let cfstr: cfstringStruct = env.mem.read(string.cast());
-        return cfstr.bytes.cast();
-    }
-
-    // Для динамических строк память находится на хосте (Rust Vec).
-    // Возвращаем NULL, чтобы заставить игру вызвать CFStringGetCharacters 
-    // и безопасно скопировать данные через Objective-C метод.
-    Ptr::null()
-}
-
-/// C-функция: CFStringGetCharacters
-/// Игра 100% вызовет эту функцию следом, если CFStringGetCharactersPtr вернула NULL.
-pub fn CFStringGetCharacters(env: &mut Environment, string: id, range: NSRange, buffer: MutPtr<unichar>) {
-    if string != nil && !buffer.is_null() {
-        // Пробрасываем вызов в уже готовый, отлично работающий метод твоего NSString
-        let _: () = msg![env; string getCharacters:buffer range:range];
+    if class == constant_utf16_class {
+        // Строка лежит прямо в памяти гостя, мы честно отдаем прямой указатель
+        let cfstr: cfstringStruct = env.mem.read(the_string.cast());
+        cfstr.bytes.cast()
+    } else {
+        // Согласно официальной документации Apple:
+        // "Returns NULL if the internal storage does not allow this to be returned in O(1) time."
+        // Для динамических строк и UTF-8 возвращаем NULL. 
+        // Игра корректно обработает это и вызовет CFStringGetCharacters.
+        Ptr::null()
     }
 }
