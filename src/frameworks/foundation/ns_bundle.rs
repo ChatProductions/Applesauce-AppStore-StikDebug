@@ -148,9 +148,9 @@ pub const CLASSES: ClassExports = objc_classes! {
               inDirectory:(id)subpath { // NSString*
     // Prepend the lproj subdirectory when a localization is given, then
     // delegate to the non-localized variant.
-    let effective_subpath: id = if localization != nil {
+    let effective_subpath: id = if inDirectory != nil {
         let lproj_suffix: id = ns_string::get_static_str(env, ".lproj");
-        let lproj_dir: id = msg![env; localization stringByAppendingString:lproj_suffix];
+        let lproj_dir: id = msg![env; inDirectory stringByAppendingString:lproj_suffix];
         if subpath != nil {
             msg![env; lproj_dir stringByAppendingPathComponent:subpath]
         } else {
