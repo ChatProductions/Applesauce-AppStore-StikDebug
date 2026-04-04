@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `stdlib.h`
@@ -26,8 +27,11 @@ pub struct State {
     arc4random: u32,
 }
 
-fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
+fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
+    if size == 0 {
+        size = 1; // Защита от падения при выделении 0 байт
+    }
     env.mem.alloc(size)
 }
 
@@ -37,15 +41,24 @@ fn malloc_size(env: &mut Environment, ptr: ConstVoidPtr) -> GuestUSize {
 
 fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
-    let total = size.checked_mul(count).unwrap();
+    let mut total = size.checked_mul(count).unwrap();
+    if total == 0 {
+        total = 1; // Защита от падения
+    }
     env.mem.calloc(total)
 }
 
-fn NSZoneMalloc(env: &mut Environment, _zone: id, size: GuestUSize) -> MutVoidPtr {
+fn NSZoneMalloc(env: &mut Environment, _zone: id, mut size: GuestUSize) -> MutVoidPtr {
+    if size == 0 {
+        size = 1;
+    }
     env.mem.alloc(size)
 }
 
-fn NSZoneRealloc(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
+fn NSZoneRealloc(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr, mut size: GuestUSize) -> MutVoidPtr {
+    if size == 0 {
+        size = 1;
+    }
     env.mem.realloc(ptr, size)
 }
 
@@ -53,10 +66,13 @@ fn NSZoneFree(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr) {
     env.mem.free(ptr)
 }
 
-fn realloc(env: &mut Environment, ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
+fn realloc(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if ptr.is_null() {
         return malloc(env, size);
+    }
+    if size == 0 {
+        size = 1;
     }
     env.mem.realloc(ptr, size)
 }
@@ -169,6 +185,7 @@ fn srandom(env: &mut Environment, seed: u32) {
     set_errno(env, 0);
     env.libc_state.stdlib.random = seed;
 }
+
 fn random(env: &mut Environment) -> i32 {
     set_errno(env, 0);
     env.libc_state.stdlib.random = prng(env.libc_state.stdlib.random);
@@ -183,7 +200,6 @@ fn arc4random(env: &mut Environment) -> u32 {
 fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
-    
     let Some(&value) = env.env_vars.get(name_cstr) else {
         if name_str != "LUA_PATH" && name_str != "LUA_CPATH" {
             log!(
@@ -423,11 +439,11 @@ fn wcstombs(
 
 fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     if cmd.is_null() {
-        return 1; // shell is available
+        return 1;
+        // shell is available
     }
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
     log!("system({:?})", cmd_str);
-
     // split_whitespace() автоматически игнорирует пробелы в начале и конце
     let parts: Vec<&str> = cmd_str.split_whitespace().collect();
     if parts.is_empty() {
@@ -787,3 +803,4 @@ where
     };
     Ok((res, whitespace_len + len))
 }
+
