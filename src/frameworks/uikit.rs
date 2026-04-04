@@ -13,6 +13,7 @@ use crate::{msg, Environment};
 use std::time::Instant;
 
 pub mod ui_accelerometer;
+puh mod ui_action_sheet;
 pub mod ui_activity_indicator_view;
 pub mod ui_application;
 pub mod ui_color;
@@ -40,6 +41,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     aliases: &[],
     class_exports: &[
         ui_accelerometer::CLASSES,
+        ui_action_sheet::CLASSES,
         ui_activity_indicator_view::CLASSES,
         ui_application::CLASSES,
         ui_color::CLASSES,
