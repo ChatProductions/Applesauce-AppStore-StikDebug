@@ -77,6 +77,27 @@ fn realloc(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> MutV
     env.mem.realloc(ptr, size)
 }
 
+fn reallocf(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> MutVoidPtr {
+    set_errno(env, 0);
+    if ptr.is_null() {
+        return malloc(env, size);
+    }
+    if size == 0 {
+        size = 1;
+    }
+    
+    // Пытаемся выделить новую память
+    let new_ptr = env.mem.realloc(ptr, size);
+    
+    // Главная фишка reallocf: если realloc вернул NULL (не удалось выделить), 
+    // старый указатель должен быть освобожден.
+    if new_ptr.is_null() {
+        env.mem.free(ptr);
+    }
+    
+    new_ptr
+}
+
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
     if env.objc.get_host_object(ptr.cast()).is_some() {
         log!(
@@ -550,6 +571,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(malloc_size(_)),
     export_c_func!(calloc(_, _)),
     export_c_func!(realloc(_, _)),
+    export_c_func!(reallocf(_, _)),
     export_c_func!(free(_)),
     export_c_func!(atexit(_)),
     export_c_func!(atoi(_)),
