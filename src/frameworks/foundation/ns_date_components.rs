@@ -6,7 +6,7 @@
 //! `NSDateComponents`.
 
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{id, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 /// Host object for NSDateComponents.
 #[derive(Default)]
