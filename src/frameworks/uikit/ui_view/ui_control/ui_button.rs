@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UIButton`.
@@ -98,6 +99,7 @@ pub struct UIButtonHostObject {
     tint_color: id,
 }
 impl_HostObject_with_superclass!(UIButtonHostObject);
+
 impl Default for UIButtonHostObject {
     fn default() -> Self {
         UIButtonHostObject {
@@ -132,11 +134,9 @@ fn update(env: &mut Environment, this: id) {
     () = msg![env; title_label setText:title];
     let title_color: id = msg![env; this currentTitleColor];
     () = msg![env; title_label setTextColor:title_color];
-
     let image_view: id = msg![env; this imageView];
     let image: id = msg![env; this currentImage];
     () = msg![env; image_view setImage:image];
-
     let background_image_view: id = msg![env; this backgroundImageView];
     let background_image: id = msg![env; this currentBackgroundImage];
     () = msg![env; background_image_view setImage:background_image];
@@ -216,7 +216,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
     let this = init_common(env, this);
-
     let key_ns_string = get_static_str(env, "UIButtonType");
     let type_: i32 = msg![env; coder decodeIntForKey:key_ns_string];
     set_type(env, this, type_);
@@ -228,7 +227,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let desc: id = msg![env; dict description];
         to_rust_string(env, desc)
     });
-
     let key_idx: id = msg_class![env; NSNumber numberWithLongLong:0i64];
     let button_content: id = msg![env; dict objectForKey:key_idx];
 
@@ -344,26 +342,56 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIButtonHostObject>(this).content_vertical_alignment = alignment;
 }
 
-// MARK: - Edge insets
+// MARK: - Edge insets (Hacked to use CGRect for GuestArg/GuestRet compatibility)
 
-- (UIEdgeInsets)contentEdgeInsets {
-    env.objc.borrow::<UIButtonHostObject>(this).content_edge_insets
+- (CGRect)contentEdgeInsets {
+    let insets = env.objc.borrow::<UIButtonHostObject>(this).content_edge_insets;
+    CGRect {
+        origin: CGPoint { x: insets.top, y: insets.left },
+        size: CGSize { width: insets.bottom, height: insets.right },
+    }
 }
-- (())setContentEdgeInsets:(UIEdgeInsets)insets {
+- (())setContentEdgeInsets:(CGRect)rect {
+    let insets = UIEdgeInsets {
+        top: rect.origin.x,
+        left: rect.origin.y,
+        bottom: rect.size.width,
+        right: rect.size.height,
+    };
     env.objc.borrow_mut::<UIButtonHostObject>(this).content_edge_insets = insets;
 }
 
-- (UIEdgeInsets)titleEdgeInsets {
-    env.objc.borrow::<UIButtonHostObject>(this).title_edge_insets
+- (CGRect)titleEdgeInsets {
+    let insets = env.objc.borrow::<UIButtonHostObject>(this).title_edge_insets;
+    CGRect {
+        origin: CGPoint { x: insets.top, y: insets.left },
+        size: CGSize { width: insets.bottom, height: insets.right },
+    }
 }
-- (())setTitleEdgeInsets:(UIEdgeInsets)insets {
+- (())setTitleEdgeInsets:(CGRect)rect {
+    let insets = UIEdgeInsets {
+        top: rect.origin.x,
+        left: rect.origin.y,
+        bottom: rect.size.width,
+        right: rect.size.height,
+    };
     env.objc.borrow_mut::<UIButtonHostObject>(this).title_edge_insets = insets;
 }
 
-- (UIEdgeInsets)imageEdgeInsets {
-    env.objc.borrow::<UIButtonHostObject>(this).image_edge_insets
+- (CGRect)imageEdgeInsets {
+    let insets = env.objc.borrow::<UIButtonHostObject>(this).image_edge_insets;
+    CGRect {
+        origin: CGPoint { x: insets.top, y: insets.left },
+        size: CGSize { width: insets.bottom, height: insets.right },
+    }
 }
-- (())setImageEdgeInsets:(UIEdgeInsets)insets {
+- (())setImageEdgeInsets:(CGRect)rect {
+    let insets = UIEdgeInsets {
+        top: rect.origin.x,
+        left: rect.origin.y,
+        bottom: rect.size.width,
+        right: rect.size.height,
+    };
     env.objc.borrow_mut::<UIButtonHostObject>(this).image_edge_insets = insets;
 }
 
@@ -559,3 +587,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
