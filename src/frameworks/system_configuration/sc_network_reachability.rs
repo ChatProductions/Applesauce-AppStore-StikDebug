@@ -9,7 +9,7 @@
 
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
+use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::libc::sys::socket::sockaddr;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
@@ -72,9 +72,11 @@ pub fn SCNetworkReachabilityRelease(env: &mut Environment, target: SCNetworkReac
 
 fn SCNetworkReachabilityCreateWithName(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     name: ConstPtr<u8>,
 ) -> SCNetworkReachabilityRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or("").to_string();
 
     // Game-specific hack for Cut the Rope.
@@ -102,16 +104,17 @@ fn SCNetworkReachabilityCreateWithName(
         }),
         &mut env.mem,
     );
-
     log!("SCNetworkReachabilityCreateWithName({:?}) -> {:?}", name_str, res);
     res
 }
 
 fn SCNetworkReachabilityCreateWithAddress(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     address: ConstPtr<sockaddr>,
 ) -> SCNetworkReachabilityRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    
     let address_val = env.mem.read(address);
     let sock_addr   = address_val.to_sockaddr_v4();
 
@@ -129,21 +132,21 @@ fn SCNetworkReachabilityCreateWithAddress(
         }),
         &mut env.mem,
     );
-
     log_dbg!(
         "SCNetworkReachabilityCreateWithAddress({}) -> {:?}",
         sock_addr, res
     );
-
     res
 }
 
 fn SCNetworkReachabilityCreateWithAddressPair(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     local_address: ConstPtr<sockaddr>,
     remote_address: ConstPtr<sockaddr>,
 ) -> SCNetworkReachabilityRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    
     // Use the remote address as primary; local is informational only.
     let addr = if !remote_address.is_null() {
         remote_address
@@ -173,7 +176,6 @@ fn SCNetworkReachabilityCreateWithAddressPair(
         }),
         &mut env.mem,
     );
-
     log_dbg!("SCNetworkReachabilityCreateWithAddressPair({}) -> {:?}", sock_addr, res);
     res
 }
@@ -240,11 +242,9 @@ fn SCNetworkReachabilitySetCallback(
         "SCNetworkReachabilitySetCallback({:?}, {:?}, {:?}) stubbed -> false",
         target, callout, context
     );
-
     let host = env.objc.borrow_mut::<SCNetworkReachabilityHostObject>(target);
     host.callout = Some(callout);
     host.context = context;
-
     // Return false — callback will never fire since we don't run a real
     // network stack.
     false
