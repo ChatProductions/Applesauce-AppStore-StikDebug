@@ -63,9 +63,68 @@ pub fn uregex_close(_env: &mut Environment, regexp: u32) {
     map.remove(&regexp);
 }
 
+// Сигнатура ICU: int32_t uregex_groupCount(URegularExpression *regexp, UErrorCode *status)
+#[allow(non_snake_case)]
+pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>) -> i32 {
+    // Устанавливаем статус U_ZERO_ERROR (0)
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
+
+    let map = UREGEX_MAP.lock().unwrap();
+    if let Some(pattern) = map.get(&regexp) {
+        let mut count = 0;
+        let mut in_quote = false;
+        let mut in_char_class = false;
+        let mut escaped = false;
+        let chars: Vec<char> = pattern.chars().collect();
+
+        // Честно парсим регулярное выражение и считаем группы
+        let mut i = 0;
+        while i < chars.len() {
+            let c = chars[i];
+            if escaped {
+                escaped = false;
+                if c == 'Q' { in_quote = true; }
+                if c == 'E' { in_quote = false; }
+            } else if c == '\\' {
+                escaped = true;
+            } else if in_quote {
+                // Внутри \Q...\E (литералы) скобки не считаются
+            } else if in_char_class {
+                // Внутри [...] скобки не считаются
+                if c == ']' { in_char_class = false; }
+            } else {
+                if c == '[' {
+                    in_char_class = true;
+                } else if c == '(' {
+                    // Проверяем следущий символ. Если это '?', то группа не захватывающая (например, (?:...) или (?m))
+                    if i + 1 < chars.len() && chars[i+1] == '?' {
+                        // Пропускаем
+                    } else {
+                        count += 1;
+                    }
+                }
+            }
+            i += 1;
+        }
+        
+        log!("libicucore: uregex_groupCount for {:#x} -> found {} groups", regexp, count);
+        count
+    } else {
+        // Хэндл не найден — возвращаем ошибку U_ILLEGAL_ARGUMENT_ERROR (1)
+        log!("libicucore: uregex_groupCount ERROR: handle {:#x} not found", regexp);
+        if !status.is_null() {
+            env.mem.write(status, 1); 
+        }
+        0
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(uregex_open(_, _, _, _, _)), // Обрати внимание: 5 аргументов!
     export_c_func!(uregex_close(_)),
+    export_c_func!(uregex_groupCount(_, _)),
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
