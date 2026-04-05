@@ -209,15 +209,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-// FIX 1: bringSublayerToFront: was called by addSublayer: but never defined.
-- (())bringSublayerToFront:(id)layer {
-    let sublayers = &mut env.objc.borrow_mut::<CALayerHostObject>(this).sublayers;
-    if let Some(idx) = sublayers.iter().position(|&s| s == layer) {
-        sublayers.remove(idx);
-        sublayers.push(layer);
-    }
-}
-
 - (())insertSublayer:(id)layer atIndex:(u32)idx {
     retain(env, layer);
     () = msg![env; layer removeFromSuperlayer];
@@ -237,50 +228,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     sublayers.insert(idx, layer);
 }
 
-// FIX 2: The original held a mutable borrow of `this` while simultaneously
-// trying to borrow_mut `new_layer` and `old_layer`, which is a Rust borrow
-// conflict (all objects share the same ObjC store). Each borrow is now a
-// separate, non-overlapping statement.
 - (())replaceSublayer:(id)old_layer with:(id)new_layer {
     if old_layer == nil || new_layer == nil || old_layer == new_layer {
         return;
     }
 
-    // Check old_layer is actually a sublayer of this (immutable borrow, dropped immediately).
-    let is_sublayer = {
+    let old_idx = {
         let host = env.objc.borrow::<CALayerHostObject>(this);
-        host.sublayers.iter().any(|&s| s == old_layer)
-    };
-    if !is_sublayer {
-        return;
-    }
-
-    log!("CALayer: replacing sublayer {:?} with {:?}", old_layer, new_layer);
-
-    retain(env, new_layer);
-    // removeFromSuperlayer may mutate the sublayer list of new_layer's current
-    // superlayer, but not of `this` (unless new_layer is already a child of
-    // `this`, in which case it would be removed and re-added below).
-    () = msg![env; new_layer removeFromSuperlayer];
-
-    // Re-find the index after the removeFromSuperlayer call, since in the edge
-    // case where new_layer was already a sublayer of `this`, the list changed.
-    let actual_idx = {
-        let host = env.objc.borrow::<CALayerHostObject>(this);
-        host.sublayers.iter().position(|&s| s == old_layer)
+        host.sublayers.iter().position(|&x| x == old_layer)
     };
 
-    if let Some(idx) = actual_idx {
-        // Update the sublayer list (borrow `this` alone, then drop).
-        env.objc.borrow_mut::<CALayerHostObject>(this).sublayers[idx] = new_layer;
-        // Update superlayer back-pointers in separate, non-overlapping borrows.
-        env.objc.borrow_mut::<CALayerHostObject>(new_layer).superlayer = this;
-        env.objc.borrow_mut::<CALayerHostObject>(old_layer).superlayer = nil;
-        release(env, old_layer);
-    } else {
-        // old_layer was removed by the removeFromSuperlayer call above
-        // (shouldn't normally happen, but guard against it).
-        release(env, new_layer);
+    if old_idx.is_some() {
+        log!("CALayer: replacing sublayer {:?} with {:?}", old_layer, new_layer);
+        
+        retain(env, new_layer);
+        () = msg![env; new_layer removeFromSuperlayer];
+        
+        let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+        if let Some(actual_idx) = host.sublayers.iter().position(|&x| x == old_layer) {
+            host.sublayers[actual_idx] = new_layer;
+            
+            env.objc.borrow_mut::<CALayerHostObject>(new_layer).superlayer = this;
+            env.objc.borrow_mut::<CALayerHostObject>(old_layer).superlayer = nil;
+            
+            release(env, old_layer);
+        } else {
+            release(env, new_layer);
+        }
     }
 }
 
@@ -614,9 +588,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     res
 }
 
-// FIX 3: When addAnimation:forKey: replaced an existing animation in the
-// HashMap, the displaced CAAnimation* was dropped without being released,
-// leaking the object. Now we release the old animation if one was evicted.
 - (())addAnimation:(id)anim // CAAnimation*
             forKey:(id)key { // NSString*
     let duration: CFTimeInterval = msg![env; anim duration];
@@ -630,7 +601,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         () = msg![env; anim setDuration:duration];
     }
 
-    retain(env, anim);
     if key == nil {
         log_dbg!("[(CALayer*){:?} addAnimation:{:?} forKey:{:?}]", this, anim, key);
         let inserted = env.objc.borrow_mut::<CALayerHostObject>(this).anonymous_animations.insert(anim);
@@ -638,16 +608,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         let key_string = to_rust_string(env, key);
         log_dbg!("[(CALayer*){:?} addAnimation:{:?} forKey:{:?} ({:?})]", this, anim, key, key_string);
-        let old_anim = env.objc
-            .borrow_mut::<CALayerHostObject>(this)
-            .animations
-            .insert(key_string.to_string(), anim);
-        // Release the animation that was previously stored under this key,
-        // if any. Without this the old CAAnimation* would be leaked.
-        if let Some(old) = old_anim {
-            release(env, old);
-        }
+        env.objc.borrow_mut::<CALayerHostObject>(this).animations.insert(key_string.to_string(), anim);
     }
+    retain(env, anim);
 }
 
 - (())removeAnimationForKey:(id)key { // NSString*
