@@ -190,16 +190,31 @@ pub const CLASSES: ClassExports = objc_classes!
 // MARK: Open / Close
 
 - (())open {
-    let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
-    host.status = NSStreamStatusOpen;
-    // For file backing, load bytes now.
-    if let InputStreamBacking::File { path, bytes, .. } = &mut host.backing {
-        let path_str = ns_string::to_rust_string(env, *path).into_owned();
-        match env.fs.read(crate::fs::GuestPath::new(&path_str)) {
-            Ok(data) => *bytes = data,
-            Err(_) => {
-                log!("NSInputStream open: couldn't read {:?}", path_str);
-                host.status = NSStreamStatusError;
+    // 1. Извлекаем нужные данные без долгого заимствования
+    let path_to_load = {
+        let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        host.status = NSStreamStatusOpen;
+        if let InputStreamBacking::File { path, .. } = &host.backing {
+            Some(*path)
+        } else {
+            None
+        }
+    };
+
+    // 2. Делаем операции, требующие полного env, когда host уже отпущен
+    if let Some(path) = path_to_load {
+        let path_str = ns_string::to_rust_string(env, path).into_owned();
+        let read_res = env.fs.read(crate::fs::GuestPath::new(&path_str));
+
+        // 3. Снова заимствуем host, чтобы записать результат
+        let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        if let InputStreamBacking::File { bytes, .. } = &mut host.backing {
+            match read_res {
+                Ok(data) => *bytes = data,
+                Err(_) => {
+                    log!("NSInputStream open: couldn't read {:?}", path_str);
+                    host.status = NSStreamStatusError;
+                }
             }
         }
     }
@@ -227,59 +242,97 @@ pub const CLASSES: ClassExports = objc_classes!
         return -1;
     }
 
-    match &mut env.objc.borrow_mut::<NSInputStreamHostObject>(this).backing {
-        InputStreamBacking::Data { data, offset } => {
-            // ИСПРАВЛЕНИЕ: Выносим значение указателя в отдельную переменную
-            let data_val = *data;
-            let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; data_val bytes];
-            let total: NSUInteger = msg![env; data_val length];
-            let remaining = total as usize - *offset;
-            let to_read = remaining.min(len as usize);
-            if to_read == 0 {
-                env.objc.borrow_mut::<NSInputStreamHostObject>(this).status =
-                    NSStreamStatusAtEnd;
-                return 0;
-            }
-            let src = env.mem.bytes_at(bytes_ptr.cast::<u8>() + *offset as u32, to_read as u32);
-            env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(src);
+    // Извлекаем тип backing и текущие параметры без долгого заимствования
+    let backing_kind = {
+        let host = env.objc.borrow::<NSInputStreamHostObject>(this);
+        match &host.backing {
+            InputStreamBacking::Data { data, offset } => Some((true, *data, *offset)),
+            InputStreamBacking::File { offset, .. } => Some((false, nil, *offset)),
+            InputStreamBacking::None => None,
+        }
+    };
+
+    let Some((is_data, data_val, current_offset)) = backing_kind else {
+        return -1;
+    };
+
+    if is_data {
+        // Мы отпустили borrow, теперь смело используем msg![env; ...]
+        let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; data_val bytes];
+        let total: NSUInteger = msg![env; data_val length];
+        let remaining = total as usize - current_offset;
+        let to_read = remaining.min(len as usize);
+
+        if to_read == 0 {
+            env.objc.borrow_mut::<NSInputStreamHostObject>(this).status = NSStreamStatusAtEnd;
+            return 0;
+        }
+
+        // Защита от E0502: копируем во временный вектор, чтобы не держать одновременные borrow
+        let src_slice = env.mem.bytes_at(bytes_ptr.cast::<u8>() + current_offset as u32, to_read as u32).to_vec();
+        env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(&src_slice);
+
+        // Обновляем состояние
+        let mut host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        if let InputStreamBacking::Data { offset, .. } = &mut host.backing {
             *offset += to_read;
             if *offset >= total as usize {
-                env.objc.borrow_mut::<NSInputStreamHostObject>(this).status =
-                    NSStreamStatusAtEnd;
+                host.status = NSStreamStatusAtEnd;
             }
-            to_read as NSInteger
         }
-        InputStreamBacking::File { bytes, offset, .. } => {
-            let remaining = bytes.len() - *offset;
-            let to_read = remaining.min(len as usize);
-            if to_read == 0 {
-                env.objc.borrow_mut::<NSInputStreamHostObject>(this).status =
-                    NSStreamStatusAtEnd;
-                return 0;
+        return to_read as NSInteger;
+    } else {
+        // Это File backing
+        let chunk = {
+            let host = env.objc.borrow::<NSInputStreamHostObject>(this);
+            if let InputStreamBacking::File { bytes, offset, .. } = &host.backing {
+                let remaining = bytes.len() - *offset;
+                let to_read = remaining.min(len as usize);
+                if to_read == 0 {
+                    Vec::new()
+                } else {
+                    bytes[*offset..*offset + to_read].to_vec()
+                }
+            } else {
+                Vec::new()
             }
-            let slice = bytes[*offset..*offset + to_read].to_vec();
-            env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(&slice);
-            *offset += to_read;
+        };
+
+        if chunk.is_empty() {
+            env.objc.borrow_mut::<NSInputStreamHostObject>(this).status = NSStreamStatusAtEnd;
+            return 0;
+        }
+
+        env.mem.bytes_at_mut(buffer, chunk.len() as u32).copy_from_slice(&chunk);
+
+        let mut host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        if let InputStreamBacking::File { bytes, offset, .. } = &mut host.backing {
+            *offset += chunk.len();
             if *offset >= bytes.len() {
-                env.objc.borrow_mut::<NSInputStreamHostObject>(this).status =
-                    NSStreamStatusAtEnd;
+                host.status = NSStreamStatusAtEnd;
             }
-            to_read as NSInteger
         }
-        InputStreamBacking::None => -1,
+        return chunk.len() as NSInteger;
     }
 }
 
 - (bool)hasBytesAvailable {
-    match &env.objc.borrow::<NSInputStreamHostObject>(this).backing {
-        InputStreamBacking::Data { data, offset } => {
-            // ИСПРАВЛЕНИЕ: Выносим значение указателя в отдельную переменную
-            let data_val = *data;
-            let total: NSUInteger = msg![env; data_val length];
-            (*offset as NSUInteger) < total
+    let backing_kind = {
+        let host = env.objc.borrow::<NSInputStreamHostObject>(this);
+        match &host.backing {
+            InputStreamBacking::Data { data, offset } => Some((*data, *offset)),
+            _ => None,
         }
+    };
+
+    if let Some((data_val, current_offset)) = backing_kind {
+        let total: NSUInteger = msg![env; data_val length];
+        return (current_offset as NSUInteger) < total;
+    }
+
+    match &env.objc.borrow::<NSInputStreamHostObject>(this).backing {
         InputStreamBacking::File { bytes, offset, .. } => *offset < bytes.len(),
-        InputStreamBacking::None => false,
+        _ => false,
     }
 }
 
@@ -473,10 +526,16 @@ pub const CLASSES: ClassExports = objc_classes!
     let key_str = ns_string::to_rust_string(env, key);
     match key_str.as_ref() {
         NSStreamDataWrittenToMemoryStreamKey => {
-            if let OutputStreamBacking::Memory { buffer } =
+            // Извлекаем клон буфера, не задерживая borrow
+            let buffer_clone = if let OutputStreamBacking::Memory { buffer } =
                 &env.objc.borrow::<NSOutputStreamHostObject>(this).backing
             {
-                let bytes = buffer.clone();
+                Some(buffer.clone())
+            } else {
+                None
+            };
+
+            if let Some(bytes) = buffer_clone {
                 let len = bytes.len() as NSUInteger;
                 let buf: MutVoidPtr = env.mem.alloc(len as u32).cast();
                 env.mem.bytes_at_mut(buf.cast(), len as u32).copy_from_slice(&bytes);
@@ -514,3 +573,4 @@ pub const CLASSES: ClassExports = objc_classes!
 @end
 
 };
+
