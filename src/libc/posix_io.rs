@@ -19,6 +19,7 @@ use crate::mem::{
     ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead,
 };
 use crate::Environment;
+use libc::EMFILE;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[derive(Default)]
