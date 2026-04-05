@@ -58,6 +58,8 @@ pub struct UIEdgeInsets {
     pub right:  CGFloat,
 }
 unsafe impl SafeRead for UIEdgeInsets {}
+unsafe impl crate::abi::GuestArg for UIEdgeInsets {}
+unsafe impl crate::abi::GuestRet for UIEdgeInsets {}
 
 // MARK: - Host objects
 
