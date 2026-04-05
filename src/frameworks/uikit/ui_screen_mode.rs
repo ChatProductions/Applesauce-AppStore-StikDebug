@@ -55,9 +55,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)description {
     let host = env.objc.borrow::<UIScreenModeHostObject>(this);
+    
+    // Копируем значения из упакованной структуры в локальные переменные,
+    // чтобы макрос format! не пытался взять невыровненную ссылку.
+    let width = host.size.width;
+    let height = host.size.height;
+    let pixel_aspect_ratio = host.pixel_aspect_ratio;
+    
     let s = format!(
         "<UIScreenMode: size=({}, {}), pixelAspectRatio={}>",
-        host.size.width, host.size.height, host.pixel_aspect_ratio
+        width, height, pixel_aspect_ratio
     );
     drop(host);
     let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, s);
@@ -74,13 +81,10 @@ pub fn from_size(
     env: &mut crate::Environment,
     size: CGSize,
     pixel_aspect_ratio: CGFloat,
-) -> crate::objc::id {
-    let class = env
-        .objc
-        .get_known_class("UIScreenMode", &mut env.mem);
-    env.objc.alloc_object(
-        class,
-        Box::new(UIScreenModeHostObject { size, pixel_aspect_ratio }),
-        &mut env.mem,
-    )
+) -> id {
+    let mode: id = crate::objc::msg_class![env; UIScreenMode alloc];
+    let mut host = env.objc.borrow_mut::<UIScreenModeHostObject>(mode);
+    host.size = size;
+    host.pixel_aspect_ratio = pixel_aspect_ratio;
+    crate::objc::autorelease(env, mode)
 }
