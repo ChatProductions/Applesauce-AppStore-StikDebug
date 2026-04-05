@@ -49,6 +49,7 @@ pub mod ns_number_formatter;
 pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
+pub mod ns_persistent_store_coordinator;
 pub mod ns_process_info;
 pub mod ns_property_list_serialization;
 pub mod ns_run_loop;
@@ -284,6 +285,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_number_formatter::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,
+        ns_persistent_store_coordinator::CLASSES,
         ns_process_info::CLASSES,
         ns_property_list_serialization::CLASSES,
         ns_run_loop::CLASSES,
