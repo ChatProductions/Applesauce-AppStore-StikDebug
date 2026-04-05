@@ -398,6 +398,15 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
     
+    // --- ХАК ДЛЯ ПРЕДОТВРАЩЕНИЯ ВЫЛЕТОВ ПРИ КАСАНИИ ---
+    // Удерживаем все объекты NIB-файла в памяти. Это предотвратит их случайное
+    // удаление (Use-After-Free), из-за которого эмулятор падает при попытке
+    // передать касание в исчезнувший UIWindow или UIViewController.
+    if objects != nil {
+        retain(env, objects);
+    }
+    // --------------------------------------------------
+    
     // Connect all the outlets with UIRuntimeOutletConnection
     let conns_key = get_static_str(env, "UINibConnectionsKey");
     let conns: id = msg![env; unarchiver decodeObjectForKey:conns_key];
