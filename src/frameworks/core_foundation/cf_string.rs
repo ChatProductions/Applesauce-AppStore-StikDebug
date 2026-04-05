@@ -1,12 +1,15 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CFString` and `CFMutableString`.
 //!
 //! This is toll-free bridged to `NSString` and `NSMutableString` in
-//! Apple's implementation. Here it is the same type.
+//! Apple's implementation.
+//! Here it is the same type.
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::cf_dictionary::CFDictionaryRef;
@@ -104,7 +107,8 @@ fn CFStringCreateCopy(
     allocator: CFAllocatorRef,
     the_string: CFStringRef,
 ) -> CFStringRef {
-    assert_eq!(allocator, kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     msg![env; the_string copy]
 }
 
@@ -113,7 +117,8 @@ fn CFStringCreateMutable(
     allocator: CFAllocatorRef,
     max_length: CFIndex,
 ) -> CFMutableStringRef {
-    assert_eq!(allocator, kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     assert_eq!(max_length, 0);
     msg_class![env; NSMutableString new]
 }
@@ -124,7 +129,8 @@ fn CFStringCreateMutableCopy(
     max_length: CFIndex,
     the_string: CFStringRef,
 ) -> CFMutableStringRef {
-    assert_eq!(allocator, kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     assert_eq!(max_length, 0);
     msg![env; the_string mutableCopy]
 }
@@ -137,7 +143,8 @@ fn CFStringCreateWithBytes(
     encoding: CFStringEncoding,
     is_external: bool,
 ) -> CFStringRef {
-    assert_eq!(allocator, kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     assert!(!is_external); // TODO
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let length: NSUInteger = num_bytes.try_into().unwrap();
@@ -151,7 +158,8 @@ fn CFStringCreateWithCString(
     c_string: ConstPtr<u8>,
     encoding: CFStringEncoding,
 ) -> CFStringRef {
-    assert!(allocator == kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let ns_string: id = msg_class![env; NSString alloc];
     msg![env; ns_string initWithCString:c_string encoding:encoding]
@@ -175,13 +183,13 @@ fn CFStringCreateWithFormatAndArguments(
     format: CFStringRef,
     args: VaList,
 ) -> CFStringRef {
-    assert!(allocator == kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     let res = ns_string::with_format(env, format, args);
     ns_string::from_rust_string(env, res)
 }
 
 pub type CFStringCompareFlags = CFOptionFlags;
-
 fn CFStringCompare(
     env: &mut Environment,
     a: CFStringRef,
@@ -298,7 +306,6 @@ fn CFStringUppercase(env: &mut Environment, string: CFStringRef, _locale: CFLoca
 
 type ConstStr255Param = ConstPtr<u8>;
 type StringPtr = MutPtr<u8>;
-
 fn CFStringCreateWithPascalString(
     env: &mut Environment,
     allocator: CFAllocatorRef,
@@ -370,3 +377,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringCreateWithPascalString(_, _, _)),
     export_c_func!(CFStringGetPascalString(_, _, _, _)),
 ];
+
