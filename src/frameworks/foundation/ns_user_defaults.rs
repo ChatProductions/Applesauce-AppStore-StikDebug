@@ -50,17 +50,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation NSUserDefaults: NSObject
 
-+ (id)standardUserDefaults {
-    if let Some(existing) = State::get(env).standard_defaults {
-        existing
-    } else {
-        let defaults = msg![env; this alloc];
-        let defaults = msg![env; defaults init];
-        State::get(env).standard_defaults = Some(defaults);
-        defaults
-    }
-}
-
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(NSUserDefaultsHostObject {
         global_domain_dict: nil,
@@ -93,8 +82,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     State::get(env).standard_defaults = None;
     log_dbg!("NSUserDefaults resetStandardUserDefaults: cache cleared");
 }
-
-// TODO: plist methods etc
 
 - (id)init {
     // First, init globals
@@ -152,23 +139,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)valueForKey:(id)key { // NSString*
-    // This is not documented, but apparently this method
-    // is overridden for NSUserDefaults.
-    // Behaviour was confirmed on macOS.
-    // TODO: should we call `valueForKey:` on the app_domain_dict instead?
     msg![env; this objectForKey:key]
 }
-- (())setValue:(id)val
-        forKey:(id)key { // NSString*
-    // This is not documented, but apparently this method
-    // is overridden for NSUserDefaults.
-    // Behaviour was confirmed on macOS.
-    // Only app domain gets affected here (this part wasn't verified).
-    let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
-    msg![env; dict setValue:val forKey:key]
-}
 
-// Add to @implementation NSUserDefaults:
+- (())setValue:(id)val forKey:(id)key { // NSString*
+    let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
+    () = msg![env; dict setValue:val forKey:key];
+}
 
 // MARK: - Additional typed getters
 
@@ -186,7 +163,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)stringArrayForKey:(id)key {
     let val: id = msg![env; this arrayForKey:key];
     if val == nil { return nil; }
-    // Verify all elements are strings.
     let count: u32 = msg![env; val count];
     let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
     for i in 0..count {
@@ -203,7 +179,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let val: id = msg![env; this objectForKey:key];
     if val == nil { return nil; }
     let val_class: Class = msg![env; val class];
-    // Stored as NSURL or as NSString (file path).
     let nsurl_class = env.objc.get_known_class("NSURL", &mut env.mem);
     if env.objc.class_is_subclass_of(val_class, nsurl_class) {
         return val;
@@ -219,21 +194,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setURL:(id)url forKey:(id)key { // NSURL*, NSString*
     if url == nil {
-        msg![env; this removeObjectForKey:key];
+        () = msg![env; this removeObjectForKey:key];
         return;
     }
-    // Store as the path string for file URLs, full string for others.
     let is_file: bool = msg![env; url isFileURL];
     let stored: id = if is_file {
         msg![env; url path]
     } else {
         msg![env; url absoluteString]
     };
-    msg![env; this setObject:stored forKey:key]
+    () = msg![env; this setObject:stored forKey:key];
 }
 
 - (())setData:(id)data forKey:(id)key { // NSData*, NSString*
-    msg![env; this setObject:data forKey:key]
+    () = msg![env; this setObject:data forKey:key];
 }
 
 // MARK: - Removing / checking
@@ -250,13 +224,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setPersistentDomain:(id)domain forName:(id)domain_name { // NSDictionary*, NSString*
     log_dbg!("NSUserDefaults setPersistentDomain:forName: — writing to app domain");
-    // Merge into app domain (we don't model separate named domains).
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     () = msg![env; dict addEntriesFromDictionary:domain];
 }
 
 - (id)persistentDomainForName:(id)_domain_name { // NSString*
-    // Return the full app domain dict as a snapshot.
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     let copy: id = msg![env; dict copy];
     autorelease(env, copy)
@@ -267,7 +239,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setVolatileDomain:(id)domain forName:(id)_domain_name { // NSDictionary*, NSString*
-    // Treat as registration domain additions.
     let reg = env.objc.borrow::<NSUserDefaultsHostObject>(this).registration_domain_dict;
     let reg = if reg != nil {
         reg
@@ -288,7 +259,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)persistentDomainNames {
-    // Return the bundle identifier as the only persistent domain name.
     let name = ns_string::from_rust_string(
         env,
         env.bundle.bundle_identifier().to_string(),
@@ -325,7 +295,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let ns_number_class = env.objc.get_known_class("NSNumber", &mut env.mem);
     if env.objc.class_is_subclass_of(val_class, ns_number_class) {
-        // Return the number's string representation.
         return msg![env; val stringValue];
     }
     nil
@@ -340,7 +309,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)objectForKey:(id)key { // NSString*
-    // TODO: check if order of searching is correct
     let app_domain_dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     let res: id = msg![env; app_domain_dict objectForKey:key];
     if res != nil {
@@ -364,22 +332,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.objc.borrow_mut::<NSUserDefaultsHostObject>(this).registration_domain_dict = new_dict;
         new_dict
     };
-
-    // Add new defaults and replace any already defined ones
     () = msg![env; dict addEntriesFromDictionary:registration_dictionary];
 }
 
-- (())setObject:(id)object
-         forKey:(id)key { // NSString*
-    // Only app domain gets affected!
+- (())setObject:(id)object forKey:(id)key { // NSString*
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
-    msg![env; dict setObject:object forKey:key]
+    () = msg![env; dict setObject:object forKey:key];
 }
 
 - (())removeObjectForKey:(id)key {
-    // Only app domain gets affected!
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
-    msg![env; dict removeObjectForKey:key]
+    () = msg![env; dict removeObjectForKey:key];
 }
 
 - (id)dataForKey:(id)key {
@@ -398,59 +361,40 @@ pub const CLASSES: ClassExports = objc_classes! {
     let val: id = msg![env; this objectForKey:key];
     msg![env; val boolValue]
 }
-- (())setBool:(bool)value
-       forKey:(id)key { // NSString *
+
+- (())setBool:(bool)value forKey:(id)key { // NSString *
     let num: id = msg_class![env; NSNumber numberWithBool:value];
-    msg![env; this setObject:num forKey:key]
+    () = msg![env; this setObject:num forKey:key];
 }
 
 - (NSInteger)integerForKey:(id)key {
     let val: id = msg![env; this objectForKey:key];
     msg![env; val integerValue]
 }
-- (())setInteger:(NSInteger)value
-          forKey:(id)key {
+
+- (())setInteger:(NSInteger)value forKey:(id)key {
     let num: id = msg_class![env; NSNumber numberWithInteger:value];
-    msg![env; this setObject:num forKey:key]
+    () = msg![env; this setObject:num forKey:key];
 }
 
 - (f32)floatForKey:(id)key {
     let val: id = msg![env; this objectForKey:key];
     msg![env; val floatValue]
 }
-- (())setFloat:(f32)value
-        forKey:(id)key {
+
+- (())setFloat:(f32)value forKey:(id)key {
     let num: id = msg_class![env; NSNumber numberWithFloat:value];
-    msg![env; this setObject:num forKey:key]
+    () = msg![env; this setObject:num forKey:key];
 }
 
 - (f64)doubleForKey:(id)key {
     let val: id = msg![env; this objectForKey:key];
     msg![env; val doubleValue]
 }
-- (())setDouble:(f64)value
-          forKey:(id)key {
-    let num: id = msg_class![env; NSNumber numberWithDouble:value];
-    msg![env; this setObject:num forKey:key]
-}
 
-- (id)stringForKey:(id)key {
-    log_dbg!("NSUserDefaults stringForKey:{}", to_rust_string(env, key));
-    let val: id = msg![env; this objectForKey:key];
-    if val == nil {
-        return nil;
-    }
-    let val_class: Class = msg![env; val class];
-    let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
-    if env.objc.class_is_subclass_of(val_class, ns_string_class) {
-        return val;
-    }
-    let ns_number_class = env.objc.get_known_class("NSNumber", &mut env.mem);
-    if env.objc.class_is_subclass_of(val_class, ns_number_class) {
-        log!("Warning: stringForKey called on NSNumber, but stringValue is unimplemented. Returning nil.");
-        return nil;
-    }
-    nil
+- (())setDouble:(f64)value forKey:(id)key {
+    let num: id = msg_class![env; NSNumber numberWithDouble:value];
+    () = msg![env; this setObject:num forKey:key];
 }
 
 - (id)arrayForKey:(id)key {
@@ -468,11 +412,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)synchronize {
-    // Note: only app domain dict gets synchronized!
     let plist_file_path_dir = env.fs.home_directory()
         .join("Library")
         .join("Preferences");
-    // TODO: can we avoid this creation call on each sync?
     _ = env.fs.create_dir_all(plist_file_path_dir.clone());
     let plist_file_name = format!("{}.plist", env.bundle.bundle_identifier());
     let plist_file_path_buf = plist_file_path_dir.join(plist_file_name);
