@@ -7,6 +7,8 @@ use std::sync::Mutex;
 // Используем подход из твоего libsqlite3.rs: храним данные регулярок на хосте
 lazy_static::lazy_static! {
     static ref UREGEX_MAP: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    // ДОБАВЛЕНО: Отдельная мапа для хранения текста, в котором ищем совпадения
+    static ref UREGEX_TEXT_MAP: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
     static ref NEXT_HANDLE: Mutex<u32> = Mutex::new(0x9000_0000);
 }
 
@@ -45,7 +47,7 @@ pub fn uregex_open(
         env.mem.write(status, U_ZERO_ERROR);
     }
 
-    // Сохраняем паттерн в глобальный Map и генерируем хэндл (как в libsqlite3)
+    // Сохраняем паттерн в глобальный Map и генерируем хэндл
     let mut map = UREGEX_MAP.lock().unwrap();
     let mut next_id = NEXT_HANDLE.lock().unwrap();
     let handle = *next_id;
@@ -56,11 +58,15 @@ pub fn uregex_open(
     handle
 }
 
-// Сразу добавим uregex_close, так как игра 100% вызовет её для очистки памяти
+// Очистка памяти
 #[allow(non_snake_case)]
 pub fn uregex_close(_env: &mut Environment, regexp: u32) {
     let mut map = UREGEX_MAP.lock().unwrap();
     map.remove(&regexp);
+    
+    // Честно удаляем привязанный текст, чтобы не было утечек памяти
+    let mut text_map = UREGEX_TEXT_MAP.lock().unwrap();
+    text_map.remove(&regexp);
 }
 
 // Сигнатура ICU: int32_t uregex_groupCount(URegularExpression *regexp, UErrorCode *status)
@@ -98,7 +104,7 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
                 if c == '[' {
                     in_char_class = true;
                 } else if c == '(' {
-                    // Проверяем следущий символ. Если это '?', то группа не захватывающая (например, (?:...) или (?m))
+                    // Проверяем следущий символ. Если это '?', то группа не захватывающая
                     if i + 1 < chars.len() && chars[i+1] == '?' {
                         // Пропускаем
                     } else {
@@ -121,14 +127,54 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
     }
 }
 
+// ДОБАВЛЕНО: Сигнатура ICU: void uregex_setText(URegularExpression *regexp, const UChar *text, int32_t textLength, UErrorCode *status)
+#[allow(non_snake_case)]
+pub fn uregex_setText(
+    env: &mut Environment,
+    regexp: u32,
+    text: ConstPtr<u16>,
+    text_length: i32,
+    status: MutPtr<i32>,
+) {
+    // Устанавливаем статус U_ZERO_ERROR (0)
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
+
+    // Читаем UTF-16 текст из памяти гостя (Fruit Ninja передает туда строку для поиска)
+    let mut chars = Vec::new();
+    let mut i = 0;
+    loop {
+        // Если указана точная длина (не -1)
+        if text_length != -1 && i >= text_length {
+            break;
+        }
+        let c: u16 = env.mem.read(text + (i as u32));
+        // Если длина -1, то строка заканчивается нуль-терминатором
+        if text_length == -1 && c == 0 {
+            break;
+        }
+        chars.push(c);
+        i += 1;
+    }
+
+    let text_str = String::from_utf16_lossy(&chars);
+    log!("libicucore: uregex_setText for {:#x} -> len {}, text: {}", regexp, chars.len(), text_str);
+
+    // Сохраняем текст в глобальной мапе. Теперь функции поиска (uregex_find) смогут его достать.
+    let mut text_map = UREGEX_TEXT_MAP.lock().unwrap();
+    text_map.insert(regexp, text_str);
+}
+
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(uregex_open(_, _, _, _, _)), // Обрати внимание: 5 аргументов!
+    export_c_func!(uregex_open(_, _, _, _, _)),
     export_c_func!(uregex_close(_)),
     export_c_func!(uregex_groupCount(_, _)),
+    export_c_func!(uregex_setText(_, _, _, _)), // Экспортируем нашу новую функцию (4 аргумента гостя)
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
-    path: "/usr/lib/libicucore.A.dylib", // Именно то имя, которое требует Fruit Ninja
+    path: "/usr/lib/libicucore.A.dylib",
     aliases: &["/usr/lib/libicucore.dylib"],
     class_exports: &[],
     constant_exports: &[],
