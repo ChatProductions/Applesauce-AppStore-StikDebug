@@ -424,6 +424,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 // -----------------------------------------
 
+// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ EAGLView ---
+- (id)context {
+    nil // Возвращаем пустоту, так как настоящего контекста у обычного UIView нет
+}
+
+- (())setContext:(id)_context {
+    // Ничего не делаем, просто игнорируем попытку игры передать нам контекст
+}
+// ------------------------------------
+
 - (bool)isOpaque {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer isOpaque]
