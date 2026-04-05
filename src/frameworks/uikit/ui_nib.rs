@@ -196,7 +196,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
     let orig = to_rust_string(env, orig_nss);
 
-    let class = env.objc.get_known_class(&name, &mut env.mem);
+    // --- НАЧАЛО ХАКА ---
+    log!("[DEBUG NIB] UIClassSwapper грузит класс: {} (оригинал: {})", name, orig);
+
+    let mut safe_name = name.clone();
+    
+    // Список проблемных классов. Добавь сюда название класса из лога, если вылет повторится
+    let problematic_classes = ["EAGLView", "GLView", "AnodiaView", "GameView"]; 
+    
+    if problematic_classes.contains(&safe_name.as_str()) {
+        log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
+        safe_name = "UIView".to_string();
+    }
+    // --- КОНЕЦ ХАКА ---
+
+    let class = env.objc.get_known_class(&safe_name, &mut env.mem);
     let object: id = msg![env; class alloc];
     let object: id = if orig == "UICustomObject" {
         msg![env; object init]
@@ -415,3 +429,4 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
 
     Ok(unarchiver)
 }
+
