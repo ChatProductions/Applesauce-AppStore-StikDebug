@@ -218,6 +218,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
+// NSCopying implementation
+- (id)copyWithZone:(NSZonePtr)_zone {
+    retain(env, this)
+}
+
+// NSCopying implementation
+- (id)mutableCopyWithZone:(NSZonePtr)_zone {
+    retain(env, this)
+}
+
 - (id)initWithCapacity:(NSUInteger)_numItems {
     // We ignore the requested capacity as Rust's internal data structures handle resizing automatically.
     env.objc.borrow_mut::<SetHostObject>(this).dict = Default::default();
