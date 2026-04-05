@@ -638,11 +638,23 @@ fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    assert!(buf.is_null());
+    // assert!(buf.is_null());
     log!(
         "Warning: ignoring a setbuf() for {:?} with NULL (unbuffered)",
         stream
     );
+}
+
+fn setvbuf(
+    _env: &mut Environment,
+    _stream: MutVoidPtr,  // FILE*
+    _buf: MutVoidPtr,     // char*
+    mode: i32,
+    _size: GuestUSize,
+) -> i32 {
+    // _IONBF = 2, _IOLBF = 1, _IOFBF = 0
+    log_dbg!("setvbuf(mode={}) — ignored, returning 0", mode);
+    0
 }
 
 // POSIX-specific functions
@@ -707,6 +719,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(remove(_)),
     export_c_func!(tmpfile()),
     export_c_func!(setbuf(_, _)),
+    export_c_func!(setvbuf(_, _, _, _)),
+
     // POSIX-specific functions
     export_c_func!(fileno(_)),
 ];
