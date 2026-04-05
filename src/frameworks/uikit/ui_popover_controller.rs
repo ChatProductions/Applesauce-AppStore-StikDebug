@@ -69,28 +69,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Class availability
 // =========================================================================
 
-+ (bool)instancesRespondToSelector:(id)selector { // SEL
-    // UIPopoverController is iPad-only. On iPhone/iPod the class exists but
-    // instancesRespondToSelector: returns NO for presentation methods so
-    // apps can gate their popover code. We return YES for everything since
-    // our stub handles all selectors gracefully.
-    //
-    // Apps typically check this before calling any popover method:
-    //   if ([UIPopoverController instancesRespondToSelector:@selector(...)]) { ... }
-    let sel_name = env.objc.selector_name(selector);
-    log_dbg!(
-        "UIPopoverController instancesRespondToSelector:{} => YES",
-        sel_name
-    );
++ (bool)instancesRespondToSelector:(id)_selector {
+    log_dbg!("UIPopoverController instancesRespondToSelector: => YES");
     true
 }
 
-+ (bool)respondsToSelector:(id)selector { // SEL  (class-level)
-    let sel_name = env.objc.selector_name(selector);
-    log_dbg!(
-        "UIPopoverController respondsToSelector:{} => YES",
-        sel_name
-    );
++ (bool)respondsToSelector:(id)_selector {
+    log_dbg!("UIPopoverController respondsToSelector: => YES");
     true
 }
 
