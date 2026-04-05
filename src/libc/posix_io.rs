@@ -38,7 +38,6 @@ impl State {
     }
 }
 
-#[derive(Clone)]
 pub struct PosixFileHostObject {
     pub file: GuestFile,
     pub needs_flush: bool,
@@ -63,7 +62,8 @@ fn fd_to_file_idx(fd: FileDescriptor) -> usize {
     fd.checked_sub(NORMAL_FILENO_BASE).unwrap_or(0) as usize
 }
 
-/// File descriptor type. This alias is for readability, POSIX just uses `int`.
+/// File descriptor type.
+/// This alias is for readability, POSIX just uses `int`.
 pub type FileDescriptor = i32;
 pub const STDIN_FILENO: FileDescriptor = 0;
 pub const STDOUT_FILENO: FileDescriptor = 1;
@@ -116,8 +116,10 @@ const F_BARRIERFSYNC:        FileControlCommand = 85;
 const F_ADDFILESIGS_RETURN:  FileControlCommand = 97;
 const F_ADDFILESUPPL:        FileControlCommand = 99;
 const F_NOCACHE:             FileControlCommand = 48;
-const F_PEOFPOSMODE:         FileControlCommand = 3; // used as seek whence, not fcntl cmd
-const F_VOLPOSMODE:          FileControlCommand = 4; // same
+const F_PEOFPOSMODE:         FileControlCommand = 3;
+// used as seek whence, not fcntl cmd
+const F_VOLPOSMODE:          FileControlCommand = 4;
+// same
 
 /// File Descriptor flags.
 /// This alias is for readability, POSIX just uses `int`.
@@ -224,29 +226,25 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
 
     // --- RETINA DEEP CASE-INSENSITIVE FALLBACK ---
     let mut actual_path_string = path_string.clone();
-
     if !env.fs.exists(GuestPath::new(&actual_path_string)) {
         let is_absolute = actual_path_string.starts_with('/');
         let parts: Vec<&str> = actual_path_string.split('/').filter(|s| !s.is_empty()).collect();
-        
         let mut current_path = if is_absolute { String::from("/") } else { String::new() };
-
         for (i, part) in parts.iter().enumerate() {
             let mut test_path = current_path.clone();
             if !test_path.is_empty() && !test_path.ends_with('/') {
                 test_path.push('/');
             }
             test_path.push_str(part);
-
             // Если текущий кусок пути существует, идем дальше
             if env.fs.exists(GuestPath::new(&test_path)) {
                 current_path = test_path;
             } else {
                 // Если не существует, ищем его без учета регистра
-                let parent_to_search = if current_path.is_empty() { "." } else { &current_path };
+                let parent_to_search = if current_path.is_empty() { "."
+                } else { &current_path };
                 let target_lower = part.to_lowercase();
                 let mut found_match = None;
-
                 if let Ok(entries) = env.fs.enumerate(GuestPath::new(parent_to_search)) {
                     for entry in entries {
                         let entry_path = std::path::Path::new(&entry);
@@ -260,7 +258,8 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
                 }
 
                 if let Some(m) = found_match {
-                    if !current_path.is_empty() && !current_path.ends_with('/') {
+                  
+                  if !current_path.is_empty() && !current_path.ends_with('/') {
                         current_path.push('/');
                     }
                     current_path.push_str(&m);
@@ -289,6 +288,7 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             let host_object = PosixFileHostObject {
                 file,
                 needs_flush,
+     
                 reached_eof: false,
                 flags: 0,
                 status_flags: flags & (O_ACCMODE | O_APPEND | O_NONBLOCK),
@@ -300,7 +300,6 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             -1
         }
     };
-
     if res != -1 && (flags & O_SHLOCK) != 0 {
         flock(env, res, LOCK_SH);
     }
@@ -576,12 +575,14 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
                     } else {
                         match file.file.sync_all() {
                             Ok(()) => 0,
+                      
                             Err(_) => -1
             
                         }
                     }
                 }
             }
+        
         }
         None => {
             set_errno(env, EBADF);
@@ -744,7 +745,8 @@ fn fcntl(
         // ----------------------------------------------------------------
         // Duplicate file descriptor (stub — GuestFile is not Clone)
         // ----------------------------------------------------------------
-        F_DUPFD | F_DUPFD_CLOEXEC => {
+        F_DUPFD |
+        F_DUPFD_CLOEXEC => {
             let min_fd: i32 = args.start().next(env);
             log!(
                 "TODO: fcntl({}, {}) F_DUPFD min_fd={} — dup not supported",
@@ -793,6 +795,7 @@ fn fcntl(
                 .files
                 .get(fd_to_file_idx(fd))
                 .and_then(|s| s.as_ref())
+                
                 .and_then(|f| f.path.clone());
             if let Some(path) = path_opt {
                 let bytes = path.as_bytes();
@@ -812,9 +815,11 @@ fn fcntl(
             log_dbg!("fcntl({}, F_CHKCLEAN) — returning 0", fd);
         }
         F_ADDSIGS
-        | F_ADDFILESIGS
+        |
+        F_ADDFILESIGS
         | F_ADDFILESIGS_FOR_DYLD_SIM
-        | F_ADDFILESIGS_RETURN
+        |
+        F_ADDFILESIGS_RETURN
         | F_ADDFILESUPPL => {
             log_dbg!("fcntl({}, {:#x}) code-signing — ignored", fd, cmd);
         }
@@ -836,64 +841,6 @@ fn fcntl(
     }
     0
 }
-
-// =========================================================================
-// MARK: - path_for_fd (remove — inline into F_GETPATH above)
-// =========================================================================
-// Deleted — logic is now inline in the F_GETPATH arm.
-
-
-/// Duplicate `fd`, returning a new file descriptor >= `min_fd` (or the lowest
-/// available if `min_fd` is None). Sets FD_CLOEXEC if `cloexec` is true.
-fn dup_fd(
-    env: &mut Environment,
-    fd: FileDescriptor,
-    min_fd: Option<i32>,
-    cloexec: bool,
-) -> Result<FileDescriptor, i32> {
-    // Validate the source fd.
-    if env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
-        return Err(EBADF);
-    }
-    // Find the lowest available slot >= min_fd.
-    let start = min_fd.unwrap_or(0).max(NORMAL_FILENO_BASE) as usize;
-    let new_fd = (start..)
-        .map(|i| i as FileDescriptor)
-        .find(|&candidate| {
-            env.libc_state.posix_io.files
-                .get(fd_to_file_idx(candidate))
-                .map(|slot| slot.is_none())
-                .unwrap_or(true)
-        })
-        .ok_or(EMFILE)?;
-
-    // Clone the underlying file entry.
-    let src_idx = fd_to_file_idx(fd);
-    let entry = env.libc_state.posix_io.files[src_idx].clone()
-        .ok_or(EBADF)?;
-
-    let dst_idx = fd_to_file_idx(new_fd);
-    // Grow the files vec if needed.
-    if dst_idx >= env.libc_state.posix_io.files.len() {
-        env.libc_state.posix_io.files.resize(dst_idx + 1, None);
-    }
-    let mut new_entry = entry;
-    if cloexec {
-        new_entry.flags |= FD_CLOEXEC;
-    } else {
-        new_entry.flags &= !FD_CLOEXEC;
-    }
-    env.libc_state.posix_io.files[dst_idx] = Some(new_entry);
-    Ok(new_fd)
-}
-
-/// Try to find the guest path associated with `fd` for F_GETPATH.
-fn path_for_fd(env: &mut Environment, fd: FileDescriptor) -> Option<String> {
-    let idx = fd_to_file_idx(fd);
-    let entry = env.libc_state.posix_io.files.get(idx)?.as_ref()?;
-    entry.path.clone()
-}
-
 
 fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32 {
     set_errno(env, 0);
@@ -971,13 +918,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(getcwd(_, _)),
     export_c_func!(chdir(_)),
     export_c_func!(fcntl(_, _, _)),
-    export_c_func!(flock(_, 
-_)),
+    export_c_func!(flock(_, _)),
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
     export_c_func!(writev(_, _, _)),
 ];
-
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env.libc_state.posix_io.files.iter().position(|f| f.is_none()) {
         env.libc_state.posix_io.files[free_idx] = Some(host_object);
