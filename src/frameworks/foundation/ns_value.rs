@@ -8,8 +8,9 @@
 use super::ns_string::{from_rust_ordering, from_rust_string};
 use super::{NSComparisonResult, NSOrderedSame, NSUInteger, _nib_archive_decoder};
 use crate::frameworks::core_foundation::cf_number::{
-    kCFNumberCharType, kCFNumberFloat32Type, kCFNumberFloatType, kCFNumberIntType,
-    kCFNumberSInt16Type, kCFNumberSInt32Type, kCFNumberSInt8Type, kCFNumberShortType, CFNumberType,
+    kCFNumberCharType, kCFNumberFloat32Type, kCFNumberFloat64Type, kCFNumberFloatType,
+    kCFNumberIntType, kCFNumberSInt16Type, kCFNumberSInt32Type, kCFNumberSInt64Type,
+    kCFNumberSInt8Type, kCFNumberShortType, CFNumberType,
 };
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
@@ -126,6 +127,70 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(NSValueHostObject::CGRect(value));
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
     autorelease(env, new)
+}
+
++ (id)valueWithNonretainedObject:(id)object {
+    // Store the pointer bits as an unsigned int.
+    msg_class![env; NSNumber numberWithUnsignedInt:(object.to_bits())]
+}
+
++ (id)valueWithBytes:(ConstVoidPtr)value objCType:(ConstVoidPtr)_type {
+    // Store as a pointer/uint — we don't model arbitrary ObjC types.
+    let bits = value.to_bits();
+    msg_class![env; NSNumber numberWithUnsignedInt:bits]
+}
+
+// MARK: - Additional NSValue accessors
+
+- (id)nonretainedObjectValue {
+    // Reverse of valueWithNonretainedObject — recover the id from bits.
+    let bits: u32 = msg![env; this unsignedIntValue];
+    crate::objc::id::from_bits(bits)
+}
+
+- (bool)isEqual:(id)other {
+    if this == other { return true; }
+    if other == crate::objc::nil { return false; }
+    // Compare by stored CG geometry.
+    let host_a = env.objc.borrow::<NSValueHostObject>(this);
+    let host_b_class: crate::objc::Class = msg![env; other class];
+    let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
+    if !env.objc.class_is_subclass_of(host_b_class, ns_value_class) {
+        return false;
+    }
+    let b = env.objc.borrow::<NSValueHostObject>(other);
+    match (host_a.as_ref(), b.as_ref()) {
+        (NSValueHostObject::CGPoint(a), NSValueHostObject::CGPoint(b)) => {
+            a.x == b.x && a.y == b.y
+        }
+        (NSValueHostObject::CGSize(a), NSValueHostObject::CGSize(b)) => {
+            a.width == b.width && a.height == b.height
+        }
+        (NSValueHostObject::CGRect(a), NSValueHostObject::CGRect(b)) => {
+            a.origin.x == b.origin.x && a.origin.y == b.origin.y
+                && a.size.width == b.size.width && a.size.height == b.size.height
+        }
+        _ => false,
+    }
+}
+
+- (id)description {
+    let s = match env.objc.borrow::<NSValueHostObject>(this) {
+        NSValueHostObject::CGPoint(p) => {
+            format!("NSPoint: {{{}, {}}}", p.x, p.y)
+        }
+        NSValueHostObject::CGSize(s) => {
+            format!("NSSize: {{{}, {}}}", s.width, s.height)
+        }
+        NSValueHostObject::CGRect(r) => {
+            format!(
+                "NSRect: {{{{{}, {}}}, {{{}, {}}}}}",
+                r.origin.x, r.origin.y, r.size.width, r.size.height
+            )
+        }
+    };
+    let ns = from_rust_string(env, s);
+    autorelease(env, ns)
 }
 
 - (CGPoint)CGPointValue {
@@ -280,7 +345,138 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-// TODO: types other than booleans and long longs
++ (id)numberWithUnsignedChar:(u8)value {
+    let new: id = msg![env; this alloc];
+    *env.objc.borrow_mut(new) = NSNumberHostObject::Char(value as i8);
+    autorelease(env, new)
+}
+
++ (id)numberWithUnsignedLong:(u32)value {
+    msg_class![env; NSNumber numberWithUnsignedInt:value]
+}
+
+// MARK: - Additional NSNumber inits
+
+- (id)initWithUnsignedChar:(u8)value {
+    *env.objc.borrow_mut(this) = NSNumberHostObject::Char(value as i8);
+    this
+}
+
+- (id)initWithUnsignedLong:(u32)value {
+    *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedInt(value);
+    this
+}
+
+// MARK: - Additional accessors
+
+- (u8)unsignedCharValue {
+    env.objc.borrow::<NSNumberHostObject>(this).as_char() as u8
+}
+
+- (u32)unsignedLongValue {
+    env.objc.borrow::<NSNumberHostObject>(this).as_unsigned_int()
+}
+
+- (i32)unsignedCharValueAsInt {
+    // Convenience — some apps read unsigned char values as int.
+    env.objc.borrow::<NSNumberHostObject>(this).as_char() as u8 as i32
+}
+
+// MARK: - String representation
+
+- (id)stringValue {
+    msg![env; this description]
+}
+
+- (id)descriptionWithLocale:(id)_locale {
+    msg![env; this description]
+}
+
+// MARK: - Formatting helpers
+
+- (id)initWithBytes:(ConstVoidPtr)value objCType:(ConstVoidPtr)type_ptr {
+    // Read the type encoding and store the appropriate value.
+    // We support 'i', 'I', 'q', 'Q', 'f', 'd', 's', 'S', 'c', 'C', 'B'.
+    let type_byte = env.mem.read(type_ptr.cast::<u8>());
+    match type_byte {
+        b'i' | b'l' => {
+            let v = env.mem.read(value.cast::<i32>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Int(v);
+        }
+        b'I' | b'L' => {
+            let v = env.mem.read(value.cast::<u32>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedInt(v);
+        }
+        b'q' => {
+            let v = env.mem.read(value.cast::<i64>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::LongLong(v);
+        }
+        b'Q' => {
+            let v = env.mem.read(value.cast::<u64>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedLongLong(v);
+        }
+        b'f' => {
+            let v = env.mem.read(value.cast::<f32>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Float(v);
+        }
+        b'd' => {
+            let v = env.mem.read(value.cast::<f64>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Double(v);
+        }
+        b's' => {
+            let v = env.mem.read(value.cast::<i16>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Short(v);
+        }
+        b'S' => {
+            let v = env.mem.read(value.cast::<u16>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedShort(v);
+        }
+        b'c' | b'C' | b'B' => {
+            let v = env.mem.read(value.cast::<i8>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Char(v);
+        }
+        _ => {
+            log!("NSNumber initWithBytes:objCType: unknown type '{}', defaulting to int",
+                 type_byte as char);
+            let v = env.mem.read(value.cast::<i32>());
+            *env.objc.borrow_mut(this) = NSNumberHostObject::Int(v);
+        }
+    }
+    this
+}
+
+- (())getValue:(MutVoidPtr)buffer {
+    // Write current value into a caller-provided buffer.
+    match env.objc.borrow::<NSNumberHostObject>(this) {
+        NSNumberHostObject::Bool(v)              => env.mem.write(buffer.cast::<i8>(), *v as i8),
+        NSNumberHostObject::Int(v)               => env.mem.write(buffer.cast::<i32>(), *v),
+        NSNumberHostObject::UnsignedInt(v)       => env.mem.write(buffer.cast::<u32>(), *v),
+        NSNumberHostObject::LongLong(v)          => env.mem.write(buffer.cast::<i64>(), *v),
+        NSNumberHostObject::UnsignedLongLong(v)  => env.mem.write(buffer.cast::<u64>(), *v),
+        NSNumberHostObject::Float(v)             => env.mem.write(buffer.cast::<f32>(), *v),
+        NSNumberHostObject::Double(v)            => env.mem.write(buffer.cast::<f64>(), *v),
+        NSNumberHostObject::Short(v)             => env.mem.write(buffer.cast::<i16>(), *v),
+        NSNumberHostObject::UnsignedShort(v)     => env.mem.write(buffer.cast::<u16>(), *v),
+        NSNumberHostObject::Char(v)              => env.mem.write(buffer.cast::<i8>(), *v),
+    }
+}
+
+// MARK: - CFNumber bridging helpers
+
+- (CFNumberType)cfNumberType {
+    match env.objc.borrow::<NSNumberHostObject>(this) {
+        NSNumberHostObject::Bool(_)             => kCFNumberSInt8Type,
+        NSNumberHostObject::Char(_)             => kCFNumberSInt8Type,
+        NSNumberHostObject::Short(_)            => kCFNumberSInt16Type,
+        NSNumberHostObject::UnsignedShort(_)    => kCFNumberSInt16Type,
+        NSNumberHostObject::Int(_)              => kCFNumberSInt32Type,
+        NSNumberHostObject::UnsignedInt(_)      => kCFNumberSInt32Type,
+        NSNumberHostObject::LongLong(_)         => kCFNumberSInt64Type,
+        NSNumberHostObject::UnsignedLongLong(_) => kCFNumberSInt64Type,
+        NSNumberHostObject::Float(_)            => kCFNumberFloat32Type,
+        NSNumberHostObject::Double(_)           => kCFNumberFloat64Type,
+    }
+}
 
 // NSCoding implementation
 - (id)initWithCoder:(id)coder {
