@@ -418,6 +418,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, clips);
 }
 
+// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
+- (())setStyle:(u32)_style {
+    // Заглушка, чтобы эмулятор не падал при настройке фейковых элементов (например, FBLoginButton)
+}
+// -----------------------------------------
+
 - (bool)isOpaque {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer isOpaque]
@@ -622,3 +628,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
