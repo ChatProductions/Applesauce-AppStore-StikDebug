@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CFLocale`
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
@@ -114,9 +116,10 @@ fn CFLocaleCopyPreferredLanguages(env: &mut Environment) -> CFArrayRef {
 
 fn CFLocaleCreate(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     locale_identifier: CFLocaleIdentifier,
 ) -> CFLocaleRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new: id = msg_class![env; NSLocale alloc];
     msg![env; new initWithLocaleIdentifier:locale_identifier]
 }
@@ -129,9 +132,10 @@ fn CFLocaleGetSystem(env: &mut Environment) -> CFLocaleRef {
 
 fn CFLocaleCreateCanonicalLocaleIdentifierFromString(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     locale_identifier: CFStringRef,
 ) -> CFLocaleIdentifier {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     if locale_identifier.is_null() {
         return nil;
     }
@@ -264,3 +268,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFLocaleCopyISOCountryCodes()),
     export_c_func!(CFLocaleCopyISOCurrencyCodes()),
 ];
+
