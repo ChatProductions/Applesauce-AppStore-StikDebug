@@ -213,6 +213,16 @@ fn random(env: &mut Environment) -> i32 {
     (env.libc_state.stdlib.random as i32) & RAND_MAX
 }
 
+fn arc4random_stir(env: &mut Environment) -> u32 {
+    env.libc_state.stdlib.arc4random = prng(env.libc_state.stdlib.arc4random);
+    env.libc_state.stdlib.arc4random
+}
+
+fn arc4random_addrandom(env: &mut Environment) -> u32 {
+    env.libc_state.stdlib.arc4random = prng(env.libc_state.stdlib.arc4random);
+    env.libc_state.stdlib.arc4random
+}
+
 fn arc4random(env: &mut Environment) -> u32 {
     env.libc_state.stdlib.arc4random = prng(env.libc_state.stdlib.arc4random);
     env.libc_state.stdlib.arc4random
@@ -584,6 +594,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(srandom(_)),
     export_c_func!(random()),
     export_c_func!(arc4random()),
+    export_c_func!(arc4random_stir()),
+    export_c_func!(arc4random_addrandom()),
     export_c_func!(getenv(_)),
     export_c_func!(setenv(_, _, _)),
     export_c_func!(unsetenv(_)),
