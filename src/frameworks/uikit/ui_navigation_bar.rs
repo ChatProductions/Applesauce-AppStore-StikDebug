@@ -8,7 +8,7 @@
 use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 type UIBarStyle = NSInteger;
@@ -329,6 +329,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// --- ДОБАВЛЕНО: Поддержка загрузки из NIB-файла ---
+- (id)initWithCoder:(id)_coder {
+    msg_super![env; this init]
+}
+// --------------------------------------------------
+
 - (())dealloc {
     let host = env.objc.borrow::<UINavigationItemHostObject>(this);
     let (title, title_view, prompt, back, left, right, left_items, right_items) = (
@@ -477,4 +483,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
