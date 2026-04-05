@@ -152,10 +152,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNavigationBarHidden:(bool)_hidden animated:(bool)_animated {
-    crate::warn_stub!("UINavigationController -setNavigationBarHidden:animated:");
-    // TODO: Реализовать логику скрытия/показа с анимацией в будущем
+    log!("TODO: UINavigationController -setNavigationBarHidden:animated: stubbed");
 }
 
 @end
 
 };
+
