@@ -1,12 +1,15 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CFDictionary` and `CFMutableDictionary`.
 //!
 //! These are toll-free bridged to `NSDictionary` and `NSMutableDictionary` in
-//! Apple's implementation. Here they are the same types.
+//! Apple's implementation.
+//! Here they are the same types.
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::{CFHashCode, CFIndex, CFRelease, CFRetain, CFTypeRef};
@@ -41,7 +44,7 @@ pub fn CFDictionaryRelease(env: &mut Environment, dict: CFDictionaryRef) {
 
 fn CFDictionaryCreate(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     keys:   ConstPtr<ConstVoidPtr>,
     values: ConstPtr<ConstVoidPtr>,
     count: CFIndex,
@@ -49,7 +52,7 @@ fn CFDictionaryCreate(
     value_callbacks: ConstPtr<CFDictionaryValueCallBacks>,
 ) -> CFDictionaryRef {
     // Build a mutable dict then return it — immutability not enforced here.
-    let dict = CFDictionaryCreateMutable(env, kCFAllocatorDefault, 0, key_callbacks, value_callbacks);
+    let dict = CFDictionaryCreateMutable(env, allocator, 0, key_callbacks, value_callbacks);
     for i in 0..count as u32 {
         let key:   ConstVoidPtr = env.mem.read(keys   + i);
         let value: ConstVoidPtr = env.mem.read(values + i);
@@ -60,11 +63,12 @@ fn CFDictionaryCreate(
 
 fn CFDictionaryCreateMutable(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     capacity: CFIndex,
     key_callbacks:   ConstPtr<CFDictionaryKeyCallBacks>,
     value_callbacks: ConstPtr<CFDictionaryValueCallBacks>,
 ) -> CFMutableDictionaryRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     // capacity hint ignored — NSMutableDictionary grows dynamically.
     let _ = capacity;
     let new = msg_class![env; _touchHLE_NSMutableDictionary_non_retaining alloc];
@@ -73,19 +77,21 @@ fn CFDictionaryCreateMutable(
 
 fn CFDictionaryCreateCopy(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     dict: CFDictionaryRef,
 ) -> CFDictionaryRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new: id = msg_class![env; NSDictionary alloc];
     msg![env; new initWithDictionary:dict]
 }
 
 fn CFDictionaryCreateMutableCopy(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     _capacity: CFIndex,
     dict: CFDictionaryRef,
 ) -> CFMutableDictionaryRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new: id = msg_class![env; NSMutableDictionary alloc];
     msg![env; new initWithDictionary:dict]
 }
@@ -277,7 +283,7 @@ fn _touchHLE_CFDictionary_retain(
     allocator: CFAllocatorRef,
     value: ConstVoidPtr,
 ) -> ConstVoidPtr {
-    assert_eq!(allocator, kCFAllocatorDefault);
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     CFRetain(env, value.cast_mut().cast()).cast_const().cast()
 }
 fn _touchHLE_CFDictionary_release(
@@ -285,7 +291,7 @@ fn _touchHLE_CFDictionary_release(
     allocator: CFAllocatorRef,
     value: ConstVoidPtr,
 ) {
-    assert_eq!(allocator, kCFAllocatorDefault);
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     CFRelease(env, value.cast_mut().cast());
 }
 fn _touchHLE_CFDictionary_copyDescription(
@@ -407,3 +413,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFDictionaryGetKeysAndValues(_, _, _)),
     export_c_func!(CFDictionaryApplyFunction(_, _, _)),
 ];
+
