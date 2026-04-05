@@ -423,10 +423,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == nil { return false; }
-    let a = env.objc.borrow::<CharacterSetHostObject>(this);
-    let b_opt = env.objc.try_borrow::<CharacterSetHostObject>(other);
-    let Some(b) = b_opt else { return false; };
-    a.set == b.set && a.inverted == b.inverted
+    // Check that other is also a character set before borrowing.
+    let cs_class = env.objc.get_known_class("_touchHLE_NSCharacterSet", &mut env.mem);
+    let mcs_class = env.objc.get_known_class("_touchHLE_NSMutableCharacterSet", &mut env.mem);
+    let other_class: id = msg![env; other class];
+    let is_cs: bool = msg![env; other_class isSubclassOfClass:cs_class];
+    let is_mcs: bool = msg![env; other_class isSubclassOfClass:mcs_class];
+    if !is_cs && !is_mcs {
+        return false;
+    }
+    let a_set: HashSet<unichar>;
+    let a_inv: bool;
+    {
+        let a = env.objc.borrow::<CharacterSetHostObject>(this);
+        a_set = a.set.clone();
+        a_inv = a.inverted;
+    }
+    let b = env.objc.borrow::<CharacterSetHostObject>(other);
+    a_set == b.set && a_inv == b.inverted
 }
 
 - (id)invertedSet {
