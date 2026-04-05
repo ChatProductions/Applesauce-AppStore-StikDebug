@@ -16,6 +16,9 @@ use std::net::Ipv4Addr;
 #[allow(non_camel_case_types)]
 type in_addr_t = u32;
 
+/// Returned by `inet_addr` when the input string is not a valid IPv4 address.
+const INADDR_NONE: in_addr_t = u32::MAX;
+
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 #[allow(non_camel_case_types)]
@@ -26,7 +29,11 @@ unsafe impl SafeRead for in_addr {}
 
 fn inet_addr(env: &mut Environment, str: ConstPtr<u8>) -> in_addr_t {
     let inet_addr_str = env.mem.cstr_at_utf8(str).unwrap();
-    let address: Ipv4Addr = inet_addr_str.parse().unwrap();
+    let Ok(address) = inet_addr_str.parse::<Ipv4Addr>() else {
+        log!("inet_addr({:?}): invalid address, returning INADDR_NONE",
+            inet_addr_str);
+        return INADDR_NONE;
+    };
     let res = u32::from_le_bytes(address.octets());
     log_dbg!("inet_addr({:?}) => {}", inet_addr_str, res);
     res
@@ -57,7 +64,11 @@ fn inet_pton(env: &mut Environment, af: i32, src: ConstPtr<u8>, dst: MutVoidPtr)
     assert_eq!(af, AF_INET);
     let str = env.mem.cstr_at_utf8(src.cast()).unwrap();
     log_dbg!("inet_pton '{}'", str);
-    let address: Ipv4Addr = str.parse().unwrap();
+    let Ok(address) = str.parse::<Ipv4Addr>() else {
+        // Return 0: src is not a valid network address string.
+        log!("inet_pton('{}'): invalid address, returning 0", str);
+        return 0;
+    };
     let addr = in_addr {
         s_addr: u32::from_le_bytes(address.octets()),
     };
