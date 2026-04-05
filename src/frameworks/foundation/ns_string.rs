@@ -62,6 +62,7 @@ const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSWindowsCP1252StringEncoding,
     NSMacOSRomanStringEncoding,
     NSISOLatin1StringEncoding,
+    NSSymbolStringEncoding,
 ];
 
 pub const NSMaximumStringLength: NSUInteger = (i32::MAX - 1) as _;
