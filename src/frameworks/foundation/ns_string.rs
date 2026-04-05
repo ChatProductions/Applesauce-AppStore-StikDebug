@@ -371,6 +371,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)stringWithContentsOfFile:(id)path // NSString*
+                  usedEncoding:(MutPtr<NSUInteger>)enc
+                         error:(MutPtr<id>)error { // NSError**
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfFile:path
+                                          usedEncoding:enc
+                                                 error:error];
+    autorelease(env, new)
+}
+
 // ИЗМЕНЕНО: Добавлена поддержка загрузки строки по URL
 + (id)stringWithContentsOfURL:(id)url // NSURL*
                      encoding:(NSStringEncoding)encoding
@@ -1509,6 +1519,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithContentsOfFile:(id)path // NSString*
+                usedEncoding:(MutPtr<NSUInteger>)enc
+                       error:(MutPtr<id>)error { // NSError**
+    if path == nil {
+        return nil;
+    }
+    let path_str = to_rust_string(env, path);
+    let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
+        if !error.is_null() {
+            env.mem.write(error, nil);
+        }
+        return nil;
+    };
+
+    let len = bytes.len();
+    let encoding = if len > 1 && (bytes[..2] == [0xFE, 0xFF] || bytes[..2] == [0xFF, 0xFE]) {
+        NSUTF16StringEncoding
+    } else if len > 2 && bytes[..3] == [0xEF, 0xBB, 0xBF] {
+        NSUTF8StringEncoding
+    } else {
+        msg_class![env; NSString defaultCStringEncoding]
+    };
+
+    if !enc.is_null() {
+        env.mem.write(enc, encoding);
+    }
+
+    let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
+    *env.objc.borrow_mut(this) = host_object;
+    this
+}
+
 - (id)stringByReplacingCharactersInRange:(NSRange)range
                               withString:(id)replacement { // NSString*
     let string = to_rust_string(env, this);
@@ -2315,3 +2357,4 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         Ptr::null()
     }
 }
+
