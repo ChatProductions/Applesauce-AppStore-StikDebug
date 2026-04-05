@@ -38,7 +38,6 @@ impl State {
     }
 }
 
-#[derive(Clone)]
 struct PosixFileHostObject {
     file: GuestFile,
     needs_flush: bool,
@@ -291,6 +290,8 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
                 needs_flush,
                 reached_eof: false,
                 flags: 0,
+                status_flags: flags & (O_ACCMODE | O_APPEND | O_NONBLOCK),
+                path: Some(actual_path_string.clone())
             };
             find_or_create_fd(env, host_object)
         }
