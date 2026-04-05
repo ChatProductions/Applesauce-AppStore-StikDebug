@@ -6,7 +6,7 @@
 //! `UIScreenMode`.
 
 use crate::frameworks::core_graphics::{CGFloat, CGSize};
-use crate::objc::{objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 pub struct UIScreenModeHostObject {
     pub size: CGSize,
