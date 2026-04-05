@@ -14,7 +14,6 @@ use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::{ns_data, ns_string, NSInteger};
 use crate::frameworks::uikit::ui_graphics::UIGraphicsGetCurrentContext;
-use crate::frameworks::uikit::ui_view::ui_control::ui_button::UIEdgeInsets;
 use crate::fs::GuestPath;
 use crate::image::Image;
 use crate::objc::{
@@ -132,7 +131,7 @@ pub const CLASSES: ClassExports = objc_classes!
 }
 
 + (id)animatedResizableImageNamed:(id)name
-                        capInsets:(UIEdgeInsets)_insets
+                        capInsets:(CGRect)_insets
                          duration:(f64)_duration {
     msg_class![env; UIImage imageNamed:name]
 }
@@ -156,19 +155,19 @@ pub const CLASSES: ClassExports = objc_classes!
 
 // MARK: - Resizable images
 
-- (id)resizableImageWithCapInsets:(UIEdgeInsets)_insets {
+- (id)resizableImageWithCapInsets:(CGRect)_insets {
     log!("UIImage resizableImageWithCapInsets: stubbed (returning self)");
     retain(env, this)
 }
 
-- (id)resizableImageWithCapInsets:(UIEdgeInsets)_insets
+- (id)resizableImageWithCapInsets:(CGRect)_insets
                     resizingMode:(NSInteger)_mode {
     log!("UIImage resizableImageWithCapInsets:resizingMode: stubbed (returning self)");
     retain(env, this)
 }
 
-- (UIEdgeInsets)capInsets {
-    UIEdgeInsets { top: 0.0, left: 0.0, bottom: 0.0, right: 0.0 }
+- (CGRect)capInsets {
+    CGRect { origin: CGPoint { x: 0.0, y: 0.0 }, size: CGSize { width: 0.0, height: 0.0 } }
 }
 
 - (NSInteger)resizingMode {
@@ -324,7 +323,6 @@ pub const CLASSES: ClassExports = objc_classes!
 }
 
 - (())dealloc {
-    // ИСПРАВЛЕНИЕ: добавлены `..`, чтобы игнорировать новые поля
     let &UIImageHostObject { cg_image, .. } = env.objc.borrow(this);
     CGImageRelease(env, cg_image);
 
