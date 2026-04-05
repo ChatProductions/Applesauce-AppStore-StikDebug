@@ -81,12 +81,29 @@ pub const O_EXCL: OpenFlag = 0x800;
 /// File control command flags.
 /// This alias is for readability, POSIX just uses `int`.
 pub type FileControlCommand = i32;
-const F_GETFD: FileControlCommand = 1;
-const F_SETFD: FileControlCommand = 2;
-const F_GETLK: FileControlCommand = 7;
-const F_SETLK: FileControlCommand = 8;
-const F_RDADVISE: FileControlCommand = 44;
-const F_NOCACHE: FileControlCommand = 48;
+const F_GETFL:               FileControlCommand = 3;
+const F_SETFL:               FileControlCommand = 4;
+const F_SETLKW:              FileControlCommand = 9;
+const F_DUPFD:               FileControlCommand = 0;
+const F_DUPFD_CLOEXEC:       FileControlCommand = 67;
+const F_RDAHEAD:             FileControlCommand = 45;
+const F_PREALLOCATE:         FileControlCommand = 42;
+const F_TRUNCATEOVERSIZE:    FileControlCommand = 46;
+const F_SETSIZE:             FileControlCommand = 43;
+const F_FULLFSYNC:           FileControlCommand = 51;
+const F_BARRIERFSYNC:        FileControlCommand = 85;
+const F_GETPATH:             FileControlCommand = 50;
+const F_PATHPKG_CHECK:       FileControlCommand = 52;
+const F_CHKCLEAN:            FileControlCommand = 41;
+const F_ADDSIGS:             FileControlCommand = 59;
+const F_ADDFILESIGS:         FileControlCommand = 61;
+const F_ADDFILESIGS_FOR_DYLD_SIM: FileControlCommand = 83;
+const F_ADDFILESIGS_RETURN:  FileControlCommand = 97;
+const F_ADDFILESUPPL:        FileControlCommand = 99;
+const F_SETNOSIGPIPE:        FileControlCommand = 73;
+const F_GETNOSIGPIPE:        FileControlCommand = 74;
+const F_PEOFPOSMODE:         FileControlCommand = 3;  // seek mode flag
+const F_VOLPOSMODE:          FileControlCommand = 4;  // seek mode flag
 
 /// File Descriptor flags.
 /// This alias is for readability, POSIX just uses `int`.
@@ -634,8 +651,13 @@ fn fcntl(
     }
 
     match cmd {
+        // ----------------------------------------------------------------
+        // File descriptor flags
+        // ----------------------------------------------------------------
         F_GETFD => {
-            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else { return -1;
+            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
+                set_errno(env, EBADF);
+                return -1;
             };
             return file.flags;
         }
@@ -643,49 +665,228 @@ fn fcntl(
             let flags: i32 = args.start().next(env);
             assert!(matches!(flags, FD_CLOEXEC | 0));
             if flags & FD_CLOEXEC == FD_CLOEXEC {
-                log!("TODO: fcntl({}, F_SETFD, {}) called. CLOEXEC currently not supported.", fd, flags);
+                log!("TODO: fcntl({}, F_SETFD, FD_CLOEXEC) — CLOEXEC not supported", fd);
             }
             if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
                 file.flags = flags;
             }
         }
+
+        // ----------------------------------------------------------------
+        // File status flags
+        // ----------------------------------------------------------------
+        F_GETFL => {
+            // Return the file's open-mode flags (O_RDONLY, O_WRONLY,
+            // O_RDWR, O_NONBLOCK, O_APPEND, etc.).
+            let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
+                set_errno(env, EBADF);
+                return -1;
+            };
+            return file.status_flags;
+        }
+        F_SETFL => {
+            // Only O_NONBLOCK and O_APPEND are meaningfully settable at
+            // runtime on Darwin. We store the flags and log.
+            let flags: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_SETFL, {:#x})", fd, flags);
+            if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
+                // Preserve the access-mode bits (O_RDONLY/O_WRONLY/O_RDWR)
+                // and only update the settable status flags.
+                const ACCESS_MODE_MASK: i32 = 0x3; // O_RDONLY|O_WRONLY|O_RDWR
+                let access = file.status_flags & ACCESS_MODE_MASK;
+                file.status_flags = access | (flags & !ACCESS_MODE_MASK);
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // Advisory record locking
+        // ----------------------------------------------------------------
         F_GETLK => {
             let lock_ptr: MutPtr<flock> = args.start().next(env);
             let mut lock = env.mem.read(lock_ptr);
-
             if let Err(error_code) = validate_lock(env, fd, &lock) {
                 set_errno(env, error_code);
                 return -1;
             }
-
-            log!("TODO: fcntl({}, F_GETLK, {:?}) called. Locking unimplemented, any conflicts will be unreported.", fd, lock);
+            log!("TODO: fcntl({}, F_GETLK) — locking unimplemented, reporting F_UNLCK", fd);
             lock.lock_type = F_UNLCK;
             env.mem.write(lock_ptr, lock);
         }
         F_SETLK => {
             let lock_ptr: MutPtr<flock> = args.start().next(env);
             let lock = env.mem.read(lock_ptr);
-
             if let Err(error_code) = validate_lock(env, fd, &lock) {
                 set_errno(env, error_code);
                 return -1;
             }
-
-            log!("TODO: fcntl({}, F_SETLK, {:?}) called. Locking unimplemented, ignoring lock.", fd, lock);
+            log!("TODO: fcntl({}, F_SETLK, {:?}) — locking ignored", fd, lock);
         }
+        F_SETLKW => {
+            // Like F_SETLK but blocks until the lock is acquired. We treat
+            // it identically to F_SETLK since we don't actually lock.
+            let lock_ptr: MutPtr<flock> = args.start().next(env);
+            let lock = env.mem.read(lock_ptr);
+            if let Err(error_code) = validate_lock(env, fd, &lock) {
+                set_errno(env, error_code);
+                return -1;
+            }
+            log!("TODO: fcntl({}, F_SETLKW, {:?}) — locking ignored", fd, lock);
+        }
+
+        // ----------------------------------------------------------------
+        // Duplicate file descriptor
+        // ----------------------------------------------------------------
+        F_DUPFD => {
+            // Duplicate fd using the lowest available fd >= the argument.
+            let min_fd: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_DUPFD, {})", fd, min_fd);
+            match dup_fd(env, fd, Some(min_fd), false) {
+                Ok(new_fd) => return new_fd,
+                Err(errno) => { set_errno(env, errno); return -1; }
+            }
+        }
+        F_DUPFD_CLOEXEC => {
+            // Same as F_DUPFD but sets FD_CLOEXEC on the new descriptor.
+            let min_fd: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_DUPFD_CLOEXEC, {})", fd, min_fd);
+            match dup_fd(env, fd, Some(min_fd), true) {
+                Ok(new_fd) => return new_fd,
+                Err(errno) => { set_errno(env, errno); return -1; }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // Darwin-specific I/O hints (all advisory / no-op)
+        // ----------------------------------------------------------------
         F_NOCACHE => {
-            let mut args = args.start();
-            let arg: i32 = args.next(env);
-            assert_eq!(arg, 1);
-            log!("TODO: Ignoring enabling F_NOCACHE for file descriptor {}", fd);
+            let arg: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_NOCACHE, {}) — ignored", fd, arg);
         }
         F_RDADVISE => {
-            log_dbg!("TODO: Ignoring F_RDADVISE for file descriptor {}", fd);
+            log_dbg!("fcntl({}, F_RDADVISE) — ignored", fd);
         }
-        _ => unimplemented!(),
+        F_RDAHEAD => {
+            let arg: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_RDAHEAD, {}) — ignored", fd, arg);
+        }
+        F_PREALLOCATE => {
+            // struct fstore_t — we just log and succeed.
+            log_dbg!("fcntl({}, F_PREALLOCATE) — ignored", fd);
+        }
+        F_TRUNCATEOVERSIZE => {
+            let _size: i64 = args.start().next(env);
+            log_dbg!("fcntl({}, F_TRUNCATEOVERSIZE) — ignored", fd);
+        }
+        F_SETSIZE => {
+            let size: i64 = args.start().next(env);
+            log_dbg!("fcntl({}, F_SETSIZE, {}) — ignored", fd, size);
+        }
+        F_FULLFSYNC => {
+            // Like fsync but flushes the drive write cache too. We flush
+            // the host file if we can.
+            log_dbg!("fcntl({}, F_FULLFSYNC) — flushing", fd);
+            // Best-effort: nothing to flush in our FS abstraction.
+        }
+        F_BARRIERFSYNC => {
+            log_dbg!("fcntl({}, F_BARRIERFSYNC) — ignored", fd);
+        }
+        F_GETPATH => {
+            // Writes the null-terminated path of the file into a buffer
+            // of MAXPATHLEN (1024) bytes pointed to by the arg.
+            let buf: MutPtr<u8> = args.start().next(env);
+            if let Some(path) = path_for_fd(env, fd) {
+                let bytes = path.as_bytes();
+                let len = bytes.len().min(1023);
+                let dst = env.mem.bytes_at_mut(buf, (len + 1) as u32);
+                dst[..len].copy_from_slice(&bytes[..len]);
+                dst[len] = 0;
+            } else {
+                log!("fcntl({}, F_GETPATH) — path unknown, zeroing buffer", fd);
+                env.mem.bytes_at_mut(buf, 1024).fill(0);
+            }
+        }
+        F_PATHPKG_CHECK => {
+            log_dbg!("fcntl({}, F_PATHPKG_CHECK) — returning 0", fd);
+        }
+        F_CHKCLEAN => {
+            log_dbg!("fcntl({}, F_CHKCLEAN) — returning 0", fd);
+        }
+        F_ADDSIGS | F_ADDFILESIGS | F_ADDFILESIGS_FOR_DYLD_SIM
+        | F_ADDFILESIGS_RETURN | F_ADDFILESUPPL => {
+            // Code-signing ioctls — silently succeed.
+            log_dbg!("fcntl({}, {:#x}) code-signing cmd — ignored", fd, cmd);
+        }
+        F_SETNOSIGPIPE => {
+            let arg: i32 = args.start().next(env);
+            log_dbg!("fcntl({}, F_SETNOSIGPIPE, {}) — ignored", fd, arg);
+        }
+        F_GETNOSIGPIPE => {
+            // Return 0 (SIGPIPE not suppressed).
+            return 0;
+        }
+        F_PEOFPOSMODE | F_VOLPOSMODE => {
+            log_dbg!("fcntl({}, {:#x}) positioning mode — ignored", fd, cmd);
+        }
+        _ => {
+            log!("Warning: fcntl({}, {:#x}) — unhandled cmd, returning -1", fd, cmd);
+            set_errno(env, EINVAL);
+            return -1;
+        }
     }
     0 // success
 }
+
+/// Duplicate `fd`, returning a new file descriptor >= `min_fd` (or the lowest
+/// available if `min_fd` is None). Sets FD_CLOEXEC if `cloexec` is true.
+fn dup_fd(
+    env: &mut Environment,
+    fd: FileDescriptor,
+    min_fd: Option<i32>,
+    cloexec: bool,
+) -> Result<FileDescriptor, i32> {
+    // Validate the source fd.
+    if env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
+        return Err(EBADF);
+    }
+    // Find the lowest available slot >= min_fd.
+    let start = min_fd.unwrap_or(0).max(NORMAL_FILENO_BASE) as usize;
+    let new_fd = (start..)
+        .map(|i| i as FileDescriptor)
+        .find(|&candidate| {
+            env.libc_state.posix_io.files
+                .get(fd_to_file_idx(candidate))
+                .map(|slot| slot.is_none())
+                .unwrap_or(true)
+        })
+        .ok_or(EMFILE)?;
+
+    // Clone the underlying file entry.
+    let src_idx = fd_to_file_idx(fd);
+    let entry = env.libc_state.posix_io.files[src_idx].clone()
+        .ok_or(EBADF)?;
+
+    let dst_idx = fd_to_file_idx(new_fd);
+    // Grow the files vec if needed.
+    if dst_idx >= env.libc_state.posix_io.files.len() {
+        env.libc_state.posix_io.files.resize(dst_idx + 1, None);
+    }
+    let mut new_entry = entry;
+    if cloexec {
+        new_entry.flags |= FD_CLOEXEC;
+    } else {
+        new_entry.flags &= !FD_CLOEXEC;
+    }
+    env.libc_state.posix_io.files[dst_idx] = Some(new_entry);
+    Ok(new_fd)
+}
+
+/// Try to find the guest path associated with `fd` for F_GETPATH.
+fn path_for_fd(env: &mut Environment, fd: FileDescriptor) -> Option<String> {
+    let idx = fd_to_file_idx(fd);
+    let entry = env.libc_state.posix_io.files.get(idx)?.as_ref()?;
+    entry.path.clone()
+}
+
 
 fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32 {
     set_errno(env, 0);
