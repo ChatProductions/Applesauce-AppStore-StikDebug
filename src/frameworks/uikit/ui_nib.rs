@@ -204,9 +204,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Список проблемных классов. Добавь сюда название класса из лога, если вылет повторится
     let problematic_classes = ["EAGLView", "GLView", "AnodiaView", "GameView"]; 
     
-    if problematic_classes.contains(&safe_name.as_str()) {
+    if problematic_classes.iter().any(|&c| safe_name == c) {
         log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
-        safe_name = "UIView".to_string();
+        safe_name = "UIView".into();
     }
     // --- КОНЕЦ ХАКА ---
 
