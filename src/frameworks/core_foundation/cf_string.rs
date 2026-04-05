@@ -24,6 +24,7 @@ pub type CFMutableStringRef = CFStringRef;
 
 pub type CFStringEncoding = u32;
 pub const kCFStringEncodingMacRoman: CFStringEncoding = 0;
+pub const kCFStringEncodingNextStepLatin: CFStringEncoding = 0x422;
 pub const kCFStringEncodingASCII: CFStringEncoding = 0x600;
 pub const kCFStringEncodingUTF8: CFStringEncoding = 0x8000100;
 pub const kCFStringEncodingUnicode: CFStringEncoding = 0x100;
@@ -77,6 +78,7 @@ pub fn CFStringConvertEncodingToNSStringEncoding(
         kCFStringEncodingUTF16BE => ns_string::NSUTF16BigEndianStringEncoding,
         kCFStringEncodingUTF16LE => ns_string::NSUTF16LittleEndianStringEncoding,
         kCFStringEncodingISOLatin1 => ns_string::NSISOLatin1StringEncoding,
+        kCFStringEncodingNextStepLatin => ns_string::NSNextStepLatinStringEncoding,
         _ => unimplemented!("Unhandled: CFStringEncoding {:#x}", encoding),
     }
 }
@@ -92,6 +94,7 @@ fn CFStringConvertNSStringEncodingToEncoding(
         ns_string::NSUTF16BigEndianStringEncoding => kCFStringEncodingUTF16BE,
         ns_string::NSUTF16LittleEndianStringEncoding => kCFStringEncodingUTF16LE,
         ns_string::NSISOLatin1StringEncoding => kCFStringEncodingISOLatin1,
+        ns_string::NSNextStepLatinStringEncoding => kCFStringEncodingNextStepLatin,
         _ => unimplemented!("Unhandled: NSStringEncoding {:#x}", encoding),
     }
 }
