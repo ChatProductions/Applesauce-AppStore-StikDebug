@@ -70,6 +70,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
+// MARK: - NSUserDefaults init variants
+
++ (id)standardUserDefaults {
+    if let Some(existing) = State::get(env).standard_defaults {
+        existing
+    } else {
+        let defaults: id = msg![env; this alloc];
+        let defaults: id = msg![env; defaults init];
+        State::get(env).standard_defaults = Some(defaults);
+        defaults
+    }
+}
+
++ (id)initWithSuiteName:(id)_suite_name { // NSString*
+    log_dbg!("NSUserDefaults initWithSuiteName: — returning standard defaults");
+    msg_class![env; NSUserDefaults standardUserDefaults]
+}
+
++ (())resetStandardUserDefaults {
+    // Remove the cached singleton so it gets re-created fresh.
+    State::get(env).standard_defaults = None;
+    log_dbg!("NSUserDefaults resetStandardUserDefaults: cache cleared");
+}
+
 // TODO: plist methods etc
 
 - (id)init {
@@ -142,6 +166,177 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Only app domain gets affected here (this part wasn't verified).
     let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
     msg![env; dict setValue:val forKey:key]
+}
+
+// Add to @implementation NSUserDefaults:
+
+// MARK: - Additional typed getters
+
+- (id)dictionaryForKey:(id)key {
+    let val: id = msg![env; this objectForKey:key];
+    if val == nil { return nil; }
+    let val_class: Class = msg![env; val class];
+    let ns_dict_class = env.objc.get_known_class("NSDictionary", &mut env.mem);
+    if env.objc.class_is_subclass_of(val_class, ns_dict_class) {
+        return val;
+    }
+    nil
+}
+
+- (id)stringArrayForKey:(id)key {
+    let val: id = msg![env; this arrayForKey:key];
+    if val == nil { return nil; }
+    // Verify all elements are strings.
+    let count: u32 = msg![env; val count];
+    let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
+    for i in 0..count {
+        let obj: id = msg![env; val objectAtIndex:i];
+        let cls: Class = msg![env; obj class];
+        if !env.objc.class_is_subclass_of(cls, ns_string_class) {
+            return nil;
+        }
+    }
+    val
+}
+
+- (id)URLForKey:(id)key {
+    let val: id = msg![env; this objectForKey:key];
+    if val == nil { return nil; }
+    let val_class: Class = msg![env; val class];
+    // Stored as NSURL or as NSString (file path).
+    let nsurl_class = env.objc.get_known_class("NSURL", &mut env.mem);
+    if env.objc.class_is_subclass_of(val_class, nsurl_class) {
+        return val;
+    }
+    let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
+    if env.objc.class_is_subclass_of(val_class, ns_string_class) {
+        return msg_class![env; NSURL fileURLWithPath:val];
+    }
+    nil
+}
+
+// MARK: - Additional typed setters
+
+- (())setURL:(id)url forKey:(id)key { // NSURL*, NSString*
+    if url == nil {
+        msg![env; this removeObjectForKey:key];
+        return;
+    }
+    // Store as the path string for file URLs, full string for others.
+    let is_file: bool = msg![env; url isFileURL];
+    let stored: id = if is_file {
+        msg![env; url path]
+    } else {
+        msg![env; url absoluteString]
+    };
+    msg![env; this setObject:stored forKey:key]
+}
+
+- (())setData:(id)data forKey:(id)key { // NSData*, NSString*
+    msg![env; this setObject:data forKey:key]
+}
+
+// MARK: - Removing / checking
+
+- (bool)objectIsForcedForKey:(id)_key {
+    false
+}
+
+- (bool)objectIsForcedForKey:(id)_key inDomain:(id)_domain {
+    false
+}
+
+// MARK: - Domain management
+
+- (())setPersistentDomain:(id)domain forName:(id)domain_name { // NSDictionary*, NSString*
+    log_dbg!("NSUserDefaults setPersistentDomain:forName: — writing to app domain");
+    // Merge into app domain (we don't model separate named domains).
+    let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
+    () = msg![env; dict addEntriesFromDictionary:domain];
+}
+
+- (id)persistentDomainForName:(id)_domain_name { // NSString*
+    // Return the full app domain dict as a snapshot.
+    let dict = env.objc.borrow::<NSUserDefaultsHostObject>(this).app_domain_dict;
+    let copy: id = msg![env; dict copy];
+    autorelease(env, copy)
+}
+
+- (())removePersistentDomainForName:(id)_domain_name { // NSString*
+    log_dbg!("NSUserDefaults removePersistentDomainForName: stubbed");
+}
+
+- (())setVolatileDomain:(id)domain forName:(id)_domain_name { // NSDictionary*, NSString*
+    // Treat as registration domain additions.
+    let reg = env.objc.borrow::<NSUserDefaultsHostObject>(this).registration_domain_dict;
+    let reg = if reg != nil {
+        reg
+    } else {
+        let new_dict: id = msg_class![env; NSMutableDictionary new];
+        env.objc.borrow_mut::<NSUserDefaultsHostObject>(this).registration_domain_dict = new_dict;
+        new_dict
+    };
+    () = msg![env; reg addEntriesFromDictionary:domain];
+}
+
+- (id)volatileDomainForName:(id)_domain_name { // NSString*
+    nil
+}
+
+- (())removeVolatileDomainForName:(id)_domain_name { // NSString*
+    // Stub.
+}
+
+- (id)persistentDomainNames {
+    // Return the bundle identifier as the only persistent domain name.
+    let name = ns_string::from_rust_string(
+        env,
+        env.bundle.bundle_identifier().to_string(),
+    );
+    let arr: id = msg_class![env; NSArray arrayWithObject:name];
+    release(env, name);
+    arr
+}
+
+- (id)volatileDomainNames {
+    msg_class![env; NSArray new]
+}
+
+// MARK: - Notifications
+
+- (())addSuiteNamed:(id)_suite_name { // NSString*
+    log_dbg!("NSUserDefaults addSuiteNamed: stubbed");
+}
+
+- (())removeSuiteNamed:(id)_suite_name { // NSString*
+    log_dbg!("NSUserDefaults removeSuiteNamed: stubbed");
+}
+
+// MARK: - stringForKey improved
+
+- (id)stringForKey:(id)key {
+    log_dbg!("NSUserDefaults stringForKey:{}", to_rust_string(env, key));
+    let val: id = msg![env; this objectForKey:key];
+    if val == nil { return nil; }
+    let val_class: Class = msg![env; val class];
+    let ns_string_class = env.objc.get_known_class("NSString", &mut env.mem);
+    if env.objc.class_is_subclass_of(val_class, ns_string_class) {
+        return val;
+    }
+    let ns_number_class = env.objc.get_known_class("NSNumber", &mut env.mem);
+    if env.objc.class_is_subclass_of(val_class, ns_number_class) {
+        // Return the number's string representation.
+        return msg![env; val stringValue];
+    }
+    nil
+}
+
+// MARK: - Description
+
+- (id)description {
+    let dict: id = msg![env; this dictionaryRepresentation];
+    let desc: id = msg![env; dict description];
+    desc
 }
 
 - (id)objectForKey:(id)key { // NSString*
