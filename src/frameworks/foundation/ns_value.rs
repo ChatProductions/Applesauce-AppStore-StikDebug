@@ -182,18 +182,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)description {
     let s = match env.objc.borrow::<NSValueHostObject>(this) {
         NSValueHostObject::CGPoint(p) => {
-            let p = *p; // Извлекаем значение из упакованной структуры
-            format!("NSPoint: {{{}, {}}}", p.x, p.y)
+            let (x, y) = (p.x, p.y);
+            format!("NSPoint: {{{}, {}}}", x, y)
         }
         NSValueHostObject::CGSize(s) => {
-            let s = *s; // Извлекаем значение из упакованной структуры
-            format!("NSSize: {{{}, {}}}", s.width, s.height)
+            let (w, h) = (s.width, s.height);
+            format!("NSSize: {{{}, {}}}", w, h)
         }
         NSValueHostObject::CGRect(r) => {
-            let r = *r; // Извлекаем значение из упакованной структуры
+            let (ox, oy) = (r.origin.x, r.origin.y);
+            let (sw, sh) = (r.size.width, r.size.height);
             format!(
                 "NSRect: {{{{{}, {}}}, {{{}, {}}}}}",
-                r.origin.x, r.origin.y, r.size.width, r.size.height
+                ox, oy, sw, sh
             )
         }
     };
