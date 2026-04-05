@@ -46,6 +46,7 @@ pub(super) struct CALayerHostObject {
     pub(super) background_color: Option<CGColorHostObject>,
     pub(super) corner_radius: CGFloat,
     pub(super) border_width: CGFloat,
+    pub(super) border_color: Option<CGColorHostObject>,
     pub(super) needs_display: bool,
     pub(super) needs_display_on_bounds_change: bool,
     pub(super) contents: id,
@@ -110,6 +111,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         background_color: None,
         corner_radius: 0.0,
         border_width: 0.0,
+        border_color: None,
         needs_display: false,
         needs_display_on_bounds_change: false,
         contents: nil,
@@ -298,6 +300,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGFloat)borderWidth { env.objc.borrow::<CALayerHostObject>(this).border_width }
 - (())setBorderWidth:(CGFloat)border_width { env.objc.borrow_mut::<CALayerHostObject>(this).border_width = border_width; }
+
+- (CGColorRef)borderColor {
+    if let Some(border_color) = env.objc.borrow::<CALayerHostObject>(this).border_color {
+        let class = env.objc.get_known_class("_touchHLE_CGColor", &mut env.mem);
+        let obj = env.objc.alloc_object(class, Box::new(border_color), &mut env.mem);
+        autorelease(env, obj)
+    } else { nil }
+}
+- (())setBorderColor:(CGColorRef)new_color {
+    let new_color = if new_color == nil { None } else { Some(*env.objc.borrow::<CGColorHostObject>(new_color)) };
+    env.objc.borrow_mut::<CALayerHostObject>(this).border_color = new_color;
+}
 
 - (bool)needsDisplay { env.objc.borrow::<CALayerHostObject>(this).needs_display }
 - (())setNeedsDisplay { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true; }
