@@ -152,6 +152,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationRepeatCount:{}]", repeatCount);
 }
 
++ (())setAnimationDelay:(f32)delay {
+    log!("TODO: [UIView setAnimationDelay:{}]", delay);
+}
+
 + (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache {
     log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
 }
