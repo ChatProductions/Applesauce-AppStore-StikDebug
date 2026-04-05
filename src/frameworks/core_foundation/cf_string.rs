@@ -9,6 +9,7 @@
 //!
 //! This is toll-free bridged to `NSString` and `NSMutableString` in
 //! Apple's implementation.
+//!
 //! Here it is the same type.
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
@@ -190,6 +191,7 @@ fn CFStringCreateWithFormatAndArguments(
 }
 
 pub type CFStringCompareFlags = CFOptionFlags;
+
 fn CFStringCompare(
     env: &mut Environment,
     a: CFStringRef,
@@ -244,6 +246,7 @@ fn CFStringGetCharacters(
     };
     msg![env; string getCharacters:buffer range:range]
 }
+
 fn CFStringGetCStringPtr(
     env: &mut Environment,
     the_string: CFStringRef,
@@ -306,6 +309,7 @@ fn CFStringUppercase(env: &mut Environment, string: CFStringRef, _locale: CFLoca
 
 type ConstStr255Param = ConstPtr<u8>;
 type StringPtr = MutPtr<u8>;
+
 fn CFStringCreateWithPascalString(
     env: &mut Environment,
     allocator: CFAllocatorRef,
@@ -349,6 +353,18 @@ fn CFStringGetPascalString(
     )
 }
 
+type CFStringNormalizationForm = CFIndex;
+
+fn CFStringNormalize(
+    env: &mut Environment,
+    the_string: CFMutableStringRef,
+    the_form: CFStringNormalizationForm,
+) {
+    let str = ns_string::to_rust_string(env, the_string);
+    log!("TODO: CFStringNormalize('{}', {})", str, the_form);
+    assert!(str.is_ascii()); // TODO
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringAppend(_, _)),
     export_c_func!(CFStringAppendCString(_, _, _)),
@@ -376,5 +392,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringUppercase(_, _)),
     export_c_func!(CFStringCreateWithPascalString(_, _, _)),
     export_c_func!(CFStringGetPascalString(_, _, _, _)),
+    export_c_func!(CFStringNormalize(_, _)),
 ];
 
