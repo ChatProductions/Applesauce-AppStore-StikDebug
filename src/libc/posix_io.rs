@@ -43,8 +43,14 @@ struct PosixFileHostObject {
     file: GuestFile,
     needs_flush: bool,
     reached_eof: bool,
+    /// FD flags (FD_CLOEXEC etc.)
     flags: i32,
+    /// File status flags (O_RDONLY, O_WRONLY, O_RDWR, O_APPEND, O_NONBLOCK)
+    status_flags: i32,
+    /// Guest path this fd was opened with (for F_GETPATH)
+    path: Option<String>,
 }
+
 
 // TODO: stdin/stdout/stderr handling somehow
 fn file_idx_to_fd(idx: usize) -> FileDescriptor {
@@ -83,29 +89,35 @@ pub const O_EXCL: OpenFlag = 0x800;
 /// File control command flags.
 /// This alias is for readability, POSIX just uses `int`.
 pub type FileControlCommand = i32;
+const F_DUPFD:               FileControlCommand = 0;
+const F_GETFD:               FileControlCommand = 1;
+const F_SETFD:               FileControlCommand = 2;
 const F_GETFL:               FileControlCommand = 3;
 const F_SETFL:               FileControlCommand = 4;
+const F_SETLK:               FileControlCommand = 8;
 const F_SETLKW:              FileControlCommand = 9;
-const F_DUPFD:               FileControlCommand = 0;
-const F_DUPFD_CLOEXEC:       FileControlCommand = 67;
-const F_RDAHEAD:             FileControlCommand = 45;
-const F_PREALLOCATE:         FileControlCommand = 42;
-const F_TRUNCATEOVERSIZE:    FileControlCommand = 46;
-const F_SETSIZE:             FileControlCommand = 43;
-const F_FULLFSYNC:           FileControlCommand = 51;
-const F_BARRIERFSYNC:        FileControlCommand = 85;
-const F_GETPATH:             FileControlCommand = 50;
-const F_PATHPKG_CHECK:       FileControlCommand = 52;
+const F_GETLK:               FileControlCommand = 7;
 const F_CHKCLEAN:            FileControlCommand = 41;
+const F_PREALLOCATE:         FileControlCommand = 42;
+const F_SETSIZE:             FileControlCommand = 43;
+const F_RDADVISE:            FileControlCommand = 44;
+const F_RDAHEAD:             FileControlCommand = 45;
+const F_TRUNCATEOVERSIZE:    FileControlCommand = 46;
+const F_GETPATH:             FileControlCommand = 50;
+const F_FULLFSYNC:           FileControlCommand = 51;
+const F_PATHPKG_CHECK:       FileControlCommand = 52;
 const F_ADDSIGS:             FileControlCommand = 59;
 const F_ADDFILESIGS:         FileControlCommand = 61;
-const F_ADDFILESIGS_FOR_DYLD_SIM: FileControlCommand = 83;
-const F_ADDFILESIGS_RETURN:  FileControlCommand = 97;
-const F_ADDFILESUPPL:        FileControlCommand = 99;
+const F_DUPFD_CLOEXEC:       FileControlCommand = 67;
 const F_SETNOSIGPIPE:        FileControlCommand = 73;
 const F_GETNOSIGPIPE:        FileControlCommand = 74;
-const F_PEOFPOSMODE:         FileControlCommand = 3;  // seek mode flag
-const F_VOLPOSMODE:          FileControlCommand = 4;  // seek mode flag
+const F_ADDFILESIGS_FOR_DYLD_SIM: FileControlCommand = 83;
+const F_BARRIERFSYNC:        FileControlCommand = 85;
+const F_ADDFILESIGS_RETURN:  FileControlCommand = 97;
+const F_ADDFILESUPPL:        FileControlCommand = 99;
+const F_NOCACHE:             FileControlCommand = 48;
+const F_PEOFPOSMODE:         FileControlCommand = 3; // used as seek whence, not fcntl cmd
+const F_VOLPOSMODE:          FileControlCommand = 4; // same
 
 /// File Descriptor flags.
 /// This alias is for readability, POSIX just uses `int`.
@@ -647,7 +659,9 @@ fn fcntl(
     args: DotDotDot,
 ) -> i32 {
     set_errno(env, 0);
-    if fd >= NORMAL_FILENO_BASE && env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
+    if fd >= NORMAL_FILENO_BASE
+        && env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none()
+    {
         set_errno(env, EBADF);
         return -1;
     }
@@ -665,7 +679,6 @@ fn fcntl(
         }
         F_SETFD => {
             let flags: i32 = args.start().next(env);
-            assert!(matches!(flags, FD_CLOEXEC | 0));
             if flags & FD_CLOEXEC == FD_CLOEXEC {
                 log!("TODO: fcntl({}, F_SETFD, FD_CLOEXEC) — CLOEXEC not supported", fd);
             }
@@ -678,8 +691,6 @@ fn fcntl(
         // File status flags
         // ----------------------------------------------------------------
         F_GETFL => {
-            // Return the file's open-mode flags (O_RDONLY, O_WRONLY,
-            // O_RDWR, O_NONBLOCK, O_APPEND, etc.).
             let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
                 set_errno(env, EBADF);
                 return -1;
@@ -687,16 +698,11 @@ fn fcntl(
             return file.status_flags;
         }
         F_SETFL => {
-            // Only O_NONBLOCK and O_APPEND are meaningfully settable at
-            // runtime on Darwin. We store the flags and log.
             let flags: i32 = args.start().next(env);
             log_dbg!("fcntl({}, F_SETFL, {:#x})", fd, flags);
             if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
-                // Preserve the access-mode bits (O_RDONLY/O_WRONLY/O_RDWR)
-                // and only update the settable status flags.
-                const ACCESS_MODE_MASK: i32 = 0x3; // O_RDONLY|O_WRONLY|O_RDWR
-                let access = file.status_flags & ACCESS_MODE_MASK;
-                file.status_flags = access | (flags & !ACCESS_MODE_MASK);
+                let access = file.status_flags & O_ACCMODE;
+                file.status_flags = access | (flags & !O_ACCMODE);
             }
         }
 
@@ -724,8 +730,6 @@ fn fcntl(
             log!("TODO: fcntl({}, F_SETLK, {:?}) — locking ignored", fd, lock);
         }
         F_SETLKW => {
-            // Like F_SETLK but blocks until the lock is acquired. We treat
-            // it identically to F_SETLK since we don't actually lock.
             let lock_ptr: MutPtr<flock> = args.start().next(env);
             let lock = env.mem.read(lock_ptr);
             if let Err(error_code) = validate_lock(env, fd, &lock) {
@@ -736,29 +740,20 @@ fn fcntl(
         }
 
         // ----------------------------------------------------------------
-        // Duplicate file descriptor
+        // Duplicate file descriptor (stub — GuestFile is not Clone)
         // ----------------------------------------------------------------
-        F_DUPFD => {
-            // Duplicate fd using the lowest available fd >= the argument.
+        F_DUPFD | F_DUPFD_CLOEXEC => {
             let min_fd: i32 = args.start().next(env);
-            log_dbg!("fcntl({}, F_DUPFD, {})", fd, min_fd);
-            match dup_fd(env, fd, Some(min_fd), false) {
-                Ok(new_fd) => return new_fd,
-                Err(errno) => { set_errno(env, errno); return -1; }
-            }
-        }
-        F_DUPFD_CLOEXEC => {
-            // Same as F_DUPFD but sets FD_CLOEXEC on the new descriptor.
-            let min_fd: i32 = args.start().next(env);
-            log_dbg!("fcntl({}, F_DUPFD_CLOEXEC, {})", fd, min_fd);
-            match dup_fd(env, fd, Some(min_fd), true) {
-                Ok(new_fd) => return new_fd,
-                Err(errno) => { set_errno(env, errno); return -1; }
-            }
+            log!(
+                "TODO: fcntl({}, {}) F_DUPFD min_fd={} — dup not supported",
+                fd, cmd, min_fd
+            );
+            set_errno(env, EINVAL);
+            return -1;
         }
 
         // ----------------------------------------------------------------
-        // Darwin-specific I/O hints (all advisory / no-op)
+        // Darwin I/O hints — all advisory, all ignored
         // ----------------------------------------------------------------
         F_NOCACHE => {
             let arg: i32 = args.start().next(env);
@@ -772,7 +767,6 @@ fn fcntl(
             log_dbg!("fcntl({}, F_RDAHEAD, {}) — ignored", fd, arg);
         }
         F_PREALLOCATE => {
-            // struct fstore_t — we just log and succeed.
             log_dbg!("fcntl({}, F_PREALLOCATE) — ignored", fd);
         }
         F_TRUNCATEOVERSIZE => {
@@ -784,19 +778,21 @@ fn fcntl(
             log_dbg!("fcntl({}, F_SETSIZE, {}) — ignored", fd, size);
         }
         F_FULLFSYNC => {
-            // Like fsync but flushes the drive write cache too. We flush
-            // the host file if we can.
-            log_dbg!("fcntl({}, F_FULLFSYNC) — flushing", fd);
-            // Best-effort: nothing to flush in our FS abstraction.
+            log_dbg!("fcntl({}, F_FULLFSYNC) — no-op", fd);
         }
         F_BARRIERFSYNC => {
-            log_dbg!("fcntl({}, F_BARRIERFSYNC) — ignored", fd);
+            log_dbg!("fcntl({}, F_BARRIERFSYNC) — no-op", fd);
         }
         F_GETPATH => {
-            // Writes the null-terminated path of the file into a buffer
-            // of MAXPATHLEN (1024) bytes pointed to by the arg.
             let buf: MutPtr<u8> = args.start().next(env);
-            if let Some(path) = path_for_fd(env, fd) {
+            let path_opt = env
+                .libc_state
+                .posix_io
+                .files
+                .get(fd_to_file_idx(fd))
+                .and_then(|s| s.as_ref())
+                .and_then(|f| f.path.clone());
+            if let Some(path) = path_opt {
                 let bytes = path.as_bytes();
                 let len = bytes.len().min(1023);
                 let dst = env.mem.bytes_at_mut(buf, (len + 1) as u32);
@@ -813,30 +809,37 @@ fn fcntl(
         F_CHKCLEAN => {
             log_dbg!("fcntl({}, F_CHKCLEAN) — returning 0", fd);
         }
-        F_ADDSIGS | F_ADDFILESIGS | F_ADDFILESIGS_FOR_DYLD_SIM
-        | F_ADDFILESIGS_RETURN | F_ADDFILESUPPL => {
-            // Code-signing ioctls — silently succeed.
-            log_dbg!("fcntl({}, {:#x}) code-signing cmd — ignored", fd, cmd);
+        F_ADDSIGS
+        | F_ADDFILESIGS
+        | F_ADDFILESIGS_FOR_DYLD_SIM
+        | F_ADDFILESIGS_RETURN
+        | F_ADDFILESUPPL => {
+            log_dbg!("fcntl({}, {:#x}) code-signing — ignored", fd, cmd);
         }
         F_SETNOSIGPIPE => {
             let arg: i32 = args.start().next(env);
             log_dbg!("fcntl({}, F_SETNOSIGPIPE, {}) — ignored", fd, arg);
         }
         F_GETNOSIGPIPE => {
-            // Return 0 (SIGPIPE not suppressed).
             return 0;
         }
-        F_PEOFPOSMODE | F_VOLPOSMODE => {
-            log_dbg!("fcntl({}, {:#x}) positioning mode — ignored", fd, cmd);
-        }
         _ => {
-            log!("Warning: fcntl({}, {:#x}) — unhandled cmd, returning -1", fd, cmd);
+            log!(
+                "Warning: fcntl({}, {:#x}) — unhandled cmd, returning -1",
+                fd, cmd
+            );
             set_errno(env, EINVAL);
             return -1;
         }
     }
-    0 // success
+    0
 }
+
+// =========================================================================
+// MARK: - path_for_fd (remove — inline into F_GETPATH above)
+// =========================================================================
+// Deleted — logic is now inline in the F_GETPATH arm.
+
 
 /// Duplicate `fd`, returning a new file descriptor >= `min_fd` (or the lowest
 /// available if `min_fd` is None). Sets FD_CLOEXEC if `cloexec` is true.
@@ -991,6 +994,8 @@ pub fn find_or_create_socket(env: &mut Environment) -> FileDescriptor {
         needs_flush: false,
         reached_eof: false,
         flags: 0,
+        status_flags: O_RDWR,
+        path: None,
     };
     find_or_create_fd(env, host_object)
 }
