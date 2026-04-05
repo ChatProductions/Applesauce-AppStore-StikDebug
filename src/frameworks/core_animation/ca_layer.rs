@@ -45,6 +45,7 @@ pub(super) struct CALayerHostObject {
     pub(super) opacity: f32,
     pub(super) background_color: Option<CGColorHostObject>,
     pub(super) corner_radius: CGFloat,
+    pub(super) border_width: CGFloat,
     pub(super) needs_display: bool,
     pub(super) needs_display_on_bounds_change: bool,
     pub(super) contents: id,
@@ -108,6 +109,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         opacity: 1.0,
         background_color: None,
         corner_radius: 0.0,
+        border_width: 0.0,
         needs_display: false,
         needs_display_on_bounds_change: false,
         contents: nil,
@@ -293,6 +295,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGFloat)cornerRadius { env.objc.borrow::<CALayerHostObject>(this).corner_radius }
 - (())setCornerRadius:(CGFloat)corner_radius { env.objc.borrow_mut::<CALayerHostObject>(this).corner_radius = corner_radius; }
+
+- (CGFloat)borderWidth { env.objc.borrow::<CALayerHostObject>(this).border_width }
+- (())setBorderWidth:(CGFloat)border_width { env.objc.borrow_mut::<CALayerHostObject>(this).border_width = border_width; }
 
 - (bool)needsDisplay { env.objc.borrow::<CALayerHostObject>(this).needs_display }
 - (())setNeedsDisplay { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true; }
