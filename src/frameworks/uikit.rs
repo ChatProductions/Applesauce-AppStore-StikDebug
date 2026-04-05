@@ -28,6 +28,7 @@ pub mod ui_keyboard;
 pub mod ui_navigation_bar;
 pub mod ui_nib;
 pub mod ui_pasteboard;
+pub mod ui_popover_controller;
 pub mod ui_responder;
 pub mod ui_screen;
 pub mod ui_screen_mode;
@@ -56,6 +57,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_navigation_bar::CLASSES,
         ui_nib::CLASSES,
         ui_pasteboard::CLASSES,
+        ui_popover_controller::CLASSES,
         ui_responder::CLASSES,
         ui_screen_mode::CLASSES,
         ui_screen::CLASSES,
