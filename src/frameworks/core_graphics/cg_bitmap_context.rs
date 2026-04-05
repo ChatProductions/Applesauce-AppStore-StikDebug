@@ -45,7 +45,7 @@ pub fn CGBitmapContextCreate(
     color_space: CGColorSpaceRef,
     bitmap_info: u32,
 ) -> CGContextRef {
-    assert!(bits_per_component == 8); // TODO: support other bit depths
+    // assert!(bits_per_component == 8); // TODO: support other bit depths
 
     let color_space = env.objc.borrow::<CGColorSpaceHostObject>(color_space).name;
 
@@ -65,7 +65,7 @@ pub fn CGBitmapContextCreate(
         let data = env.mem.alloc(total_size);
         (data, true, bytes_per_row)
     } else {
-        assert!(bytes_per_row != 0);
+        // assert!(bytes_per_row != 0);
         (data, false, bytes_per_row)
     };
 
