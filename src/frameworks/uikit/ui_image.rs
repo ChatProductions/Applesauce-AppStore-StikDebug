@@ -41,7 +41,8 @@ impl State {
 }
 
 struct UIImageHostObject {
-    cg_image: CGImageRef,
+    cg_image:    CGImageRef,
+    orientation: NSInteger, // UIImageOrientation
 }
 impl HostObject for UIImageHostObject {}
 
@@ -52,9 +53,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIImage: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(UIImageHostObject { cg_image: nil });
+    let host_object = Box::new(UIImageHostObject {
+        cg_image:    nil,
+        orientation: 0, // UIImageOrientationUp
+    });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
+
 
 + (id)imageWithCGImage:(CGImageRef)cg_image {
     let new: id = msg![env; this alloc];
@@ -97,6 +102,223 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithData:data];
     autorelease(env, new)
+}
+
++ (id)imageWithCGImage:(CGImageRef)cg_image
+                 scale:(CGFloat)_scale
+           orientation:(NSInteger)orientation {
+    // We ignore scale for now (stored as 1.0).
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithCGImage:cg_image];
+    // Store orientation.
+    env.objc.borrow_mut::<UIImageHostObject>(new).orientation = orientation;
+    autorelease(env, new)
+}
+
++ (id)animatedImageNamed:(id)name
+               duration:(f64)_duration { // NSString*
+    // No animation support — return static image.
+    msg_class![env; UIImage imageNamed:name]
+}
+
++ (id)animatedImageWithImages:(id)images
+                     duration:(f64)_duration { // NSArray<UIImage*>*
+    // Return first frame.
+    let count: u32 = msg![env; images count];
+    if count == 0 { return nil; }
+    msg![env; images objectAtIndex:0u32]
+}
+
++ (id)animatedResizableImageNamed:(id)name
+                        capInsets:(UIEdgeInsets)_insets
+                         duration:(f64)_duration {
+    msg_class![env; UIImage imageNamed:name]
+}
+
+// MARK: - Init with scale / orientation
+
+- (id)initWithCGImage:(CGImageRef)cg_image
+                scale:(CGFloat)_scale
+          orientation:(NSInteger)orientation {
+    CGImageRetain(env, cg_image);
+    let host = env.objc.borrow_mut::<UIImageHostObject>(this);
+    host.cg_image    = cg_image;
+    host.orientation = orientation;
+    this
+}
+
+- (id)initWithData:(id)data
+             scale:(CGFloat)_scale { // NSData*
+    msg![env; this initWithData:data]
+}
+
+// MARK: - Resizable images
+
+- (id)resizableImageWithCapInsets:(UIEdgeInsets)_insets {
+    log!("UIImage resizableImageWithCapInsets: stubbed (returning self)");
+    retain(env, this)
+}
+
+- (id)resizableImageWithCapInsets:(UIEdgeInsets)_insets
+                    resizingMode:(NSInteger)_mode {
+    log!("UIImage resizableImageWithCapInsets:resizingMode: stubbed (returning self)");
+    retain(env, this)
+}
+
+- (UIEdgeInsets)capInsets {
+    UIEdgeInsets { top: 0.0, left: 0.0, bottom: 0.0, right: 0.0 }
+}
+
+- (NSInteger)resizingMode {
+    0 // UIImageResizingModeTile
+}
+
+// MARK: - Rendering mode
+
+- (id)imageWithRenderingMode:(NSInteger)_rendering_mode {
+    log_dbg!("UIImage imageWithRenderingMode: stubbed (returning self)");
+    retain(env, this)
+}
+
+- (NSInteger)renderingMode {
+    0 // UIImageRenderingModeAutomatic
+}
+
+// MARK: - Flipped image
+
+- (id)imageFlippedForRightToLeftLayoutDirection {
+    retain(env, this)
+}
+
+- (bool)flipsForRightToLeftLayoutDirection {
+    false
+}
+
+// MARK: - Image with tint (iOS 13+)
+
+- (id)imageWithTintColor:(id)_color { // UIColor*
+    retain(env, this)
+}
+
+- (id)imageWithTintColor:(id)_color
+        renderingMode:(NSInteger)_mode {
+    retain(env, this)
+}
+
+// MARK: - Accessors
+
+- (NSInteger)imageOrientation {
+    env.objc.borrow::<UIImageHostObject>(this).orientation
+}
+
+- (CGFloat)scale {
+    1.0
+}
+
+- (bool)isSymbolImage {
+    false
+}
+
+- (id)imageAsset {
+    nil
+}
+
+- (id)traitCollection {
+    nil
+}
+
+- (id)configuration {
+    nil
+}
+
+- (id)baselineOffsetFromBottom {
+    nil
+}
+
+- (CGFloat)leftCapWidth {
+    0.0
+}
+
+- (CGFloat)topCapHeight {
+    0.0
+}
+
+- (id)images {
+    // Non-animated — return nil (single frame).
+    nil
+}
+
+- (f64)duration {
+    0.0
+}
+
+- (bool)isHighDynamicRange {
+    false
+}
+
+// MARK: - Drawing variants
+
+- (())drawInRect:(CGRect)rect
+       blendMode:(NSInteger)_blend_mode
+           alpha:(CGFloat)alpha {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil { return; }
+    // TODO: apply blend mode and alpha properly.
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    CGContextDrawImage(env, context, rect, image);
+}
+
+- (())drawAsPatternInRect:(CGRect)_rect {
+    log!("UIImage drawAsPatternInRect: stubbed (not rendered)");
+}
+
+// MARK: - NSCoding
+
+- (id)initWithCoder:(id)coder {
+    // Some NIB archives embed UIImage data.
+    let key = get_static_str(env, "UIImageData");
+    let data: id = msg![env; coder decodeObjectForKey:key];
+    if data != nil {
+        return msg![env; this initWithData:data];
+    }
+    let key = get_static_str(env, "UIResourceName");
+    let name: id = msg![env; coder decodeObjectForKey:key];
+    if name != nil {
+        release(env, this);
+        let img = msg_class![env; UIImage imageNamed:name];
+        return retain(env, img);
+    }
+    this
+}
+
+// MARK: - Equality / description
+
+- (bool)isEqual:(id)other {
+    if this == other { return true; }
+    if other == nil  { return false; }
+    let a = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    let b = env.objc.borrow::<UIImageHostObject>(other).cg_image;
+    a == b
+}
+
+- (id)description {
+    let host  = env.objc.borrow::<UIImageHostObject>(this);
+    let image = host.cg_image;
+    drop(host);
+    let (w, h) = if image != nil {
+        cg_image::borrow_image(&env.objc, image).dimensions()
+    } else {
+        (0, 0)
+    };
+    let s = format!("<UIImage: {:?} size={{{}×{}}}>", this, w, h);
+    let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, s);
+    autorelease(env, ns)
+}
+
+// MARK: - NSCopying
+
+- (id)copyWithZone:(NSZonePtr)_zone {
+    retain(env, this)
 }
 
 - (())dealloc {
@@ -333,5 +555,39 @@ fn write_to_saved_photos_album_inner(env: &mut Environment, cg_image: CGImageRef
     );
 }
 
-pub const FUNCTIONS: FunctionExports =
-    &[export_c_func!(UIImageWriteToSavedPhotosAlbum(_, _, _, _))];
+fn UIImagePNGRepresentation(env: &mut Environment, image: id) -> id {
+    if image == nil { return nil; }
+    let cg_image: CGImageRef = msg![env; image CGImage];
+    if cg_image.is_null() { return nil; }
+    let img = cg_image::borrow_image(&env.objc, cg_image);
+    let (w, h) = img.dimensions();
+    let rgba = img.pixels();
+    let stride = w as usize * 4;
+    let mut png_data: Vec<u8> = Vec::new();
+    let ctx_ptr: *mut std::ffi::c_void = (&mut png_data as *mut Vec<u8>).cast();
+    let ok = img.write_png_image(ctx_ptr, w as i32, h as i32, rgba, stride as i32);
+    if ok == 0 {
+        log!("UIImagePNGRepresentation: encoding failed");
+        return nil;
+    }
+    let len = png_data.len() as crate::frameworks::foundation::NSUInteger;
+    let buf: crate::mem::MutVoidPtr = env.mem.alloc(len as u32).cast();
+    env.mem.bytes_at_mut(buf.cast(), len as u32).copy_from_slice(&png_data);
+    msg_class![env; NSData dataWithBytesNoCopy:buf length:len]
+}
+
+fn UIImageJPEGRepresentation(
+    env: &mut Environment,
+    image: id,
+    _compression_quality: CGFloat,
+) -> id {
+    // We don't have a JPEG encoder — fall back to PNG.
+    log!("UIImageJPEGRepresentation: stubbed, returning PNG data");
+    UIImagePNGRepresentation(env, image)
+}
+
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(UIImageWriteToSavedPhotosAlbum(_, _, _, _)),
+    export_c_func!(UIImagePNGRepresentation(_)),
+    export_c_func!(UIImageJPEGRepresentation(_, _)),
+];
