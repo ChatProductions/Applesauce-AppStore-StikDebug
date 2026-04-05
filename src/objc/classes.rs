@@ -967,3 +967,41 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
     // Если прошли всю цепочку и ничего не нашли, метод не существует
     ConstVoidPtr::null()
 }
+
+pub fn method_getImplementation(env: &mut crate::Environment, cls: Class, name: SEL) -> ConstVoidPtr {
+    // Согласно спецификации Objective-C, если передан nil класс, возвращаем nil
+    if cls.is_null() {
+        return ConstVoidPtr::null();
+    }
+
+    let mut curr = cls;
+    while !curr.is_null() {
+        // Достаём хост-объект класса, чтобы получить доступ к списку методов
+        if let Some(host_obj) = env.objc.get_host_object(curr) {
+            if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+                // Если селектор зарегистрирован в данном классе
+                if class_obj.methods.contains_key(&name) {
+                    // Возвращаем non-null указатель. 
+                    // В реальном iOS/macOS это указатель на структуру `method_t`.
+                    // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
+                    // и не выделяет под них память в гостевом пространстве, 
+                    // возврат указателя на сам класс — это безопасный способ дать 
+                    // приложению "валидный" (читаемый) адрес, означающий, что метод существует.
+                    return curr.cast_const().cast();
+                }
+            }
+        }
+        
+        // Поднимаемся вверх по иерархии к суперклассу
+        let next = env.objc.get_superclass(curr);
+        
+        // Защита от бесконечного цикла, если иерархия зациклена
+        if next == curr {
+            break;
+        }
+        curr = next;
+    }
+
+    // Если прошли всю цепочку и ничего не нашли, метод не существует
+    ConstVoidPtr::null()
+}
