@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSInputStream` and `NSOutputStream`.
@@ -74,7 +75,8 @@ struct NSOutputStreamHostObject {
 }
 impl HostObject for NSOutputStreamHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 
 (env, this, _cmd);
 
@@ -190,7 +192,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())open {
     let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
     host.status = NSStreamStatusOpen;
-
     // For file backing, load bytes now.
     if let InputStreamBacking::File { path, bytes, .. } = &mut host.backing {
         let path_str = ns_string::to_rust_string(env, *path).into_owned();
@@ -228,8 +229,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     match &mut env.objc.borrow_mut::<NSInputStreamHostObject>(this).backing {
         InputStreamBacking::Data { data, offset } => {
-            let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; data bytes];
-            let total: NSUInteger = msg![env; data length];
+            let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; *data bytes];
+            let total: NSUInteger = msg![env; *data length];
             let remaining = total as usize - *offset;
             let to_read = remaining.min(len as usize);
             if to_read == 0 {
@@ -270,7 +271,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)hasBytesAvailable {
     match &env.objc.borrow::<NSInputStreamHostObject>(this).backing {
         InputStreamBacking::Data { data, offset } => {
-            let total: NSUInteger = msg![env; data length];
+            let total: NSUInteger = msg![env; *data length];
             (*offset as NSUInteger) < total
         }
         InputStreamBacking::File { bytes, offset, .. } => *offset < bytes.len(),
@@ -440,7 +441,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if status == NSStreamStatusClosed || status == NSStreamStatusError {
         return -1;
     }
-    if len == 0 { return 0; }
+    if len == 0 { return 0;
+    }
 
     match &mut env.objc.borrow_mut::<NSOutputStreamHostObject>(this).backing {
         OutputStreamBacking::Memory { buffer: buf } => {
@@ -508,3 +510,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
