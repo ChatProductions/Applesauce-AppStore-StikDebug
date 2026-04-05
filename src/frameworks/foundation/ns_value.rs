@@ -152,16 +152,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == crate::objc::nil { return false; }
-    // Compare by stored CG geometry.
-    let host_a = env.objc.borrow::<NSValueHostObject>(this);
+    
+    // Сначала вызываем функции, использующие env, ДО заимствования `this`
     let host_b_class: crate::objc::Class = msg![env; other class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
     if !env.objc.class_is_subclass_of(host_b_class, ns_value_class) {
         return false;
     }
+    
+    // Теперь можно безопасно заимствовать оба объекта
+    let host_a = env.objc.borrow::<NSValueHostObject>(this);
     let b = env.objc.borrow::<NSValueHostObject>(other);
     
-    // ИСПРАВЛЕНИЕ: убраны .as_ref()
     match (host_a, b) {
         (NSValueHostObject::CGPoint(a), NSValueHostObject::CGPoint(b)) => {
             a.x == b.x && a.y == b.y
@@ -180,12 +182,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)description {
     let s = match env.objc.borrow::<NSValueHostObject>(this) {
         NSValueHostObject::CGPoint(p) => {
+            let p = *p; // Извлекаем значение из упакованной структуры
             format!("NSPoint: {{{}, {}}}", p.x, p.y)
         }
         NSValueHostObject::CGSize(s) => {
+            let s = *s; // Извлекаем значение из упакованной структуры
             format!("NSSize: {{{}, {}}}", s.width, s.height)
         }
         NSValueHostObject::CGRect(r) => {
+            let r = *r; // Извлекаем значение из упакованной структуры
             format!(
                 "NSRect: {{{{{}, {}}}, {{{}, {}}}}}",
                 r.origin.x, r.origin.y, r.size.width, r.size.height
