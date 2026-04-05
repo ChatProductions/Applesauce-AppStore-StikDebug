@@ -37,6 +37,7 @@ impl State {
     }
 }
 
+#[derive(Clone)]
 struct PosixFileHostObject {
     file: GuestFile,
     needs_flush: bool,
