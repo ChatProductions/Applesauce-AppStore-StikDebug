@@ -47,7 +47,8 @@ struct UIImageHostObject {
 }
 impl HostObject for UIImageHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 
 (env, this, _cmd);
 
@@ -323,7 +324,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UIImageHostObject { cg_image } = env.objc.borrow(this);
+    // ИСПРАВЛЕНИЕ: добавлены `..`, чтобы игнорировать новые поля
+    let &UIImageHostObject { cg_image, .. } = env.objc.borrow(this);
     CGImageRelease(env, cg_image);
 
     env.objc.dealloc_object(this, &mut env.mem)
@@ -428,11 +430,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSCoding implementation
 - (id)initWithCoder:(id)coder {
     release(env, this);
-
     // TODO: decode other attributes
     let key_ns_string = get_static_str(env, "UIResourceName");
     let resource_name: id = msg![env; coder decodeObjectForKey:key_ns_string];
-
     let res = msg_class![env; UIImage imageNamed:resource_name];
     // TODO: It is not clear if we need to additionally retain here?
     retain(env, res)
@@ -454,13 +454,11 @@ fn UIImageWriteToSavedPhotosAlbum(
         completionTarget,
         completionSelector,
     );
-
     let cg_image = if image != nil {
         msg![env; image CGImage]
     } else {
         nil
     };
-
     if cg_image != nil {
         write_to_saved_photos_album_inner(env, cg_image);
     } else {
@@ -490,7 +488,6 @@ fn write_to_saved_photos_album_inner(env: &mut Environment, cg_image: CGImageRef
 
     let w = w_u32 as i32;
     let h = h_u32 as i32;
-
     let rgba: &[u8] = img.pixels();
     let stride = (w_u32 as usize) * 4;
 
@@ -498,14 +495,12 @@ fn write_to_saved_photos_album_inner(env: &mut Environment, cg_image: CGImageRef
     let ctx_ptr: *mut std::ffi::c_void = (&mut png_data as *mut Vec<u8>).cast();
 
     let ok = img.write_png_image(ctx_ptr, w, h, rgba, stride as i32);
-
     if ok == 0 {
         log!("Warning: UIImageWriteToSavedPhotosAlbum: stb_image_write failed to encode PNG");
         return;
     }
     let base = crate::paths::user_data_base_path();
     let album_dir = base.join(crate::paths::PHOTO_ALBUM_DIR);
-
     if let Err(e) = std::fs::create_dir_all(&album_dir) {
         log!(
             "Warning: UIImageWriteToSavedPhotosAlbum failed to create {:?}: {:?}",
@@ -592,3 +587,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(UIImagePNGRepresentation(_)),
     export_c_func!(UIImageJPEGRepresentation(_, _)),
 ];
+
