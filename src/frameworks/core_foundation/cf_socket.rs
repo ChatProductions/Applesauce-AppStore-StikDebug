@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 //! `CFSocket`
 
-use super::cf_allocator::{CFAllocatorRef};
+use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::{CFRelease, CFRetain, CFTypeRef};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{ConstVoidPtr, MutVoidPtr};
@@ -16,7 +16,6 @@ use crate::Environment;
 
 pub type CFSocketRef       = CFTypeRef;
 pub type CFSocketNativeHandle = i32;
-
 pub type CFSocketCallBackType = u32;
 pub type CFSocketError        = i32;
 
@@ -77,8 +76,8 @@ pub fn CFSocketRelease(env: &mut Environment, s: CFSocketRef) {
 // MARK: - Constructors
 
 fn CFSocketCreate(
-    _env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
     protocol_family: i32,
     socket_type: i32,
     protocol: i32,
@@ -86,6 +85,7 @@ fn CFSocketCreate(
     _callout: MutVoidPtr,
     _context: MutVoidPtr,
 ) -> CFSocketRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     log!(
         "CFSocketCreate: family={} type={} protocol={} callbacks={} — stubbed, returning null",
         protocol_family, socket_type, protocol, callback_types
@@ -238,22 +238,22 @@ fn CFSocketInvalidate(_env: &mut Environment, _s: CFSocketRef) {
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFSocketRetain(_)),
     export_c_func!(CFSocketRelease(_)),
-    export_c_func!(CFSocketCreate(_, _, _, _, _, _, _)),
-    export_c_func!(CFSocketCreateWithNative(_, _, _, _, _)),
-    export_c_func!(CFSocketCreateWithSocketSignature(_, _, _, _, _)),
-    export_c_func!(CFSocketCreateConnectedToSocketSignature(_, _, _, _, _, _)),
+    export_c_func!(CFSocketCreate(_, _, _, _, _, _, _, _)),
+    export_c_func!(CFSocketCreateWithNative(_, _, _, _, _, _)),
+    export_c_func!(CFSocketCreateWithSocketSignature(_, _, _, _, _, _)),
+    export_c_func!(CFSocketCreateConnectedToSocketSignature(_, _, _, _, _, _, _)),
     export_c_func!(CFSocketGetNative(_)),
-    export_c_func!(CFSocketEnableCallBacks(_, _)),
-    export_c_func!(CFSocketDisableCallBacks(_, _)),
-    export_c_func!(CFSocketSetSocketFlags(_, _)),
-    export_c_func!(CFSocketGetSocketFlags(_)),
-    export_c_func!(CFSocketCopyAddress(_)),
-    export_c_func!(CFSocketCopyPeerAddress(_)),
-    export_c_func!(CFSocketSetAddress(_, _)),
-    export_c_func!(CFSocketConnectToAddress(_, _, _)),
-    export_c_func!(CFSocketSendData(_, _, _, _)),
-    export_c_func!(CFSocketCreateRunLoopSource(_, _, _)),
-    export_c_func!(CFSocketIsValid(_)),
-    export_c_func!(CFSocketInvalidate(_)),
+    export_c_func!(CFSocketEnableCallBacks(_, _, _)),
+    export_c_func!(CFSocketDisableCallBacks(_, _, _)),
+    export_c_func!(CFSocketSetSocketFlags(_, _, _)),
+    export_c_func!(CFSocketGetSocketFlags(_, _)),
+    export_c_func!(CFSocketCopyAddress(_, _)),
+    export_c_func!(CFSocketCopyPeerAddress(_, _)),
+    export_c_func!(CFSocketSetAddress(_, _, _)),
+    export_c_func!(CFSocketConnectToAddress(_, _, _, _)),
+    export_c_func!(CFSocketSendData(_, _, _, _, _)),
+    export_c_func!(CFSocketCreateRunLoopSource(_, _, _, _)),
+    export_c_func!(CFSocketIsValid(_, _)),
+    export_c_func!(CFSocketInvalidate(_, _)),
 ];
 
