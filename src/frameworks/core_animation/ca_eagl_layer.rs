@@ -162,8 +162,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - find_fullscreen_eagl_layer
 // =========================================================================
 
-/// If there is an opaque `CAEAGLLayer` that covers the entire screen, this
-/// returns a pointer to it. Otherwise, it returns [nil].
+/// Returns a pointer to a `CAEAGLLayer` inside the active window.
+/// Replaces strict bounds checks with a robust BFS layer search.
 pub fn find_fullscreen_eagl_layer(env: &mut Environment) -> id {
     if env.options.force_composition {
         return nil;
@@ -178,50 +178,26 @@ pub fn find_fullscreen_eagl_layer(env: &mut Environment) -> id {
         return nil;
     };
 
-    let screen_bounds: CGRect = {
-        let screen: id = msg_class![env; UIScreen mainScreen];
-        msg![env; screen bounds]
-    };
-
-    let mut layer: id = msg![env; top_window layer];
-
-    loop {
-        // assert!(layer != nil);
-
-        let layer_host_obj: &CALayerHostObject = env.objc.borrow(layer);
-
-        if layer_host_obj.bounds.size != screen_bounds.size
-            || layer_host_obj.bounds.origin != (CGPoint { x: 0.0, y: 0.0 })
-            || layer_host_obj.anchor_point != (CGPoint { x: 0.5, y: 0.5 })
-            || layer_host_obj.position
-                != (CGPoint {
-                    x: screen_bounds.size.width / 2.0,
-                    y: screen_bounds.size.height / 2.0,
-                })
-            || layer_host_obj.hidden
-            || layer_host_obj.opacity != 1.0
-            || !layer_host_obj.affine_transform.is_identity()
-        {
-            return nil;
-        }
-
-        if let Some(&next) = layer_host_obj.sublayers.last() {
-            layer = next;
-        } else {
-            break;
-        }
-    }
-
-    if !env.objc.borrow::<CALayerHostObject>(layer).opaque {
-        return nil;
-    }
-
     let ca_eagl_layer_class: Class = msg_class![env; CAEAGLLayer class];
-    if !msg![env; layer isKindOfClass:ca_eagl_layer_class] {
-        return nil;
+    
+    // Используем очередь для обхода всего дерева слоев окна (BFS)
+    let mut queue = vec![msg![env; top_window layer]];
+    while let Some(layer) = queue.pop() {
+        if layer == nil { continue; }
+        
+        // Если нашли графический слой OpenGL - сразу отдаем его
+        if msg![env; layer isKindOfClass:ca_eagl_layer_class] {
+            return layer;
+        }
+        
+        // Иначе продолжаем поиск по вложенным слоям
+        let layer_host_obj: &CALayerHostObject = env.objc.borrow(layer);
+        for &sublayer in layer_host_obj.sublayers.iter().rev() {
+            queue.push(sublayer);
+        }
     }
 
-    layer
+    nil
 }
 
 // =========================================================================
@@ -279,3 +255,4 @@ pub fn drawable_height(env: &mut Environment, layer: id) -> u32 {
     }
     host.bounds.size.height as u32
 }
+
