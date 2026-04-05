@@ -19,7 +19,7 @@ struct UINavigationControllerHostObject {
     superclass: super::UIViewControllerHostObject,
     delegate: id,
     navigation_stack: Vec<id>,
-    // Заглушка панели навигации
+    // Ссылка на панель навигации
     navigation_bar: id,
 }
 impl_HostObject_with_superclass!(UINavigationControllerHostObject);
@@ -122,19 +122,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)navigationBar {
-    // 1. Сначала безопасно "заглядываем" в объект (берем immutable borrow)
     let existing_bar = env.objc.borrow::<UINavigationControllerHostObject>(this).navigation_bar;
     
     if existing_bar != nil {
         return existing_bar;
     }
 
-    // 2. Если бара нет, создаем его (здесь никаких borrow_mut не висит, поэтому безопасно)
-    let view_class = env.objc.get_known_class("UIView", &mut env.mem);
-    let bar: id = msg![env; view_class alloc];
+    // Инициализируем настоящий UINavigationBar
+    let bar_class = env.objc.get_known_class("UINavigationBar", &mut env.mem);
+    let bar: id = msg![env; bar_class alloc];
     let bar: id = msg![env; bar init];
 
-    // 3. Открываем объект для записи (mutable borrow) и сохраняем
     env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_bar = bar;
     
     bar
