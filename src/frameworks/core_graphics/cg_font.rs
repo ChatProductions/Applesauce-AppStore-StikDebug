@@ -222,16 +222,15 @@ fn CGFontGetGlyphAdvances(
     env: &mut Environment,
     font: CGFontRef,
     glyphs: crate::mem::ConstPtr<CGGlyph>,
-    count: usize,
+    count: u32,
     advances: crate::mem::MutPtr<i32>,
 ) -> bool {
     if font.is_null() { return false; }
     let upm = CGFontGetUnitsPerEm(env, font);
-    // Use ~60% of em as a reasonable average advance.
     let avg_advance = (upm as f32 * 0.60).round() as i32;
     for i in 0..count {
-        let _glyph: CGGlyph = env.mem.read(glyphs + i as u32);
-        env.mem.write(advances + i as u32, avg_advance);
+        let _glyph: CGGlyph = env.mem.read(glyphs + i);
+        env.mem.write(advances + i, avg_advance);
     }
     log_dbg!("CGFontGetGlyphAdvances: wrote {} stub advances", count);
     true
@@ -245,21 +244,21 @@ fn CGFontGetGlyphBBoxes(
     env: &mut Environment,
     font: CGFontRef,
     _glyphs: crate::mem::ConstPtr<CGGlyph>,
-    count: usize,
-    bboxes: MutVoidPtr, // CGRect*
+    count: u32,
+    bboxes: crate::mem::MutVoidPtr,
 ) -> bool {
     use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
     if font.is_null() { return false; }
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
-    let asc  =  CGFontGetAscent(env, font)  as f32;
-    let desc =  CGFontGetDescent(env, font) as f32;
+    let asc  = CGFontGetAscent(env, font)  as f32;
+    let desc = CGFontGetDescent(env, font) as f32;
     let rect = CGRect {
         origin: CGPoint { x: 0.0, y: desc },
         size:   CGSize  { width: upm * 0.60, height: asc - desc },
     };
     let p: crate::mem::MutPtr<CGRect> = bboxes.cast();
     for i in 0..count {
-        env.mem.write(p + i as u32, rect);
+        env.mem.write(p + i, rect);
     }
     true
 }
@@ -336,7 +335,7 @@ fn CGFontCreatePostScriptSubset(
     subset_name: CFStringRef,
     format: CGFontPostScriptFormat,
     _glyphs: crate::mem::ConstPtr<CGGlyph>,
-    _count: usize,
+    _count: u32,
     _encoding: crate::mem::ConstPtr<CGGlyph>,
 ) -> CFTypeRef {
     log!(
