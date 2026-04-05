@@ -1,12 +1,15 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `UINib` and loading of nib files.
 //!
 //! Resources:
 //! - Apple's [Resource Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/LoadingResources/CocoaNibs/CocoaNibs.html) is very helpful.
+//!
 //! - GitHub user 0xced's [reverse-engineering of UIClassSwapper](https://gist.github.com/0xced/45daf79b62ad6a20be1c).
 
 use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
@@ -91,7 +94,8 @@ pub const CLASSES: ClassExports = objc_classes! {
                        options:(id)options { // NSDictionary *
         assert!(owner != nil);
         // TODO
-        assert!(options == nil); // TODO
+        assert!(options == nil);
+        // TODO
 
         let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
         let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
@@ -105,7 +109,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         
         let nib_path = to_rust_string(env, path).to_string();
-
         assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
         env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
         
@@ -118,7 +121,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         } else {
             nil
         };
-        
         env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
 
         top_level_objects
@@ -126,7 +128,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
-// An undocumented type that nib files reference by name. NSKeyedUnarchiver will
+// An undocumented type that nib files reference by name.
+// NSKeyedUnarchiver will
 // find and instantiate this class.
 @implementation UIProxyObject: NSObject
 
@@ -135,7 +138,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
     let id = to_rust_string(env, id_nss);
-
+    
     if id == "IBFilesOwner" {
         // The file owner is usually the UIApplication instance.
         // Replacing the proxy with that instance is important so that the
@@ -161,14 +164,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else if id == "IBFirstResponder" {
         // Временная заглушка для IBFirstResponder
         log!("touchHLE: Bypassing IBFirstResponder replacement with dummy NSObject");
-        
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
         let dummy: id = msg![env; ns_object_class alloc];
         let dummy_init: id = msg![env; dummy init];
-        
         // Освобождаем оригинальную заглушку proxy, так как мы ее заменяем
-        release(env, this); 
-        
+        release(env, this);
         dummy_init
     } else {
         log!("TODO: UIProxyObject replacement for {}, instance {:?} left unreplaced", id, this);
@@ -198,12 +198,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // --- НАЧАЛО ХАКА ---
     log!("[DEBUG NIB] UIClassSwapper грузит класс: {} (оригинал: {})", name, orig);
-
     let mut safe_name = name.clone();
     
     // Список проблемных классов. Добавь сюда название класса из лога, если вылет повторится
-    let problematic_classes = ["EAGLView", "GLView", "AnodiaView", "GameView"]; 
-    
+    let problematic_classes = ["EAGLView", "GLView", "AnodiaView", "GameView", "FBLoginButton"];
     if problematic_classes.iter().any(|&c| safe_name == c) {
         log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
         safe_name = "UIView".into();
@@ -304,6 +302,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         superclass: _,
         event_mask
     } = env.objc.borrow(this);
+    
     let selector = to_rust_string(env, label);
     let action = env.objc.lookup_selector(&selector).unwrap();
 
@@ -399,6 +398,7 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     // ensures everything else is deserialized.
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
+    
     // Connect all the outlets with UIRuntimeOutletConnection
     let conns_key = get_static_str(env, "UINibConnectionsKey");
     let conns: id = msg![env; unarchiver decodeObjectForKey:conns_key];
@@ -422,6 +422,7 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     let visibles_key = get_static_str(env, "UINibVisibleWindowsKey");
     let visibles: id = msg![env; unarchiver decodeObjectForKey:visibles_key];
     let visibles_count: NSUInteger = msg![env; visibles count];
+    
     for i in 0..visibles_count {
         let visible: id = msg![env; visibles objectAtIndex:i];
         () = msg![env; visible setHidden:false];
