@@ -219,7 +219,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // =========================================================================
 // MARK: - Presentation
-// touchHLE has no popover UI. We immediately fire the delegate's
+// touchHLE has no popover UI.
+// We immediately fire the delegate's
 // popoverControllerDidDismissPopover: so the app can clean up, matching
 // the pattern used for other picker/sheet controllers.
 // =========================================================================
@@ -286,9 +287,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         let h = env.objc.borrow::<UIPopoverControllerHostObject>(this);
         (h.popover_visible, h.popover_content_size)
     };
+    
+    // Выносим поля из упакованной структуры CGSize в локальные переменные
+    let width = size.width;
+    let height = size.height;
+    
     let s = format!(
         "<UIPopoverController: {:?}; visible={}; contentSize={{{}, {}}}>",
-        this, visible, size.width, size.height
+        this, visible, width, height
     );
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
