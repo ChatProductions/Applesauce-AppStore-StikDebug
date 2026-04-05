@@ -4,27 +4,25 @@ use crate::Environment;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-// Используем подход из твоего libsqlite3.rs: храним данные регулярок на хосте
+// Храним данные регулярок и текст для поиска на хосте
 lazy_static::lazy_static! {
     static ref UREGEX_MAP: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
-    // ДОБАВЛЕНО: Отдельная мапа для хранения текста, в котором ищем совпадения
     static ref UREGEX_TEXT_MAP: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
     static ref NEXT_HANDLE: Mutex<u32> = Mutex::new(0x9000_0000);
 }
 
 const U_ZERO_ERROR: i32 = 0;
 
-// Сигнатура ICU: URegularExpression* uregex_open(const UChar *pattern, int32_t patternLength, uint32_t flags, UParseError *pe, UErrorCode *status)
+// URegularExpression* uregex_open(const UChar *pattern, int32_t patternLength, uint32_t flags, UParseError *pe, UErrorCode *status)
 #[allow(non_snake_case)]
 pub fn uregex_open(
     env: &mut Environment,
-    pattern: ConstPtr<u16>, // UChar* в ICU это UTF-16 (u16)
+    pattern: ConstPtr<u16>, 
     pattern_length: i32,
     _flags: u32,
-    _pe: MutPtr<u8>,        // UParseError*
-    status: MutPtr<i32>,    // UErrorCode*
+    _pe: MutPtr<u8>,        
+    status: MutPtr<i32>,    
 ) -> u32 {
-    // Честно читаем UTF-16 строку (паттерн) из памяти гостя
     let mut chars = Vec::new();
     let mut i = 0;
     loop {
@@ -33,21 +31,20 @@ pub fn uregex_open(
         }
         let c: u16 = env.mem.read(pattern + (i as u32));
         if pattern_length == -1 && c == 0 {
-            break; // дошли до нуль-терминатора
+            break;
         }
         chars.push(c);
         i += 1;
     }
 
-    let pattern_str = String::from_utf16_lossy(&chars);
+    // Убираем возможные \0, чтобы SDL2 логгер не падал с NulError
+    let pattern_str = String::from_utf16_lossy(&chars).replace('\0', "");
     log!("libicucore: uregex_open pattern: {}", pattern_str);
 
-    // Обязательно записываем успешный статус (0) по указателю, иначе игра подумает, что произошла ошибка парсинга
     if !status.is_null() {
         env.mem.write(status, U_ZERO_ERROR);
     }
 
-    // Сохраняем паттерн в глобальный Map и генерируем хэндл
     let mut map = UREGEX_MAP.lock().unwrap();
     let mut next_id = NEXT_HANDLE.lock().unwrap();
     let handle = *next_id;
@@ -58,21 +55,19 @@ pub fn uregex_open(
     handle
 }
 
-// Очистка памяти
+// void uregex_close(URegularExpression *regexp)
 #[allow(non_snake_case)]
 pub fn uregex_close(_env: &mut Environment, regexp: u32) {
     let mut map = UREGEX_MAP.lock().unwrap();
     map.remove(&regexp);
     
-    // Честно удаляем привязанный текст, чтобы не было утечек памяти
     let mut text_map = UREGEX_TEXT_MAP.lock().unwrap();
     text_map.remove(&regexp);
 }
 
-// Сигнатура ICU: int32_t uregex_groupCount(URegularExpression *regexp, UErrorCode *status)
+// int32_t uregex_groupCount(URegularExpression *regexp, UErrorCode *status)
 #[allow(non_snake_case)]
 pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>) -> i32 {
-    // Устанавливаем статус U_ZERO_ERROR (0)
     if !status.is_null() {
         env.mem.write(status, U_ZERO_ERROR);
     }
@@ -85,7 +80,6 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
         let mut escaped = false;
         let chars: Vec<char> = pattern.chars().collect();
 
-        // Честно парсим регулярное выражение и считаем группы
         let mut i = 0;
         while i < chars.len() {
             let c = chars[i];
@@ -96,17 +90,15 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
             } else if c == '\\' {
                 escaped = true;
             } else if in_quote {
-                // Внутри \Q...\E (литералы) скобки не считаются
+                // ...
             } else if in_char_class {
-                // Внутри [...] скобки не считаются
                 if c == ']' { in_char_class = false; }
             } else {
                 if c == '[' {
                     in_char_class = true;
                 } else if c == '(' {
-                    // Проверяем следущий символ. Если это '?', то группа не захватывающая
                     if i + 1 < chars.len() && chars[i+1] == '?' {
-                        // Пропускаем
+                        // Не захватывающая группа
                     } else {
                         count += 1;
                     }
@@ -118,7 +110,6 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
         log!("libicucore: uregex_groupCount for {:#x} -> found {} groups", regexp, count);
         count
     } else {
-        // Хэндл не найден — возвращаем ошибку U_ILLEGAL_ARGUMENT_ERROR (1)
         log!("libicucore: uregex_groupCount ERROR: handle {:#x} not found", regexp);
         if !status.is_null() {
             env.mem.write(status, 1); 
@@ -127,7 +118,7 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
     }
 }
 
-// ДОБАВЛЕНО: Сигнатура ICU: void uregex_setText(URegularExpression *regexp, const UChar *text, int32_t textLength, UErrorCode *status)
+// void uregex_setText(URegularExpression *regexp, const UChar *text, int32_t textLength, UErrorCode *status)
 #[allow(non_snake_case)]
 pub fn uregex_setText(
     env: &mut Environment,
@@ -136,21 +127,17 @@ pub fn uregex_setText(
     text_length: i32,
     status: MutPtr<i32>,
 ) {
-    // Устанавливаем статус U_ZERO_ERROR (0)
     if !status.is_null() {
         env.mem.write(status, U_ZERO_ERROR);
     }
 
-    // Читаем UTF-16 текст из памяти гостя (Fruit Ninja передает туда строку для поиска)
     let mut chars = Vec::new();
     let mut i = 0;
     loop {
-        // Если указана точная длина (не -1)
         if text_length != -1 && i >= text_length {
             break;
         }
         let c: u16 = env.mem.read(text + (i as u32));
-        // Если длина -1, то строка заканчивается нуль-терминатором
         if text_length == -1 && c == 0 {
             break;
         }
@@ -158,10 +145,10 @@ pub fn uregex_setText(
         i += 1;
     }
 
-    let text_str = String::from_utf16_lossy(&chars);
+    // ОЧИСТКА: убираем \0 из строки перед логированием и сохранением!
+    let text_str = String::from_utf16_lossy(&chars).replace('\0', "");
     log!("libicucore: uregex_setText for {:#x} -> len {}, text: {}", regexp, chars.len(), text_str);
 
-    // Сохраняем текст в глобальной мапе. Теперь функции поиска (uregex_find) смогут его достать.
     let mut text_map = UREGEX_TEXT_MAP.lock().unwrap();
     text_map.insert(regexp, text_str);
 }
@@ -170,7 +157,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(uregex_open(_, _, _, _, _)),
     export_c_func!(uregex_close(_)),
     export_c_func!(uregex_groupCount(_, _)),
-    export_c_func!(uregex_setText(_, _, _, _)), // Экспортируем нашу новую функцию (4 аргумента гостя)
+    export_c_func!(uregex_setText(_, _, _, _)), 
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
