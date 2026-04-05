@@ -28,6 +28,8 @@ const EOF: i32 = -1;
 struct FILEHostObject {
     /// `ungetc()` implementation
     pushbacks: Vec<u8>,
+    /// `ferror()` implementation
+    error: bool,
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -60,6 +62,7 @@ impl State {
                 file_ptr,
                 FILEHostObject {
                     pushbacks: Vec::new(),
+                    error: false,
                 },
             );
         }
@@ -115,6 +118,7 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
                 res,
                 FILEHostObject {
                     pushbacks: Vec::new(),
+                    error: false,
                 },
             );
             res
@@ -149,7 +153,7 @@ fn fread(
     // really does expect you to just multiply and divide like this, with no
     // attempt being made to ensure a whole number are read or written!
     let mut total_size = item_size.checked_mul(n_items).unwrap();
-    let FILEHostObject { ref mut pushbacks } = env
+    let FILEHostObject { ref mut pushbacks, .. } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -176,8 +180,13 @@ fn fread(
     };
     let FILE { fd } = env.mem.read(file_ptr);
     match posix_io::read(env, fd, buffer, total_size) {
-        // TODO: ferror() support.
-        -1 => already_read / item_size,
+        -1 => {
+            env.libc_state
+                .stdio
+                .get_file_host_obj_mut(&mut env.mem, file_ptr)
+                .error = true;
+            already_read / item_size
+        }
         bytes_read => {
             let bytes_read: GuestUSize = bytes_read.try_into().unwrap();
             (bytes_read + already_read) / item_size
@@ -190,7 +199,7 @@ fn fgetc(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     set_errno(env, 0);
 
     let FILE { fd } = env.mem.read(file_ptr);
-    let FILEHostObject { ref mut pushbacks } = env
+    let FILEHostObject { ref mut pushbacks, .. } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -203,7 +212,13 @@ fn fgetc(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     let buffer = env.mem.alloc(1);
 
     match posix_io::read(env, fd, buffer, 1) {
-        -1 => EOF,
+        -1 => {
+            env.libc_state
+                .stdio
+                .get_file_host_obj_mut(&mut env.mem, file_ptr)
+                .error = true;
+            EOF
+        }
         bytes_read => {
             let bytes_read: GuestUSize = bytes_read.try_into().unwrap();
             if bytes_read < 1 {
@@ -229,7 +244,7 @@ fn ungetc(env: &mut Environment, c: i32, file_ptr: MutPtr<FILE>) -> i32 {
     // Note: successful seeking clears EOF indicator
     let new_offset = posix_io::lseek(env, fd, -1, SEEK_CUR);
     assert!(new_offset >= 0); // TODO: handle error
-    let FILEHostObject { ref mut pushbacks } = env
+    let FILEHostObject { ref mut pushbacks, .. } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -316,28 +331,41 @@ fn fwrite(
             let buffer_slice = env.mem.bytes_at(buffer.cast(), total_size);
             match std::io::stdout().write(buffer_slice) {
                 Ok(bytes_written) => (bytes_written / (item_size as usize)) as GuestUSize,
-                Err(_err) => 0,
+                Err(_err) => {
+                    env.libc_state
+                        .stdio
+                        .get_file_host_obj_mut(&mut env.mem, file_ptr)
+                        .error = true;
+                    0
+                }
             }
         }
         STDERR_FILENO => {
             let buffer_slice = env.mem.bytes_at(buffer.cast(), total_size);
             match std::io::stderr().write(buffer_slice) {
                 Ok(bytes_written) => (bytes_written / (item_size as usize)) as GuestUSize,
-                Err(_err) => 0,
-            }
-        }
-        _ => {
-            // The comment about the item_size/n_items split in fread() applies
-            // here too.
-            match posix_io::write(env, fd, buffer, total_size) {
-                // TODO: ferror() support.
-                -1 => 0,
-                bytes_written => {
-                    let bytes_written: GuestUSize = bytes_written.try_into().unwrap();
-                    bytes_written / item_size
+                Err(_err) => {
+                    env.libc_state
+                        .stdio
+                        .get_file_host_obj_mut(&mut env.mem, file_ptr)
+                        .error = true;
+                    0
                 }
             }
         }
+        _ => match posix_io::write(env, fd, buffer, total_size) {
+            -1 => {
+                env.libc_state
+                    .stdio
+                    .get_file_host_obj_mut(&mut env.mem, file_ptr)
+                    .error = true;
+                0
+            }
+            bytes_written => {
+                let bytes_written: GuestUSize = bytes_written.try_into().unwrap();
+                bytes_written / item_size
+            }
+        },
     }
 }
 
@@ -354,7 +382,7 @@ fn fseek(env: &mut Environment, file_ptr: MutPtr<FILE>, offset: i32, whence: i32
     match posix_io::lseek(env, fd, offset.into(), whence) {
         -1 => -1,
         _cur_pos => {
-            let FILEHostObject { ref mut pushbacks } = env
+            let FILEHostObject { ref mut pushbacks, .. } = env
                 .libc_state
                 .stdio
                 .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -380,6 +408,11 @@ fn ftell(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
 fn rewind(env: &mut Environment, file_ptr: MutPtr<FILE>) {
     // TODO: handle errno properly
     set_errno(env, 0);
+
+    env.libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr)
+        .error = false;
 
     // Note: this call will clean pushbacks as well
     fseek(env, file_ptr, 0, SEEK_SET);
@@ -424,12 +457,21 @@ fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     }
 }
 
-fn ferror(env: &mut Environment, _file_ptr: MutPtr<FILE>) -> i32 {
+fn ferror(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    log!("TODO: ferror() support.");
-    0
+    let error = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr)
+        .error;
+
+    if error {
+        1
+    } else {
+        0
+    }
 }
 
 fn fsetpos(env: &mut Environment, file_ptr: MutPtr<FILE>, pos: ConstPtr<fpos_t>) -> i32 {
@@ -442,7 +484,7 @@ fn fsetpos(env: &mut Environment, file_ptr: MutPtr<FILE>, pos: ConstPtr<fpos_t>)
     if res == -1 {
         -1
     } else {
-        let FILEHostObject { ref mut pushbacks } = env
+        let FILEHostObject { ref mut pushbacks, .. } = env
             .libc_state
             .stdio
             .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -476,6 +518,11 @@ fn feof(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
 fn clearerr(env: &mut Environment, file_ptr: MutPtr<FILE>) {
     // TODO: handle errno properly
     set_errno(env, 0);
+
+    env.libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, file_ptr)
+        .error = false;
 
     let FILE { fd } = env.mem.read(file_ptr);
     posix_io::clearerr(env, fd)
@@ -663,3 +710,4 @@ pub const FUNCTIONS: FunctionExports = &[
     // POSIX-specific functions
     export_c_func!(fileno(_)),
 ];
+
