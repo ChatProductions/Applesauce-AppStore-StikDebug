@@ -106,43 +106,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Display mode / overscan
 
-- (id)availableModes {
-    // Report the two standard iPhone resolutions.
-    use crate::frameworks::uikit::ui_screen_mode;
-    let mode_320 = ui_screen_mode::from_size(
-        env,
-        crate::frameworks::core_graphics::CGSize { width: 320.0, height: 480.0 },
-        1.0,
-    );
-    let mode_640 = ui_screen_mode::from_size(
-        env,
-        crate::frameworks::core_graphics::CGSize { width: 640.0, height: 960.0 },
-        1.0,
-    );
-    let arr: id = msg_class![env; NSArray arrayWithObjects:mode_320, mode_640, (crate::objc::nil)];
-    crate::objc::release(env, mode_320);
-    crate::objc::release(env, mode_640);
-    arr
-}
-
 - (id)currentMode {
-    use crate::frameworks::uikit::ui_screen_mode;
-    let bounds: CGRect = msg![env; this bounds];
-    let mode = ui_screen_mode::from_size(
-        env,
-        crate::frameworks::core_graphics::CGSize {
-            width: bounds.size.width,
-            height: bounds.size.height,
-        },
-        1.0,
-    );
-    crate::objc::autorelease(env, mode)
+    // UIScreenMode — return nil; apps that need this are uncommon.
+    log!("TODO: [UIScreen currentMode] returning nil");
+    nil
 }
 
 - (id)preferredMode {
-    msg![env; this currentMode]
+    nil
 }
 
+- (id)availableModes {
+    msg_class![env; NSArray new]
+}
 
 - (CGFloat)overscanCompensationInsets {
     // UIEdgeInsetsZero as four floats would need a custom return type.
