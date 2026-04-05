@@ -19,7 +19,7 @@ struct UINavigationControllerHostObject {
     superclass: super::UIViewControllerHostObject,
     delegate: id,
     navigation_stack: Vec<id>,
-    // --- ФИКС КРАША 0x6c ---
+    // Заглушка панели навигации
     navigation_bar: id,
 }
 impl_HostObject_with_superclass!(UINavigationControllerHostObject);
@@ -36,7 +36,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithRootViewController:(id)root_vc {
-    // --- ФИКС КРАША: Инициализируем сам класс перед использованием
     let this: id = msg![env; this init];
     () = msg![env; this pushViewController:root_vc animated:false];
     this
@@ -123,16 +122,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)navigationBar {
-    let host_obj = env.objc.borrow_mut::<UINavigationControllerHostObject>(this);
-    if host_obj.navigation_bar == nil {
-        // --- ФИКС КРАША 0x6c ---
-        // Создаем фейковый UIView, чтобы игра не падала, если попытается его запросить
-        let view_class = env.objc.get_known_class("UIView", &mut env.mem);
-        let bar: id = msg![env; view_class alloc];
-        let bar: id = msg![env; bar init];
-        host_obj.navigation_bar = bar;
+    // 1. Сначала безопасно "заглядываем" в объект (берем immutable borrow)
+    let existing_bar = env.objc.borrow::<UINavigationControllerHostObject>(this).navigation_bar;
+    
+    if existing_bar != nil {
+        return existing_bar;
     }
-    host_obj.navigation_bar
+
+    // 2. Если бара нет, создаем его (здесь никаких borrow_mut не висит, поэтому безопасно)
+    let view_class = env.objc.get_known_class("UIView", &mut env.mem);
+    let bar: id = msg![env; view_class alloc];
+    let bar: id = msg![env; bar init];
+
+    // 3. Открываем объект для записи (mutable borrow) и сохраняем
+    env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_bar = bar;
+    
+    bar
 }
 
 - (())setNavigationBarHidden:(bool)_hidden {
@@ -140,8 +145,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNavigationBarHidden:(bool)_hidden animated:(bool)_animated {
-    // --- ФИКС ОШИБКИ КОМПИЛЯЦИИ ---
-    // Заменяем warn_stub на log!
     log!("TODO: UINavigationController -setNavigationBarHidden:animated: stubbed");
 }
 
