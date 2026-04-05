@@ -4,13 +4,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Our implementations of various things that Apple's libSystem would provide.
+//!
 //! On other platforms these are part of the "libc", so let's call it that.
 //!
 //! Useful resources:
+//!
 //! - Apple's [iOS Manual Pages](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/) (contains what would be `man` pages if iOS had a command line)
 
 mod generic_char;
-
 pub mod arpa;
 pub mod clocale;
 pub mod crypto;
@@ -64,6 +65,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         libkern::os_atomic::FUNCTIONS,
         mach::arm::task::FUNCTIONS,
         mach::arm::thread_act::FUNCTIONS,
+        libkern::task::FUNCTIONS,
         mach::host::FUNCTIONS,
         mach::init::FUNCTIONS,
         mach::mach_port::FUNCTIONS,
@@ -126,3 +128,4 @@ pub struct State {
     mach_vm: mach::vm_map::State,
     mmap: mmap::State,
 }
+
