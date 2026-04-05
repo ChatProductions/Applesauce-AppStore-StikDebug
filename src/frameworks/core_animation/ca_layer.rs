@@ -196,9 +196,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)superlayer {
     env.objc.borrow::<CALayerHostObject>(this).superlayer
 }
-// TODO: sublayers accessors
 
 - (())addSublayer:(id)layer {
+    if layer == nil { return; }
     if env.objc.borrow::<CALayerHostObject>(layer).superlayer == this {
         () = msg![env; this bringSublayerToFront:layer];
     } else {
@@ -210,6 +210,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())insertSublayer:(id)layer atIndex:(u32)idx {
+    if layer == nil { return; }
     retain(env, layer);
     () = msg![env; layer removeFromSuperlayer];
     env.objc.borrow_mut::<CALayerHostObject>(layer).superlayer = this;
@@ -219,6 +220,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())insertSublayer:(id)layer below:(id)sibling {
+    if layer == nil { return; }
     retain(env, layer);
     () = msg![env; layer removeFromSuperlayer];
     env.objc.borrow_mut::<CALayerHostObject>(layer).superlayer = this;
@@ -713,3 +715,4 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
     log_dbg!("Transform from {other:?} to {this:?}: {other_to_this:?}");
     other_to_this
 }
+
