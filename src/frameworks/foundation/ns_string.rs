@@ -45,6 +45,7 @@ pub const NSUnicodeStringEncoding: NSUInteger = 10;
 pub const NSWindowsCP1252StringEncoding: NSUInteger = 12;
 pub const NSMacOSRomanStringEncoding: NSUInteger = 30;
 pub const NSUTF16StringEncoding: NSUInteger = NSUnicodeStringEncoding;
+pub const NSNextStepLatinStringEncoding: NSUInteger = 0x422;
 pub const NSUTF16BigEndianStringEncoding: NSUInteger = 0x90000100;
 pub const NSUTF16LittleEndianStringEncoding: NSUInteger = 0x94000100;
 pub const NSSymbolStringEncoding: NSUInteger = 0x9c000100;
@@ -63,6 +64,7 @@ const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSMacOSRomanStringEncoding,
     NSISOLatin1StringEncoding,
     NSSymbolStringEncoding,
+    NSNextStepLatinStringEncoding,
 ];
 
 pub const NSMaximumStringLength: NSUInteger = (i32::MAX - 1) as _;
@@ -125,6 +127,11 @@ impl StringHostObject {
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSSymbolStringEncoding => {
+                // TODO: use encoding_rs
+                let string = CP1252.decode(&bytes).to_string();
+                StringHostObject::Utf8(Cow::Owned(string))
+            }
+            NSNextStepLatinStringEncoding => {
                 // TODO: use encoding_rs
                 let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
@@ -853,7 +860,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: other encodings
     let bytes: Vec<u8> = match encoding {
         NSASCIIStringEncoding |
-        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSSymbolStringEncoding => {
+        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSSymbolStringEncoding | NSNextStepLatinStringEncoding => {
             // TODO: properly support Mac OS Roman and ISO Latin 1 encodings.
             // The first 128 characters are identical to the ASCII
             assert!(string.as_bytes().iter().all(|byte| byte.is_ascii()));
@@ -867,7 +874,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     let null_size: GuestUSize = match encoding {
         NSUTF8StringEncoding | NSASCIIStringEncoding | NSMacOSRomanStringEncoding |
-        NSISOLatin1StringEncoding | NSSymbolStringEncoding => 1,
+        NSISOLatin1StringEncoding | NSSymbolStringEncoding | NSNextStepLatinStringEncoding => 1,
         NSUTF16LittleEndianStringEncoding => 2,
         _ => unimplemented!()
     };
