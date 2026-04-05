@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CFURL`.
 //!
 //! This is toll-free bridged to `NSURL` in Apple's implementation. Here it is
@@ -44,6 +46,7 @@ pub fn CFURLGetFileSystemRepresentation(
         // bundle
         // thus, the url should already be an absolute path name
         // TODO: use absoluteURL instead once implemented
+    
         let path = msg![env; url path];
         // TODO: avoid copy
         assert!(to_rust_string(env, path).starts_with('/'));
@@ -61,7 +64,8 @@ pub fn CFURLCreateFromFileSystemRepresentation(
     buffer_size: CFIndex,
     is_directory: bool,
 ) -> CFURLRef {
-    assert!(allocator == kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
 
     let buffer_size: NSUInteger = buffer_size.try_into().unwrap();
 
@@ -69,7 +73,6 @@ pub fn CFURLCreateFromFileSystemRepresentation(
     let string: id = msg![env; string initWithBytes:buffer
                                              length:buffer_size
                                            encoding:NSUTF8StringEncoding];
-
     let url: id = msg_class![env; NSURL alloc];
     let res = msg![env; url initFileURLWithPath:string isDirectory:is_directory];
     release(env, string);
@@ -84,9 +87,11 @@ fn CFURLCreateWithBytes(
     encoding: CFStringEncoding,
     base_url: CFURLRef,
 ) -> CFURLRef {
-    assert_eq!(allocator, kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     assert_eq!(encoding, kCFStringEncodingASCII); // TODO
-    assert!(base_url.is_null()); // TODO
+    assert!(base_url.is_null());
+    // TODO
 
     // TODO: interpret percent escape sequences using encoding as well
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
@@ -100,7 +105,6 @@ fn CFURLCreateWithBytes(
     let string: id = msg![env; string initWithBytes:url_bytes
                                              length:length
                                            encoding:encoding];
-
     assert!(!to_rust_string(env, string).contains("://")); // TODO
 
     // Assume file URL case here
@@ -117,7 +121,8 @@ fn CFURLCreateWithFileSystemPath(
     style: CFURLPathStyle,
     is_directory: bool,
 ) -> CFURLRef {
-    assert!(allocator == kCFAllocatorDefault); // unimplemented
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    // unimplemented
     assert_eq!(style, kCFURLPOSIXPathStyle);
     let url: id = msg_class![env; NSURL alloc];
     msg![env; url initFileURLWithPath:file_path isDirectory:is_directory]
@@ -146,7 +151,7 @@ fn CFURLCreateCopyAppendingPathComponent(
     path_component: CFStringRef,
     is_directory: bool,
 ) -> CFURLRef {
-    assert!(allocator.is_null());
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new_url =
         msg![env; url URLByAppendingPathComponent:path_component isDirectory:is_directory];
     msg![env; new_url copy]
@@ -157,14 +162,13 @@ fn CFURLCreateCopyDeletingLastPathComponent(
     allocator: CFAllocatorRef,
     url: CFURLRef,
 ) -> CFURLRef {
-    assert!(allocator.is_null());
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new_url = msg![env; url URLByDeletingLastPathComponent];
     msg![env; new_url copy]
 }
 
 fn CFURLHasDirectoryPath(env: &mut Environment, url: CFURLRef) -> bool {
     assert!(!url.is_null());
-
     let path = msg![env; url path];
     if msg![env; path isEqual:(get_static_str(env, "//"))] {
         // Special case
@@ -191,7 +195,6 @@ fn CFURLCreateStringByAddingPercentEscapes(
     _encoding: u32,
 ) -> CFStringRef {
     log_once!("Stubbed CFURLCreateStringByAddingPercentEscapes");
-    
     // As a stub, we just return the original string.
     // Retain it because "Create" or "Copy" functions in CoreFoundation 
     // transfer ownership to the caller.
@@ -210,3 +213,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLHasDirectoryPath(_)),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
 ];
+
