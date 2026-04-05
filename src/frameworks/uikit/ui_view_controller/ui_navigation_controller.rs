@@ -17,11 +17,10 @@ use crate::objc::{
 #[derive(Default)]
 struct UINavigationControllerHostObject {
     superclass: super::UIViewControllerHostObject,
-    /// something implementing UINavigationControllerDelegate
     delegate: id,
-    /// Navigation stack of view controllers, non-retaining
-    /// (we explicitly retain/release on push/pop messages)
     navigation_stack: Vec<id>,
+    // --- ФИКС КРАША 0x6c ---
+    navigation_bar: id,
 }
 impl_HostObject_with_superclass!(UINavigationControllerHostObject);
 
@@ -36,13 +35,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-- (id)initWithRootViewController:(id)root_vc { // UIViewController *
+- (id)initWithRootViewController:(id)root_vc {
+    // --- ФИКС КРАША: Инициализируем сам класс перед использованием
+    let this: id = msg![env; this init];
     () = msg![env; this pushViewController:root_vc animated:false];
     this
 }
 
-// weak/non-retaining
-- (())setDelegate:(id)delegate { // something implementing UINavigationControllerDelegate
+- (())setDelegate:(id)delegate {
     log_dbg!("[(UINavigationController*){:?} setDelegate:{:?}]", this, delegate);
     let host_object = env.objc.borrow_mut::<UINavigationControllerHostObject>(this);
     host_object.delegate = delegate;
@@ -51,36 +51,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UINavigationControllerHostObject>(this).delegate
 }
 
-- (())pushViewController:(id)view_controller // UIViewController *
-                animated:(bool)_animated {
+- (())pushViewController:(id)view_controller animated:(bool)_animated {
     let stack = &mut env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_stack;
     assert!(!stack.contains(&view_controller));
     stack.push(view_controller);
     retain(env, view_controller);
 
     let delegate = env.objc.borrow::<UINavigationControllerHostObject>(this).delegate;
-    let sel: SEL = env
-        .objc
-        .register_host_selector(
-            "navigationController:willShowViewController:animated:".to_string(),
-            &mut env.mem
-        );
+    let sel: SEL = env.objc.register_host_selector("navigationController:willShowViewController:animated:".to_string(), &mut env.mem);
     let responds: bool = msg![env; delegate respondsToSelector:sel];
     if responds {
         () = msg![env; delegate navigationController:this willShowViewController:view_controller animated:false];
     }
     let self_view: id = msg![env; this view];
     let vc_view: id = msg![env; view_controller view];
-    // TODO: animations
     () = msg![env; view_controller viewWillAppear:false];
     () = msg![env; self_view addSubview:vc_view];
     () = msg![env; view_controller viewDidAppear:false];
-    let sel: SEL = env
-        .objc
-        .register_host_selector(
-            "navigationController:didShowViewController:animated:".to_string(),
-            &mut env.mem
-        );
+    let sel: SEL = env.objc.register_host_selector("navigationController:didShowViewController:animated:".to_string(), &mut env.mem);
     let responds: bool  = msg![env; delegate respondsToSelector:sel];
     if responds {
         () = msg![env; delegate navigationController:this didShowViewController:view_controller animated:false];
@@ -97,37 +85,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)viewControllers {
     let vcs = env.objc.borrow::<UINavigationControllerHostObject>(this).navigation_stack.to_vec();
-    for vc in &vcs {
-        retain(env, *vc);
-    }
+    for vc in &vcs { retain(env, *vc); }
     let res = ns_array::from_vec(env, vcs);
     autorelease(env, res)
 }
-- (())setViewControllers:(id)controllers { // NSArray *
+
+- (())setViewControllers:(id)controllers {
     msg![env; this setViewControllers:controllers animated:false]
 }
 
-- (())setViewControllers:(id)controllers // NSArray *
-                animated:(bool)animated {
+- (())setViewControllers:(id)controllers animated:(bool)animated {
     assert!(!animated);
 
-    // Clean existing view controllers
     let self_view = env.objc.borrow::<UINavigationControllerHostObject>(this).superclass.view;
     let mut stack = std::mem::take(&mut env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_stack);
-    // TODO: shall we drain in reverse order? does it matter?
+    
     for controller in stack.drain(..) {
         let vc_view = env.objc.borrow::<super::UIViewControllerHostObject>(controller).view;
         let vc_view_superview = msg![env; vc_view superview];
         assert_eq!(self_view, vc_view_superview);
-        // TODO: view{Will,Did}Disappear: messages for vc?
         () = msg![env; vc_view removeFromSuperview];
-
         release(env, controller);
     }
 
     let mut tmp_stack: Vec<id> = Vec::new();
     let count: NSUInteger = msg![env; controllers count];
-    // TODO: zero count
     assert!(count > 0);
     for i in 0..(count - 1) {
         let next: id = msg![env; controllers objectAtIndex:i];
@@ -136,15 +118,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.objc.borrow_mut::<UINavigationControllerHostObject>(this).navigation_stack = tmp_stack;
 
-    // The n-1 element in the controllers array is special and need to be pushed
-    // TODO: double check this behavior
     let last_vc: id = msg![env; controllers objectAtIndex:(count - 1)];
     () = msg![env; this pushViewController:last_vc animated:animated];
 }
 
 - (id)navigationBar {
-    // TODO
-    nil
+    let host_obj = env.objc.borrow_mut::<UINavigationControllerHostObject>(this);
+    if host_obj.navigation_bar == nil {
+        // --- ФИКС КРАША 0x6c ---
+        // Создаем фейковый UIView, чтобы игра не падала, если попытается его запросить
+        let view_class = env.objc.get_known_class("UIView", &mut env.mem);
+        let bar: id = msg![env; view_class alloc];
+        let bar: id = msg![env; bar init];
+        host_obj.navigation_bar = bar;
+    }
+    host_obj.navigation_bar
 }
 
 - (())setNavigationBarHidden:(bool)_hidden {
@@ -152,10 +140,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNavigationBarHidden:(bool)_hidden animated:(bool)_animated {
+    // --- ФИКС ОШИБКИ КОМПИЛЯЦИИ ---
+    // Заменяем warn_stub на log!
     log!("TODO: UINavigationController -setNavigationBarHidden:animated: stubbed");
 }
 
 @end
 
 };
-
