@@ -229,8 +229,10 @@ pub const CLASSES: ClassExports = objc_classes!
 
     match &mut env.objc.borrow_mut::<NSInputStreamHostObject>(this).backing {
         InputStreamBacking::Data { data, offset } => {
-            let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; *data bytes];
-            let total: NSUInteger = msg![env; *data length];
+            // ИСПРАВЛЕНИЕ: Выносим значение указателя в отдельную переменную
+            let data_val = *data;
+            let bytes_ptr: crate::mem::ConstVoidPtr = msg![env; data_val bytes];
+            let total: NSUInteger = msg![env; data_val length];
             let remaining = total as usize - *offset;
             let to_read = remaining.min(len as usize);
             if to_read == 0 {
@@ -271,7 +273,9 @@ pub const CLASSES: ClassExports = objc_classes!
 - (bool)hasBytesAvailable {
     match &env.objc.borrow::<NSInputStreamHostObject>(this).backing {
         InputStreamBacking::Data { data, offset } => {
-            let total: NSUInteger = msg![env; *data length];
+            // ИСПРАВЛЕНИЕ: Выносим значение указателя в отдельную переменную
+            let data_val = *data;
+            let total: NSUInteger = msg![env; data_val length];
             (*offset as NSUInteger) < total
         }
         InputStreamBacking::File { bytes, offset, .. } => *offset < bytes.len(),
@@ -510,4 +514,3 @@ pub const CLASSES: ClassExports = objc_classes!
 @end
 
 };
-
