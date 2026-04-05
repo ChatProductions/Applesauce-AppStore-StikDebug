@@ -39,9 +39,9 @@ impl State {
 }
 
 #[derive(Clone)]
-struct PosixFileHostObject {
-    file: GuestFile,
-    needs_flush: bool,
+pub struct PosixFileHostObject {
+    pub file: GuestFile,
+    pub needs_flush: bool,
     reached_eof: bool,
     /// FD flags (FD_CLOEXEC etc.)
     flags: i32,
