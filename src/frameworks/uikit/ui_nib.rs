@@ -199,8 +199,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("[DEBUG NIB] UIClassSwapper грузит класс: {} (оригинал: {})", name, orig);
     let mut safe_name = name.clone();
     
-    // Список проблемных классов. Добавь сюда название класса из лога, если вылет повторится
-    let problematic_classes = ["EAGLView", "GLView", "AnodiaView", "GameView", "FBLoginButton"];
+    // ИСПРАВЛЕНО: Оставляем в списке проблемных только кнопку Facebook.
+    // EAGLView подменять нельзя, иначе не будет работать 3D графика!
+    let problematic_classes = ["FBLoginButton"];
     if problematic_classes.iter().any(|&c| safe_name == c) {
         log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
         safe_name = "UIView".into();
@@ -268,22 +269,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 // Another undocumented type referenced by nib files by name.
-// Example taken from a nib file:
-// 298 => {
-//   "$classes" => [
-//     0 => "UIRuntimeEventConnection"
-//     1 => "UIRuntimeConnection"
-//     2 => "NSObject"
-//   ]
-//   "$classname" => "UIRuntimeEventConnection"
-// }
-// 299 => {
-//   "$class" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 298}
-//   "UIDestination" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 7}
-//   "UIEventMask" => 64
-//   "UILabel" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 300}
-//   "UISource" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 178}
-// }
 @implementation UIRuntimeEventConnection: UIRuntimeConnection
 
 + (id)alloc {
@@ -327,21 +312,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 // Another undocumented type referenced by nib files by name.
-// Example taken from a nib file:
-// 29 => {
-//   "$classes" => [
-//     0 => "UIRuntimeOutletConnection"
-//     1 => "UIRuntimeConnection"
-//     2 => "NSObject"
-//   ]
-//   "$classname" => "UIRuntimeOutletConnection"
-// }
-// 30 => {
-//   "$class" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 29}
-//   "UIDestination" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 11}
-//   "UILabel" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 31}
-//   "UISource" => <CFKeyedArchiverUID ... [0x1de8cba20]>{value = 7}
-// }
 @implementation UIRuntimeOutletConnection: UIRuntimeConnection
 
 - (())connect {
