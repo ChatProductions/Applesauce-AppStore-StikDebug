@@ -1,12 +1,15 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CFData` and `CFMutableData`.
 //!
 //! These are toll-free bridged to `NSData` and `NSMutableData` in Apple's
-//! implementation. Here they are the same types.
+//! implementation.
+//! Here they are the same types.
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::{CFIndex, CFRange, CFRelease, CFRetain, CFTypeRef};
@@ -24,10 +27,11 @@ pub type CFMutableDataRef = CFTypeRef;
 
 pub fn CFDataCreate(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     bytes: ConstPtr<u8>,
     length: CFIndex,
 ) -> CFDataRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let bytes: ConstVoidPtr = bytes.cast();
     let length: NSUInteger  = length.try_into().unwrap();
     let new: id = msg_class![env; NSData alloc];
@@ -36,9 +40,10 @@ pub fn CFDataCreate(
 
 pub fn CFDataCreateCopy(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     data: CFDataRef,
 ) -> CFDataRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let bytes: ConstVoidPtr = msg![env; data bytes];
     let length: NSUInteger  = msg![env; data length];
     let new: id = msg_class![env; NSData alloc];
@@ -47,11 +52,12 @@ pub fn CFDataCreateCopy(
 
 fn CFDataCreateWithBytesNoCopy(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     bytes: ConstPtr<u8>,
     length: CFIndex,
     _bytes_deallocator: CFAllocatorRef, // ignored — we copy anyway
 ) -> CFDataRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     // We don't support custom deallocators; just copy the bytes.
     CFDataCreate(env, kCFAllocatorDefault, bytes, length)
 }
@@ -107,9 +113,10 @@ fn CFDataIsEqual(env: &mut Environment, a: CFDataRef, b: CFDataRef) -> bool {
 
 fn CFDataCreateMutable(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     capacity: CFIndex,
 ) -> CFMutableDataRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new: id = msg_class![env; NSMutableData alloc];
     if capacity > 0 {
         let cap: NSUInteger = capacity.try_into().unwrap();
@@ -121,10 +128,11 @@ fn CFDataCreateMutable(
 
 fn CFDataCreateMutableCopy(
     env: &mut Environment,
-    _allocator: CFAllocatorRef,
+    allocator: CFAllocatorRef,
     _capacity: CFIndex,
     data: CFDataRef,
 ) -> CFMutableDataRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let new: id = msg_class![env; NSMutableData alloc];
     msg![env; new initWithData:data]
 }
@@ -209,3 +217,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFDataDeleteBytes(_, _)),
     export_c_func!(CFDataReplaceBytes(_, _, _, _)),
 ];
+
