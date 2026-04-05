@@ -1,7 +1,6 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //!
@@ -49,6 +48,12 @@ struct UIRuntimeEventConnectionHostObject {
     event_mask: UIControlEvents,
 }
 impl_HostObject_with_superclass!(UIRuntimeEventConnectionHostObject);
+
+// --- ДОБАВЛЕНО: Хост-объект для UINavigationItem ---
+#[derive(Default)]
+struct UINavigationItemHostObject {}
+impl HostObject for UINavigationItemHostObject {}
+// ---------------------------------------------------
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -221,6 +226,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
+
+// --- ДОБАВЛЕНО: Заглушка для UINavigationItem ---
+@implementation UINavigationItem: NSObject
+
++ (id)alloc {
+    let host_object = Box::<UINavigationItemHostObject>::default();
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)initWithCoder:(id)coder {
+    msg_super![env; this init]
+}
+
+- (())dealloc {
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+// Заглушки для свойств, которые часто вызывает загрузчик интерфейса
+- (())setTitle:(id)title {}
+- (id)title { nil }
+- (())setPrompt:(id)prompt {}
+- (id)prompt { nil }
+- (())setLeftBarButtonItem:(id)item {}
+- (())setRightBarButtonItem:(id)item {}
+- (())setBackBarButtonItem:(id)item {}
+- (())setHidesBackButton:(bool)hides {}
+
+@end
+// ------------------------------------------------
 
 // Another undocumented type used by nib files. This one's purpose seems to be
 // to connect outlets once all the objects are deserialized.
