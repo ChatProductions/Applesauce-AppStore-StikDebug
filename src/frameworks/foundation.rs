@@ -31,6 +31,7 @@ pub mod ns_data;
 pub mod ns_date;
 pub mod ns_date_components;
 pub mod ns_date_formatter;
+pub mod ns_decimal_number;
 pub mod ns_dictionary;
 pub mod ns_enumerator;
 pub mod ns_error;
@@ -272,6 +273,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_date::CLASSES,
         ns_date_components::CLASSES,
         ns_date_formatter::CLASSES,
+        ns_decimal_number::CLASSES,
         ns_dictionary::CLASSES,
         ns_enumerator::CLASSES,
         ns_error::CLASSES,
