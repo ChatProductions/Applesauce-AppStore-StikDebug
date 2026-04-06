@@ -6,7 +6,7 @@
 //! The `NSValue` class cluster, including `NSNumber`.
 
 use super::ns_string::{from_rust_ordering, from_rust_string};
-use super::{NSComparisonResult, NSOrderedSame, NSUInteger, _nib_archive_decoder};
+use super::{NSComparisonResult, NSOrderedSame, NSUInteger, NSRange, _nib_archive_decoder};
 use crate::frameworks::core_foundation::cf_number::{
     kCFNumberCharType, kCFNumberFloat32Type, kCFNumberFloat64Type, kCFNumberFloatType,
     kCFNumberIntType, kCFNumberSInt16Type, kCFNumberSInt32Type, kCFNumberSInt64Type,
@@ -27,6 +27,7 @@ pub(super) enum NSValueHostObject {
     CGPoint(CGPoint),
     CGSize(CGSize),
     CGRect(CGRect),
+    NSRange(NSRange),
 }
 impl HostObject for NSValueHostObject {}
 
@@ -130,6 +131,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)valueWithRange:(NSRange)value {
+    // Упаковываем структуру в наш HostObject и выделяем под это память
+    let host_object = Box::new(NSValueHostObject::NSRange(value));
+    let new = env.objc.alloc_object(this, host_object, &mut env.mem);
+    autorelease(env, new)
+}
+    
 + (id)valueWithNonretainedObject:(id)object {
     // Store the pointer bits as an unsigned int.
     msg_class![env; NSNumber numberWithUnsignedInt:(object.to_bits())]
@@ -175,6 +183,9 @@ pub const CLASSES: ClassExports = objc_classes! {
             a.origin.x == b.origin.x && a.origin.y == b.origin.y
                 && a.size.width == b.size.width && a.size.height == b.size.height
         }
+        (NSValueHostObject::NSRange(a), NSValueHostObject::NSRange(b)) => {
+            a.location == b.location && a.length == b.length
+        }
         _ => false,
     }
 }
@@ -196,6 +207,9 @@ pub const CLASSES: ClassExports = objc_classes! {
                 "NSRect: {{{{{}, {}}}, {{{}, {}}}}}",
                 ox, oy, sw, sh
             )
+        }
+        NSValueHostObject::NSRange(r) => {
+            format!("NSRange: {{{}, {}}}", r.location, r.length)
         }
     };
     let ns = from_rust_string(env, s);
@@ -226,6 +240,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (NSRange)rangeValue {
+    let host_object = env.objc.borrow::<NSValueHostObject>(this);
+    match host_object {
+        NSValueHostObject::NSRange(r) => NSRange { location: r.location, length: r.length },
+        _ => unimplemented!("Called rangeValue on non-range NSValue")
+    }
+}
+    
 // NSCopying implementation
 - (id)copyWithZone:(NSZonePtr)_zone {
     retain(env, this)
