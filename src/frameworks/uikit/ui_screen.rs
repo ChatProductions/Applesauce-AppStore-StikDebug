@@ -107,9 +107,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Display mode / overscan
 
 - (id)currentMode {
-    // UIScreenMode — return nil; apps that need this are uncommon.
-    log!("TODO: [UIScreen currentMode] returning nil");
-    nil
+    // Look up the UIScreenMode class
+    let cls = env.objc.class_by_name("UIScreenMode").expect("UIScreenMode class not found");
+    
+    // Allocate a trivial host object to represent the mode
+    env.objc.alloc_static_object(
+        cls,
+        Box::new(TrivialHostObject),
+        &mut env.mem,
+    )
 }
 
 - (id)preferredMode {
