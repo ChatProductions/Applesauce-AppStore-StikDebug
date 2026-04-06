@@ -76,9 +76,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, obj)
 }
 
-/// `+raise:format:` — convenience that creates and immediately raises.
-/// The `format` parameter is treated as a plain reason string (no printf
-/// substitution) because varargs are not supported in touchHLE HLE stubs.
+// `+raise:format:` — convenience that creates and immediately raises.
+// The `format` parameter is treated as a plain reason string (no printf
+// substitution) because varargs are not supported in touchHLE HLE stubs.
 + (())raise:(id)name   // NSString*  (exception name)
        format:(id)fmt  // NSString*  (reason / format string)
 {
@@ -120,24 +120,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSExceptionHostObject>(this).user_info
 }
 
-/// Returns an empty array — we have no guest stack-trace support.
+// Returns an empty array — we have no guest stack-trace support.
 - (id)callStackSymbols {
     msg_class![env; NSArray array]
 }
 
-/// Returns an empty array — same reason.
+// Returns an empty array — same reason.
 - (id)callStackReturnAddresses {
     msg_class![env; NSArray array]
 }
 
 // MARK: - raise
 
-/// Raises (throws) the exception.
-///
-/// Because touchHLE does not emulate ObjC `@try`/`@catch` unwinding, we
-/// translate a `raise` into a Rust `panic!`.  This terminates the guest with
-/// a clear, human-readable message rather than silently continuing and
-/// crashing later with a mysterious NULL-deref.
+// Raises (throws) the exception.
+//
+// Because touchHLE does not emulate ObjC `@try`/`@catch` unwinding, we
+// translate a `raise` into a Rust `panic!`.  This terminates the guest with
+// a clear, human-readable message rather than silently continuing and
+// crashing later with a mysterious NULL-deref.
 - (())raise {
     let name   = env.objc.borrow::<NSExceptionHostObject>(this).name;
     let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
@@ -150,8 +150,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - NSCopying
 
-/// NSException is documented as immutable once created, so `copy` just
-/// retains and returns `self` (same as NSString / NSArray behaviour).
+// NSException is documented as immutable once created, so `copy` just
+// retains and returns `self` (same as NSString / NSArray behaviour).
 - (id)copy {
     retain(env, this);
     this
