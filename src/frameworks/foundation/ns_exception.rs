@@ -143,9 +143,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
-    // Log before panicking so the message appears in the touchHLE log stream.
     log!("NSException raised — name: {}, reason: {}", name_s, reason_s);
-    panic!("Unhandled Objective-C exception — name: {}, reason: {}", name_s, reason_s);
+    // Intentionally do NOT panic — see doc comment above.
 }
 
 // MARK: - NSCopying
