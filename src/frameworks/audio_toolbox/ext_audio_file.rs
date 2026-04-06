@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `ExtAudioFile.h` (Extended Audio File Services)
@@ -37,7 +38,7 @@ impl State {
 }
 
 pub struct ExtAudioFileHostObject {
-    /// The underlying audio file.  We always own it (even when created via
+    /// The underlying audio file. We always own it (even when created via
     /// `ExtAudioFileWrapAudioFileID`, we keep a reference to the same data).
     pub audio_file: audio::AudioFile,
     /// Client format requested via `kExtAudioFileProperty_ClientDataFormat`.
@@ -78,12 +79,12 @@ const kExtAudioFileError_InvalidDataFormat: OSStatus = fourcc(b"fmt?") as _;
 
 /// Usually a FourCC.
 type ExtAudioFilePropertyID = u32;
-
 const kExtAudioFileProperty_FileDataFormat: ExtAudioFilePropertyID = fourcc(b"ffmt");
 const kExtAudioFileProperty_ClientDataFormat: ExtAudioFilePropertyID = fourcc(b"cfmt");
 const kExtAudioFileProperty_FileLengthFrames: ExtAudioFilePropertyID = fourcc(b"#frm");
 const kExtAudioFileProperty_AudioFile: ExtAudioFilePropertyID = fourcc(b"afil");
-const kExtAudioFileProperty_AudioConverter: ExtAudioFilePropertyID = fourcc(b"aconv");
+// ИСПРАВЛЕНИЕ: Заменено b"aconv" на b"acnv" (ровно 4 байта)
+const kExtAudioFileProperty_AudioConverter: ExtAudioFilePropertyID = fourcc(b"acnv");
 
 fn property_size(property_id: ExtAudioFilePropertyID) -> Option<GuestUSize> {
     match property_id {
@@ -119,14 +120,12 @@ fn register_ext_audio_file(
         frame_position: 0,
         wrapped_audio_file_id: wrapped_id,
     };
-
     let guest_ref = env
         .mem
         .alloc_and_write(OpaqueExtAudioFileID { _filler: 0 });
     State::get(&mut env.framework_state)
         .ext_audio_files
         .insert(guest_ref, host_object);
-
     env.mem.write(out_ext_audio_file, guest_ref);
     log_dbg!(
         "ExtAudioFile registered, new handle: {:?}",
@@ -145,7 +144,6 @@ pub fn ExtAudioFileOpenURL(
     out_ext_audio_file: MutPtr<ExtAudioFileRef>,
 ) -> OSStatus {
     return_if_null!(in_url);
-
     let path = to_rust_path(env, in_url);
     let audio_file = match audio::AudioFile::open_for_reading(path, &env.fs) {
         Ok(af) => af,
@@ -172,7 +170,6 @@ pub fn ExtAudioFileWrapAudioFileID(
     out_ext_audio_file: MutPtr<ExtAudioFileRef>,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
-
     // We clone the audio data out of the existing host object so we have an
     // independent read cursor, but mark the original ID so Dispose skips the
     // memory free.
@@ -203,7 +200,6 @@ pub fn ExtAudioFileDispose(
     in_ext_audio_file: ExtAudioFileRef,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     let Some(host_object) = State::get(&mut env.framework_state)
         .ext_audio_files
         .remove(&in_ext_audio_file)
@@ -239,7 +235,6 @@ pub fn ExtAudioFileGetPropertyInfo(
     out_writable: MutPtr<u32>,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     let Some(size) = property_size(in_property_id) else {
         log!(
             "Warning: ExtAudioFileGetPropertyInfo() unknown property {}",
@@ -280,7 +275,6 @@ pub fn ExtAudioFileGetProperty(
     out_property_data: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     let Some(required_size) = property_size(in_property_id) else {
         log!(
             "Warning: ExtAudioFileGetProperty() unknown property {}",
@@ -297,7 +291,6 @@ pub fn ExtAudioFileGetProperty(
         .ext_audio_files
         .get(&in_ext_audio_file)
         .expect("ExtAudioFileGetProperty: unknown ExtAudioFileRef");
-
     match in_property_id {
         kExtAudioFileProperty_FileDataFormat => {
             // Delegate to the underlying AudioFile property machinery by
@@ -347,7 +340,6 @@ pub fn ExtAudioFileSetProperty(
     in_property_data: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     match in_property_id {
         kExtAudioFileProperty_ClientDataFormat => {
             let required = guest_size_of::<AudioStreamBasicDescription>();
@@ -427,7 +419,6 @@ pub fn ExtAudioFileRead(
     io_data: MutPtr<AudioBufferList>,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     // Read `io_num_frames` frames starting at the current frame position.
     // We do not yet implement sample-rate or format conversion; we require
     // the client format (if set) to match the file format.
@@ -441,19 +432,18 @@ pub fn ExtAudioFileRead(
         .ext_audio_files
         .get(&in_ext_audio_file)
         .expect("ExtAudioFileRead: unknown ExtAudioFileRef");
-
     let desc = host_object.audio_file.audio_description();
     let frame_position = host_object.frame_position;
 
     // If a client format is set and it differs from the file format, we
-    // would need a converter.  For now we log a warning and fall through
+    // would need a converter. For now we log a warning and fall through
     // using the file format data directly, which is correct when the
     // formats are identical or the caller ignores the discrepancy.
     if let Some(cf) = host_object.client_format {
         if cf.format_id != build_asbd(&host_object.audio_file).format_id {
             log!(
                 "Warning: ExtAudioFileRead() client format differs from file \
-                 format â format conversion not yet implemented, reading raw data"
+                 format — format conversion not yet implemented, reading raw data"
             );
         }
     }
@@ -481,7 +471,7 @@ pub fn ExtAudioFileRead(
         // ExtAudioFileRef address so we can call into AudioFileReadPackets
         // without duplicating all the I/O logic.
         // NOTE: this relies on the fact that AudioFileReadPackets only looks
-        //       up the host object via the ID map â the pointer value itself
+        //       up the host object via the ID map — the pointer value itself
         //       is just a map key.
         // We build a temporary AudioFileHostObject entry for the duration of
         // this call and clean it up immediately after.
@@ -507,7 +497,6 @@ pub fn ExtAudioFileRead(
         .get_mut(&in_ext_audio_file)
         .unwrap()
         .frame_position += frames_read as u64;
-
     env.mem.write(io_num_frames, frames_read);
 
     // Update the buffer's reported byte size.
@@ -528,7 +517,6 @@ pub fn ExtAudioFileSeek(
     in_frame_offset: i64,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     let Some(host_object) = State::get(&mut env.framework_state)
         .ext_audio_files
         .get_mut(&in_ext_audio_file)
@@ -559,12 +547,10 @@ pub fn ExtAudioFileTell(
     out_frame_offset: MutPtr<i64>,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-
     let host_object = State::get(&mut env.framework_state)
         .ext_audio_files
         .get(&in_ext_audio_file)
         .expect("ExtAudioFileTell: unknown ExtAudioFileRef");
-
     let pos = host_object.frame_position as i64;
     env.mem.write(out_frame_offset, pos);
     log_dbg!(
@@ -586,7 +572,6 @@ fn build_asbd(audio_file: &audio::AudioFile) -> AudioStreamBasicDescription {
         kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian, kAudioFormatFlagIsFloat,
         kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
     };
-
     let audio::AudioDescription {
         sample_rate,
         format,
@@ -595,7 +580,6 @@ fn build_asbd(audio_file: &audio::AudioFile) -> AudioStreamBasicDescription {
         channels_per_frame,
         bits_per_channel,
     } = audio_file.audio_description();
-
     match format {
         audio::AudioFormat::LinearPcm {
             is_float,
@@ -631,6 +615,18 @@ fn build_asbd(audio_file: &audio::AudioFile) -> AudioStreamBasicDescription {
             bits_per_channel,
             _reserved: 0,
         },
+        // ИСПРАВЛЕНИЕ: Добавлен отсутствующий вариант Mpeg4Aac
+        audio::AudioFormat::Mpeg4Aac => AudioStreamBasicDescription {
+            sample_rate,
+            format_id: fourcc(b"aac "), // Формат AAC
+            format_flags: 0,
+            bytes_per_packet,
+            frames_per_packet,
+            bytes_per_frame: 0,
+            channels_per_frame,
+            bits_per_channel,
+            _reserved: 0,
+        },
     }
 }
 
@@ -649,3 +645,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ExtAudioFileSeek(_, _)),
     export_c_func!(ExtAudioFileTell(_, _)),
 ];
+
