@@ -502,23 +502,7 @@ fn AudioFileStreamOpen(
 
 pub fn AudioFormatGetPropertyInfo(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
-pub fn AudioFormatGetPropertyInfo(
-    _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
@@ -534,14 +518,14 @@ pub fn AudioFormatGetPropertyInfo(
 
 pub fn ExtAudioFileOpenURL(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
     // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
     log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        "Stubbed ExtAudioFileOpenURL for property ID: {}",
         debug_fourcc(property_id)
     );
     // Return paramErr (-50) to indicate the property/format info is not available.
@@ -550,14 +534,14 @@ pub fn ExtAudioFileOpenURL(
 
 pub fn ExtAudioFileGetProperty(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
     // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
     log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        "Stubbed ExtAudioFileGetProperty for property ID: {}",
         debug_fourcc(property_id)
     );
     // Return paramErr (-50) to indicate the property/format info is not available.
@@ -566,14 +550,14 @@ pub fn ExtAudioFileGetProperty(
 
 pub fn ExtAudioFileSetProperty(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
     // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
     log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        "Stubbed ExtAudioFileSetProperty for property ID: {}",
         debug_fourcc(property_id)
     );
     // Return paramErr (-50) to indicate the property/format info is not available.
@@ -582,14 +566,14 @@ pub fn ExtAudioFileSetProperty(
 
 pub fn ExtAudioFileRead(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
     // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
     log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        "Stubbed ExtAudioFileRead for property ID: {}",
         debug_fourcc(property_id)
     );
     // Return paramErr (-50) to indicate the property/format info is not available.
@@ -598,14 +582,14 @@ pub fn ExtAudioFileRead(
 
 pub fn ExtAudioFileDispose(
     _env: &mut Environment,
-    property_id: AudioFormatPropertyID,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
     // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
     log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
+        "Stubbed ExtAudioFileDispose for property ID: {}",
         debug_fourcc(property_id)
     );
     // Return paramErr (-50) to indicate the property/format info is not available.
