@@ -10,7 +10,7 @@ use super::NSTimeInterval;
 use super::{ns_run_loop, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
-    HostObject, SEL,
+    HostObject, SEL, NSZonePtr,
 };
 use crate::Environment;
 use std::time::{Duration, Instant};
@@ -79,6 +79,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+        // Создаем "пустой" хост-объект. Данные перезапишутся при вызове init.
+        let host_object = Box::new(NSTimerHostObject {
+            ns_interval: 0.0,
+            rust_interval: Duration::from_secs(0),
+            target: nil,
+            selector: _cmd, // Используем текущий селектор как временную заглушку
+            user_info: nil,
+            repeats: false,
+            due_by: None,
+            is_running_callback: false,
+            run_loop: nil,
+        });
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+    
 + (id)scheduledTimerWithTimeInterval:(NSTimeInterval)interval
                               target:(id)target
                             selector:(SEL)selector
@@ -189,6 +205,45 @@ pub const CLASSES: ClassExports = objc_classes! {
         nil
     }
 }
+
+- (id)initWithFireDate:(id)date
+                  interval:(NSTimeInterval)ns_interval
+                    target:(id)target
+                  selector:(SEL)selector
+                  userInfo:(id)user_info
+                   repeats:(bool)repeats {
+        let ns_interval = ns_interval.max(0.0001);
+        let rust_interval = Duration::from_secs_f64(ns_interval);
+
+        retain(env, target);
+        retain(env, user_info);
+
+        // Рассчитываем время до вызова (до заимствования таймера, чтобы избежать паники RefCell)
+        let time_interval: NSTimeInterval = if date != nil {
+            msg![env; date timeIntervalSinceNow]
+        } else {
+            0.0
+        };
+
+        // Заполняем реальные данные
+        let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
+
+        timer.ns_interval = ns_interval;
+        timer.rust_interval = rust_interval;
+        timer.target = target;
+        timer.selector = selector;
+        timer.user_info = user_info;
+        timer.repeats = repeats;
+
+        if time_interval.is_nan() || time_interval <= 0.0 {
+            timer.due_by = Some(Instant::now());
+        } else {
+            let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
+            timer.due_by = Some(Instant::now() + Duration::from_secs_f64(safe_interval));
+        }
+
+        this
+    }
     
 // TODO: more constructors
 // TODO: more accessors
