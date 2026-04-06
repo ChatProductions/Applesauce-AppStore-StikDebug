@@ -201,6 +201,27 @@ fn CFURLCreateStringByAddingPercentEscapes(
     retain(env, original_string)
 }
 
+fn CFURLCreateWithString(
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
+    url_string: CFStringRef,
+    base_url: CFURLRef,
+) -> CFURLRef {
+    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+
+    if url_string.is_null() {
+        return Ptr::null();
+    }
+
+    let url: id = msg_class![env; NSURL alloc];
+    
+    if base_url.is_null() {
+        msg![env; url initWithString:url_string]
+    } else {
+        msg![env; url initWithString:url_string relativeToURL:base_url]
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetFileSystemRepresentation(_, _, _, _)),
     export_c_func!(CFURLCreateFromFileSystemRepresentation(_, _, _, _)),
@@ -212,5 +233,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCreateCopyDeletingLastPathComponent(_, _)),
     export_c_func!(CFURLHasDirectoryPath(_)),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
+    export_c_func!(CFURLCreateWithString(_, _, _)),
 ];
-
