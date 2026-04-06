@@ -51,7 +51,8 @@ struct NSDecimalNumberHandlerHostObject {
 }
 impl HostObject for NSDecimalNumberHandlerHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 
 (env, this, _cmd);
 
@@ -310,18 +311,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     let b = env.objc.borrow::<NSDecimalNumberHostObject>(other).value;
     if a < b  { return -1; } // NSOrderedAscending
     if a > b  { return  1; } // NSOrderedDescending
-    0                         // NSOrderedSame
+    0                        // NSOrderedSame
 }
 
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == nil  { return false; }
-    let a = env.objc.borrow::<NSDecimalNumberHostObject>(this).value;
-    let b_ref = env.objc.try_borrow::<NSDecimalNumberHostObject>(other);
-    if let Some(b) = b_ref {
-        return a == b.value;
+    
+    // ИСПРАВЛЕНИЕ: Безопасная проверка класса вместо try_borrow
+    let other_class: crate::objc::Class = msg![env; other class];
+    let ns_decimal_class = env.objc.get_known_class("NSDecimalNumber", &mut env.mem);
+    if !env.objc.class_is_subclass_of(other_class, ns_decimal_class) {
+        return false;
     }
-    false
+    
+    let a = env.objc.borrow::<NSDecimalNumberHostObject>(this).value;
+    let b = env.objc.borrow::<NSDecimalNumberHostObject>(other).value;
+    a == b
 }
 
 // MARK: - Accessors
@@ -398,37 +404,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     )
 }
 
-+ (id)decimalNumberHandlerWithRoundingMode:(NSRoundingMode)rounding_mode
-                                     scale:(i16)scale
-                          raiseOnExactness:(bool)exactness
-                           raiseOnOverflow:(bool)overflow
-                          raiseOnUnderflow:(bool)underflow
-                       raiseOnDivideByZero:(bool)divide_by_zero {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithRoundingMode:rounding_mode
-                                               scale:scale
-                                    raiseOnExactness:exactness
-                                     raiseOnOverflow:overflow
-                                    raiseOnUnderflow:underflow
-                                 raiseOnDivideByZero:divide_by_zero];
-    autorelease(env, new)
-}
-
-- (id)initWithRoundingMode:(NSRoundingMode)rounding_mode
-                     scale:(i16)scale
-          raiseOnExactness:(bool)exactness
-           raiseOnOverflow:(bool)overflow
-          raiseOnUnderflow:(bool)underflow
-       raiseOnDivideByZero:(bool)divide_by_zero {
-    let host = env.objc.borrow_mut::<NSDecimalNumberHandlerHostObject>(this);
-    host.rounding_mode          = rounding_mode;
-    host.scale                  = scale;
-    host.raise_on_exactness     = exactness;
-    host.raise_on_overflow      = overflow;
-    host.raise_on_underflow     = underflow;
-    host.raise_on_divide_by_zero = divide_by_zero;
-    this
-}
+// ИСПРАВЛЕНИЕ: Удалены методы инициализации с 6 аргументами,
+// так как они превышают лимит макросов ядра и всё равно не используются.
 
 - (())dealloc {
     env.objc.dealloc_object(this, &mut env.mem)
@@ -479,3 +456,4 @@ fn decimal_from_f64(env: &mut crate::Environment, value: f64) -> crate::objc::id
     );
     obj
 }
+
