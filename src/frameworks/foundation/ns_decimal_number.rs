@@ -92,6 +92,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, n)
 }
 
+// MARK: - Default behavior
+
++ (id)defaultBehavior {
+    msg_class![env; NSDecimalNumberHandler defaultDecimalNumberHandler]
+}
+
 + (id)notANumber {
     let n: id = msg![env; this alloc];
     env.objc.borrow_mut::<NSDecimalNumberHostObject>(n).value = f64::NAN;
@@ -355,12 +361,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)copyWithZone:(NSZonePtr)_zone {
     retain(env, this)
-}
-
-// MARK: - Default behavior
-
-+ (id)defaultBehavior {
-    msg_class![env; NSDecimalNumberHandler defaultDecimalNumberHandler]
 }
 
 @end
