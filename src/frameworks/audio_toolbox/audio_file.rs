@@ -45,7 +45,7 @@ pub type AudioFileID = MutPtr<OpaqueAudioFileID>;
 
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
-const kAudioFileNotOpenError: = i32;
+const kAudioFileNotOpenError: OSStatus = -38;
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 const kAudioFileUnsupportedProperty: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
@@ -557,4 +557,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
+
 
