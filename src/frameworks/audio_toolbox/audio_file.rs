@@ -45,6 +45,7 @@ pub type AudioFileID = MutPtr<OpaqueAudioFileID>;
 
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
+const kAudioFileNotOpenErrorOSStatus = -44;
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 const kAudioFileUnsupportedProperty: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
