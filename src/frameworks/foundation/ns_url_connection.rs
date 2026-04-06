@@ -107,9 +107,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Synchronous API
 
-/// Returns empty NSData and sets *error to an NSError.
-/// Apps that only check for nil data will continue; apps that inspect the
-/// error will also be able to handle the failure path cleanly.
+// Returns empty NSData and sets *error to an NSError.
+// Apps that only check for nil data will continue; apps that inspect the
+// error will also be able to handle the failure path cleanly.
 + (id)sendSynchronousRequest:(id)_request
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
