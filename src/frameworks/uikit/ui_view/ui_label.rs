@@ -167,7 +167,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     false // default value
 }
 - (())setAdjustsFontSizeToFitWidth:(bool)adjusts {
-    assert!(!adjusts); // TODO
+    // assert!(!adjusts); // TODO
 }
 
 - (bool)isEnabled {
