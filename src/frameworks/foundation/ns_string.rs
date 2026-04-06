@@ -910,7 +910,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     let null_size: GuestUSize = match encoding {
         NSUTF8StringEncoding | NSASCIIStringEncoding | NSMacOSRomanStringEncoding |
-        NSISOLatin1StringEncoding | NSSymbolStringEncoding | NSNextStepLatinStringEncoding => 1,
+        NSISOLatin1StringEncoding | NSUTF32LittleEndianStringEncoding | NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding | NSNextStepLatinStringEncoding => 1,
         NSUTF16LittleEndianStringEncoding => 2,
         _ => unimplemented!()
     };
