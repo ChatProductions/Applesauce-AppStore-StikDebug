@@ -6,15 +6,18 @@
  */
 //! `AudioServices.h` (Audio Services)
 
+use crate::audio;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::OSStatus;
 use crate::frameworks::core_audio_types::fourcc;
+use crate::frameworks::core_foundation::cf_url::CFURLRef;
+use crate::frameworks::foundation::ns_url::to_rust_path;
 use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr};
-use crate::objc::id;
 use crate::Environment;
+use std::collections::HashMap;
 
 type AudioServicesPropertyID = u32;
-type SystemSoundID = u32;
+pub type SystemSoundID = u32;
 type AudioServicesSystemSoundCompletionProc = u32; // guest function pointer
 
 const kAudioServicesUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
@@ -22,6 +25,19 @@ const kAudioServicesBadSystemSoundIDError: OSStatus = fourcc(b"!ids") as _;
 
 const kSystemSoundID_Vibrate: SystemSoundID = 0x00000FFF;
 const kSystemSoundID_UserPreferredAlert: SystemSoundID = 0x00001000;
+
+#[derive(Default)]
+pub struct State {
+    pub system_sounds: HashMap<SystemSoundID, audio::AudioFile>,
+    pub next_sound_id: SystemSoundID,
+}
+
+impl State {
+    pub fn get(framework_state: &mut crate::frameworks::State) -> &mut Self {
+        // Ensure this field exists in your framework_state definition
+        &mut framework_state.audio_toolbox.audio_services
+    }
+}
 
 fn AudioServicesGetProperty(
     _env: &mut Environment,
@@ -53,35 +69,86 @@ fn AudioServicesSetProperty(
 
 fn AudioServicesCreateSystemSoundID(
     env: &mut Environment,
-    _in_file_url: id,
+    in_file_url: CFURLRef, // Changed from `id` to `CFURLRef` to match typical CoreFoundation usage
     out_system_sound_id: MutPtr<SystemSoundID>,
 ) -> OSStatus {
-    log!("AudioToolbox: AudioServicesCreateSystemSoundID stubbed");
-    if !out_system_sound_id.is_null() {
-        env.mem.write(out_system_sound_id, 1001);
+    return_if_null!(in_file_url);
+
+    let path = to_rust_path(env, in_file_url);
+    
+    // Open the audio file
+    let audio_file = match audio::AudioFile::open_for_reading(path.clone(), &env.fs) {
+        Ok(file) => file,
+        Err(e) => {
+            log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}: {:?}", path, e);
+            // fnfErr (File not found) or unspec error
+            return -43; 
+        }
+    };
+
+    let state = State::get(&mut env.framework_state);
+    
+    // Start generating IDs from 4096 to avoid colliding with built-in system IDs
+    if state.next_sound_id < 4096 {
+        state.next_sound_id = 4096;
     }
+    
+    let id = state.next_sound_id;
+    state.next_sound_id += 1;
+
+    state.system_sounds.insert(id, audio_file);
+
+    if !out_system_sound_id.is_null() {
+        env.mem.write(out_system_sound_id, id);
+    }
+    
+    log_dbg!("AudioToolbox: AudioServicesCreateSystemSoundID created ID {} for url {:?}", id, in_file_url);
     0
 }
 
 fn AudioServicesDisposeSystemSoundID(
-    _env: &mut Environment,
-    _in_system_sound_id: SystemSoundID,
+    env: &mut Environment,
+    in_system_sound_id: SystemSoundID,
 ) -> OSStatus {
-    0
-}
-
-fn AudioServicesPlaySystemSound(_env: &mut Environment, in_system_sound_id: SystemSoundID) {
-    if in_system_sound_id == kSystemSoundID_Vibrate {
-        log!("TODO: vibration (AudioServicesPlaySystemSound)");
-    } else if in_system_sound_id == kSystemSoundID_UserPreferredAlert {
-        log!("TODO: alert sound (AudioServicesPlaySystemSound)");
+    let state = State::get(&mut env.framework_state);
+    
+    if state.system_sounds.remove(&in_system_sound_id).is_some() {
+        log_dbg!("AudioToolbox: Disposed system sound ID {}", in_system_sound_id);
+        0
     } else {
-        log!("AudioToolbox: Playing system sound ID: {} (stub)", in_system_sound_id);
+        log!("AudioToolbox: Attempted to dispose invalid system sound ID {}", in_system_sound_id);
+        kAudioServicesBadSystemSoundIDError
     }
 }
 
-fn AudioServicesPlayAlertSound(_env: &mut Environment, in_system_sound_id: SystemSoundID) {
-    log!("AudioToolbox: AudioServicesPlayAlertSound: ID {} (stub)", in_system_sound_id);
+fn AudioServicesPlaySystemSound(env: &mut Environment, in_system_sound_id: SystemSoundID) {
+    if in_system_sound_id == kSystemSoundID_Vibrate {
+        log!("TODO: vibration (AudioServicesPlaySystemSound)");
+        return;
+    } else if in_system_sound_id == kSystemSoundID_UserPreferredAlert {
+        log!("TODO: alert sound (AudioServicesPlaySystemSound)");
+        return;
+    }
+
+    let state = State::get(&mut env.framework_state);
+    
+    if let Some(audio_file) = state.system_sounds.get(&in_system_sound_id) {
+        log_dbg!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
+        
+        // TODO: Pass the audio_file data to your specific audio mixing/playback backend!
+        // This usually looks something like this depending on your emulator architecture:
+        // env.audio_mixer.play_buffer(audio_file.clone());
+        // OR
+        // audio::play_system_sound(&mut env.audio_queue, audio_file);
+        
+    } else {
+        log!("AudioToolbox: Attempted to play unknown system sound ID: {}", in_system_sound_id);
+    }
+}
+
+fn AudioServicesPlayAlertSound(env: &mut Environment, in_system_sound_id: SystemSoundID) {
+    // PlayAlertSound acts exactly like PlaySystemSound, just with potential vibration overrides on physical devices
+    AudioServicesPlaySystemSound(env, in_system_sound_id);
 }
 
 fn AudioServicesAddSystemSoundCompletion(
@@ -104,12 +171,12 @@ fn AudioServicesRemoveSystemSoundCompletion(
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioServicesGetProperty(_, _, _, _, _)),
-    export_c_func!(AudioServicesSetProperty(_, _, _, _, _)),
-    export_c_func!(AudioServicesCreateSystemSoundID(_, _)),
-    export_c_func!(AudioServicesDisposeSystemSoundID(_)),
-    export_c_func!(AudioServicesPlaySystemSound(_)),
-    export_c_func!(AudioServicesPlayAlertSound(_)),
-    export_c_func!(AudioServicesAddSystemSoundCompletion(_, _, _, _, _)),
-    export_c_func!(AudioServicesRemoveSystemSoundCompletion(_)),
+    export_c_func!(AudioServicesGetProperty(_, _, _, _, _, _)),
+    export_c_func!(AudioServicesSetProperty(_, _, _, _, _, _)),
+    export_c_func!(AudioServicesCreateSystemSoundID(_, _, _)),
+    export_c_func!(AudioServicesDisposeSystemSoundID(_, _)),
+    export_c_func!(AudioServicesPlaySystemSound(_, _)),
+    export_c_func!(AudioServicesPlayAlertSound(_, _)),
+    export_c_func!(AudioServicesAddSystemSoundCompletion(_, _, _, _, _, _)),
+    export_c_func!(AudioServicesRemoveSystemSoundCompletion(_, _)),
 ];
