@@ -350,6 +350,11 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     let av_audio_player: id = in_user_data.cast();
     let class: Class = msg![env; av_audio_player class];
     
+    log_dbg!(
+        "_touchHLE_AVAudioPlayerOutputBufferHelper on object of class: {}",
+        env.objc.get_class_name(class)
+    );
+    
     assert_eq!(
         class,
         env.objc.get_known_class("AVAudioPlayer", &mut env.mem)
@@ -379,7 +384,7 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     let status = AudioFileReadPackets(
         env,
         audio_file_id.unwrap(),
-        0, 
+        false,
         num_bytes_ptr,
         Ptr::null(),
         current_packet,
