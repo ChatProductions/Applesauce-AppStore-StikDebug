@@ -34,7 +34,14 @@ pub enum AudioFormat {
         is_little_endian: bool,
     },
     AppleIma4,
+    /// MPEG-4 Advanced Audio Coding (AAC-LC).
+    ///
+    /// Raw ADTS or CAF-packaged AAC frames.  The emulator does not decode
+    /// these itself; callers that need PCM must pass through an Audio
+    /// Converter or use the Symphonia PCM path instead.
+    Mpeg4Aac,
 }
+
 /// Fields have the same meanings as in the Core Audio Format's
 /// Audio Description chunk, which is in turn similar to Core Audio Types'
 /// `AudioStreamBasicDescription`.
@@ -49,11 +56,68 @@ pub struct AudioDescription {
     pub bits_per_channel: u32,
 }
 
+// ---------------------------------------------------------------------------
+// AAC packet store
+// ---------------------------------------------------------------------------
+
+/// Raw (compressed) AAC packet data extracted from a CAF or ADTS container.
+///
+/// Each entry in `packets` is one complete AAC frame's worth of bytes.
+/// `frames_per_packet` is always 1024 for AAC-LC.
+pub struct AacPackets {
+    pub sample_rate: f64,
+    pub channels_per_frame: u32,
+    /// Raw bytes for every packet, concatenated.
+    pub packet_bytes: Vec<u8>,
+    /// Byte offset of each packet inside `packet_bytes`.  The sentinel at
+    /// `packet_offsets[n]` is the end of the last packet (== packet_bytes.len()).
+    pub packet_offsets: Vec<usize>,
+    /// Magic cookie / decoder-specific config blob (AudioSpecificConfig).
+    /// Empty when parsed from raw ADTS (the config is embedded in each frame).
+    pub magic_cookie: Vec<u8>,
+}
+
+impl AacPackets {
+    pub fn packet_count(&self) -> u64 {
+        // packet_offsets has one sentinel past the end, so subtract 1.
+        self.packet_offsets.len().saturating_sub(1) as u64
+    }
+
+    pub fn byte_count(&self) -> u64 {
+        self.packet_bytes.len() as u64
+    }
+
+    /// Upper bound on bytes per packet; equal to the largest packet seen.
+    pub fn packet_size_upper_bound(&self) -> u32 {
+        self.packet_offsets
+            .windows(2)
+            .map(|w| (w[1] - w[0]) as u32)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Read raw packet bytes starting at byte offset `offset` into `buffer`.
+    /// Packets are treated as an opaque byte stream (variable-size read).
+    pub fn read_bytes(&self, offset: u64, buffer: &mut [u8]) -> Result<usize, ()> {
+        let start = offset as usize;
+        let src = self.packet_bytes.get(start..).ok_or(())?;
+        let n = buffer.len().min(src.len());
+        buffer[..n].copy_from_slice(&src[..n]);
+        Ok(n)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AudioFile
+// ---------------------------------------------------------------------------
+
 pub struct AudioFile(AudioFileInner);
 enum AudioFileInner {
     Wave(hound::WavReader<Cursor<Vec<u8>>>),
     Caf(caf::CafPacketReader<Cursor<Vec<u8>>>),
     Symphonia(symphonia_formats::SymphoniaDecodedToPcm),
+    /// Raw AAC packets (CAF-AAC or ADTS AAC).
+    Aac(AacPackets),
 }
 
 impl AudioFile {
@@ -63,7 +127,6 @@ impl AudioFile {
     ) -> Result<Self, AudioFileOpenError> {
         // TODO: it would be better not to load the whole file at once
         let Ok(bytes) = fs.read(path.as_ref()) else {
-            // TODO: Handle other FS related errors?
             return Err(AudioFileOpenError::FileReadError);
         };
 
@@ -79,22 +142,30 @@ impl AudioFile {
     }
 
     pub fn read_from_vec(bytes: Vec<u8>) -> Result<Self, AudioFileOpenError> {
-        // Both WavReader::new() and CafPacketReader::new() consume the reader
-        // (in this case, a Cursor) passed to them. This is a bit annoying
-        // considering we don't know which is appropriate for the file without
-        // trying both. This is worked around here by using temporary readers
-        // for checking if the file is the supported format, then recreating the
-        // reader if that works.
+        // Both WavReader::new() and CafPacketReader::new() consume the reader,
+        // so we use temporary readers for format detection and then recreate.
         if hound::WavReader::new(Cursor::new(&bytes)).is_ok() {
             let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
             Ok(AudioFile(AudioFileInner::Wave(reader)))
         } else if caf::CafPacketReader::new(Cursor::new(&bytes), vec![]).is_ok() {
-            let reader = caf::CafPacketReader::new(Cursor::new(bytes), vec![]).unwrap();
-            Ok(AudioFile(AudioFileInner::Caf(reader)))
+            // Distinguish CAF-AAC from CAF-PCM/IMA4 early so we can expose
+            // the correct compressed format upstream.
+            if let Some(aac) = try_parse_caf_aac(&bytes) {
+                Ok(AudioFile(AudioFileInner::Aac(aac)))
+            } else {
+                let reader = caf::CafPacketReader::new(Cursor::new(bytes), vec![]).unwrap();
+                Ok(AudioFile(AudioFileInner::Caf(reader)))
+            }
+        } else if is_adts_aac(&bytes) {
+            // Raw ADTS AAC stream (e.g. a bare .aac file).
+            match parse_adts_aac(bytes) {
+                Ok(aac) => Ok(AudioFile(AudioFileInner::Aac(aac))),
+                Err(_) => Err(AudioFileOpenError::FileDecodeError),
+            }
         // TODO: Real MP3/MP4/Non-linear PCM container handling. Currently we
         // are immediately decoding the entire file to PCM and acting as if
-        // it's a PCM file, simply because because this is easier. Full MP3
-        // support would require a lot of changes in Audio Toolbox.
+        // it's a PCM file, simply because this is easier. Full MP3 support
+        // would require a lot of changes in Audio Toolbox.
         } else if let Ok(pcm) = symphonia_formats::decode_symphonia_to_pcm(Cursor::new(bytes)) {
             Ok(AudioFile(AudioFileInner::Symphonia(pcm)))
         } else {
@@ -113,8 +184,7 @@ impl AudioFile {
                 } = wave_reader.spec();
                 // Hound supports unsigned 8-bit, signed 16-bit, signed 24-bit
                 // and floating-point 32-bit linear PCM. We should expose all of
-                // these eventually, but we should only expose formats we've
-                // tested.
+                // these eventually, but we should only expose formats we've tested.
                 assert!(matches!(bits_per_sample, 8 | 16));
                 assert!(sample_format == hound::SampleFormat::Int);
 
@@ -157,7 +227,6 @@ impl AudioFile {
                             assert!(format_flags == 0);
                             AudioFormat::AppleIma4
                         }
-                        //
                         // We should expose all of the formats eventually, but
                         // the others haven't been tested yet.
                         _ => panic!("{format_id:?} not supported yet"),
@@ -182,6 +251,18 @@ impl AudioFile {
                 frames_per_packet: 1,
                 channels_per_frame: channels,
                 bits_per_channel: 16,
+            },
+            AudioFileInner::Aac(ref aac) => AudioDescription {
+                sample_rate: aac.sample_rate,
+                format: AudioFormat::Mpeg4Aac,
+                // bytes_per_packet == 0 signals variable-size packets to
+                // Core Audio callers (same convention as AAC in a CAF file).
+                bytes_per_packet: 0,
+                // AAC-LC always produces 1024 PCM frames per compressed packet.
+                frames_per_packet: 1024,
+                channels_per_frame: aac.channels_per_frame,
+                // AAC is a compressed format; bits_per_channel is 0.
+                bits_per_channel: 0,
             },
         }
     }
@@ -214,6 +295,7 @@ impl AudioFile {
                 ref bytes,
                 ..
             }) => bytes.len() as u64,
+            AudioFileInner::Aac(ref aac) => aac.byte_count(),
         }
     }
 
@@ -227,6 +309,7 @@ impl AudioFile {
             AudioFileInner::Caf(ref caf_reader) => {
                 caf_reader.get_packet_count().unwrap().try_into().unwrap()
             }
+            AudioFileInner::Aac(ref aac) => aac.packet_count(),
         }
     }
 
@@ -236,12 +319,26 @@ impl AudioFile {
         let AudioDescription {
             bytes_per_packet, ..
         } = self.audio_description();
-        assert!(bytes_per_packet != 0);
+        // AAC has variable-size packets (bytes_per_packet == 0).
+        // Callers that need fixed-size reads must not call this for AAC.
+        assert!(bytes_per_packet != 0, "packet_size_fixed() called on variable-size format");
         bytes_per_packet
     }
 
     pub fn packet_size_upper_bound(&self) -> u32 {
-        self.packet_size_fixed() // variable size not implemented
+        match self.0 {
+            AudioFileInner::Aac(ref aac) => aac.packet_size_upper_bound(),
+            _ => self.packet_size_fixed(), // variable size not implemented for others
+        }
+    }
+
+    /// Returns the magic cookie (AudioSpecificConfig) for AAC files, or an
+    /// empty slice for all other formats.
+    pub fn magic_cookie(&self) -> &[u8] {
+        match self.0 {
+            AudioFileInner::Aac(ref aac) => &aac.magic_cookie,
+            _ => &[],
+        }
     }
 
     /// Read `buffer.len()` bytes of audio data from byte offset `offset`.
@@ -327,6 +424,216 @@ impl AudioFile {
                 buffer[..bytes_to_read].copy_from_slice(bytes);
                 Ok(bytes_to_read)
             }
+            AudioFileInner::Aac(ref aac) => aac.read_bytes(offset, buffer),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// AAC parsing helpers
+// ---------------------------------------------------------------------------
+
+/// FourCC for AAC-LC in a CAF `audio description` chunk.
+/// The CAF spec uses 'aac ' (with a trailing space) for AAC-LC.
+const CAF_FORMAT_AAC_LC: &[u8; 4] = b"aac ";
+
+/// Try to extract raw AAC packets from a CAF file that contains AAC-LC audio.
+/// Returns `None` when the CAF file uses a non-AAC format.
+fn try_parse_caf_aac(bytes: &[u8]) -> Option<AacPackets> {
+    // We need a second parse pass for the audio description because
+    // CafPacketReader consumes the reader.  Use a minimal manual parse.
+    let format_id = caf_read_format_id(bytes)?;
+    if &format_id != CAF_FORMAT_AAC_LC {
+        return None;
+    }
+
+    // Full parse to extract packets, sample rate, channels, and magic cookie.
+    let mut reader = caf::CafPacketReader::new(Cursor::new(bytes), vec![]).ok()?;
+
+    let sample_rate = reader.audio_desc.sample_rate;
+    let channels_per_frame = reader.audio_desc.channels_per_frame;
+
+    // Collect magic cookie if the CAF file provides one.
+    let magic_cookie: Vec<u8> = reader
+        .chunks
+        .iter()
+        .find_map(|chunk| {
+            if let caf::ChunkType::MagicCookie(ref cookie) = chunk.data {
+                Some(cookie.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    // Collect all packets into a flat byte buffer with an offset table.
+    let packet_count = reader.get_packet_count().ok()?;
+    let mut packet_bytes = Vec::new();
+    let mut packet_offsets = Vec::with_capacity(packet_count + 1);
+
+    reader.seek_to_packet(0).ok()?;
+    for _ in 0..packet_count {
+        let Some(pkt_size) = reader.next_packet_size() else {
+            break;
+        };
+        packet_offsets.push(packet_bytes.len());
+        let start = packet_bytes.len();
+        packet_bytes.resize(start + pkt_size, 0u8);
+        reader
+            .read_packet_into(&mut packet_bytes[start..])
+            .ok()?;
+    }
+    packet_offsets.push(packet_bytes.len()); // sentinel
+
+    log_dbg!(
+        "try_parse_caf_aac: {} packets, {} bytes, {:.0} Hz, {} ch",
+        packet_offsets.len().saturating_sub(1),
+        packet_bytes.len(),
+        sample_rate,
+        channels_per_frame,
+    );
+
+    Some(AacPackets {
+        sample_rate,
+        channels_per_frame,
+        packet_bytes,
+        packet_offsets,
+        magic_cookie,
+    })
+}
+
+/// Minimal CAF header walk to read the `format_id` field from the `desc` chunk.
+///
+/// CAF file layout:
+///   "caff" magic (4 bytes) + version (2) + flags (2)
+///   Chunks: type (4) + size (i64) + data
+///   `desc` chunk data starts with: sample_rate (f64) + format_id (4 bytes) + â¦
+fn caf_read_format_id(bytes: &[u8]) -> Option<[u8; 4]> {
+    if bytes.len() < 8 {
+        return None;
+    }
+    if &bytes[..4] != b"caff" {
+        return None;
+    }
+    let mut pos = 8usize; // skip magic + version + flags
+    while pos + 12 <= bytes.len() {
+        let chunk_type = &bytes[pos..pos + 4];
+        let chunk_size = i64::from_be_bytes(bytes[pos + 4..pos + 12].try_into().ok()?);
+        pos += 12;
+        if chunk_type == b"desc" && chunk_size >= 12 {
+            // format_id is at offset 8 within the desc chunk data (after f64 sample_rate).
+            let data = bytes.get(pos..pos + chunk_size as usize)?;
+            return Some(data[8..12].try_into().ok()?);
+        }
+        pos = pos.checked_add(chunk_size.try_into().ok()?)? ;
+    }
+    None
+}
+
+/// Detect a raw ADTS AAC stream by its sync word (0xFFF or 0xFFE).
+fn is_adts_aac(bytes: &[u8]) -> bool {
+    if bytes.len() < 2 {
+        return false;
+    }
+    // ADTS sync word: 12 set bits (0xFFF) for MPEG-2/4 AAC.
+    // The 13th bit being 0 distinguishes MPEG-4 (0) from MPEG-2 (1).
+    (bytes[0] == 0xFF) && ((bytes[1] & 0xF0) == 0xF0)
+}
+
+/// Parse a raw ADTS bitstream into an `AacPackets`.
+///
+/// Each ADTS frame has a 7- or 9-byte header followed by the AAC payload.
+/// Header layout (bits):
+///   [0..12]  sync word (0xFFF)
+///   [12]     ID (0 = MPEG-4, 1 = MPEG-2)
+///   [13..14] layer (always 00)
+///   [14]     protection absent (1 = no CRC, 0 = CRC present â 9-byte header)
+///   [15..16] profile (0 = Main, 1 = LC, 2 = SSR, 3 = reserved) stored as (profile - 1)
+///   [17..20] sampling frequency index
+///   [20]     private bit
+///   [21..23] channel configuration
+///   [23]     originality / copy
+///   [24]     home
+///   [25]     copyright id bit
+///   [26]     copyright id start
+///   [27..40] frame length (includes header)
+///   [40..53] buffer fullness (0x7FF = VBR)
+///   [53..54] number of AAC frames in ADTS frame minus 1
+fn parse_adts_aac(bytes: Vec<u8>) -> Result<AacPackets, ()> {
+    // ADTS sampling frequency table (ISO 14496-3 Â§1.6.5.3.3)
+    const SAMPLE_RATES: [u32; 13] = [
+        96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350,
+    ];
+
+    let mut pos = 0usize;
+    let mut sample_rate = 44100f64; // fallback
+    let mut channels_per_frame = 2u32; // fallback
+    let mut packet_bytes: Vec<u8> = Vec::new();
+    let mut packet_offsets: Vec<usize> = Vec::new();
+    let mut first = true;
+
+    while pos + 7 <= bytes.len() {
+        // Validate sync word.
+        if bytes[pos] != 0xFF || (bytes[pos + 1] & 0xF0) != 0xF0 {
+            if packet_offsets.is_empty() {
+                return Err(()); // not ADTS
+            }
+            break; // trailing non-ADTS data; stop here
+        }
+
+        let protection_absent = (bytes[pos + 1] & 0x01) != 0;
+        let header_size: usize = if protection_absent { 7 } else { 9 };
+
+        if first {
+            // Extract metadata from the first frame header.
+            let sfi = ((bytes[pos + 2] & 0x3C) >> 2) as usize;
+            if sfi < SAMPLE_RATES.len() {
+                sample_rate = SAMPLE_RATES[sfi].into();
+            }
+            // Channel configuration:
+            //   bits [21..23] span bytes[pos+2] (low 1 bit) and bytes[pos+3] (high 2 bits).
+            let ch_cfg = ((bytes[pos + 2] & 0x01) << 2) | ((bytes[pos + 3] & 0xC0) >> 6);
+            channels_per_frame = if ch_cfg == 0 { 2 } else { u32::from(ch_cfg) };
+            first = false;
+        }
+
+        // Frame length is 13 bits: bytes[pos+3] bits [6..0] (7 bits) and
+        // bytes[pos+4] (8 bits) and bytes[pos+5] bits [7] (1 bit) â 16 bits
+        // stored at [27..40] of the header.
+        let frame_length = (((bytes[pos + 3] & 0x03) as usize) << 11)
+            | ((bytes[pos + 4] as usize) << 3)
+            | ((bytes[pos + 5] as usize) >> 5);
+
+        if frame_length < header_size || pos + frame_length > bytes.len() {
+            break; // truncated frame
+        }
+
+        // Store the raw payload (header included â matches ADTS convention).
+        packet_offsets.push(packet_bytes.len());
+        packet_bytes.extend_from_slice(&bytes[pos..pos + frame_length]);
+
+        pos += frame_length;
+    }
+
+    if packet_offsets.is_empty() {
+        return Err(());
+    }
+    packet_offsets.push(packet_bytes.len()); // sentinel
+
+    log_dbg!(
+        "parse_adts_aac: {} packets, {} bytes, {:.0} Hz, {} ch",
+        packet_offsets.len().saturating_sub(1),
+        packet_bytes.len(),
+        sample_rate,
+        channels_per_frame,
+    );
+
+    Ok(AacPackets {
+        sample_rate,
+        channels_per_frame,
+        packet_bytes,
+        packet_offsets,
+        // ADTS frames carry config inline; no separate magic cookie.
+        magic_cookie: Vec::new(),
+    })
 }
