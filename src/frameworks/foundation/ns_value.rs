@@ -209,7 +209,10 @@ pub const CLASSES: ClassExports = objc_classes! {
             )
         }
         NSValueHostObject::NSRange(r) => {
-            format!("NSRange: {{{}, {}}}", r.location, r.length)
+            // Копируем значения в локальные переменные, чтобы избежать взятия ссылки на packed-структуру
+            let loc = r.location;
+            let len = r.length;
+            format!("NSRange: {{{}, {}}}", loc, len)
         }
     };
     let ns = from_rust_string(env, s);
