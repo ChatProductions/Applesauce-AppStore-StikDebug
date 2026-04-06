@@ -350,10 +350,7 @@ impl AudioFile {
     }
 
     pub fn packet_size_upper_bound(&self) -> u32 {
-        match self.inner {
-            AudioFileInner::Aac(ref aac) => aac.packet_size_upper_bound(),
-            _ => self.packet_size_fixed(), // variable size not implemented for others
-        }
+        self.packet_size_fixed() // variable size not implemented
     }
 
     /// Returns the magic cookie (AudioSpecificConfig) for AAC files, or an
