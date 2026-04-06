@@ -177,7 +177,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Integer specifiers
             b'c' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 // TODO: support length modifier
                 assert!(length_modifier.is_none());
                 let c: u8 = args.next(env);
@@ -187,7 +186,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Apple extension? Seemingly works in both NSLog and printf.
             b'C' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 assert!(length_modifier.is_none());
                 let c: unichar = args.next(env);
                 // TODO
@@ -205,7 +203,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 // assert!(pad_char == ' '); // TODO
                 if !c_string.is_null() {
                     if let Some(precision) = precision {
-                        // assert!(!left_justified);
                         let str_len = strlen(env, c_string);
                         res.extend_from_slice(
                             env.mem.bytes_at(c_string, str_len.min(precision as _)),
@@ -222,14 +219,12 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         res.extend_from_slice(env.mem.cstr_at(c_string));
                     }
                 } else {
-                    // assert!(!left_justified);
                     // assert!(precision.is_none());
                     res.extend_from_slice("(null)".as_bytes());
                 }
             }
             b'S' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 // TODO: support length modifier
                 assert!(length_modifier.is_none());
                 // TODO: support other locales
@@ -244,7 +239,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 }
             }
             b'd' | b'i' | b'u' => {
-                assert!(!left_justified);
                 // Note: on 32-bit system int and long are i32,
                 // so single length_modifier is ignored (but not double one!)
                 let int: i64 = if specifier == b'u' {
@@ -270,7 +264,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
 
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
-                    if pad_char == '0' && precision.is_none() {
+                    if pad_char == '0' && precision.is_none() && !left_justified {
                         if prepend_sign {
                             assert!(int != 0); // TODO
                             assert!(pad_width > 0);
@@ -284,7 +278,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         }
                     } else {
                         // assert!(!prepend_sign);
-                        write!(&mut res, "{int_with_precision:>pad_width$}").unwrap();
+                        if left_justified {
+                            write!(&mut res, "{int_with_precision:<pad_width$}").unwrap();
+                        } else {
+                            write!(&mut res, "{int_with_precision:>pad_width$}").unwrap();
+                        }
                     }
                 } else {
                     // assert!(!prepend_sign);
@@ -293,7 +291,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'@' if NS_LOG => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 assert!(length_modifier.is_none());
                 let object: id = args.next(env);
                 // TODO: use localized description if available?
@@ -309,15 +306,16 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'x' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 // Note: on 32-bit system unsigned int and unsigned long
                 // are u32, so length_modifier is ignored
                 let uint: u32 = args.next(env);
                 if pad_width > 0 {
                     assert!(precision.is_none()); // TODO
                     let pad_width = pad_width as usize;
-                    if pad_char == '0' && precision.is_none() {
+                    if pad_char == '0' && precision.is_none() && !left_justified {
                         write!(&mut res, "{uint:0>pad_width$x}").unwrap();
+                    } else if left_justified {
+                        write!(&mut res, "{uint:<pad_width$x}").unwrap();
                     } else {
                         write!(&mut res, "{uint:>pad_width$x}").unwrap();
                     }
@@ -335,15 +333,16 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'X' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 assert!(precision.is_none());
                 // Note: on 32-bit system unsigned int and unsigned long
                 // are u32, so length_modifier is ignored
                 let uint: u32 = args.next(env);
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
-                    if pad_char == '0' && precision.is_none() {
+                    if pad_char == '0' && precision.is_none() && !left_justified {
                         write!(&mut res, "{uint:0>pad_width$X}").unwrap();
+                    } else if left_justified {
+                        write!(&mut res, "{uint:<pad_width$X}").unwrap();
                     } else {
                         assert!(pad_char == ' '); // TODO
                         write!(&mut res, "{uint:>pad_width$X}").unwrap();
@@ -354,7 +353,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'p' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 assert!(length_modifier.is_none());
                 let ptr: MutVoidPtr = args.next(env);
                 // '%p' is implementation defined,
@@ -363,7 +361,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     assert!(pad_char == ' '); // TODO
-                    write!(&mut res, "{tmp:>pad_width$}").unwrap();
+                    if left_justified {
+                        write!(&mut res, "{tmp:<pad_width$}").unwrap();
+                    } else {
+                        write!(&mut res, "{tmp:>pad_width$}").unwrap();
+                    }
                 } else {
                     res.extend_from_slice(tmp.as_bytes());
                 }
@@ -371,27 +373,24 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Float specifiers
             b'f' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = f_format(float, pad_width, pad_char, precision);
+                let formatted = f_format(float, pad_width, pad_char, precision, left_justified);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'e' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
 
-                let formatted = e_format(float, pad_width, pad_char, precision);
+                let formatted = e_format(float, pad_width, pad_char, precision, left_justified);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'g' => {
                 assert!(!prepend_sign);
-                assert!(!left_justified);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
 
@@ -421,7 +420,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 if P > X && X >= -4 {
                     let precision: usize = (P - X - 1).try_into().unwrap();
 
-                    let result = f_format(float, pad_width, pad_char, precision);
+                    let result = f_format(float, pad_width, pad_char, precision, left_justified);
 
                     // TODO: skip if alternative representation is requested
                     let trimmed_result = if result.contains('.') {
@@ -431,7 +430,9 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     };
 
                     let trimmed_result = if pad_width > 0 && trimmed_result.len() < pad_width {
-                        if pad_char == '0' {
+                        if left_justified {
+                            format!("{trimmed_result:<pad_width$}")
+                        } else if pad_char == '0' {
                             format!("{trimmed_result:0>pad_width$}")
                         } else {
                             format!("{trimmed_result:>pad_width$}")
@@ -444,7 +445,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 } else {
                     let precision: usize = (P - 1).try_into().unwrap();
 
-                    let formatted = e_format(float, pad_width, pad_char, precision);
+                    let formatted = e_format(float, pad_width, pad_char, precision, left_justified);
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
@@ -462,16 +463,18 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
     res
 }
 
-fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> String {
-    if pad_char == '0' {
-        format!("{float:0pad_width$.precision$}")
+fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left_justified: bool) -> String {
+    if left_justified {
+        format!("{float:<pad_width$.precision$}")
+    } else if pad_char == '0' {
+        format!("{float:0>pad_width$.precision$}")
     } else {
         assert!(pad_char == ' '); // TODO
-        format!("{float:pad_width$.precision$}")
+        format!("{float:>pad_width$.precision$}")
     }
 }
 
-fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> String {
+fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left_justified: bool) -> String {
     let exponent = if float == 0.0 {
         0.0
     } else {
@@ -479,8 +482,13 @@ fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> S
     };
     let mantissa = float.abs() / 10f64.powf(exponent);
     let sign = if float.is_sign_negative() { "-" } else { "" };
-    if pad_char == '0' {
-        let float_exp_notation = format!("{mantissa:.precision$}e{exponent:+03}");
+    
+    let float_exp_notation = format!("{mantissa:.precision$}e{exponent:+03}");
+    let full_str = format!("{sign}{float_exp_notation}");
+
+    if left_justified {
+        format!("{full_str:<pad_width$}")
+    } else if pad_char == '0' {
         format!(
             "{0}{1:0>2$}",
             sign,
@@ -489,8 +497,7 @@ fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize) -> S
         )
     } else {
         assert!(pad_char == ' '); // TODO
-        let float_exp_notation = format!("{sign}{mantissa:.precision$}e{exponent:+03}");
-        format!("{float_exp_notation:>pad_width$}")
+        format!("{full_str:>pad_width$}")
     }
 }
 
@@ -1302,8 +1309,5 @@ pub fn isspace(env: &mut Environment, src: ConstPtr<u8>) -> bool {
     let c = env.mem.read(src);
     isspace_inner(c)
 }
-pub fn isspace_inner(c: u8) -> bool {
-    // Rust's definition of whitespace excludes vertical tab, unlike C's
-    c.is_ascii_whitespace() || c == b'\x0b'
-}
+pub fn is
 
