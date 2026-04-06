@@ -107,15 +107,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Display mode / overscan
 
 - (id)currentMode {
-    // Look up the UIScreenMode class
-    let cls = env.objc.class_by_name("UIScreenMode").expect("UIScreenMode class not found");
+    let (width, height) = env.window().device_family().portrait_size();
+    let size = CGSize {
+        width:  width  as CGFloat,
+        height: height as CGFloat,
+    };
     
-    // Allocate a trivial host object to represent the mode
-    env.objc.alloc_static_object(
-        cls,
-        Box::new(TrivialHostObject),
-        &mut env.mem,
-    )
+    // Call your new helper function directly
+    crate::frameworks::uikit::ui_screen_mode::from_size(env, size, 1.0)
 }
 
 - (id)preferredMode {
