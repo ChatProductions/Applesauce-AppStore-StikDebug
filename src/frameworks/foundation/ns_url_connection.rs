@@ -39,15 +39,19 @@ impl HostObject for NSURLConnectionHostObject {}
 // Helper — build an NSError for "not connected to internet".
 // ---------------------------------------------------------------------------
 fn make_network_error(env: &mut crate::Environment) -> id {
-    // NSDictionary with NSLocalizedDescriptionKey
-    let domain = crate::frameworks::foundation::ns_string::from_rust_string(
-        env,
-        NS_URL_ERROR_DOMAIN.to_string(),
-    );
+    use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str};
+
+    // Build all NSString* values via from_rust_string / get_static_str so we
+    // never call .as_ptr() or any Rust methods inside a msg_class! macro.
+    let domain = from_rust_string(env, NS_URL_ERROR_DOMAIN.to_string());
     autorelease(env, domain);
 
-    let desc_key: id = msg_class![env; NSString stringWithUTF8String:"NSLocalizedDescription\0".as_ptr()];
-    let desc_val: id = msg_class![env; NSString stringWithUTF8String:"The network connection was lost. (touchHLE: networking not supported)\0".as_ptr()];
+    let desc_key = get_static_str(env, "NSLocalizedDescription");
+    let desc_val = from_rust_string(
+        env,
+        "The network connection was lost. (touchHLE: networking not supported)".to_string(),
+    );
+    autorelease(env, desc_val);
 
     let user_info: id = msg_class![env; NSMutableDictionary new];
     autorelease(env, user_info);
