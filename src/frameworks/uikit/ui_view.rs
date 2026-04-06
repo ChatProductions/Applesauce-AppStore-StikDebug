@@ -434,6 +434,41 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 // ------------------------------------
 
+// =========================================================================
+// MARK: - OpenGL ES / EAGLView lifecycle stubs
+// These are called by apps that subclass UIView as an EAGLView.
+// =========================================================================
+
+- (())resume {
+    log_dbg!("UIView resume {:?}", this);
+    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    host.is_animating = true;
+}
+
+- (())flushBuffer {
+    // Called by some EAGLView implementations after rendering a frame to
+    // present the renderbuffer. The actual present is handled by EAGLContext
+    // presentRenderBuffer: — this is just a hook some apps call before that.
+    log_dbg!("UIView flushBuffer {:?}", this);
+    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    // Forward to the layer's display if it has content to present.
+    let _: () = msg![env; layer display];
+}
+
+- (())setupView {
+    // Called by EAGLView subclasses to set up the OpenGL ES state
+    // (viewport, projection matrix, etc.) before rendering begins.
+    // The actual GL setup is done by the app's own override; the base
+    // UIView implementation is a no-op.
+    log_dbg!("UIView setupView {:?}", this);
+}
+
+- (())endDrawing {
+    // Called by some EAGLView implementations at the end of a render pass.
+    // No-op at the UIView level — the app's override does the real work.
+    log_dbg!("UIView endDrawing {:?}", this);
+}
+
 - (bool)isOpaque {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer isOpaque]
