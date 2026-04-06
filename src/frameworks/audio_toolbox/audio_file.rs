@@ -437,7 +437,7 @@ pub fn AudioFileReadPackets(
     return_if_null!(in_audio_file);
 
     if !out_packet_descriptions.is_null() {
-        log!("Warning: ignoring non-null out_packet_descriptions in AudioFileReadPackets()");
+        log_dbg!("Warning: ignoring non-null out_packet_descriptions in AudioFileReadPackets()");
     }
 
     let host_object = match State::get(&mut env.framework_state)
@@ -446,7 +446,7 @@ pub fn AudioFileReadPackets(
     {
         Some(obj) => obj,
         None => {
-            log!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
+            log_dbg!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
             return kAudioFileNotOpenError;
         }
     };
