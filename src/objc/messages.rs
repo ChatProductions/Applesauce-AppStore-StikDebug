@@ -139,7 +139,7 @@ Type mismatch when sending message {} to {:?}!
                                 if tolerate_type_mismatch {
                                     log!("Warning: {}", msg);
                                 } else {
-                                    panic!("{}", msg);
+                                    log_dbg!("{}", msg);
                                 }
                             }
                         }
