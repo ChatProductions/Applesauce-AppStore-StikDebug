@@ -412,6 +412,8 @@ struct AudioBufferList {
 }
 unsafe impl SafeRead for AudioBufferList {}
 
+// Inside ExtAudioFile.h
+
 pub fn ExtAudioFileRead(
     env: &mut Environment,
     in_ext_audio_file: ExtAudioFileRef,
@@ -419,94 +421,66 @@ pub fn ExtAudioFileRead(
     io_data: MutPtr<AudioBufferList>,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-    // Read `io_num_frames` frames starting at the current frame position.
-    // We do not yet implement sample-rate or format conversion; we require
-    // the client format (if set) to match the file format.
 
     let frames_requested = env.mem.read(io_num_frames);
     if frames_requested == 0 {
-        return 0; // nothing to do
+        return 0; 
     }
 
-    let host_object = State::get(&mut env.framework_state)
-        .ext_audio_files
-        .get(&in_ext_audio_file)
-        .expect("ExtAudioFileRead: unknown ExtAudioFileRef");
-    let desc = host_object.audio_file.audio_description();
-    let frame_position = host_object.frame_position;
+    let (desc, frame_pos) = {
+        let state = State::get(&mut env.framework_state);
+        let host = state.ext_audio_files.get(&in_ext_audio_file).expect("Invalid Ref");
+        (host.audio_file.audio_description(), host.frame_position)
+    };
 
-    // If a client format is set and it differs from the file format, we
-    // would need a converter. For now we log a warning and fall through
-    // using the file format data directly, which is correct when the
-    // formats are identical or the caller ignores the discrepancy.
-    if let Some(cf) = host_object.client_format {
-        if cf.format_id != build_asbd(&host_object.audio_file).format_id {
-            log!(
-                "Warning: ExtAudioFileRead() client format differs from file \
-                 format — format conversion not yet implemented, reading raw data"
-            );
-        }
-    }
+    // 1. Calculate how many packets we need to satisfy the frame request
+    // For VBR (like AAC), frames_per_packet is > 1. For PCM, it's usually 1.
+    let starting_packet = (frame_pos / desc.frames_per_packet as u64) as i64;
+    let packets_to_read = frames_requested.div_ceil(desc.frames_per_packet);
 
-    let starting_packet: i64 = (frame_position / desc.frames_per_packet as u64)
-        .try_into()
-        .unwrap();
-    let packets_to_read: u32 = frames_requested
-        .div_ceil(desc.frames_per_packet)
-        .min(u32::MAX);
-
-    // We need a writable copy of the packet count for AudioFileReadPackets.
-    let io_num_packets: MutPtr<u32> = env.mem.alloc(guest_size_of::<u32>()).cast();
-    let out_num_bytes: MutPtr<u32> = env.mem.alloc(guest_size_of::<u32>()).cast();
-
-    env.mem.write(io_num_packets, packets_to_read);
-
+    // 2. Prepare Guest Memory for the underlying AudioFileReadPackets call
+    let io_num_packets_ptr: MutPtr<u32> = env.mem.alloc_and_write(packets_to_read);
+    let out_num_bytes_ptr: MutPtr<u32> = env.mem.alloc_and_write(0u32);
+    
     let abl: AudioBufferList = env.mem.read(io_data);
     let out_buffer = abl.first_buffer.data;
 
-    // Re-use the AudioFile read path.
+    // 3. Perform the actual read from the virtual filesystem/buffer
+    // We transmute the ExtAudioFileRef to an AudioFileID for the shim call
     let status = AudioFileReadPackets(
         env,
-        // We need an AudioFileID.  We store a synthetic one keyed on the
-        // ExtAudioFileRef address so we can call into AudioFileReadPackets
-        // without duplicating all the I/O logic.
-        // NOTE: this relies on the fact that AudioFileReadPackets only looks
-        //       up the host object via the ID map — the pointer value itself
-        //       is just a map key.
-        // We build a temporary AudioFileHostObject entry for the duration of
-        // this call and clean it up immediately after.
         unsafe { std::mem::transmute(in_ext_audio_file) },
         false,
-        out_num_bytes,
-        MutVoidPtr::null(),
+        out_num_bytes_ptr,
+        MutVoidPtr::null(), // We don't support PacketDescriptions yet
         starting_packet,
-        io_num_packets,
+        io_num_packets_ptr,
         out_buffer,
     );
 
-    // Clean up temporary AudioFileID entry (see NOTE above).
-    // (In a real implementation the ExtAudioFile would hold an AudioFileID
-    //  directly; this shim avoids that refactor for now.)
+    if status == 0 {
+        let packets_actually_read = env.mem.read(io_num_packets_ptr);
+        let bytes_actually_read = env.mem.read(out_num_bytes_ptr);
+        let frames_actually_read = packets_actually_read * desc.frames_per_packet;
 
-    let packets_read = env.mem.read(io_num_packets);
-    let frames_read = packets_read * desc.frames_per_packet;
+        // 4. Update the Host Object's playback cursor
+        let host = State::get(&mut env.framework_state)
+            .ext_audio_files
+            .get_mut(&in_ext_audio_file)
+            .unwrap();
+        
+        host.frame_position += frames_actually_read as u64;
 
-    // Update state.
-    State::get(&mut env.framework_state)
-        .ext_audio_files
-        .get_mut(&in_ext_audio_file)
-        .unwrap()
-        .frame_position += frames_read as u64;
-    env.mem.write(io_num_frames, frames_read);
+        // 5. Update the Guest's io_num_frames and AudioBufferList
+        env.mem.write(io_num_frames, frames_actually_read);
+        
+        let mut abl_updated = abl;
+        abl_updated.first_buffer.data_byte_size = bytes_actually_read;
+        env.mem.write(io_data, abl_updated);
+    }
 
-    // Update the buffer's reported byte size.
-    let bytes_read = env.mem.read(out_num_bytes);
-    let mut abl_mut: AudioBufferList = env.mem.read(io_data);
-    abl_mut.first_buffer.data_byte_size = bytes_read;
-    env.mem.write(io_data, abl_mut);
-
-    env.mem.free(io_num_packets.cast());
-    env.mem.free(out_num_bytes.cast());
+    env.mem.free(io_num_packets_ptr.cast());
+    env.mem.free(out_num_bytes_ptr.cast());
 
     status
 }
