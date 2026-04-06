@@ -48,7 +48,9 @@ pub const NSUTF16StringEncoding: NSUInteger = NSUnicodeStringEncoding;
 pub const NSNextStepLatinStringEncoding: NSUInteger = 0x422;
 pub const NSUTF16BigEndianStringEncoding: NSUInteger = 0x90000100;
 pub const NSUTF16LittleEndianStringEncoding: NSUInteger = 0x94000100;
-pub const NSSymbolStringEncoding: NSUInteger = 0x9c000100;
+pub const NSUTF32LittleEndianStringEncoding: NSUInteger = 0x9c000100;
+pub const NSUTF32StringEncoding:              NSUInteger = 0x8c000100;
+pub const NSUTF32BigEndianStringEncoding:     NSUInteger = 0x98000100;
 
 pub type NSStringCompareOptions = NSUInteger;
 pub const NSCaseInsensitiveSearch: NSUInteger = 1;
@@ -63,8 +65,10 @@ const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSWindowsCP1252StringEncoding,
     NSMacOSRomanStringEncoding,
     NSISOLatin1StringEncoding,
-    NSSymbolStringEncoding,
+    NSUTF32LittleEndianStringEncoding,
     NSNextStepLatinStringEncoding,
+    NSUTF32StringEncoding,
+    NSUTF32BigEndianStringEncoding,
 ];
 
 pub const NSMaximumStringLength: NSUInteger = (i32::MAX - 1) as _;
@@ -126,7 +130,17 @@ impl StringHostObject {
                 let string = String::from_utf8(bytes.into_owned()).unwrap();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSSymbolStringEncoding => {
+            NSUTF32LittleEndianStringEncoding => {
+                // TODO: use encoding_rs
+                let string = CP1252.decode(&bytes).to_string();
+                StringHostObject::Utf8(Cow::Owned(string))
+            }
+            NSUTF32StringEncoding => {
+                // TODO: use encoding_rs
+                let string = CP1252.decode(&bytes).to_string();
+                StringHostObject::Utf8(Cow::Owned(string))
+            }
+            NSUTF32BigEndianStringEncoding => {
                 // TODO: use encoding_rs
                 let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
@@ -873,13 +887,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     // TODO: other encodings
     let bytes: Vec<u8> = match encoding {
         NSASCIIStringEncoding |
-        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSSymbolStringEncoding | NSNextStepLatinStringEncoding => {
+        NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
             // TODO: properly support Mac OS Roman and ISO Latin 1 encodings.
             // The first 128 characters are identical to the ASCII
             assert!(string.as_bytes().iter().all(|byte| byte.is_ascii()));
             string.as_bytes().to_vec()
         },
         NSUTF8StringEncoding => {
+            string.as_bytes().to_vec()
+        },
+        NSUTF32LittleEndianStringEncoding => {
+            string.as_bytes().to_vec()
+        },
+        NSUTF32StringEncoding => {
+            string.as_bytes().to_vec()
+        },
+        NSUTF32BigEndianStringEncoding => {
             string.as_bytes().to_vec()
         },
         NSUTF16LittleEndianStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
@@ -1552,6 +1575,63 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
     *env.objc.borrow_mut(this) = host_object;
     this
+}
+
+- (NSUInteger)lengthOfBytesUsingEncoding:(NSUInteger)encoding {
+    let s = ns_string::to_rust_string(env, this);
+    match encoding {
+        NSUTF8StringEncoding => s.len() as NSUInteger,
+        NSASCIIStringEncoding => {
+            // Count only ASCII bytes.
+            s.bytes().filter(|b| b.is_ascii()).count() as NSUInteger
+        }
+        NSUTF16StringEncoding |
+        NSUTF16BigEndianStringEncoding |
+        NSUTF16LittleEndianStringEncoding => {
+            // UTF-16: each BMP char = 2 bytes, supplementary = 4 bytes.
+            s.chars().map(|c| if (c as u32) <= 0xFFFF { 2usize } else { 4 }).sum::<usize>()
+                as NSUInteger
+        }
+        NSUTF32StringEncoding |
+        NSUTF32BigEndianStringEncoding |
+        NSUTF32LittleEndianStringEncoding => {
+            (s.chars().count() * 4) as NSUInteger
+        }
+        NSISOLatin1StringEncoding |
+        NSWindowsCP1252StringEncoding => {
+            // Latin-1: each char that fits in u8 = 1 byte, others dropped.
+            s.chars().filter(|c| (*c as u32) <= 0xFF).count() as NSUInteger
+        }
+        _ => {
+            log!("NSString lengthOfBytesUsingEncoding: unknown encoding {}, falling back to UTF-8", encoding);
+            s.len() as NSUInteger
+        }
+    }
+}
+
+- (NSUInteger)maximumLengthOfBytesUsingEncoding:(NSUInteger)encoding {
+    let s = ns_string::to_rust_string(env, this);
+    match encoding {
+        NSUTF8StringEncoding => {
+            // Max 4 bytes per char in UTF-8.
+            (s.chars().count() * 4) as NSUInteger
+        }
+        NSUTF16StringEncoding |
+        NSUTF16BigEndianStringEncoding |
+        NSUTF16LittleEndianStringEncoding => {
+            // Max 4 bytes per char (surrogate pairs).
+            (s.chars().count() * 4) as NSUInteger
+        }
+        NSUTF32StringEncoding |
+        NSUTF32BigEndianStringEncoding |
+        NSUTF32LittleEndianStringEncoding => {
+            (s.chars().count() * 4) as NSUInteger
+        }
+        _ => {
+            // Conservative: same as lengthOfBytesUsingEncoding.
+            msg![env; this lengthOfBytesUsingEncoding:encoding]
+        }
+    }
 }
 
 - (id)stringByReplacingCharactersInRange:(NSRange)range
