@@ -128,11 +128,16 @@ fn CFHostStartInfoResolution(
         .name
         .clone()
         .unwrap_or_else(|| "<address>".to_string());
+    
+    // Change the log to indicate we are bypassing the stub
     log!(
-        "CFHostStartInfoResolution: host={} info={} — stubbed, returning false",
+        "CFHostStartInfoResolution: host={} info={} — Faking success to bypass crash",
         name_str, info
     );
-    false
+
+    // CRITICAL: Return true instead of false.
+    // This tricks the game into thinking the DNS lookup is working.
+    true 
 }
 
 fn CFHostCancelInfoResolution(
@@ -174,12 +179,29 @@ fn CFHostSetClient(
 // MARK: - Info accessors (always return nil / false)
 
 fn CFHostGetAddressing(
-    _env: &mut Environment,
+    env: &mut Environment, // Removed the underscore to use 'env'
     _host: CFHostRef,
-    _has_been_resolved: MutVoidPtr, // Boolean*
+    has_been_resolved: MutVoidPtr, // Boolean*
 ) -> CFTypeRef {
-    // Returns CFArrayRef of CFDataRef addresses — nil since we never resolve.
-    nil
+    log!("CFHostGetAddressing: Faking a valid empty array to prevent 0x10 panic.");
+
+    // 1. Tell the game the resolution "finished" by setting the boolean pointer to true
+    if !has_been_resolved.is_null() {
+        unsafe {
+            env.mem.write_u8(has_been_resolved.as_guest_ptr(), 1); // 1 = true
+        }
+    }
+
+    // 2. Instead of 'nil', return an empty CFArray. 
+    // This gives the game a real memory address to look at, preventing the crash.
+    let allocator = nil; 
+    crate::frameworks::core_foundation::cf_array::CFArrayCreate(
+        env, 
+        allocator, 
+        MutVoidPtr::null(), // No values
+        0,                  // Count = 0
+        MutVoidPtr::null()  // No callbacks
+    )
 }
 
 fn CFHostGetNames(
@@ -205,7 +227,10 @@ fn CFHostIsInfoResolved(
     _host: CFHostRef,
     _info: CFHostInfoType,
 ) -> bool {
-    false
+    // Return true to tell the game the data is ready to be read.
+    // This prevents the game from hanging or failing a 'ready' check.
+    log!("CFHostIsInfoResolved: Faking 'Resolved' status.");
+    true 
 }
 
 pub const FUNCTIONS: FunctionExports = &[
