@@ -330,10 +330,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)stringWithUTF8String:(ConstPtr<u8>)utf8_string {
-    let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithUTF8String:utf8_string];
-    autorelease(env, new)
++ (id)stringWithUTF8String(id)_utf8: {
+    this
 }
 
 + (id)stringWithCString:(ConstPtr<u8>)c_string {
