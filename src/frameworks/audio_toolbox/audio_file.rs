@@ -516,86 +516,6 @@ pub fn AudioFormatGetPropertyInfo(
     -50
 }
 
-pub fn ExtAudioFileOpenURL(
-    _env: &mut Environment,
-    property_id: AudioFilePropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed ExtAudioFileOpenURL for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
-pub fn ExtAudioFileGetProperty(
-    _env: &mut Environment,
-    property_id: AudioFilePropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed ExtAudioFileGetProperty for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
-pub fn ExtAudioFileSetProperty(
-    _env: &mut Environment,
-    property_id: AudioFilePropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed ExtAudioFileSetProperty for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
-pub fn ExtAudioFileRead(
-    _env: &mut Environment,
-    property_id: AudioFilePropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed ExtAudioFileRead for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
-pub fn ExtAudioFileDispose(
-    _env: &mut Environment,
-    property_id: AudioFilePropertyID,
-    _specifier_size: u32,
-    _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
-) -> OSStatus {
-    // Используем log! вместо log_once!, так как log! поддерживает форматирование {}
-    log!(
-        "Stubbed ExtAudioFileDispose for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
-}
-
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileOpenURL(_, _, _, _)),
     export_c_func!(AudioFileGetPropertyInfo(_, _, _, _)),
@@ -607,9 +527,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileClose(_)),
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
-    export_c_func!(ExtAudioFileOpenURL(_, _, _, _)),
-    export_c_func!(ExtAudioFileGetProperty(_, _, _, _)),
-    export_c_func!(ExtAudioFileSetProperty(_, _, _, _)),
-    export_c_func!(ExtAudioFileRead(_, _, _, _)),
-    export_c_func!(ExtAudioFileDispose(_, _, _, _)),
 ];
