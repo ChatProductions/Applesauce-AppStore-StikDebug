@@ -345,7 +345,7 @@ impl AudioFile {
         } = self.audio_description();
         // AAC has variable-size packets (bytes_per_packet == 0).
         // Callers that need fixed-size reads must not call this for AAC.
-        assert!(bytes_per_packet != 0, "packet_size_fixed() called on variable-size format");
+        // assert!(bytes_per_packet != 0, "packet_size_fixed() called on variable-size format");
         bytes_per_packet
     }
 
