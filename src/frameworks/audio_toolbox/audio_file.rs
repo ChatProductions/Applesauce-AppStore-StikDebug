@@ -428,33 +428,58 @@ pub fn AudioFileReadPackets(
     in_audio_file: AudioFileID,
     in_use_cache: bool,
     out_num_bytes: MutPtr<u32>,
-    out_packet_descriptions: MutVoidPtr, // unimplemented
-  
+    out_packet_descriptions: MutVoidPtr,
     in_starting_packet: i64,
     io_num_packets: MutPtr<u32>,
     out_buffer: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
-    // Variable-size packets are not implemented currently. When they are,
-    // this parameter should be a `MutPtr<AudioStreamPacketDescription>`.
+
     if !out_packet_descriptions.is_null() {
         log!("Warning: ignoring non-null out_packet_descriptions in AudioFileReadPackets()");
     }
 
-    let host_object = State::get(&mut env.framework_state)
+    let host_object = match State::get(&mut env.framework_state)
         .audio_files
         .get_mut(&in_audio_file)
-        .unwrap();
+    {
+        Some(obj) => obj,
+        None => {
+            log!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
+            return kAudioFileNotOpenError;
+        }
+    };
+
     let packet_size = host_object.audio_file.packet_size_fixed();
 
     let packets_to_read = env.mem.read(io_num_packets);
 
-    let starting_byte = i64::from(packet_size)
-        .checked_mul(in_starting_packet)
-        .unwrap();
-    let bytes_to_read = packets_to_read.checked_mul(packet_size).unwrap();
+    let starting_byte = match i64::from(packet_size).checked_mul(in_starting_packet) {
+        Some(v) => v,
+        None => {
+            log!(
+                "Warning: AudioFileReadPackets: starting byte overflow \
+                 (packet_size={}, in_starting_packet={})",
+                packet_size, in_starting_packet
+            );
+            return kAudioFileBadPropertySizeError;
+        }
+    };
+
+    let bytes_to_read = match packets_to_read.checked_mul(packet_size) {
+        Some(v) => v,
+        None => {
+            log!(
+                "Warning: AudioFileReadPackets: bytes_to_read overflow \
+                 (packets_to_read={}, packet_size={})",
+                packets_to_read, packet_size
+            );
+            return kAudioFileBadPropertySizeError;
+        }
+    };
 
     env.mem.write(out_num_bytes, bytes_to_read);
+
     let res = AudioFileReadBytes(
         env,
         in_audio_file,
@@ -463,9 +488,11 @@ pub fn AudioFileReadPackets(
         out_num_bytes,
         out_buffer,
     );
+
     let bytes_read = env.mem.read(out_num_bytes);
-    let packets_read = bytes_read / packet_size;
+    let packets_read = if packet_size > 0 { bytes_read / packet_size } else { 0 };
     env.mem.write(io_num_packets, packets_read);
+
     res
 }
 
