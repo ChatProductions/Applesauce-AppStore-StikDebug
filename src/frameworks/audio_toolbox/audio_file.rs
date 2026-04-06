@@ -5,8 +5,6 @@
  */
 //! `AudioFile.h` (Audio File Services)
 
-#![allow(dead_code)]
-
 use crate::abi::{CallFromHost, GuestFunction};
 use crate::audio;
 use crate::audio::AudioDescription;
