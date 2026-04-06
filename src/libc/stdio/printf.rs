@@ -828,6 +828,13 @@ where
             continue;
         }
 
+        let suppress_assignment = if env.mem.read(format + format_char_idx) == b'*' {
+            format_char_idx += 1;
+            true
+        } else {
+            false
+        };
+
         let mut max_width: u32 = 0;
         while let c @ b'0'..=b'9' = env.mem.read(format + format_char_idx) {
             max_width = max_width * 10 + (c - b'0') as u32;
@@ -913,8 +920,10 @@ where
                                 match res {
                                     Ok((val, len)) => {
                                         src_char_idx += len;
-                                        let c_int_ptr: ConstPtr<i16> = args.next(env);
-                                        env.mem.write(c_int_ptr.cast_mut(), val);
+                                        if !suppress_assignment {
+                                            let c_int_ptr: ConstPtr<i16> = args.next(env);
+                                            env.mem.write(c_int_ptr.cast_mut(), val);
+                                        }
                                     }
                                     Err(_) => break,
                                 }
@@ -937,8 +946,10 @@ where
                         match res {
                             Ok((val, len)) => {
                                 src_char_idx += len;
-                                let c_int_ptr: ConstPtr<i32> = args.next(env);
-                                env.mem.write(c_int_ptr.cast_mut(), val);
+                                if !suppress_assignment {
+                                    let c_int_ptr: ConstPtr<i32> = args.next(env);
+                                    env.mem.write(c_int_ptr.cast_mut(), val);
+                                }
                             }
                             Err(_) => break,
                         }
@@ -957,12 +968,16 @@ where
                 };
                 match length_modifier {
                     None => {
-                        let c_int_ptr: ConstPtr<f32> = args.next(env);
-                        env.mem.write(c_int_ptr.cast_mut(), val as f32);
+                        if !suppress_assignment {
+                            let c_int_ptr: ConstPtr<f32> = args.next(env);
+                            env.mem.write(c_int_ptr.cast_mut(), val as f32);
+                        }
                     }
                     Some("l") => {
-                        let c_int_ptr: ConstPtr<f64> = args.next(env);
-                        env.mem.write(c_int_ptr.cast_mut(), val);
+                        if !suppress_assignment {
+                            let c_int_ptr: ConstPtr<f64> = args.next(env);
+                            env.mem.write(c_int_ptr.cast_mut(), val);
+                        }
                     }
                     Some(modifier) => {
                         unimplemented!("Length formater '{}' for f", modifier)
@@ -990,8 +1005,10 @@ where
                 match res {
                     Ok((val, len)) => {
                         src_char_idx += len;
-                        let c_u32_ptr: ConstPtr<u32> = args.next(env);
-                        env.mem.write(c_u32_ptr.cast_mut(), val);
+                        if !suppress_assignment {
+                            let c_u32_ptr: ConstPtr<u32> = args.next(env);
+                            env.mem.write(c_u32_ptr.cast_mut(), val);
+                        }
                     }
                     Err(_) => break,
                 }
@@ -1027,15 +1044,22 @@ where
                     c = env.mem.read(format + format_char_idx);
                     format_char_idx += 1;
                 }
-                let mut dst_ptr: MutPtr<u8> = args.next(env);
+                
+                let mut dst_ptr: Option<MutPtr<u8>> = if !suppress_assignment {
+                    Some(args.next(env))
+                } else {
+                    None
+                };
                 let mut matched = false;
                 // Consume `src` while chars are not in the set
                 let mut cc = getc_fn(env, subject, src_char_idx).unwrap().into(); // TODO: EOF
                 src_char_idx += 1;
                 while set.contains(&cc) ^ inverted && cc != b'\0' {
                     matched = true;
-                    env.mem.write(dst_ptr, cc);
-                    dst_ptr += 1;
+                    if let Some(ptr) = dst_ptr {
+                        env.mem.write(ptr, cc);
+                        dst_ptr = Some(ptr + 1);
+                    }
                     cc = getc_fn(env, subject, src_char_idx).unwrap().into(); // TODO: EOF
                     src_char_idx += 1;
                 }
@@ -1043,16 +1067,24 @@ where
                 ungetc_fn(env, subject, cc);
                 src_char_idx -= 1;
                 if matched {
-                    env.mem.write(dst_ptr, b'\0');
+                    if let Some(ptr) = dst_ptr {
+                        env.mem.write(ptr, b'\0');
+                    }
                 } else {
-                    matched_args -= 1;
+                    if !suppress_assignment {
+                        matched_args -= 1;
+                    }
                 }
             }
             b's' => {
                 assert_eq!(max_width, 0);
                 assert!(length_modifier.is_none());
-                let orig_dst_ptr: MutPtr<u8> = args.next(env);
-                let mut dst_ptr: MutPtr<u8> = orig_dst_ptr;
+                let mut dst_ptr: Option<MutPtr<u8>> = if !suppress_assignment {
+                    Some(args.next(env))
+                } else {
+                    None
+                };
+                let orig_dst_ptr = dst_ptr;
                 loop {
                     let x = getc_fn(env, subject, src_char_idx);
                     if x.is_err() {
@@ -1063,25 +1095,32 @@ where
                         if cc == b'\0' {
                             break;
                         }
-                        env.mem.write(dst_ptr, cc);
+                        if let Some(ptr) = dst_ptr {
+                            env.mem.write(ptr, cc);
+                            dst_ptr = Some(ptr + 1);
+                        }
                         src_char_idx += 1;
-                        dst_ptr += 1;
                     } else {
                         ungetc_fn(env, subject, cc);
                         break;
                     }
                 }
-                env.mem.write(dst_ptr, b'\0');
-                log_dbg!(
-                    "sscanf_common_generic read %s '{:?}'",
-                    env.mem.cstr_at_utf8(orig_dst_ptr)
-                );
+                
+                if let Some(ptr) = dst_ptr {
+                    env.mem.write(ptr, b'\0');
+                    log_dbg!(
+                        "sscanf_common_generic read %s '{:?}'",
+                        env.mem.cstr_at_utf8(orig_dst_ptr.unwrap())
+                    );
+                }
             }
             // TODO: more specifiers
             _ => unimplemented!("Format character '{}'", specifier as char),
         }
 
-        matched_args += 1;
+        if !suppress_assignment {
+            matched_args += 1;
+        }
     }
 
     matched_args
@@ -1267,3 +1306,4 @@ pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
     c.is_ascii_whitespace() || c == b'\x0b'
 }
+
