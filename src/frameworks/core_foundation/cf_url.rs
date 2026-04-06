@@ -222,6 +222,73 @@ fn CFURLCreateWithString(
     }
 }
 
+fn CFURLCopyAbsoluteURL(env: &mut Environment, url: CFURLRef) -> CFURLRef {
+    if url.is_null() {
+        return Ptr::null();
+    }
+    let abs_url: id = msg![env; url absoluteURL];
+    retain(env, abs_url)
+}
+
+fn CFURLCopyScheme(env: &mut Environment, url: CFURLRef) -> CFStringRef {
+    let scheme: id = msg![env; url scheme];
+    if scheme.is_null() {
+        return Ptr::null();
+    }
+    msg![env; scheme copy]
+}
+
+fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
+    // In NSURL, this is roughly equivalent to the 'host' or 'resourceSpecifier' 
+    // depending on the context. For CFURL, it usually refers to the host.
+    let host: id = msg![env; url host];
+    if host.is_null() {
+        return Ptr::null();
+    }
+    msg![env; host copy]
+}
+
+fn CFURLGetPortNumber(env: &mut Environment, url: CFURLRef) -> i32 {
+    let port: id = msg![env; url port];
+    if port.is_null() {
+        return -1; // Standard CFURL return for no port
+    }
+    // NSURL port returns an NSNumber
+    let val: i32 = msg![env; port intValue];
+    val
+}
+
+fn CFURLCopyResourcePropertyForKey(
+    env: &mut Environment,
+    url: CFURLRef,
+    key: CFStringRef,
+    property_ptr: MutPtr<super::CFTypeRef>,
+    error: MutPtr<super::CFTypeRef>,
+) -> bool {
+    // This is a common pattern for checking file existence or sizes.
+    // Note: This is a simplified bridge to getResourceValue:forKey:error:
+    let mut err: id = Ptr::null();
+    let mut value: id = Ptr::null();
+    
+    let success: bool = msg![env; url getResourceValue:&value forKey:key error:&err];
+    
+    if !property_ptr.is_null() {
+        env.mem.write(property_ptr, value);
+        if !value.is_null() {
+            retain(env, value);
+        }
+    }
+    
+    if !error.is_null() {
+        env.mem.write(error, err);
+        if !err.is_null() {
+            retain(env, err);
+        }
+    }
+    
+    success
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetFileSystemRepresentation(_, _, _, _)),
     export_c_func!(CFURLCreateFromFileSystemRepresentation(_, _, _, _)),
@@ -234,4 +301,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLHasDirectoryPath(_)),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
+    export_c_func!(CFURLCopyAbsoluteURL(_)),
+    export_c_func!(CFURLCopyScheme(_)),
+    export_c_func!(CFURLCopyNetLocation(_)),
+    export_c_func!(CFURLGetPortNumber(_)),
+    export_c_func!(CFURLCopyResourcePropertyForKey(_, _, _, _)),
 ];
