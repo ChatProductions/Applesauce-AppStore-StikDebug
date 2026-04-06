@@ -282,7 +282,8 @@ fn substitute_classes(
         || name.starts_with("FB")
         || name.starts_with("Flurry")
         || name.starts_with("OpenFeint")
-        || name.starts_with("Tapjoy"))
+        || name.starts_with("Tapjoy")
+        || name.starts_with("UA"))
     {
         return None;
     }
