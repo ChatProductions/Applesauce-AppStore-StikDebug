@@ -330,7 +330,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)stringWithUTF8String(id)_utf8: {
++ (id)stringWithUTF8String:(id)_utf8: {
     this
 }
 
