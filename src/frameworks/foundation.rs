@@ -26,6 +26,7 @@ pub mod ns_bundle;
 pub mod ns_calendar;
 pub mod ns_character_set;
 pub mod ns_coder;
+pub mod ns_condition;
 pub mod ns_data;
 pub mod ns_date;
 pub mod ns_date_components;
@@ -266,6 +267,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_calendar::CLASSES,
         ns_character_set::CLASSES,
         ns_coder::CLASSES,
+        ns_condition::CLASSES,
         ns_data::CLASSES,
         ns_date::CLASSES,
         ns_date_components::CLASSES,
