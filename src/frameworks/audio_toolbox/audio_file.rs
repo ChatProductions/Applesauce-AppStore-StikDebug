@@ -45,7 +45,7 @@ pub type AudioFileID = MutPtr<OpaqueAudioFileID>;
 
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
-const kAudioFileNotOpenError: OSStatus = -38;
+const kAudioFileSuccess: OSStatus = -38;
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 const kAudioFileUnsupportedProperty: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
@@ -437,7 +437,7 @@ pub fn AudioFileReadPackets(
     return_if_null!(in_audio_file);
 
     if !out_packet_descriptions.is_null() {
-        log_dbg!("Warning: ignoring non-null out_packet_descriptions in AudioFileReadPackets()");
+        log_dbg!("AudioFileReadPackets: ignoring non-null out_packet_descriptions");
     }
 
     let host_object = match State::get(&mut env.framework_state)
@@ -446,14 +446,22 @@ pub fn AudioFileReadPackets(
     {
         Some(obj) => obj,
         None => {
-            log_dbg!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
+            log!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
             return kAudioFileNotOpenError;
         }
     };
 
     let packet_size = host_object.audio_file.packet_size_fixed();
-
     let packets_to_read = env.mem.read(io_num_packets);
+
+    // If packet_size is 0 (VBR file) or packets_to_read is 0, return early.
+    if packet_size == 0 || packets_to_read == 0 {
+        env.mem.write(io_num_packets, 0);
+        if !out_num_bytes.is_null() {
+            env.mem.write(out_num_bytes, 0);
+        }
+        return kAudioFileSuccess;
+    }
 
     let starting_byte = match i64::from(packet_size).checked_mul(in_starting_packet) {
         Some(v) => v,
@@ -479,7 +487,11 @@ pub fn AudioFileReadPackets(
         }
     };
 
-    env.mem.write(out_num_bytes, bytes_to_read);
+    // Write the byte count we intend to read before calling AudioFileReadBytes
+    // so it knows the buffer size.
+    if !out_num_bytes.is_null() {
+        env.mem.write(out_num_bytes, bytes_to_read);
+    }
 
     let res = AudioFileReadBytes(
         env,
@@ -490,9 +502,19 @@ pub fn AudioFileReadPackets(
         out_buffer,
     );
 
-    let bytes_read = env.mem.read(out_num_bytes);
-    let packets_read = if packet_size > 0 { bytes_read / packet_size } else { 0 };
+    // Update io_num_packets to reflect how many packets were actually read.
+    let bytes_read = if !out_num_bytes.is_null() {
+        env.mem.read(out_num_bytes)
+    } else {
+        0
+    };
+    let packets_read = bytes_read / packet_size;
     env.mem.write(io_num_packets, packets_read);
+
+    log_dbg!(
+        "AudioFileReadPackets: starting_packet={} requested={} read={} bytes={} res={}",
+        in_starting_packet, packets_to_read, packets_read, bytes_read, res
+    );
 
     res
 }
