@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `errno.h`
@@ -30,13 +31,16 @@ pub const ESPIPE: i32 = 29;
 pub const EROFS: i32 = 30;
 #[allow(dead_code)]
 pub const EPROTONOSUPPORT: i32 = 43;
+pub const ENOTSUP: i32 = 45;
 pub const ECONNRESET: i32 = 54;
 pub const EOVERFLOW: i32 = 75;
 
 #[derive(Default)]
 pub struct State {
     errnos: std::collections::HashMap<crate::ThreadId, MutPtr<i32>>,
+    strings_cache: std::collections::HashMap<i32, ConstPtr<u8>>,
 }
+
 impl State {
     fn errno_ptr_for_thread(
         &mut self,
@@ -74,8 +78,10 @@ fn __error(env: &mut Environment) -> MutPtr<i32> {
 }
 
 fn perror(env: &mut Environment, s: ConstPtr<u8>) {
-    // TODO: errno mapping
-    let errno_msg = "<TODO: errno>\n";
+    let errno_ptr = __error(env);
+    let str_error = strerror(env, env.mem.read(errno_ptr));
+    let errno_msg = format!("{}\n", env.mem.cstr_at_utf8(str_error).unwrap());
+    
     let msg = if !s.is_null() {
         if let Ok(str) = env.mem.cstr_at_utf8(s) {
             format!("{str}: {errno_msg}")
@@ -85,7 +91,52 @@ fn perror(env: &mut Environment, s: ConstPtr<u8>) {
     } else {
         errno_msg.to_string()
     };
+    
     let _ = std::io::stderr().write_all(msg.as_bytes());
 }
 
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(__error()), export_c_func!(perror(_))];
+fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
+    if let Some(&c_str) = env.libc_state.errno.strings_cache.get(&err_num) {
+        c_str
+    } else {
+        let str = match err_num {
+            0 => "Undefined error: 0",
+            EPERM => "Operation not permitted",
+            ENOENT => "No such file or directory",
+            ESRCH => "No such process",
+            EINTR => "Interrupted system call",
+            EIO => "Input/output error",
+            ENXIO => "No such device or address",
+            EBADF => "Bad file descriptor",
+            ECHILD => "No child processes",
+            EDEADLK => "Resource deadlock avoided",
+            ENOSYS => "Function not implemented",
+            EACCES => "Permission denied",
+            EBUSY => "Resource busy",
+            EEXIST => "File exists",
+            EISDIR => "Is a directory",
+            EINVAL => "Invalid argument",
+            ESPIPE => "Illegal seek",
+            EROFS => "Read-only file system",
+            EPROTONOSUPPORT => "Protocol not supported",
+            ENOTSUP => "Operation not supported",
+            ECONNRESET => "Connection reset by peer",
+            EOVERFLOW => "Value too large to be stored in data type",
+            _ => unimplemented!("strerror({})", err_num),
+        };
+        
+        let new_c_str = env.mem.alloc_and_write_cstr(str.as_bytes()).cast_const();
+        env.libc_state
+            .errno
+            .strings_cache
+            .insert(err_num, new_c_str);
+            
+        new_c_str
+    }
+}
+
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(__error()),
+    export_c_func!(perror(_)),
+    export_c_func!(strerror(_)),
+];
