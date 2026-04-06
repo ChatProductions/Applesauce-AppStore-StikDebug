@@ -52,6 +52,7 @@ pub struct State {
     audio_file: audio_file::State,
     audio_queue: audio_queue::State,
     audio_components: audio_components::State,
+    audio_services: audio_services::State,
     audio_session: audio_session::State,
     ext_audio_file: ext_audio_file::State,
     al_context: LazyALContext,
