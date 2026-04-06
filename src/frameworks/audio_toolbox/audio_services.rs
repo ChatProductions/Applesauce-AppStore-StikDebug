@@ -171,12 +171,12 @@ fn AudioServicesRemoveSystemSoundCompletion(
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioServicesGetProperty(_, _, _, _, _, _)),
-    export_c_func!(AudioServicesSetProperty(_, _, _, _, _, _)),
-    export_c_func!(AudioServicesCreateSystemSoundID(_, _, _)),
-    export_c_func!(AudioServicesDisposeSystemSoundID(_, _)),
-    export_c_func!(AudioServicesPlaySystemSound(_, _)),
-    export_c_func!(AudioServicesPlayAlertSound(_, _)),
-    export_c_func!(AudioServicesAddSystemSoundCompletion(_, _, _, _, _, _)),
-    export_c_func!(AudioServicesRemoveSystemSoundCompletion(_, _)),
+    export_c_func!(AudioServicesGetProperty(_, _, _, _, _)),
+    export_c_func!(AudioServicesSetProperty(_, _, _, _, _)),
+    export_c_func!(AudioServicesCreateSystemSoundID(_, _)),
+    export_c_func!(AudioServicesDisposeSystemSoundID(_)),
+    export_c_func!(AudioServicesPlaySystemSound(_)),
+    export_c_func!(AudioServicesPlayAlertSound(_)),
+    export_c_func!(AudioServicesAddSystemSoundCompletion(_, _, _, _, _)),
+    export_c_func!(AudioServicesRemoveSystemSoundCompletion(_)),
 ];
