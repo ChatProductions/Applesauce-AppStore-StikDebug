@@ -2421,6 +2421,52 @@ fn string_by_replacing_occurrences_inner(
 
 // В самом низу файла ns_string.rs добавь:
 
+fn size_with_font_min_font_size_actual_font_size_for_width_line_break_mode(
+    env: &mut Environment,
+    this: id,
+    font: id,
+    min_font_size: CGFloat,
+    actual_font_size: MutPtr<CGFloat>,
+    for_width: CGFloat,
+    _line_break_mode: UILineBreakMode,
+) -> CGSize {
+    if font == nil {
+        return CGSize { width: 0.0, height: 0.0 };
+    }
+
+    // Получаем базовый (неограниченный) размер текста
+    let unconstrained_size: CGSize = msg![env; this sizeWithFont:font];
+    
+    // Получаем исходный размер шрифта из объекта UIFont
+    let orig_point_size: CGFloat = msg![env; font pointSize];
+
+    let mut final_point_size = orig_point_size;
+    let mut final_size = unconstrained_size;
+
+    // Если текст шире доступного места, нам нужно его сжать
+    if unconstrained_size.width > for_width && for_width > 0.0 {
+        // Считаем необходимый масштаб, чтобы влезть в ширину
+        let scale = for_width / unconstrained_size.width;
+        
+        // Уменьшаем шрифт, но жестко ограничиваем его минимальным размером
+        final_point_size = (orig_point_size * scale).max(min_font_size);
+
+        // Вычисляем фактический масштаб после применения лимита min_font_size
+        let actual_scale = final_point_size / orig_point_size;
+        
+        // Пересчитываем итоговый размер (ширина ограничивается for_width на случай если min_font_size не дал сжать до конца)
+        final_size.width = (unconstrained_size.width * actual_scale).min(for_width);
+        final_size.height = unconstrained_size.height * actual_scale;
+    }
+
+    // Если игра передала валидный указатель (не null), честно записываем туда итоговый размер шрифта
+    if !actual_font_size.is_null() {
+        env.mem.write(actual_font_size, final_point_size);
+    }
+
+    final_size
+}
+
 pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstPtr<unichar> {
     if the_string == nil {
         return Ptr::null();
