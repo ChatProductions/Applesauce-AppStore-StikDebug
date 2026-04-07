@@ -132,18 +132,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - raise
 
-- (())raise {
-    // 1. Safety check to prevent host-side panic if 'this' is an invalid pointer
-    if !env.objc.is_pointer_valid(this) {
-        log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
+- ((()))raise {
+    // Check if the pointer 'this' actually exists in the ObjC object table.
+    // In touchHLE, this is usually done by checking if we can successfully 
+    // find the host object associated with the pointer.
+    if !env.objc.is_registered(this) {
+        log!("GUEST NSException: Attempted to raise on unregistered pointer {:?}. Ignoring.", this);
         return;
     }
 
+    // Now it is safe to borrow
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
     let name   = host.name;
     let reason = host.reason;
-    let user_info = host.user_info;
-    drop(host); // Drop borrow before calling objc_str to avoid borrow conflicts
+    drop(host); 
     
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
@@ -151,13 +153,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("KAMI RETRO - NSException raised (Continuing):");
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
-
-    if user_info != nil {
-        log!("  UserInfo present.");
-    }
     
-    // We return control to the guest. 
-    // This allows the game to hit its own error-handling instead of crashing the emulator.
+    // Control returns to the guest, preventing the panic seen in your logs.
 }
 
 // MARK: - NSCopying
