@@ -133,23 +133,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - raise
 
 - (())raise {
-    // We use the public is_valid() method to check the guest pointer.
-    // This avoids accessing the private 'objects' HashMap directly.
-    if this == nil || !env.objc.is_valid(this) {
-        log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
+    if this == nil {
+        log!("GUEST NSException: Attempted to raise on nil. Ignoring.");
         return;
     }
 
-    // It is now safe to borrow the host object
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
     let name   = host.name;
     let reason = host.reason;
-    drop(host); 
-    
+    drop(host);
+
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
-    log!("KAMI RETRO - NSException raised (Continuing):");
+    log_dbg("KAMI RETRO - NSException raised (Continuing):");
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
 }
