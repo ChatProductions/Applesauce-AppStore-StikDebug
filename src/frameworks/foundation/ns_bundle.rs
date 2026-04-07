@@ -167,7 +167,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let plist_file_path = format!("{}/Info.plist", path_str);
     let plist_guest = crate::fs::GuestPath::new(&plist_file_path);
     if env.fs.read(plist_guest).is_err() {
-        log!("NSBundle initWithPath: Cannot find Info.plist at {:?}. Returning nil.", path_str);
+        log_dbg!("NSBundle initWithPath: Cannot find Info.plist at {:?}. Returning nil.", path_str);
         release(env, this);
         return nil;
     }
