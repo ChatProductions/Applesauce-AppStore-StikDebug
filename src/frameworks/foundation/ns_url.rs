@@ -514,14 +514,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Resource values (stub)
 
-- (bool)getResourceValue:(MutPtr<id>)value // id*
-                  forKey:(id)_key          // NSURLResourceKey
-                   error:(MutPtr<id>)_err  // NSError**
-{
-    // Write nil and return false — resource values not supported.
-    if !value.is_null() {
-        env.mem.write(value, nil);
+- (bool)getResourceValue:(MutPtr<id>)value forKey:(id)key error:(MutPtr<id>)_err {
+    let key_str = to_rust_string(env, key);
+    if key_str == "NSURLIsDirectoryKey" {
+        let is_dir = msg![env; this hasDirectoryPath];
+        let ns_bool = msg_class![env; NSNumber numberWithBool:is_dir];
+        env.mem.write(value, ns_bool);
+        return true;
     }
+    // Default to nil/false for others
+    if !value.is_null() { env.mem.write(value, nil); }
     false
 }
 
