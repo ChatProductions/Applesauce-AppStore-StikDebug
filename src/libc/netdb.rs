@@ -220,10 +220,6 @@ fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// gethostbyname
-// ---------------------------------------------------------------------------
-
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     let hostname = if name.is_null() {
         "<null>".to_string()
@@ -232,31 +228,23 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     };
 
     // 1. LAZY INITIALIZATION
-    // Accessing through libc_state.netdb as indicated by the compiler
     if env.libc_state.netdb.dummy_hostent_ptr == 0 {
         let dummy_size = 64; 
         let ptr = env.mem.alloc(dummy_size);
         
-        // Use write_bytes (standard for NullableBox<Mem>) to zero the memory
-        env.mem.write_bytes(ptr, 0, dummy_size); 
+        // Use write() with a zeroed array to clear the memory.
+        // This ensures h_addr_list at offset 0x10 is NULL (0).
+        env.mem.write(ptr, [0u8; 64]); 
         
-        // Use .0 to get the VAddr from the Ptr tuple struct
-        env.libc_state.netdb.dummy_hostent_ptr = ptr.0;
+        // Use to_bits() to get the raw u32 address from the Ptr wrapper.
+        env.libc_state.netdb.dummy_hostent_ptr = ptr.to_bits();
     }
 
-    // 2. ACCESS THE POINTER
+    // 2. RETURN THE DUMMY
     let dummy_ptr = env.libc_state.netdb.dummy_hostent_ptr;
 
-    if !env.options.network_access {
-        log!(
-            "gethostbyname(\"{}\") — network access disabled. Returning dummy (0x{:08x}) to avoid 0x10 crash.",
-            hostname, dummy_ptr
-        );
-        return MutPtr::from_bits(dummy_ptr);
-    }
-
     log!(
-        "gethostbyname(\"{}\") — resolution stubbed for KAMI RETRO. Returning dummy (0x{:08x}).",
+        "gethostbyname(\"{}\") — Stubbed for KAMI RETRO. Returning dummy (0x{:08x}).",
         hostname, dummy_ptr
     );
     
