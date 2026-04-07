@@ -8,8 +8,8 @@
 use crate::frameworks::foundation::ns_string::{self, to_rust_string};
 use crate::frameworks::core_graphics::CGRect;
 use crate::msg;
-// ДОБАВЛЕНО: NSUInteger для поддержки dataDetectorTypes
-use crate::objc::{id, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr, NSUInteger};
+use crate::objc::{id, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr};
+use super::NSUInteger; // <-- ИСПРАВЛЕНО
 use std::borrow::Cow;
 
 struct UIWebViewHostObject {
@@ -17,7 +17,6 @@ struct UIWebViewHostObject {
     delegate: id,
     scales_page_to_fit: bool,
     detects_phone_numbers: bool,
-    // ДОБАВЛЕНО: поле для хранения типов детекторов данных
     data_detector_types: NSUInteger,
     allows_inline_media_playback: bool,
     media_playback_requires_user_action: bool,
@@ -38,7 +37,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         delegate: nil,
         scales_page_to_fit: false,
         detects_phone_numbers: true,
-        // ДОБАВЛЕНО: инициализируем нулем (соответствует UIDataDetectorTypeNone)
         data_detector_types: 0,
         allows_inline_media_playback: false,
         media_playback_requires_user_action: true,
@@ -169,7 +167,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIWebViewHostObject>(this).detects_phone_numbers = value;
 }
 
-// ДОБАВЛЕНО: реализация свойств dataDetectorTypes для обхода паники
 - (NSUInteger)dataDetectorTypes {
     env.objc.borrow::<UIWebViewHostObject>(this).data_detector_types
 }
@@ -204,4 +201,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
