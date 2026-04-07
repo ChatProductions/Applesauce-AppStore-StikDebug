@@ -29,9 +29,11 @@ const EAI_SYSTEM:  i32 = 11;
 const HOST_NOT_FOUND: i32 = 1;
 const NO_RECOVERY:    i32 = 3;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+#[derive(Default)]
+pub struct State {
+    /// Pointer to a pre-allocated, zeroed-out hostent struct in guest memory.
+    pub dummy_hostent_ptr: u32,
+}
 
 #[allow(non_camel_case_types)]
 pub type socklen_t = u32;
@@ -218,7 +220,6 @@ fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
     }
 }
 
-// ---------------------------------------------------------------------------
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     let hostname = if name.is_null() {
         "<null>".to_string()
@@ -226,24 +227,19 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
 
-    // KAMI RETRO FULL SUPPORT:
-    // We return the pre-allocated dummy_hostent_ptr from State.
-    // Since the memory there is 0, h_addr_list will be 0 (NULL).
-    // The game will see "0 addresses found" and skip the connection 
-    // instead of crashing at 0x10.
-    
-    let dummy_ptr = env.framework_state.foundation.ns_bundle.dummy_hostent_ptr;
+    // Use the pointer stored in the netdb/libc state
+    let dummy_ptr = env.state.libc.netdb.dummy_hostent_ptr;
 
     if !env.options.network_access {
-        log!(
-            "gethostbyname(\"{}\") — Network disabled. Returning dummy_hostent_ptr (0x{:08x})",
+        log_dbg!(
+            "gethostbyname(\"{}\") — Network disabled. Preventing 0x10 crash by returning dummy (0x{:08x})",
             hostname, dummy_ptr
         );
         return MutPtr::new(dummy_ptr);
     }
 
     log!(
-        "gethostbyname(\"{}\") — Resolution not implemented. Returning dummy_hostent_ptr (0x{:08x})",
+        "gethostbyname(\"{}\") — Resolution stubbed for KAMI RETRO. Returning dummy (0x{:08x})",
         hostname, dummy_ptr
     );
     
