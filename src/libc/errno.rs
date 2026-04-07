@@ -34,6 +34,8 @@ pub const EADDRNOTAVAIL: i32 = 19;
 pub const ECONNREFUSED: i32 = 20;
 pub const EISDIR: i32 = 21;
 pub const EINVAL: i32 = 22;
+pub const ENOTCONN: i32 = 23;
+pub const EAGAIN: i32 = 24;
 pub const ESPIPE: i32 = 29;
 pub const EROFS: i32 = 30;
 #[allow(dead_code)]
