@@ -7,7 +7,6 @@
 
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
-use crate::frameworks::State;
 use crate::libc::sys::socket::{sockaddr, AF_INET, SOCK_DGRAM, SOCK_STREAM};
 use crate::mem::{guest_size_of, ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::Environment;
@@ -220,9 +219,6 @@ fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
 }
 
 // ---------------------------------------------------------------------------
-// gethostbyname
-// ---------------------------------------------------------------------------
-
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     let hostname = if name.is_null() {
         "<null>".to_string()
@@ -230,26 +226,28 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
 
-    // KAMI RETRO FIX: The game does not check for NULL returns from gethostbyname.
-    // If network is disabled or resolution fails, we must return a pointer to 
-    // a valid (but empty/failed) hostent structure to prevent a 0x10 crash.
+    // KAMI RETRO FULL SUPPORT:
+    // We return the pre-allocated dummy_hostent_ptr from State.
+    // Since the memory there is 0, h_addr_list will be 0 (NULL).
+    // The game will see "0 addresses found" and skip the connection 
+    // instead of crashing at 0x10.
     
+    let dummy_ptr = env.framework_state.foundation.ns_bundle.dummy_hostent_ptr;
+
     if !env.options.network_access {
         log!(
-            "gethostbyname(\"{}\") — network access disabled. Returning dummy hostent for stability.",
-            hostname
+            "gethostbyname(\"{}\") — Network disabled. Returning dummy_hostent_ptr (0x{:08x})",
+            hostname, dummy_ptr
         );
-        // Return a pre-allocated dummy structure address instead of Ptr::null()
-        return env.state.libc.dummy_hostent_ptr; 
+        return MutPtr::new(dummy_ptr);
     }
 
     log!(
-        "gethostbyname(\"{}\") — resolution not implemented. Returning dummy hostent.",
-        hostname
+        "gethostbyname(\"{}\") — Resolution not implemented. Returning dummy_hostent_ptr (0x{:08x})",
+        hostname, dummy_ptr
     );
     
-    // Fallback to the same dummy pointer to ensure the guest never receives NULL
-    env.state.libc.dummy_hostent_ptr
+    MutPtr::new(dummy_ptr)
 }
 
 // ---------------------------------------------------------------------------
