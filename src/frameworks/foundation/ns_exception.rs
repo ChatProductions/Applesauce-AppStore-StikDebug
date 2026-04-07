@@ -134,17 +134,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Raises (throws) the exception.
 //
-// Because touchHLE does not emulate ObjC `@try`/`@catch` unwinding, we
-// translate a `raise` into a Rust `panic!`.  This terminates the guest with
-// a clear, human-readable message rather than silently continuing and
-// crashing later with a mysterious NULL-deref.
+// FIXED: We have removed panic! to allow the guest to attempt to continue.
+// Note: Since touchHLE doesn't support Stack Unwinding (setjmp/longjmp), 
+// the guest will continue execution on the very next instruction after 
+// the call to -raise.
 - (())raise {
     let name   = env.objc.borrow::<NSExceptionHostObject>(this).name;
     let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
+    
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
-    log!("NSException raised — name: {}, reason: {}", name_s, reason_s);
-    // Intentionally do NOT panic — see doc comment above.
+
+    // Log the exception details clearly for debugging
+    log!("GUEST NSException raised (Continuing without panic):");
+    log!("  Name:   {}", name_s);
+    log!("  Reason: {}", reason_s);
+
+    // If there is userInfo, log it too (useful for network errors)
+    let user_info = env.objc.borrow::<NSExceptionHostObject>(this).user_info;
+    if user_info != nil {
+        log!("  UserInfo: <present>");
+    }
+    
+    // We return () to the guest. 
+    // The guest will now continue execution.
 }
 
 // MARK: - NSCopying
