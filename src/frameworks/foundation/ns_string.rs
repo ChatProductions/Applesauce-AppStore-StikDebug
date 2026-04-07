@@ -119,14 +119,15 @@ impl StringHostObject {
                 let string = unsafe { String::from_utf8_unchecked(bytes.into_owned()) };
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSMacOSRomanStringEncoding |
-            NSISOLatin1StringEncoding => {
-                // TODO: support non ASCII symbols
-                assert!(bytes.iter().all(|byte| byte.is_ascii()));
-                // Safety: guaranteed by above assertion
-                let string = unsafe { String::from_utf8_unchecked(bytes.into_owned()) };
+            NSMacOSRomanStringEncoding => {
+                let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
+            NSISOLatin1StringEncoding => {
+            // ISO Latin-1 code points map 1:1 to Unicode
+                let string: String = bytes.iter().map(|&b| b as char).collect();
+                StringHostObject::Utf8(Cow::Owned(string))
+           }
             NSUTF8StringEncoding => {
                 let string = String::from_utf8(bytes.into_owned()).unwrap();
                 StringHostObject::Utf8(Cow::Owned(string))
@@ -1368,16 +1369,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (i32)intValue {
     let st = to_rust_string(env, this);
-    let st = st.trim_start();
-    let mut cutoff = st.len();
-    for (i, c) in st.char_indices() {
-        if !c.is_ascii_digit() && c != '+' && c != '-' {
-            cutoff = i;
-            break;
-        }
-    }
-    // TODO: handle over/underflow properly
-    st[..cutoff].parse().unwrap_or(0)
+    let st = st.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    // Accept one optional leading sign, then only digits
+    let (sign, rest) = match st.strip_prefix('-') {
+        Some(r) => (-1i64, r),
+        None    => (1i64, st.strip_prefix('+').unwrap_or(st)),
+    };
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let magnitude: i64 = digits.parse().unwrap_or(0);
+    // Clamp to i32 range like Apple's implementation
+    (sign * magnitude).clamp(i32::MIN as i64, i32::MAX as i64) as i32
 }
 
 - (id)lowercaseString {
