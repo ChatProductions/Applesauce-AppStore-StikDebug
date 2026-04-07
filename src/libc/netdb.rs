@@ -229,19 +229,26 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
 
+    // KAMI RETRO FIX: The game does not check for NULL returns from gethostbyname.
+    // If network is disabled or resolution fails, we must return a pointer to 
+    // a valid (but empty/failed) hostent structure to prevent a 0x10 crash.
+    
     if !env.options.network_access {
         log!(
-            "gethostbyname(\"{}\") — network access disabled, returning NULL",
+            "gethostbyname(\"{}\") — network access disabled. Returning dummy hostent for stability.",
             hostname
         );
-        return Ptr::null();
+        // Return a pre-allocated dummy structure address instead of Ptr::null()
+        return env.state.libc.dummy_hostent_ptr; 
     }
 
     log!(
-        "TODO: gethostbyname(\"{}\") — hostname resolution not implemented, returning NULL",
+        "gethostbyname(\"{}\") — resolution not implemented. Returning dummy hostent.",
         hostname
     );
-    Ptr::null()
+    
+    // Fallback to the same dummy pointer to ensure the guest never receives NULL
+    env.state.libc.dummy_hostent_ptr
 }
 
 // ---------------------------------------------------------------------------
