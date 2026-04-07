@@ -100,7 +100,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
         let type_: id = get_static_str(env, "nib");
         let path: id  = msg![env; bundle pathForResource:nib_name ofType:type_];
-        
         // Убираем жесткий assert!(path != nil) и assert!(msg![env; path isAbsolutePath])
         if path == nil {
             log!("Warning: UINib instantiateWithOwner: nib file {:?} not found", to_rust_string(env, nib_name));
@@ -128,8 +127,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 // An undocumented type that nib files reference by name.
-// NSKeyedUnarchiver will
-// find and instantiate this class.
+// NSKeyedUnarchiver will find and instantiate this class.
 @implementation UIProxyObject: NSObject
 
 // NSCoding implementation
@@ -137,7 +135,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
     let id = to_rust_string(env, id_nss);
-    
+
     if id == "IBFilesOwner" {
         // The file owner is usually the UIApplication instance.
         // Replacing the proxy with that instance is important so that the
@@ -178,10 +176,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 // Another undocumented type used by nib files.
-// This one seems to be used to
-// instantiate types that don't implement NSCoding (i.e. don't respond to
-// initWithCoder:).
-// See the link at the top of this file.
+// This one seems to be used to instantiate types that don't implement NSCoding 
+// (i.e. don't respond to initWithCoder:).
 @implementation UIClassSwapper: NSObject
 
 // NSCoding implementation
@@ -199,12 +195,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("[DEBUG NIB] UIClassSwapper грузит класс: {} (оригинал: {})", name, orig);
     let mut safe_name = name.clone();
     
-    // ИСПРАВЛЕНО: Оставляем в списке проблемных только кнопку Facebook.
+    // Подмена проблемных View
     // EAGLView подменять нельзя, иначе не будет работать 3D графика!
-    let problematic_classes = ["FBLoginButton"];
-    if problematic_classes.iter().any(|&c| safe_name == c) {
+    let problematic_views = ["FBLoginButton"];
+    if problematic_views.iter().any(|&c| safe_name == c) {
         log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
         safe_name = "UIView".into();
+    }
+
+    // Подмена проблемных Контроллеров
+    let problematic_controllers = ["BarcodeReaderViewController", "VideoViewController"];
+    if problematic_controllers.iter().any(|&c| safe_name == c) {
+        log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем {} на базовый UIViewController", safe_name);
+        safe_name = "UIViewController".into();
     }
     // --- КОНЕЦ ХАКА ---
 
@@ -286,7 +289,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         superclass: _,
         event_mask
     } = env.objc.borrow(this);
-    
     let selector = to_rust_string(env, label);
     let action = env.objc.lookup_selector(&selector).unwrap();
 
@@ -367,7 +369,6 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     // ensures everything else is deserialized.
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
-    
     // --- ХАК ДЛЯ ПРЕДОТВРАЩЕНИЯ ВЫЛЕТОВ ПРИ КАСАНИИ ---
     // Удерживаем все объекты NIB-файла в памяти. Это предотвратит их случайное
     // удаление (Use-After-Free), из-за которого эмулятор падает при попытке
@@ -400,7 +401,6 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     let visibles_key = get_static_str(env, "UINibVisibleWindowsKey");
     let visibles: id = msg![env; unarchiver decodeObjectForKey:visibles_key];
     let visibles_count: NSUInteger = msg![env; visibles count];
-    
     for i in 0..visibles_count {
         let visible: id = msg![env; visibles objectAtIndex:i];
         () = msg![env; visible setHidden:false];
