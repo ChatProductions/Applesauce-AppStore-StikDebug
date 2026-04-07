@@ -146,7 +146,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
-    log_dbg("KAMI RETRO - NSException raised (Continuing):");
+    log_dbg("KAMI RETRO - NSException raised (Continuing);
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
 }
