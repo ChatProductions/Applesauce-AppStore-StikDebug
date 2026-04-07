@@ -115,7 +115,6 @@ pub struct State {
     dirent: dirent::State,
     keymgr: keymgr::State,
     math: math::State,
-    netdb: netdb::State,
     posix_io: posix_io::State,
     pub pthread: pthread::State,
     pub semaphore: semaphore::State,
