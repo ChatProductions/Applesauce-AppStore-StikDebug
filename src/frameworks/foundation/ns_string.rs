@@ -519,6 +519,56 @@ pub const CLASSES: ClassExports = objc_classes! {
     utf16[index as usize]
 }
 
+- (NSRange)rangeOfCharacterFromSet:(id)set { // NSCharacterSet*
+    msg![env; this rangeOfCharacterFromSet:set options:0u32]
+}
+
+- (NSRange)rangeOfCharacterFromSet:(id)set // NSCharacterSet*
+                           options:(NSStringCompareOptions)options {
+    let len: NSUInteger = msg![env; this length];
+    let range = NSRange { location: 0, length: len };
+    msg![env; this rangeOfCharacterFromSet:set options:options range:range]
+}
+
+- (NSRange)rangeOfCharacterFromSet:(id)set // NSCharacterSet*
+                           options:(NSStringCompareOptions)options
+                             range:(NSRange)search_range {
+    let search_loc = search_range.location;
+    let search_len = search_range.length;
+    let len: NSUInteger = msg![env; this length];
+
+    // Если набор пустой, диапазон выходит за рамки или длина поиска 0 — ничего не найдено
+    if set == nil || search_loc >= len || search_len == 0 {
+        return NSRange { location: NSNotFound as NSUInteger, length: 0 };
+    }
+
+    let end_bound = (search_loc + search_len).min(len);
+    let is_backwards = (options & NSBackwardsSearch) != 0;
+
+    // Если включен поиск с конца (NSBackwardsSearch)
+    if is_backwards {
+        for i in (search_loc..end_bound).rev() {
+            let c: u16 = msg![env; this characterAtIndex:i];
+            let is_member: bool = msg![env; set characterIsMember:c];
+            if is_member {
+                return NSRange { location: i, length: 1 };
+            }
+        }
+    } else {
+        // Обычный поиск слева направо
+        for i in search_loc..end_bound {
+            let c: u16 = msg![env; this characterAtIndex:i];
+            let is_member: bool = msg![env; set characterIsMember:c];
+            if is_member {
+                return NSRange { location: i, length: 1 };
+            }
+        }
+    }
+
+    // Если ни один символ из набора не найден
+    NSRange { location: NSNotFound as NSUInteger, length: 0 }
+}
+    
 - (NSRange)rangeOfString:(id)search_string {
     msg![env; this rangeOfString:search_string options:0u32]
 }
