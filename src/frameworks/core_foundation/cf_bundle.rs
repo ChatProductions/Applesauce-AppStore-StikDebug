@@ -43,7 +43,11 @@ pub type CFBundleRef = CFTypeRef;
 // =========================================================================
 
 fn CFBundleGetMainBundle(env: &mut Environment) -> CFBundleRef {
-    msg_class![env; NSBundle mainBundle]
+    let main_bundle: id = msg_class![env; NSBundle mainBundle];
+    if main_bundle == nil {
+        log!("Error: NSBundle mainBundle returned nil!");
+    }
+    main_bundle
 }
 
 fn CFBundleGetBundleWithIdentifier(
@@ -510,28 +514,30 @@ fn CFBundleGetDataPointersForNames(
     }
 }
 
-// =========================================================================
-// MARK: - Miscellaneous
-// =========================================================================
-
-/// `CFBundleRef CFBundleCreate(CFAllocatorRef allocator, CFURLRef bundleURL)`
 fn CFBundleCreate(
     env: &mut Environment,
-    _allocator: CFTypeRef,
+    _allocator: CFTypeRef, // Allocators are generally ignored in touchHLE
     bundle_url: CFURLRef,
 ) -> CFBundleRef {
     if bundle_url == nil {
+        log!("CFBundleCreate: bundle_url is nil");
         return nil;
     }
+
+    // Attempt to get or create the NSBundle associated with this URL
     let bundle: id = msg_class![env; NSBundle bundleWithURL:bundle_url];
+    
     if bundle == nil {
+        log!("CFBundleCreate: Failed to create NSBundle for URL");
         return nil;
     }
-    // "Create" convention — caller owns a reference.
+
+    // CRITICAL: CoreFoundation "Create" functions must return a retained object.
+    // This matches the "Create Rule" in Apple's Memory Management policy.
     crate::objc::retain(env, bundle)
 }
 
-/// `CFArrayRef CFBundleCreateBundlesFromDirectory(allocator, dirURL, bundleType)`
+// `CFArrayRef CFBundleCreateBundlesFromDirectory(allocator, dirURL, bundleType)`
 fn CFBundleCreateBundlesFromDirectory(
     _env: &mut Environment,
     _allocator: CFTypeRef,
