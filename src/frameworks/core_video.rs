@@ -18,18 +18,12 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
     
     unsafe {
         if GUEST_FRAME_PTR == 0 {
-            // Выделяем память в гостевой системе эмулятора
+            // Просто выделяем память в гостевой системе эмулятора, 
+            // чтобы у игры был буфер для камеры, и она не вылетала.
             let ptr = env.mem.alloc(size);
-            GUEST_FRAME_PTR = ptr.into();
             
-            // Закрашиваем фейковую камеру красным (RGBA)
-            let host_slice = env.mem.get_mut_slice(ptr, size);
-            for i in (0..host_slice.len()).step_by(4) {
-                host_slice[i] = 255;     // R
-                host_slice[i + 1] = 0;   // G
-                host_slice[i + 2] = 0;   // B
-                host_slice[i + 3] = 255; // A
-            }
+            // В touchHLE у MutPtr есть метод addr(), возвращающий u32
+            GUEST_FRAME_PTR = ptr.addr(); 
         }
         GUEST_FRAME_PTR
     }
@@ -80,11 +74,9 @@ pub fn CVPixelBufferGetHeightOfPlane(_env: &mut Environment, _pixel_buffer: MutV
 }
 
 pub fn CVPixelBufferRelease(_env: &mut Environment, _pixel_buffer: MutVoidPtr) {
-    // Ничего не делаем, утечка одного фейкового кадра нам не страшна
 }
 
 pub fn CVPixelBufferRetain(_env: &mut Environment, _pixel_buffer: MutVoidPtr) {
-    // Ничего не делаем
 }
 
 // === РЕГИСТРАЦИЯ ВСЕХ ФУНКЦИЙ ДЛЯ ИГРЫ ===
@@ -107,10 +99,11 @@ pub const FUNCTIONS: &[(&str, HostFunction)] = &[
     ("CVPixelBufferRetain", &(CVPixelBufferRetain as fn(&mut Environment, _) -> _)),
 ];
 
-// === РЕГИСТРАЦИЯ ФРЕЙМВОРКА (DYLIB) ===
+// === РЕГИСТРАЦИЯ ФРЕЙМВОРКА (Адаптировано под новые версии Rust/touchHLE) ===
 pub const DYLIB: HostDylib = HostDylib {
-    install_name: "/System/Library/Frameworks/CoreVideo.framework/CoreVideo",
-    function_exports: Some(FUNCTIONS),
-    class_exports: None,
-    constant_exports: None,
+    path: "/System/Library/Frameworks/CoreVideo.framework/CoreVideo",
+    aliases: &[],
+    function_exports: &[FUNCTIONS],
+    class_exports: &[],
+    constant_exports: &[],
 };
