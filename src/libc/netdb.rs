@@ -89,32 +89,38 @@ fn getaddrinfo(
         env.mem.read(hints)
     };
 
-    if hint.ai_family != AF_INET && hint.ai_family != 0 {
+    // Copy all fields to avoid unaligned references to packed struct
+    let ai_flags = hint.ai_flags;
+    let ai_family = hint.ai_family;
+    let ai_socktype = hint.ai_socktype;
+    let ai_protocol = hint.ai_protocol;
+
+    if ai_family != AF_INET && ai_family != 0 {
         log!(
             "getaddrinfo: unsupported ai_family {} — returning EAI_FAMILY",
-            hint.ai_family
+            ai_family
         );
         return EAI_FAMILY;
     }
 
-    if hint.ai_socktype != 0
-        && hint.ai_socktype != SOCK_STREAM
-        && hint.ai_socktype != SOCK_DGRAM
+    if ai_socktype != 0
+        && ai_socktype != SOCK_STREAM
+        && ai_socktype != SOCK_DGRAM
     {
         log!(
             "getaddrinfo: unsupported ai_socktype {} — returning EAI_SERVICE",
-            hint.ai_socktype
+            ai_socktype
         );
         return EAI_SERVICE;
     }
 
-    if hint.ai_protocol != 0
-        && hint.ai_protocol != IPPROTO_TCP
-        && hint.ai_protocol != IPPROTO_UDP
+    if ai_protocol != 0
+        && ai_protocol != IPPROTO_TCP
+        && ai_protocol != IPPROTO_UDP
     {
         log!(
             "getaddrinfo: unsupported ai_protocol {} — returning EAI_FAIL",
-            hint.ai_protocol
+            ai_protocol
         );
         return EAI_FAIL;
     }
@@ -171,10 +177,10 @@ fn getaddrinfo(
     let addr_ptr = env.mem.alloc_and_write(addr);
 
     let result = addrinfo {
-        ai_flags:     hint.ai_flags,
+        ai_flags:     ai_flags,
         ai_family:    AF_INET,
-        ai_socktype:  if hint.ai_socktype != 0 { hint.ai_socktype } else { SOCK_STREAM },
-        ai_protocol:  if hint.ai_protocol != 0 { hint.ai_protocol } else { IPPROTO_TCP },
+        ai_socktype:  if ai_socktype != 0 { ai_socktype } else { SOCK_STREAM },
+        ai_protocol:  if ai_protocol != 0 { ai_protocol } else { IPPROTO_TCP },
         ai_addrlen:   guest_size_of::<sockaddr>(),
         ai_canonname: Ptr::null(),
         ai_addr:      addr_ptr,
