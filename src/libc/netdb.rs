@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `netdb.h` — host/service name resolution stubs.
@@ -22,7 +23,6 @@ const AI_ADDRCONFIG: i32 = 0x400;
 
 pub const IPPROTO_TCP: i32 = 6;
 pub const IPPROTO_UDP: i32 = 17;
-
 const EAI_AGAIN:   i32 = 2;
 const EAI_FAIL:    i32 = 4;
 const EAI_FAMILY:  i32 = 5;
@@ -31,12 +31,10 @@ const EAI_NONAME:  i32 = 8;
 const EAI_MEMORY:  i32 = 6;
 const EAI_SYSTEM:  i32 = 11;
 const EAI_OVERFLOW: i32 = 14;
-
 const HOST_NOT_FOUND: i32 = 1;
 const TRY_AGAIN:      i32 = 2;
 const NO_RECOVERY:    i32 = 3;
 const NO_DATA:        i32 = 4;
-
 const NI_MAXHOST: u32 = 1025;
 const NI_MAXSERV: u32 = 32;
 
@@ -48,14 +46,12 @@ const NI_DGRAM:       i32 = 0x10;
 
 #[allow(non_camel_case_types)]
 pub type socklen_t = u32;
-
 // h_errno values stored in libc state.
 pub const H_ERRNO_SUCCESS:       i32 = 0;
 pub const H_ERRNO_HOST_NOT_FOUND: i32 = HOST_NOT_FOUND;
 pub const H_ERRNO_TRY_AGAIN:     i32 = TRY_AGAIN;
 pub const H_ERRNO_NO_RECOVERY:   i32 = NO_RECOVERY;
 pub const H_ERRNO_NO_DATA:       i32 = NO_DATA;
-
 // AF_INET in network byte order for in_addr.
 const AF_INET_NBO: u16 = ((AF_INET as u16) << 8) | ((AF_INET as u16) >> 8);
 
@@ -129,7 +125,7 @@ fn service_port(name: &str) -> Option<u16> {
         "imap"   => Some(143),
         "imap2"  => Some(143),
         "ldap"   => Some(389),
-        "https"  => Some(443),
+        // Убрано дублирующееся значение "https" => Some(443),
         "smtps"  => Some(465),
         "imaps"  => Some(993),
         "pop3s"  => Some(995),
@@ -175,7 +171,6 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
     let name_bytes = canonical_name.as_bytes();
     let name_len   = name_bytes.len() as u32 + 1;
-
     let total = guest_size_of::<hostent_guest>()
         + name_len
         + 4   // ip bytes
@@ -232,13 +227,11 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
-
     let hostname = if name.is_null() {
         "localhost".to_string()
     } else {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
-
     log_dbg!("gethostbyname(\"{}\")", hostname);
 
     // Resolve: try dotted-decimal first, then well-known names.
@@ -267,7 +260,6 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
             }
         }
     };
-
     // Free previous hostent if any.
     if env.libc_state.netdb.dummy_hostent_ptr != 0 {
         let old: MutPtr<u8> = MutPtr::from_bits(env.libc_state.netdb.dummy_hostent_ptr);
@@ -276,12 +268,10 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
 
     let ptr = alloc_hostent(env, ip_octets, &hostname);
     env.libc_state.netdb.dummy_hostent_ptr = ptr;
-
     log_dbg!(
         "gethostbyname(\"{}\") -> {:?} at 0x{:08x}",
         hostname, ip_octets, ptr
     );
-
     MutPtr::from_bits(ptr)
 }
 
@@ -301,7 +291,6 @@ fn gethostbyaddr(
     type_: i32,
 ) -> MutPtr<u8> {
     env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
-
     if type_ != AF_INET || len < 4 {
         log!("gethostbyaddr: unsupported family {} or len {}", type_, len);
         env.libc_state.netdb.h_errno = H_ERRNO_NO_RECOVERY;
@@ -314,10 +303,8 @@ fn gethostbyaddr(
         env.mem.read(addr + 2u32),
         env.mem.read(addr + 3u32),
     ];
-
     let dotted = format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]);
     log_dbg!("gethostbyaddr({}) -> returning dotted form", dotted);
-
     if env.libc_state.netdb.dummy_hostent_ptr != 0 {
         let old: MutPtr<u8> = MutPtr::from_bits(env.libc_state.netdb.dummy_hostent_ptr);
         env.mem.free(old.cast());
@@ -325,7 +312,6 @@ fn gethostbyaddr(
 
     let ptr = alloc_hostent(env, octets, &dotted);
     env.libc_state.netdb.dummy_hostent_ptr = ptr;
-
     MutPtr::from_bits(ptr)
 }
 
@@ -350,10 +336,8 @@ fn getservbyname(
     } else {
         env.mem.cstr_at_utf8(proto).unwrap_or_default().to_owned()
     };
-
     // port in network byte order (big-endian).
     let port_nbo = port.to_be() as i32;
-
     alloc_servent(env, &name_str, port_nbo, &proto_str)
 }
 
@@ -376,7 +360,6 @@ fn getservbyport(
     } else {
         env.mem.cstr_at_utf8(proto).unwrap_or_default().to_owned()
     };
-
     alloc_servent(env, name, port_nbo, &proto_str)
 }
 
@@ -390,7 +373,6 @@ fn alloc_servent(env: &mut Environment, name: &str, port_nbo: i32, proto: &str) 
 
     let block: MutPtr<u8> = env.mem.alloc(total).cast();
     let base = block.to_bits();
-
     let name_off    = guest_size_of::<servent_guest>();
     let proto_off   = name_off + name_bytes.len() as u32 + 1;
     let aliases_off = proto_off + proto_bytes.len() as u32 + 1;
@@ -398,13 +380,11 @@ fn alloc_servent(env: &mut Environment, name: &str, port_nbo: i32, proto: &str) 
     let name_ptr: MutPtr<u8>  = MutPtr::from_bits(base + name_off);
     let proto_ptr: MutPtr<u8> = MutPtr::from_bits(base + proto_off);
     let aliases_ptr: MutPtr<MutPtr<u8>> = MutPtr::from_bits(base + aliases_off);
-
     for (i, &b) in name_bytes.iter().enumerate()  { env.mem.write(name_ptr  + i as u32, b); }
     env.mem.write(name_ptr  + name_bytes.len()  as u32, 0u8);
     for (i, &b) in proto_bytes.iter().enumerate() { env.mem.write(proto_ptr + i as u32, b); }
     env.mem.write(proto_ptr + proto_bytes.len() as u32, 0u8);
     env.mem.write(aliases_ptr, MutPtr::<u8>::null());
-
     let sv = servent_guest {
         s_name:    name_ptr,
         s_aliases: aliases_ptr,
@@ -442,7 +422,6 @@ fn getaddrinfo(
     } else {
         env.mem.read(hints)
     };
-
     let ai_flags    = hint.ai_flags;
     let ai_family   = hint.ai_family;
     let ai_socktype = hint.ai_socktype;
@@ -477,7 +456,6 @@ fn getaddrinfo(
             }
         }
     };
-
     let port: u16 = if serv_name.is_null() {
         0
     } else {
@@ -494,7 +472,6 @@ fn getaddrinfo(
             }
         }
     };
-
     log_dbg!("getaddrinfo: ip={:?} port={}", ip_octets, port);
 
     let addr_ptr = env.mem.alloc_and_write(sockaddr::from_ipv4_parts(ip_octets, port));
@@ -543,9 +520,19 @@ fn getnameinfo(
     if sa.is_null() || salen < guest_size_of::<sockaddr>() {
         return EAI_FAIL;
     }
-    let addr = env.mem.read(sa);
-    let octets = addr.sin_addr_octets();
-    let port   = addr.sin_port_hbo();
+    
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Прямое чтение из гостевой памяти по смещениям (AF_INET/sockaddr_in layout)
+    let sa_ptr = sa.cast::<u8>();
+    let port = u16::from_be_bytes([
+        env.mem.read(sa_ptr + 2u32),
+        env.mem.read(sa_ptr + 3u32),
+    ]);
+    let octets: [u8; 4] = [
+        env.mem.read(sa_ptr + 4u32),
+        env.mem.read(sa_ptr + 5u32),
+        env.mem.read(sa_ptr + 6u32),
+        env.mem.read(sa_ptr + 7u32),
+    ];
 
     if !host.is_null() && hostlen > 0 {
         let dotted = format!("{}.{}.{}.{}\0",
@@ -623,3 +610,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__h_errno_location()),
     export_c_func!(gai_strerror(_)),
 ];
+
