@@ -231,20 +231,25 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
 
-    // LAZY INITIALIZATION: Allocate the safe zone if it hasn't been created yet
-    if env.libc_state.netdb_dummy_hostent_ptr == 0 {
-        let dummy_size = 64; // Large enough for hostent + padding
+    // 1. LAZY INITIALIZATION
+    // Accessing through libc_state.netdb as indicated by the compiler
+    if env.libc_state.netdb.dummy_hostent_ptr == 0 {
+        let dummy_size = 64; 
         let ptr = env.mem.alloc(dummy_size);
-        env.mem.zero(ptr, dummy_size); // Ensure h_addr_list (offset 0x10) is 0
-        env.libc_state.netdb_dummy_hostent_ptr = ptr.address();
+        
+        // Use write_bytes (standard for NullableBox<Mem>) to zero the memory
+        env.mem.write_bytes(ptr, 0, dummy_size); 
+        
+        // Use .0 to get the VAddr from the Ptr tuple struct
+        env.libc_state.netdb.dummy_hostent_ptr = ptr.0;
     }
 
-    // Access the pointer from the libc state
-    let dummy_ptr = env.libc_state.netdb_dummy_hostent_ptr;
+    // 2. ACCESS THE POINTER
+    let dummy_ptr = env.libc_state.netdb.dummy_hostent_ptr;
 
     if !env.options.network_access {
         log!(
-            "gethostbyname(\"{}\") — network access disabled. Returning dummy (0x{:08x}) to avoid crash.",
+            "gethostbyname(\"{}\") — network access disabled. Returning dummy (0x{:08x}) to avoid 0x10 crash.",
             hostname, dummy_ptr
         );
         return MutPtr::from_bits(dummy_ptr);
