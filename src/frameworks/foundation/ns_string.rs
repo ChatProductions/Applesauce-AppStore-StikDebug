@@ -1981,8 +1981,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())appendFormat:(id)format, // NSString*
                    ...args {
     assert_ne!(format, nil);
-    let res = with_format(env, format, args.start());
-    *env.objc.borrow_mut(this) = StringHostObject::Utf8(format!("{}{}", to_rust_string(env, this), res).into());
+    let formatted = with_format(env, format, args.start());
+    let ns = from_rust_string(env, formatted);
+    () = msg![env; this appendString:ns];
+    release(env, ns);
 }
 
 - (())setString:(id)a_string { // NSString*
