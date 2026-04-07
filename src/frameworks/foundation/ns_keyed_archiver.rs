@@ -1,9 +1,17 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSKeyedArchiver` and serialization of its object graph format.
+//!
+//! Resources:
+//!
+//! - You can get a good intuitive grasp of how the format works just by staring
+//!   at a pretty-print of a simple archive file from something that can parse
+//!   plists, e.g. `plutil -p` or `println!("{:#?}", plist::Value::...);`.
+//! - Apple's [Archives and Serializations Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Archiving/Articles/archives.html)
 
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -28,7 +36,8 @@ struct NSKeyedArchiverHostObject {
 }
 impl HostObject for NSKeyedArchiverHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 
 (env, this, _cmd);
 
@@ -151,14 +160,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let len = buffer.len() as GuestUSize;
     let guest_buffer = env.mem.alloc(len);
     env.mem.bytes_at_mut(guest_buffer.cast(), len).copy_from_slice(&buffer[..]);
-    let encoded_data: id = msg_class![env; NSData dataWithBytesNoCopy:guest_buffer length:len];
+    let encoded_data: id = msg_class![env;
+    NSData dataWithBytesNoCopy:guest_buffer length:len];
     env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = encoded_data;
     retain(env, encoded_data);
 }
 
 - (id)encodedData {
     if env.objc.borrow::<NSKeyedArchiverHostObject>(this).encoded_data == nil {
-        () = msg![env; this finishEncoding];
+        () = msg![env;
+        this finishEncoding];
     }
     env.objc.borrow::<NSKeyedArchiverHostObject>(this).encoded_data
 }
@@ -256,6 +267,11 @@ fn encode_object(env: &mut Environment, archiver: id, object: id) -> Uid {
                 .borrow_mut::<NSKeyedArchiverHostObject>(archiver)
                 .current_key = previous_key;
         }
+        
+        // Кэшируем объект, чтобы избежать дубликатов (перенесено из оригинала)
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
+        host_object.already_archived.insert(object, new_uid);
+        
         new_uid
     }
 }
