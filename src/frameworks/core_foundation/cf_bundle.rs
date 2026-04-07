@@ -520,7 +520,7 @@ fn CFBundleCreate(
     bundle_url: CFURLRef,
 ) -> CFBundleRef {
     if bundle_url == nil {
-        log!("CFBundleCreate: bundle_url is nil");
+        log_dbg!("CFBundleCreate: bundle_url is nil");
         return nil;
     }
 
@@ -528,7 +528,7 @@ fn CFBundleCreate(
     let bundle: id = msg_class![env; NSBundle bundleWithURL:bundle_url];
     
     if bundle == nil {
-        log!("CFBundleCreate: Failed to create NSBundle for URL");
+        log_dbg!("CFBundleCreate: Failed to create NSBundle for URL");
         return nil;
     }
 
