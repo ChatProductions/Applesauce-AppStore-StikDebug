@@ -7,6 +7,7 @@
 
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
+use crate::frameworks::State;
 use crate::libc::sys::socket::{sockaddr, AF_INET, SOCK_DGRAM, SOCK_STREAM};
 use crate::mem::{guest_size_of, ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::Environment;
