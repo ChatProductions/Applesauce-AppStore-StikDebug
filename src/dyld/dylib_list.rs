@@ -35,6 +35,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::libsqlite3::DYLIB,
     &frameworks::libxml2::DYLIB, // Добавлена поддержка libxml2 (необходима для Rolando)
     &frameworks::common_crypto::DYLIB,
+    &frameworks::core_video::DYLIB, // <--- МЫ ДОБАВИЛИ ЭТУ СТРОКУ ДЛЯ ПОДДЕРЖКИ КАМЕРЫ
     &frameworks::address_book::DYLIB,
 ];
 
