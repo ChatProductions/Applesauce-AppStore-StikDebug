@@ -779,7 +779,7 @@ fn path_for_resource_helper(
         // from_rust_string (which needs a mutable borrow on env).
         let found: Option<String> = env.fs.enumerate(parent_guest)
             .ok()
-            .and_then(|entries| {
+            .and_then(|mut entries| {
                 entries
                     .find(|e| e.to_lowercase() == target_name)
                     .map(|e| format!("{}/{}", parent_str, e))
