@@ -995,7 +995,7 @@ fn send(
 
     match type_ {
         SOCK_STREAM => {
-            let Some(stream) = State::get(env)
+            let Some(mut stream) = State::get(env)
                 .sockets.get(&socket).unwrap().tcp_stream.as_ref()
             else {
                 set_errno(env, ENOTCONN);
