@@ -289,9 +289,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _)),
     export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)), 
     export_c_func!(CCHmac(_, _, _, _, _, _)),
-    export_c_func!(CC_MD5_Init(_, _)),
-    export_c_func!(CC_MD5_Update(_, _, _, _)),
-    export_c_func!(CC_MD5_Final(_, _, _)),
+    // Исправленное количество аргументов (исключая env):
+    export_c_func!(CC_MD5_Init(_)),           // Было (_, _), нужно (_)
+    export_c_func!(CC_MD5_Update(_, _, _)),    // Было (_, _, _, _), нужно (_, _, _)
+    export_c_func!(CC_MD5_Final(_, _)),       // Было (_, _, _), нужно (_, _)
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
