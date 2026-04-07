@@ -4,17 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `netdb.h` — host/service name resolution stubs.
-//!
-//! touchHLE does not implement a real network stack.  These functions either
-//! return sensible failure codes (so the caller's error-handling path runs) or,
-//! when `network_access` is enabled in options, perform real resolution via
-//! `getaddrinfo`/`gethostbyname` on the host OS.
-//!
-//! ### Why not just `assert!` on unexpected inputs?
-//! The original code used `assert!` for every input combination it hadn't seen
-//! yet.  That turns any unexpected-but-harmless call into a hard crash.  We
-//! replace all of those with logged `EAI_FAIL` / NULL returns so the guest's
-//! own error-handling code runs instead.
 
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
@@ -31,18 +20,14 @@ const AI_PASSIVE: i32 = 0x1;
 pub const IPPROTO_TCP: i32 = 6;
 pub const IPPROTO_UDP: i32 = 17;
 
-// getaddrinfo() error codes (subset used here)
-const EAI_AGAIN:   i32 = 2; // temporary failure
-const EAI_FAIL:    i32 = 4; // non-recoverable failure
-const EAI_FAMILY:  i32 = 5; // ai_family not supported
-const EAI_SERVICE: i32 = 8; // service not supported for ai_socktype
-const EAI_SYSTEM:  i32 = 11; // system error (see errno)
+const EAI_AGAIN:   i32 = 2;
+const EAI_FAIL:    i32 = 4;
+const EAI_FAMILY:  i32 = 5;
+const EAI_SERVICE: i32 = 8;
+const EAI_SYSTEM:  i32 = 11;
 
-// h_errno values used by gethostbyname()
 const HOST_NOT_FOUND: i32 = 1;
-const TRY_AGAIN:      i32 = 2;
 const NO_RECOVERY:    i32 = 3;
-const NO_DATA:        i32 = 4;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,8 +36,6 @@ const NO_DATA:        i32 = 4;
 #[allow(non_camel_case_types)]
 pub type socklen_t = u32;
 
-/// Opaque host entry.  We never return a valid one (networking is not
-/// implemented), so the struct only needs to exist; no fields are required.
 #[allow(non_camel_case_types)]
 struct hostent {}
 
@@ -77,12 +60,11 @@ unsafe impl SafeRead for addrinfo {}
 
 fn getaddrinfo(
     env: &mut Environment,
-    node_name: MutPtr<u8>,   // hostname or IP string (may be null for passive)
-    serv_name: MutPtr<u8>,   // service name or port number string (may be null)
+    node_name: MutPtr<u8>,
+    serv_name: MutPtr<u8>,
     hints: ConstPtr<addrinfo>,
     res: MutPtr<MutPtr<addrinfo>>,
 ) -> i32 {
-    // --- network_access gate ------------------------------------------------
     if !env.options.network_access {
         log_dbg!(
             "getaddrinfo: network access disabled — returning EAI_FAIL \
@@ -92,12 +74,10 @@ fn getaddrinfo(
         return EAI_FAIL;
     }
 
-    // --- read hints (if provided) -------------------------------------------
     let hint = if hints.is_null() {
-        // POSIX allows hints == NULL; use all-zero defaults.
         addrinfo {
             ai_flags:     0,
-            ai_family:    0,   // AF_UNSPEC
+            ai_family:    0,
             ai_socktype:  0,
             ai_protocol:  0,
             ai_addrlen:   0,
@@ -109,7 +89,6 @@ fn getaddrinfo(
         env.mem.read(hints)
     };
 
-    // --- validate family ----------------------------------------------------
     if hint.ai_family != AF_INET && hint.ai_family != 0 {
         log!(
             "getaddrinfo: unsupported ai_family {} — returning EAI_FAMILY",
@@ -118,7 +97,6 @@ fn getaddrinfo(
         return EAI_FAMILY;
     }
 
-    // --- validate socktype --------------------------------------------------
     if hint.ai_socktype != 0
         && hint.ai_socktype != SOCK_STREAM
         && hint.ai_socktype != SOCK_DGRAM
@@ -130,7 +108,6 @@ fn getaddrinfo(
         return EAI_SERVICE;
     }
 
-    // --- validate protocol --------------------------------------------------
     if hint.ai_protocol != 0
         && hint.ai_protocol != IPPROTO_TCP
         && hint.ai_protocol != IPPROTO_UDP
@@ -142,18 +119,12 @@ fn getaddrinfo(
         return EAI_FAIL;
     }
 
-    // --- hostname resolution -----------------------------------------------
-    // We only support the passive (bind) case where node_name is null and
-    // the caller wants INADDR_ANY.  Real hostname → IP resolution requires a
-    // host-OS networking call; log and fail gracefully for now.
     let ip_octets: [u8; 4] = if node_name.is_null() {
-        // Passive / INADDR_ANY
         [0u8; 4]
     } else {
         let hostname = env.mem.cstr_at_utf8(node_name)
             .unwrap_or_default()
             .to_owned();
-        // Try to parse as a dotted-decimal IPv4 literal first.
         if let Ok(addr) = hostname.parse::<std::net::Ipv4Addr>() {
             addr.octets()
         } else {
@@ -166,7 +137,6 @@ fn getaddrinfo(
         }
     };
 
-    // --- port ---------------------------------------------------------------
     let port: u16 = if serv_name.is_null() {
         0
     } else {
@@ -174,18 +144,29 @@ fn getaddrinfo(
         match svc.parse::<u16>() {
             Ok(p) => p,
             Err(_) => {
-                log!(
-                    "getaddrinfo: named service \"{}\" not supported — returning EAI_SERVICE",
-                    svc
-                );
-                return EAI_SERVICE;
+                // Try well-known service names.
+                match svc.as_str() {
+                    "http"  => 80,
+                    "https" => 443,
+                    "ftp"   => 21,
+                    "smtp"  => 25,
+                    "pop3"  => 110,
+                    "imap"  => 143,
+                    _ => {
+                        log!(
+                            "getaddrinfo: named service \"{}\" not supported \
+                             — returning EAI_SERVICE",
+                            svc
+                        );
+                        return EAI_SERVICE;
+                    }
+                }
             }
         }
     };
 
     log_dbg!("getaddrinfo: ip={:?} port={}", ip_octets, port);
 
-    // --- build result -------------------------------------------------------
     let addr = sockaddr::from_ipv4_parts(ip_octets, port);
     let addr_ptr = env.mem.alloc_and_write(addr);
 
@@ -205,7 +186,7 @@ fn getaddrinfo(
         env.mem.write(res, result_ptr);
     }
 
-    0 // EAI_SUCCESS
+    0 // success
 }
 
 // ---------------------------------------------------------------------------
@@ -216,14 +197,12 @@ fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
     if ai.is_null() {
         return;
     }
-    // Walk the linked list and free each node + its ai_addr.
     let mut cur = ai;
     while !cur.is_null() {
         let node = env.mem.read(cur);
         if !node.ai_addr.is_null() {
             env.mem.free(node.ai_addr.cast());
         }
-        // Free canon name if present (we never set it, but be safe).
         if !node.ai_canonname.is_null() {
             env.mem.free(node.ai_canonname.cast());
         }
@@ -249,43 +228,33 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
             "gethostbyname(\"{}\") — network access disabled, returning NULL",
             hostname
         );
-        // TODO: set h_errno = HOST_NOT_FOUND
         return Ptr::null();
     }
 
-    // Real hostname resolution is not yet implemented.
-    // Return NULL so the caller's error path runs rather than crashing later
-    // on a garbage pointer (the original crash in KamiChallenge).
     log!(
         "TODO: gethostbyname(\"{}\") — hostname resolution not implemented, returning NULL",
         hostname
     );
-    // TODO: set h_errno = NO_RECOVERY
     Ptr::null()
 }
 
 // ---------------------------------------------------------------------------
-// gai_strerror — useful for guest-side error logging
+// gai_strerror
 // ---------------------------------------------------------------------------
 
 fn gai_strerror(env: &mut Environment, ecode: i32) -> ConstPtr<u8> {
-    let msg: &str = match ecode {
-        0            => "Success",
-        2            => "Temporary failure in name resolution",
-        EAI_FAIL     => "Non-recoverable failure in name resolution",
-        EAI_FAMILY   => "ai_family not supported",
-        EAI_SERVICE  => "Servname not supported for ai_socktype",
-        EAI_SYSTEM   => "System error",
-        _            => "Unknown error",
+    let msg: &[u8] = match ecode {
+        0           => b"Success",
+        2           => b"Temporary failure in name resolution",
+        EAI_FAIL    => b"Non-recoverable failure in name resolution",
+        EAI_FAMILY  => b"ai_family not supported",
+        EAI_SERVICE => b"Servname not supported for ai_socktype",
+        EAI_SYSTEM  => b"System error",
+        _           => b"Unknown error",
     };
-    // Leak a static C string into guest memory. This is fine because
-    // gai_strerror returns a pointer to a static buffer per POSIX.
-    let bytes: Vec<u8> = msg.bytes().chain(std::iter::once(0u8)).collect();
-    let ptr = env.mem.alloc(bytes.len() as u32);
-    for (i, &b) in bytes.iter().enumerate() {
-        env.mem.write(MutPtr::from_bits(ptr.addr() + i as u32), b);
-    }
-    ptr.cast()
+    // Use alloc_and_write_cstr which is the correct API for writing
+    // a null-terminated C string into guest memory.
+    env.mem.alloc_and_write_cstr(msg).cast_const()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
