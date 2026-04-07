@@ -257,7 +257,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interface_orientation {
-    interface_orientation == UIInterfaceOrientationPortrait
+    // ИСПРАВЛЕНИЕ: 3 = LandscapeRight, 4 = LandscapeLeft
+    interface_orientation == 3 || interface_orientation == 4
 }
 
 // UIResponder implementation
@@ -407,7 +408,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
-    UIInterfaceOrientationPortrait
+    // ИСПРАВЛЕНИЕ: Форсируем ландшафтный режим
+    3
 }
 
 - (id)childViewControllers {
@@ -444,6 +446,41 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)shouldAutomaticallyForwardAppearanceMethods {
     true
+}
+
+@end
+
+// --- ИСПРАВЛЕНИЕ: Умные заглушки для пропуска видео и камеры ---
+
+@implementation VideoViewController: UIViewController
+
+- (())viewDidAppear:(bool)animated {
+    () = msg_super![env; this viewDidAppear:animated];
+    log!("[HACK] VideoViewController auto-closing!");
+    
+    // Закрываем модальное окно
+    () = msg![env; this dismissModalViewControllerAnimated:false];
+    
+    // На всякий случай удаляем View, если оно было добавлено напрямую
+    let view: id = msg![env; this view];
+    if view != nil {
+        () = msg![env; view removeFromSuperview];
+    }
+}
+
+@end
+
+@implementation BarcodeReaderViewController: UIViewController
+
+- (())viewDidAppear:(bool)animated {
+    () = msg_super![env; this viewDidAppear:animated];
+    log!("[HACK] BarcodeReaderViewController auto-closing!");
+    
+    () = msg![env; this dismissModalViewControllerAnimated:false];
+    let view: id = msg![env; this view];
+    if view != nil {
+        () = msg![env; view removeFromSuperview];
+    }
 }
 
 @end
