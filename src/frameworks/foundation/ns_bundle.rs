@@ -393,24 +393,30 @@ pub const CLASSES: ClassExports = objc_classes! {
         search_dir_str.push_str(&subpath_str);
     }
     let search_dir = crate::fs::GuestPath::new(&search_dir_str);
-    let mut result_paths: Vec<id> = Vec::new();
-    if let Ok(iterator) = env.fs.enumerate(search_dir) {
-        for entry in iterator {
-            let matches = match &ext_str {
+    // Collect matching filenames into plain Rust Strings BEFORE calling any
+    // env-mutating functions (from_rust_string).  The iterator holds an
+    // immutable borrow on env.fs for its entire lifetime, which would conflict
+    // with the mutable borrow required by from_rust_string.
+    let matched_names: Vec<String> = match env.fs.enumerate(search_dir) {
+        Ok(iterator) => iterator
+            .filter(|entry| match &ext_str {
                 Some(extension) => entry.ends_with(extension.as_ref()),
                 None => true,
-            };
-            if matches {
-                // Construct the full path, not just the filename.
-                let full_path = format!("{}/{}", search_dir_str, entry);
-                result_paths.push(ns_string::from_rust_string(env, full_path));
-            }
+            })
+            .map(|entry| format!("{}/{}", search_dir_str, entry))
+            .collect(),
+        Err(_) => {
+            log!(
+                "Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?}",
+                search_dir_str
+            );
+            Vec::new()
         }
-    } else {
-        log!(
-            "Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?}",
-            search_dir_str
-        );
+    };
+    // Iterator and its fs borrow are now fully dropped — safe to call env mutators.
+    let mut result_paths: Vec<id> = Vec::with_capacity(matched_names.len());
+    for full_path in matched_names {
+        result_paths.push(ns_string::from_rust_string(env, full_path));
     }
     let array: id = crate::frameworks::foundation::ns_array::from_vec(env, result_paths);
     autorelease(env, array)
@@ -769,14 +775,17 @@ fn path_for_resource_helper(
         let parent_str  = parent.to_str().unwrap_or("");
         let target_name = file_name.to_str().unwrap_or("").to_lowercase();
         let parent_guest = crate::fs::GuestPath::new(parent_str);
-        if let Ok(entries) = env.fs.enumerate(parent_guest) {
-            for entry in entries {
-                // `entry` is just the filename component; build the full path.
-                if entry.to_lowercase() == target_name {
-                    let full = format!("{}/{}", parent_str, entry);
-                    return ns_string::from_rust_string(env, full);
-                }
-            }
+        // Collect all entries first so env.fs borrow is dropped before we call
+        // from_rust_string (which needs a mutable borrow on env).
+        let found: Option<String> = env.fs.enumerate(parent_guest)
+            .ok()
+            .and_then(|entries| {
+                entries
+                    .find(|e| e.to_lowercase() == target_name)
+                    .map(|e| format!("{}/{}", parent_str, e))
+            });
+        if let Some(full) = found {
+            return ns_string::from_rust_string(env, full);
         }
     }
     nil
