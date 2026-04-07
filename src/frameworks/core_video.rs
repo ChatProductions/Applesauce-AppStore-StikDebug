@@ -18,12 +18,12 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
     
     unsafe {
         if GUEST_FRAME_PTR == 0 {
-            // Просто выделяем память в гостевой системе эмулятора, 
-            // чтобы у игры был буфер для камеры, и она не вылетала.
+            // Выделяем память в гостевой системе эмулятора
             let ptr = env.mem.alloc(size);
             
-            // В touchHLE у MutPtr есть метод addr(), возвращающий u32
-            GUEST_FRAME_PTR = ptr.addr(); 
+            // Используем "грубую силу" Rust: копируем сырые байты указателя 
+            // напрямую в число u32 в обход любых ограничений структуры Ptr.
+            GUEST_FRAME_PTR = std::mem::transmute_copy(&ptr); 
         }
         GUEST_FRAME_PTR
     }
@@ -74,9 +74,11 @@ pub fn CVPixelBufferGetHeightOfPlane(_env: &mut Environment, _pixel_buffer: MutV
 }
 
 pub fn CVPixelBufferRelease(_env: &mut Environment, _pixel_buffer: MutVoidPtr) {
+    // Ничего не делаем
 }
 
 pub fn CVPixelBufferRetain(_env: &mut Environment, _pixel_buffer: MutVoidPtr) {
+    // Ничего не делаем
 }
 
 // === РЕГИСТРАЦИЯ ВСЕХ ФУНКЦИЙ ДЛЯ ИГРЫ ===
