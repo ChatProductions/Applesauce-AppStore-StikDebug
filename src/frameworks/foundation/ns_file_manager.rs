@@ -141,6 +141,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (id)displayNameAtPath:(id)path { // NSString *
+    if path == nil {
+        return nil;
+    }
+    
+    // В Foundation метод возвращает локализованное имя файла.
+    // Если локализованного имени нет, метод выступает полным аналогом lastPathComponent.
+    // Так как в touchHLE уже есть path_algorithms.rs для NSString, 
+    // мы просто вызываем нативный эмулируемый метод:
+    msg![env; path lastPathComponent]
+}
+
 - (bool)fileExistsAtPath:(id)path { // NSString*
     let res_exists = if path == nil {
         false
