@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSURL`.
@@ -514,14 +515,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Resource values (stub)
 
-- (bool)getResourceValue:(MutPtr<id>)value // id*
-                  forKey:(id)_key          // NSURLResourceKey
-                   error:(MutPtr<id>)_err  // NSError**
-{
-    // Write nil and return false — resource values not supported.
-    if !value.is_null() {
-        env.mem.write(value, nil);
+- (bool)getResourceValue:(MutPtr<id>)value forKey:(id)key error:(MutPtr<id>)_err {
+    let key_str = to_rust_string(env, key);
+    if key_str == "NSURLIsDirectoryKey" {
+        // ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлена явная аннотация типа `: bool`
+        let is_dir: bool = msg![env; this hasDirectoryPath]; 
+        let ns_bool = msg_class![env; NSNumber numberWithBool:is_dir];
+        env.mem.write(value, ns_bool);
+        return true;
     }
+    // Default to nil/false for others
+    if !value.is_null() { env.mem.write(value, nil); }
     false
 }
 
@@ -536,6 +540,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)getFileSystemRepresentation:(MutPtr<u8>)buffer
                           maxLength:(NSUInteger)buffer_size {
+   
     let &NSURLHostObject::FileURL { ns_string, .. } = env.objc.borrow(this) else {
         return false;
     };
@@ -608,3 +613,4 @@ pub fn to_rust_path(env: &mut Environment, url: id) -> Cow<'static, GuestPath> {
         Cow::Owned(path_buf) => Cow::Owned(path_buf.into()),
     }
 }
+
