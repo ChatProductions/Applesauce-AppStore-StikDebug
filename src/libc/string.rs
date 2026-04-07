@@ -570,6 +570,10 @@ fn strerror_r(
     0
 }
 
+fn bcopy(env: &mut Environment, src: ConstVoidPtr, dest: MutVoidPtr, count: GuestUSize) {
+    memmove(env, dest, src, count);
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strtok(_, _)),
     export_c_func!(bzero(_, _)),
@@ -619,4 +623,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(explicit_bzero(_, _)),
     export_c_func!(strerror(_)),
     export_c_func!(strerror_r(_, _, _)),
+    export_c_func!(bcopy(_, _, _)),
 ];
