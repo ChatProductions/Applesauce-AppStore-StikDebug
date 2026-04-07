@@ -133,22 +133,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - raise
 
 - (())raise {
-    if this == nil {
-        log!("GUEST NSException: Attempted to raise on nil. Ignoring.");
-        return;
-    }
-
-    let host = env.objc.borrow::<NSExceptionHostObject>(this);
-    let name   = host.name;
-    let reason = host.reason;
-    drop(host);
-
+    let name   = env.objc.borrow::<NSExceptionHostObject>(this).name;
+    let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
+    
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
-    log_dbg("KAMI RETRO - NSException raised (Continuing);
+    // Log the exception details clearly for debugging
+    log!("GUEST NSException raised (Continuing without panic):");
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
+
+    // If there is userInfo, log it too (useful for network errors)
+    let user_info = env.objc.borrow::<NSExceptionHostObject>(this).user_info;
+    if user_info != nil {
+        log!("  UserInfo: <present>");
+    }
+    
+    // We return () to the guest. 
+    // The guest will now continue execution.
 }
 
 // MARK: - NSCopying
