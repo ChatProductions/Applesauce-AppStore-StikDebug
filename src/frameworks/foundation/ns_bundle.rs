@@ -148,50 +148,77 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithPath:(id)path { // NSString*
     if path == nil {
+        log!("NSBundle initWithPath: nil path provided");
         release(env, this);
         return nil;
     }
+
     let path_str = ns_string::to_rust_string(env, path).into_owned();
-    // Return cached instance if we already have one for this path.
+
+    // 1. CACHE CHECK (Prevents "SUPER HACK" warnings)
+    // If the bundle already exists, we MUST return the cached pointer.
     if let Some(&cached) = env.framework_state.foundation.ns_bundle.bundle_cache.get(&path_str) {
-        release(env, this);
-        return retain(env, cached);
+        log_dbg!("NSBundle initWithPath: returning cached bundle for {:?}", path_str);
+        release(env, this); // Dispose of the current uninitialized allocation
+        return retain(env, cached); // Return the one we already know about
     }
-    let plist_file = format!("{}/Info.plist", path_str);
-    let plist_guest = crate::fs::GuestPath::new(&plist_file);
+
+    // 2. FILESYSTEM VALIDATION
+    let plist_file_path = format!("{}/Info.plist", path_str);
+    let plist_guest = crate::fs::GuestPath::new(&plist_file_path);
     if env.fs.read(plist_guest).is_err() {
-        log_dbg!("NSBundle initWithPath: no Info.plist at {:?}, returning nil", path_str);
+        log!("NSBundle initWithPath: Cannot find Info.plist at {:?}. Returning nil.", path_str);
         release(env, this);
         return nil;
     }
-    let bundle_path_ns = ns_string::from_rust_string(env, path_str.clone());
-    // Derive bundle identifier from Info.plist CFBundleIdentifier.
-    let plist_path_ns = ns_string::get_static_str(env, "Info.plist");
-    let full_plist: id = msg![env; bundle_path_ns stringByAppendingPathComponent:plist_path_ns];
+
+    // 3. IDENTIFIER & DICTIONARY LOADING
+    // We use the static string helper to avoid unnecessary allocations
+    let plist_path_ns = ns_string::from_rust_string(env, plist_file_path);
     let dict: id = msg_class![env; NSDictionary alloc];
-    let dict: id = msg![env; dict initWithContentsOfFile:full_plist];
+    let dict: id = msg![env; dict initWithContentsOfFile:plist_path_ns];
+    
+    // Release the temporary plist path string
+    release(env, plist_path_ns);
+
     let id_key: id = ns_string::get_static_str(env, "CFBundleIdentifier");
     let bundle_identifier: id = if dict != nil {
         let val: id = msg![env; dict objectForKey:id_key];
-        if val != nil { retain(env, val) } else { ns_string::get_static_str(env, "") }
+        if val != nil { 
+            retain(env, val) 
+        } else { 
+            // Fallback for KAMI RETRO if identifier is missing in a sub-bundle
+            ns_string::get_static_str(env, "com.gamevil.kamiretro.unknown") 
+        }
     } else {
         ns_string::get_static_str(env, "")
     };
-    // IMPORTANT: write directly into the already-allocated host object slot.
-    // Do NOT call borrow_mut twice (the first was the old "ensure allocated"
-    // no-op which was unnecessary and confusing).
-    *env.objc.borrow_mut::<NSBundleHostObject>(this) = NSBundleHostObject {
+
+    // 4. HOST OBJECT INITIALIZATION
+    let bundle_path_ns = ns_string::from_rust_string(env, path_str.clone());
+    
+    // Create the host object. We store the dict (if any) directly.
+    let host_object = NSBundleHostObject {
         bundle: None,
-        bundle_path: bundle_path_ns,   // owned: from_rust_string gives +1
-        bundle_identifier,              // owned: retained above (or static)
+        bundle_path: bundle_path_ns,   // Ownership transferred (+1)
+        bundle_identifier,              // Ownership transferred (+1)
         bundle_url: None,
         info_dictionary: if dict != nil { Some(dict) } else { None },
     };
+
+    // Write to the slot provided by alloc
+    *env.objc.borrow_mut::<NSBundleHostObject>(this) = host_object;
+
+    // 5. CACHE INSERTION
+    // Insert into the cache BEFORE returning to ensure subsequent calls 
+    // to bundleForClass or bundleWithIdentifier find it.
     env.framework_state
         .foundation
         .ns_bundle
         .bundle_cache
         .insert(path_str, this);
+
+    log_dbg!("NSBundle initialized and cached: {:?}", bundle_identifier);
     this
 }
 
@@ -598,33 +625,40 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)localizedStringForKey:(id)key
                       value:(id)value
                       table:(id)tableName {
+    // 1. Debug logging (essential for tracking what the game is looking for)
     log_dbg!(
-        "localizedStringForKey key:'{}' value:'{}' table:'{}'",
-        if key == nil { std::borrow::Cow::from("(null)") } else { ns_string::to_rust_string(env, key) },
-        if value == nil { std::borrow::Cow::from("(null)") } else { ns_string::to_rust_string(env, value) },
-        if tableName == nil { std::borrow::Cow::from("(null)") } else { ns_string::to_rust_string(env, tableName) }
+        "localizedStringForKey key:'{}' table:'{}'",
+        if key == nil { "nil".into() } else { ns_string::to_rust_string(env, key) },
+        if tableName == nil { "Localizable".into() } else { ns_string::to_rust_string(env, tableName) }
     );
+
     let empty_str: id = ns_string::get_static_str(env, "");
+
+    // 2. Early exit for nil keys
     if key == nil {
         return if value == nil { empty_str } else { value };
     }
-    let name = if tableName == nil {
+
+    // 3. Determine the table name
+    let name = if tableName == nil || tableName == nil {
         ns_string::get_static_str(env, "Localizable")
     } else {
         tableName
     };
-    // FIX: removed assert_eq! that panicked for any non-main bundle.
-    // If this is not the main bundle we simply fall through to the key/value
-    // fallback below (no localization table lookup for non-main bundles yet).
-    let is_main_bundle = env.framework_state.foundation.ns_bundle.main_bundle
-        .map(|mb| mb == this)
-        .unwrap_or(false);
-    if !is_main_bundle {
-        log_dbg!(
-            "localizedStringForKey: called on non-main bundle — falling back to key/value"
-        );
+
+    // 4. Bundle Check
+    // KAMI RETRO often uses sub-bundles for localizations. 
+    // We should allow table lookup on ANY bundle that has a path.
+    let host = env.objc.borrow::<NSBundleHostObject>(this);
+    let is_valid_bundle = host.bundle_path != nil;
+    drop(host);
+
+    if !is_valid_bundle {
         return if value != nil && value != empty_str { value } else { key };
     }
+
+    // 5. Localization Table Lookup & Caching
+    // We cache dictionaries per-bundle/per-table to prevent repeated IO
     let dict = if let Some(&table_dict) = env
         .framework_state
         .foundation
@@ -635,11 +669,25 @@ pub const CLASSES: ClassExports = objc_classes! {
         table_dict
     } else {
         let extension = ns_string::get_static_str(env, "strings");
+        
+        // Attempt to find the [Table].strings file
         let dict_url: id = msg![env; this URLForResource:name withExtension:extension];
+        
+        if dict_url == nil {
+            // Log that a translation table is missing (common in many Gamevil ports)
+            log_dbg!("Localization table '{}.strings' not found, using fallback", 
+                ns_string::to_rust_string(env, name));
+            return if value == nil || value == empty_str { key } else { value };
+        }
+
+        // Load the strings file into a dictionary
         let dict: id = msg_class![env; NSDictionary dictionaryWithContentsOfURL:dict_url];
+        
         if dict == nil {
             return if value == nil || value == empty_str { key } else { value };
         }
+
+        // Store in cache to avoid re-loading from disk
         retain(env, name);
         retain(env, dict);
         env.framework_state
@@ -649,14 +697,15 @@ pub const CLASSES: ClassExports = objc_classes! {
             .insert(name, dict);
         dict
     };
+
+    // 6. Final String Extraction
     let res: id = msg![env; dict objectForKey:key];
+    
     if res == nil {
+        // Return the 'value' if provided, otherwise the 'key' itself
         return if value == nil || value == empty_str { key } else { value };
     }
-    log_dbg!(
-        "localizedStringForKey res => {:?}",
-        ns_string::to_rust_string(env, res)
-    );
+
     res
 }
 
