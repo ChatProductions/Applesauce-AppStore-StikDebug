@@ -133,15 +133,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - raise
 
 - (())raise {
-    // We check the 'objects' HashMap directly to see if this pointer exists.
-    // We also use &this because HashMap::contains_key takes a reference.
-    if this == nil || !env.objc.objects.contains_key(&this) {
+    // We use the public is_valid() method to check the guest pointer.
+    // This avoids accessing the private 'objects' HashMap directly.
+    if this == nil || !env.objc.is_valid(this) {
         log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
         return;
     }
 
+    // It is now safe to borrow the host object
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
-
     let name   = host.name;
     let reason = host.reason;
     drop(host); 
