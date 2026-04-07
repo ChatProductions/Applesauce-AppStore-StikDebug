@@ -202,13 +202,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем кастомный класс {} на базовый UIView", safe_name);
         safe_name = "UIView".into();
     }
-
-    // Подмена проблемных Контроллеров
-    let problematic_controllers = ["BarcodeReaderViewController", "VideoViewController"];
-    if problematic_controllers.iter().any(|&c| safe_name == c) {
-        log!("[DEBUG NIB] ВНИМАНИЕ: Подменяем {} на базовый UIViewController", safe_name);
-        safe_name = "UIViewController".into();
-    }
     // --- КОНЕЦ ХАКА ---
 
     let class = env.objc.get_known_class(&safe_name, &mut env.mem);
