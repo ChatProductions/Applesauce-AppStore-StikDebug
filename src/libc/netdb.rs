@@ -177,33 +177,31 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     };
 
     // Lazy-init a persistent zeroed 64-byte dummy hostent.
-    //
-    // WHY byte-by-byte: env.mem.alloc() returns MutPtr<c_void>.  The write()
-    // method requires T: SafeWrite, and c_void does not implement SafeRead
-    // (and therefore not SafeWrite either).  Casting to MutPtr<u8> gives us a
-    // type that does implement SafeWrite, so we can zero the block one byte at
-    // a time without unsafe code.
     if env.libc_state.netdb.dummy_hostent_ptr == 0 {
         const DUMMY_SIZE: u32 = 64;
+
         let void_ptr = env.mem.alloc(DUMMY_SIZE);
-        let base = void_ptr.addr();
+
+        // Cast once to a byte pointer
+        let byte_ptr = void_ptr.cast::<u8>();
+
+        // Zero memory safely using pointer arithmetic
         for i in 0..DUMMY_SIZE {
-            let byte_ptr: MutPtr<u8> = Ptr::from_bits(base + i);
-            env.mem.write(byte_ptr, 0u8);
+            env.mem.write(byte_ptr.add(i), 0u8);
         }
-        env.libc_state.netdb.dummy_hostent_ptr = base;
+
+        // Store raw address (since your state uses u32)
+        env.libc_state.netdb.dummy_hostent_ptr = void_ptr.to_bits();
     }
 
     let dummy_addr = env.libc_state.netdb.dummy_hostent_ptr;
+
     log!(
         "gethostbyname(\"{}\") — networking not implemented, \
          returning zeroed dummy hostent at 0x{:08x}",
         hostname, dummy_addr,
     );
 
-    // Return the dummy so callers that only NULL-check survive.
-    // h_addr_list lives at offset 0x10 in a real hostent; it will read as
-    // NULL from the zeroed block, signalling "address not found".
     MutPtr::from_bits(dummy_addr)
 }
 
