@@ -132,32 +132,32 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - raise
 
-// Raises (throws) the exception.
-//
-// FIXED: We have removed panic! to allow the guest to attempt to continue.
-// Note: Since touchHLE doesn't support Stack Unwinding (setjmp/longjmp), 
-// the guest will continue execution on the very next instruction after 
-// the call to -raise.
 - (())raise {
-    let name   = env.objc.borrow::<NSExceptionHostObject>(this).name;
-    let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
+    // 1. Safety check to prevent host-side panic if 'this' is an invalid pointer
+    if !env.objc.is_pointer_valid(this) {
+        log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
+        return;
+    }
+
+    let host = env.objc.borrow::<NSExceptionHostObject>(this);
+    let name   = host.name;
+    let reason = host.reason;
+    let user_info = host.user_info;
+    drop(host); // Drop borrow before calling objc_str to avoid borrow conflicts
     
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
-    // Log the exception details clearly for debugging
-    log!("GUEST NSException raised (Continuing without panic):");
+    log!("KAMI RETRO - NSException raised (Continuing):");
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
 
-    // If there is userInfo, log it too (useful for network errors)
-    let user_info = env.objc.borrow::<NSExceptionHostObject>(this).user_info;
     if user_info != nil {
-        log!("  UserInfo: <present>");
+        log!("  UserInfo present.");
     }
     
-    // We return () to the guest. 
-    // The guest will now continue execution.
+    // We return control to the guest. 
+    // This allows the game to hit its own error-handling instead of crashing the emulator.
 }
 
 // MARK: - NSCopying
