@@ -22,7 +22,7 @@
 //! - [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/html/index-wide.html)
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::libc::errno::{set_errno, EBADF, ECONNRESET, EINVAL, EPROTONOSUPPORT};
+use crate::libc::errno::{set_errno, EBADF, ECONNRESET, EINVAL, EIO, EISCONN, ESOCKTNOSUPPORT, EPROTONOSUPPORT};
 use crate::libc::posix_io::{close, find_or_create_socket, is_socket, FileDescriptor};
 use crate::libc::time::timeval;
 use crate::mem::{
@@ -361,13 +361,24 @@ fn connect(
     address: ConstPtr<sockaddr>,
     address_len: socklen_t,
 ) -> i32 {
-    // TODO: handle errno properly
     set_errno(env, 0);
 
-    let type_ = State::get(env).sockets.get(&socket).unwrap().type_;
-    assert!(type_ == SOCK_STREAM);
+    let Some(sock) = State::get(env).sockets.get(&socket) else {
+        set_errno(env, EBADF);
+        return -1;
+    };
 
-    assert_eq!(address_len, guest_size_of::<sockaddr>());
+    let type_ = sock.type_;
+    if type_ != SOCK_STREAM {
+        set_errno(env, ESOCKTNOSUPPORT);
+        return -1;
+    }
+
+    if address_len < guest_size_of::<sockaddr>() {
+        set_errno(env, EINVAL);
+        return -1;
+    }
+
     let sockaddr_val = env.mem.read(address);
     log_dbg!(
         "connect({:?} ({:?}), {})",
@@ -379,23 +390,46 @@ fn connect(
     let socket_address = sockaddr_val.to_sockaddr_v4();
     log_dbg!("connect: socket address {:?}", socket_address);
 
-    assert!(State::get(env)
+    if State::get(env)
         .sockets
         .get(&socket)
         .unwrap()
         .tcp_stream
-        .is_none());
-    let host_stream = TcpStream::connect(socket_address).unwrap();
-    // We set host socket as non-blocking in order to have
-    // more control of how and when it's used
-    host_stream.set_nonblocking(true).unwrap();
-    State::get_mut(env)
-        .sockets
-        .get_mut(&socket)
-        .unwrap()
-        .tcp_stream = Some(host_stream);
+        .is_some()
+    {
+        set_errno(env, EISCONN);
+        return -1;
+    }
 
-    0 // Success
+    match TcpStream::connect(socket_address) {
+        Ok(host_stream) => {
+            if let Err(e) = host_stream.set_nonblocking(true) {
+                log!("connect: set_nonblocking failed: {}", e);
+                set_errno(env, EIO);
+                return -1;
+            }
+            State::get_mut(env)
+                .sockets
+                .get_mut(&socket)
+                .unwrap()
+                .tcp_stream = Some(host_stream);
+            0 // Success
+        }
+        Err(e) => {
+            log!("connect: TcpStream::connect({:?}) failed: {}", socket_address, e);
+            let errno = match e.kind() {
+                std::io::ErrorKind::ConnectionRefused  => ECONNREFUSED,
+                std::io::ErrorKind::TimedOut           => ETIMEDOUT,
+                std::io::ErrorKind::AddrNotAvailable   => EADDRNOTAVAIL,
+                std::io::ErrorKind::AddrInUse          => EADDRINUSE,
+                std::io::ErrorKind::NetworkUnreachable => ENETUNREACH,
+                std::io::ErrorKind::PermissionDenied   => EACCES,
+                _                                      => EIO,
+            };
+            set_errno(env, errno);
+            -1
+        }
+    }
 }
 
 fn select(
