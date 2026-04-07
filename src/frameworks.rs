@@ -32,6 +32,7 @@ pub mod core_foundation;
 pub mod core_graphics;
 pub mod core_location;
 pub mod core_motion;
+pub mod core_video; // <--- ДОБАВЛЕНО: МОДУЛЬ КАМЕРЫ (ОБЯЗАТЕЛЬНАЯ СТРОКА)
 pub mod foundation;
 pub mod game_kit;
 pub mod libicucore; // <--- ДОБАВЛЕНА БИБЛИОТЕКА ICU
