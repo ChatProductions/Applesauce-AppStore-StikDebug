@@ -133,16 +133,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - raise
 
 - (())raise {
-    // KAMI RETRO FIX: 
-    // Use contains_key directly on env.objc. 
-    // If it's a NullableBox, it will automatically deref to the ObjC state.
-    if this == nil || !env.objc.contains_key(this) {
+    // We check the 'objects' HashMap directly to see if this pointer exists.
+    // We also use &this because HashMap::contains_key takes a reference.
+    if this == nil || !env.objc.objects.contains_key(&this) {
         log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
         return;
     }
 
-    // Now it is safe to borrow the host object
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
+
     let name   = host.name;
     let reason = host.reason;
     drop(host); 
