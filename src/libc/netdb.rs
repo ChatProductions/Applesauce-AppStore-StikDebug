@@ -220,6 +220,10 @@ fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// gethostbyname
+// ---------------------------------------------------------------------------
+
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
     let hostname = if name.is_null() {
         "<null>".to_string()
@@ -227,23 +231,31 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
         env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
     };
 
-    // Use the pointer stored in the netdb/libc state
-    let dummy_ptr = env.state.libc.netdb.dummy_hostent_ptr;
+    // LAZY INITIALIZATION: Allocate the safe zone if it hasn't been created yet
+    if env.libc_state.netdb_dummy_hostent_ptr == 0 {
+        let dummy_size = 64; // Large enough for hostent + padding
+        let ptr = env.mem.alloc(dummy_size);
+        env.mem.zero(ptr, dummy_size); // Ensure h_addr_list (offset 0x10) is 0
+        env.libc_state.netdb_dummy_hostent_ptr = ptr.address();
+    }
+
+    // Access the pointer from the libc state
+    let dummy_ptr = env.libc_state.netdb_dummy_hostent_ptr;
 
     if !env.options.network_access {
-        log_dbg!(
-            "gethostbyname(\"{}\") — Network disabled. Preventing 0x10 crash by returning dummy (0x{:08x})",
+        log!(
+            "gethostbyname(\"{}\") — network access disabled. Returning dummy (0x{:08x}) to avoid crash.",
             hostname, dummy_ptr
         );
-        return MutPtr::new(dummy_ptr);
+        return MutPtr::from_bits(dummy_ptr);
     }
 
     log!(
-        "gethostbyname(\"{}\") — Resolution stubbed for KAMI RETRO. Returning dummy (0x{:08x})",
+        "gethostbyname(\"{}\") — resolution stubbed for KAMI RETRO. Returning dummy (0x{:08x}).",
         hostname, dummy_ptr
     );
     
-    MutPtr::new(dummy_ptr)
+    MutPtr::from_bits(dummy_ptr)
 }
 
 // ---------------------------------------------------------------------------
