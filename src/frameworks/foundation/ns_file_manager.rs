@@ -12,8 +12,9 @@ use crate::frameworks::foundation::ns_error::{NSCocoaErrorDomain, NSFileReadNoSu
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::fs::{FsError, GuestPath, GuestPathBuf};
 use crate::mem::{ConstPtr, MutPtr, Ptr};
+// ДОБАВЛЕН NSZonePtr для работы NSAllocateObject
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 
@@ -21,7 +22,7 @@ type NSSearchPathDirectory = NSUInteger;
 const NSApplicationDirectory: NSSearchPathDirectory = 1;
 const NSLibraryDirectory: NSSearchPathDirectory = 5;
 const NSDocumentDirectory: NSSearchPathDirectory = 9;
-const NSCachesDirectory: NSSearchPathDirectory = 13; // <-- ДОБАВИТЬ ЭТУ СТРОКУ
+const NSCachesDirectory: NSSearchPathDirectory = 13;
 
 type NSSearchPathDomainMask = NSUInteger;
 const NSUserDomainMask: NSSearchPathDomainMask = 1;
@@ -96,10 +97,27 @@ fn NSTemporaryDirectory(env: &mut Environment) -> id {
     autorelease(env, dir)
 }
 
+// ДОБАВЛЕНА ФУНКЦИЯ NSAllocateObject СЮДА, ЧТОБЫ ЛИНКЕР ЕЕ ТОЧНО НАШЕЛ
+fn NSAllocateObject(
+    env: &mut Environment,
+    class: id,
+    extra_bytes: NSUInteger,
+    _zone: NSZonePtr,
+) -> id {
+    if extra_bytes > 0 {
+        log!("Warning: NSAllocateObject called with extra_bytes={}, which is currently unhandled!", extra_bytes);
+    }
+    
+    // Перенаправляем вызов в стандартный метод alloc данного класса
+    msg![env; class alloc]
+}
+
+// ДОБАВЛЯЕМ ЕЕ В МАССИВ ЭКСПОРТА, КОТОРЫЙ УЖЕ ЗАВЕДЕН В СИСТЕМУ
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSHomeDirectory()),
     export_c_func!(NSTemporaryDirectory()),
     export_c_func!(NSSearchPathForDirectoriesInDomains(_, _, _)),
+    export_c_func!(NSAllocateObject(_, _, _)),
 ];
 
 #[derive(Default)]
@@ -145,11 +163,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path == nil {
         return nil;
     }
-    
-    // В Foundation метод возвращает локализованное имя файла.
-    // Если локализованного имени нет, метод выступает полным аналогом lastPathComponent.
-    // Так как в touchHLE уже есть path_algorithms.rs для NSString, 
-    // мы просто вызываем нативный эмулируемый метод:
+    // Наша успешная реализация через lastPathComponent
     msg![env; path lastPathComponent]
 }
 
@@ -521,4 +535,3 @@ fn file_attributes_common(env: &mut Environment, guest_path: &GuestPath) -> id {
     release(env, dict);
     autorelease(env, dict_imm)
 }
-
