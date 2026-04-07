@@ -148,7 +148,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithPath:(id)path { // NSString*
     if path == nil {
-        log!("NSBundle initWithPath: nil path provided");
+        log_dbg!("NSBundle initWithPath: nil path provided");
         release(env, this);
         return nil;
     }
