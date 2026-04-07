@@ -132,11 +132,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - raise
 
-- ((()))raise {
-    // Check if 'this' is nil or if it exists in the host object table.
-    // This prevents the host from panicking when the guest tries to use 
-    // an invalid exception pointer (common in the KamiChallenge socket loop).
-    if this == nil || !env.objc.get().contains_key(this) {
+- (())raise {
+    // KAMI RETRO FIX: 
+    // Use contains_key directly on env.objc. 
+    // If it's a NullableBox, it will automatically deref to the ObjC state.
+    if this == nil || !env.objc.contains_key(this) {
         log!("GUEST NSException: Attempted to raise on invalid pointer {:?}. Ignoring.", this);
         return;
     }
@@ -145,14 +145,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
     let name   = host.name;
     let reason = host.reason;
-    drop(host); // release borrow before calling objc_str to avoid potential conflicts
+    drop(host); 
     
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
-    // KAMI RETRO: We log the exception and return control to the guest.
-    // This allows the game's internal "offline mode" or error-handling to 
-    // run instead of killing the emulator.
     log!("KAMI RETRO - NSException raised (Continuing):");
     log!("  Name:   {}", name_s);
     log!("  Reason: {}", reason_s);
