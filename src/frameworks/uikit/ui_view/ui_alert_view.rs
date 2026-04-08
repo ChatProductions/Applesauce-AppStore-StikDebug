@@ -264,33 +264,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     if delegate == nil { return; }
 
     // alertView:clickedButtonAtIndex:
-    let sel_clicked = env.objc
-        .lookup_selector("alertView:clickedButtonAtIndex:")
-        .unwrap();
-    let responds: bool = msg![env; delegate respondsToSelector:sel_clicked];
-    if responds {
-        let _: () = msg![env; delegate alertView:this
-                             clickedButtonAtIndex:button_index];
+    if let Some(sel_clicked) = env.objc
+        .lookup_selector("alertView:clickedButtonAtIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel_clicked];
+        if responds {
+            let _: () = msg![env; delegate alertView:this
+                                 clickedButtonAtIndex:button_index];
+        }
     }
 
     // alertView:willDismissWithButtonIndex:
-    let sel_will = env.objc
-        .lookup_selector("alertView:willDismissWithButtonIndex:")
-        .unwrap();
-    let responds: bool = msg![env; delegate respondsToSelector:sel_will];
-    if responds {
-        let _: () = msg![env; delegate alertView:this
-                        willDismissWithButtonIndex:button_index];
+    if let Some(sel_will) = env.objc
+        .lookup_selector("alertView:willDismissWithButtonIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel_will];
+        if responds {
+            let _: () = msg![env; delegate alertView:this
+                            willDismissWithButtonIndex:button_index];
+        }
     }
 
     // alertView:didDismissWithButtonIndex:
-    let sel_did = env.objc
-        .lookup_selector("alertView:didDismissWithButtonIndex:")
-        .unwrap();
-    let responds: bool = msg![env; delegate respondsToSelector:sel_did];
-    if responds {
-        let _: () = msg![env; delegate alertView:this
-                         didDismissWithButtonIndex:button_index];
+    if let Some(sel_did) = env.objc
+        .lookup_selector("alertView:didDismissWithButtonIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel_did];
+        if responds {
+            let _: () = msg![env; delegate alertView:this
+                             didDismissWithButtonIndex:button_index];
+        }
     }
 }
 
