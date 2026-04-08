@@ -20,7 +20,7 @@ use crate::Environment;
 pub type CFArrayRef = super::CFTypeRef;
 pub type CFMutableArrayRef = super::CFTypeRef;
 
-fn CFArrayCreateMutable(
+pub fn CFArrayCreateMutable(
     env: &mut Environment,
     allocator: CFAllocatorRef,
     capacity: CFIndex,
@@ -44,7 +44,7 @@ fn CFArrayGetValueAtIndex(env: &mut Environment, array: CFArrayRef, idx: CFIndex
     value.cast().cast_const()
 }
 
-fn CFArrayAppendValue(env: &mut Environment, array: CFMutableArrayRef, value: ConstVoidPtr) {
+pub fn CFArrayAppendValue(env: &mut Environment, array: CFMutableArrayRef, value: ConstVoidPtr) {
     let value: id = value.cast().cast_mut();
     msg![env; array addObject:value]
 }
