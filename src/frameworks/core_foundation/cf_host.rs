@@ -15,7 +15,7 @@ use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
-use std::net::SocketAddrV4;
+use std::net::{SocketAddrV4, ToSocketAddrs};
 
 pub type CFHostRef = CFTypeRef;
 
