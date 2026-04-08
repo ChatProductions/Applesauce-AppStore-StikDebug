@@ -992,32 +992,65 @@ where
                 }
             }
             b'x' | b'X' | b'u' => {
-                assert!(length_modifier.is_none());
                 let base: u32 = match specifier {
                     b'x' | b'X' => 16,
                     b'u' => 10,
                     _ => unreachable!(),
                 };
-                let res = str_to_int_inner_generic(
-                    env,
-                    &getc_fn,
-                    &ungetc_fn,
-                    subject,
-                    src_char_idx,
-                    base,
-                    if max_width > 0 { max_width } else { u32::MAX },
-                    |s, base| u32::from_str_radix(s, base).unwrap_or(u32::MAX),
-                    |num| num.wrapping_neg(),
-                );
-                match res {
-                    Ok((val, len)) => {
-                        src_char_idx += len;
-                        if !suppress_assignment {
-                            let c_u32_ptr: ConstPtr<u32> = args.next(env);
-                            env.mem.write(c_u32_ptr.cast_mut(), val);
+
+                match length_modifier {
+                    Some(lm) => {
+                        match lm {
+                            "h" => {
+                                // unsigned short*
+                                let res = str_to_int_inner_generic(
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| u16::from_str_radix(s, base).unwrap_or(u16::MAX),
+                                    |num| num.wrapping_neg(),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let c_u16_ptr: ConstPtr<u16> = args.next(env);
+                                            env.mem.write(c_u16_ptr.cast_mut(), val);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            _ => unimplemented!(),
                         }
                     }
-                    Err(_) => break,
+                    None => {
+                        let res = str_to_int_inner_generic(
+                            env,
+                            &getc_fn,
+                            &ungetc_fn,
+                            subject,
+                            src_char_idx,
+                            base,
+                            if max_width > 0 { max_width } else { u32::MAX },
+                            |s, base| u32::from_str_radix(s, base).unwrap_or(u32::MAX),
+                            |num| num.wrapping_neg(),
+                        );
+                        match res {
+                            Ok((val, len)) => {
+                                src_char_idx += len;
+                                if !suppress_assignment {
+                                    let c_u32_ptr: ConstPtr<u32> = args.next(env);
+                                    env.mem.write(c_u32_ptr.cast_mut(), val);
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
                 }
             }
             b'[' => {
