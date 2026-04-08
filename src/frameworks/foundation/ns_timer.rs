@@ -244,6 +244,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 
         this
     }
+
+// =========================================================================
+// MARK: - Description
+// =========================================================================
+
+- (id)description {
+    let host = env.objc.borrow::<NSTimerHostObject>(this);
+    let validity = if host.due_by.is_some() { "valid" } else { "invalid" };
+    let repeats_str = if host.repeats { "repeats" } else { "one-shot" };
+    let selector_str = host.selector.as_str(&env.mem);
+    let s = format!(
+        "<NSTimer: {:?}; {} {}; interval={:.4}s; target={:?}; selector={}>",
+        this,
+        validity,
+        repeats_str,
+        host.ns_interval,
+        host.target,
+        selector_str
+    );
+    let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
+    msg_class![env; NSString stringWithUTF8String:cstr]
+}
     
 // TODO: more constructors
 // TODO: more accessors
@@ -360,3 +382,4 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
 
     new_due_by
 }
+
