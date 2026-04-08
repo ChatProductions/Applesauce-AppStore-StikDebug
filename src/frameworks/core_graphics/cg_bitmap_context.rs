@@ -54,6 +54,7 @@ pub fn CGBitmapContextCreate(
         kCGColorSpaceGenericGray => components_for_gray(bitmap_info).unwrap(),
         _ => unimplemented!("support other color spaces"),
     };
+
     let (data, data_is_owned, bytes_per_row) = if data.is_null() {
         let bytes_per_row = if bytes_per_row == 0 {
             width.checked_mul(component_count).unwrap()
@@ -79,7 +80,7 @@ pub fn CGBitmapContextCreate(
             color_space,
             alpha_info: bitmap_info & kCGBitmapAlphaInfoMask,
         }),
-        transform: Default::default(), // <--- ИСПРАВЛЕНИЕ: добавлено поле transform
+        transform: CGAffineTransformIdentity, // <--- ИСПРАВЛЕНИЕ: Использована константа вместо Default::default()
         // When creating a CGBitmapContext, initialise:
         rgb_fill_color:   (0.0, 0.0, 0.0, 1.0),
         rgb_stroke_color: (0.0, 0.0, 0.0, 1.0),
@@ -93,6 +94,7 @@ pub fn CGBitmapContextCreate(
         state_stack:      Vec::new(),
         path_points:      Vec::new(),
     };
+
     let isa = env
         .objc
         .get_known_class("_touchHLE_CGContext", &mut env.mem);
@@ -136,6 +138,7 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
                 kCGImageAlphaNoneSkipLast | kCGImageAlphaPremultipliedLast
             )
     );
+
     let pixels = env
         .mem
         .bytes_at(
@@ -143,6 +146,7 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
             bitmap_data.bytes_per_row * bitmap_data.height,
         )
         .to_vec();
+
     cg_image::from_image(
         env,
         Image::from_pixel_vec(pixels, (bitmap_data.width, bitmap_data.height)),
@@ -247,10 +251,8 @@ fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usi
         kCGColorSpaceGenericRGB => {
             match data.alpha_info {
                 kCGImageAlphaNone => (0, 1, 2, None),
-                kCGImageAlphaPremultipliedLast |
-                kCGImageAlphaLast => (0, 1, 2, Some(3)),
-                kCGImageAlphaPremultipliedFirst |
-                kCGImageAlphaFirst => (1, 2, 3, Some(0)),
+                kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 1, 2, Some(3)),
+                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 2, 3, Some(0)),
                 kCGImageAlphaNoneSkipLast => (0, 1, 2, None),
                 kCGImageAlphaNoneSkipFirst => (1, 2, 3, None),
                 kCGImageAlphaOnly => (0, 0, 0, Some(0)),
@@ -261,8 +263,7 @@ fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usi
             match data.alpha_info {
                 kCGImageAlphaNone => (0, 0, 0, None),
                 kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 0, 0, Some(1)),
-                kCGImageAlphaPremultipliedFirst |
-                kCGImageAlphaFirst => (1, 1, 1, Some(0)),
+                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 1, 1, Some(0)),
                 kCGImageAlphaNoneSkipLast => (0, 0, 0, None),
                 kCGImageAlphaNoneSkipFirst => (1, 1, 1, None),
                 kCGImageAlphaOnly => (0, 0, 0, Some(0)),
@@ -309,8 +310,7 @@ fn put_pixel(
         return;
     }
     let (x, y) = (x as GuestUSize, y as GuestUSize);
-    if x >= data.width ||
-        y >= data.height {
+    if x >= data.width || y >= data.height {
         return;
     }
 
@@ -321,10 +321,8 @@ fn put_pixel(
     let bg_pixel = get_pixel(data, pixels, first_component_idx);
     let (r, g, b, a) = if blend {
         match data.alpha_info {
-            kCGImageAlphaLast |
-            kCGImageAlphaFirst => blend_straight(bg_pixel, pixel),
-            kCGImageAlphaPremultipliedLast |
-            kCGImageAlphaPremultipliedFirst => {
+            kCGImageAlphaLast | kCGImageAlphaFirst => blend_straight(bg_pixel, pixel),
+            kCGImageAlphaPremultipliedLast | kCGImageAlphaPremultipliedFirst => {
                 blend_premultiplied(bg_pixel, pixel)
             }
             kCGImageAlphaOnly => (pixel.0, pixel.1, pixel.2, blend_alpha(bg_pixel.3, pixel.3)),
@@ -386,8 +384,7 @@ impl CGBitmapContextDrawer<'_> {
     }
     pub fn rgb_fill_color(&self) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
         let multiply_by = match self.bitmap_info.alpha_info {
-            kCGImageAlphaPremultipliedLast |
-            kCGImageAlphaPremultipliedFirst => {
+            kCGImageAlphaPremultipliedLast | kCGImageAlphaPremultipliedFirst => {
                 self.rgb_fill_color.3
             }
             _ => 1.0,
@@ -465,7 +462,6 @@ pub(super) fn draw_image(
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
 
     let (image_width, image_height) = image.dimensions();
-
     for ((x, y), (texel_x, texel_y)) in drawer.iter_transformed_pixels(rect) {
         let texel_x = (image_width as f32 * texel_x) as i32;
         let texel_y = (image_height as f32 * (1.0 - texel_y)) as i32;
