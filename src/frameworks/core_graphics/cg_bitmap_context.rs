@@ -80,10 +80,18 @@ pub fn CGBitmapContextCreate(
             color_space,
             alpha_info: bitmap_info & kCGBitmapAlphaInfoMask,
         }),
-        rgb_fill_color: (0.0, 0.0, 0.0, 0.0),
-        rgb_stroke_color: (0.0, 0.0, 0.0, 1.0), // Добавлено (черный по умолчанию)
-        transform: CGAffineTransformIdentity,
-        state_stack: Vec::new(),
+        // When creating a CGBitmapContext, initialise:
+        rgb_fill_color:   (0.0, 0.0, 0.0, 1.0),
+        rgb_stroke_color: (0.0, 0.0, 0.0, 1.0),
+        alpha:            1.0,
+        line_width:       1.0,
+        line_cap:         0,   // kCGLineCapButt
+        line_join:        0,   // kCGLineJoinMiter
+        miter_limit:      10.0,
+        flatness:         0.0,
+        blend_mode:       0,   // kCGBlendModeNormal
+        state_stack:      Vec::new(),
+        path_points:      Vec::new(),
     };
     let isa = env
         .objc
