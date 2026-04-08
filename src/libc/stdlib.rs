@@ -263,11 +263,15 @@ fn setenv(env: &mut Environment, name: ConstPtr<u8>, value: ConstPtr<u8>, overwr
 fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
     set_errno(env, 0);
     let name_cstr = env.mem.cstr_at(name);
-    if !env.env_vars.contains_key(name_cstr) {
+    if let Some(&existing) = env.env_vars.get(name_cstr) {
+        // Free the old value
+        env.mem.free(existing.cast());
+        // Remove from env_vars map
+        env.env_vars.remove(name_cstr);
+        0
+    } else {
         set_errno(env, EINVAL);
         -1
-    } else {
-        todo!()
     }
 }
 
