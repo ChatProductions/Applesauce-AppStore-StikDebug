@@ -88,7 +88,6 @@ fn reallocf(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> Mut
     
     // Пытаемся выделить новую память
     let new_ptr = env.mem.realloc(ptr, size);
-    
     // Главная фишка reallocf: если realloc вернул NULL (не удалось выделить), 
     // старый указатель должен быть освобожден.
     if new_ptr.is_null() {
@@ -183,14 +182,10 @@ fn prng(state: u32) -> u32 {
 }
 
 const RAND_MAX: i32 = i32::MAX;
-
 fn srand(env: &mut Environment, seed: u32) {
     env.libc_state.stdlib.rand = seed;
 }
 
-/// BSD function that seeds rand() from a random source (/dev/random).
-/// Stubbed: seeds using arc4random so the game gets a non-deterministic seed
-/// without requiring actual /dev/random access.
 fn sranddev(env: &mut Environment) {
     let seed = arc4random(env);
     env.libc_state.stdlib.rand = seed;
@@ -372,7 +367,7 @@ fn strtoull(
         str.cast_mut(),
         0,
         base.try_into().unwrap(),
-        u64::MAX,
+        u32::MAX, // <--- ИСПРАВЛЕНО НА u32::MAX
         |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
         |num| num.wrapping_neg(),
     );
@@ -603,7 +598,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(arc4random_stir()),
     export_c_func!(arc4random_addrandom()),
     export_c_func!(getenv(_)),
-    export_c_func!(setenv(_, _, _, _)),
+    export_c_func!(setenv(_, _, _)), // <--- ИСПРАВЛЕНИЕ НА 3 АРГУМЕНТА ГОСТЯ
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
     export_c_func!(abort()),
