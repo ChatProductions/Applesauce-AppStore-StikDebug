@@ -277,7 +277,7 @@ pub fn CFArrayExchangeValuesAtIndices(
 
 // MARK: - Sorting
 
-pub fn CFArraySortValues<U>(
+pub fn CFArraySortValues(
     env: &mut Environment,
     array: CFMutableArrayRef,
     range_location: CFIndex,
@@ -302,7 +302,7 @@ pub fn CFArraySortValues<U>(
             let b = items[j];
             let res: i32 = comparator.call_from_host(
                 env,
-                (a.cast::<U>().cast_const(), b.cast().cast_const(), context),
+                (a.cast().cast_const(), b.cast().cast_const(), context),
             );
             if res > 0 {
                 items.swap(j - 1, j);
@@ -322,7 +322,7 @@ pub fn CFArraySortValues<U>(
 
 // MARK: - Apply / callbacks
 
-pub fn CFArrayApplyFunction<U>(
+pub fn CFArrayApplyFunction(
     env: &mut Environment,
     array: CFArrayRef,
     range_location: CFIndex,
@@ -336,7 +336,7 @@ pub fn CFArrayApplyFunction<U>(
         let val: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let _: () = applier.call_from_host(
             env,
-            (val.cast::<U>().cast_const(), context),
+            (val.cast().cast_const(), context),
         );
     }
 }
