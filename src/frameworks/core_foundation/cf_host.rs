@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 //! `CFHost` — CFNetwork host resolution stub.
 
-use crate::abi::GuestFunction;
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
@@ -34,7 +34,6 @@ pub(crate) struct CFHostHostObject {
     pub(crate) callout:   Option<GuestFunction>,
     pub(crate) context:   MutVoidPtr,
 }
-
 
 impl HostObject for CFHostHostObject {}
 
@@ -64,6 +63,7 @@ fn alloc_cfhost(
         Box::new(CFHostHostObject {
             name,
             address,
+            resolved: Vec::new(),
             callout: None,
             context: MutVoidPtr::null(),
         }),
@@ -155,14 +155,12 @@ fn CFHostStartInfoResolution(
                     std::net::SocketAddr::V6(_)  => None, // IPv4-only for now
                 })
                 .collect();
-
             log!(
                 "CFHostStartInfoResolution: '{}' resolved to {} address(es): {:?}",
                 name_str,
                 resolved.len(),
                 resolved
             );
-
             env.objc.borrow_mut::<CFHostHostObject>(host).resolved = resolved;
 
             // Fire the client callout if one was registered via CFHostSetClient.
@@ -179,7 +177,7 @@ fn CFHostStartInfoResolution(
                 //                                 const CFStreamError*, void* info)
                 // We pass a null error pointer to signal success.
                 let error_ptr = MutVoidPtr::null();
-                let _ = env.call_function(cb, (host, info, error_ptr, ctx));
+                let _ = cb.call_from_host(env, (host, info, error_ptr, ctx));
             }
 
             true
@@ -245,10 +243,10 @@ fn CFHostSetClient(
         // Passing NULL clears the client.
         (None, MutVoidPtr::null())
     } else {
-        let cb = GuestFunction::from_addr(client_cb.to_bits());
+        let cb = GuestFunction::from_addr_with_thumb_bit(client_cb.to_bits());
         let ctx_info: MutVoidPtr = if !client_ctx.is_null() {
             let info_ptr: crate::mem::MutPtr<MutVoidPtr> =
-                (client_ctx.to_bits() + 4).into();
+                crate::mem::Ptr::from_bits(client_ctx.to_bits() + 4);
             env.mem.read(info_ptr)
         } else {
             MutVoidPtr::null()
@@ -259,7 +257,6 @@ fn CFHostSetClient(
     let h = env.objc.borrow_mut::<CFHostHostObject>(host);
     h.callout = callout;
     h.context = context;
-
     log_dbg!(
         "CFHostSetClient: callout={:?} context={:?}",
         callout, context
@@ -280,7 +277,6 @@ fn CFHostGetAddressing(
 
     let resolved = env.objc.borrow::<CFHostHostObject>(host).resolved.clone();
     let did_resolve = !resolved.is_empty();
-
     if !has_been_resolved.is_null() {
         env.mem.write(has_been_resolved.cast::<u8>(), did_resolve as u8);
     }
@@ -295,8 +291,12 @@ fn CFHostGetAddressing(
     use crate::frameworks::core_foundation::cf_data::CFDataCreate;
     use crate::libc::sys::socket::sockaddr;
 
-    let array = CFArrayCreateMutable(env);
-
+    let array = CFArrayCreateMutable(
+        env, 
+        crate::frameworks::core_foundation::cf_allocator::kCFAllocatorDefault, 
+        0, 
+        crate::mem::ConstVoidPtr::null()
+    );
     for addr in &resolved {
         let sa = sockaddr::from_ipv4_parts(addr.ip().octets(), addr.port());
         // Write the 16-byte sockaddr into a temporary guest buffer, then
@@ -361,3 +361,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFHostGetReachability(_, _)),
     export_c_func!(CFHostIsInfoResolved(_, _)),
 ];
+
