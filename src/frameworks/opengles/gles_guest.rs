@@ -1552,6 +1552,15 @@ fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.UnmapBufferOES(target) })
 }
 
+fn glGetTexParameteriv(
+    _env: &mut Environment,
+    type_: GLenum,
+    stride: GLsizei,
+    _pointer: ConstVoidPtr,
+) {
+    log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+}
+
 /// If fog is enabled, check if the values for start and end distances
 /// are equal.
 /// Apple platforms (even modern Mac OS) seem to handle that
@@ -1771,6 +1780,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetBufferParameteriv(_, _, _)),
     export_c_func!(glMapBufferOES(_, _)),
     export_c_func!(glUnmapBufferOES(_)),
+    export_c_func!(glGetTexParameteriv(_, _, _)),
 ];
 
 fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
