@@ -293,7 +293,7 @@ fn CFHostGetAddressing(
     // (16 bytes, matching the guest sockaddr layout).
     use crate::frameworks::core_foundation::cf_array::CFArrayCreateMutable;
     use crate::frameworks::core_foundation::cf_data::CFDataCreate;
-    use crate::libc::sys_socket::sockaddr;
+    use crate::libc::sys::socket::sockaddr;
 
     let array = CFArrayCreateMutable(env);
 
