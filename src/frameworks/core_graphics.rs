@@ -57,7 +57,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 
 #[derive(Default)]
 pub struct State {
-    cg_context: cg_context::State,
+    // cg_context: cg_context::State,
 }
 
 pub type CGFloat = f32;
