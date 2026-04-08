@@ -76,7 +76,6 @@ pub(super) struct CGContextState {
     pub blend_mode:   i32,
     pub transform:    CGAffineTransform,
 }
-l
 
 pub(super) enum CGContextSubclass {
     CGBitmapContext(cg_bitmap_context::CGBitmapContextData),
