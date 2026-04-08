@@ -28,11 +28,13 @@ const kCFHostReachability: CFHostInfoType = 2;
 type CFStreamError = u64; // two i32s packed; we never inspect it
 
 pub(crate) struct CFHostHostObject {
-    pub(crate) address: Option<SocketAddrV4>,
-    pub(crate) name: Option<String>,
-    pub(crate) callout: Option<GuestFunction>,
-    pub(crate) context: MutVoidPtr,
+    pub(crate) address:   Option<SocketAddrV4>,
+    pub(crate) name:      Option<String>,
+    pub(crate) resolved:  Vec<SocketAddrV4>,   // populated after resolution
+    pub(crate) callout:   Option<GuestFunction>,
+    pub(crate) context:   MutVoidPtr,
 }
+
 
 impl HostObject for CFHostHostObject {}
 
@@ -120,20 +122,85 @@ fn CFHostStartInfoResolution(
     env: &mut Environment,
     host: CFHostRef,
     info: CFHostInfoType,
-    _error: MutVoidPtr,
+    error: MutVoidPtr, // CFStreamError*
 ) -> bool {
-    let name_str = env
-        .objc
-        .borrow::<CFHostHostObject>(host)
-        .name
-        .clone()
-        .unwrap_or_else(|| "<address>".to_string());
-    log!(
-        "CFHostStartInfoResolution: host={} info={} — stubbed, returning false",
-        name_str, info
-    );
-    false
+    if host.is_null() {
+        return false;
+    }
+
+    let name = env.objc.borrow::<CFHostHostObject>(host).name.clone();
+    let Some(name_str) = name else {
+        log!("CFHostStartInfoResolution: no hostname stored, returning false");
+        return false;
+    };
+
+    if info != kCFHostAddresses {
+        log!(
+            "CFHostStartInfoResolution: info type {} not supported, returning false",
+            info
+        );
+        return false;
+    }
+
+    // Perform a synchronous DNS lookup on the host side.
+    // Port 0 is used as a placeholder — only the IP addresses matter.
+    let lookup_str = format!("{}:0", name_str);
+    log_dbg!("CFHostStartInfoResolution: resolving '{}'", lookup_str);
+
+    match lookup_str.to_socket_addrs() {
+        Ok(addrs) => {
+            let resolved: Vec<SocketAddrV4> = addrs
+                .filter_map(|addr| match addr {
+                    std::net::SocketAddr::V4(v4) => Some(v4),
+                    std::net::SocketAddr::V6(_)  => None, // IPv4-only for now
+                })
+                .collect();
+
+            log!(
+                "CFHostStartInfoResolution: '{}' resolved to {} address(es): {:?}",
+                name_str,
+                resolved.len(),
+                resolved
+            );
+
+            env.objc.borrow_mut::<CFHostHostObject>(host).resolved = resolved;
+
+            // Fire the client callout if one was registered via CFHostSetClient.
+            let (callout, ctx) = {
+                let h = env.objc.borrow::<CFHostHostObject>(host);
+                (h.callout, h.context)
+            };
+            if let Some(cb) = callout {
+                log_dbg!(
+                    "CFHostStartInfoResolution: firing client callout {:?}",
+                    cb
+                );
+                // Signature: CFHostClientCallBack(CFHostRef, CFHostInfoType,
+                //                                 const CFStreamError*, void* info)
+                // We pass a null error pointer to signal success.
+                let error_ptr = MutVoidPtr::null();
+                let _ = env.call_function(cb, (host, info, error_ptr, ctx));
+            }
+
+            true
+        }
+        Err(e) => {
+            log!(
+                "CFHostStartInfoResolution: DNS lookup for '{}' failed: {}",
+                name_str, e
+            );
+            // Write a non-zero error if the caller gave us an error pointer.
+            if !error.is_null() {
+                // CFStreamError is domain (i32) + error (i32).
+                // Domain 1 = kCFStreamErrorDomainPOSIX.
+                let posix_err: u64 = (1u64) | ((e.raw_os_error().unwrap_or(0) as u64) << 32);
+                env.mem.write(error.cast::<u64>(), posix_err);
+            }
+            false
+        }
+    }
 }
+
 
 fn CFHostCancelInfoResolution(
     _env: &mut Environment,
@@ -162,24 +229,88 @@ fn CFHostUnscheduleFromRunLoop(
 }
 
 fn CFHostSetClient(
-    _env: &mut Environment,
-    _host: CFHostRef,
-    _client_cb: MutVoidPtr,  // CFHostClientCallBack
-    _client_ctx: MutVoidPtr, // CFHostClientContext*
+    env: &mut Environment,
+    host: CFHostRef,
+    client_cb: MutVoidPtr,  // CFHostClientCallBack (guest fn ptr)
+    client_ctx: MutVoidPtr, // CFHostClientContext* — we only need the info pointer
 ) -> bool {
-    log!("CFHostSetClient: stubbed, returning false");
-    false
+    if host.is_null() {
+        return false;
+    }
+
+    // The real CFHostClientContext is:
+    //   { CFIndex version; void *info; retain; release; copyDescription }
+    // We only read `info` (offset 4 on 32-bit).
+    let (callout, context) = if client_cb.is_null() {
+        // Passing NULL clears the client.
+        (None, MutVoidPtr::null())
+    } else {
+        let cb = GuestFunction::from_addr(client_cb.to_bits());
+        let ctx_info: MutVoidPtr = if !client_ctx.is_null() {
+            let info_ptr: crate::mem::MutPtr<MutVoidPtr> =
+                (client_ctx.to_bits() + 4).into();
+            env.mem.read(info_ptr)
+        } else {
+            MutVoidPtr::null()
+        };
+        (Some(cb), ctx_info)
+    };
+
+    let h = env.objc.borrow_mut::<CFHostHostObject>(host);
+    h.callout = callout;
+    h.context = context;
+
+    log_dbg!(
+        "CFHostSetClient: callout={:?} context={:?}",
+        callout, context
+    );
+    true
 }
 
 // MARK: - Info accessors (always return nil / false)
 
 fn CFHostGetAddressing(
-    _env: &mut Environment,
-    _host: CFHostRef,
-    _has_been_resolved: MutVoidPtr, // Boolean*
+    env: &mut Environment,
+    host: CFHostRef,
+    has_been_resolved: MutVoidPtr, // Boolean* (u8*)
 ) -> CFTypeRef {
-    // Returns CFArrayRef of CFDataRef addresses — nil since we never resolve.
-    nil
+    if host.is_null() {
+        return nil;
+    }
+
+    let resolved = env.objc.borrow::<CFHostHostObject>(host).resolved.clone();
+    let did_resolve = !resolved.is_empty();
+
+    if !has_been_resolved.is_null() {
+        env.mem.write(has_been_resolved.cast::<u8>(), did_resolve as u8);
+    }
+
+    if !did_resolve {
+        return nil;
+    }
+
+    // Build a CFArray of CFData objects, each holding a struct sockaddr_in
+    // (16 bytes, matching the guest sockaddr layout).
+    use crate::frameworks::core_foundation::cf_array::CFArrayCreateMutable;
+    use crate::frameworks::core_foundation::cf_data::CFDataCreate;
+    use crate::libc::sys_socket::sockaddr;
+
+    let array = CFArrayCreateMutable(env);
+
+    for addr in &resolved {
+        let sa = sockaddr::from_ipv4_parts(addr.ip().octets(), addr.port());
+        // Write the 16-byte sockaddr into a temporary guest buffer, then
+        // wrap it in CFData and append to the array.
+        let sa_size = std::mem::size_of::<sockaddr>() as u32;
+        let buf: crate::mem::MutPtr<u8> = env.mem.alloc(sa_size).cast();
+        env.mem.write(buf.cast::<sockaddr>(), sa);
+        let data = CFDataCreate(env, buf.cast_const().cast(), sa_size);
+        crate::frameworks::core_foundation::cf_array::CFArrayAppendValue(env, array, data);
+        crate::frameworks::core_foundation::CFRelease(env, data);
+        env.mem.free(buf.cast());
+    }
+
+    array
 }
 
 fn CFHostGetNames(
@@ -201,11 +332,17 @@ fn CFHostGetReachability(
 }
 
 fn CFHostIsInfoResolved(
-    _env: &mut Environment,
-    _host: CFHostRef,
-    _info: CFHostInfoType,
+    env: &mut Environment,
+    host: CFHostRef,
+    info: CFHostInfoType,
 ) -> bool {
-    false
+    if host.is_null() {
+        return false;
+    }
+    if info != kCFHostAddresses {
+        return false;
+    }
+    !env.objc.borrow::<CFHostHostObject>(host).resolved.is_empty()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
