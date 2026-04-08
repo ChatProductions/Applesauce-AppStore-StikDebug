@@ -177,7 +177,8 @@ fn CFHostStartInfoResolution(
                 //                                 const CFStreamError*, void* info)
                 // We pass a null error pointer to signal success.
                 let error_ptr = MutVoidPtr::null();
-                let _ = cb.call_from_host(env, (host, info, error_ptr, ctx));
+                // ИСПРАВЛЕНИЕ: Явно указываем пустой тип : () 
+                let _: () = cb.call_from_host(env, (host, info, error_ptr, ctx));
             }
 
             true
@@ -236,9 +237,6 @@ fn CFHostSetClient(
         return false;
     }
 
-    // The real CFHostClientContext is:
-    //   { CFIndex version; void *info; retain; release; copyDescription }
-    // We only read `info` (offset 4 on 32-bit).
     let (callout, context) = if client_cb.is_null() {
         // Passing NULL clears the client.
         (None, MutVoidPtr::null())
@@ -299,13 +297,18 @@ fn CFHostGetAddressing(
     );
     for addr in &resolved {
         let sa = sockaddr::from_ipv4_parts(addr.ip().octets(), addr.port());
-        // Write the 16-byte sockaddr into a temporary guest buffer, then
-        // wrap it in CFData and append to the array.
         let sa_size = std::mem::size_of::<sockaddr>() as u32;
         let buf: crate::mem::MutPtr<u8> = env.mem.alloc(sa_size).cast();
         env.mem.write(buf.cast::<sockaddr>(), sa);
-        let data = CFDataCreate(env, buf.cast_const().cast(), sa_size);
-        crate::frameworks::core_foundation::cf_array::CFArrayAppendValue(env, array, data);
+        
+        // ИСПРАВЛЕНИЕ: добавлены правильные аргументы и касты
+        let data = CFDataCreate(
+            env, 
+            crate::frameworks::core_foundation::cf_allocator::kCFAllocatorDefault, 
+            buf.cast_const().cast(), 
+            sa_size as i32
+        );
+        crate::frameworks::core_foundation::cf_array::CFArrayAppendValue(env, array, data.cast().cast_const());
         crate::frameworks::core_foundation::CFRelease(env, data);
         env.mem.free(buf.cast());
     }
