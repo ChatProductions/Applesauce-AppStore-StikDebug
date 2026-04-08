@@ -129,7 +129,9 @@ impl StringHostObject {
                 StringHostObject::Utf8(Cow::Owned(string))
            }
             NSUTF8StringEncoding => {
-                let string = String::from_utf8(bytes.into_owned()).unwrap();
+                // Честно декодируем UTF-8, а невалидные байты заменяем на символ '', 
+                // чтобы предотвратить падение (panic) эмулятора на кривых данных от игр.
+                let string = String::from_utf8_lossy(&bytes).into_owned();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSUTF32LittleEndianStringEncoding => {
