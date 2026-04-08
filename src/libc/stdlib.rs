@@ -245,29 +245,32 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     value
 }
 
+// === ИСПРАВЛЕННЫЙ setenv ДЛЯ ОБХОДА БЛОКИРОВКИ ПАМЯТИ ===
 fn setenv(env: &mut Environment, name: ConstPtr<u8>, value: ConstPtr<u8>, overwrite: i32) -> i32 {
     set_errno(env, 0);
-    let name_cstr = env.mem.cstr_at(name);
-    if let Some(&existing) = env.env_vars.get(name_cstr) {
+    // Сохраняем имя в отдельный вектор, чтобы отпустить блокировку памяти
+    let name_bytes = env.mem.cstr_at(name).to_vec();
+    
+    if let Some(&existing) = env.env_vars.get(&name_bytes) {
         if overwrite == 0 {
             return 0;
         }
         env.mem.free(existing.cast());
     };
     let value = super::string::strdup(env, value);
-    let name_cstr = env.mem.cstr_at(name);
-    env.env_vars.insert(name_cstr.to_vec(), value);
+    env.env_vars.insert(name_bytes, value);
     0
 }
 
+// === ИСПРАВЛЕННЫЙ unsetenv ДЛЯ ОБХОДА БЛОКИРОВКИ ПАМЯТИ ===
 fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
     set_errno(env, 0);
-    let name_cstr = env.mem.cstr_at(name);
-    if let Some(&existing) = env.env_vars.get(name_cstr) {
-        // Free the old value
+    // Сохраняем имя в отдельный вектор
+    let name_bytes = env.mem.cstr_at(name).to_vec();
+    
+    if let Some(&existing) = env.env_vars.get(&name_bytes) {
         env.mem.free(existing.cast());
-        // Remove from env_vars map
-        env.env_vars.remove(name_cstr);
+        env.env_vars.remove(&name_bytes);
         0
     } else {
         set_errno(env, EINVAL);
@@ -369,7 +372,7 @@ fn strtoull(
         str.cast_mut(),
         0,
         base.try_into().unwrap(),
-        u32::MAX,
+        u64::MAX,
         |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
         |num| num.wrapping_neg(),
     );
@@ -474,8 +477,7 @@ fn wcstombs(
 
 fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     if cmd.is_null() {
-        return 1;
-        // shell is available
+        return 1; // shell is available
     }
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
     log!("system({:?})", cmd_str);
@@ -601,7 +603,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(arc4random_stir()),
     export_c_func!(arc4random_addrandom()),
     export_c_func!(getenv(_)),
-    export_c_func!(setenv(_, _, _)),
+    export_c_func!(setenv(_, _, _, _)),
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
     export_c_func!(abort()),
