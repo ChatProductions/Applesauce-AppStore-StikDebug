@@ -702,6 +702,7 @@ fn CFStringGetBytes(
         std::ptr::null_mut()
     };
     
+    let null_ptr: MutPtr<NSRange> = MutPtr::null();
     let success: bool = if buffer.is_null() {
         // Just compute required length
         msg![env; substring getBytes:buffer 
@@ -710,7 +711,7 @@ fn CFStringGetBytes(
              encoding:encoding_ns 
              options:options 
              range:(NSRange { location: 0, length: ns_range.length }) 
-             remainingRange:std::ptr::null_mut()]
+             remainingRange:null_ptr]
     } else {
         msg![env; substring getBytes:buffer 
              maxLength:max_len_u 
@@ -718,7 +719,7 @@ fn CFStringGetBytes(
              encoding:encoding_ns 
              options:options 
              range:(NSRange { location: 0, length: ns_range.length }) 
-             remainingRange:std::ptr::null_mut()]
+             remainingRange:null_ptr]
     };
     
     if !used_buf_len.is_null() {
@@ -1166,9 +1167,9 @@ fn CFStringTrim(
         return;
     }
     
-    // Trim from both ends
-    let trimmed: id = msg![env; string stringByTrimmingCharactersInSet:
-        msg_class![env; NSCharacterSet characterSetWithCharactersInString:trim_string]];
+    // Create character set first, then use it
+    let char_set: id = msg_class![env; NSCharacterSet characterSetWithCharactersInString:trim_string];
+    let trimmed: id = msg![env; string stringByTrimmingCharactersInSet:char_set];
     () = msg![env; string setString:trimmed];
 }
 
