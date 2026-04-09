@@ -14,6 +14,7 @@ pub struct NSDateComponentsHostObject {
     pub era:        NSInteger,
     pub year:       NSInteger,
     pub month:      NSInteger,
+    pub week:        NSInteger,
     pub day:        NSInteger,
     pub hour:       NSInteger,
     pub minute:     NSInteger,
@@ -83,6 +84,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSInteger)month { env.objc.borrow::<NSDateComponentsHostObject>(this).month }
 - (())setMonth:(NSInteger)v { env.objc.borrow_mut::<NSDateComponentsHostObject>(this).month = v; }
+
+- (NSInteger)week { env.objc.borrow::<NSDateComponentsHostObject>(this).week }
+- (())setWeek:(NSInteger)v { env.objc.borrow_mut::<NSDateComponentsHostObject>(this).week = v; }
 
 - (NSInteger)day { env.objc.borrow::<NSDateComponentsHostObject>(this).day }
 - (())setDay:(NSInteger)v { env.objc.borrow_mut::<NSDateComponentsHostObject>(this).day = v; }
