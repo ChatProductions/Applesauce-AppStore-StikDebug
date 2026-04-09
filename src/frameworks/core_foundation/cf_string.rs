@@ -704,6 +704,9 @@ fn CFStringGetBytes(
     }
     
     let encoding_ns = CFStringConvertEncodingToNSStringEncoding(env, encoding);
+    
+    let range_length = ns_range.length;
+
     // For simplicity, create a substring and get its bytes
     let substring: id = msg![env; the_string substringWithRange:ns_range];
     let mut options: NSUInteger = 0;
@@ -717,7 +720,6 @@ fn CFStringGetBytes(
     }
     
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
-    
     // Allocate a temporary guest pointer to hold the used length output
     let temp_used_len_ptr: MutPtr<NSUInteger> = env.mem.alloc(4).cast();
     env.mem.write(temp_used_len_ptr, 0);
@@ -731,15 +733,15 @@ fn CFStringGetBytes(
              usedLength:temp_used_len_ptr 
              encoding:encoding_ns 
              options:options 
-             range:(NSRange { location: 0, length: ns_range.length }) 
+             range:(NSRange { location: 0, length: range_length }) 
              remainingRange:null_ptr]
     } else {
-         msg![env; substring getBytes:buffer 
+          msg![env; substring getBytes:buffer 
              maxLength:max_len_u 
              usedLength:temp_used_len_ptr 
              encoding:encoding_ns 
              options:options 
-             range:(NSRange { location: 0, length: ns_range.length }) 
+             range:(NSRange { location: 0, length: range_length }) 
              remainingRange:null_ptr]
     };
     
@@ -1367,6 +1369,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringConvertNSStringEncodingToEncoding(_)),
     export_c_func!(CFStringIsEncodingAvailable(_)),
     export_c_func!(CFStringGetSystemEncoding()),
+  
     export_c_func!(CFStringGetMostCompatibleMacStringEncoding(_)),
     
   
@@ -1437,6 +1440,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringNormalize(_, _)),
     export_c_func!(CFStringTransform(_, _, _, _)),
     
+  
     // Type info
     export_c_func!(CFStringGetTypeID()),
 ];
