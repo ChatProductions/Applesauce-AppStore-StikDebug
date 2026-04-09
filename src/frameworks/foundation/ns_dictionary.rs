@@ -433,6 +433,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo!("TODO: Implement [dictionary init] for custom subclasses")
 }
 
+- (id)keyEnumerator {
+    // 1. Получаем все ключи словаря в виде объекта NSArray
+    let keys: id = msg![env; this allKeys];
+    
+    // 2. Возвращаем готовый энумератор массива (он уже честно реализован в ns_array.rs)
+    msg![env; keys objectEnumerator]
+}
+
+- (id)objectEnumerator {
+    // Заодно добавим и перебор значений, чтобы игра не упала на следующем шаге
+    let values: id = msg![env; this allValues];
+    msg![env; values objectEnumerator]
+}
+    
 // These probably comes from some category related to plists.
 - (id)initWithContentsOfFile:(id)path { // NSString*
     release(env, this);
