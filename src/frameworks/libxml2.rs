@@ -40,7 +40,7 @@ fn alloc_xml_mem(env: &mut Environment) -> u32 {
 fn xmlNewParserCtxt(env: &mut Environment) -> u32 { alloc_xml_mem(env) }
 
 #[allow(non_snake_case)]
-fn xmlClearParserCtxt: &mut Environment) -> u32 { alloc_xml_mem(env) }
+fn xmlClearParserCtxt(env: &mut Environment) -> u32 { alloc_xml_mem(env) }
 
 #[allow(non_snake_case)]
 fn xmlCtxtReadMemory(env: &mut Environment, _ctxt: u32, _buf: u32, _sz: u32, _url: u32, _enc: u32, _opt: u32) -> u32 { 
