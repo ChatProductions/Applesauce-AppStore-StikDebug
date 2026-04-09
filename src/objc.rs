@@ -30,7 +30,7 @@ mod properties;
 mod selectors;
 mod synchronization;
 
-pub use classes::{objc_classes, objc_getClass, object_getClassName, object_getClass, objc_setProperty_nonatomic, objc_retainAutoreleasedReturnValue, objc_autoreleasePoolPush, objc_exception_throw, objc_begin_catch, objc_end_catch, class_getSuperclass, class_getInstanceSize, class_getInstanceMethod, method_getImplementation, method_setImplementation, Class, ClassExports, ClassTemplate};
+pub use classes::{objc_classes, objc_getClass, object_getClassName, object_getClass, objc_setProperty_nonatomic, objc_retainAutoreleasedReturnValue, objc_autoreleasePoolPush, objc_exception_throw, objc_begin_catch, objc_end_catch, class_getSuperclass, class_getInstanceSize, class_getInstanceMethod, method_getImplementation, method_setImplementation, method_getTypeEncoding, Class, ClassExports, ClassTemplate};
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
     objc_super, release, retain,
@@ -152,5 +152,6 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(method_getImplementation(_, _)),
     export_c_func!(method_setImplementation(_, _)),
+    export_c_func!(method_getTypeEncoding(_, _)),
     export_c_func!(_Block_object_dispose(_, _)),
 ];
