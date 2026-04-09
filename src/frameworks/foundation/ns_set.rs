@@ -61,6 +61,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)setWithSet:(id)object {
+    // assert!(object != nil);
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithObject:object];
+    autorelease(env, new)
+}
+
 + (id)setWithObject:(id)object {
     assert!(object != nil);
     let new: id = msg![env; this alloc];
