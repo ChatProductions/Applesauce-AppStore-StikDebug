@@ -43,6 +43,7 @@ pub const EPROTONOSUPPORT: i32 = 43;
 pub const ENOTSUP: i32 = 45;
 pub const ECONNRESET: i32 = 54;
 pub const EOVERFLOW: i32 = 75;
+pub const EOPNOTSUPP: i32 = 102;
 
 #[derive(Default)]
 pub struct State {
@@ -131,6 +132,7 @@ fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
             ENOTSUP => "Operation not supported",
             ECONNRESET => "Connection reset by peer",
             EOVERFLOW => "Value too large to be stored in data type",
+            EOPNOTSUPP => "Operation not supported on socket",
             _ => unimplemented!("strerror({})", err_num),
         };
         
