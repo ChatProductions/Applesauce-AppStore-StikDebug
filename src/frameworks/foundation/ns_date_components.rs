@@ -48,6 +48,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         era:        NSDateComponentUndefined,
         year:       NSDateComponentUndefined,
         month:      NSDateComponentUndefined,
+        week:        NSDateComponentUndefined,
         day:        NSDateComponentUndefined,
         hour:       NSDateComponentUndefined,
         minute:     NSDateComponentUndefined,
