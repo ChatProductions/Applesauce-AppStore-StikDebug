@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `NSDateComponents`.
 
 use crate::frameworks::foundation::NSInteger;
@@ -14,7 +16,7 @@ pub struct NSDateComponentsHostObject {
     pub era:        NSInteger,
     pub year:       NSInteger,
     pub month:      NSInteger,
-    pub week:        NSInteger,
+    pub week:       NSInteger,
     pub day:        NSInteger,
     pub hour:       NSInteger,
     pub minute:     NSInteger,
@@ -40,7 +42,6 @@ const NSDateComponentUndefined: NSInteger = NSInteger::MAX;
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
-
 @implementation NSDateComponents: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
@@ -48,7 +49,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         era:        NSDateComponentUndefined,
         year:       NSDateComponentUndefined,
         month:      NSDateComponentUndefined,
-        week:        NSDateComponentUndefined,
+        week:       NSDateComponentUndefined,
         day:        NSDateComponentUndefined,
         hour:       NSDateComponentUndefined,
         minute:     NSDateComponentUndefined,
@@ -170,7 +171,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isValidDateInCalendar:(id)_calendar {
-    msg![env; this isValidDate]
+    msg![env;
+    this isValidDate]
 }
 
 // MARK: - Date conversion
@@ -179,7 +181,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Delegate to the associated calendar if available, otherwise return nil.
     let calendar = env.objc.borrow::<NSDateComponentsHostObject>(this).calendar;
     if calendar != crate::objc::nil {
-        msg![env; calendar dateFromComponents:this]
+        msg![env;
+        calendar dateFromComponents:this]
     } else {
         crate::objc::nil
     }
