@@ -268,6 +268,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<SetHostObject>(this).dict.count
 }
 
+- (())bodyType {
+
+}
+
 - (id)anyObject {
     let object_or_none = env.objc.borrow_mut::<SetHostObject>(this).dict.iter_keys().next();
     match object_or_none {
