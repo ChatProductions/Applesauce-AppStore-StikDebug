@@ -1,16 +1,20 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! The Core Location framework.
 //!
 //! Proper implementation of this framework _could_ make sense on Android,
+//!
 //! but it seems like early iOS games were using it exclusively to
 //! ~~spy on~~ track users without actual location-based gameplay.
 //!
 //! Some apps (e.g. maps) would _require_ location support to work properly,
-//! but it is not the current focus of touchHLE. The current focus is,
+//!
+//! but it is not the current focus of the touchHLE. The current focus is,
 //! you know, **GAMES**.
 
 use crate::dyld::{ConstantExports, HostConstant, HostDylib};
@@ -81,7 +85,7 @@ struct CLLocationHostObject {
     longitude: CLLocationDegrees,
     altitude:  CLLocationDistance,
     horizontal_accuracy: CLLocationAccuracy,
-    vertical_accuracy:   CLLocationAccuracy,
+    vertical_accuracy: CLLocationAccuracy,
     speed:     CLLocationSpeed,
     course:    CLLocationDirection,
     // NSDate* timestamp
@@ -320,7 +324,8 @@ const CLASSES: ClassExports = objc_classes! {
             .unwrap();
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
-            let _: () = msg![env; delegate locationManager:this
+            let _: () = msg![env;
+                delegate locationManager:this
                               didChangeAuthorizationStatus:CL_AUTHORIZATION_STATUS_DENIED];
         }
     }
@@ -355,7 +360,7 @@ const CLASSES: ClassExports = objc_classes! {
         altitude:  0.0,
         horizontal_accuracy: -1.0,
         vertical_accuracy:   -1.0,
-        speed:  -1.0,
+        speed: -1.0,
         course: -1.0,
         timestamp: nil,
     });
@@ -377,7 +382,6 @@ const CLASSES: ClassExports = objc_classes! {
 
 // Replace the 6-parameter init with two separate inits that are within
 // the HostIMP parameter limit.
-
 - (id)initWithCoordinate:(CLLocationDegrees)lat
               longitude:(CLLocationDegrees)lon
                altitude:(CLLocationDistance)alt
@@ -527,3 +531,4 @@ const CONSTANTS: ConstantExports = &[
     ("_kCLErrorDomain",
         HostConstant::NSString("kCLErrorDomain")),
 ];
+
