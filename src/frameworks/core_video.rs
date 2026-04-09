@@ -54,7 +54,6 @@ pub fn CVPixelBufferGetHeight(_env: &mut Environment, _pixel_buffer: MutVoidPtr)
 
 pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoidPtr) -> u32 {
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
-    
     if let Some(ref info) = *buffers {
         return info.guest_ptr;
     }
@@ -68,14 +67,13 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
     
     // Выделяем память в гостевой системе
     let ptr = env.mem.alloc(size);
-    
     // Безопасное преобразование указателя в u32
     // Используем .cast().to_bits() для получения сырого значения адреса
     let guest_ptr = ptr.cast::<u8>().to_bits();
     
     // Инициализируем буфер черным цветом (опционально)
     for offset in 0..size {
-        env.mem.write(ptr + offset, 0u8);
+        env.mem.write(ptr.cast::<u8>() + offset, 0u8);
     }
     
     *buffers = Some(PixelBufferInfo {
@@ -97,7 +95,6 @@ pub fn CVPixelBufferLockBaseAddress(
     lock_flags: i32,
 ) -> i32 {
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
-    
     if let Some(ref mut info) = *buffers {
         if info.is_locked {
             return K_CV_RETURN_ERROR;
@@ -115,7 +112,6 @@ pub fn CVPixelBufferUnlockBaseAddress(
     _unlock_flags: i32,
 ) -> i32 {
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
-    
     if let Some(ref mut info) = *buffers {
         if !info.is_locked {
             return K_CV_RETURN_ERROR;
@@ -192,7 +188,7 @@ pub fn CVPixelBufferGetBaseAddressOfPlane(
                 // В реальной реализации здесь было бы смещение
                 info.guest_ptr
             } else {
-                0
+                 0
             }
         } else {
             0
@@ -217,7 +213,7 @@ pub fn CVPixelBufferGetWidthOfPlane(
                 0
             }
         } else {
-            0
+             0
         }
     }
 }
@@ -238,7 +234,7 @@ pub fn CVPixelBufferGetHeightOfPlane(
                 0
             }
         } else {
-            0
+             0
         }
     }
 }
@@ -355,7 +351,8 @@ pub fn CVPixelBufferCreate(
     pixel_buffer_out: MutPtr<u32>,
 ) -> i32 {
     let bytes_per_pixel = match pixel_format_type {
-        K_CV_PIXEL_FORMAT_TYPE_32BGRA | K_CV_PIXEL_FORMAT_TYPE_32ARGB => 4,
+        K_CV_PIXEL_FORMAT_TYPE_32BGRA |
+        K_CV_PIXEL_FORMAT_TYPE_32ARGB => 4,
         K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarFullRange |
         K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarVideoRange => 1, // Y plane
         _ => 4, // По умолчанию
@@ -369,7 +366,7 @@ pub fn CVPixelBufferCreate(
     
     // Инициализируем буфер
     for offset in 0..size {
-        env.mem.write(ptr + offset, 0u8);
+        env.mem.write(ptr.cast::<u8>() + offset, 0u8);
     }
     
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
@@ -385,7 +382,6 @@ pub fn CVPixelBufferCreate(
     
     // Записываем указатель в выходной параметр
     env.mem.write(pixel_buffer_out, guest_ptr);
-    
     K_CV_RETURN_SUCCESS
 }
 
@@ -441,3 +437,4 @@ pub const DYLIB: HostDylib = HostDylib {
     class_exports: &[],
     constant_exports: &[],
 };
+
