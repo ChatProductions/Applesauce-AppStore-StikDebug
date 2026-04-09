@@ -396,7 +396,7 @@ fn CFStringCreateWithPascalString(
         if !res.is_null() {
             ns_string::to_rust_string(env, res)
         } else {
-            String::from("<null>")
+            std::borrow::Cow::Borrowed("<null>")
         }
     );
     res
@@ -696,10 +696,10 @@ fn CFStringGetBytes(
     
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
     let mut used_len: NSUInteger = 0;
-    let used_len_ptr = if !used_buf_len.is_null() {
-        &mut used_len as *mut NSUInteger
+    let used_len_ptr: MutPtr<NSUInteger> = if !used_buf_len.is_null() {
+        MutPtr::from_exposed_addr(&mut used_len as *mut NSUInteger as u32)
     } else {
-        std::ptr::null_mut()
+        MutPtr::null()
     };
     
     let null_ptr: MutPtr<NSRange> = MutPtr::null();
@@ -1280,7 +1280,7 @@ fn CFStringTransform(
     log!("TODO: CFStringTransform('{}', reverse={})", transform_name, reverse);
     
     // For now, basic implementation of common transforms
-    match transform_name.as_str() {
+    match transform_name.as_ref() {
         kCFStringTransformStripDiacritics | kCFStringTransformStripCombiningMarks => {
             // Strip accents/diacritics - approximate implementation
             let folded: id = msg![env; string 
