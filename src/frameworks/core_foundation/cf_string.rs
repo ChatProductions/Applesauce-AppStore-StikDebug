@@ -695,16 +695,24 @@ fn CFStringGetBytes(
     }
     
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
+    
+    // --- HOST MEMORY ---
+    // We allocate used_len on the host stack to safely catch the result from the msg! call
     let mut used_len: NSUInteger = 0;
+    
+    // Create a pointer to our host variable to pass into the Objective-C runtime
     let used_len_ptr: MutPtr<NSUInteger> = if !used_buf_len.is_null() {
-        MutPtr::from_exposed_addr(&mut used_len as *mut NSUInteger as u32)
+        // FIX: Use from_bits to construct the pointer from the raw memory address
+        MutPtr::from_bits(&mut used_len as *mut NSUInteger as u32)
     } else {
         MutPtr::null()
     };
     
     let null_ptr: MutPtr<NSRange> = MutPtr::null();
+    
+    // Execute the Objective-C message
     let success: bool = if buffer.is_null() {
-        // Just compute required length
+        // Just compute required length (passing null for the buffer)
         msg![env; substring getBytes:buffer 
              maxLength:max_len_u 
              usedLength:used_len_ptr 
@@ -713,6 +721,7 @@ fn CFStringGetBytes(
              range:(NSRange { location: 0, length: ns_range.length }) 
              remainingRange:null_ptr]
     } else {
+        // Actually fetch the bytes into the provided guest buffer
         msg![env; substring getBytes:buffer 
              maxLength:max_len_u 
              usedLength:used_len_ptr 
@@ -722,6 +731,8 @@ fn CFStringGetBytes(
              remainingRange:null_ptr]
     };
     
+    // --- GUEST MEMORY ---
+    // If the guest requested the used length, safely write the host value back into guest memory
     if !used_buf_len.is_null() {
         env.mem.write(used_buf_len, used_len.try_into().unwrap_or(0));
     }
