@@ -433,6 +433,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())didChangeValueForKey:(id)_key {
 }
 
+- (())self {
+
+}
+
 - (())addObserver:(id)_observer forKeyPath:(id)_keyPath options:(NSUInteger)_options context:(id)_context {
     log!("Warning: NSObject addObserver:forKeyPath:options:context: is stubbed");
 }
