@@ -13,6 +13,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
+    export_c_func!(xmlReadFile(_, _, _, _, _, _)),
     export_c_func!(xmlReadMemory(_, _, _, _, _)),
     export_c_func!(xmlParseMemory(_, _)),
     export_c_func!(xmlDocGetRootElement(_)),
@@ -43,6 +44,11 @@ fn xmlClearParserCtxt: &mut Environment) -> u32 { alloc_xml_mem(env) }
 
 #[allow(non_snake_case)]
 fn xmlCtxtReadMemory(env: &mut Environment, _ctxt: u32, _buf: u32, _sz: u32, _url: u32, _enc: u32, _opt: u32) -> u32 { 
+    alloc_xml_mem(env) // Возвращаем фейковый xmlDocPtr
+}
+
+#[allow(non_snake_case)]
+fn xmlReadFile(env: &mut Environment, _ctxt: u32, _buf: u32, _sz: u32, _url: u32, _enc: u32, _opt: u32) -> u32 { 
     alloc_xml_mem(env) // Возвращаем фейковый xmlDocPtr
 }
 
