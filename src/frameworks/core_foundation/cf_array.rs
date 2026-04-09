@@ -70,7 +70,7 @@ pub fn CFArrayRetain(env: &mut Environment, arr: CFArrayRef) -> CFArrayRef {
 
 pub fn CFArrayRelease(env: &mut Environment, arr: CFArrayRef) {
     if !arr.is_null() { 
-        CFRelease(env, arr); 
+        CFRelease(env, arr);
     }
 }
 
@@ -88,7 +88,6 @@ pub fn CFArrayCreate(
     }
     
     let arr: id = msg_class![env; NSMutableArray new];
-    
     for i in 0..num_values.max(0) as u32 {
         let val: id = env.mem.read(values + i).cast().cast_mut();
         if !val.is_null() {
@@ -108,7 +107,7 @@ pub fn CFArrayCreateCopy(
     the_array: CFArrayRef,
 ) -> CFArrayRef {
     if the_array.is_null() { 
-        return nil; 
+        return nil;
     }
     msg![env; the_array copy]
 }
@@ -152,7 +151,7 @@ pub fn CFArrayCreateMutableCopy(
 
 pub fn CFArrayGetCount(env: &mut Environment, array: CFArrayRef) -> CFIndex {
     if array.is_null() { 
-        return 0; 
+        return 0;
     }
     
     let count: NSUInteger = msg![env; array count];
@@ -186,7 +185,7 @@ pub fn CFArrayGetValues(
     values: MutPtr<ConstVoidPtr>,
 ) {
     if array.is_null() || values.is_null() { 
-        return; 
+        return;
     }
     
     let count = CFArrayGetCount(env, array);
@@ -209,7 +208,7 @@ pub fn CFArrayContainsValue(
     value: ConstVoidPtr,
 ) -> bool {
     if array.is_null() || value.is_null() { 
-        return false; 
+        return false;
     }
     
     let count = CFArrayGetCount(env, array);
@@ -219,12 +218,11 @@ pub fn CFArrayContainsValue(
     
     let val: id = value.cast().cast_mut();
     let end = range_location + range_length;
-    
     for i in range_location..end {
         let item: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let eq: bool = msg![env; item isEqual:val];
         if eq { 
-            return true; 
+            return true;
         }
     }
     
@@ -239,7 +237,7 @@ pub fn CFArrayGetFirstIndexOfValue(
     value: ConstVoidPtr,
 ) -> CFIndex {
     if array.is_null() || value.is_null() { 
-        return K_CF_NOT_FOUND; 
+        return K_CF_NOT_FOUND;
     }
     
     let count = CFArrayGetCount(env, array);
@@ -249,12 +247,11 @@ pub fn CFArrayGetFirstIndexOfValue(
     
     let val: id = value.cast().cast_mut();
     let end = range_location + range_length;
-    
     for i in range_location..end {
         let item: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let eq: bool = msg![env; item isEqual:val];
         if eq { 
-            return i; 
+            return i;
         }
     }
     
@@ -269,7 +266,7 @@ pub fn CFArrayGetLastIndexOfValue(
     value: ConstVoidPtr,
 ) -> CFIndex {
     if array.is_null() || value.is_null() { 
-        return K_CF_NOT_FOUND; 
+        return K_CF_NOT_FOUND;
     }
     
     let count = CFArrayGetCount(env, array);
@@ -285,7 +282,7 @@ pub fn CFArrayGetLastIndexOfValue(
         let item: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let eq: bool = msg![env; item isEqual:val];
         if eq { 
-            last = i; 
+            last = i;
         }
     }
     
@@ -300,7 +297,7 @@ pub fn CFArrayGetCountOfValue(
     value: ConstVoidPtr,
 ) -> CFIndex {
     if array.is_null() || value.is_null() { 
-        return 0; 
+        return 0;
     }
     
     let count = CFArrayGetCount(env, array);
@@ -316,7 +313,7 @@ pub fn CFArrayGetCountOfValue(
         let item: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let eq: bool = msg![env; item isEqual:val];
         if eq { 
-            found_count += 1; 
+            found_count += 1;
         }
     }
     
@@ -335,7 +332,6 @@ pub fn CFArrayBSearchValues(
     context: MutVoidPtr,
 ) -> CFIndex {
     use crate::abi::CallFromHost;
-    
     if array.is_null() || value.is_null() {
         return K_CF_NOT_FOUND;
     }
@@ -359,9 +355,8 @@ pub fn CFArrayBSearchValues(
         
         let cmp: i32 = comparator.call_from_host(
             env,
-            (value, item.cast().cast_const(), context),
+            (value, item.cast::<std::ffi::c_void>().cast_const(), context),
         );
-        
         if cmp == 0 {
             return mid; // Found exact match
         } else if cmp < 0 {
@@ -464,7 +459,7 @@ pub fn CFArrayAppendArray(
     range_length: CFIndex,
 ) {
     if array.is_null() || other.is_null() { 
-        return; 
+        return;
     }
     
     let count = CFArrayGetCount(env, other);
@@ -539,7 +534,6 @@ pub fn CFArrayExchangeValuesAtIndices(
     
     let v1: id = msg![env; array objectAtIndex:i1];
     let v2: id = msg![env; array objectAtIndex:i2];
-    
     // Retain temporarily to prevent premature deallocation
     crate::objc::retain(env, v1);
     crate::objc::retain(env, v2);
@@ -562,7 +556,6 @@ pub fn CFArraySortValues(
     context: MutVoidPtr,
 ) {
     use crate::abi::CallFromHost;
-    
     if array.is_null() {
         return;
     }
@@ -585,7 +578,6 @@ pub fn CFArraySortValues(
             val
         })
         .collect();
-
     // Simple insertion sort — avoids the borrow-checker complexity of in-place
     // sort with a closure that borrows env.
     let n = items.len();
@@ -596,7 +588,7 @@ pub fn CFArraySortValues(
             let b = items[j];
             let res: i32 = comparator.call_from_host(
                 env,
-                (a.cast().cast_const(), b.cast().cast_const(), context),
+                (a.cast::<std::ffi::c_void>().cast_const(), b.cast::<std::ffi::c_void>().cast_const(), context),
             );
             if res > 0 {
                 items.swap(j - 1, j);
@@ -630,7 +622,6 @@ pub fn CFArrayApplyFunction(
     context: MutVoidPtr,
 ) {
     use crate::abi::CallFromHost;
-    
     if array.is_null() {
         return;
     }
@@ -645,7 +636,7 @@ pub fn CFArrayApplyFunction(
         let val: id = msg![env; array objectAtIndex:(i as NSUInteger)];
         let _: () = applier.call_from_host(
             env,
-            (val.cast().cast_const(), context),
+            (val.cast::<std::ffi::c_void>().cast_const(), context),
         );
     }
 }
@@ -657,7 +648,7 @@ pub fn CFArrayCreateDescription(
     array: CFArrayRef,
 ) -> CFTypeRef {
     if array.is_null() { 
-        return nil; 
+        return nil;
     }
     
     msg![env; array description]
@@ -728,3 +719,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFArrayGetTypeID()),
     export_c_func!(CFMakeCollectable(_)),
 ];
+
