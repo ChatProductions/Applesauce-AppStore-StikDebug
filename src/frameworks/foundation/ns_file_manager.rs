@@ -221,7 +221,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSSearchPathForDirectoriesInDomains(_, _, _)),
     export_c_func!(NSUserName()),
     export_c_func!(NSFullUserName()),
-    export_c_func!(NSOpenStepRootDirectory(_)),
+    export_c_func!(NSOpenStepRootDirectory()),
     export_c_func!(NSAllocateObject(_, _, _)),
     export_c_func!(NSDeallocateObject(_)),
 ];
@@ -856,4 +856,5 @@ pub fn move_item(env: &mut Environment, src: id, dst: id) -> bool {
     let error: MutPtr<id> = Ptr::null();
     msg![env; manager moveItemAtPath:src toPath:dst error:error]
 }
+
 
