@@ -34,6 +34,7 @@ use crate::gles::gles11_raw::types::{
 
 // These types have different sizes, so some care is needed.
 use crate::gles::gles11_raw::types::{GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr};
+
 type GuestGLsizeiptr = GuestISize;
 type GuestGLintptr = GuestISize;
 
@@ -89,6 +90,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -109,6 +111,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -184,12 +187,6 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
     });
 }
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
-    // ЗАЩИТА: Если игра передала нулевой указатель, просто игнорируем вызов
-    if params.is_null() {
-        println!("touchHLE WARNING: glGetBooleanv called with NULL pointer for pname {:#x}", pname);
-        return;
-    }
-
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
         log!("🚨 glGetBooleanv: запрос параметра {:#x} без контекста!", pname);
     }
@@ -199,12 +196,6 @@ fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>
     });
 }
 fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
-    // ЗАЩИТА: Если игра передала нулевой указатель, просто игнорируем вызов
-    if params.is_null() {
-        println!("touchHLE WARNING: glGetFloatv called with NULL pointer for pname {:#x}", pname);
-        return;
-    }
-
     assert_ne!(gles11::NUM_COMPRESSED_TEXTURE_FORMATS, pname);
     assert_ne!(gles11::COMPRESSED_TEXTURE_FORMATS, pname);
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
@@ -216,12 +207,6 @@ fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     });
 }
 fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
-    // ЗАЩИТА: Если игра передала нулевой указатель, просто игнорируем вызов
-    if params.is_null() {
-        println!("touchHLE WARNING: glGetIntegerv called with NULL pointer for pname {:#x}", pname);
-        return;
-    }
-
     match pname {
         gles11::NUM_COMPRESSED_TEXTURE_FORMATS => {
             env.mem.write(params, SUPPORTED_COMPRESSED_TEXTURE_FORMATS.len() as _);
@@ -254,6 +239,7 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
     use crate::gles::gles1_on_gl2::{ArrayInfo, ARRAYS};
     let &ArrayInfo { buffer_binding, .. } =
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
+
     with_ctx_and_mem(env, |gles, mem| {
         let mut host_pointer_or_offset = std::ptr::null();
         let guest_pointer_or_offset = unsafe {
@@ -300,6 +286,7 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
                 b"Unknown"
             }
         };
+
         let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
         
         env.framework_state
@@ -395,6 +382,7 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Scissor(x, y, width, height)
     })
@@ -403,6 +391,7 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Viewport(x, y, width, height)
     })
@@ -1419,7 +1408,7 @@ fn glGetBufferParameteriv(
     params: MutPtr<GLint>,
 ) {
      let params = env.mem.ptr_at_mut(params, 1);
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
+     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.GetBufferParameteriv(target, pname, params)
     })
 }
