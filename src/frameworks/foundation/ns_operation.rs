@@ -105,12 +105,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Check if cancelled before starting
     let cancelled = env.objc.borrow::<NSOperationHostObject>(this).cancelled;
     if cancelled {
-        // FIXME: Передача указателя хоста в гостевое пространство. Для работы KVO 
-        // потребуется настоящая гостевая строка, но as u32 решает проблему компиляции.
         let is_finished_key = "isFinished\0".as_ptr() as u32;
-        () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
+        // Извлекаем в переменную с явным указанием типа
+        let finished_str: id = msg_class![env; NSString stringWithUTF8String:is_finished_key];
+        
+        () = msg![env; this willChangeValueForKey:finished_str];
         env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
-        () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
+        () = msg![env; this didChangeValueForKey:finished_str];
         return;
     }
     
@@ -131,20 +132,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Transition to executing
     let is_executing_key = "isExecuting\0".as_ptr() as u32;
-    () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
+    let executing_str: id = msg_class![env; NSString stringWithUTF8String:is_executing_key];
+    
+    () = msg![env; this willChangeValueForKey:executing_str];
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Executing;
-    () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
+    () = msg![env; this didChangeValueForKey:executing_str];
     
     // Execute main
     () = msg![env; this main];
     
     // Transition to finished
     let is_finished_key = "isFinished\0".as_ptr() as u32;
-    () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
-    () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
+    let finished_str: id = msg_class![env; NSString stringWithUTF8String:is_finished_key];
+    
+    // Re-create the executing string for the finished transition
+    let is_executing_key_2 = "isExecuting\0".as_ptr() as u32;
+    let executing_str_2: id = msg_class![env; NSString stringWithUTF8String:is_executing_key_2];
+
+    () = msg![env; this willChangeValueForKey:executing_str_2];
+    () = msg![env; this willChangeValueForKey:finished_str];
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
-    () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
-    () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
+    () = msg![env; this didChangeValueForKey:executing_str_2];
+    () = msg![env; this didChangeValueForKey:finished_str];
     
     // Call completion block if present
     let completion = env.objc.borrow::<NSOperationHostObject>(this).completion_block;
@@ -164,9 +173,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let was_cancelled = env.objc.borrow::<NSOperationHostObject>(this).cancelled;
     if !was_cancelled {
         let is_cancelled_key = "isCancelled\0".as_ptr() as u32;
-        () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_cancelled_key])];
+        let cancelled_str: id = msg_class![env; NSString stringWithUTF8String:is_cancelled_key];
+        
+        () = msg![env; this willChangeValueForKey:cancelled_str];
         env.objc.borrow_mut::<NSOperationHostObject>(this).cancelled = true;
-        () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_cancelled_key])];
+        () = msg![env; this didChangeValueForKey:cancelled_str];
     }
 }
 
@@ -576,4 +587,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
