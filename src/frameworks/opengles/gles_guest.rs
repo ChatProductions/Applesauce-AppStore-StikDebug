@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! Wrapper functions exposing OpenGL ES to the guest.
 //!
 //! This code is intentionally somewhat lax with calculating array sizes when
@@ -23,7 +24,6 @@ use crate::gles::{gles11_raw as gles11, GLES}; // constants only
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::nil;
 use crate::Environment;
-
 use std::slice::from_raw_parts;
 
 // These types are the same size in guest code (32-bit) and host code (64-bit).
@@ -31,6 +31,7 @@ use crate::gles::gles11_raw::types::{
     GLbitfield, GLboolean, GLclampf, GLclampx, GLenum, GLfixed, GLfloat, GLint, GLsizei, GLubyte,
     GLuint, GLvoid,
 };
+
 // These types have different sizes, so some care is needed.
 use crate::gles::gles11_raw::types::{GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr};
 
@@ -87,6 +88,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     //panic_on_gl_errors(&mut *gles);
     let res = f(gles.as_mut(), &mut env.mem);
     //panic_on_gl_errors(&mut *gles);
@@ -112,6 +114,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     //panic_on_gl_errors(&mut **gles);
     let res = f(gles.as_mut(), &mut env.mem);
     //panic_on_gl_errors(&mut **gles);
@@ -197,41 +200,42 @@ fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     });
 }
 fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
-    with_ctx_and_mem(env, |gles, mem| {
-        match pname {
-            gles11::NUM_COMPRESSED_TEXTURE_FORMATS => {
-                mem.write(params, SUPPORTED_COMPRESSED_TEXTURE_FORMATS.len() as _);
-            }
-            gles11::COMPRESSED_TEXTURE_FORMATS => {
-                for (idx, &format) in SUPPORTED_COMPRESSED_TEXTURE_FORMATS.iter().enumerate() {
-                    mem.write(params + idx as GuestUSize, format as _);
-                }
-            }
-            // MAX_COLOR_ATTACHMENTS_EXT or MAX_COLOR_ATTACHMENTS_OES
-            0x8cdf => {
-                // According to [OES_framebuffer_object](https://registry.khronos.org/OpenGL/extensions/OES/OES_framebuffer_object.txt),
-                // MAX_COLOR_ATTACHMENTS_OES is not supported in the extension,
-                // but we return 1 to match the real device.
-                mem.write(params, 1 as _);
-            }
-            // MAX_SAMPLES or MAX_SAMPLES_ANGLE
-            0x8d57 => {
-                // TODO: handle GetBooleanv and GetFloatv as well
-                // 1 is an initial value
-                // TODO: This is an OpenGL ES 2.0 extension, not supported yet
-                mem.write(params, 1 as _);
-            }
-            _ => {
-                let params = mem.ptr_at_mut(params, 16 /* upper bound */);
-                unsafe { gles.GetIntegerv(pname, params) };
+    match pname {
+        gles11::NUM_COMPRESSED_TEXTURE_FORMATS => {
+            env.mem.write(params, SUPPORTED_COMPRESSED_TEXTURE_FORMATS.len() as _);
+        }
+        gles11::COMPRESSED_TEXTURE_FORMATS => {
+            for (idx, &format) in SUPPORTED_COMPRESSED_TEXTURE_FORMATS.iter().enumerate() {
+                env.mem.write(params + idx as GuestUSize, format as _);
             }
         }
-    });
+        // MAX_COLOR_ATTACHMENTS_EXT or MAX_COLOR_ATTACHMENTS_OES
+        0x8cdf => {
+            // According to [OES_framebuffer_object](https://registry.khronos.org/OpenGL/extensions/OES/OES_framebuffer_object.txt),
+            // MAX_COLOR_ATTACHMENTS_OES is not supported in the extension,
+            // but we return 1 to match the real device.
+            env.mem.write(params, 1 as _);
+        }
+        // MAX_SAMPLES or MAX_SAMPLES_ANGLE
+        0x8d57 => {
+            // TODO: handle GetBooleanv and GetFloatv as well
+            // 1 is an initial value
+            // TODO: This is an OpenGL ES 2.0 extension, not supported yet
+            env.mem.write(params, 1 as _);
+        }
+        _ => {
+            with_ctx_and_mem(env, |gles, mem| {
+                let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+                unsafe { gles.GetIntegerv(pname, params) };
+            });
+        }
+    }
 }
 fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidPtr>) {
     use crate::gles::gles1_on_gl2::{ArrayInfo, ARRAYS};
     let &ArrayInfo { buffer_binding, .. } =
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
+
     with_ctx_and_mem(env, |gles, mem| {
         // params always points to just one pointer for this function
         let mut host_pointer_or_offset = std::ptr::null();
@@ -268,25 +272,25 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
     let res = if let Some(&str) = env.framework_state.opengles.strings_cache.get(&name) {
         str
     } else {
-        let new_str = with_ctx_and_mem(env, |_gles, mem| {
-            // Those values are extracted from the iPod touch 2nd gen, iOS 4.2.1
-            let s: &[u8] = match name {
-                gles11::VENDOR => {
-                    b"Imagination Technologies"
-                }
-                gles11::RENDERER => {
-                    b"PowerVR MBXLite with VGPLite"
-                }
-                gles11::VERSION => {
-                    b"OpenGL ES-CM 1.1 (76)"
-                }
-                gles11::EXTENSIONS => {
-                    b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object "
-                }
-                _ => unreachable!(),
-            };
-            mem.alloc_and_write_cstr(s).cast_const()
-        });
+        // Those values are extracted from the iPod touch 2nd gen, iOS 4.2.1
+        let s: &[u8] = match name {
+            gles11::VENDOR => {
+                b"Imagination Technologies"
+            }
+            gles11::RENDERER => {
+                b"PowerVR MBXLite with VGPLite"
+            }
+            gles11::VERSION => {
+                b"OpenGL ES-CM 1.1 (76)"
+            }
+            gles11::EXTENSIONS => {
+                b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object "
+            }
+            _ => unreachable!(),
+        };
+
+        let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
+        
         env.framework_state
             .opengles
             .strings_cache
@@ -382,6 +386,7 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Scissor(x, y, width, height)
     })
@@ -392,6 +397,7 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Viewport(x, y, width, height)
     })
@@ -1036,8 +1042,7 @@ fn glTexParameterxv(
 fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -> GuestUSize {
     let bytes_per_pixel: GuestUSize = match type_ {
         gles11::UNSIGNED_BYTE => match format {
-            gles11::ALPHA |
-            gles11::LUMINANCE => 1,
+            gles11::ALPHA | gles11::LUMINANCE => 1,
             gles11::LUMINANCE_ALPHA => 2,
             gles11::RGB => 3,
             gles11::RGBA => 4,
@@ -1045,8 +1050,7 @@ fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -
             _ => panic!("Unexpected format {format:#x}"),
         },
         gles11::UNSIGNED_SHORT_5_6_5
-        |
-        gles11::UNSIGNED_SHORT_4_4_4_4
+        | gles11::UNSIGNED_SHORT_4_4_4_4
         | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
         _ => panic!("Unexpected type {type_:#x}"),
     };
@@ -1098,8 +1102,7 @@ fn glTexSubImage2D(
     type_: GLenum,
     pixels: ConstVoidPtr,
 ) {
-    with_ctx_and_mem(env, |gles, mem|
-    unsafe {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
         let pixel_count: GuestUSize = width.checked_mul(height).unwrap().try_into().unwrap();
         let size = image_size_estimate(pixel_count, format, type_);
         let pixels = mem.ptr_at(pixels.cast::<u8>(), size).cast::<GLvoid>();
@@ -1146,8 +1149,7 @@ fn glCopyTexImage2D(
     height: GLsizei,
     border: GLint,
 ) {
-    with_ctx_and_mem(env, |gles, _mem| 
-    unsafe {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.CopyTexImage2D(target, level, internalformat, x, y, width, height, border)
     })
 }
@@ -1162,8 +1164,7 @@ fn glCopyTexSubImage2D(
     width: GLsizei,
     height: GLsizei,
 ) {
-    with_ctx_and_mem(env, |gles, _mem|
-    unsafe {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height)
     })
 }
@@ -1178,8 +1179,7 @@ fn glTexEnvx(env: &mut Environment, target: GLenum, pname: GLenum, param: GLfixe
     })
 }
 fn glTexEnvi(env: &mut Environment, target: GLenum, pname: GLenum, param: GLint) {
-    with_ctx_and_mem(env, |gles, 
-    _mem| unsafe {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.TexEnvi(target, pname, param)
     })
 }
@@ -1224,8 +1224,7 @@ fn glMultiTexCoord4f(
     })
 }
 fn glMultiTexCoord4x(
-    env: &mut 
-    Environment,
+    env: &mut Environment,
     target: GLenum,
     s: GLfixed,
     t: GLfixed,
@@ -1242,13 +1241,11 @@ fn glGenFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let framebuffers = mem.ptr_at_mut(framebuffers, n_usize);
-        unsafe { 
-        gles.GenFramebuffersOES(n, framebuffers) }
+        unsafe { gles.GenFramebuffersOES(n, framebuffers) }
     })
 }
 fn glGenRenderbuffersOES(env: &mut Environment, n: GLsizei, renderbuffers: MutPtr<GLuint>) {
-    with_ctx_and_mem(env, |gles, mem|
-    {
+    with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let renderbuffers = mem.ptr_at_mut(renderbuffers, n_usize);
         unsafe { gles.GenRenderbuffersOES(n, renderbuffers) }
@@ -1269,8 +1266,7 @@ fn glBindFramebufferOES(env: &mut Environment, target: GLenum, framebuffer: GLui
         gles.BindFramebufferOES(target, framebuffer)
     })
 }
-fn glBindRenderbufferOES(env: &mut Environment, target: GLenum, renderbuffer: 
-    GLuint) {
+fn glBindRenderbufferOES(env: &mut Environment, target: GLenum, renderbuffer: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.BindRenderbufferOES(target, renderbuffer)
     })
@@ -1353,8 +1349,7 @@ fn glDeleteFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: Cons
         unsafe { gles.DeleteFramebuffersOES(n, framebuffers) }
     })
 }
-fn glDeleteRenderbuffersOES(env: &mut Environment, n: GLsizei, 
-    renderbuffers: ConstPtr<GLuint>) {
+fn glDeleteRenderbuffersOES(env: &mut Environment, n: GLsizei, renderbuffers: ConstPtr<GLuint>) {
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let renderbuffers = mem.ptr_at(renderbuffers, n_usize);
@@ -1389,7 +1384,6 @@ fn glRenderbufferStorage(
     env: &mut Environment,
     target: GLenum,
     internalformat: GLenum,
- 
     width: GLsizei,
     height: GLsizei,
 ) {
@@ -1411,8 +1405,7 @@ fn glFramebufferRenderbuffer(
     )
 }
 fn glFramebufferTexture2D(
-    env: 
-    &mut Environment,
+    env: &mut Environment,
     target: GLenum,
     attachment: GLenum,
     textarget: GLenum,
@@ -1436,8 +1429,7 @@ fn glGetRenderbufferParameteriv(
     pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-    glGetRenderbufferParameterivOES(env, 
-    target, pname, params)
+    glGetRenderbufferParameterivOES(env, target, pname, params)
 }
 fn glCheckFramebufferStatus(env: &mut Environment, target: GLenum) -> GLenum {
     glCheckFramebufferStatusOES(env, target)
@@ -1466,9 +1458,8 @@ fn glGetBufferParameteriv(
     pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-   
      let params = env.mem.ptr_at_mut(params, 1);
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
+     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.GetBufferParameteriv(target, pname, params)
     })
 }
@@ -1611,7 +1602,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glFlush()),
     export_c_func!(glGetString(_)),
     // Other state manipulation
-  
     export_c_func!(glAlphaFunc(_, _)),
     export_c_func!(glAlphaFuncx(_, _)),
     export_c_func!(glBlendFunc(_, _)),
@@ -1632,7 +1622,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glShadeModel(_)),
     export_c_func!(glScissor(_, _, _, _)),
     export_c_func!(glViewport(_, _, _, _)),
-  
     export_c_func!(glLineWidth(_)),
     export_c_func!(glLineWidthx(_)),
     export_c_func!(glStencilFunc(_, _, _)),
@@ -1653,7 +1642,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glFogxv(_, _)),
     export_c_func!(glLightf(_, _, _)),
     export_c_func!(glLightx(_, _, _)),
-  
     export_c_func!(glLightfv(_, _, _)),
     export_c_func!(glLightxv(_, _, _)),
     export_c_func!(glLightModelf(_, _)),
@@ -1672,7 +1660,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glBufferData(_, _, _, _)),
     export_c_func!(glBufferSubData(_, _, _, _)),
     // Non-pointers
-   
     export_c_func!(glColor4f(_, _, _, _)),
     export_c_func!(glColor4x(_, _, _, _)),
     export_c_func!(glColor4ub(_, _, _, _)),
@@ -1690,7 +1677,6 @@ pub const FUNCTIONS: FunctionExports = &[
     // Clearing
     export_c_func!(glClear(_)),
     export_c_func!(glClearColor(_, _, _, _)),
-    
     export_c_func!(glClearColorx(_, _, _, _)),
     export_c_func!(glClearDepthf(_)),
     export_c_func!(glClearDepthx(_)),
@@ -1709,7 +1695,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glFrustumf(_, _, _, _, _, _)),
     export_c_func!(glFrustumx(_, _, _, _, _, _)),
     export_c_func!(glRotatef(_, _, _, _)),
-   
     export_c_func!(glRotatex(_, _, _, _)),
     export_c_func!(glScalef(_, _, _)),
     export_c_func!(glScalex(_, _, _)),
@@ -1727,8 +1712,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glTexParameterf(_, _, _)),
     export_c_func!(glTexParameterx(_, _, _)),
     export_c_func!(glTexParameteriv(_, _, _)),
-    export_c_func!(glTexParameterfv(_, 
-    _, _)),
+    export_c_func!(glTexParameterfv(_, _, _)),
     export_c_func!(glTexParameterxv(_, _, _)),
     export_c_func!(glTexImage2D(_, _, _, _, _, _, _, _, _)),
     export_c_func!(glTexSubImage2D(_, _, _, _, _, _, _, _, _)),
@@ -1740,8 +1724,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glTexEnvi(_, _, _)),
     export_c_func!(glTexEnvfv(_, _, _)),
     export_c_func!(glTexEnvxv(_, _, _)),
-    export_c_func!(glTexEnviv(_, _, 
-    _)),
+    export_c_func!(glTexEnviv(_, _, _)),
     export_c_func!(glMultiTexCoord4f(_, _, _, _, _)),
     export_c_func!(glMultiTexCoord4x(_, _, _, _, _)),
     // OES_framebuffer_object
@@ -1759,7 +1742,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glCheckFramebufferStatusOES(_)),
     export_c_func!(glDeleteFramebuffersOES(_, _)),
     export_c_func!(glDeleteRenderbuffersOES(_, _)),
-  
     export_c_func!(glGenerateMipmapOES(_)),
     // Non-OES aliases for OES_framebuffer_object functions.
     export_c_func!(glGenFramebuffers(_, _)),
@@ -1803,3 +1785,4 @@ fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
         buffer_size
     })
 }
+
