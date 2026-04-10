@@ -156,7 +156,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationDelay:{}]", delay);
 }
 
-+ (())setAnimationsEnabled:(f32)delay {
++ (())setAnimationsEnabled:(f32)enabled {
     log!("TODO: [UIView setAnimationsEnabled:{}]", enabled);
 }
 
