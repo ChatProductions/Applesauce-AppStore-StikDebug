@@ -74,8 +74,8 @@ where
         .current_ctx_for_thread(env.current_thread)
         .is_none()
     {
-        log_dbg!(
-            "Skipping GLES call without context (line {})",
+        log!(
+            "⚠️ GLES SKIP: вызов без контекста! (строка {})",
             std::panic::Location::caller().line()
         );
         return U::default();
@@ -102,6 +102,13 @@ fn with_ctx_and_mem_no_skip<T, U>(env: &mut Environment, f: T) -> U
 where
     T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
 {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!(
+            "🚨 CRITICAL GLES SKIP: вызов NO_SKIP функции без контекста! (строка {})",
+            std::panic::Location::caller().line()
+        );
+    }
+
     let mut gles = super::sync_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
@@ -181,12 +188,11 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
 }
 
 // =====================================================================
-// БЛОК ИСПРАВЛЕНИЙ: БЕЗОПАСНАЯ ЗАПИСЬ ДЛЯ ФУНКЦИЙ GET
-// Если игра вызывает их без контекста, мы принудительно пишем нули
-// в память гостя, чтобы игра не прочитала мусор и не упала.
+// БЛОК ЗАЩИТЫ: БЕЗОПАСНАЯ ЗАПИСЬ ДЛЯ ФУНКЦИЙ GET
 // =====================================================================
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGetBooleanv: запрос {:#x} без контекста! Возвращаем 0.", pname);
         env.mem.write(params, 0);
         return;
     }
@@ -200,6 +206,7 @@ fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     assert_ne!(gles11::NUM_COMPRESSED_TEXTURE_FORMATS, pname);
     assert_ne!(gles11::COMPRESSED_TEXTURE_FORMATS, pname);
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGetFloatv: запрос {:#x} без контекста! Возвращаем 0.0.", pname);
         env.mem.write(params, 0.0);
         return;
     }
@@ -230,7 +237,8 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
         _ => {
             if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-                env.mem.write(params, 0); // Безопасный нуль, чтобы избежать мусора
+                log!("⚠️ glGetIntegerv: запрос параметра {:#x} без контекста! Возвращаем 1.", pname);
+                env.mem.write(params, 1); // Безопасная единица вместо нуля
                 return;
             }
             with_ctx_and_mem(env, |gles, mem| {
@@ -240,9 +248,13 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
     }
 }
-// =====================================================================
 
 fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidPtr>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGetPointerv: запрос {:#x} без контекста! Записываем NULL.", pname);
+        env.mem.write(params, Ptr::null());
+        return;
+    }
     use crate::gles::gles1_on_gl2::{ArrayInfo, ARRAYS};
     let &ArrayInfo { buffer_binding, .. } =
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
@@ -256,6 +268,8 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
         mem.write(params, guest_pointer_or_offset);
     });
 }
+// =====================================================================
+
 fn glGetTexEnviv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLint>) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16 /* upper bound */);
@@ -286,11 +300,9 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
-            // ИСПРАВЛЕНИЕ: Оставлены только безопасные расширения. 
-            // Убраны GL_OES_draw_texture и GL_OES_matrix_palette во избежание падения по 0x0
             gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
             _ => {
-                log!("glGetString: unknown parameter {:#x}", name);
+                log!("⚠️ glGetString: unknown parameter {:#x}", name);
                 b"Unknown"
             }
         };
@@ -303,7 +315,7 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             .insert(name, new_str);
         new_str
     };
-    log_dbg!("glGetString({}) => {:?}", name, res);
+    log!("glGetString({}) => {:?}", name, res);
     res
 }
 
@@ -538,11 +550,20 @@ fn glMaterialxv(env: &mut Environment, face: GLenum, pname: GLenum, params: Cons
     })
 }
 
-// Buffers
+// =====================================================================
+// БЛОК ЗАЩИТЫ: ГЕНЕРАЦИЯ ФЕЙКОВЫХ ID БЕЗ КОНТЕКСТА
+// =====================================================================
 fn glIsBuffer(env: &mut Environment, buffer: GLuint) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsBuffer(buffer) })
 }
 fn glGenBuffers(env: &mut Environment, n: GLsizei, buffers: MutPtr<GLuint>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGenBuffers: запрос без контекста! Создаем {} фейковых ID.", n);
+        for i in 0..n {
+            env.mem.write(buffers + (i as GuestUSize), (i + 1) as GLuint);
+        }
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let buffers = mem.ptr_at_mut(buffers, n_usize);
@@ -714,7 +735,7 @@ fn glPointSizePointerOES(
     stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+    log!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
 }
 
 // Drawing
@@ -933,6 +954,13 @@ fn glReadPixels(
     })
 }
 fn glGenTextures(env: &mut Environment, n: GLsizei, textures: MutPtr<GLuint>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGenTextures: запрос без контекста! Создаем {} фейковых ID.", n);
+        for i in 0..n {
+            env.mem.write(textures + (i as GuestUSize), (i + 1) as GLuint);
+        }
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let textures = mem.ptr_at_mut(textures, n_usize);
@@ -1021,7 +1049,8 @@ fn glTexParameterxv(
 fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -> GuestUSize {
     let bytes_per_pixel: GuestUSize = match type_ {
         gles11::UNSIGNED_BYTE => match format {
-            gles11::ALPHA | gles11::LUMINANCE => 1,
+            gles11::ALPHA |
+            gles11::LUMINANCE => 1,
             gles11::LUMINANCE_ALPHA => 2,
             gles11::RGB => 3,
             gles11::RGBA => 4,
@@ -1029,7 +1058,8 @@ fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -
             _ => panic!("Unexpected format {format:#x}"),
         },
         gles11::UNSIGNED_SHORT_5_6_5
-        | gles11::UNSIGNED_SHORT_4_4_4_4
+        |
+        gles11::UNSIGNED_SHORT_4_4_4_4
         | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
         _ => panic!("Unexpected type {type_:#x}"),
     };
@@ -1213,6 +1243,13 @@ fn glMultiTexCoord4x(
 
 // OES_framebuffer_object
 fn glGenFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<GLuint>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGenFramebuffersOES: запрос без контекста! Создаем {} фейковых ID.", n);
+        for i in 0..n {
+            env.mem.write(framebuffers + (i as GuestUSize), (i + 1) as GLuint);
+        }
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let framebuffers = mem.ptr_at_mut(framebuffers, n_usize);
@@ -1220,6 +1257,13 @@ fn glGenFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<
     })
 }
 fn glGenRenderbuffersOES(env: &mut Environment, n: GLsizei, renderbuffers: MutPtr<GLuint>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        log!("⚠️ glGenRenderbuffersOES: запрос без контекста! Создаем {} фейковых ID.", n);
+        for i in 0..n {
+            env.mem.write(renderbuffers + (i as GuestUSize), (i + 1) as GLuint);
+        }
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let n_usize: GuestUSize = n.try_into().unwrap();
         let renderbuffers = mem.ptr_at_mut(renderbuffers, n_usize);
@@ -1291,7 +1335,9 @@ fn glGetFramebufferAttachmentParameterivOES(
 ) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 1);
-        unsafe { gles.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params) }
+        unsafe {
+            gles.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params)
+        }
     })
 }
 fn glGetRenderbufferParameterivOES(
@@ -1415,8 +1461,8 @@ fn glGetBufferParameteriv(
     pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-     let params = env.mem.ptr_at_mut(params, 1);
-     with_ctx_and_mem(env, |gles, _mem| unsafe {
+    let params = env.mem.ptr_at_mut(params, 1);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.GetBufferParameteriv(target, pname, params)
     })
 }
@@ -1483,7 +1529,7 @@ fn glGetTexParameteriv(
     stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+    log!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
 }
 
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
@@ -1712,4 +1758,3 @@ fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
         buffer_size
     })
 }
-
