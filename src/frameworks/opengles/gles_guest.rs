@@ -1,28 +1,16 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//!
 //! Wrapper functions exposing OpenGL ES to the guest.
 //!
-//!
-//!
 //! This code is intentionally somewhat lax with calculating array sizes when
-//! obtainining a pointer with [Mem::ptr_at].
-//!
-//! For large chunks of data, e.g. the
+//! obtainining a pointer with [Mem::ptr_at]. For large chunks of data, e.g. the
 //! `pixels` parameter of `glTexImage2D`, it's worth being precise, but for
-//!
-//!
 //! `glFoofv(pname, param)` where `param` is a pointer to one to four `GLfloat`s
-//!
-//!
 //! depending on the value of `pname`, using the upper bound (4 in this case)
-//!
-//!
 //! every time is never going to cause a problem in practice.
 
 use touchHLE_gl_bindings::gles11::{
@@ -46,11 +34,11 @@ use crate::gles::gles11_raw::types::{
 
 // These types have different sizes, so some care is needed.
 use crate::gles::gles11_raw::types::{GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr};
+
 type GuestGLsizeiptr = GuestISize;
 type GuestGLintptr = GuestISize;
 
 /// List of compressed formats supported by our emulation.
-/// Currently, it's all the PVRTC and all paletted ones.
 const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
     // PVRTC
     gles11::COMPRESSED_RGBA_PVRTC_2BPPV1_IMG,
@@ -71,9 +59,6 @@ const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
 ];
 
 /// Sync the current context and performs a function `f` within it.
-///
-/// In case of missing EAGL context for a current thread,
-/// returns a default value.
 #[track_caller]
 fn with_ctx_and_mem<T, U: Default>(env: &mut Environment, f: T) -> U
 where
@@ -107,7 +92,6 @@ where
     res
 }
 
-/// Version of with_ctx_and_mem which panics on a missing context.
 #[track_caller]
 fn with_ctx_and_mem_no_skip<T, U>(env: &mut Environment, f: T) -> U
 where
@@ -135,7 +119,6 @@ where
     res
 }
 
-/// Useful for debugging
 #[allow(dead_code)]
 fn panic_on_gl_errors(gles: &mut dyn GLES) {
     let mut did_error = false;
@@ -159,9 +142,7 @@ fn glGetError(env: &mut Environment) -> GLenum {
         let err = unsafe { gles.GetError() };
         if err != 0 {
             if ignore_gl_errors {
-                log_once!(
-                    "Warning: Guest error reporting is ignored for glGetError(), returning 0."
-                );
+                log_once!("Warning: Guest error reporting is ignored for glGetError(), returning 0.");
                 return 0;
             }
             log!("Warning: glGetError() returned {:#x}", err);
@@ -200,12 +181,11 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
 
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGetBooleanv: запрос {:#x} без контекста! Возвращаем 0.", pname);
         env.mem.write(params, 0);
         return;
     }
     with_ctx_and_mem(env, |gles, mem| {
-        let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+        let params = mem.ptr_at_mut(params, 16);
         unsafe { gles.GetBooleanv(pname, params) };
     });
 }
@@ -214,12 +194,11 @@ fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     assert_ne!(gles11::NUM_COMPRESSED_TEXTURE_FORMATS, pname);
     assert_ne!(gles11::COMPRESSED_TEXTURE_FORMATS, pname);
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGetFloatv: запрос {:#x} без контекста! Возвращаем 0.0.", pname);
         env.mem.write(params, 0.0);
         return;
     }
     with_ctx_and_mem(env, |gles, mem| {
-        let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+        let params = mem.ptr_at_mut(params, 16);
         unsafe { gles.GetFloatv(pname, params) };
     });
 }
@@ -245,12 +224,11 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
         _ => {
             if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-                log!("⚠️ glGetIntegerv: запрос параметра {:#x} без контекста! Возвращаем 1.", pname);
                 env.mem.write(params, 1);
                 return;
             }
             with_ctx_and_mem(env, |gles, mem| {
-                let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+                let params = mem.ptr_at_mut(params, 16);
                 unsafe { gles.GetIntegerv(pname, params) };
             });
         }
@@ -259,7 +237,6 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
 
 fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidPtr>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGetPointerv: запрос {:#x} без контекста! Записываем NULL.", pname);
         env.mem.write(params, Ptr::null());
         return;
     }
@@ -279,13 +256,13 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
 
 fn glGetTexEnviv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLint>) {
     with_ctx_and_mem(env, |gles, mem| {
-        let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+        let params = mem.ptr_at_mut(params, 16);
         unsafe { gles.GetTexEnviv(target, pname, params) };
     });
 }
 fn glGetTexEnvfv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLfloat>) {
     with_ctx_and_mem(env, |gles, mem| {
-        let params = mem.ptr_at_mut(params, 16 /* upper bound */);
+        let params = mem.ptr_at_mut(params, 16);
         unsafe { gles.GetTexEnvfv(target, pname, params) };
     });
 }
@@ -307,8 +284,8 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
-            // ВОЗВРАЩЕНО: GL_OES_draw_texture, чтобы игра не завершала работу через exit()
-            gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
+            // Полная строка расширений (чтобы игра не падала при проверках)
+            gles11::EXTENSIONS => b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object ",
             _ => {
                 log!("⚠️ glGetString: unknown parameter {:#x}", name);
                 b"Unknown"
@@ -564,7 +541,6 @@ fn glIsBuffer(env: &mut Environment, buffer: GLuint) -> GLboolean {
 }
 fn glGenBuffers(env: &mut Environment, n: GLsizei, buffers: MutPtr<GLuint>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGenBuffers: запрос без контекста! Создаем {} фейковых ID.", n);
         for i in 0..n {
             env.mem.write(buffers + (i as GuestUSize), (i + 1) as GLuint);
         }
@@ -741,10 +717,13 @@ fn glPointSizePointerOES(
     stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+    log_once!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
 }
 
-// ДОБАВЛЕННЫЕ ФУНКЦИИ-ЗАГЛУШКИ ДЛЯ GL_OES_draw_texture
+// =====================================================================
+// ДОБАВЛЕННЫЕ ФУНКЦИИ-ЗАГЛУШКИ ДЛЯ ДОПОЛНИТЕЛЬНЫХ РАСШИРЕНИЙ 
+// =====================================================================
+
 fn glDrawTexfOES(_env: &mut Environment, _x: GLfloat, _y: GLfloat, _z: GLfloat, _width: GLfloat, _height: GLfloat) {
     log_once!("glDrawTexfOES — stubbed");
 }
@@ -762,6 +741,56 @@ fn glDrawTexivOES(_env: &mut Environment, _coords: ConstPtr<GLint>) {
 }
 fn glDrawTexxvOES(_env: &mut Environment, _coords: ConstPtr<GLfixed>) {
     log_once!("glDrawTexxvOES — stubbed");
+}
+
+fn glRenderbufferStorageMultisampleAPPLE(
+    env: &mut Environment,
+    target: GLenum,
+    _samples: GLsizei,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    log_once!("glRenderbufferStorageMultisampleAPPLE — stubbed");
+    glRenderbufferStorageOES(env, target, internalformat, width, height);
+}
+fn glResolveMultisampleFramebufferAPPLE(_env: &mut Environment) {
+    log_once!("glResolveMultisampleFramebufferAPPLE — stubbed");
+}
+fn glDiscardFramebufferEXT(_env: &mut Environment, _target: GLenum, _numAttachments: GLsizei, _attachments: ConstPtr<GLenum>) {
+    log_once!("glDiscardFramebufferEXT — stubbed");
+}
+fn glBindVertexArrayOES(_env: &mut Environment, _array: GLuint) {
+    log_once!("glBindVertexArrayOES — stubbed");
+}
+fn glDeleteVertexArraysOES(_env: &mut Environment, _n: GLsizei, _arrays: ConstPtr<GLuint>) {
+    log_once!("glDeleteVertexArraysOES — stubbed");
+}
+fn glGenVertexArraysOES(env: &mut Environment, n: GLsizei, arrays: MutPtr<GLuint>) {
+    log_once!("glGenVertexArraysOES — stubbed");
+    for i in 0..n {
+        env.mem.write(arrays + (i as GuestUSize), (i + 1) as GLuint);
+    }
+}
+fn glIsVertexArrayOES(_env: &mut Environment, _array: GLuint) -> GLboolean {
+    log_once!("glIsVertexArrayOES — stubbed");
+    0
+}
+fn glCurrentPaletteMatrixOES(_env: &mut Environment, _matrixpaletteindex: GLuint) {
+    log_once!("glCurrentPaletteMatrixOES — stubbed");
+}
+fn glLoadPaletteFromModelViewMatrixOES(_env: &mut Environment) {
+    log_once!("glLoadPaletteFromModelViewMatrixOES — stubbed");
+}
+fn glMatrixIndexPointerOES(_env: &mut Environment, _size: GLint, _type_: GLenum, _stride: GLsizei, _pointer: ConstVoidPtr) {
+    log_once!("glMatrixIndexPointerOES — stubbed");
+}
+fn glWeightPointerOES(_env: &mut Environment, _size: GLint, _type_: GLenum, _stride: GLsizei, _pointer: ConstVoidPtr) {
+    log_once!("glWeightPointerOES — stubbed");
+}
+fn glGetBufferPointervOES(env: &mut Environment, _target: GLenum, _pname: GLenum, params: MutPtr<ConstVoidPtr>) {
+    log_once!("glGetBufferPointervOES — stubbed");
+    env.mem.write(params, Ptr::null());
 }
 
 // Drawing
@@ -981,7 +1010,6 @@ fn glReadPixels(
 }
 fn glGenTextures(env: &mut Environment, n: GLsizei, textures: MutPtr<GLuint>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGenTextures: запрос без контекста! Создаем {} фейковых ID.", n);
         for i in 0..n {
             env.mem.write(textures + (i as GuestUSize), (i + 1) as GLuint);
         }
@@ -1268,7 +1296,6 @@ fn glMultiTexCoord4x(
 // OES_framebuffer_object
 fn glGenFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<GLuint>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGenFramebuffersOES: запрос без контекста! Создаем {} фейковых ID.", n);
         for i in 0..n {
             env.mem.write(framebuffers + (i as GuestUSize), (i + 1) as GLuint);
         }
@@ -1282,7 +1309,6 @@ fn glGenFramebuffersOES(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<
 }
 fn glGenRenderbuffersOES(env: &mut Environment, n: GLsizei, renderbuffers: MutPtr<GLuint>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("⚠️ glGenRenderbuffersOES: запрос без контекста! Создаем {} фейковых ID.", n);
         for i in 0..n {
             env.mem.write(renderbuffers + (i as GuestUSize), (i + 1) as GLuint);
         }
@@ -1547,15 +1573,6 @@ fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.UnmapBufferOES(target) })
 }
 
-fn glGetTexParameteriv(
-    _env: &mut Environment,
-    type_: GLenum,
-    stride: GLsizei,
-    _pointer: ConstVoidPtr,
-) {
-    log!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
-}
-
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
     let mut fogEnabled: GLboolean = 0;
     gles.GetBooleanv(gles11::FOG, &mut fogEnabled);
@@ -1669,12 +1686,27 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glVertexPointer(_, _, _, _)),
     export_c_func!(glPointSizePointerOES(_, _, _)),
     // Drawing
-    export_c_func!(glDrawTexfOES(_, _, _, _, _)),
-    export_c_func!(glDrawTexiOES(_, _, _, _, _)),
-    export_c_func!(glDrawTexxOES(_, _, _, _, _)),
-    export_c_func!(glDrawTexfvOES(_)),
-    export_c_func!(glDrawTexivOES(_)),
-    export_c_func!(glDrawTexxvOES(_)),
+    export_c_func!(glDrawTexfOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexiOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexxOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexfvOES(_, _)),
+    export_c_func!(glDrawTexivOES(_, _)),
+    export_c_func!(glDrawTexxvOES(_, _)),
+    
+    // Заглушки для Apple / OES
+    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _, _)),
+    export_c_func!(glResolveMultisampleFramebufferAPPLE(_)),
+    export_c_func!(glDiscardFramebufferEXT(_, _, _, _)),
+    export_c_func!(glBindVertexArrayOES(_, _)),
+    export_c_func!(glDeleteVertexArraysOES(_, _, _)),
+    export_c_func!(glGenVertexArraysOES(_, _, _)),
+    export_c_func!(glIsVertexArrayOES(_, _)),
+    export_c_func!(glCurrentPaletteMatrixOES(_, _)),
+    export_c_func!(glLoadPaletteFromModelViewMatrixOES(_)),
+    export_c_func!(glMatrixIndexPointerOES(_, _, _, _, _)),
+    export_c_func!(glWeightPointerOES(_, _, _, _, _)),
+    export_c_func!(glGetBufferPointervOES(_, _, _, _)),
+
     export_c_func!(glDrawArrays(_, _, _)),
     export_c_func!(glDrawElements(_, _, _, _)),
     // Clearing
@@ -1765,27 +1797,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetBufferParameteriv(_, _, _)),
     export_c_func!(glMapBufferOES(_, _)),
     export_c_func!(glUnmapBufferOES(_)),
-    export_c_func!(glGetTexParameteriv(_, _, _)),
 ];
 
 fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
-        let pname = match target {
-            ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
-            ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
-            _ => panic!("Unsupported buffer target"),
-        };
-        let mut currently_bound_buffer_name: GLint = 0;
-        gles.GetIntegerv(pname, &mut currently_bound_buffer_name);
-        currently_bound_buffer_name as GLuint
-    })
-}
-
-fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
-    with_ctx_and_mem(env, |gles, _mem| {
-        let mut buffer_size: GLint = 0;
-        unsafe { gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut buffer_size) }
-        buffer_size
-    })
-}
-
+    with_ctx_
