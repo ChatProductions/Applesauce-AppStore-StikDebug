@@ -1151,22 +1151,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)stringByAddingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
-    assert!(encoding == NSASCIIStringEncoding || encoding == NSUTF8StringEncoding);
-    
     let str = to_rust_string(env, this);
-    // Выделяем память с запасом, так как строка может увеличиться
-    let mut escaped = String::with_capacity(str.len());
+    
+    // Если игра вдруг запросит экзотику, мы не будем падать, а просто 
+    // залогируем предупреждение и используем UTF-8 байты, 
+    // что почти всегда является стандартом для URL
+    let bytes: std::borrow::Cow<[u8]> = match encoding {
+        NSUTF8StringEncoding | NSASCIIStringEncoding => std::borrow::Cow::Borrowed(str.as_bytes()),
+        _ => {
+            log!("Warning: stringByAddingPercentEscapesUsingEncoding: non-standard encoding {}, falling back to UTF-8", encoding);
+            std::borrow::Cow::Borrowed(str.as_bytes())
+        }
+    };
 
-    for byte in str.as_bytes() {
-        // Проверяем, является ли символ разрешенным в URL
+    let mut escaped = String::with_capacity(bytes.len());
+
+    for byte in bytes.iter() {
         if byte.is_ascii_alphanumeric() 
             || b"-_.~".contains(byte) 
             || b"!*'();:@&=+$,/?%#".contains(byte) 
         {
-            // Оставляем как есть
             escaped.push(*byte as char);
         } else {
-            // Кодируем все остальные символы (включая кириллицу и пробелы) в формат %XX
             use std::fmt::Write;
             write!(&mut escaped, "%{:02X}", byte).unwrap();
         }
@@ -1342,18 +1348,37 @@ pub const CLASSES: ClassExports = objc_classes! {
          atomically:(bool)use_aux_file
            encoding:(NSStringEncoding)encoding
               error:(MutPtr<id>)error { // NSError**
-    assert!(encoding == NSUTF8StringEncoding || encoding == NSASCIIStringEncoding);
     let string = to_rust_string(env, this);
-    let c_string = env.mem.alloc_and_write_cstr(string.as_bytes());
-    // This should not include a NULL terminator!
-    let length: NSUInteger = string.len().try_into().unwrap();
-    // NSData will handle releasing the string (it is autoreleased)
-    let data: id = msg_class![env; NSData dataWithBytesNoCopy:(c_string.cast_void())
+    
+    // Честно конвертируем строку в нужные байты в зависимости от запрашиваемой кодировки
+    let bytes: Vec<u8> = match encoding {
+        NSUTF16StringEncoding | NSUTF16LittleEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        },
+        NSUTF16BigEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
+        },
+        NSUTF32LittleEndianStringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect()
+        },
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect()
+        },
+        // Для остальных (ASCII, UTF8, Latin1, MacOSRoman) берем UTF-8
+        _ => string.as_bytes().to_vec(),
+    };
+
+    let length: NSUInteger = bytes.len().try_into().unwrap();
+    
+    // Выделяем память ровно под размер массива (без нуль-терминатора, который был в alloc_and_write_cstr)
+    let buf_ptr: MutPtr<u8> = env.mem.alloc(length as u32).cast();
+    env.mem.bytes_at_mut(buf_ptr, length as u32).copy_from_slice(&bytes);
+    
+    let data: id = msg_class![env; NSData dataWithBytesNoCopy:(buf_ptr.cast_void())
                                                     length:length];
-    // TODO: write extended attributes about text encoding
+    
     let success: bool = msg![env; data writeToFile:path atomically:use_aux_file];
     if !success && !error.is_null() {
-        todo!();
         // TODO: create an NSError if requested
     }
     success
