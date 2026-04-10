@@ -48,12 +48,24 @@ pub fn CGBitmapContextCreate(
 ) -> CGContextRef {
     // assert!(bits_per_component == 8); // TODO: support other bit depths
 
-    let color_space = env.objc.borrow::<CGColorSpaceHostObject>(color_space).name;
-    let component_count = match color_space {
-        kCGColorSpaceGenericRGB => components_for_rgb(bitmap_info).unwrap(),
-        kCGColorSpaceGenericGray => components_for_gray(bitmap_info).unwrap(),
-        _ => unimplemented!("support other color spaces"),
+        // Честная обработка NULL color_space: по умолчанию используем RGB.
+    let color_space_name = if color_space.is_null() {
+        kCGColorSpaceGenericRGB
+    } else {
+        env.objc.borrow::<CGColorSpaceHostObject>(color_space).name
     };
+
+    let component_count = match color_space_name {
+        kCGColorSpaceGenericRGB => components_for_rgb(bitmap_info).unwrap_or(4), // Fallback на 4 компонента
+        kCGColorSpaceGenericGray => components_for_gray(bitmap_info).unwrap_or(1),
+        _ => {
+            log!("Warning: unknown color space '{}' in CGBitmapContextCreate, falling back to RGB", color_space_name);
+            components_for_rgb(bitmap_info).unwrap_or(4)
+        }
+    };
+    
+    // Перезаписываем имя для сохранения в структуре
+    let color_space = color_space_name;
 
     let (data, data_is_owned, bytes_per_row) = if data.is_null() {
         let bytes_per_row = if bytes_per_row == 0 {
@@ -208,9 +220,9 @@ fn bytes_per_pixel(data: &CGBitmapContextData) -> GuestUSize {
     } = data;
     assert!(bits_per_component == 8);
     match color_space {
-        kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap(),
-        kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap(),
-        _ => unimplemented!("support other color spaces"),
+        kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap_or(4),
+        kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap_or(1),
+        _ => components_for_rgb(alpha_info).unwrap_or(4), // Fallback
     }
 }
 
