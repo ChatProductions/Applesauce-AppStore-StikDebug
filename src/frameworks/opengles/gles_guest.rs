@@ -1,18 +1,24 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+//!
 //! Wrapper functions exposing OpenGL ES to the guest.
 //!
+//!
 //! This code is intentionally somewhat lax with calculating array sizes when
-//! obtainining a pointer with [Mem::ptr_at]. For large chunks of data, e.g. the
+//! obtainining a pointer with [Mem::ptr_at].
+//! For large chunks of data, e.g. the
 //! `pixels` parameter of `glTexImage2D`, it's worth being precise, but for
+//!
 //! `glFoofv(pname, param)` where `param` is a pointer to one to four `GLfloat`s
+//!
 //! depending on the value of `pname`, using the upper bound (4 in this case)
+//!
 //! every time is never going to cause a problem in practice.
-
 use touchHLE_gl_bindings::gles11::{
     ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER_BINDING, VERTEX_ARRAY_BUFFER_BINDING,
     WRITE_ONLY_OES,
@@ -31,10 +37,8 @@ use crate::gles::gles11_raw::types::{
     GLbitfield, GLboolean, GLclampf, GLclampx, GLenum, GLfixed, GLfloat, GLint, GLsizei, GLubyte,
     GLuint, GLvoid,
 };
-
 // These types have different sizes, so some care is needed.
 use crate::gles::gles11_raw::types::{GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr};
-
 type GuestGLsizeiptr = GuestISize;
 type GuestGLintptr = GuestISize;
 
@@ -89,7 +93,6 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
-
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -117,7 +120,6 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
-
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -255,7 +257,6 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
     use crate::gles::gles1_on_gl2::{ArrayInfo, ARRAYS};
     let &ArrayInfo { buffer_binding, .. } =
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
-
     with_ctx_and_mem(env, |gles, mem| {
         let mut host_pointer_or_offset = std::ptr::null();
         let guest_pointer_or_offset = unsafe {
@@ -303,7 +304,6 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
                 b"Unknown"
             }
         };
-
         let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
         
         env.framework_state
@@ -399,7 +399,6 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
-
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Scissor(x, y, width, height)
     })
@@ -408,7 +407,6 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
-
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Viewport(x, y, width, height)
     })
@@ -1762,13 +1760,19 @@ fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum
         let pname = match target {
             ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
             ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
-            _ => panic!(),
+            _ => panic!("Unsupported buffer target"),
         };
-        let currently_bound_buffer_name: GLuint = 0;
-        gles.GetIntegerv(pname, &mut (currently_bound_buffer_name as GLint));
-        currently_bound_buffer_name
+        let mut currently_bound_buffer_name: GLint = 0;
+        gles.GetIntegerv(pname, &mut currently_bound_buffer_name);
+        currently_bound_buffer_name as GLuint
     })
 }
 
-fn _get
+fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        let mut buffer_size: GLint = 0;
+        gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut buffer_size);
+        buffer_size
+    })
+}
 
