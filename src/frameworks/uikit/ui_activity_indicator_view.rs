@@ -83,7 +83,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     // Set the style
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     host.style = style;
     drop(host);
     
@@ -157,42 +157,45 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Encode superclass
     // let _: () = msg_super![env; this encodeWithCoder:coder];
     
+    // 1. Сначала читаем все данные из host
     let host = env.objc.borrow::<UIActivityIndicatorViewHostObject>(this);
+    let style = host.style;
+    let hides_when_stopped = host.hides_when_stopped;
+    let color = host.color;
+    let animating = host.animating;
+    // 2. Освобождаем заимствование env.objc перед отправкой сообщений (msg!)
+    drop(host);
     
     // Encode style
     let style_str = "UIActivityIndicatorViewStyle\0".as_ptr() as usize as u32;
     let style_key: id = msg_class![env; NSString stringWithUTF8String:style_str];
-    let style = host.style;
     let _: () = msg![env; coder encodeInteger:style forKey:style_key];
     
     // Encode hidesWhenStopped
     let hides_str = "UIActivityIndicatorViewHidesWhenStopped\0".as_ptr() as usize as u32;
     let hides_key: id = msg_class![env; NSString stringWithUTF8String:hides_str];
-    let hides_when_stopped = host.hides_when_stopped;
     let _: () = msg![env; coder encodeBool:hides_when_stopped forKey:hides_key];
 
     // Encode color
-    if let Some(color) = host.color {
+    if let Some(c) = color {
         let color_str = "UIActivityIndicatorViewColor\0".as_ptr() as usize as u32;
         let color_key: id = msg_class![env; NSString stringWithUTF8String:color_str];
-        let _: () = msg![env; coder encodeObject:color forKey:color_key];
+        let _: () = msg![env; coder encodeObject:c forKey:color_key];
     }
     
     // Encode animating state
     let animating_str = "UIActivityIndicatorViewAnimating\0".as_ptr() as usize as u32;
     let animating_key: id = msg_class![env; NSString stringWithUTF8String:animating_str];
-    let animating = host.animating;
     let _: () = msg![env; coder encodeBool:animating forKey:animating_key];
 }
 
 // MARK: - Configuring the Activity Indicator Appearance
 
 - (())setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)style {
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     if host.style == style {
         return;
     }
-    
     host.style = style;
     drop(host);
 
@@ -216,24 +219,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setColor:(id)color { // UIColor*
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    
-    // Release old color if any
-    if let Some(old_color) = host.color {
-        drop(host);
-        release(env, old_color);
-        host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    }
-    
-    // Retain new color
-    if color != nil {
-        let retained_color: id = msg![env; color retain];
-        host.color = Some(retained_color);
+    // Сначала удерживаем новый цвет до заимствования host, 
+    // чтобы избежать двойного мутабельного заимствования `env`.
+    let retained_color = if color != nil {
+        msg![env; color retain]
     } else {
-        host.color = None;
+        nil
+    };
+
+    // Заимствуем host и меняем цвет, одновременно извлекая старый цвет
+    let old_color = {
+        let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+        let old = host.color;
+        host.color = if retained_color != nil { Some(retained_color) } else { None };
+        old
+    }; // host автоматически сбрасывается (drop) при выходе из блока
+
+    // Теперь безопасно освобождаем старый цвет
+    if let Some(old_c) = old_color {
+        release(env, old_c);
     }
-    
-    drop(host);
     
     // Trigger a redraw
     let _: () = msg![env; this setNeedsDisplay];
@@ -247,14 +252,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         color
     } else {
         // Return default color for style
-        get_default_color_for_style(env, host.style)
+        let style = host.style;
+        drop(host); // Сбрасываем до вызова функции, которая использует msg!
+        get_default_color_for_style(env, style)
     }
 }
 
 // MARK: - Managing Animation
 
 - (())startAnimating {
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     if host.animating {
         return; // Already animating
     }
@@ -272,7 +279,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())stopAnimating {
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     if !host.animating {
         return; // Already stopped
     }
@@ -299,7 +306,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Configuring Visibility Behavior
 
 - (())setHidesWhenStopped:(bool)hides {
-    let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     if host.hides_when_stopped == hides {
         return;
     }
@@ -330,7 +337,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Center the indicator in its bounds
     let bounds: CGRect = msg![env; this bounds];
-    let size = get_size_for_style(env.objc.borrow::<UIActivityIndicatorViewHostObject>(this).style);
+    let style = env.objc.borrow::<UIActivityIndicatorViewHostObject>(this).style;
+    let size = get_size_for_style(style);
     
     let center_x = bounds.size.width / 2.0;
     let center_y = bounds.size.height / 2.0;
