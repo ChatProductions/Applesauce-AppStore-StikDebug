@@ -80,7 +80,7 @@ fn objc_msgSend_inner(
             } = class_host_object.as_any().downcast_ref().unwrap();
             
             // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! ---
-            log!(
+            panic!(
                 "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
                 if is_metaclass { "Class" } else { "Object" },
                 receiver,
