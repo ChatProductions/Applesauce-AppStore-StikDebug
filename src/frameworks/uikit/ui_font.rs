@@ -95,6 +95,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation UIFont: NSObject
 
+// ДОБАВЛЕНО: Стандартные размеры системных шрифтов (честные значения iOS)
++ (CGFloat)systemFontSize {
+    14.0
+}
+
++ (CGFloat)smallSystemFontSize {
+    12.0
+}
+
++ (CGFloat)labelFontSize {
+    17.0
+}
+
++ (CGFloat)buttonFontSize {
+    18.0
+}
+
 + (id)systemFontOfSize:(CGFloat)size {
     let host_object = UIFontHostObject {
         size,
@@ -474,3 +491,4 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
     }
 }
 
+}
