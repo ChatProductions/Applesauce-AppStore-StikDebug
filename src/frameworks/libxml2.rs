@@ -24,6 +24,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlFreeParserCtxt(_)),
     export_c_func!(xmlGetProp(_, _)),
     export_c_func!(xmlHasProp(_, _)),
+    export_c_func!(xmlStrcmp(_, _)),
     export_c_func!(xmlNodeGetContent(_)),
 ];
 
@@ -72,6 +73,9 @@ fn xmlGetProp(_env: &mut Environment, _node: u32, _name: u32) -> u32 { 0 }
 
 #[allow(non_snake_case)]
 fn xmlHasProp(_env: &mut Environment, _node: u32, _name: u32) -> u32 { 0 }
+
+#[allow(non_snake_case)]
+fn xmlStrcmp(_env: &mut Environment, _node: u32, _name: u32) -> u32 { 0 }
 
 #[allow(non_snake_case)]
 fn xmlNodeGetContent(_env: &mut Environment, _node: u32) -> u32 { 0 }
