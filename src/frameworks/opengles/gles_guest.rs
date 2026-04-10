@@ -63,6 +63,7 @@ const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
 ///
 /// In case of missing EAGL context for a current thread,
 /// returns a default value.
+#[track_caller]
 fn with_ctx_and_mem<T, U: Default>(env: &mut Environment, f: T) -> U
 where
     T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
@@ -73,10 +74,12 @@ where
         .current_ctx_for_thread(env.current_thread)
         .is_none()
     {
-        // ВРЕМЕННО МЕНЯЕМ ПРЕДУПРЕЖДЕНИЕ НА ПАНИКУ ДЛЯ ОТЛАДКИ:
+        let caller = std::panic::Location::caller();
         panic!(
-            "Missing EAGLContext for thread {}! Catching the exact GL function in Rust backtrace.",
-            env.current_thread
+            "🚨 НАШЛИ! Missing EAGLContext for thread {}! The problematic GL function wrapper is called at {}:{}",
+            env.current_thread,
+            caller.file(),
+            caller.line()
         );
     }
 
@@ -102,6 +105,7 @@ where
 /// Needed because for return types such as `*mut GLvoid` we cannnot
 /// return a default value in case EAGL context is missing for
 /// a current thread.
+#[track_caller]
 fn with_ctx_and_mem_no_skip<T, U>(env: &mut Environment, f: T) -> U
 where
     T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
@@ -211,16 +215,10 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
         // MAX_COLOR_ATTACHMENTS_EXT or MAX_COLOR_ATTACHMENTS_OES
         0x8cdf => {
-            // According to [OES_framebuffer_object](https://registry.khronos.org/OpenGL/extensions/OES/OES_framebuffer_object.txt),
-            // MAX_COLOR_ATTACHMENTS_OES is not supported in the extension,
-            // but we return 1 to match the real device.
             env.mem.write(params, 1 as _);
         }
         // MAX_SAMPLES or MAX_SAMPLES_ANGLE
         0x8d57 => {
-            // TODO: handle GetBooleanv and GetFloatv as well
-            // 1 is an initial value
-            // TODO: This is an OpenGL ES 2.0 extension, not supported yet
             env.mem.write(params, 1 as _);
         }
         _ => {
@@ -237,7 +235,6 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
 
     with_ctx_and_mem(env, |gles, mem| {
-        // params always points to just one pointer for this function
         let mut host_pointer_or_offset = std::ptr::null();
         let guest_pointer_or_offset = unsafe {
             gles.GetPointerv(pname, &mut host_pointer_or_offset);
@@ -272,20 +269,12 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
     let res = if let Some(&str) = env.framework_state.opengles.strings_cache.get(&name) {
         str
     } else {
-        // Those values are extracted from the iPod touch 2nd gen, iOS 4.2.1
+        // Убрали with_ctx_and_mem, так как контекст для хардкода не нужен
         let s: &[u8] = match name {
-            gles11::VENDOR => {
-                b"Imagination Technologies"
-            }
-            gles11::RENDERER => {
-                b"PowerVR MBXLite with VGPLite"
-            }
-            gles11::VERSION => {
-                b"OpenGL ES-CM 1.1 (76)"
-            }
-            gles11::EXTENSIONS => {
-                b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object "
-            }
+            gles11::VENDOR => b"Imagination Technologies",
+            gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
+            gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
+            gles11::EXTENSIONS => b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object ",
             _ => unreachable!(),
         };
 
@@ -381,8 +370,6 @@ fn glShadeModel(env: &mut Environment, mode: GLenum) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.ShadeModel(mode) })
 }
 fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
-    // apply scale hack: assume framebuffer's size is larger than the app thinks
-    // and scale scissor appropriately
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
@@ -392,8 +379,6 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     })
 }
 fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
-    // apply scale hack: assume framebuffer's size is larger than the app thinks
-    // and scale viewport appropriately
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
@@ -619,12 +604,6 @@ fn glNormal3x(env: &mut Environment, nx: GLfixed, ny: GLfixed, nz: GLfixed) {
 // Pointers
 
 /// Helper for implementing OpenGL pointer setting functions.
-///
-/// One of the ugliest things in OpenGL is that, depending on dynamic state
-/// (`ARRAY_BUFFER_BINDING` or `ELEMENT_ARRAY_BUFFER_BINDING`), the pointer
-/// parameter of certain functions is either a pointer or an offset!
-///
-/// See also: [translate_pointer_or_offset_to_guest]
 unsafe fn translate_pointer_or_offset_to_host(
     gles: &mut dyn GLES,
     mem: &Mem,
@@ -640,22 +619,12 @@ unsafe fn translate_pointer_or_offset_to_host(
         std::ptr::null()
     } else {
         let pointer = pointer_or_offset;
-        // We need to use an unchecked version of ptr_at to avoid crashing here
-        // if dynamic state was disabled.
-        // Also, bounds checking is hopeless here
         mem.unchecked_ptr_at(pointer.cast::<u8>(), 0)
             .cast::<GLvoid>()
     }
 }
 
 /// Helper for implementing OpenGL pointer retrieval.
-///
-/// Reverse of [translate_pointer_or_offset_to_host]. Depending on the value
-/// of `VERTEX_ARRAY_BUFFER_BINDING`/`NORMAL_ARRAY_BUFFER_BINDING`/etc
-/// (not to be confused with `ARRAY_BUFFER_BINDING`, only used when *setting*),
-/// the pointer retrieved with `glGetPointerv` may actually be an offset.
-///
-/// See also: [translate_pointer_or_offset_to_host]
 unsafe fn translate_pointer_or_offset_to_guest(
     gles: &mut dyn GLES,
     mem: &Mem,
@@ -972,8 +941,6 @@ fn glBindTexture(env: &mut Environment, target: GLenum, texture: GLuint) {
     })
 }
 fn glTexParameteri(env: &mut Environment, target: GLenum, pname: GLenum, param: GLint) {
-    // So long as we haven't implemented glDrawTexOES yet, we can just ignore
-    // this parameter, because it doesn't do anything for normal texture use.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -982,7 +949,6 @@ fn glTexParameteri(env: &mut Environment, target: GLenum, pname: GLenum, param: 
     })
 }
 fn glTexParameterf(env: &mut Environment, target: GLenum, pname: GLenum, param: GLfloat) {
-    // See above.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -991,7 +957,6 @@ fn glTexParameterf(env: &mut Environment, target: GLenum, pname: GLenum, param: 
     })
 }
 fn glTexParameterx(env: &mut Environment, target: GLenum, pname: GLenum, param: GLfixed) {
-    // See above.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1000,7 +965,6 @@ fn glTexParameterx(env: &mut Environment, target: GLenum, pname: GLenum, param: 
     })
 }
 fn glTexParameteriv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLint>) {
-    // See above.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1015,7 +979,6 @@ fn glTexParameterfv(
     pname: GLenum,
     params: ConstPtr<GLfloat>,
 ) {
-    // See above.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1030,7 +993,6 @@ fn glTexParameterxv(
     pname: GLenum,
     params: ConstPtr<GLfixed>,
 ) {
-    // See above.
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1054,7 +1016,6 @@ fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -
         | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
         _ => panic!("Unexpected type {type_:#x}"),
     };
-    // This is approximate, it doesn't account for alignment.
     pixel_count.checked_mul(bytes_per_pixel).unwrap()
 }
 fn glTexImage2D(
@@ -1188,14 +1149,12 @@ fn glTexEnvfv(env: &mut Environment, target: GLenum, pname: GLenum, params: Cons
         target == gles11::TEXTURE_ENV || target == gles11::TEXTURE_FILTER_CONTROL_EXT,
         "target {target:#x}, pname {pname:#x}"
     );
-    // TODO: GL_POINT_SPRITE_OES
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at(params, 4 /* upper bound */);
         unsafe { gles.TexEnvfv(target, pname, params) }
     })
 }
 fn glTexEnvxv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLfixed>) {
-    // TODO: GL_POINT_SPRITE_OES
     assert!(target == gles11::TEXTURE_ENV);
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at(params, 4 /* upper bound */);
@@ -1203,7 +1162,6 @@ fn glTexEnvxv(env: &mut Environment, target: GLenum, pname: GLenum, params: Cons
     })
 }
 fn glTexEnviv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLint>) {
-    // TODO: GL_POINT_SPRITE_OES
     assert!(target == gles11::TEXTURE_ENV);
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at(params, 4 /* upper bound */);
@@ -1278,7 +1236,6 @@ fn glRenderbufferStorageOES(
     width: GLsizei,
     height: GLsizei,
 ) {
-    // apply scale hack: give the app a larger framebuffer than it asked for
     let factor = env.options.scale_hack.get() as GLsizei;
     let (width, height) = (width * factor, height * factor);
     with_ctx_and_mem(env, |gles, _mem| unsafe {
@@ -1330,8 +1287,6 @@ fn glGetRenderbufferParameterivOES(
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 1);
         unsafe { gles.GetRenderbufferParameterivOES(target, pname, params) };
-        // apply scale hack: scale down the reported size of the framebuffer,
-        // assuming the framebuffer's true size is larger than it should be
         if pname == gles11::RENDERBUFFER_WIDTH_OES || pname == gles11::RENDERBUFFER_HEIGHT_OES {
             unsafe { params.write_unaligned(params.read_unaligned() / factor) }
         }
@@ -1361,7 +1316,6 @@ fn glGenerateMipmapOES(env: &mut Environment, target: GLenum) {
 }
 
 // Non-OES aliases for OES_framebuffer_object functions.
-// Some GLES1 apps call the suffix-free ES2-style names directly.
 fn glGenFramebuffers(env: &mut Environment, n: GLsizei, framebuffers: MutPtr<GLuint>) {
     glGenFramebuffersOES(env, n, framebuffers)
 }
@@ -1396,13 +1350,7 @@ fn glFramebufferRenderbuffer(
     renderbuffertarget: GLenum,
     renderbuffer: GLuint,
 ) {
-    glFramebufferRenderbufferOES(
-        env,
-        target,
-        attachment,
-        renderbuffertarget,
-        renderbuffer,
-    )
+    glFramebufferRenderbufferOES(env, target, attachment, renderbuffertarget, renderbuffer)
 }
 fn glFramebufferTexture2D(
     env: &mut Environment,
@@ -1434,18 +1382,10 @@ fn glGetRenderbufferParameteriv(
 fn glCheckFramebufferStatus(env: &mut Environment, target: GLenum) -> GLenum {
     glCheckFramebufferStatusOES(env, target)
 }
-fn glDeleteFramebuffers(
-    env: &mut Environment,
-    n: GLsizei,
-    framebuffers: ConstPtr<GLuint>,
-) {
+fn glDeleteFramebuffers(env: &mut Environment, n: GLsizei, framebuffers: ConstPtr<GLuint>) {
     glDeleteFramebuffersOES(env, n, framebuffers)
 }
-fn glDeleteRenderbuffers(
-    env: &mut Environment,
-    n: GLsizei,
-    renderbuffers: ConstPtr<GLuint>,
-) {
+fn glDeleteRenderbuffers(env: &mut Environment, n: GLsizei, renderbuffers: ConstPtr<GLuint>) {
     glDeleteRenderbuffersOES(env, n, renderbuffers)
 }
 fn glGenerateMipmap(env: &mut Environment, target: GLenum) {
@@ -1464,17 +1404,6 @@ fn glGetBufferParameteriv(
     })
 }
 fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutPtr<GLvoid> {
-    //  "glMapBuffer maps to the client's address space the entire data store
-    //  of the buffer object currently bound to target. The data can then be
-    //  directly read and/or written relative to the returned pointer,
-    //  depending on the specified access policy."
-    // https://docs.gl/gl2/glMapBuffer
-    //
-    // We have to make an address space in the guest and "forward" those
-    // reads/writes to the address space in the host, which is mapped to the
-    // target buffer.
-    // Since the mapped buffer can't be used until it's unmapped, we defer the
-    // "forwarding" of read/writes until the moment the buffer is unmapped.
     assert!(matches!(target, ARRAY_BUFFER | ELEMENT_ARRAY_BUFFER));
     assert!(access == WRITE_ONLY_OES);
     let buffer_object_name = _get_currently_bound_buffer_object_name(env, target);
@@ -1486,7 +1415,6 @@ fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutP
     } else {
         let buffer_size = _get_buffer_size(env, target) as u32;
         let guest_buffer: MutVoidPtr = env.mem.alloc(buffer_size).cast();
-        // Copy host buffer to guest buffer
         unsafe {
             env.mem
                 .bytes_at_mut(guest_buffer.cast(), buffer_size)
@@ -1508,16 +1436,6 @@ fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutP
     }
 }
 fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
-    //  "A mapped data store must be unmapped with glUnmapBuffer before its
-    //  buffer object is used. Otherwise an error will be generated by any GL
-    //  command that attempts to dereference the buffer object's data store.
-    //  When a data store is unmapped, the pointer to its data store becomes
-    //  invalid."
-    // https://docs.gl/gl2/glMapBuffer
-    //
-    // Since the mapped buffer can't be used until it's unmapped, we defer the
-    // "forwarding" of read/writes until the moment the buffer is unmapped.
-    // The guest buffer is deallocated here
     let buffer_object_name = _get_currently_bound_buffer_object_name(env, target);
     let current_ctx = env
         .framework_state
@@ -1531,7 +1449,6 @@ fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
         .remove(&buffer_object_name)
     {
         let buffer_size = _get_buffer_size(env, target) as u32;
-        // Copy guest buffer to host buffer
         unsafe {
             host_buffer.copy_from(
                 env.mem.bytes_at(guest_buffer.cast(), buffer_size).as_ptr() as *mut GLvoid,
@@ -1552,13 +1469,6 @@ fn glGetTexParameteriv(
     log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
 }
 
-/// If fog is enabled, check if the values for start and end distances
-/// are equal.
-/// Apple platforms (even modern Mac OS) seem to handle that
-/// gracefully, however, both Windows and Android have issues in those cases.
-/// This workaround is required so Doom 2 RPG renders correctly.
-/// It prevents divisions by zero in levels where fog is used and both
-/// values are set to 10000.
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
     let mut fogEnabled: GLboolean = 0;
     gles.GetBooleanv(gles11::FOG, &mut fogEnabled);
