@@ -442,14 +442,16 @@ pub fn format_date_iso8601(env: &mut crate::Environment, date: id) -> String {
     
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
+    // Copy packed struct fields to locals to avoid unaligned reference UB.
+    let year = greg_date.year;
+    let month = greg_date.month;
+    let day = greg_date.day;
+    let hours = greg_date.hours;
+    let minutes = greg_date.minutes;
+    let seconds = greg_date.seconds as i32;
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        greg_date.year,
-        greg_date.month,
-        greg_date.day,
-        greg_date.hours,
-        greg_date.minutes,
-        greg_date.seconds as i32
+        year, month, day, hours, minutes, seconds
     )
 }
 
