@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `NSDate`.
 
 use super::ns_string::{from_rust_ordering, from_rust_string, to_rust_string};
@@ -14,7 +16,6 @@ use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
-
 use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_date;
 use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
@@ -73,7 +74,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
 
     log_dbg!("[(NSDate*){:?} distantFuture]: date {:?} (time_interval: {})", this, new, time_interval);
-
     autorelease(env, new)
 }
 
@@ -88,7 +88,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
 
     log_dbg!("[(NSDate*){:?} distantPast]: date {:?} (time_interval: {})", this, new, time_interval);
-
     autorelease(env, new)
 }
 
@@ -228,7 +227,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSComparisonResult)compare:(id)anotherDate { // NSDate *
     if anotherDate.is_null() {
-        return 1; // NSOrderedDescending - this is later than nil
+        return 1;
+        // NSOrderedDescending - this is later than nil
     }
     
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
@@ -300,7 +300,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)descriptionWithLocale:(id)locale { // NSLocale *
     // For now, ignore locale and use standard description
-    let _locale = locale; // Suppress unused warning
+    let _locale = locale;
+    // Suppress unused warning
     msg![env; this description]
 }
 
@@ -322,8 +323,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         return true;
     }
     
-    // Check if other is an NSDate
-    let is_kind_of_class: bool = msg![env; other isKindOfClass:msg_class![env; NSDate class]];
+    // Check if other is an NSDate. Выносим вызов msg_class! в отдельную переменную,
+    // чтобы избежать ошибки парсинга макроса msg!.
+    let nsdate_class = msg_class![env; NSDate class];
+    let is_kind_of_class: bool = msg![env; other isKindOfClass:nsdate_class];
+    
     if !is_kind_of_class {
         return false;
     }
@@ -438,7 +442,6 @@ pub fn format_date_iso8601(env: &mut crate::Environment, date: id) -> String {
     
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
-    
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
         greg_date.year,
@@ -477,7 +480,6 @@ pub fn are_dates_on_same_day(env: &mut crate::Environment, date1: id, date2: id)
     
     let (year1, month1, day1, _, _, _) = get_date_components(env, date1);
     let (year2, month2, day2, _, _, _) = get_date_components(env, date2);
-    
     year1 == year2 && month1 == month2 && day1 == day2
 }
 
@@ -489,13 +491,11 @@ pub fn start_of_day(env: &mut crate::Environment, date: id) -> id {
     
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
-    
     // Calculate time interval for start of day (00:00:00)
     let day_start_interval = time_interval - 
         (greg_date.hours as f64 * SECS_PER_HOUR) -
         (greg_date.minutes as f64 * SECS_PER_MINUTE) -
         greg_date.seconds;
-    
     msg_class![env; NSDate dateWithTimeIntervalSinceReferenceDate:day_start_interval]
 }
 
@@ -506,6 +506,8 @@ pub fn end_of_day(env: &mut crate::Environment, date: id) -> id {
     }
     
     let start = start_of_day(env, date);
-    let end_interval = SECS_PER_DAY - 0.001; // 23:59:59.999
+    let end_interval = SECS_PER_DAY - 0.001;
+    // 23:59:59.999
     msg![env; start dateByAddingTimeInterval:end_interval]
 }
+
