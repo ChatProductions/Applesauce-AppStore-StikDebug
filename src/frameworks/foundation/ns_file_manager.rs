@@ -160,7 +160,6 @@ fn NSSearchPathForDirectoriesInDomains(
             env.fs.home_directory().to_owned()
         }
     };
-
     let dir = ns_string::from_rust_string(env, String::from(dir));
     let dir_list = ns_array::from_vec(env, vec![dir]);
     autorelease(env, dir_list)
@@ -192,7 +191,7 @@ fn NSTemporaryDirectory(env: &mut Environment) -> id {
     autorelease(env, dir)
 }
 
-fn NSOpenStepRootDirectory() -> id {
+fn NSOpenStepRootDirectory(_env: &mut Environment) -> id {
     // Return root directory
     nil // Not typically used on iOS
 }
@@ -222,7 +221,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSSearchPathForDirectoriesInDomains(_, _, _)),
     export_c_func!(NSUserName()),
     export_c_func!(NSFullUserName()),
-    export_c_func!(NSOpenStepRootDirectory()),
+    export_c_func!(NSOpenStepRootDirectory(_)),
     export_c_func!(NSAllocateObject(_, _, _)),
     export_c_func!(NSDeallocateObject(_)),
 ];
@@ -296,16 +295,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let Ok(paths) = env.fs.enumerate(GuestPath::new(&path)) else {
         return nil;
     };
+    
     let paths: Vec<GuestPathBuf> = paths
         .map(|path| GuestPathBuf::from(GuestPath::new(path)))
         .collect();
-
+    
     log_dbg!("directoryContentsAtPath {}: {:?}", path, paths);
     let path_strings = paths
         .iter()
         .map(|name| ns_string::from_rust_string(env, name.as_str().to_string()))
         .collect();
-
     let res = ns_array::from_vec(env, path_strings);
     autorelease(env, res)
 }
@@ -325,7 +324,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         iterator: paths.into_iter(),
         base_path: GuestPathBuf::from(guest_path),
     });
-
+    
     let class = env.objc.get_known_class("NSDirectoryEnumerator", &mut env.mem);
     let enumerator = env.objc.alloc_object(class, host_object, &mut env.mem);
     autorelease(env, enumerator)
@@ -354,12 +353,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return nil;
     };
-
+    
     let path_strings: Vec<id> = paths
         .iter()
         .map(|p| ns_string::from_rust_string(env, p.as_str().to_string()))
         .collect();
-
     let res = ns_array::from_vec(env, path_strings);
     autorelease(env, res)
 }
@@ -401,7 +399,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)createDirectoryAtPath:(id)path
   withIntermediateDirectories:(bool)with_intermediates
-                   attributes:(id)_attributes
+                 attributes:(id)_attributes
                         error:(MutPtr<id>)error {
     if path.is_null() {
         if !error.is_null() {
@@ -414,13 +412,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     let path_str = ns_string::to_rust_string(env, path);
-
     let res = if with_intermediates {
         env.fs.create_dir_all(GuestPath::new(&path_str))
     } else {
         env.fs.create_dir(GuestPath::new(&path_str))
     };
-
+    
     match res {
         Ok(()) => {
             log_dbg!("createDirectoryAtPath {} => true", path_str);
@@ -512,6 +509,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let src_str = ns_string::to_rust_string(env, src);
     let dst_str = ns_string::to_rust_string(env, dst);
+    
     let data = match env.fs.read(GuestPath::new(src_str.as_ref())) {
         Ok(d) => d,
         Err(_) => {
@@ -524,7 +522,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             return false;
         }
     };
-
+    
     if env.fs.write(GuestPath::new(dst_str.as_ref()), &data).is_err() {
         if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -534,6 +532,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
+    
     true
 }
 
@@ -552,14 +551,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let path_str = ns_string::to_rust_string(env, path);
     let to_path_str = ns_string::to_rust_string(env, toPath);
+    
     match env.fs.rename(GuestPath::new(&path_str), GuestPath::new(&to_path_str)) {
         Ok(()) => true,
         Err(()) => {
             if !error.is_null() {
-               let domain = get_static_str(env, NSCocoaErrorDomain);
-               let ns_error = msg_class![env; NSError alloc];
-               let ns_error = msg![env; ns_error initWithDomain:domain code:1 userInfo:nil];
-               env.mem.write(error, ns_error);
+                let domain = get_static_str(env, NSCocoaErrorDomain);
+                let ns_error = msg_class![env; NSError alloc];
+                let ns_error = msg![env; ns_error initWithDomain:domain code:1 userInfo:nil];
+                env.mem.write(error, ns_error);
             }
             false
         }
@@ -586,9 +586,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)setUbiquitous:(bool)_flag
-        itemAtURL:(id)_url
-   destinationURL:(id)_dest_url
-            error:(MutPtr<id>)error {
+            itemAtURL:(id)_url
+       destinationURL:(id)_dest_url
+                error:(MutPtr<id>)error {
     // iCloud not supported
     if !error.is_null() {
         let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -605,362 +605,200 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return false;
     }
-    
-    let path_str = ns_string::to_rust_string(env, path);
-    let res_exists = env.fs.exists(GuestPath::new(&path_str));
-    log_dbg!("[(NSFileManager*) {:?} fileExistsAtPath:{:?}] => {}", this, path, res_exists);
-    res_exists
+    let path = ns_string::to_rust_string(env, path);
+    env.fs.exists(GuestPath::new(&path))
 }
 
 - (bool)fileExistsAtPath:(id)path
-             isDirectory:(MutPtr<bool>)is_dir {
+             isDirectory:(MutPtr<bool>)is_dir_ptr {
     if path.is_null() {
-        if !is_dir.is_null() {
-            env.mem.write(is_dir, false);
+        if !is_dir_ptr.is_null() {
+            env.mem.write(is_dir_ptr, false);
         }
         return false;
     }
     
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
-    let res_exists = env.fs.exists(guest_path);
-    let res_is_dir = if res_exists {
-        !env.fs.is_file(guest_path)
+    
+    if env.fs.exists(guest_path) {
+        if !is_dir_ptr.is_null() {
+            let is_dir = env.fs.is_dir(guest_path);
+            env.mem.write(is_dir_ptr, is_dir);
+        }
+        true
     } else {
+        if !is_dir_ptr.is_null() {
+            env.mem.write(is_dir_ptr, false);
+        }
         false
-    };
-
-    if !is_dir.is_null() {
-        env.mem.write(is_dir, res_is_dir);
     }
-
-    log_dbg!("[(NSFileManager*) {:?} fileExistsAtPath:{:?} isDirectory:{:?}] => {}", this, path, res_is_dir, res_exists);
-    res_exists
 }
 
 - (bool)isReadableFileAtPath:(id)path {
     if path.is_null() {
         return false;
     }
-    
-    let path_str = ns_string::to_rust_string(env, path);
-    let (_, readable, _, _) = env.fs.access(GuestPath::new(&path_str));
-    readable
+    let path = ns_string::to_rust_string(env, path);
+    env.fs.exists(GuestPath::new(&path)) // All existing files are readable
 }
 
 - (bool)isWritableFileAtPath:(id)path {
     if path.is_null() {
         return false;
     }
-    
-    let path_str = ns_string::to_rust_string(env, path);
-    let (_, _, writable, _) = env.fs.access(GuestPath::new(&path_str));
-    writable
+    let path = ns_string::to_rust_string(env, path);
+    env.fs.exists(GuestPath::new(&path)) // All existing files are writable
 }
 
 - (bool)isExecutableFileAtPath:(id)path {
     if path.is_null() {
         return false;
     }
-    
-    let path_str = ns_string::to_rust_string(env, path);
-    let (_, _, _, executable) = env.fs.access(GuestPath::new(&path_str));
-    executable
+    // We don't support execution right now, but for compatibility might want to return true for certain files
+    let path = ns_string::to_rust_string(env, path);
+    env.fs.exists(GuestPath::new(&path))
 }
 
 - (bool)isDeletableFileAtPath:(id)path {
     if path.is_null() {
         return false;
     }
-    
-    let path_str = ns_string::to_rust_string(env, path);
-    let guest_path = GuestPath::new(&path_str);
-    let is_file = env.fs.is_file(guest_path);
-
-    if is_file {
-        return msg![env; this isWritableFileAtPath:path];
-    }
-
-    let directory_enumerator: id = msg![env; this enumeratorAtPath:path];
-
-    let mut is_deletable = true;
-    loop {
-        let sub_path: id = msg![env; directory_enumerator nextObject];
-        if sub_path == nil {
-            break;
-        }
-        let is_path_deletable: bool = msg![env; this isDeletableFileAtPath:sub_path];
-        is_deletable &= is_path_deletable;
-        if !is_deletable {
-            break;
-        }
-    }
-    is_deletable
+    let path = ns_string::to_rust_string(env, path);
+    env.fs.exists(GuestPath::new(&path)) // All existing files are deletable
 }
 
 // MARK: - Getting and Setting Attributes
 
 - (id)attributesOfItemAtPath:(id)path
-                       error:(MutPtr<id>)_error {
+                       error:(MutPtr<id>)error {
     if path.is_null() {
-        if !_error.is_null() {
+        if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
             let ns_error = msg_class![env; NSError alloc];
             let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
-            env.mem.write(_error, ns_error);
+            env.mem.write(error, ns_error);
         }
         return nil;
     }
     
-    log_once!("Warning: NSFileManager attributesOfItemAtPath:error: returns limited attributes!");
     let path_str = ns_string::to_rust_string(env, path);
-    log_dbg!("[(NSFileManager *){:?} attributesOfItemAtPath:{} error:{:?}]", this, path_str, _error);
-
     let guest_path = GuestPath::new(&path_str);
-    file_attributes_common(env, guest_path)
-}
-
-- (id)fileAttributesAtPath:(id)path
-              traverseLink:(bool)_traverse {
-    if path.is_null() {
-        return nil;
-    }
     
-    log_once!("Warning: NSFileManager fileAttributesAtPath:traverseLink: returns limited attributes!");
-    let path_str = ns_string::to_rust_string(env, path);
-    log_dbg!("[(NSFileManager *){:?} fileAttributesAtPath:{} traverse:{}]", this, path_str, _traverse);
-
-    let guest_path = GuestPath::new(&path_str);
-    file_attributes_common(env, guest_path)
-}
-
-- (id)attributesOfFileSystemForPath:(id)_path
-                              error:(MutPtr<id>)_error {
-    log_once!("Warning: NSFileManager attributesOfFileSystemForPath:error: returns only NSFileSystemFreeSize attribute!");
-    let dict = msg_class![env; NSMutableDictionary new];
-
-    // Reporting 1 GB of free space
-    let size: u64 = 1024 * 1024 * 1024;
-    let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:size];
-
-    let fs_free_size_key = get_static_str(env, NSFileSystemFreeSize);
-    () = msg![env; dict setObject:size_num forKey:fs_free_size_key];
-
-    let dict_imm = msg![env; dict copy];
-    release(env, dict);
-    autorelease(env, dict_imm)
-}
-
-- (bool)setAttributes:(id)_attributes
-         ofItemAtPath:(id)_path
-                error:(MutPtr<id>)error {
-    // Attribute setting not implemented
-    log!("Warning: setAttributes:ofItemAtPath:error: not implemented");
-    if !error.is_null() {
-        let domain = get_static_str(env, NSCocoaErrorDomain);
-        let ns_error = msg_class![env; NSError alloc];
-        let ns_error = msg![env; ns_error initWithDomain:domain code:1 userInfo:nil];
-        env.mem.write(error, ns_error);
-    }
-    false
-}
-
-// MARK: - Getting and Comparing File Contents
-
-- (id)contentsAtPath:(id)path {
-    if path.is_null() {
-        return nil;
-    }
-    
-    // TODO: return nil if path is directory
-    // TODO: handle non-absolute paths?
-    let is_absolute: bool = msg![env; path isAbsolutePath];
-    if !is_absolute {
-        log!("Warning: contentsAtPath called with non-absolute path");
-    }
-    
-    msg_class![env; NSData dataWithContentsOfFile:path]
-}
-
-- (bool)contentsEqualAtPath:(id)path1
-                    andPath:(id)path2 {
-    if path1.is_null() || path2.is_null() {
-        return false;
-    }
-    
-    let data1: id = msg![env; this contentsAtPath:path1];
-    let data2: id = msg![env; this contentsAtPath:path2];
-    
-    if data1.is_null() || data2.is_null() {
-        return data1 == data2; // Both nil = equal
-    }
-    
-    msg![env; data1 isEqual:data2]
-}
-
-// MARK: - Getting the Relationship Between Items
-
-- (id)displayNameAtPath:(id)path {
-    if path.is_null() {
-        return nil;
-    }
-    msg![env; path lastPathComponent]
-}
-
-- (id)componentsToDisplayForPath:(id)path {
-    if path.is_null() {
-        return nil;
-    }
-    msg![env; path pathComponents]
-}
-
-// MARK: - Converting File Paths to Strings
-
-- (ConstPtr<u8>)fileSystemRepresentationWithPath:(id)path {
-    if path.is_null() {
-        return ConstPtr::null();
-    }
-    
-    let length: NSUInteger = msg![env; path length];
-    if length == 0 {
-        return ConstPtr::null();
-    }
-    
-    msg![env; path UTF8String]
-}
-
-- (id)stringWithFileSystemRepresentation:(ConstPtr<u8>)str
-                                  length:(NSUInteger)len {
-    if str.is_null() {
-        return nil;
-    }
-    
-    let string: id = msg_class![env; NSString alloc];
-    msg![env; string initWithBytes:str length:len encoding:4] // UTF8
-}
-
-// MARK: - Deprecated Methods (for compatibility)
-
-- (bool)changeFileAttributes:(id)_attrs
-                      atPath:(id)_path {
-    log!("Warning: changeFileAttributes:atPath: is deprecated and not implemented");
-    false
-}
-
-- (id)fileSystemAttributesAtPath:(id)path {
-    let error: MutPtr<id> = Ptr::null();
-    msg![env; this attributesOfFileSystemForPath:path error:error]
-}
-
-- (id)pathContentOfSymbolicLinkAtPath:(id)_path {
-    // Symbolic links not supported
-    nil
-}
-
-- (bool)createSymbolicLinkAtPath:(id)path
-                     pathContent:(id)_content {
-    log!("Warning: createSymbolicLinkAtPath:pathContent: not implemented");
-    let _ = path;
-    false
-}
-
-@end
-
-@implementation NSDirectoryEnumerator: NSEnumerator
-
-- (id)nextObject {
-    let host_obj = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
-    host_obj.iterator.next().map_or(nil, |s| ns_string::from_rust_string(env, String::from(s)))
-}
-
-- (id)fileAttributes {
-    // Return attributes of current file
-    // Not fully implemented
-    nil
-}
-
-- (id)directoryAttributes {
-    // Return attributes of current directory
-    // Not fully implemented
-    nil
-}
-
-- (())skipDescendants {
-    // Skip subdirectories
-    log!("Warning: NSDirectoryEnumerator skipDescendants not implemented");
-}
-
-- (())skipDescendents {
-    // Deprecated spelling
-    msg![env; this skipDescendants]
-}
-
-- (NSUInteger)level {
-    // Return nesting level
-    // Not fully implemented
-    0
-}
-
-@end
-
-};
-
-fn file_attributes_common(env: &mut Environment, guest_path: &GuestPath) -> id {
     if !env.fs.exists(guest_path) {
-        log!(
-            "file_attributes_common() called with file that does not exist: {:?}, Returning nil",
-            guest_path
-        );
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
         return nil;
     }
-
-    let dict = msg_class![env; NSMutableDictionary new];
-
-    // Modification date
-    if let Ok(unix_timestamp) = env.fs.modified(guest_path) {
-        let unix_timestamp_f64 = unix_timestamp as f64;
-        let unix_ref_date: id = msg_class![env; NSDate dateWithTimeIntervalSince1970:0f64];
-        let unix_date: id =
-            msg_class![env; NSDate dateWithTimeInterval:unix_timestamp_f64 sinceDate:unix_ref_date];
-
-        let modif_date_key = get_static_str(env, NSFileModificationDate);
-        () = msg![env; dict setObject:unix_date forKey:modif_date_key];
-        
-        // Use same for creation date
-        let creation_date_key = get_static_str(env, NSFileCreationDate);
-        () = msg![env; dict setObject:unix_date forKey:creation_date_key];
-    }
-
-    // File size
-    if let Ok(size) = env.fs.size(guest_path) {
-        let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:size];
-        let size_key = get_static_str(env, NSFileSize);
-        () = msg![env; dict setObject:size_num forKey:size_key];
-    }
-
-    // File type
-    let file_type_key = get_static_str(env, NSFileType);
-    if env.fs.is_file(guest_path) {
-        let file_type_regular = get_static_str(env, NSFileTypeRegular);
-        () = msg![env; dict setObject:file_type_regular forKey:file_type_key];
-    } else if env.fs.is_dir(guest_path) {
-        let file_type_directory = get_static_str(env, NSFileTypeDirectory);
-        () = msg![env; dict setObject:file_type_directory forKey:file_type_key];
-    } else {
-        let file_type_unknown = get_static_str(env, NSFileTypeUnknown);
-        () = msg![env; dict setObject:file_type_unknown forKey:file_type_key];
-    }
-
-    // POSIX permissions (stub - default to 0644 for files, 0755 for dirs)
-    let perms: u32 = if env.fs.is_dir(guest_path) { 0o755 } else { 0o644 };
+    
+    let is_dir = env.fs.is_dir(guest_path);
+    let file_size = if is_dir { 0 } else { env.fs.read(guest_path).map(|d| d.len()).unwrap_or(0) };
+    
+    let dict: id = msg_class![env; NSMutableDictionary dictionary];
+    
+    let type_val = if is_dir { NSFileTypeDirectory } else { NSFileTypeRegular };
+    let type_str = get_static_str(env, type_val);
+    let type_key = get_static_str(env, NSFileType);
+    () = msg![env; dict setObject:type_str forKey:type_key];
+    
+    let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:file_size as u64];
+    let size_key = get_static_str(env, NSFileSize);
+    () = msg![env; dict setObject:size_num forKey:size_key];
+    
+    let perms = if is_dir { 0o755 } else { 0o644 };
     let perms_num: id = msg_class![env; NSNumber numberWithUnsignedInt:perms];
     let perms_key = get_static_str(env, NSFilePosixPermissions);
     () = msg![env; dict setObject:perms_num forKey:perms_key];
 
     let dict_imm = msg![env; dict copy];
-    release(env, dict);
     autorelease(env, dict_imm)
 }
+
+- (id)attributesOfFileSystemForPath:(id)path
+                              error:(MutPtr<id>)error {
+    if path.is_null() {
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
+        return nil;
+    }
+    
+    // Return dummy file system attributes
+    let dict: id = msg_class![env; NSMutableDictionary dictionary];
+    
+    let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:1024 * 1024 * 1024 * 16_u64]; // 16GB
+    let size_key = get_static_str(env, NSFileSystemSize);
+    () = msg![env; dict setObject:size_num forKey:size_key];
+    
+    let free_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:1024 * 1024 * 1024 * 8_u64]; // 8GB
+    let free_key = get_static_str(env, NSFileSystemFreeSize);
+    () = msg![env; dict setObject:free_num forKey:free_key];
+    
+    let dict_imm = msg![env; dict copy];
+    autorelease(env, dict_imm)
+}
+
+- (bool)setAttributes:(id)attributes
+         ofItemAtPath:(id)path
+                error:(MutPtr<id>)error {
+    // Setting attributes is not fully supported, but we claim success if file exists
+    let exists: bool = msg![env; this fileExistsAtPath:path];
+    if !exists {
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
+        return false;
+    }
+    true
+}
+
+// MARK: - Retrieving File Contents
+
+- (id)contentsAtPath:(id)path {
+    if path.is_null() {
+        return nil;
+    }
+    msg_class![env; NSData dataWithContentsOfFile:path]
+}
+
+// MARK: - Comparing Files
+
+- (bool)contentsEqualAtPath:(id)path1
+                     andPath:(id)path2 {
+    if path1.is_null() || path2.is_null() {
+        return false;
+    }
+    
+    if path1 == path2 {
+        return true;
+    }
+    
+    let p1 = ns_string::to_rust_string(env, path1);
+    let p2 = ns_string::to_rust_string(env, path2);
+    
+    if p1 == p2 {
+        return true;
+    }
+    
+    let Ok(d1) = env.fs.read(GuestPath::new(&p1)) else { return false };
+    let Ok(d2) = env.fs.read(GuestPath::new(&p2)) else { return false };
+    
+    d1 == d2
+}
+
+@end
+
+};
 
 // Helper functions for path manipulation
 pub fn path_exists(env: &mut Environment, path: id) -> bool {
@@ -976,9 +814,16 @@ pub fn is_directory(env: &mut Environment, path: id) -> bool {
         return false;
     }
     let manager: id = msg_class![env; NSFileManager defaultManager];
-    let mut is_dir: bool = false;
-    let is_dir_ptr = &mut is_dir as *mut bool;
+    
+    // Allocate a boolean in guest memory
+    let is_dir_ptr: MutPtr<bool> = env.mem.alloc(1).cast();
+    env.mem.write(is_dir_ptr, false);
+    
     let exists: bool = msg![env; manager fileExistsAtPath:path isDirectory:is_dir_ptr];
+    
+    let is_dir = env.mem.read(is_dir_ptr);
+    env.mem.free(is_dir_ptr.cast());
+    
     exists && is_dir
 }
 
@@ -992,9 +837,42 @@ pub fn create_directory_if_needed(env: &mut Environment, path: id) -> bool {
     }
     
     let manager: id = msg_class![env; NSFileManager defaultManager];
+    let attributes: id = nil;
     let error: MutPtr<id> = Ptr::null();
-    msg![env; manager createDirectoryAtPath:path
-               withIntermediateDirectories:true
-                                attributes:nil
-                                     error:error]
+    
+    msg![env; manager createDirectoryAtPath:path withIntermediateDirectories:true attributes:attributes error:error]
 }
+
+pub fn remove_item(env: &mut Environment, path: id) -> bool {
+    if path.is_null() {
+        return false;
+    }
+    
+    let manager: id = msg_class![env; NSFileManager defaultManager];
+    let error: MutPtr<id> = Ptr::null();
+    
+    msg![env; manager removeItemAtPath:path error:error]
+}
+
+pub fn copy_item(env: &mut Environment, src: id, dst: id) -> bool {
+    if src.is_null() || dst.is_null() {
+        return false;
+    }
+    
+    let manager: id = msg_class![env; NSFileManager defaultManager];
+    let error: MutPtr<id> = Ptr::null();
+    
+    msg![env; manager copyItemAtPath:src toPath:dst error:error]
+}
+
+pub fn move_item(env: &mut Environment, src: id, dst: id) -> bool {
+    if src.is_null() || dst.is_null() {
+        return false;
+    }
+    
+    let manager: id = msg_class![env; NSFileManager defaultManager];
+    let error: MutPtr<id> = Ptr::null();
+    
+    msg![env; manager moveItemAtPath:src toPath:dst error:error]
+}
+
