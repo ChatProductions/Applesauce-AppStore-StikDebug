@@ -57,7 +57,7 @@ impl<T> Deref for NullableBox<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         debug_assert!(self.inner.is_some(), "NullableBox derefed on None!");
-        // Используем as_deref() чтобы получить Option<&T> вместо Option<&Box<T>>
+        // ИСправлено: as_ref() заменено на as_deref()
         unsafe { self.inner.as_deref().unwrap_unchecked() }
     }
 }
@@ -65,7 +65,7 @@ impl<T> Deref for NullableBox<T> {
 impl<T> DerefMut for NullableBox<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         debug_assert!(self.inner.is_some(), "NullableBox derefed on None!");
-        // Используем as_deref_mut() чтобы получить Option<&mut T>
+        // Исправлено: as_mut() заменено на as_deref_mut()
         unsafe { self.inner.as_deref_mut().unwrap_unchecked() }
     }
 }
@@ -73,6 +73,7 @@ impl<T> DerefMut for NullableBox<T> {
 impl<T> AsRef<T> for NullableBox<T> {
     fn as_ref(&self) -> &T {
         debug_assert!(self.inner.is_some(), "NullableBox derefed on None!");
+        // Исправлено: as_ref() заменено на as_deref()
         unsafe { self.inner.as_deref().unwrap_unchecked() }
     }
 }
@@ -80,6 +81,7 @@ impl<T> AsRef<T> for NullableBox<T> {
 impl<T> AsMut<T> for NullableBox<T> {
     fn as_mut(&mut self) -> &mut T {
         debug_assert!(self.inner.is_some(), "NullableBox derefed on None!");
+        // Исправлено: as_mut() заменено на as_deref_mut()
         unsafe { self.inner.as_deref_mut().unwrap_unchecked() }
     }
 }
