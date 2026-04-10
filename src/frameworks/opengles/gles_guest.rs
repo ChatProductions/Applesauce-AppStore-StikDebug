@@ -323,8 +323,6 @@ fn glVertexPointer(env: &mut Environment, size: GLint, type_: GLenum, stride: GL
 }
 
 fn glPointSizePointerOES(_env: &mut Environment, _type_: GLenum, _stride: GLsizei, _pointer: ConstVoidPtr) { log_once!("glPointSizePointerOES — stubbed"); }
-
-// ЗАГЛУШКА: Эмулятор не поддерживает GetTexParameteriv "из коробки"
 fn glGetTexParameteriv(env: &mut Environment, _target: GLenum, _pname: GLenum, params: MutPtr<GLint>) {
     log_once!("glGetTexParameteriv — stubbed");
     env.mem.write(params, 0);
@@ -680,17 +678,23 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glColor4ub(_, _, _, _)), export_c_func!(glNormal3f(_, _, _)),
     export_c_func!(glNormal3x(_, _, _)), export_c_func!(glColorPointer(_, _, _, _)),
     export_c_func!(glNormalPointer(_, _, _)), export_c_func!(glTexCoordPointer(_, _, _, _)),
-    export_c_func!(glVertexPointer(_, _, _, _)), export_c_func!(glPointSizePointerOES(_, _, _, _)),
-    export_c_func!(glDrawTexfOES(_, _, _, _, _, _)), export_c_func!(glDrawTexiOES(_, _, _, _, _, _)),
-    export_c_func!(glDrawTexxOES(_, _, _, _, _, _)), export_c_func!(glDrawTexfvOES(_, _)),
-    export_c_func!(glDrawTexivOES(_, _)), export_c_func!(glDrawTexxvOES(_, _)),
-    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _, _)),
-    export_c_func!(glResolveMultisampleFramebufferAPPLE(_)),
-    export_c_func!(glDiscardFramebufferEXT(_, _, _, _)), export_c_func!(glBindVertexArrayOES(_, _)),
-    export_c_func!(glDeleteVertexArraysOES(_, _, _)), export_c_func!(glGenVertexArraysOES(_, _, _)),
-    export_c_func!(glIsVertexArrayOES(_, _)), export_c_func!(glCurrentPaletteMatrixOES(_, _)),
-    export_c_func!(glLoadPaletteFromModelViewMatrixOES(_)), export_c_func!(glMatrixIndexPointerOES(_, _, _, _, _)),
-    export_c_func!(glWeightPointerOES(_, _, _, _, _)), export_c_func!(glGetBufferPointervOES(_, _, _, _)),
+    export_c_func!(glVertexPointer(_, _, _, _)), 
+    
+    // Заглушки
+    export_c_func!(glPointSizePointerOES(_, _, _)),
+    export_c_func!(glDrawTexfOES(_, _, _, _, _)), export_c_func!(glDrawTexiOES(_, _, _, _, _)),
+    export_c_func!(glDrawTexxOES(_, _, _, _, _)), export_c_func!(glDrawTexfvOES(_)),
+    export_c_func!(glDrawTexivOES(_)), export_c_func!(glDrawTexxvOES(_)),
+    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _)),
+    export_c_func!(glResolveMultisampleFramebufferAPPLE()),
+    export_c_func!(glDiscardFramebufferEXT(_, _, _)), export_c_func!(glBindVertexArrayOES(_)),
+    export_c_func!(glDeleteVertexArraysOES(_, _)), export_c_func!(glGenVertexArraysOES(_, _)),
+    export_c_func!(glIsVertexArrayOES(_)), export_c_func!(glCurrentPaletteMatrixOES(_)),
+    export_c_func!(glLoadPaletteFromModelViewMatrixOES()), export_c_func!(glMatrixIndexPointerOES(_, _, _, _)),
+    export_c_func!(glWeightPointerOES(_, _, _, _)), export_c_func!(glGetBufferPointervOES(_, _, _)),
+    export_c_func!(glGetTexParameteriv(_, _, _)),
+
+    // Основные функции рендеринга
     export_c_func!(glDrawArrays(_, _, _)), export_c_func!(glDrawElements(_, _, _, _)),
     export_c_func!(glClear(_)), export_c_func!(glClearColor(_, _, _, _)),
     export_c_func!(glClearColorx(_, _, _, _)), export_c_func!(glClearDepthf(_)),
@@ -739,7 +743,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glDeleteFramebuffers(_, _)), export_c_func!(glDeleteRenderbuffers(_, _)),
     export_c_func!(glGenerateMipmap(_)), export_c_func!(glGetBufferParameteriv(_, _, _)),
     export_c_func!(glMapBufferOES(_, _)), export_c_func!(glUnmapBufferOES(_)),
-    export_c_func!(glGetTexParameteriv(_, _, _, _)),
 ];
 
 fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
