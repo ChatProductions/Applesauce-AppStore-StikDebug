@@ -31,8 +31,10 @@ use crate::gles::gles11_raw::types::{
     GLbitfield, GLboolean, GLclampf, GLclampx, GLenum, GLfixed, GLfloat, GLint, GLsizei, GLubyte,
     GLuint, GLvoid,
 };
+
 // These types have different sizes, so some care is needed.
 use crate::gles::gles11_raw::types::{GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr};
+
 type GuestGLsizeiptr = GuestISize;
 type GuestGLintptr = GuestISize;
 
@@ -72,7 +74,7 @@ where
         .current_ctx_for_thread(env.current_thread)
         .is_none()
     {
-        log!(
+        log_dbg!(
             "Skipping GLES call without context (line {})",
             std::panic::Location::caller().line()
         );
@@ -87,6 +89,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -107,6 +110,7 @@ where
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
     );
+
     let res = f(gles.as_mut(), &mut env.mem);
 
     #[allow(clippy::let_and_return)]
@@ -175,22 +179,36 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
         unsafe { gles.DisableClientState(array) };
     });
 }
+
+// =====================================================================
+// БЛОК ИСПРАВЛЕНИЙ: БЕЗОПАСНАЯ ЗАПИСЬ ДЛЯ ФУНКЦИЙ GET
+// Если игра вызывает их без контекста, мы принудительно пишем нули
+// в память гостя, чтобы игра не прочитала мусор и не упала.
+// =====================================================================
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        env.mem.write(params, 0);
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16 /* upper bound */);
         unsafe { gles.GetBooleanv(pname, params) };
     });
 }
+
 fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     assert_ne!(gles11::NUM_COMPRESSED_TEXTURE_FORMATS, pname);
     assert_ne!(gles11::COMPRESSED_TEXTURE_FORMATS, pname);
+    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+        env.mem.write(params, 0.0);
+        return;
+    }
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16 /* upper bound */);
         unsafe { gles.GetFloatv(pname, params) };
     });
 }
 
-// ИСПРАВЛЕНИЕ 1: Блок match вынесен наружу из with_ctx_and_mem
 fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
     match pname {
         gles11::NUM_COMPRESSED_TEXTURE_FORMATS => {
@@ -201,15 +219,20 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
                 env.mem.write(params + idx as GuestUSize, format as _);
             }
         }
-        // MAX_COLOR_ATTACHMENTS_EXT or MAX_COLOR_ATTACHMENTS_OES
         0x8cdf => {
             env.mem.write(params, 1 as _);
         }
-        // MAX_SAMPLES or MAX_SAMPLES_ANGLE
         0x8d57 => {
             env.mem.write(params, 1 as _);
         }
+        gles11::MAX_TEXTURE_SIZE => {
+            env.mem.write(params, 2048 as _);
+        }
         _ => {
+            if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
+                env.mem.write(params, 0); // Безопасный нуль, чтобы избежать мусора
+                return;
+            }
             with_ctx_and_mem(env, |gles, mem| {
                 let params = mem.ptr_at_mut(params, 16 /* upper bound */);
                 unsafe { gles.GetIntegerv(pname, params) };
@@ -217,11 +240,13 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
     }
 }
+// =====================================================================
 
 fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidPtr>) {
     use crate::gles::gles1_on_gl2::{ArrayInfo, ARRAYS};
     let &ArrayInfo { buffer_binding, .. } =
         ARRAYS.iter().find(|info| info.pointer == pname).unwrap();
+
     with_ctx_and_mem(env, |gles, mem| {
         let mut host_pointer_or_offset = std::ptr::null();
         let guest_pointer_or_offset = unsafe {
@@ -261,14 +286,17 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
-            // ИСПРАВЛЕНИЕ 2: Строка идет без переносов (\n), чтобы движок игры парсил ее корректно
-            gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
+            // ИСПРАВЛЕНИЕ: Оставлены только безопасные расширения. 
+            // Убраны GL_OES_draw_texture и GL_OES_matrix_palette во избежание падения по 0x0
+            gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
             _ => {
                 log!("glGetString: unknown parameter {:#x}", name);
                 b"Unknown"
             }
         };
+
         let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
+        
         env.framework_state
             .opengles
             .strings_cache
@@ -362,6 +390,7 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Scissor(x, y, width, height)
     })
@@ -370,6 +399,7 @@ fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height:
     let factor = env.options.scale_hack.get() as GLsizei;
     let (x, y) = (x * factor, y * factor);
     let (width, height) = (width * factor, height * factor);
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Viewport(x, y, width, height)
     })
