@@ -135,7 +135,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         (object1, object2)
     };
-
+    
     // Use comparator block if present, otherwise use selector.
     let raw_result: NSComparisonResult = if comparator != nil {
         // NSComparator is `NSComparisonResult (^)(id obj1, id obj2)`.
@@ -161,6 +161,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ascending = host.ascending;
     let selector  = host.selector;
     drop(host);
+    
     let new: id = msg_class![env; NSSortDescriptor alloc];
     let new: id = msg![env; new initWithKey:key ascending:(!ascending) selector:selector];
     autorelease(env, new)
@@ -178,7 +179,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_key  = crate::frameworks::foundation::ns_string::get_static_str(env, "NSKey");
     let asc_key  = crate::frameworks::foundation::ns_string::get_static_str(env, "NSAscending");
     let sel_key  = crate::frameworks::foundation::ns_string::get_static_str(env, "NSSelector");
-
+    
     let key: id       = msg![env; coder decodeObjectForKey:key_key];
     let ascending: bool = msg![env; coder decodeBoolForKey:asc_key];
     let sel_str: id   = msg![env; coder decodeObjectForKey:sel_key];
@@ -190,7 +191,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         env.objc.register_host_selector("compare:".to_string(), &mut env.mem)
     };
-
+    
     let host = env.objc.borrow_mut::<NSSortDescriptorHostObject>(this);
     host.key       = key;
     host.ascending = ascending;
@@ -202,7 +203,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<NSSortDescriptorHostObject>(this);
     let (key, ascending, selector) = (host.key, host.ascending, host.selector);
     drop(host);
-
+    
     let key_key = ns_string::get_static_str(env, "NSKey");
     let asc_key = ns_string::get_static_str(env, "NSAscending");
     let sel_key = ns_string::get_static_str(env, "NSSelector");
@@ -221,10 +222,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == nil  { return false; }
+    
     let a_key: id   = msg![env; this key];
     let b_key: id   = msg![env; other key];
     let a_asc: bool = msg![env; this ascending];
     let b_asc: bool = msg![env; other ascending];
+    
     let keys_eq: bool = if a_key == nil && b_key == nil {
         true
     } else if a_key == nil || b_key == nil {
@@ -240,11 +243,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key  = host.key;
     let asc  = host.ascending;
     drop(host);
+    
     let key_str = if key != nil {
         ns_string::to_rust_string(env, key).into_owned()
     } else {
         "<nil>".to_string()
     };
+    
     let s  = format!("(key: {}, ascending: {})", key_str, asc);
     let ns = ns_string::from_rust_string(env, s);
     autorelease(env, ns)
@@ -263,15 +268,17 @@ pub fn sort_with_descriptors(
     descriptors: crate::objc::id,
 ) {
     use crate::objc::msg;
+    
     let count: u32     = msg![env; objects count];
     let desc_count: u32 = msg![env; descriptors count];
+    
     if count == 0 || desc_count == 0 { return; }
 
     // Collect into a Rust vec, sort, write back.
     let mut items: Vec<crate::objc::id> = (0..count)
         .map(|i| msg![env; objects objectAtIndex:i])
         .collect();
-
+        
     // Insertion sort — stable and avoids complex borrow patterns.
     let n = items.len();
     for i in 1..n {
@@ -280,6 +287,7 @@ pub fn sort_with_descriptors(
             let a = items[j - 1];
             let b = items[j];
             let mut result: crate::frameworks::foundation::NSComparisonResult = 0;
+            
             for d in 0..desc_count {
                 let desc: crate::objc::id = msg![env; descriptors objectAtIndex:d];
                 result = msg![env; desc compareObject:a toObject:b];
@@ -298,3 +306,4 @@ pub fn sort_with_descriptors(
         () = msg![env; objects replaceObjectAtIndex:(i as u32) withObject:(*val)];
     }
 }
+
