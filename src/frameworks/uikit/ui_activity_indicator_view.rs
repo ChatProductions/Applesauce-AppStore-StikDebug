@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `UIActivityIndicatorView`.
 
 use crate::frameworks::core_graphics::cg_rect::{CGRect, CGPoint, CGSize};
@@ -109,7 +111,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     // Decode style
-    let style_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewStyle\0".as_ptr()];
+    let style_str = "UIActivityIndicatorViewStyle\0".as_ptr();
+    let style_key: id = msg_class![env; NSString stringWithUTF8String:style_str];
     let has_style: bool = msg![env; coder containsValueForKey:style_key];
     if has_style {
         let style: UIActivityIndicatorViewStyle = msg![env; coder decodeIntegerForKey:style_key];
@@ -117,7 +120,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     // Decode hidesWhenStopped
-    let hides_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewHidesWhenStopped\0".as_ptr()];
+    let hides_str = "UIActivityIndicatorViewHidesWhenStopped\0".as_ptr();
+    let hides_key: id = msg_class![env; NSString stringWithUTF8String:hides_str];
     let has_hides: bool = msg![env; coder containsValueForKey:hides_key];
     if has_hides {
         let hides: bool = msg![env; coder decodeBoolForKey:hides_key];
@@ -125,7 +129,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     // Decode color
-    let color_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewColor\0".as_ptr()];
+    let color_str = "UIActivityIndicatorViewColor\0".as_ptr();
+    let color_key: id = msg_class![env; NSString stringWithUTF8String:color_str];
     let has_color: bool = msg![env; coder containsValueForKey:color_key];
     if has_color {
         let color: id = msg![env; coder decodeObjectForKey:color_key];
@@ -135,7 +140,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     // Decode animating state
-    let animating_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewAnimating\0".as_ptr()];
+    let animating_str = "UIActivityIndicatorViewAnimating\0".as_ptr();
+    let animating_key: id = msg_class![env; NSString stringWithUTF8String:animating_str];
     let has_animating: bool = msg![env; coder containsValueForKey:animating_key];
     if has_animating {
         let animating: bool = msg![env; coder decodeBoolForKey:animating_key];
@@ -154,36 +160,42 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<UIActivityIndicatorViewHostObject>(this);
     
     // Encode style
-    let style_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewStyle\0".as_ptr()];
-    let _: () = msg![env; coder encodeInteger:host.style forKey:style_key];
+    let style_str = "UIActivityIndicatorViewStyle\0".as_ptr();
+    let style_key: id = msg_class![env; NSString stringWithUTF8String:style_str];
+    let style = host.style;
+    let _: () = msg![env; coder encodeInteger:style forKey:style_key];
     
     // Encode hidesWhenStopped
-    let hides_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewHidesWhenStopped\0".as_ptr()];
-    let _: () = msg![env; coder encodeBool:host.hides_when_stopped forKey:hides_key];
-    
+    let hides_str = "UIActivityIndicatorViewHidesWhenStopped\0".as_ptr();
+    let hides_key: id = msg_class![env; NSString stringWithUTF8String:hides_str];
+    let hides_when_stopped = host.hides_when_stopped;
+    let _: () = msg![env; coder encodeBool:hides_when_stopped forKey:hides_key];
+
     // Encode color
     if let Some(color) = host.color {
-        let color_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewColor\0".as_ptr()];
+        let color_str = "UIActivityIndicatorViewColor\0".as_ptr();
+        let color_key: id = msg_class![env; NSString stringWithUTF8String:color_str];
         let _: () = msg![env; coder encodeObject:color forKey:color_key];
     }
     
     // Encode animating state
-    let animating_key: id = msg_class![env; NSString stringWithUTF8String:"UIActivityIndicatorViewAnimating\0".as_ptr()];
-    let _: () = msg![env; coder encodeBool:host.animating forKey:animating_key];
+    let animating_str = "UIActivityIndicatorViewAnimating\0".as_ptr();
+    let animating_key: id = msg_class![env; NSString stringWithUTF8String:animating_str];
+    let animating = host.animating;
+    let _: () = msg![env; coder encodeBool:animating forKey:animating_key];
 }
 
 // MARK: - Configuring the Activity Indicator Appearance
 
 - (())setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)style {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    
     if host.style == style {
         return;
     }
     
     host.style = style;
     drop(host);
-    
+
     // Update frame size to match new style
     let size = get_size_for_style(style);
     let current_frame: CGRect = msg![env; this frame];
@@ -231,7 +243,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)color { // UIColor*
     let host = env.objc.borrow::<UIActivityIndicatorViewHostObject>(this);
-    
     if let Some(color) = host.color {
         color
     } else {
@@ -244,7 +255,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())startAnimating {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    
     if host.animating {
         return; // Already animating
     }
@@ -263,7 +273,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())stopAnimating {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    
     if !host.animating {
         return; // Already stopped
     }
@@ -291,7 +300,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setHidesWhenStopped:(bool)hides {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
-    
     if host.hides_when_stopped == hides {
         return;
     }
@@ -326,7 +334,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let center_x = bounds.size.width / 2.0;
     let center_y = bounds.size.height / 2.0;
-    
     let center = CGPoint { x: center_x, y: center_y };
     let _: () = msg![env; this setCenter:center];
 }
@@ -334,7 +341,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (CGSize)intrinsicContentSize {
     let style = env.objc.borrow::<UIActivityIndicatorViewHostObject>(this).style;
     let size = get_size_for_style(style);
-    
     CGSize { width: size, height: size }
 }
 
@@ -371,13 +377,15 @@ fn get_size_for_style(style: UIActivityIndicatorViewStyle) -> f32 {
 
 fn get_default_color_for_style(env: &mut crate::Environment, style: UIActivityIndicatorViewStyle) -> id {
     match style {
-        UIActivityIndicatorViewStyleWhiteLarge | UIActivityIndicatorViewStyleWhite => {
+        UIActivityIndicatorViewStyleWhiteLarge |
+        UIActivityIndicatorViewStyleWhite => {
             msg_class![env; UIColor whiteColor]
         }
         UIActivityIndicatorViewStyleGray => {
             msg_class![env; UIColor grayColor]
         }
-        UIActivityIndicatorViewStyleMedium | UIActivityIndicatorViewStyleLarge => {
+        UIActivityIndicatorViewStyleMedium |
+        UIActivityIndicatorViewStyleLarge => {
             // iOS 13+ uses system gray color
             msg_class![env; UIColor systemGrayColor]
         }
@@ -436,7 +444,6 @@ pub fn create_configured_indicator(
     start_animating: bool,
 ) -> id {
     let indicator = create_activity_indicator(env, style);
-    
     if indicator == nil {
         return nil;
     }
@@ -456,3 +463,4 @@ pub fn create_configured_indicator(
     
     indicator
 }
+
