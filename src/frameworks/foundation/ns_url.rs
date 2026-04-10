@@ -566,6 +566,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+@implementation NSNetServiceBrowser: NSObject
+@end
+
+@implementation NSHTTPURLResponse: NSObject
+@end
+
 // MARK: - NSURLCache stub
 
 @implementation NSURLCache: NSObject
