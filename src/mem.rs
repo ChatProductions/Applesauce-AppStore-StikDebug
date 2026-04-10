@@ -67,11 +67,14 @@ impl<T, const MUT: bool> std::hash::Hash for Ptr<T, MUT> {
 
 /// Constant guest pointer type (like Rust's `*const T`).
 pub type ConstPtr<T> = Ptr<T, false>;
+
 /// Mutable guest pointer type (like Rust's `*mut T`).
 pub type MutPtr<T> = Ptr<T, true>;
+
 #[allow(dead_code)]
 /// Constant guest pointer-to-void type (like C's `const void *`)
 pub type ConstVoidPtr = ConstPtr<std::ffi::c_void>;
+
 /// Mutable guest pointer-to-void type (like C's `void *`)
 pub type MutVoidPtr = MutPtr<std::ffi::c_void>;
 
@@ -276,7 +279,6 @@ impl Mem {
     /// Create a fresh instance of guest memory.
     pub fn new() -> Mem {
         let size = std::mem::size_of::<Bytes>();
-
         let ptr = unsafe { crate::mem::host::allocate_memory(size).unwrap() };
 
         assert_eq!(
@@ -338,7 +340,10 @@ impl Mem {
     // seems like a good idea to help the compiler optimise for the fast path
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize) {
-        panic!("Attempted null-page access at {at:#x} ({size:#x} bytes)")
+        // ХАК: Вместо краша эмулятора просто выводим предупреждение в консоль.
+        // Эмулятор продолжит работу, позволив игре прочитать/записать данные по адресу 0x0.
+        // panic!("Attempted null-page access at {at:#x} ({size:#x} bytes)")
+        println!("touchHLE WARNING: Ignored null-page access at {:#x} ({:#x} bytes). HACK ACTIVE.", at, size);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
@@ -609,4 +614,5 @@ impl Mem {
     pub fn reserve(&mut self, base: VAddr, size: GuestUSize) {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
-    }
+}
+
