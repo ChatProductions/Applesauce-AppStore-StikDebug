@@ -158,6 +158,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithRequest:(id)request
              delegate:(id)delegate
      startImmediately:(bool)start_immediately {
+     
+    // 1. Поведение Apple: если request == nil, прерываем инициализацию и возвращаем nil
+    if request == nil {
+        log!("NSURLConnection initWithRequest: got nil request, returning nil");
+        // Очищаем выделенную под объект память, так как возвращаем nil
+        release(env, this);
+        return nil;
+    }
+
     log!(
         "NSURLConnection initWithRequest:{:?} delegate:{:?} startImmediately:{} \
          (stub — will call connection:didFailWithError: immediately)",
@@ -177,9 +186,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Fire the failure delegate callback right away so the app's error-handling
     // path runs instead of waiting forever for data that will never arrive.
     if start_immediately {
-        notify_delegate_failure(env, this, delegate);
-        // Mark as done so cancel/dealloc don't double-notify.
+        // 2. СНАЧАЛА помечаем как отмененный, чтобы не обращаться к this ПОСЛЕ коллбека
         env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
+        
+        // 3. Защищаем объект от удаления (dealloc) игрой внутри коллбека
+        retain(env, this);
+        notify_delegate_failure(env, this, delegate);
+        autorelease(env, this);
     }
 
     this
@@ -192,9 +205,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let already_done = host.cancelled;
     let delegate     = host.delegate;
     drop(host);
+    
     if !already_done {
-        notify_delegate_failure(env, this, delegate);
+        // То же самое: сначала меняем состояние, затем защищаем объект
         env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
+        
+        retain(env, this);
+        notify_delegate_failure(env, this, delegate);
+        autorelease(env, this);
     }
 }
 
