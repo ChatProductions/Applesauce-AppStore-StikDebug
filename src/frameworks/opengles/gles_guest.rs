@@ -74,10 +74,9 @@ where
         .current_ctx_for_thread(env.current_thread)
         .is_none()
     {
-        let caller = std::panic::Location::caller();
-        log!(
-            "🚨 ПРОПУСК GLES-ВЫЗОВА БЕЗ КОНТЕКСТА: обертка вызвана на строке {}",
-            caller.line()
+        log_dbg!(
+            "Skipping GLES call without context (line {})",
+            std::panic::Location::caller().line()
         );
         return U::default();
     }
@@ -153,9 +152,6 @@ fn glGetError(env: &mut Environment) -> GLenum {
     })
 }
 fn glEnable(env: &mut Environment, cap: GLenum) {
-    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("🚨 glEnable вызван без контекста для параметра: {:#x}", cap);
-    }
     with_ctx_and_mem(env, |gles, _mem| {
         unsafe { gles.Enable(cap) };
     });
@@ -164,9 +160,6 @@ fn glIsEnabled(env: &mut Environment, cap: GLenum) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsEnabled(cap) })
 }
 fn glDisable(env: &mut Environment, cap: GLenum) {
-    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("🚨 glDisable вызван без контекста для параметра: {:#x}", cap);
-    }
     with_ctx_and_mem(env, |gles, _mem| {
         unsafe { gles.Disable(cap) };
     });
@@ -187,9 +180,6 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
     });
 }
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
-    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("🚨 glGetBooleanv: запрос параметра {:#x} без контекста!", pname);
-    }
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16 /* upper bound */);
         unsafe { gles.GetBooleanv(pname, params) };
@@ -198,9 +188,6 @@ fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>
 fn glGetFloatv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfloat>) {
     assert_ne!(gles11::NUM_COMPRESSED_TEXTURE_FORMATS, pname);
     assert_ne!(gles11::COMPRESSED_TEXTURE_FORMATS, pname);
-    if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-        log!("🚨 glGetFloatv: запрос параметра {:#x} без контекста!", pname);
-    }
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16 /* upper bound */);
         unsafe { gles.GetFloatv(pname, params) };
@@ -225,9 +212,6 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
             env.mem.write(params, 1 as _);
         }
         _ => {
-            if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
-                log!("🚨 glGetIntegerv: запрос параметра {:#x} без контекста!", pname);
-            }
             with_ctx_and_mem(env, |gles, mem| {
                 let params = mem.ptr_at_mut(params, 16 /* upper bound */);
                 unsafe { gles.GetIntegerv(pname, params) };
@@ -279,16 +263,17 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
-            // ОБРЕЗАННЫЙ СПИСОК: убраны все GL_APPLE_*, GL_EXT_discard_framebuffer и GL_OES_vertex_array_object
+            // Trimmed list: removed GL_APPLE_*, GL_EXT_discard_framebuffer
+            // and GL_OES_vertex_array_object
             gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
             _ => {
-                log!("🚨 glGetString: ЗАПРОШЕН НЕИЗВЕСТНЫЙ ПАРАМЕТР {:#x}", name);
+                log!("glGetString: unknown parameter {:#x}", name);
                 b"Unknown"
             }
         };
 
         let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
-        
+
         env.framework_state
             .opengles
             .strings_cache
@@ -706,7 +691,11 @@ fn glPointSizePointerOES(
     stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+    log_dbg!(
+        "glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed",
+        type_,
+        stride
+    );
 }
 
 // Drawing
@@ -973,7 +962,12 @@ fn glTexParameterx(env: &mut Environment, target: GLenum, pname: GLenum, param: 
         gles.TexParameterx(target, pname, param)
     })
 }
-fn glTexParameteriv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLint>) {
+fn glTexParameteriv(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: ConstPtr<GLint>,
+) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1283,7 +1277,9 @@ fn glGetFramebufferAttachmentParameterivOES(
 ) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 1);
-        unsafe { gles.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params) }
+        unsafe {
+            gles.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params)
+        }
     })
 }
 fn glGetRenderbufferParameterivOES(
@@ -1407,8 +1403,8 @@ fn glGetBufferParameteriv(
     pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-     let params = env.mem.ptr_at_mut(params, 1);
-     with_ctx_and_mem(env, |gles, _mem| unsafe {
+    let params = env.mem.ptr_at_mut(params, 1);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.GetBufferParameteriv(target, pname, params)
     })
 }
@@ -1475,7 +1471,11 @@ fn glGetTexParameteriv(
     stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log_dbg!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+    log_dbg!(
+        "glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed",
+        type_,
+        stride
+    );
 }
 
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
