@@ -732,14 +732,14 @@ fn glPointSizePointerOES(
 }
 
 // ДОБАВЛЕННЫЕ ФУНКЦИИ-ЗАГЛУШКИ ДЛЯ GL_OES_draw_texture
-fn glDrawTexfOES(_env: &mut Environment, x: GLfloat, y: GLfloat, z: GLfloat, width: GLfloat, height: GLfloat) {
-    log_once!("glDrawTexfOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+fn glDrawTexfOES(_env: &mut Environment, _x: GLfloat, _y: GLfloat, _z: GLfloat, _width: GLfloat, _height: GLfloat) {
+    log_once!("glDrawTexfOES — stubbed");
 }
-fn glDrawTexiOES(_env: &mut Environment, x: GLint, y: GLint, z: GLint, width: GLint, height: GLint) {
-    log_once!("glDrawTexiOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+fn glDrawTexiOES(_env: &mut Environment, _x: GLint, _y: GLint, _z: GLint, _width: GLint, _height: GLint) {
+    log_once!("glDrawTexiOES — stubbed");
 }
-fn glDrawTexxOES(_env: &mut Environment, x: GLfixed, y: GLfixed, z: GLfixed, width: GLfixed, height: GLfixed) {
-    log_once!("glDrawTexxOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+fn glDrawTexxOES(_env: &mut Environment, _x: GLfixed, _y: GLfixed, _z: GLfixed, _width: GLfixed, _height: GLfixed) {
+    log_once!("glDrawTexxOES — stubbed");
 }
 fn glDrawTexfvOES(_env: &mut Environment, _coords: ConstPtr<GLfloat>) {
     log_once!("glDrawTexfvOES — stubbed");
