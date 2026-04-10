@@ -73,11 +73,11 @@ where
         .current_ctx_for_thread(env.current_thread)
         .is_none()
     {
-        log!(
-            "Warning: No EAGLContext for thread {}! Ignoring OpenGL ES call, returning default value.",
+        // ВРЕМЕННО МЕНЯЕМ ПРЕДУПРЕЖДЕНИЕ НА ПАНИКУ ДЛЯ ОТЛАДКИ:
+        panic!(
+            "Missing EAGLContext for thread {}! Catching the exact GL function in Rust backtrace.",
             env.current_thread
         );
-        return U::default();
     }
 
     let mut gles = super::sync_context(
