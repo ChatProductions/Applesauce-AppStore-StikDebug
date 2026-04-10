@@ -343,7 +343,7 @@ impl Mem {
         // ХАК: Вместо краша эмулятора просто выводим предупреждение в консоль.
         // Эмулятор продолжит работу, позволив игре прочитать/записать данные по адресу 0x0.
         // panic!("Attempted null-page access at {at:#x} ({size:#x} bytes)")
-        log_dbg!("touchHLE WARNING: Ignored null-page access at {:#x} ({:#x} bytes). HACK ACTIVE.", at, size);
+        panic!("touchHLE WARNING: Ignored null-page access at {:#x} ({:#x} bytes). HACK ACTIVE.", at, size);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
