@@ -10,8 +10,10 @@
 //! Resources:
 //! - Apple's [Objective-C Runtime Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtHowMessagingWorks.html)
 //!
+//!
 //! - [Apple's documentation of `objc_msgSend`](https://developer.apple.com/documentation/objectivec/1456712-objc_msgsend)
 //! - Mike Ash's [objc_msgSend's New Prototype](https://www.mikeash.com/pyblog/objc_msgsends-new-prototype.html)
+//!
 //!
 //! - Peter Steinberger's [Calling Super at Runtime in Swift](https://steipete.com/posts/calling-super-at-runtime/) explains `objc_msgSendSuper2`
 
@@ -27,11 +29,13 @@ use std::any::TypeId;
 /// defined by the wrappers over this function, a call to an `objc_msgSend`
 /// variant may have additional arguments to be forwarded (or rather, left
 /// untouched) by `objc_msgSend` when it tail-calls the method implementation it
-/// looks up. This is invisible to the Rust type system; we're relying on
+/// looks up.
+/// This is invisible to the Rust type system; we're relying on
 /// [crate::abi::CallFromGuest] here.
 ///
 /// Similarly, the return value of `objc_msgSend` is whatever value is returned
-/// by the method implementation. We are relying on CallFromGuest not
+/// by the method implementation.
+/// We are relying on CallFromGuest not
 /// overwriting it.
 #[allow(non_snake_case)]
 fn objc_msgSend_inner(
@@ -74,23 +78,23 @@ fn objc_msgSend_inner(
                 is_metaclass,
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
-            // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменяем panic! на предупреждение и возврат 0 ---
-            panic!(
+            
+            // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! ---
+            log!(
                 "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
                 if is_metaclass { "Class" } else { "Object" },
                 receiver,
-        
                 if is_metaclass { "meta" } else { "" },
                 name,
                 orig_class,
                 if super2.is_some() {
                     "'s superclass"
-             
                 } else {
                     ""
                 },
                 selector.as_str(&env.mem),
             );
+            
             // Имитируем возврат nil/0, чтобы приложение продолжило работу
             env.cpu.regs_mut()[0..2].fill(0);
             return;
@@ -106,7 +110,6 @@ fn objc_msgSend_inner(
         }) = host_object.as_any().downcast_ref()
         {
             // Skip method lookup on first iteration if this is the super-call
-      
             // variant of objc_msgSend (look up the superclass first)
             if super2.is_some() && class == orig_class {
                 class = superclass;
@@ -130,14 +133,11 @@ fn objc_msgSend_inner(
 Type mismatch when sending message {} to {:?}!
 - Message has type: {:?} / {}
 - Method expects type: {:?} / {}",
-      
                                     selector.as_str(&env.mem),
                                     receiver,
-                                  
                                     sent_type_id,
                                     sent_type_desc,
                                     expected_type_id,
-                          
                                     expected_type_desc
                                 );
                                 if tolerate_type_mismatch {
@@ -149,7 +149,6 @@ Type mismatch when sending message {} to {:?}!
                         }
                         host_imp.call_from_guest(env)
                     }
-    
                     // We can't create a new stack frame, because that would
                     // interfere with pass-through of stack arguments.
                     IMP::Guest(guest_imp) => guest_imp.call_without_pushing_stack_frame(env),
@@ -165,7 +164,6 @@ Type mismatch when sending message {} to {:?}!
         {
             panic!(
                 "Class \"{}\" ({:?}) is unimplemented. Call to {} method \"{}\".",
-       
                  name,
                 class,
                 if is_metaclass { "class" } else { "instance" },
@@ -178,7 +176,6 @@ Type mismatch when sending message {} to {:?}!
         {
             log!(
                 "Call to faked class \"{}\" ({:?}) {} method \"{}\". Behaving as if message was sent to nil.",
-        
                 name,
                 class,
                 if is_metaclass { "class" } else { "instance" },
@@ -448,8 +445,7 @@ pub use crate::msg;
 /// ```
 #[macro_export]
 macro_rules! msg_super {
-    [$env:expr;
-$receiver:tt $name:ident $(: $arg1:tt $($($namen:ident)?: $argn:tt)*)?] => {
+    [$env:expr; $receiver:tt $name:ident $(: $arg1:tt $($($namen:ident)?: $argn:tt)*)?] => {
         {
             let class = $env.objc.get_known_class(
                 _OBJC_CURRENT_CLASS,
@@ -478,8 +474,7 @@ pub use crate::msg_super;
 // #[macro_export] is weird...
 
 /// Variant of [msg] for sending a message to a named class.
-/// Useful for calling
-/// class methods, especially `new`.
+/// Useful for calling class methods, especially `new`.
 ///
 /// ```ignore
 /// msg_class![env; SomeClass alloc]
@@ -488,13 +483,11 @@ pub use crate::msg_super;
 /// desugars to:
 ///
 /// ```ignore
-/// msg![env;
-/// (env.objc.get_known_class("SomeClass", &mut env.mem)) alloc]
+/// msg![env; (env.objc.get_known_class("SomeClass", &mut env.mem)) alloc]
 /// ```
 #[macro_export]
 macro_rules! msg_class {
-    [$env:expr;
-$receiver_class:ident $name:ident $(: $arg1:tt $($($namen:ident)?: $argn:tt)*)?] => {
+    [$env:expr; $receiver_class:ident $name:ident $(: $arg1:tt $($($namen:ident)?: $argn:tt)*)?] => {
         {
             let class = $env.objc.get_known_class(
                 stringify!($receiver_class),
@@ -533,3 +526,4 @@ pub fn autorelease(env: &mut Environment, object: id) -> id {
     }
     msg![env; object autorelease]
 }
+
