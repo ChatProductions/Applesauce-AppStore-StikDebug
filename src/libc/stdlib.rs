@@ -513,6 +513,29 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     }
 }
 
+fn dladdr(_env: &mut Environment, _addr: ConstVoidPtr, _info: MutVoidPtr) -> i32 {
+    // FakeDladdr
+    0
+}
+
+fn kqueue(_env: &mut Environment) -> i32 {
+    // FakeKqueue
+    999
+}
+
+fn kevent(
+    _env: &mut Environment,
+    _kq: i32,
+    _changelist: ConstVoidPtr,
+    _nchanges: i32,
+    _eventlist: MutVoidPtr,
+    _nevents: i32,
+    _timeout: ConstVoidPtr,
+) -> i32 {
+    // FakeKevent
+    0
+}
+
 fn __assert_rtn(
     env: &mut Environment,
     func: ConstPtr<u8>,
@@ -619,6 +642,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__assert(_, _, _)),
     export_c_func!(__assert_fail(_, _, _, _)),
     export_c_func!(system(_)),
+    export_c_func!(dladdr(_, _)),
+    export_c_func!(kqueue()),
+    export_c_func!(kevent(_, _, _, _, _, _)),
 ];
 
 pub fn atof_inner(
