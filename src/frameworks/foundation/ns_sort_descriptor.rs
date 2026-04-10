@@ -211,7 +211,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; coder encodeObject:key forKey:key_key];
     () = msg![env; coder encodeBool:ascending forKey:asc_key];
 
-    let sel_name = (*env.objc).get_selector_name(selector).to_string();
+    let sel_name = env.mem.cstr_at_utf8(selector).unwrap().to_string();
     let sel_ns   = ns_string::from_rust_string(env, sel_name);
     () = msg![env; coder encodeObject:sel_ns forKey:sel_key];
     release(env, sel_ns);
@@ -306,5 +306,4 @@ pub fn sort_with_descriptors(
         () = msg![env; objects replaceObjectAtIndex:(i as u32) withObject:(*val)];
     }
 }
-
 
