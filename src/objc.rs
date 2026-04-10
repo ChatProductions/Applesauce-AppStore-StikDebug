@@ -94,6 +94,15 @@ impl ObjC {
             message_type_info: None,
         }
     }
+
+    /// Returns the name of a selector, panicking if it is unknown.
+    pub fn get_selector_name(&self, sel: SEL) -> &str {
+        self.selectors
+            .iter()
+            .find(|(_k, v)| **v == sel)
+            .map(|(k, _v)| k.as_str())
+            .expect("get_selector_name: unknown selector")
+    }
 }
 
 pub const DYLIB: HostDylib = HostDylib {
