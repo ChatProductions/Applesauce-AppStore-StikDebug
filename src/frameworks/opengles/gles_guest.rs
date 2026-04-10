@@ -187,9 +187,6 @@ fn glDisableClientState(env: &mut Environment, array: GLenum) {
     });
 }
 
-// =====================================================================
-// БЛОК ЗАЩИТЫ: БЕЗОПАСНАЯ ЗАПИСЬ ДЛЯ ФУНКЦИЙ GET
-// =====================================================================
 fn glGetBooleanv(env: &mut Environment, pname: GLenum, params: MutPtr<GLboolean>) {
     if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
         log!("⚠️ glGetBooleanv: запрос {:#x} без контекста! Возвращаем 0.", pname);
@@ -238,7 +235,7 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         _ => {
             if env.framework_state.opengles.current_ctx_for_thread(env.current_thread).is_none() {
                 log!("⚠️ glGetIntegerv: запрос параметра {:#x} без контекста! Возвращаем 1.", pname);
-                env.mem.write(params, 1); // Безопасная единица вместо нуля
+                env.mem.write(params, 1);
                 return;
             }
             with_ctx_and_mem(env, |gles, mem| {
@@ -268,7 +265,6 @@ fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidP
         mem.write(params, guest_pointer_or_offset);
     });
 }
-// =====================================================================
 
 fn glGetTexEnviv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLint>) {
     with_ctx_and_mem(env, |gles, mem| {
@@ -300,7 +296,8 @@ fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
-            gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
+            // ВОЗВРАЩЕНО: GL_OES_draw_texture, чтобы игра не завершала работу через exit()
+            gles11::EXTENSIONS => b"GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat ",
             _ => {
                 log!("⚠️ glGetString: unknown parameter {:#x}", name);
                 b"Unknown"
@@ -550,9 +547,7 @@ fn glMaterialxv(env: &mut Environment, face: GLenum, pname: GLenum, params: Cons
     })
 }
 
-// =====================================================================
-// БЛОК ЗАЩИТЫ: ГЕНЕРАЦИЯ ФЕЙКОВЫХ ID БЕЗ КОНТЕКСТА
-// =====================================================================
+// Buffers
 fn glIsBuffer(env: &mut Environment, buffer: GLuint) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsBuffer(buffer) })
 }
@@ -736,6 +731,26 @@ fn glPointSizePointerOES(
     _pointer: ConstVoidPtr,
 ) {
     log!("glPointSizePointerOES(type: {:#x}, stride: {}) — stubbed", type_, stride);
+}
+
+// ДОБАВЛЕННЫЕ ФУНКЦИИ-ЗАГЛУШКИ ДЛЯ GL_OES_draw_texture
+fn glDrawTexfOES(_env: &mut Environment, x: GLfloat, y: GLfloat, z: GLfloat, width: GLfloat, height: GLfloat) {
+    log_once!("glDrawTexfOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+}
+fn glDrawTexiOES(_env: &mut Environment, x: GLint, y: GLint, z: GLint, width: GLint, height: GLint) {
+    log_once!("glDrawTexiOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+}
+fn glDrawTexxOES(_env: &mut Environment, x: GLfixed, y: GLfixed, z: GLfixed, width: GLfixed, height: GLfixed) {
+    log_once!("glDrawTexxOES({}, {}, {}, {}, {}) — stubbed", x, y, z, width, height);
+}
+fn glDrawTexfvOES(_env: &mut Environment, _coords: ConstPtr<GLfloat>) {
+    log_once!("glDrawTexfvOES — stubbed");
+}
+fn glDrawTexivOES(_env: &mut Environment, _coords: ConstPtr<GLint>) {
+    log_once!("glDrawTexivOES — stubbed");
+}
+fn glDrawTexxvOES(_env: &mut Environment, _coords: ConstPtr<GLfixed>) {
+    log_once!("glDrawTexxvOES — stubbed");
 }
 
 // Drawing
@@ -1049,8 +1064,7 @@ fn glTexParameterxv(
 fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -> GuestUSize {
     let bytes_per_pixel: GuestUSize = match type_ {
         gles11::UNSIGNED_BYTE => match format {
-            gles11::ALPHA |
-            gles11::LUMINANCE => 1,
+            gles11::ALPHA | gles11::LUMINANCE => 1,
             gles11::LUMINANCE_ALPHA => 2,
             gles11::RGB => 3,
             gles11::RGBA => 4,
@@ -1058,8 +1072,7 @@ fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -
             _ => panic!("Unexpected format {format:#x}"),
         },
         gles11::UNSIGNED_SHORT_5_6_5
-        |
-        gles11::UNSIGNED_SHORT_4_4_4_4
+        | gles11::UNSIGNED_SHORT_4_4_4_4
         | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
         _ => panic!("Unexpected type {type_:#x}"),
     };
@@ -1645,6 +1658,12 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glVertexPointer(_, _, _, _)),
     export_c_func!(glPointSizePointerOES(_, _, _)),
     // Drawing
+    export_c_func!(glDrawTexfOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexiOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexxOES(_, _, _, _, _, _)),
+    export_c_func!(glDrawTexfvOES(_, _)),
+    export_c_func!(glDrawTexivOES(_, _)),
+    export_c_func!(glDrawTexxvOES(_, _)),
     export_c_func!(glDrawArrays(_, _, _)),
     export_c_func!(glDrawElements(_, _, _, _)),
     // Clearing
@@ -1751,10 +1770,5 @@ fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum
     })
 }
 
-fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
-    with_ctx_and_mem(env, |gles, _mem| {
-        let mut buffer_size: GLint = 0;
-        unsafe { gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut buffer_size) }
-        buffer_size
-    })
-}
+fn _get
+
