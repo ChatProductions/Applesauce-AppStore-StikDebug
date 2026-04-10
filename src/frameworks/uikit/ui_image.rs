@@ -259,6 +259,30 @@ pub const CLASSES: ClassExports = objc_classes!
 
 // MARK: - Drawing variants
 
+- (())drawAtPoint:(CGPoint)point
+        blendMode:(NSInteger)_blend_mode
+            alpha:(CGFloat)alpha {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil { return; }
+    
+    // TODO: apply blend mode and alpha properly.
+    // (Точно так же, как и в drawInRect:blendMode:alpha:)
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    
+    // Высчитываем CGRect на основе переданной CGPoint и размеров картинки,
+    // как это сделано в обычном drawAtPoint:
+    let rect = CGRect {
+        origin: point,
+        size: CGSize {
+            width: CGImageGetWidth(env, image) as CGFloat,
+            height: CGImageGetHeight(env, image) as CGFloat,
+        }
+    };
+    
+    // Отрисовываем
+    CGContextDrawImage(env, context, rect, image);
+            }
+    
 - (())drawInRect:(CGRect)rect
        blendMode:(NSInteger)_blend_mode
            alpha:(CGFloat)alpha {
