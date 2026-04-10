@@ -384,6 +384,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
++ (id)mainQueue {
+    // Return a singleton main queue
+    // In a real implementation, this would be a true singleton
+    let queue: id = msg_class![env; NSOperationQueue alloc];
+    let queue: id = msg![env; queue init];
+    let name: id = msg_class![env; NSString stringWithUTF8String:"NSOperationQueue Main Queue\0".as_ptr()];
+    () = msg![env; queue setName:name];
+    autorelease(env, queue)
+}
+
++ (id)currentQueue {
+    // In HLE, we don't track thread-local queues, so return nil
+    nil
+}
+
 - (id)init {
     let operations: id = msg_class![env; NSMutableArray alloc];
     let operations: id = msg![env; operations init];
@@ -401,23 +416,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, operations);
     release(env, name);
     env.objc.dealloc_object(this, &mut env.mem)
-}
-
-// MARK: - Class methods
-
-+ (id)mainQueue {
-    // Return a singleton main queue
-    // In a real implementation, this would be a true singleton
-    let queue: id = msg_class![env; NSOperationQueue alloc];
-    let queue: id = msg![env; queue init];
-    let name: id = msg_class![env; NSString stringWithUTF8String:"NSOperationQueue Main Queue\0".as_ptr()];
-    () = msg![env; queue setName:name];
-    autorelease(env, queue)
-}
-
-+ (id)currentQueue {
-    // In HLE, we don't track thread-local queues, so return nil
-    nil
 }
 
 // MARK: - Adding operations
