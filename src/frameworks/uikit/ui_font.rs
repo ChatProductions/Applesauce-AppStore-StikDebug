@@ -104,6 +104,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     12.0
 }
 
++ (CGFloat)familyNames {
+    15.0
+}
+
 + (CGFloat)labelFontSize {
     17.0
 }
