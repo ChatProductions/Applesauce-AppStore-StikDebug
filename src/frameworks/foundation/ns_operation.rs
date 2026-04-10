@@ -56,8 +56,7 @@ struct NSOperationQueueHostObject {
 
 impl HostObject for NSOperationQueueHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
@@ -84,13 +83,13 @@ pub const CLASSES: ClassExports = objc_classes!
             host_object.arg,
         )
     };
-
+    
     release(env, deps);
     release(env, completion);
     release(env, name);
     release(env, target);
     release(env, arg);
-
+    
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -106,7 +105,9 @@ pub const CLASSES: ClassExports = objc_classes!
     // Check if cancelled before starting
     let cancelled = env.objc.borrow::<NSOperationHostObject>(this).cancelled;
     if cancelled {
-        let is_finished_key = "isFinished\0".as_ptr();
+        // FIXME: Передача указателя хоста в гостевое пространство. Для работы KVO 
+        // потребуется настоящая гостевая строка, но as u32 решает проблему компиляции.
+        let is_finished_key = "isFinished\0".as_ptr() as u32;
         () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
         env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
         () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
@@ -129,16 +130,16 @@ pub const CLASSES: ClassExports = objc_classes!
     }
     
     // Transition to executing
-    let is_executing_key = "isExecuting\0".as_ptr();
+    let is_executing_key = "isExecuting\0".as_ptr() as u32;
     () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Executing;
     () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
-
+    
     // Execute main
     () = msg![env; this main];
-
+    
     // Transition to finished
-    let is_finished_key = "isFinished\0".as_ptr();
+    let is_finished_key = "isFinished\0".as_ptr() as u32;
     () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_executing_key])];
     () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_finished_key])];
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
@@ -162,7 +163,7 @@ pub const CLASSES: ClassExports = objc_classes!
 - (())cancel {
     let was_cancelled = env.objc.borrow::<NSOperationHostObject>(this).cancelled;
     if !was_cancelled {
-        let is_cancelled_key = "isCancelled\0".as_ptr();
+        let is_cancelled_key = "isCancelled\0".as_ptr() as u32;
         () = msg![env; this willChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_cancelled_key])];
         env.objc.borrow_mut::<NSOperationHostObject>(this).cancelled = true;
         () = msg![env; this didChangeValueForKey:(msg_class![env; NSString stringWithUTF8String:is_cancelled_key])];
@@ -230,6 +231,7 @@ pub const CLASSES: ClassExports = objc_classes!
     }
     
     let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
+    
     let deps_arr = if deps == nil {
         let new_arr: id = msg_class![env; NSMutableArray alloc];
         let new_arr: id = msg![env; new_arr init];
@@ -238,7 +240,7 @@ pub const CLASSES: ClassExports = objc_classes!
     } else {
         deps
     };
-
+    
     // Check if dependency already exists
     let contains: bool = msg![env; deps_arr containsObject:op];
     if !contains {
@@ -394,7 +396,7 @@ pub const CLASSES: ClassExports = objc_classes!
     // In a real implementation, this would be a true singleton
     let queue: id = msg_class![env; NSOperationQueue alloc];
     let queue: id = msg![env; queue init];
-    let name_ptr = "NSOperationQueue Main Queue\0".as_ptr();
+    let name_ptr = "NSOperationQueue Main Queue\0".as_ptr() as u32;
     let name: id = msg_class![env; NSString stringWithUTF8String:name_ptr];
     () = msg![env; queue setName:name];
     autorelease(env, queue)
@@ -409,8 +411,7 @@ pub const CLASSES: ClassExports = objc_classes!
     let operations: id = msg_class![env; NSMutableArray alloc];
     let operations: id = msg![env; operations init];
     env.objc.borrow_mut::<NSOperationQueueHostObject>(this).operations = operations;
-    env.objc.borrow_mut::<NSOperationQueueHostObject>(this).max_concurrent_operations = -1;
-    // Default: unlimited
+    env.objc.borrow_mut::<NSOperationQueueHostObject>(this).max_concurrent_operations = -1; // Default: unlimited
     this
 }
 
@@ -422,6 +423,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     release(env, operations);
     release(env, name);
+    
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -436,7 +438,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let operations = env.objc.borrow::<NSOperationQueueHostObject>(this).operations;
     () = msg![env; operations addObject:op];
-
+    
     // Execute immediately if not suspended
     let suspended = env.objc.borrow::<NSOperationQueueHostObject>(this).suspended;
     if !suspended {
@@ -480,7 +482,7 @@ pub const CLASSES: ClassExports = objc_classes!
 
 - (())setSuspended:(bool)suspended {
     env.objc.borrow_mut::<NSOperationQueueHostObject>(this).suspended = suspended;
-
+    
     // If resuming, start ready operations
     if !suspended {
         let operations = env.objc.borrow::<NSOperationQueueHostObject>(this).operations;
