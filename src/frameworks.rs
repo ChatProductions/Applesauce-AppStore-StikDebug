@@ -44,6 +44,8 @@ pub mod opengles;
 pub mod store_kit;
 pub mod system_configuration;
 pub mod uikit;
+pub mod core_audio;
+pub mod cf_network;
 
 /// Container for state of various child modules
 #[derive(Default)]
