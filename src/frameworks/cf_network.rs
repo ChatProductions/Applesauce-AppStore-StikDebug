@@ -40,12 +40,12 @@ fn CFHostStartInfoResolution(env: &mut Environment, theHost: u32, info: u32, err
 // --- Exports ---
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(CFReadStreamCreateForHTTPRequest(_, _, _)),
-    export_c_func!(CFReadStreamOpen(_, _)),
-    export_c_func!(CFReadStreamHasBytesAvailable(_, _)),
+    export_c_func!(CFReadStreamCreateForHTTPRequest(_, _)),
+    export_c_func!(CFReadStreamOpen(_)),
+    export_c_func!(CFReadStreamHasBytesAvailable(_)),
     export_c_func!(CFReadStreamRead(_, _, _)),
-    export_c_func!(CFReadStreamClose(_, _)),
+    export_c_func!(CFReadStreamClose(_)),
     export_c_func!(CFReadStreamSetProperty(_, _, _)),
-    export_c_func!(CFHostCreateWithAddress(_, _, _)),
+    export_c_func!(CFHostCreateWithAddress(_, _)),
     export_c_func!(CFHostStartInfoResolution(_, _, _)),
 ];
