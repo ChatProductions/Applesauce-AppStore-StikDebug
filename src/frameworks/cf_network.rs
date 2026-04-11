@@ -1,16 +1,18 @@
-// cf_network.rs
 /*
-* Stub implementation for CFNetwork.framework
-*
-* Purpose:
-* - satisfy symbol lookup
-* - avoid crashes on simple create/open checks
-* - behave safely when the game polls streams/hosts
-*/
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+//! Stub for `CFNetwork.framework/CFNetwork`.
+//!
+//! Purpose:
+//! - satisfy symbol lookup so apps that depend on CFNetwork don't crash
+//! - avoid crashes on simple create/open checks
+//! - behave safely when the game polls streams or hosts
 
 use crate::dyld::{export_c_func, FunctionExports};
+use crate::mem::MutPtr;
 use crate::Environment;
-use crate::mem::{ConstPtr, MutPtr};
 
 const DUMMY_STREAM: u32 = 0xC0F0_0001;
 const DUMMY_HOST: u32 = 0xC0F0_0002;
@@ -20,7 +22,8 @@ fn CFReadStreamCreateForHTTPRequest(
     _alloc: u32,
     _request: u32,
 ) -> u32 {
-    // Return a non-null dummy handle so callers that only check for null continue.
+    // Return a non-null dummy handle so callers that only check for null
+    // continue past the nil check.
     DUMMY_STREAM
 }
 
@@ -41,9 +44,7 @@ fn CFReadStreamRead(
     0
 }
 
-fn CFReadStreamClose(_env: &mut Environment, _stream: u32) {
-    // No-op.
-}
+fn CFReadStreamClose(_env: &mut Environment, _stream: u32) {}
 
 fn CFReadStreamSetProperty(
     _env: &mut Environment,
@@ -68,7 +69,6 @@ fn CFReadStreamScheduleWithRunLoop(
     _run_loop: u32,
     _run_loop_mode: u32,
 ) {
-    // No-op.
 }
 
 fn CFReadStreamUnscheduleFromRunLoop(
@@ -77,7 +77,6 @@ fn CFReadStreamUnscheduleFromRunLoop(
     _run_loop: u32,
     _run_loop_mode: u32,
 ) {
-    // No-op.
 }
 
 fn CFReadStreamSetClient(
@@ -91,15 +90,13 @@ fn CFReadStreamSetClient(
 }
 
 fn CFReadStreamGetStatus(_env: &mut Environment, _stream: u32) -> u32 {
-    // kCFStreamStatusOpen-ish fallback.
+    // kCFStreamStatusOpen
     2
 }
 
 fn CFReadStreamCopyError(_env: &mut Environment, _stream: u32) -> u32 {
     0
 }
-
-// --- CFHost stubs ---
 
 fn CFHostCreateWithAddress(_env: &mut Environment, _allocator: u32, _address: u32) -> u32 {
     DUMMY_HOST
@@ -114,9 +111,7 @@ fn CFHostStartInfoResolution(
     true
 }
 
-fn CFHostCancelInfoResolution(_env: &mut Environment, _the_host: u32) {
-    // No-op.
-}
+fn CFHostCancelInfoResolution(_env: &mut Environment, _the_host: u32) {}
 
 fn CFHostGetAddresses(_env: &mut Environment, _the_host: u32, _resolved: u32) -> u32 {
     0
@@ -144,10 +139,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamSetClient(_, _, _, _)),
     export_c_func!(CFReadStreamGetStatus(_)),
     export_c_func!(CFReadStreamCopyError(_)),
-
     export_c_func!(CFHostCreateWithAddress(_, _)),
     export_c_func!(CFHostStartInfoResolution(_, _, _)),
     export_c_func!(CFHostCancelInfoResolution(_)),
     export_c_func!(CFHostGetAddresses(_, _)),
     export_c_func!(CFHostSetClient(_, _, _)),
 ];
+
