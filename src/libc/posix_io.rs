@@ -906,6 +906,34 @@ fn writev(
     written_bytes
 }
 
+pub const PROT_NONE: i32 = 0x00;
+pub const PROT_READ: i32 = 0x01;
+pub const PROT_WRITE: i32 = 0x02;
+pub const PROT_EXEC: i32 = 0x04;
+
+fn _mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32 {
+    set_errno(env, 0);
+
+    // ПОЛНОЦЕННАЯ РЕАЛИЗАЦИЯ POSIX: 
+    // Адрес (addr) должен быть выровнен по границе системной страницы (обычно 4096 байт).
+    // Если адрес не выровнен, mprotect обязан вернуть -1 и установить errno = EINVAL.
+    if addr % 4096 != 0 {
+        log!("Warning: _mprotect({:#x}, {:#x}, {:#x}) failed - address not page-aligned", addr, len, prot);
+        set_errno(env, EINVAL);
+        return -1;
+    }
+
+    log_dbg!("_mprotect(addr: {:#x}, len: {:#x}, prot: {:#x}) => 0", addr, len, prot);
+
+    // Если в твоем менеджере памяти (env.mem) когда-нибудь появится реальный контроль 
+    // прав доступа к страницам (NX bit), то здесь нужно будет вызвать:
+    // env.mem.set_protection(addr, len, prot).unwrap_or(-1)
+    
+    // В текущей модели памяти эмулятора память доступна полностью (RWX).
+    // Валидация пройдена, возвращаем 0 (успех).
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(open(_, _, _)),
     export_c_func!(read(_, _, _)),
@@ -922,6 +950,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
     export_c_func!(writev(_, _, _)),
+    export_c_func!(_mprotect(_, _, _)),
 ];
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env.libc_state.posix_io.files.iter().position(|f| f.is_none()) {
