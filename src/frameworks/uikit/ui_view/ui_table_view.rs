@@ -129,12 +129,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UITableViewController: UIViewController
 
 - (id)initWithStyle:(i32)_style {
-    // Пробрасываем базовую инициализацию в UIViewController
     msg_super![env; this init]
 }
 
-- (id)tableView { nil }
-- (())setTableView:(id)_view {}
+// Честный iOS-подход: переопределяем создание вьюхи по умолчанию.
+// Если NIB'а нет, мы принудительно создаем UITableView, а не UIView.
+- (())loadView {
+    let frame = <CGRect as Default>::default();
+    let table_view: id = msg_class![env; UITableView alloc];
+    
+    // 0 = UITableViewStylePlain
+    let table_view: id = msg![env; table_view initWithFrame:frame style:0];
+    
+    // Устанавливаем таблицу как главную view этого контроллера
+    () = msg![env; this setView:table_view];
+    release(env, table_view);
+}
+
+// Теперь tableView ссылается на реальный UITableView
+- (id)tableView {
+    msg![env; this view]
+}
+
+- (())setTableView:(id)view {
+    () = msg![env; this setView:view];
+}
 
 - (bool)clearsSelectionOnViewWillAppear { true }
 - (())setClearsSelectionOnViewWillAppear:(bool)_clears {}
