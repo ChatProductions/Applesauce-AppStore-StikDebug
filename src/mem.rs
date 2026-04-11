@@ -339,32 +339,23 @@ impl Mem {
     // ХАК: Убираем панику при доступе к null-page. Вместо этого логируем и разрешаем доступ.
     // Это нужно для запуска игр, которые пытаются читать/писать по адресу 0x0.
     #[cold]
-    fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool) {
+    fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
         
-        // Используем eprintln! для вывода в консоль (всегда видно, не зависит от настроек логирования)
-        eprintln!("╔══════════════════════════════════════════════════════════════════╗");
-        eprintln!("║  touchHLE NULL-PAGE ACCESS DETECTED (HACK ACTIVE)               ║");
-        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
-        eprintln!("║  Operation: {:<51} ║", op_type);
-        eprintln!("║  Address:   0x{:08x} (NULL + 0x{:x} bytes)                     ║", at, at);
-        eprintln!("║  Size:      0x{:x} bytes                                         ║", size);
-        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
+        // Выводим подробную информацию о проблеме через eprintln! (всегда работает)
+        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
+        eprintln!("Operation: {}", op_type);
+        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
+        eprintln!("Size:      0x{:x} bytes", size);
+        eprintln!("Caller:    {}", caller);
+        eprintln!("===========================================");
+        eprintln!("WARNING: Access ALLOWED (returning zero page).");
+        eprintln!("Game may crash later or behave unexpectedly.");
+        eprintln!("===========================================\n");
         
-        // Выводим backtrace хоста (Rust)
-        eprintln!("║  Host Backtrace (Rust):                                          ║");
-        let backtrace = std::backtrace::Backtrace::capture();
-        for (i, line) in format!("{:?}", backtrace).lines().enumerate().take(15) {
-            if i == 0 { continue; } // Пропускаем первую строку "Backtrace captured"
-            eprintln!("║  {:<64} ║", &line[..line.len().min(64)]);
-        }
-        
-        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
-        eprintln!("║  NOTE: Access ALLOWED (returning zero page). Game may crash later ║");
-        eprintln!("╚══════════════════════════════════════════════════════════════════╝");
-        
-        // Также логируем через touchHLE логгер, если доступен
-        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) - HACK ACTIVE", op_type, at, size);
+        // Также используем touchHLE логгер если доступен
+        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
+             op_type, at, size, caller);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
@@ -401,11 +392,11 @@ impl Mem {
     /// [Self::ptr_at] for that).
     pub fn bytes_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>, count: GuestUSize) -> &[u8] {
         // ХАК: Вместо паники логируем и разрешаем доступ к null-page
-        if ptr.to_bits() < self.null_segment_size && ptr.to_bits() != 0 {
-            Self::null_check_fail(ptr.to_bits(), count, false);
+        // Проверяем <= чтобы гарантированно ловить 0x0 даже при null_segment_size = 0
+        if ptr.to_bits() <= self.null_segment_size {
+            Self::null_check_fail(ptr.to_bits(), count, false, "bytes_at");
         }
-        // Если адрес 0x0, просто возвращаем доступ к началу памяти (нулевая страница)
-        // Это может содержать мусор или нули, но позволит игре продолжить
+        // Возвращаем доступ к памяти (даже если это null-page)
         &self.bytes()[ptr.to_bits() as usize..][..count as usize]
     }
     /// Get a slice for reading `count` bytes without a null-page check.
@@ -429,10 +420,10 @@ impl Mem {
     /// [Self::ptr_at_mut] for that).
     pub fn bytes_at_mut(&mut self, ptr: MutPtr<u8>, count: GuestUSize) -> &mut [u8] {
         // ХАК: Вместо паники логируем и разрешаем доступ к null-page
-        if ptr.to_bits() < self.null_segment_size && ptr.to_bits() != 0 {
-            Self::null_check_fail(ptr.to_bits(), count, true);
+        if ptr.to_bits() <= self.null_segment_size {
+            Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
         }
-        // Если адрес 0x0, разрешаем запись (опасно, но нужно для совместимости)
+        // Возвращаем доступ к памяти (даже если это null-page)
         &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
     }
 
@@ -640,4 +631,5 @@ impl Mem {
     pub fn reserve(&mut self, base: VAddr, size: GuestUSize) {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
-            }
+}
+
