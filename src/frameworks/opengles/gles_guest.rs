@@ -618,6 +618,189 @@ fn glUnmapBufferOES(env: &mut Environment, target: GLenum) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.UnmapBufferOES(target) })
 }
 
+// ============================================
+// ЗАГЛУШКИ ДЛЯ OPENGL ES 2.0 ФУНКЦИЙ
+// Эти функции нужны для совместимости с играми,
+// которые пытаются использовать ES 2.0, но
+// touchHLE поддерживает только ES 1.1
+// ============================================
+
+/// Создание шейдерной программы (ES 2.0) - заглушка
+fn glCreateProgram(_env: &mut Environment) -> GLuint {
+    log_once!("glCreateProgram() — ES 2.0 stub, returning 1");
+    1 // Возвращаем фейковый ID программы
+}
+
+/// Создание шейдера (ES 2.0) - заглушка
+fn glCreateShader(_env: &mut Environment, _type: GLenum) -> GLuint {
+    log_once!("glCreateShader() — ES 2.0 stub, returning 1");
+    1 // Возвращаем фейковый ID шейдера
+}
+
+/// Привязка атрибута (ES 2.0) - заглушка
+fn glBindAttribLocation(_env: &mut Environment, _program: GLuint, _index: GLuint, _name: ConstPtr<GLubyte>) {
+    log_once!("glBindAttribLocation() — ES 2.0 stub");
+}
+
+/// Получение uniform-переменной (ES 2.0) - заглушка
+fn glGetUniformLocation(_env: &mut Environment, _program: GLuint, _name: ConstPtr<GLubyte>) -> GLint {
+    log_once!("glGetUniformLocation() — ES 2.0 stub, returning -1");
+    -1 // Возвращаем -1 (не найдено)
+}
+
+/// Установка uniform-матрицы (ES 2.0) - заглушка
+fn glUniformMatrix4fv(_env: &mut Environment, _location: GLint, _count: GLsizei, _transpose: GLboolean, _value: ConstPtr<GLfloat>) {
+    log_once!("glUniformMatrix4fv() — ES 2.0 stub");
+}
+
+/// Использование программы (ES 2.0) - заглушка
+fn glUseProgram(_env: &mut Environment, _program: GLuint) {
+    log_once!("glUseProgram() — ES 2.0 stub");
+}
+
+/// Удаление программы (ES 2.0) - заглушка
+fn glDeleteProgram(_env: &mut Environment, _program: GLuint) {
+    log_once!("glDeleteProgram() — ES 2.0 stub");
+}
+
+/// Удаление шейдера (ES 2.0) - заглушка
+fn glDeleteShader(_env: &mut Environment, _shader: GLuint) {
+    log_once!("glDeleteShader() — ES 2.0 stub");
+}
+
+/// Компиляция шейдера (ES 2.0) - заглушка
+fn glCompileShader(_env: &mut Environment, _shader: GLuint) {
+    log_once!("glCompileShader() — ES 2.0 stub");
+}
+
+/// Присоединение шейдера к программе (ES 2.0) - заглушка
+fn glAttachShader(_env: &mut Environment, _program: GLuint, _shader: GLuint) {
+    log_once!("glAttachShader() — ES 2.0 stub");
+}
+
+/// Линковка программы (ES 2.0) - заглушка
+fn glLinkProgram(_env: &mut Environment, _program: GLuint) {
+    log_once!("glLinkProgram() — ES 2.0 stub");
+}
+
+/// Получение параметра шейдера (ES 2.0) - заглушка
+fn glGetShaderiv(_env: &mut Environment, _shader: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
+    log_once!("glGetShaderiv() — ES 2.0 stub");
+    // Возвращаем GL_TRUE для COMPILE_STATUS чтобы игра думала что компиляция успешна
+    unsafe { params.write_unaligned(1) };
+}
+
+/// Получение информационного лога шейдера (ES 2.0) - заглушка
+fn glGetShaderInfoLog(_env: &mut Environment, _shader: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
+    log_once!("glGetShaderInfoLog() — ES 2.0 stub");
+    if !length.is_null() {
+        unsafe { length.write_unaligned(0) }; // Нет сообщения
+    }
+    if !infoLog.is_null() {
+        unsafe { infoLog.cast::<u8>().write_unaligned(0) }; // Пустая строка
+    }
+}
+
+/// Получение параметра программы (ES 2.0) - заглушка
+fn glGetProgramiv(_env: &mut Environment, _program: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
+    log_once!("glGetProgramiv() — ES 2.0 stub");
+    // Возвращаем GL_TRUE для LINK_STATUS
+    unsafe { params.write_unaligned(1) };
+}
+
+/// Получение информационного лога программы (ES 2.0) - заглушка
+fn glGetProgramInfoLog(_env: &mut Environment, _program: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
+    log_once!("glGetProgramInfoLog() — ES 2.0 stub");
+    if !length.is_null() {
+        unsafe { length.write_unaligned(0) };
+    }
+    if !infoLog.is_null() {
+        unsafe { infoLog.cast::<u8>().write_unaligned(0) };
+    }
+}
+
+/// Исходный код шейдера (ES 2.0) - заглушка
+fn glShaderSource(_env: &mut Environment, _shader: GLuint, _count: GLsizei, _string: ConstPtr<ConstPtr<GLubyte>>, _length: ConstPtr<GLint>) {
+    log_once!("glShaderSource() — ES 2.0 stub");
+}
+
+/// Включение/отключение вершинного атрибута (ES 2.0) - заглушка
+fn glEnableVertexAttribArray(_env: &mut Environment, _index: GLuint) {
+    log_once!("glEnableVertexAttribArray() — ES 2.0 stub");
+}
+
+fn glDisableVertexAttribArray(_env: &mut Environment, _index: GLuint) {
+    log_once!("glDisableVertexAttribArray() — ES 2.0 stub");
+}
+
+/// Указатель на вершинный атрибут (ES 2.0) - заглушка
+fn glVertexAttribPointer(_env: &mut Environment, _index: GLuint, _size: GLint, _type: GLenum, _normalized: GLboolean, _stride: GLsizei, _pointer: ConstVoidPtr) {
+    log_once!("glVertexAttribPointer() — ES 2.0 stub");
+}
+
+/// Установка uniform-переменных (ES 2.0) - заглушки
+fn glUniform1i(_env: &mut Environment, _location: GLint, _v0: GLint) {
+    log_once!("glUniform1i() — ES 2.0 stub");
+}
+
+fn glUniform1f(_env: &mut Environment, _location: GLint, _v0: GLfloat) {
+    log_once!("glUniform1f() — ES 2.0 stub");
+}
+
+fn glUniform2f(_env: &mut Environment, _location: GLint, _v0: GLfloat, _v1: GLfloat) {
+    log_once!("glUniform2f() — ES 2.0 stub");
+}
+
+fn glUniform3f(_env: &mut Environment, _location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat) {
+    log_once!("glUniform3f() — ES 2.0 stub");
+}
+
+fn glUniform4f(_env: &mut Environment, _location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat, _v3: GLfloat) {
+    log_once!("glUniform4f() — ES 2.0 stub");
+}
+
+/// Генерация VAO (ES 2.0) - заглушка
+fn glGenVertexArrays(env: &mut Environment, n: GLsizei, arrays: MutPtr<GLuint>) {
+    log_once!("glGenVertexArrays() — ES 2.0 stub");
+    for i in 0..n {
+        env.mem.write(arrays + (i as GuestUSize), (i + 1) as GLuint);
+    }
+}
+
+/// Привязка VAO (ES 2.0) - заглушка
+fn glBindVertexArray(_env: &mut Environment, _array: GLuint) {
+    log_once!("glBindVertexArray() — ES 2.0 stub");
+}
+
+/// Удаление VAO (ES 2.0) - заглушка
+fn glDeleteVertexArrays(_env: &mut Environment, _n: GLsizei, _arrays: ConstPtr<GLuint>) {
+    log_once!("glDeleteVertexArrays() — ES 2.0 stub");
+}
+
+/// Генерация VBO (ES 2.0) - используем существующую реализацию
+fn glGenBuffersES2(env: &mut Environment, n: GLsizei, buffers: MutPtr<GLuint>) {
+    glGenBuffers(env, n, buffers)
+}
+
+/// Привязка VBO (ES 2.0) - используем существующую реализацию
+fn glBindBufferES2(env: &mut Environment, target: GLenum, buffer: GLuint) {
+    glBindBuffer(env, target, buffer)
+}
+
+/// Удаление VBO (ES 2.0) - используем существующую реализацию
+fn glDeleteBuffersES2(env: &mut Environment, n: GLsizei, buffers: ConstPtr<GLuint>) {
+    glDeleteBuffers(env, n, buffers)
+}
+
+/// Буферные данные (ES 2.0) - используем существующую реализацию
+fn glBufferDataES2(env: &mut Environment, target: GLenum, size: GuestGLsizeiptr, data: ConstPtr<GLvoid>, usage: GLenum) {
+    glBufferData(env, target, size, data, usage)
+}
+
+fn glBufferSubDataES2(env: &mut Environment, target: GLenum, offset: GuestGLintptr, size: GuestGLsizeiptr, data: ConstPtr<GLvoid>) {
+    glBufferSubData(env, target, offset, size, data)
+}
+
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
     let mut fog_enabled: GLboolean = 0;
     gles.GetBooleanv(gles11::FOG, &mut fog_enabled);
@@ -646,123 +829,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glDisable(_)), export_c_func!(glClientActiveTexture(_)),
     export_c_func!(glEnableClientState(_)), export_c_func!(glDisableClientState(_)),
     export_c_func!(glGetBooleanv(_, _)), export_c_func!(glGetFloatv(_, _)),
-    export_c_func!(glGetIntegerv(_, _)), export_c_func!(glGetPointerv(_, _)),
-    export_c_func!(glGetTexEnviv(_, _, _)), export_c_func!(glGetTexEnvfv(_, _, _)),
-    export_c_func!(glHint(_, _)), export_c_func!(glFinish()), export_c_func!(glFlush()),
-    export_c_func!(glGetString(_)), export_c_func!(glAlphaFunc(_, _)), export_c_func!(glAlphaFuncx(_, _)),
-    export_c_func!(glBlendFunc(_, _)), export_c_func!(glBlendEquationOES(_)),
-    export_c_func!(glColorMask(_, _, _, _)), export_c_func!(glClipPlanef(_, _)),
-    export_c_func!(glClipPlanex(_, _)), export_c_func!(glCullFace(_)), export_c_func!(glDepthFunc(_)),
-    export_c_func!(glDepthMask(_)), export_c_func!(glDepthRangef(_, _)),
-    export_c_func!(glDepthRangex(_, _)), export_c_func!(glFrontFace(_)),
-    export_c_func!(glPolygonOffset(_, _)), export_c_func!(glPolygonOffsetx(_, _)),
-    export_c_func!(glSampleCoverage(_, _)), export_c_func!(glSampleCoveragex(_, _)),
-    export_c_func!(glShadeModel(_)), export_c_func!(glScissor(_, _, _, _)),
-    export_c_func!(glViewport(_, _, _, _)), export_c_func!(glLineWidth(_)),
-    export_c_func!(glLineWidthx(_)), export_c_func!(glStencilFunc(_, _, _)),
-    export_c_func!(glStencilOp(_, _, _)), export_c_func!(glStencilMask(_)),
-    export_c_func!(glLogicOp(_)), export_c_func!(glPointSize(_)), export_c_func!(glPointSizex(_)),
-    export_c_func!(glPointParameterf(_, _)), export_c_func!(glPointParameterx(_, _)),
-    export_c_func!(glPointParameterfv(_, _)), export_c_func!(glPointParameterxv(_, _)),
-    export_c_func!(glFogf(_, _)), export_c_func!(glFogx(_, _)), export_c_func!(glFogfv(_, _)),
-    export_c_func!(glFogxv(_, _)), export_c_func!(glLightf(_, _, _)), export_c_func!(glLightx(_, _, _)),
-    export_c_func!(glLightfv(_, _, _)), export_c_func!(glLightxv(_, _, _)),
-    export_c_func!(glLightModelf(_, _)), export_c_func!(glLightModelfv(_, _)),
-    export_c_func!(glLightModelx(_, _)), export_c_func!(glLightModelxv(_, _)),
-    export_c_func!(glMaterialf(_, _, _)), export_c_func!(glMaterialx(_, _, _)),
-    export_c_func!(glMaterialfv(_, _, _)), export_c_func!(glMaterialxv(_, _, _)),
-    export_c_func!(glIsBuffer(_)), export_c_func!(glGenBuffers(_, _)),
-    export_c_func!(glDeleteBuffers(_, _)), export_c_func!(glBindBuffer(_, _)),
-    export_c_func!(glBufferData(_, _, _, _)), export_c_func!(glBufferSubData(_, _, _, _)),
-    export_c_func!(glColor4f(_, _, _, _)), export_c_func!(glColor4x(_, _, _, _)),
-    export_c_func!(glColor4ub(_, _, _, _)), export_c_func!(glNormal3f(_, _, _)),
-    export_c_func!(glNormal3x(_, _, _)), export_c_func!(glColorPointer(_, _, _, _)),
-    export_c_func!(glNormalPointer(_, _, _)), export_c_func!(glTexCoordPointer(_, _, _, _)),
-    export_c_func!(glVertexPointer(_, _, _, _)), 
-    
-    // Заглушки
-    export_c_func!(glPointSizePointerOES(_, _, _)),
-    export_c_func!(glDrawTexfOES(_, _, _, _, _)), export_c_func!(glDrawTexiOES(_, _, _, _, _)),
-    export_c_func!(glDrawTexxOES(_, _, _, _, _)), export_c_func!(glDrawTexfvOES(_)),
-    export_c_func!(glDrawTexivOES(_)), export_c_func!(glDrawTexxvOES(_)),
-    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _)),
-    export_c_func!(glResolveMultisampleFramebufferAPPLE()),
-    export_c_func!(glDiscardFramebufferEXT(_, _, _)), export_c_func!(glBindVertexArrayOES(_)),
-    export_c_func!(glDeleteVertexArraysOES(_, _)), export_c_func!(glGenVertexArraysOES(_, _)),
-    export_c_func!(glIsVertexArrayOES(_)), export_c_func!(glCurrentPaletteMatrixOES(_)),
-    export_c_func!(glLoadPaletteFromModelViewMatrixOES()), export_c_func!(glMatrixIndexPointerOES(_, _, _, _)),
-    export_c_func!(glWeightPointerOES(_, _, _, _)), export_c_func!(glGetBufferPointervOES(_, _, _)),
-    export_c_func!(glGetTexParameteriv(_, _, _)),
-
-    // Основные функции рендеринга
-    export_c_func!(glDrawArrays(_, _, _)), export_c_func!(glDrawElements(_, _, _, _)),
-    export_c_func!(glClear(_)), export_c_func!(glClearColor(_, _, _, _)),
-    export_c_func!(glClearColorx(_, _, _, _)), export_c_func!(glClearDepthf(_)),
-    export_c_func!(glClearDepthx(_)), export_c_func!(glClearStencil(_)),
-    export_c_func!(glMatrixMode(_)), export_c_func!(glLoadIdentity()),
-    export_c_func!(glLoadMatrixf(_)), export_c_func!(glLoadMatrixx(_)),
-    export_c_func!(glMultMatrixf(_)), export_c_func!(glMultMatrixx(_)),
-    export_c_func!(glPushMatrix()), export_c_func!(glPopMatrix()),
-    export_c_func!(glOrthof(_, _, _, _, _, _)), export_c_func!(glOrthox(_, _, _, _, _, _)),
-    export_c_func!(glFrustumf(_, _, _, _, _, _)), export_c_func!(glFrustumx(_, _, _, _, _, _)),
-    export_c_func!(glRotatef(_, _, _, _)), export_c_func!(glRotatex(_, _, _, _)),
-    export_c_func!(glScalef(_, _, _)), export_c_func!(glScalex(_, _, _)),
-    export_c_func!(glTranslatef(_, _, _)), export_c_func!(glTranslatex(_, _, _)),
-    export_c_func!(glPixelStorei(_, _)), export_c_func!(glReadPixels(_, _, _, _, _, _, _)),
-    export_c_func!(glGenTextures(_, _)), export_c_func!(glDeleteTextures(_, _)),
-    export_c_func!(glActiveTexture(_)), export_c_func!(glIsTexture(_)),
-    export_c_func!(glBindTexture(_, _)), export_c_func!(glTexParameteri(_, _, _)),
-    export_c_func!(glTexParameterf(_, _, _)), export_c_func!(glTexParameterx(_, _, _)),
-    export_c_func!(glTexParameteriv(_, _, _)), export_c_func!(glTexParameterfv(_, _, _)),
-    export_c_func!(glTexParameterxv(_, _, _)), export_c_func!(glTexImage2D(_, _, _, _, _, _, _, _, _)),
-    export_c_func!(glTexSubImage2D(_, _, _, _, _, _, _, _, _)),
-    export_c_func!(glCompressedTexImage2D(_, _, _, _, _, _, _, _)),
-    export_c_func!(glCopyTexImage2D(_, _, _, _, _, _, _, _)),
-    export_c_func!(glCopyTexSubImage2D(_, _, _, _, _, _, _, _)),
-    export_c_func!(glTexEnvf(_, _, _)), export_c_func!(glTexEnvx(_, _, _)),
-    export_c_func!(glTexEnvi(_, _, _)), export_c_func!(glTexEnvfv(_, _, _)),
-    export_c_func!(glTexEnvxv(_, _, _)), export_c_func!(glTexEnviv(_, _, _)),
-    export_c_func!(glMultiTexCoord4f(_, _, _, _, _)), export_c_func!(glMultiTexCoord4x(_, _, _, _, _)),
-    export_c_func!(glGenFramebuffersOES(_, _)), export_c_func!(glGenRenderbuffersOES(_, _)),
-    export_c_func!(glIsFramebufferOES(_)), export_c_func!(glIsRenderbufferOES(_)),
-    export_c_func!(glBindFramebufferOES(_, _)), export_c_func!(glBindRenderbufferOES(_, _)),
-    export_c_func!(glRenderbufferStorageOES(_, _, _, _)),
-    export_c_func!(glFramebufferRenderbufferOES(_, _, _, _)),
-    export_c_func!(glFramebufferTexture2DOES(_, _, _, _, _)),
-    export_c_func!(glGetFramebufferAttachmentParameterivOES(_, _, _, _)),
-    export_c_func!(glGetRenderbufferParameterivOES(_, _, _)),
-    export_c_func!(glCheckFramebufferStatusOES(_)), export_c_func!(glDeleteFramebuffersOES(_, _)),
-    export_c_func!(glDeleteRenderbuffersOES(_, _)), export_c_func!(glGenerateMipmapOES(_)),
-    export_c_func!(glGenFramebuffers(_, _)), export_c_func!(glGenRenderbuffers(_, _)),
-    export_c_func!(glIsFramebuffer(_)), export_c_func!(glIsRenderbuffer(_)),
-    export_c_func!(glBindFramebuffer(_, _)), export_c_func!(glBindRenderbuffer(_, _)),
-    export_c_func!(glRenderbufferStorage(_, _, _, _)), export_c_func!(glFramebufferRenderbuffer(_, _, _, _)),
-    export_c_func!(glFramebufferTexture2D(_, _, _, _, _)),
-    export_c_func!(glGetFramebufferAttachmentParameteriv(_, _, _, _)),
-    export_c_func!(glGetRenderbufferParameteriv(_, _, _)), export_c_func!(glCheckFramebufferStatus(_)),
-    export_c_func!(glDeleteFramebuffers(_, _)), export_c_func!(glDeleteRenderbuffers(_, _)),
-    export_c_func!(glGenerateMipmap(_)), export_c_func!(glGetBufferParameteriv(_, _, _)),
-    export_c_func!(glMapBufferOES(_, _)), export_c_func!(glUnmapBufferOES(_)),
-];
-
-fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
-        let pname = match target {
-            ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
-            ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
-            _ => panic!("Unsupported buffer target"),
-        };
-        let mut currently_bound_buffer_name: GLint = 0;
-        gles.GetIntegerv(pname, &mut currently_bound_buffer_name);
-        currently_bound_buffer_name as GLuint
-    })
-}
-
-fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
-    with_ctx_and_mem(env, |gles, _mem| {
-        let mut buffer_size: GLint = 0;
-        unsafe { gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut buffer_size) }
-        buffer_size
-    })
-}
+    export_c_func!(gl
 
