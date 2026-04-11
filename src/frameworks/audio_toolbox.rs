@@ -29,6 +29,7 @@ pub mod audio_queue;
 pub mod audio_services;
 pub mod audio_session;
 pub mod audio_unit;
+pub mod audio_converter;
 pub mod ext_audio_file;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -38,6 +39,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[],
     function_exports: &[
         audio_components::FUNCTIONS,
+        audio_converter::FUNCTIONS,
         audio_file::FUNCTIONS,
         audio_queue::FUNCTIONS,
         audio_services::FUNCTIONS,

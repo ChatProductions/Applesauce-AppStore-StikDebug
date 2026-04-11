@@ -20,6 +20,7 @@ pub mod cxxabi;
 pub mod dirent;
 pub mod dlfcn;
 pub mod dns_sd;
+pub mod fnmatch;
 pub mod errno;
 pub mod ifaddrs;
 pub mod keymgr;
@@ -59,6 +60,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         dirent::FUNCTIONS,
         dlfcn::FUNCTIONS,
         dns_sd::FUNCTIONS,
+        fnmatch::FUNCTIONS,
         errno::FUNCTIONS,
         ifaddrs::FUNCTIONS,
         keymgr::FUNCTIONS,
@@ -129,4 +131,3 @@ pub struct State {
     mach_vm: mach::vm_map::State,
     mmap: mmap::State,
 }
-
