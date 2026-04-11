@@ -1,14 +1,26 @@
 /*
  * OpenGL ES 2.0 Stub Functions for touchHLE
- * 
- * Этот модуль предоставляет заглушки для функций OpenGL ES 2.0,
+ * * Этот модуль предоставляет заглушки для функций OpenGL ES 2.0,
  * чтобы предотвратить краши на устройствах без поддержки ES 2.0.
  */
 
-use crate::gles::gles1_bindings::types::*;
-use crate::gles::gles1_bindings::*;
+use std::os::raw::{c_char, c_int, c_uchar, c_uint, c_void};
 use crate::mem::MutVoidPtr;
 use crate::environment::Environment;
+
+// Определение базовых типов OpenGL
+pub type GLenum = c_uint;
+pub type GLuint = c_uint;
+pub type GLint = c_int;
+pub type GLchar = c_char;
+pub type GLsizei = c_int;
+pub type GLboolean = c_uchar;
+pub type GLfloat = f32;
+pub type GLdouble = f64;
+pub type GLbitfield = c_uint;
+pub type GLintptr = isize;
+pub type GLsizeiptr = isize;
+pub type GLubyte = u8;
 
 // Константы ES 2.0 которых нет в ES 1.1
 pub const GL_ES_VERSION_2_0: GLenum = 1;
@@ -39,13 +51,6 @@ pub const GL_ACTIVE_UNIFORMS: GLenum = 0x8B86;
 pub const GL_ATTACHED_SHADERS: GLenum = 0x8B85;
 pub const GL_DELETE_STATUS: GLenum = 0x8B80;
 pub const GL_VALIDATE_STATUS: GLenum = 0x8B83;
-
-// Типы шейдеров и программ (фейковые указатели)
-pub type GLuint = c_uint;
-pub type GLint = c_int;
-pub type GLchar = c_char;
-pub type GLsizei = c_int;
-pub type GLboolean = c_uchar;
 
 static mut NEXT_SHADER_ID: GLuint = 1;
 static mut NEXT_PROGRAM_ID: GLuint = 1000;
@@ -78,8 +83,8 @@ pub extern "C" fn glCreateShader(_type: GLenum) -> GLuint {
 pub extern "C" fn glShaderSource(
     shader: GLuint,
     count: GLsizei,
-    string: *const *const GLchar,
-    length: *const GLint,
+    _string: *const *const GLchar,
+    _length: *const GLint,
 ) {
     log!("STUB: glShaderSource(shader={}, count={})", shader, count);
 }
@@ -114,9 +119,9 @@ pub extern "C" fn glGetShaderiv(shader: GLuint, pname: GLenum, params: *mut GLin
 #[no_mangle]
 pub extern "C" fn glGetShaderInfoLog(
     shader: GLuint,
-    bufSize: GLsizei,
+    _bufSize: GLsizei,
     length: *mut GLsizei,
-    infoLog: *mut GLchar,
+    _infoLog: *mut GLchar,
 ) {
     log!("STUB: glGetShaderInfoLog(shader={})", shader);
     if !length.is_null() {
@@ -174,9 +179,9 @@ pub extern "C" fn glGetProgramiv(program: GLuint, pname: GLenum, params: *mut GL
 #[no_mangle]
 pub extern "C" fn glGetProgramInfoLog(
     program: GLuint,
-    bufSize: GLsizei,
+    _bufSize: GLsizei,
     length: *mut GLsizei,
-    infoLog: *mut GLchar,
+    _infoLog: *mut GLchar,
 ) {
     log!("STUB: glGetProgramInfoLog(program={})", program);
     if !length.is_null() {
@@ -222,9 +227,9 @@ pub extern "C" fn glVertexAttribPointer(
     index: GLuint,
     size: GLint,
     _type: GLenum,
-    normalized: GLboolean,
-    stride: GLsizei,
-    pointer: *const c_void,
+    _normalized: GLboolean,
+    _stride: GLsizei,
+    _pointer: *const c_void,
 ) {
     log!("STUB: glVertexAttribPointer(index={}, size={})", index, size);
 }
@@ -240,119 +245,119 @@ pub extern "C" fn glDisableVertexAttribArray(index: GLuint) {
 }
 
 #[no_mangle]
-pub extern "C" fn glVertexAttrib1f(index: GLuint, x: GLfloat) {
+pub extern "C" fn glVertexAttrib1f(index: GLuint, _x: GLfloat) {
     log!("STUB: glVertexAttrib1f(index={})", index);
 }
 
 #[no_mangle]
-pub extern "C" fn glVertexAttrib2f(index: GLuint, x: GLfloat, y: GLfloat) {
+pub extern "C" fn glVertexAttrib2f(index: GLuint, _x: GLfloat, _y: GLfloat) {
     log!("STUB: glVertexAttrib2f(index={})", index);
 }
 
 #[no_mangle]
-pub extern "C" fn glVertexAttrib3f(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat) {
+pub extern "C" fn glVertexAttrib3f(index: GLuint, _x: GLfloat, _y: GLfloat, _z: GLfloat) {
     log!("STUB: glVertexAttrib3f(index={})", index);
 }
 
 #[no_mangle]
-pub extern "C" fn glVertexAttrib4f(index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
+pub extern "C" fn glVertexAttrib4f(index: GLuint, _x: GLfloat, _y: GLfloat, _z: GLfloat, _w: GLfloat) {
     log!("STUB: glVertexAttrib4f(index={})", index);
 }
 
 // MARK: - Uniform Setters
 
 #[no_mangle]
-pub extern "C" fn glUniform1f(location: GLint, v0: GLfloat) {
+pub extern "C" fn glUniform1f(location: GLint, _v0: GLfloat) {
     log!("STUB: glUniform1f(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform2f(location: GLint, v0: GLfloat, v1: GLfloat) {
+pub extern "C" fn glUniform2f(location: GLint, _v0: GLfloat, _v1: GLfloat) {
     log!("STUB: glUniform2f(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform3f(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat) {
+pub extern "C" fn glUniform3f(location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat) {
     log!("STUB: glUniform3f(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform4f(location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat, v3: GLfloat) {
+pub extern "C" fn glUniform4f(location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat, _v3: GLfloat) {
     log!("STUB: glUniform4f(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform1i(location: GLint, v0: GLint) {
+pub extern "C" fn glUniform1i(location: GLint, _v0: GLint) {
     log!("STUB: glUniform1i(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform2i(location: GLint, v0: GLint, v1: GLint) {
+pub extern "C" fn glUniform2i(location: GLint, _v0: GLint, _v1: GLint) {
     log!("STUB: glUniform2i(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform3i(location: GLint, v0: GLint, v1: GLint, v2: GLint) {
+pub extern "C" fn glUniform3i(location: GLint, _v0: GLint, _v1: GLint, _v2: GLint) {
     log!("STUB: glUniform3i(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform4i(location: GLint, v0: GLint, v1: GLint, v2: GLint, v3: GLint) {
+pub extern "C" fn glUniform4i(location: GLint, _v0: GLint, _v1: GLint, _v2: GLint, _v3: GLint) {
     log!("STUB: glUniform4i(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform1fv(location: GLint, count: GLsizei, value: *const GLfloat) {
+pub extern "C" fn glUniform1fv(location: GLint, _count: GLsizei, _value: *const GLfloat) {
     log!("STUB: glUniform1fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform2fv(location: GLint, count: GLsizei, value: *const GLfloat) {
+pub extern "C" fn glUniform2fv(location: GLint, _count: GLsizei, _value: *const GLfloat) {
     log!("STUB: glUniform2fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform3fv(location: GLint, count: GLsizei, value: *const GLfloat) {
+pub extern "C" fn glUniform3fv(location: GLint, _count: GLsizei, _value: *const GLfloat) {
     log!("STUB: glUniform3fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform4fv(location: GLint, count: GLsizei, value: *const GLfloat) {
+pub extern "C" fn glUniform4fv(location: GLint, _count: GLsizei, _value: *const GLfloat) {
     log!("STUB: glUniform4fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform1iv(location: GLint, count: GLsizei, value: *const GLint) {
+pub extern "C" fn glUniform1iv(location: GLint, _count: GLsizei, _value: *const GLint) {
     log!("STUB: glUniform1iv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform2iv(location: GLint, count: GLsizei, value: *const GLint) {
+pub extern "C" fn glUniform2iv(location: GLint, _count: GLsizei, _value: *const GLint) {
     log!("STUB: glUniform2iv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform3iv(location: GLint, count: GLsizei, value: *const GLint) {
+pub extern "C" fn glUniform3iv(location: GLint, _count: GLsizei, _value: *const GLint) {
     log!("STUB: glUniform3iv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniform4iv(location: GLint, count: GLsizei, value: *const GLint) {
+pub extern "C" fn glUniform4iv(location: GLint, _count: GLsizei, _value: *const GLint) {
     log!("STUB: glUniform4iv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniformMatrix2fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat) {
+pub extern "C" fn glUniformMatrix2fv(location: GLint, _count: GLsizei, _transpose: GLboolean, _value: *const GLfloat) {
     log!("STUB: glUniformMatrix2fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniformMatrix3fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat) {
+pub extern "C" fn glUniformMatrix3fv(location: GLint, _count: GLsizei, _transpose: GLboolean, _value: *const GLfloat) {
     log!("STUB: glUniformMatrix3fv(location={})", location);
 }
 
 #[no_mangle]
-pub extern "C" fn glUniformMatrix4fv(location: GLint, count: GLsizei, transpose: GLboolean, value: *const GLfloat) {
+pub extern "C" fn glUniformMatrix4fv(location: GLint, _count: GLsizei, _transpose: GLboolean, _value: *const GLfloat) {
     log!("STUB: glUniformMatrix4fv(location={})", location);
 }
 
@@ -376,17 +381,17 @@ pub extern "C" fn glBindBuffer(target: GLenum, buffer: GLuint) {
 }
 
 #[no_mangle]
-pub extern "C" fn glBufferData(target: GLenum, size: GLsizeiptr, data: *const c_void, usage: GLenum) {
+pub extern "C" fn glBufferData(target: GLenum, size: GLsizeiptr, _data: *const c_void, _usage: GLenum) {
     log!("STUB: glBufferData(target=0x{:x}, size={})", target, size);
 }
 
 #[no_mangle]
-pub extern "C" fn glBufferSubData(target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const c_void) {
+pub extern "C" fn glBufferSubData(target: GLenum, _offset: GLintptr, _size: GLsizeiptr, _data: *const c_void) {
     log!("STUB: glBufferSubData(target=0x{:x})", target);
 }
 
 #[no_mangle]
-pub extern "C" fn glDeleteBuffers(n: GLsizei, buffers: *const GLuint) {
+pub extern "C" fn glDeleteBuffers(n: GLsizei, _buffers: *const GLuint) {
     log!("STUB: glDeleteBuffers(n={})", n);
 }
 
@@ -410,17 +415,17 @@ pub extern "C" fn glGenFramebuffers(n: GLsizei, framebuffers: *mut GLuint) {
 }
 
 #[no_mangle]
-pub extern "C" fn glDeleteFramebuffers(n: GLsizei, framebuffers: *const GLuint) {
+pub extern "C" fn glDeleteFramebuffers(n: GLsizei, _framebuffers: *const GLuint) {
     log!("STUB: glDeleteFramebuffers(n={})", n);
 }
 
 #[no_mangle]
-pub extern "C" fn glFramebufferTexture2D(target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint) {
+pub extern "C" fn glFramebufferTexture2D(target: GLenum, attachment: GLenum, _textarget: GLenum, _texture: GLuint, _level: GLint) {
     log!("STUB: glFramebufferTexture2D(target=0x{:x}, attachment=0x{:x})", target, attachment);
 }
 
 #[no_mangle]
-pub extern "C" fn glFramebufferRenderbuffer(target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint) {
+pub extern "C" fn glFramebufferRenderbuffer(target: GLenum, attachment: GLenum, _renderbuffertarget: GLenum, _renderbuffer: GLuint) {
     log!("STUB: glFramebufferRenderbuffer(target=0x{:x}, attachment=0x{:x})", target, attachment);
 }
 
@@ -450,7 +455,7 @@ pub extern "C" fn glBindRenderbuffer(target: GLenum, renderbuffer: GLuint) {
 }
 
 #[no_mangle]
-pub extern "C" fn glDeleteRenderbuffers(n: GLsizei, renderbuffers: *const GLuint) {
+pub extern "C" fn glDeleteRenderbuffers(n: GLsizei, _renderbuffers: *const GLuint) {
     log!("STUB: glDeleteRenderbuffers(n={})", n);
 }
 
@@ -489,23 +494,23 @@ pub extern "C" fn glBlendFuncSeparate(srcRGB: GLenum, dstRGB: GLenum, srcAlpha: 
 }
 
 #[no_mangle]
-pub extern "C" fn glStencilOpSeparate(face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
+pub extern "C" fn glStencilOpSeparate(face: GLenum, _sfail: GLenum, _dpfail: GLenum, _dppass: GLenum) {
     log!("STUB: glStencilOpSeparate(face=0x{:x})", face);
 }
 
 #[no_mangle]
-pub extern "C" fn glStencilFuncSeparate(face: GLenum, func: GLenum, ref_: GLint, mask: GLuint) {
+pub extern "C" fn glStencilFuncSeparate(face: GLenum, _func: GLenum, _ref_: GLint, _mask: GLuint) {
     log!("STUB: glStencilFuncSeparate(face=0x{:x})", face);
 }
 
 #[no_mangle]
-pub extern "C" fn glStencilMaskSeparate(face: GLenum, mask: GLuint) {
+pub extern "C" fn glStencilMaskSeparate(face: GLenum, _mask: GLuint) {
     log!("STUB: glStencilMaskSeparate(face=0x{:x})", face);
 }
 
 #[no_mangle]
-pub extern "C" fn glColorMask(red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean) {
-    log!("STUB: glColorMask({}, {}, {}, {})", red, green, blue, alpha);
+pub extern "C" fn glColorMask(_red: GLboolean, _green: GLboolean, _blue: GLboolean, _alpha: GLboolean) {
+    log!("STUB: glColorMask()");
 }
 
 // MARK: - Other Functions
@@ -630,7 +635,7 @@ pub extern "C" fn glPixelStorei(pname: GLenum, param: GLint) {
 }
 
 #[no_mangle]
-pub extern "C" fn glReadPixels(x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut c_void) {
+pub extern "C" fn glReadPixels(x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, _pixels: *mut c_void) {
     log!("STUB: glReadPixels({}, {}, {}, {}, 0x{:x}, 0x{:x})", x, y, width, height, format, type_);
 }
 
@@ -642,7 +647,7 @@ pub extern "C" fn glDrawArrays(mode: GLenum, first: GLint, count: GLsizei) {
 }
 
 #[no_mangle]
-pub extern "C" fn glDrawElements(mode: GLenum, count: GLsizei, type_: GLenum, indices: *const c_void) {
+pub extern "C" fn glDrawElements(mode: GLenum, count: GLsizei, type_: GLenum, _indices: *const c_void) {
     log!("STUB: glDrawElements(mode=0x{:x}, count={}, type=0x{:x})", mode, count, type_);
 }
 
@@ -687,7 +692,7 @@ pub extern "C" fn glIsTexture(texture: GLuint) -> GLboolean {
 // MARK: - Shader Precision
 
 #[no_mangle]
-pub extern "C" fn glGetShaderPrecisionFormat(shadertype: GLenum, precisiontype: GLenum, range: *mut GLint, precision: *mut GLint) {
+pub extern "C" fn glGetShaderPrecisionFormat(_shadertype: GLenum, _precisiontype: GLenum, range: *mut GLint, precision: *mut GLint) {
     log!("STUB: glGetShaderPrecisionFormat");
     if !range.is_null() {
         unsafe {
@@ -733,7 +738,7 @@ pub extern "C" fn glSampleCoverage(value: GLfloat, invert: GLboolean) {
 // MARK: - Stencil Functions
 
 #[no_mangle]
-pub extern "C" fn glStencilFunc(func: GLenum, ref_: GLint, mask: GLuint) {
+pub extern "C" fn glStencilFunc(func: GLenum, _ref_: GLint, _mask: GLuint) {
     log!("STUB: glStencilFunc(func=0x{:x})", func);
 }
 
@@ -774,7 +779,7 @@ pub extern "C" fn glFrontFace(mode: GLenum) {
 // MARK: - Color Mask (duplicate for completeness)
 
 #[no_mangle]
-pub extern "C" fn glColorMaski(index: GLuint, r: GLboolean, g: GLboolean, b: GLboolean, a: GLboolean) {
+pub extern "C" fn glColorMaski(index: GLuint, _r: GLboolean, _g: GLboolean, _b: GLboolean, _a: GLboolean) {
     log!("STUB: glColorMaski(index={})", index);
 }
 
@@ -805,22 +810,22 @@ pub extern "C" fn glGenerateMipmap(target: GLenum) {
 // MARK: - Tex Parameter
 
 #[no_mangle]
-pub extern "C" fn glTexParameterf(target: GLenum, pname: GLenum, param: GLfloat) {
+pub extern "C" fn glTexParameterf(target: GLenum, pname: GLenum, _param: GLfloat) {
     log!("STUB: glTexParameterf(target=0x{:x}, pname=0x{:x})", target, pname);
 }
 
 #[no_mangle]
-pub extern "C" fn glTexParameteri(target: GLenum, pname: GLenum, param: GLint) {
+pub extern "C" fn glTexParameteri(target: GLenum, pname: GLenum, _param: GLint) {
     log!("STUB: glTexParameteri(target=0x{:x}, pname=0x{:x})", target, pname);
 }
 
 #[no_mangle]
-pub extern "C" fn glTexParameterfv(target: GLenum, pname: GLenum, params: *const GLfloat) {
+pub extern "C" fn glTexParameterfv(target: GLenum, pname: GLenum, _params: *const GLfloat) {
     log!("STUB: glTexParameterfv(target=0x{:x}, pname=0x{:x})", target, pname);
 }
 
 #[no_mangle]
-pub extern "C" fn glTexParameteriv(target: GLenum, pname: GLenum, params: *const GLint) {
+pub extern "C" fn glTexParameteriv(target: GLenum, pname: GLenum, _params: *const GLint) {
     log!("STUB: glTexParameteriv(target=0x{:x}, pname=0x{:x})", target, pname);
 }
 
@@ -852,7 +857,7 @@ pub extern "C" fn glBindTexture(target: GLenum, texture: GLuint) {
 // MARK: - Delete Textures
 
 #[no_mangle]
-pub extern "C" fn glDeleteTextures(n: GLsizei, textures: *const GLuint) {
+pub extern "C" fn glDeleteTextures(n: GLsizei, _textures: *const GLuint) {
     log!("STUB: glDeleteTextures(n={})", n);
 }
 
@@ -873,42 +878,42 @@ pub extern "C" fn glGenTextures(n: GLsizei, textures: *mut GLuint) {
 // MARK: - Tex Image 2D
 
 #[no_mangle]
-pub extern "C" fn glTexImage2D(target: GLenum, level: GLint, internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const c_void) {
+pub extern "C" fn glTexImage2D(target: GLenum, _level: GLint, _internalformat: GLint, width: GLsizei, height: GLsizei, _border: GLint, _format: GLenum, _type_: GLenum, _pixels: *const c_void) {
     log!("STUB: glTexImage2D(target=0x{:x}, {}x{})", target, width, height);
 }
 
 // MARK: - Tex Sub Image 2D
 
 #[no_mangle]
-pub extern "C" fn glTexSubImage2D(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const c_void) {
+pub extern "C" fn glTexSubImage2D(target: GLenum, _level: GLint, _xoffset: GLint, _yoffset: GLint, _width: GLsizei, _height: GLsizei, _format: GLenum, _type_: GLenum, _pixels: *const c_void) {
     log!("STUB: glTexSubImage2D(target=0x{:x})", target);
 }
 
 // MARK: - Copy Tex Image 2D
 
 #[no_mangle]
-pub extern "C" fn glCopyTexImage2D(target: GLenum, level: GLint, internalformat: GLenum, x: GLint, y: GLint, width: GLsizei, height: GLsizei, border: GLint) {
+pub extern "C" fn glCopyTexImage2D(target: GLenum, _level: GLint, _internalformat: GLenum, _x: GLint, _y: GLint, _width: GLsizei, _height: GLsizei, _border: GLint) {
     log!("STUB: glCopyTexImage2D(target=0x{:x})", target);
 }
 
 // MARK: - Copy Tex Sub Image 2D
 
 #[no_mangle]
-pub extern "C" fn glCopyTexSubImage2D(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+pub extern "C" fn glCopyTexSubImage2D(target: GLenum, _level: GLint, _xoffset: GLint, _yoffset: GLint, _x: GLint, _y: GLint, _width: GLsizei, _height: GLsizei) {
     log!("STUB: glCopyTexSubImage2D(target=0x{:x})", target);
 }
 
 // MARK: - Compressed Tex Image 2D
 
 #[no_mangle]
-pub extern "C" fn glCompressedTexImage2D(target: GLenum, level: GLint, internalformat: GLenum, width: GLsizei, height: GLsizei, border: GLint, imageSize: GLsizei, data: *const c_void) {
+pub extern "C" fn glCompressedTexImage2D(target: GLenum, _level: GLint, _internalformat: GLenum, _width: GLsizei, _height: GLsizei, _border: GLint, _imageSize: GLsizei, _data: *const c_void) {
     log!("STUB: glCompressedTexImage2D(target=0x{:x})", target);
 }
 
 // MARK: - Compressed Tex Sub Image 2D
 
 #[no_mangle]
-pub extern "C" fn glCompressedTexSubImage2D(target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, imageSize: GLsizei, data: *const c_void) {
+pub extern "C" fn glCompressedTexSubImage2D(target: GLenum, _level: GLint, _xoffset: GLint, _yoffset: GLint, _width: GLsizei, _height: GLsizei, _format: GLenum, _imageSize: GLsizei, _data: *const c_void) {
     log!("STUB: glCompressedTexSubImage2D(target=0x{:x})", target);
 }
 
@@ -918,3 +923,4 @@ pub extern "C" fn glCompressedTexSubImage2D(target: GLenum, level: GLint, xoffse
 pub extern "C" fn glGetError() -> GLenum {
     0 // GL_NO_ERROR
 }
+
