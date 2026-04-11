@@ -29,7 +29,6 @@ use crate::mem::{ConstVoidPtr, GuestUSize, Mem, MutPtr, Ptr};
 use crate::objc::{nil, ClassExports, ObjC};
 use crate::Environment;
 use std::collections::HashMap;
-use log; // Добавлен импорт для логирования заглушек
 
 pub use dylib_list::DYLIB_LIST;
 
@@ -531,7 +530,7 @@ impl Dyld {
         // Collecting unhandled relocations for the same symbol onto one line
         // makes the log output much less spammy.
         for (name, addrs) in unhandled_relocations {
-            log!(
+            crate::log!(
                 "Warning: unhandled external relocation {:?} in {:?} at {}",
                 name,
                 bin.name,
@@ -591,7 +590,7 @@ impl Dyld {
                 continue;
             }
 
-            log!(
+            crate::log!(
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
                 ptr_ptr,
@@ -861,59 +860,55 @@ impl Dyld {
 // MARK: - Added Stubs
 // =========================================================================
 
-/// Заглушки для часто встречающихся символов
-extern "C" {
-    pub fn stub__NSConcreteGlobalBlock();
-    pub fn stub___mb_cur_max() -> i32;
-    pub fn stub___NSConcreteStackBlock();
-    pub fn stub___objc_personality_v0();
-    pub fn stub_UIScreenDidConnectNotification();
-    pub fn stub_OBJC_EHTYPE_id();
-    pub fn stub_OBJC_EHTYPE_NSException();
-}
-
 // Реализация заглушек
-extern "C" fn stub__NSConcreteGlobalBlock() {
-    log::warn!("__NSConcreteGlobalBlock: stub called");
+#[no_mangle]
+pub extern "C" fn stub__NSConcreteGlobalBlock() {
+    crate::log!("Warning: __NSConcreteGlobalBlock: stub called");
 }
 
-extern "C" fn stub___mb_cur_max() -> i32 {
-    log::warn!("___mb_cur_max: stub called");
+#[no_mangle]
+pub extern "C" fn stub___mb_cur_max() -> i32 {
+    crate::log!("Warning: ___mb_cur_max: stub called");
     1 // Возвращаем значение по умолчанию
 }
 
-extern "C" fn stub___NSConcreteStackBlock() {
-    log::warn!("__NSConcreteStackBlock: stub called");
+#[no_mangle]
+pub extern "C" fn stub___NSConcreteStackBlock() {
+    crate::log!("Warning: __NSConcreteStackBlock: stub called");
 }
 
-extern "C" fn stub___objc_personality_v0() {
-    log::warn!("___objc_personality_v0: stub called");
+#[no_mangle]
+pub extern "C" fn stub___objc_personality_v0() {
+    crate::log!("Warning: ___objc_personality_v0: stub called");
 }
 
-extern "C" fn stub_UIScreenDidConnectNotification() {
-    log::warn!("UIScreenDidConnectNotification: stub called");
+#[no_mangle]
+pub extern "C" fn stub_UIScreenDidConnectNotification() {
+    crate::log!("Warning: UIScreenDidConnectNotification: stub called");
 }
 
-extern "C" fn stub_OBJC_EHTYPE_id() {
-    log::warn!("OBJC_EHTYPE_id: stub called");
+#[no_mangle]
+pub extern "C" fn stub_OBJC_EHTYPE_id() {
+    crate::log!("Warning: OBJC_EHTYPE_id: stub called");
 }
 
-extern "C" fn stub_OBJC_EHTYPE_NSException() {
-    log::warn!("OBJC_EHTYPE_NSException: stub called");
+#[no_mangle]
+pub extern "C" fn stub_OBJC_EHTYPE_NSException() {
+    crate::log!("Warning: OBJC_EHTYPE_NSException: stub called");
 }
 
 // Обработка dyld_stub_binder
 #[no_mangle]
-pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, addend: *const u8) -> *const u8 {
-    // Извлекаем имя символа (упрощённая логика)
+pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, _addend: *const u8) -> *const u8 {
+    // Извлекаем имя символа (исправлено приведение указателя)
     let symbol_name = unsafe {
-        let ptr = lazy_info.add(4) as *const i8;
+        let ptr = lazy_info.add(4) as *const std::ffi::c_char;
         std::ffi::CStr::from_ptr(ptr)
             .to_string_lossy()
             .into_owned()
     };
 
-    log::warn!("dyld_stub_binder: Unresolved symbol {}", symbol_name);
+    crate::log!("Warning: dyld_stub_binder: Unresolved symbol {}", symbol_name);
 
     // Возвращаем адрес заглушки для известных символов
     match symbol_name.as_str() {
@@ -925,7 +920,7 @@ pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, addend: *const u8) -> *
         "_OBJC_EHTYPE_id" => stub_OBJC_EHTYPE_id as *const u8,
         "_OBJC_EHTYPE_$_NSException" => stub_OBJC_EHTYPE_NSException as *const u8,
         _ => {
-            log::error!("Unsupported symbol: {}", symbol_name);
+            crate::log!("Error: Unsupported symbol: {}", symbol_name);
             std::ptr::null()
         }
     }
