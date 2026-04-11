@@ -22,7 +22,6 @@ use crate::gles::gles11_raw::types::{
     GLbitfield, GLboolean, GLclampf, GLclampx, GLenum, GLfixed, GLfloat, GLint, GLsizei, GLubyte,
     GLuint, GLvoid, GLintptr as HostGLintptr, GLsizeiptr as HostGLsizeiptr
 };
-
 type GuestGLsizeiptr = GuestISize;
 type GuestGLintptr = GuestISize;
 
@@ -34,7 +33,6 @@ const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
     gles11::PALETTE8_RGB5_A1_OES, gles11::PALETTE8_RGB8_OES, gles11::PALETTE8_RGBA4_OES,
     gles11::PALETTE8_RGBA8_OES,
 ];
-
 #[track_caller]
 fn with_ctx_and_mem<T, U: Default>(env: &mut Environment, f: T) -> U
 where T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
@@ -708,38 +706,38 @@ fn glLinkProgram(_env: &mut Environment, _program: GLuint) {
 }
 
 /// Получение параметра шейдера (ES 2.0) - заглушка
-fn glGetShaderiv(_env: &mut Environment, _shader: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
+fn glGetShaderiv(env: &mut Environment, _shader: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
     log_once!("glGetShaderiv() — ES 2.0 stub");
     // Возвращаем GL_TRUE для COMPILE_STATUS
-    unsafe { params.write_unaligned(1) };
+    env.mem.write(params, 1);
 }
 
 /// Получение информационного лога шейдера (ES 2.0) - заглушка
-fn glGetShaderInfoLog(_env: &mut Environment, _shader: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
+fn glGetShaderInfoLog(env: &mut Environment, _shader: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
     log_once!("glGetShaderInfoLog() — ES 2.0 stub");
     if !length.is_null() {
-        unsafe { length.write_unaligned(0) };
+        env.mem.write(length, 0);
     }
     if !infoLog.is_null() {
-        unsafe { infoLog.cast::<u8>().write_unaligned(0) };
+        env.mem.write(infoLog.cast::<u8>(), 0);
     }
 }
 
 /// Получение параметра программы (ES 2.0) - заглушка
-fn glGetProgramiv(_env: &mut Environment, _program: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
+fn glGetProgramiv(env: &mut Environment, _program: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
     log_once!("glGetProgramiv() — ES 2.0 stub");
     // Возвращаем GL_TRUE для LINK_STATUS
-    unsafe { params.write_unaligned(1) };
+    env.mem.write(params, 1);
 }
 
 /// Получение информационного лога программы (ES 2.0) - заглушка
-fn glGetProgramInfoLog(_env: &mut Environment, _program: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
+fn glGetProgramInfoLog(env: &mut Environment, _program: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
     log_once!("glGetProgramInfoLog() — ES 2.0 stub");
     if !length.is_null() {
-        unsafe { length.write_unaligned(0) };
+        env.mem.write(length, 0);
     }
     if !infoLog.is_null() {
-        unsafe { infoLog.cast::<u8>().write_unaligned(0) };
+        env.mem.write(infoLog.cast::<u8>(), 0);
     }
 }
 
