@@ -587,6 +587,30 @@ fn glDeleteFramebuffers(env: &mut Environment, n: GLsizei, framebuffers: ConstPt
 fn glDeleteRenderbuffers(env: &mut Environment, n: GLsizei, renderbuffers: ConstPtr<GLuint>) { glDeleteRenderbuffersOES(env, n, renderbuffers) }
 fn glGenerateMipmap(env: &mut Environment, target: GLenum) { glGenerateMipmapOES(env, target) }
 
+fn _get_currently_bound_buffer_object_name(
+    env: &mut Environment,
+    target: GLenum,
+) -> GLuint {
+    let binding = match target {
+        ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
+        ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
+        _ => panic!("Unexpected buffer target {:#x}", target),
+    };
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        let mut name: GLint = 0;
+        gles.GetIntegerv(binding, &mut name);
+        name as GLuint
+    })
+}
+
+fn _get_buffer_size(env: &mut Environment, target: GLenum) -> GLint {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        let mut size: GLint = 0;
+        gles.GetBufferParameteriv(target, gles11::BUFFER_SIZE, &mut size);
+        size
+    })
+}
+
 fn glGetBufferParameteriv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLint>) {
     let params = env.mem.ptr_at_mut(params, 1);
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.GetBufferParameteriv(target, pname, params) })
@@ -686,7 +710,7 @@ fn glLinkProgram(_env: &mut Environment, _program: GLuint) {
 /// Получение параметра шейдера (ES 2.0) - заглушка
 fn glGetShaderiv(_env: &mut Environment, _shader: GLuint, _pname: GLenum, params: MutPtr<GLint>) {
     log_once!("glGetShaderiv() — ES 2.0 stub");
-    // Возвращаем GL_TRUE для COMPILE_STATUS чтобы игра думала что компиляция успешна
+    // Возвращаем GL_TRUE для COMPILE_STATUS
     unsafe { params.write_unaligned(1) };
 }
 
@@ -694,10 +718,10 @@ fn glGetShaderiv(_env: &mut Environment, _shader: GLuint, _pname: GLenum, params
 fn glGetShaderInfoLog(_env: &mut Environment, _shader: GLuint, _bufSize: GLsizei, length: MutPtr<GLsizei>, infoLog: MutPtr<GLubyte>) {
     log_once!("glGetShaderInfoLog() — ES 2.0 stub");
     if !length.is_null() {
-        unsafe { length.write_unaligned(0) }; // Нет сообщения
+        unsafe { length.write_unaligned(0) };
     }
     if !infoLog.is_null() {
-        unsafe { infoLog.cast::<u8>().write_unaligned(0) }; // Пустая строка
+        unsafe { infoLog.cast::<u8>().write_unaligned(0) };
     }
 }
 
@@ -829,5 +853,153 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glDisable(_)), export_c_func!(glClientActiveTexture(_)),
     export_c_func!(glEnableClientState(_)), export_c_func!(glDisableClientState(_)),
     export_c_func!(glGetBooleanv(_, _)), export_c_func!(glGetFloatv(_, _)),
-    export_c_func!(gl
+    export_c_func!(glGetIntegerv(_, _)), export_c_func!(glGetPointerv(_, _)),
+    export_c_func!(glGetTexEnviv(_, _, _)), export_c_func!(glGetTexEnvfv(_, _, _)),
+    export_c_func!(glHint(_, _)), export_c_func!(glFinish()), export_c_func!(glFlush()),
+    export_c_func!(glGetString(_)),
+    export_c_func!(glAlphaFunc(_, _)), export_c_func!(glAlphaFuncx(_, _)),
+    export_c_func!(glBlendFunc(_, _)), export_c_func!(glBlendEquationOES(_)),
+    export_c_func!(glColorMask(_, _, _, _)),
+    export_c_func!(glClipPlanef(_, _)), export_c_func!(glClipPlanex(_, _)),
+    export_c_func!(glCullFace(_)), export_c_func!(glDepthFunc(_)),
+    export_c_func!(glDepthMask(_)), export_c_func!(glDepthRangef(_, _)),
+    export_c_func!(glDepthRangex(_, _)), export_c_func!(glFrontFace(_)),
+    export_c_func!(glPolygonOffset(_, _)), export_c_func!(glPolygonOffsetx(_, _)),
+    export_c_func!(glSampleCoverage(_, _)), export_c_func!(glSampleCoveragex(_, _)),
+    export_c_func!(glShadeModel(_)), export_c_func!(glScissor(_, _, _, _)),
+    export_c_func!(glViewport(_, _, _, _)),
+    export_c_func!(glLineWidth(_)), export_c_func!(glLineWidthx(_)),
+    export_c_func!(glStencilFunc(_, _, _)), export_c_func!(glStencilOp(_, _, _)),
+    export_c_func!(glStencilMask(_)), export_c_func!(glLogicOp(_)),
+    export_c_func!(glPointSize(_)), export_c_func!(glPointSizex(_)),
+    export_c_func!(glPointParameterf(_, _)), export_c_func!(glPointParameterx(_, _)),
+    export_c_func!(glPointParameterfv(_, _)), export_c_func!(glPointParameterxv(_, _)),
+    export_c_func!(glFogf(_, _)), export_c_func!(glFogx(_, _)),
+    export_c_func!(glFogfv(_, _)), export_c_func!(glFogxv(_, _)),
+    export_c_func!(glLightf(_, _, _)), export_c_func!(glLightx(_, _, _)),
+    export_c_func!(glLightfv(_, _, _)), export_c_func!(glLightxv(_, _, _)),
+    export_c_func!(glLightModelf(_, _)), export_c_func!(glLightModelx(_, _)),
+    export_c_func!(glLightModelfv(_, _)), export_c_func!(glLightModelxv(_, _)),
+    export_c_func!(glMaterialf(_, _, _)), export_c_func!(glMaterialx(_, _, _)),
+    export_c_func!(glMaterialfv(_, _, _)), export_c_func!(glMaterialxv(_, _, _)),
+    export_c_func!(glIsBuffer(_)), export_c_func!(glGenBuffers(_, _)),
+    export_c_func!(glDeleteBuffers(_, _)), export_c_func!(glBindBuffer(_, _)),
+    export_c_func!(glBufferData(_, _, _, _)), export_c_func!(glBufferSubData(_, _, _, _)),
+    export_c_func!(glColor4f(_, _, _, _)), export_c_func!(glColor4x(_, _, _, _)),
+    export_c_func!(glColor4ub(_, _, _, _)),
+    export_c_func!(glNormal3f(_, _, _)), export_c_func!(glNormal3x(_, _, _)),
+    export_c_func!(glColorPointer(_, _, _, _)), export_c_func!(glNormalPointer(_, _, _)),
+    export_c_func!(glTexCoordPointer(_, _, _, _)),
+    export_c_func!(glVertexPointer(_, _, _, _)),
+    export_c_func!(glPointSizePointerOES(_, _, _)),
+    export_c_func!(glGetTexParameteriv(_, _, _)),
+    export_c_func!(glDrawTexfOES(_, _, _, _, _)),
+    export_c_func!(glDrawTexiOES(_, _, _, _, _)),
+    export_c_func!(glDrawTexxOES(_, _, _, _, _)),
+    export_c_func!(glDrawTexfvOES(_)), export_c_func!(glDrawTexivOES(_)),
+    export_c_func!(glDrawTexxvOES(_)),
+    export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _)),
+    export_c_func!(glResolveMultisampleFramebufferAPPLE()),
+    export_c_func!(glDiscardFramebufferEXT(_, _, _)),
+    export_c_func!(glBindVertexArrayOES(_)),
+    export_c_func!(glDeleteVertexArraysOES(_, _)),
+    export_c_func!(glGenVertexArraysOES(_, _)),
+    export_c_func!(glIsVertexArrayOES(_)),
+    export_c_func!(glCurrentPaletteMatrixOES(_)),
+    export_c_func!(glLoadPaletteFromModelViewMatrixOES()),
+    export_c_func!(glMatrixIndexPointerOES(_, _, _, _)),
+    export_c_func!(glWeightPointerOES(_, _, _, _)),
+    export_c_func!(glGetBufferPointervOES(_, _, _)),
+    export_c_func!(glDrawArrays(_, _, _)), export_c_func!(glDrawElements(_, _, _, _)),
+    export_c_func!(glClear(_)), export_c_func!(glClearColor(_, _, _, _)),
+    export_c_func!(glClearColorx(_, _, _, _)),
+    export_c_func!(glClearDepthf(_)), export_c_func!(glClearDepthx(_)),
+    export_c_func!(glClearStencil(_)),
+    export_c_func!(glMatrixMode(_)), export_c_func!(glLoadIdentity()),
+    export_c_func!(glLoadMatrixf(_)), export_c_func!(glLoadMatrixx(_)),
+    export_c_func!(glMultMatrixf(_)), export_c_func!(glMultMatrixx(_)),
+    export_c_func!(glPushMatrix()), export_c_func!(glPopMatrix()),
+    export_c_func!(glOrthof(_, _, _, _, _, _)),
+    export_c_func!(glOrthox(_, _, _, _, _, _)),
+    export_c_func!(glFrustumf(_, _, _, _, _, _)),
+    export_c_func!(glFrustumx(_, _, _, _, _, _)),
+    export_c_func!(glRotatef(_, _, _, _)), export_c_func!(glRotatex(_, _, _, _)),
+    export_c_func!(glScalef(_, _, _)), export_c_func!(glScalex(_, _, _)),
+    export_c_func!(glTranslatef(_, _, _)), export_c_func!(glTranslatex(_, _, _)),
+    export_c_func!(glPixelStorei(_, _)),
+    export_c_func!(glReadPixels(_, _, _, _, _, _, _)),
+    export_c_func!(glGenTextures(_, _)), export_c_func!(glDeleteTextures(_, _)),
+    export_c_func!(glActiveTexture(_)), export_c_func!(glIsTexture(_)),
+    export_c_func!(glBindTexture(_, _)),
+    export_c_func!(glTexParameteri(_, _, _)), export_c_func!(glTexParameterf(_, _, _)),
+    export_c_func!(glTexParameterx(_, _, _)), export_c_func!(glTexParameteriv(_, _, _)),
+    export_c_func!(glTexParameterfv(_, _, _)), export_c_func!(glTexParameterxv(_, _, _)),
+    export_c_func!(glTexImage2D(_, _, _, _, _, _, _, _, _)),
+    export_c_func!(glTexSubImage2D(_, _, _, _, _, _, _, _, _)),
+    export_c_func!(glCompressedTexImage2D(_, _, _, _, _, _, _, _)),
+    export_c_func!(glCopyTexImage2D(_, _, _, _, _, _, _, _)),
+    export_c_func!(glCopyTexSubImage2D(_, _, _, _, _, _, _, _)),
+    export_c_func!(glTexEnvf(_, _, _)), export_c_func!(glTexEnvx(_, _, _)),
+    export_c_func!(glTexEnvi(_, _, _)),
+    export_c_func!(glTexEnvfv(_, _, _)), export_c_func!(glTexEnvxv(_, _, _)),
+    export_c_func!(glTexEnviv(_, _, _)),
+    export_c_func!(glMultiTexCoord4f(_, _, _, _, _)),
+    export_c_func!(glMultiTexCoord4x(_, _, _, _, _)),
+    export_c_func!(glGenFramebuffersOES(_, _)),
+    export_c_func!(glGenRenderbuffersOES(_, _)),
+    export_c_func!(glIsFramebufferOES(_)), export_c_func!(glIsRenderbufferOES(_)),
+    export_c_func!(glBindFramebufferOES(_, _)),
+    export_c_func!(glBindRenderbufferOES(_, _)),
+    export_c_func!(glRenderbufferStorageOES(_, _, _, _)),
+    export_c_func!(glFramebufferRenderbufferOES(_, _, _, _)),
+    export_c_func!(glFramebufferTexture2DOES(_, _, _, _, _)),
+    export_c_func!(glGetFramebufferAttachmentParameterivOES(_, _, _, _)),
+    export_c_func!(glGetRenderbufferParameterivOES(_, _, _)),
+    export_c_func!(glCheckFramebufferStatusOES(_)),
+    export_c_func!(glDeleteFramebuffersOES(_, _)),
+    export_c_func!(glDeleteRenderbuffersOES(_, _)),
+    export_c_func!(glGenerateMipmapOES(_)),
+    export_c_func!(glGenFramebuffers(_, _)),
+    export_c_func!(glGenRenderbuffers(_, _)),
+    export_c_func!(glIsFramebuffer(_)), export_c_func!(glIsRenderbuffer(_)),
+    export_c_func!(glBindFramebuffer(_, _)),
+    export_c_func!(glBindRenderbuffer(_, _)),
+    export_c_func!(glRenderbufferStorage(_, _, _, _)),
+    export_c_func!(glFramebufferRenderbuffer(_, _, _, _)),
+    export_c_func!(glFramebufferTexture2D(_, _, _, _, _)),
+    export_c_func!(glGetFramebufferAttachmentParameteriv(_, _, _, _)),
+    export_c_func!(glGetRenderbufferParameteriv(_, _, _)),
+    export_c_func!(glCheckFramebufferStatus(_)),
+    export_c_func!(glDeleteFramebuffers(_, _)),
+    export_c_func!(glDeleteRenderbuffers(_, _)),
+    export_c_func!(glGenerateMipmap(_)),
+    export_c_func!(glGetBufferParameteriv(_, _, _)),
+    export_c_func!(glMapBufferOES(_, _)), export_c_func!(glUnmapBufferOES(_)),
+    // ES 2.0 stubs
+    export_c_func!(glCreateProgram()),
+    export_c_func!(glCreateShader(_)),
+    export_c_func!(glBindAttribLocation(_, _, _)),
+    export_c_func!(glGetUniformLocation(_, _)),
+    export_c_func!(glUniformMatrix4fv(_, _, _, _)),
+    export_c_func!(glUseProgram(_)),
+    export_c_func!(glDeleteProgram(_)),
+    export_c_func!(glDeleteShader(_)),
+    export_c_func!(glCompileShader(_)),
+    export_c_func!(glAttachShader(_, _)),
+    export_c_func!(glLinkProgram(_)),
+    export_c_func!(glGetShaderiv(_, _, _)),
+    export_c_func!(glGetShaderInfoLog(_, _, _, _)),
+    export_c_func!(glGetProgramiv(_, _, _)),
+    export_c_func!(glGetProgramInfoLog(_, _, _, _)),
+    export_c_func!(glShaderSource(_, _, _, _)),
+    export_c_func!(glEnableVertexAttribArray(_)),
+    export_c_func!(glDisableVertexAttribArray(_)),
+    export_c_func!(glVertexAttribPointer(_, _, _, _, _, _)),
+    export_c_func!(glUniform1i(_, _)), export_c_func!(glUniform1f(_, _)),
+    export_c_func!(glUniform2f(_, _, _)), export_c_func!(glUniform3f(_, _, _, _)),
+    export_c_func!(glUniform4f(_, _, _, _, _)),
+    export_c_func!(glGenVertexArrays(_, _)),
+    export_c_func!(glBindVertexArray(_)),
+    export_c_func!(glDeleteVertexArrays(_, _)),
+];
 
