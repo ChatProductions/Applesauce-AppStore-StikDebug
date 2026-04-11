@@ -640,5 +640,4 @@ impl Mem {
     pub fn reserve(&mut self, base: VAddr, size: GuestUSize) {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
-}
-
+            }
