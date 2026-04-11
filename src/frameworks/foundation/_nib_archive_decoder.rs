@@ -204,6 +204,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (CGRect)decodeCGRectForKey:(id)key_str {
+    let key = to_rust_string(env, key_str);
+    let host_obj = borrow_host_obj(env, this);
+    let current_idx = host_obj.current_object_idx.expect("No current object");
+    let object = host_obj.archive.objects().get(current_idx as usize).unwrap();
+    
+    for value in object.values(host_obj.archive.values()) {
+        if value.key(host_obj.archive.keys()) == key {
+            if let ValueVariant::Rect(r) = value.value() {
+                return CGRect {
+                    origin: CGPoint { x: r.origin.x as CGFloat, y: r.origin.y as CGFloat },
+                    size: CGSize { width: r.size.width as CGFloat, height: r.size.height as CGFloat },
+                };
+            }
+        }
+    }
+    // Если ключ не найден, возвращаем нулевой CGRect
+    CGRect::zero()
+}
+    
 @end
 
 };
