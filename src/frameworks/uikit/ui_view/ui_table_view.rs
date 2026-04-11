@@ -6,7 +6,7 @@
 //! `UITableView`, `UITableViewCell`.
 
 use crate::frameworks::core_graphics::CGRect;
-use crate::objc::{id, msg_super, nil, objc_classes, ClassExports};
+use crate::objc::{id, msg, msg_class, msg_super, nil, objc_classes, release, ClassExports};
 
 pub const CLASSES: ClassExports = objc_classes! {
 
