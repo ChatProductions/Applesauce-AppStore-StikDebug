@@ -336,14 +336,31 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // the performance characteristics of this hasn't been profiled, but it
-    // seems like a good idea to help the compiler optimise for the fast path
+    // ХАК: Убираем панику при доступе к null-page. Вместо этого логируем и разрешаем доступ.
+    // Это нужно для запуска игр, которые пытаются читать/писать по адресу 0x0.
     #[cold]
-    fn null_check_fail(at: VAddr, size: GuestUSize) {
-        // ХАК: Вместо краша эмулятора просто выводим предупреждение в консоль.
-        // Эмулятор продолжит работу, позволив игре прочитать/записать данные по адресу 0x0.
-        // panic!("Attempted null-page access at {at:#x} ({size:#x} bytes)")
-        panic!("touchHLE WARNING: Ignored null-page access at {:#x} ({:#x} bytes). HACK ACTIVE.", at, size);
+    fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool) {
+        let op_type = if is_write { "WRITE" } else { "READ" };
+        
+        // Выводим подробную информацию о проблеме
+        log::warn!("╔══════════════════════════════════════════════════════════════════╗");
+        log::warn!("║  touchHLE NULL-PAGE ACCESS DETECTED (HACK ACTIVE)               ║");
+        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
+        log::warn!("║  Operation: {}                                                    ", op_type);
+        log::warn!("║  Address:  {:#010x} (NULL + {:#x} bytes)                          ", at, at);
+        log::warn!("║  Size:     {:#x} bytes                                           ", size);
+        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
+        
+        // Пытаемся получить backtrace хоста (Rust)
+        log::warn!("║  Host Backtrace (Rust):                                          ");
+        let backtrace = std::backtrace::Backtrace::capture();
+        for line in format!("{:?}", backtrace).lines().take(20) {
+            log::warn!("║    {}", line);
+        }
+        
+        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
+        log::warn!("║  NOTE: Access ALLOWED (returning zero page). Game may crash later ║");
+        log::warn!("╚══════════════════════════════════════════════════════════════════╝");
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
@@ -379,9 +396,12 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at] for that).
     pub fn bytes_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>, count: GuestUSize) -> &[u8] {
-        if ptr.to_bits() < self.null_segment_size {
-            Self::null_check_fail(ptr.to_bits(), count)
+        // ХАК: Вместо паники логируем и разрешаем доступ к null-page
+        if ptr.to_bits() < self.null_segment_size && ptr.to_bits() != 0 {
+            Self::null_check_fail(ptr.to_bits(), count, false);
         }
+        // Если адрес 0x0, просто возвращаем доступ к началу памяти (нулевая страница)
+        // Это может содержать мусор или нули, но позволит игре продолжить
         &self.bytes()[ptr.to_bits() as usize..][..count as usize]
     }
     /// Get a slice for reading `count` bytes without a null-page check.
@@ -404,9 +424,11 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at_mut] for that).
     pub fn bytes_at_mut(&mut self, ptr: MutPtr<u8>, count: GuestUSize) -> &mut [u8] {
-        if ptr.to_bits() < self.null_segment_size {
-            Self::null_check_fail(ptr.to_bits(), count)
+        // ХАК: Вместо паники логируем и разрешаем доступ к null-page
+        if ptr.to_bits() < self.null_segment_size && ptr.to_bits() != 0 {
+            Self::null_check_fail(ptr.to_bits(), count, true);
         }
+        // Если адрес 0x0, разрешаем запись (опасно, но нужно для совместимости)
         &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
     }
 
