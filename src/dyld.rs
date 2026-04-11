@@ -63,7 +63,6 @@ pub struct HostDylib {
 }
 
 pub type HostFunction = &'static dyn CallFromGuest;
-
 /// Type for lists of functions exported by host implementations of dynamic
 /// libraries (usually frameworks).
 ///
@@ -94,7 +93,6 @@ pub type HostFunction = &'static dyn CallFromGuest;
 ///
 /// See also [ConstantExports] and [ClassExports].
 pub type FunctionExports = &'static [(&'static str, HostFunction)];
-
 /// Macro for exporting a function with C-style name mangling. See
 /// [FunctionExports].
 ///
@@ -165,7 +163,6 @@ pub enum HostConstant {
 ///
 /// See also [FunctionExports], [ClassExports].
 pub type ConstantExports = &'static [(&'static str, HostConstant)];
-
 /// Search the list of [HostDylib]s for a class/constant/function by its symbol.
 ///
 /// Example usage: `search_host_dylibs(|dylib| dylib.function_exports, "_foo")`
@@ -740,10 +737,12 @@ impl Dyld {
         svc: u32,
     ) -> Option<HostFunction> {
         match svc {
-            Self::SVC_LAZY_LINK | Self::SVC_LAZY_LINK_RET_FLAG => {
+            Self::SVC_LAZY_LINK |
+            Self::SVC_LAZY_LINK_RET_FLAG => {
                 self.do_lazy_link(bins, mem, cpu, svc_pc)
             }
-            Self::SVC_THREAD_EXIT | Self::SVC_RETURN_TO_HOST => unreachable!(), // don't handle here
+            Self::SVC_THREAD_EXIT |
+            Self::SVC_RETURN_TO_HOST => unreachable!(), // don't handle here
             Self::SVC_LINKED_FUNCTIONS_BASE.. => {
                 let f = self.linked_host_functions.get(
                     ((svc & !Self::SVC_LAZY_LINK_RET_FLAG) - Self::SVC_LINKED_FUNCTIONS_BASE)
@@ -765,6 +764,7 @@ impl Dyld {
         cpu: &mut Cpu,
         svc_pc: u32,
     ) -> Option<HostFunction> {
+        
         // Links by restoring the original stub function, then updating
         // __la_symbol_ptr to the appropriate function.
         fn link_by_restoring_stub(
@@ -775,7 +775,8 @@ impl Dyld {
             entry_size: u32,
             pic_offset: u32,
         ) -> (MutPtr<u32>, MutPtr<u32>) {
-            let original_instructions = match entry_size {
+       
+             let original_instructions = match entry_size {
                 4 => Dyld::SYMBOL_STUB1_INSTRUCTIONS.as_slice(),
                 12 => Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 16 => Dyld::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
@@ -960,3 +961,10 @@ impl Dyld {
     }
 }
 
+/// Вызывается из `lib.rs` для регистрации GLES 2.0 заглушек.
+pub fn register_gles2_stubs() {
+    crate::log!("Регистрация GLES 2.0 заглушек...");
+    // В зависимости от того, как устроен ваш модуль gles2_stubs, здесь можно вызвать:
+    // crate::gles::gles2_stubs::register();
+    // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
+}
