@@ -707,6 +707,15 @@ pub const CLASSES: ClassExports = objc_classes!
     autorelease(env, dict_imm)
 }
 
+- (id)fileAttributesAtPath:(id)path
+              traverseLink:(bool)_traverse {
+    // В старых версиях iOS этот метод просто возвращал словарь с атрибутами.
+    // Так как у нас уже есть полноценная реализация атрибутов,
+    // мы честно делегируем вызов в неё, передав null вместо указателя на ошибку.
+    let error: MutPtr<id> = Ptr::null();
+    msg![env; this attributesOfItemAtPath:path error:error]
+}
+    
 - (id)attributesOfFileSystemForPath:(id)path
                               error:(MutPtr<id>)error {
     if path.is_null() {
