@@ -19,7 +19,6 @@ use crate::frameworks::foundation::ns_string;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
-use log; // Добавлен импорт для логирования заглушек
 
 pub const DYLIB: HostDylib = HostDylib {
     path: "/System/Library/Frameworks/CoreLocation.framework/CoreLocation",
@@ -537,29 +536,29 @@ const CONSTANTS: ConstantExports = &[
 // Заглушки для CLLocationManager
 #[no_mangle]
 pub extern "C" fn CLLocationManager_new() -> *mut std::ffi::c_void {
-    log::info!("CLLocationManager_new: stub called");
+    crate::log!("Warning: CLLocationManager_new: stub called");
     std::ptr::null_mut()
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_startUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    log::info!("CLLocationManager_startUpdatingLocation: stub called");
+    crate::log!("Warning: CLLocationManager_startUpdatingLocation: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_stopUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    log::info!("CLLocationManager_stopUpdatingLocation: stub called");
+    crate::log!("Warning: CLLocationManager_stopUpdatingLocation: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_setDelegate(_manager: *mut std::ffi::c_void, _delegate: *mut std::ffi::c_void) {
-    log::info!("CLLocationManager_setDelegate: stub called");
+    crate::log!("Warning: CLLocationManager_setDelegate: stub called");
 }
 
 // Заглушки для CLAuthorizationStatus
 #[no_mangle]
 pub extern "C" fn CLAuthorizationStatus() -> i32 {
-    log::info!("CLAuthorizationStatus: stub called");
+    crate::log!("Warning: CLAuthorizationStatus: stub called");
     3 // Возвращаем CL_AUTHORIZATION_STATUS_AUTHORIZED
 }
 
