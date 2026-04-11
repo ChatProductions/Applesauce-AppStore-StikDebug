@@ -203,3 +203,6 @@ com.idsoftware.Doom: --force-composition
 
 # Edge
 net.mobigame.Edge: --force-composition
+
+# Radiant 
+net.hexage.radiant: --force-composition
