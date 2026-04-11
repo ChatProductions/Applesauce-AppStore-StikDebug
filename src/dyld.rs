@@ -613,6 +613,23 @@ impl Dyld {
                 continue;
             }
 
+            // Blocks runtime class descriptors in __nl_symbol_ptr.
+            // Must be non-null so block->isa != NULL; otherwise the
+            // first retain/release of any stack block causes a
+            // NULL-page read at 0x0.
+            if symbol == "__NSConcreteStackBlock"
+                || symbol == "__NSConcreteGlobalBlock"
+            {
+                let dummy = mem.alloc(16);
+                mem.write(ptr_ptr, dummy.cast().cast_const());
+                log_dbg!(
+                    "Patched non-lazy block class {} -> {:#x}",
+                    symbol,
+                    dummy.to_bits()
+                );
+                continue;
+            }
+
             log!(
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
@@ -878,4 +895,5 @@ impl Dyld {
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
 }
+
 
