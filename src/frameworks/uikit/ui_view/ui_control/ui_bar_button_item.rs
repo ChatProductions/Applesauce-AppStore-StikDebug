@@ -177,6 +177,7 @@ impl std::fmt::Display for UIBarButtonSystemItem {
 struct UIBarButtonItemHostObject {
     superclass: super::UIControlHostObject,
     title: id,
+    pub image: id,
     style: UIBarButtonItemStyle,
     target: id,
     action: Option<SEL>,
@@ -193,6 +194,7 @@ impl Default for UIBarButtonItemHostObject {
         Self {
             superclass: Default::default(),
             title: nil,
+            image: nil,
             style: UIBarButtonItemStyle::Plain,
             target: nil,
             action: None,
@@ -276,6 +278,66 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithImage:(id)image
+              style:(UIBarButtonItemStyle)style
+             target:(id)target
+             action:(SEL)action
+{
+    log_dbg!(
+        "[(UIBarButtonItem*){:?} initWithImage:{:?} style:{:?} target:{:?} action:{:?}]",
+        this,
+        image,
+        style,
+        target,
+        action
+    );
+
+    let frame = CGRect {
+        origin: CGPoint { x: 0.0, y: 0.0 },
+        size: CGSize { width: 0.0, height: 44.0 },
+    };
+
+    // Честно создаем UIImageView для рендера картинки на кнопке
+    let image_view: id = if image != nil {
+        let iv: id = msg_class![env; UIImageView alloc];
+        let iv: id = msg![env; iv initWithImage:image];
+        autorelease(env, iv);
+        iv
+    } else {
+        nil
+    };
+
+    let host = env.objc.borrow_mut::<UIBarButtonItemHostObject>(this);
+    host.image = image;
+    host.style = style;
+    host.target = target;
+    host.action = Some(action);
+    host.system_item = UIBarButtonSystemItem::Done;
+    
+    // ХАК АРХИТЕКТУРЫ: Пишем image_view в custom_view. 
+    // Твои методы sizeThatFits: и layoutSubviews: автоматически 
+    // подхватят этот виджет, рассчитают размер и отрисуют его!
+    host.custom_view = image_view;
+
+    if image != nil {
+        retain(env, image);
+    }
+    if image_view != nil {
+        retain(env, image_view);
+    }
+    if target != nil {
+        retain(env, target);
+        () = msg![env; this addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
+    }
+
+    let this: id = msg_super![env; this initWithFrame:frame];
+    
+    if image_view != nil {
+        () = msg![env; this addSubview:image_view];
+    }
+    this
+}
+    
 - (id)initWithBarButtonSystemItem:(UIBarButtonSystemItem)system_item
                             target:(id)target
                             action:(SEL)action
@@ -508,6 +570,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("dealloc [(UIBarButtonItem*){:?} title {:?}, target {:?}, label {:?}, custom_view {:?}]", this, title, target, label, custom_view);
     
     release(env, title);
+    release(env, image);
     release(env, target);
     release(env, label);
     // Не забываем очистить кастомный виджет
