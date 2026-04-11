@@ -530,7 +530,7 @@ impl Dyld {
         // Collecting unhandled relocations for the same symbol onto one line
         // makes the log output much less spammy.
         for (name, addrs) in unhandled_relocations {
-            crate::log!(
+            log!(
                 "Warning: unhandled external relocation {:?} in {:?} at {}",
                 name,
                 bin.name,
@@ -590,7 +590,7 @@ impl Dyld {
                 continue;
             }
 
-            crate::log!(
+            log!(
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
                 ptr_ptr,
@@ -863,38 +863,38 @@ impl Dyld {
 // Реализация заглушек
 #[no_mangle]
 pub extern "C" fn stub__NSConcreteGlobalBlock() {
-    crate::log!("Warning: __NSConcreteGlobalBlock: stub called");
+    log_dbg!("Warning: __NSConcreteGlobalBlock: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn stub___mb_cur_max() -> i32 {
-    crate::log!("Warning: ___mb_cur_max: stub called");
+    log_dbg!("Warning: ___mb_cur_max: stub called");
     1 // Возвращаем значение по умолчанию
 }
 
 #[no_mangle]
 pub extern "C" fn stub___NSConcreteStackBlock() {
-    crate::log!("Warning: __NSConcreteStackBlock: stub called");
+    log_dbg!("Warning: __NSConcreteStackBlock: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn stub___objc_personality_v0() {
-    crate::log!("Warning: ___objc_personality_v0: stub called");
+    log_dbg!("Warning: ___objc_personality_v0: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn stub_UIScreenDidConnectNotification() {
-    crate::log!("Warning: UIScreenDidConnectNotification: stub called");
+    log_dbg!("Warning: UIScreenDidConnectNotification: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn stub_OBJC_EHTYPE_id() {
-    crate::log!("Warning: OBJC_EHTYPE_id: stub called");
+    log_dbg!("Warning: OBJC_EHTYPE_id: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn stub_OBJC_EHTYPE_NSException() {
-    crate::log!("Warning: OBJC_EHTYPE_NSException: stub called");
+    log_dbg!("Warning: OBJC_EHTYPE_NSException: stub called");
 }
 
 // Обработка dyld_stub_binder
@@ -908,7 +908,7 @@ pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, _addend: *const u8) -> 
             .into_owned()
     };
 
-    crate::log!("Warning: dyld_stub_binder: Unresolved symbol {}", symbol_name);
+    log_dbg!("Warning: dyld_stub_binder: Unresolved symbol {}", symbol_name);
 
     // Возвращаем адрес заглушки для известных символов
     match symbol_name.as_str() {
@@ -920,7 +920,7 @@ pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, _addend: *const u8) -> 
         "_OBJC_EHTYPE_id" => stub_OBJC_EHTYPE_id as *const u8,
         "_OBJC_EHTYPE_$_NSException" => stub_OBJC_EHTYPE_NSException as *const u8,
         _ => {
-            crate::log!("Error: Unsupported symbol: {}", symbol_name);
+            log_dbg!("Error: Unsupported symbol: {}", symbol_name);
             std::ptr::null()
         }
     }
