@@ -470,6 +470,14 @@ impl Dyld {
     /// binaries symbols may be looked up in.
     fn do_non_lazy_linking(&mut self, bin: &MachO, bins: &[MachO], mem: &mut Mem, objc: &mut ObjC) {
         let mut unhandled_relocations: HashMap<&str, Vec<u32>> = HashMap::new();
+        // Cache for Objective-C blocks runtime class descriptors.
+        // All relocation sites for the same name must resolve to the same
+        // non-null guest address so that `block->isa == &_NSConcreteGlobalBlock`
+        // identity checks in the blocks runtime work correctly.
+        // Without this, the isa field of every global/stack block is NULL (0x0),
+        // causing a NULL-page read the first time the ObjC runtime tries to
+        // retain or release a block object.
+        let mut block_class_addrs: HashMap<String, u32> = HashMap::new();
         for &(ptr_ptr, ref name) in &bin.external_relocations {
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptr_ptr);
             // There will be an existing value at the address, which is an
@@ -487,6 +495,21 @@ impl Dyld {
             } else if name == "___CFConstantStringClassReference" {
                 // See ns_string::register_constant_strings
                 nil.cast().cast_const()
+            } else if name == "__NSConcreteGlobalBlock"
+                || name == "__NSConcreteStackBlock"
+            {
+                // Blocks runtime class descriptor. Allocate a small dummy
+                // object in guest memory so isa != NULL. All sites for the
+                // same symbol share one address (cached above).
+                let addr = *block_class_addrs
+                    .entry(name.clone())
+                    .or_insert_with(|| mem.alloc(16).to_bits());
+                log_dbg!(
+                    "Patched block class descriptor {} -> {:#x}",
+                    name,
+                    addr
+                );
+                Ptr::from_bits(addr)
             } else if let Some(&external_addr) = bins
                 .iter()
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
@@ -853,76 +876,6 @@ impl Dyld {
         mem.write(function_ptr + 0, encode_a32_svc(svc));
         mem.write(function_ptr + 1, encode_a32_ret());
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
-    }
-}
-
-// =========================================================================
-// MARK: - Added Stubs
-// =========================================================================
-
-// Реализация заглушек
-#[no_mangle]
-pub extern "C" fn stub__NSConcreteGlobalBlock() {
-    log_dbg!("Warning: __NSConcreteGlobalBlock: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn stub___mb_cur_max() -> i32 {
-    log_dbg!("Warning: ___mb_cur_max: stub called");
-    1 // Возвращаем значение по умолчанию
-}
-
-#[no_mangle]
-pub extern "C" fn stub___NSConcreteStackBlock() {
-    log_dbg!("Warning: __NSConcreteStackBlock: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn stub___objc_personality_v0() {
-    log_dbg!("Warning: ___objc_personality_v0: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn stub_UIScreenDidConnectNotification() {
-    log_dbg!("Warning: UIScreenDidConnectNotification: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn stub_OBJC_EHTYPE_id() {
-    log_dbg!("Warning: OBJC_EHTYPE_id: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn stub_OBJC_EHTYPE_NSException() {
-    log_dbg!("Warning: OBJC_EHTYPE_NSException: stub called");
-}
-
-// Обработка dyld_stub_binder
-#[no_mangle]
-pub extern "C" fn dyld_stub_binder(lazy_info: *const u8, _addend: *const u8) -> *const u8 {
-    // Извлекаем имя символа (исправлено приведение указателя)
-    let symbol_name = unsafe {
-        let ptr = lazy_info.add(4) as *const std::ffi::c_char;
-        std::ffi::CStr::from_ptr(ptr)
-            .to_string_lossy()
-            .into_owned()
-    };
-
-    log_dbg!("Warning: dyld_stub_binder: Unresolved symbol {}", symbol_name);
-
-    // Возвращаем адрес заглушки для известных символов
-    match symbol_name.as_str() {
-        "__NSConcreteGlobalBlock" => stub__NSConcreteGlobalBlock as *const u8,
-        "___mb_cur_max" => stub___mb_cur_max as *const u8,
-        "__NSConcreteStackBlock" => stub___NSConcreteStackBlock as *const u8,
-        "___objc_personality_v0" => stub___objc_personality_v0 as *const u8,
-        "_UIScreenDidConnectNotification" => stub_UIScreenDidConnectNotification as *const u8,
-        "_OBJC_EHTYPE_id" => stub_OBJC_EHTYPE_id as *const u8,
-        "_OBJC_EHTYPE_$_NSException" => stub_OBJC_EHTYPE_NSException as *const u8,
-        _ => {
-            log_dbg!("Error: Unsupported symbol: {}", symbol_name);
-            std::ptr::null()
-        }
     }
 }
 
