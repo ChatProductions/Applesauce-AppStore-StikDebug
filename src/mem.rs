@@ -67,12 +67,14 @@ impl<T, const MUT: bool> std::hash::Hash for Ptr<T, MUT> {
 
 /// Constant guest pointer type (like Rust's `*const T`).
 pub type ConstPtr<T> = Ptr<T, false>;
+
 /// Mutable guest pointer type (like Rust's `*mut T`).
 pub type MutPtr<T> = Ptr<T, true>;
 
 #[allow(dead_code)]
 /// Constant guest pointer-to-void type (like C's `const void *`)
 pub type ConstVoidPtr = ConstPtr<std::ffi::c_void>;
+
 /// Mutable guest pointer-to-void type (like C's `void *`)
 pub type MutVoidPtr = MutPtr<std::ffi::c_void>;
 
@@ -132,6 +134,7 @@ impl<T, const MUT: bool> std::fmt::Debug for Ptr<T, MUT> {
 // C-like pointer arithmetic
 impl<T, const MUT: bool> std::ops::Add<GuestUSize> for Ptr<T, MUT> {
     type Output = Self;
+
     fn add(self, other: GuestUSize) -> Self {
         let size: GuestUSize = guest_size_of::<T>();
         assert_ne!(size, 0);
@@ -149,6 +152,7 @@ impl<T, const MUT: bool> std::ops::AddAssign<GuestUSize> for Ptr<T, MUT> {
 }
 impl<T, const MUT: bool> std::ops::Sub<GuestUSize> for Ptr<T, MUT> {
     type Output = Self;
+
     fn sub(self, other: GuestUSize) -> Self {
         let size: GuestUSize = guest_size_of::<T>();
         assert_ne!(size, 0);
@@ -233,6 +237,10 @@ pub struct Mem {
     /// fault occurs.
     bytes: *mut Bytes,
 
+    /// The sizearmic) accesses memory via this pointer directly except when a page
+    /// fault occurs.
+    bytes: *mut Bytes,
+
     /// The size of the __PAGE_ZERO segment, where pointer accesses are trapped
     /// to prevent null pointer derefrences.
     ///
@@ -248,12 +256,22 @@ pub struct Mem {
     /// Right now only one game, Spore Origin, is setting this value to `false`
     /// via a game-specific hack. See [crate::Environment] for more info.
     pub(super) zero_memory_on_free: bool,
+
+    /// ХАК: Страница-заглушка для null-page доступов.
+    /// Заполнена инструкциями BX LR (0x4770 в Thumb) которые просто возвращают управление.
+    /// Это позволяет играм, которые случайно читают null-page, продолжить работу
+    /// вместо краша на UndefinedInstruction.
+    null_stub_page: *mut u8,
 }
 
 impl Drop for Mem {
     fn drop(&mut self) {
         unsafe {
             crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
+            // Освобождаем страницу-заглушку
+            if !self.null_stub_page.is_null() {
+                crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize).unwrap();
+            }
         }
     }
 }
@@ -282,7 +300,23 @@ impl Mem {
             0,
             "Failed to align host memory with guest memory"
         );
+
         let bytes = ptr as *mut Bytes;
+
+        // ХАК: Создаём страницу-заглушку для null-page (4KB)
+        // Заполняем инструкцией BX LR (0x4770 в Thumb) которая просто возвращает управление
+        // Это предотвращает UndefinedInstruction когда игра читает null-page как таблицу указателей
+        let null_stub_page = unsafe {
+            let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
+            // Заполняем всю страницу инструкциями BX LR (0x4770 в little-endian)
+            // Также можно интерпретировать как 0x00004770 в ARM (ANDEQ R0, R0, R0, ROR #8) - безопасная NOP
+            let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
+            for chunk in stub_slice.chunks_exact_mut(2) {
+                chunk[0] = 0x70; // BX LR (Thumb)
+                chunk[1] = 0x47;
+            }
+            page as *mut u8
+        };
 
         let allocator = allocator::Allocator::new();
 
@@ -291,6 +325,7 @@ impl Mem {
             null_segment_size: 0,
             allocator,
             zero_memory_on_free: true,
+            null_stub_page,
         }
     }
 
@@ -331,12 +366,12 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // ХАК: Убираем панику при доступе к null-page.
-    // Вместо этого логируем и разрешаем доступ.
-    // Это нужно для запуска игр, которые пытаются читать/писать по адресу 0x0.
+    // ХАК: Улучшенный обработчик null-page доступов
+    // Вместо паники логируем и возвращаем данные из stub-страницы
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
+        
         // Выводим подробную информацию о проблеме через eprintln! (всегда работает)
         eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
         eprintln!("Operation: {}", op_type);
@@ -344,9 +379,10 @@ impl Mem {
         eprintln!("Size:      0x{:x} bytes", size);
         eprintln!("Caller:    {}", caller);
         eprintln!("===========================================");
-        eprintln!("WARNING: Access ALLOWED (returning zero page).");
-        eprintln!("Game may crash later or behave unexpectedly.");
+        eprintln!("WARNING: Access ALLOWED (returning stub page with BX LR).");
+        eprintln!("Game may behave unexpectedly but should not crash.");
         eprintln!("===========================================\n");
+        
         // Также используем touchHLE логгер если доступен
         log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
              op_type, at, size, caller);
@@ -356,7 +392,13 @@ impl Mem {
     /// panicking on failure. Only for use by [crate::gdb::GdbServer].
     pub fn get_bytes_fallible(&self, addr: ConstVoidPtr, count: GuestUSize) -> Option<&[u8]> {
         if addr.to_bits() < self.null_segment_size {
-            return None;
+            // Для GDB возвращаем stub-страницу
+            let offset = (addr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let stub_slice = unsafe {
+                std::slice::from_raw_parts(self.null_stub_page.add(offset), PAGE_SIZE as usize - offset)
+            };
+            return Some(&stub_slice[..count_usize.min(stub_slice.len())]);
         }
         self.bytes()
             .get(addr.to_bits() as usize..)?
@@ -370,7 +412,7 @@ impl Mem {
         count: GuestUSize,
     ) -> Option<&mut [u8]> {
         if addr.to_bits() < self.null_segment_size {
-            return None;
+            return None; // GDB не должен писать в null-page
         }
         self.bytes_mut()
             .get_mut(addr.to_bits() as usize..)?
@@ -385,9 +427,19 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at] for that).
     pub fn bytes_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>, count: GuestUSize) -> &[u8] {
-        // Проверяем <= чтобы гарантированно ловить 0x0 даже при null_segment_size = 0
-        if ptr.to_bits() <= self.null_segment_size {
+        // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
+        if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, false, "bytes_at");
+            // Возвращаем данные из stub-страницы вместо реальной памяти
+            // Это предотвращает UndefinedInstruction когда игра использует
+            // прочитанные значения как указатели на функции
+            let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let available = PAGE_SIZE as usize - offset;
+            let actual_count = count_usize.min(available);
+            return unsafe {
+                std::slice::from_raw_parts(self.null_stub_page.add(offset), actual_count)
+            };
         }
         &self.bytes()[ptr.to_bits() as usize..][..count as usize]
     }
@@ -411,8 +463,17 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at_mut] for that).
     pub fn bytes_at_mut(&mut self, ptr: MutPtr<u8>, count: GuestUSize) -> &mut [u8] {
-        if ptr.to_bits() <= self.null_segment_size {
+        // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
+        if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
+            // Для записи в null-page - возвращаем stub-страницу (запись будет проигнорирована)
+            let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let available = PAGE_SIZE as usize - offset;
+            let actual_count = count_usize.min(available);
+            return unsafe {
+                std::slice::from_raw_parts_mut(self.null_stub_page.add(offset), actual_count)
+            };
         }
         &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
     }
@@ -622,3 +683,4 @@ impl Mem {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }
+
