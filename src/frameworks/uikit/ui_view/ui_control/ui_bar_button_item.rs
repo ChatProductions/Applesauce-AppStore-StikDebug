@@ -460,6 +460,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UIBarButtonItemHostObject>(this).title
 }
 
+- (id)image {
+    env.objc.borrow::<UIBarButtonItemHostObject>(this).image
+}
+
+- (())setImage:(id)image {
+    let old = env.objc.borrow::<UIBarButtonItemHostObject>(this).image;
+    release(env, old);
+    retain(env, image);
+    env.objc.borrow_mut::<UIBarButtonItemHostObject>(this).image = image;
+}
+    
 - (())setTitle:(id)title {
     env.objc.borrow_mut::<UIBarButtonItemHostObject>(this).title = title;
 }
