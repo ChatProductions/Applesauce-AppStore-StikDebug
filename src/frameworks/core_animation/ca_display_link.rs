@@ -37,7 +37,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Сохраняем целевой объект и селектор (игры) внутри самого CADisplayLink
     {
-        let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
+        let mut host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
         host_object.target = target;
         host_object.selector = Some(sel);
     }
@@ -54,7 +54,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, ns_timer);
     
     {
-        let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
+        let mut host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
         host_object.ns_timer = ns_timer;
     }
     
@@ -68,19 +68,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     // чтобы игра могла безопасно взаимодействовать с CADisplayLink.
     let (target, sel, paused) = {
         let host = env.objc.borrow::<CADisplayLinkHostObject>(this);
-        (host.target, host.selector.unwrap(), host.paused)
+        (host.target, host.selector, host.paused)
     };
     
-    if paused {
+    // Защита от вызова во время или после invalidate
+    if paused || target == nil {
         return;
     }
     
-    // Передаем this (сам CADisplayLink), как и ожидает игра!
-    let sel_str = sel.as_str(&env.mem);
-    if sel_str.ends_with(':') {
-        let _: u32 = crate::objc::msg_send_no_type_checking(env, (target, sel, this));
-    } else {
-        let _: u32 = crate::objc::msg_send_no_type_checking(env, (target, sel));
+    if let Some(sel) = sel {
+        // Передаем this (сам CADisplayLink), как и ожидает игра!
+        let sel_str = sel.as_str(&env.mem);
+        if sel_str.ends_with(':') {
+            let _: u32 = crate::objc::msg_send_no_type_checking(env, (target, sel, this));
+        } else {
+            let _: u32 = crate::objc::msg_send_no_type_checking(env, (target, sel));
+        }
     }
 }
 
@@ -109,28 +112,52 @@ pub const CLASSES: ClassExports = objc_classes! {
     
 - (())setFrameInterval:(NSInteger)frameInterval {
     log_dbg!("[(CADisplayLink*){:?} setFrameInterval:{}]", this, frameInterval);
-    assert!(frameInterval >= 1);
-    let interval = frameInterval as f64 / 60.0;
+    
+    // Предотвращаем деление на 0 или отрицательные значения (безопаснее, чем assert)
+    let safe_interval = frameInterval.max(1);
+    let interval = safe_interval as f64 / 60.0;
+    
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
-    set_time_interval(env, ns_timer, interval);
+    if ns_timer != nil {
+        set_time_interval(env, ns_timer, interval);
+    }
 }
 
 - (())addToRunLoop:(id)run_loop forMode:(NSRunLoopMode)mode {
     log_dbg!("[(CADisplayLink*){:?} addToRunLoop:{:?} forMode:{:?}]", this, run_loop, mode);
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
-    () = msg![env; run_loop addTimer:ns_timer forMode:mode];
+    if ns_timer != nil {
+        () = msg![env; run_loop addTimer:ns_timer forMode:mode];
+    }
 }
 
 - (())removeFromRunLoop:(id)run_loop forMode:(NSRunLoopMode)mode {
     log_dbg!("[(CADisplayLink*){:?} removeFromRunLoop:{:?} forMode:{:?}]", this, run_loop, mode);
+    // В NSTimer нет прямого API для удаления из конкретного RunLoop,
+    // игра в любом случае должна вызывать invalidate.
 }
 
 - (())invalidate {
     log_dbg!("[(CADisplayLink*){:?} invalidate]", this);
-    let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
+    
+    // Освобождаем зависимости и обнуляем их в HostObject, 
+    // чтобы разорвать Retain Cycle: (Target -> CADisplayLink -> Target).
+    let (ns_timer, target) = {
+        let mut host = env.objc.borrow_mut::<CADisplayLinkHostObject>(this);
+        let t = host.ns_timer;
+        let tgt = host.target;
+        host.ns_timer = nil;
+        host.target = nil;
+        (t, tgt)
+    };
+
     if ns_timer != nil {
-        // Таймер инвалидируется -> отпускает (release) наш CADisplayLink
         () = msg![env; ns_timer invalidate];
+        release(env, ns_timer);
+    }
+    
+    if target != nil {
+        release(env, target);
     }
 }
 
@@ -139,8 +166,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         let host_object = env.objc.borrow::<CADisplayLinkHostObject>(this);
         (host_object.ns_timer, host_object.target)
     };
-    release(env, ns_timer);
-    release(env, target);
+    
+    if ns_timer != nil {
+        release(env, ns_timer);
+    }
+    if target != nil {
+        release(env, target);
+    }
+    
     env.objc.dealloc_object(this, &mut env.mem);
 }
 
