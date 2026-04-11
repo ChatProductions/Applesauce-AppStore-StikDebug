@@ -270,7 +270,7 @@ impl Environment {
                 .iter()
                 .find(|&&o| o != "UIInterfaceOrientationPortrait")
             {
-                                options.initial_orientation = match non_portrait_orientation {
+                options.initial_orientation = match non_portrait_orientation {
                     // UIInterfaceOrientation values are flipped relative to
                     // (UI)DeviceOrientation values (content has to rotate in
                     // the opposite direction to how the device rotates).
@@ -282,12 +282,13 @@ impl Environment {
                     }
                     // This appears to be an older way set the orientation.
                     // From testing, it seems to correspond to left.
-                    "UIInterfaceOrientationLandscape" => {
-                        window::DeviceOrientation::LandscapeLeft
-                    }
+                    "UIInterfaceOrientationLandscape" => window::DeviceOrientation::LandscapeLeft,
+                    
+                    // ДОБАВЛЯЕМ СЮДА ПРИВЯЗКУ К ОБЫЧНОМУ ПОРТРЕТУ:
                     "UIInterfaceOrientationPortraitUpsideDown" => {
-                        window::DeviceOrientation::PortraitUpsideDown
+                        window::DeviceOrientation::Portrait
                     }
+                    
                     other => unimplemented!("Unsupported startup orientation: {:?}", other),
                 };
                 log!("App needs non-portrait user interface orientation {:?}, applying device orientation {:?}.", non_portrait_orientation, options.initial_orientation);
