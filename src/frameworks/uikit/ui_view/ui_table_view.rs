@@ -52,9 +52,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithFrame:(CGRect)frame {
     let this: id = msg_super![env; this initWithFrame:frame];
-    // Честно создаем внутренний content_view
-    let content_view_class = env.objc.get_known_class("UITableViewCellContentView", &mut env.mem);
-    let content_view: id = msg_class![env; content_view_class alloc];
+    
+    // Честно создаем внутренний content_view. 
+    // Передаем имя класса напрямую в макрос msg_class!
+    let content_view: id = msg_class![env; UITableViewCellContentView alloc];
     let content_view: id = msg![env; content_view initWithFrame:frame];
     
     // Добавляем его как subview (как в iOS)
@@ -75,8 +76,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Мы можем просто инициализировать поле, если NIB его создал,
     // но для безопасности создадим пустой, если его нет.
     let frame = <CGRect as Default>::default();
-    let content_view_class = env.objc.get_known_class("UITableViewCellContentView", &mut env.mem);
-    let content_view: id = msg_class![env; content_view_class alloc];
+    
+    // Исправлено здесь: убран get_known_class и переменная, имя класса передано напрямую
+    let content_view: id = msg_class![env; UITableViewCellContentView alloc];
     let content_view: id = msg![env; content_view initWithFrame:frame];
     
     () = msg![env; this addSubview:content_view];
