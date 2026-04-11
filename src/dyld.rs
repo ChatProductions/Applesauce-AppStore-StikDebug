@@ -222,6 +222,7 @@ fn write_return_to_host_routine(mem: &mut Mem, svc: u32) -> GuestFunction {
     assert!(!ptr.is_thumb());
     ptr
 }
+
 pub struct Dyld {
     /// List of host functions that have been "linked" and had SVCs assigned.
     ///
@@ -250,7 +251,8 @@ impl Dyld {
     /// handling the SVC.
     pub const SVC_LAZY_LINK_RET_FLAG: u32 = 0x800000;
 
-    const SYMBOL_STUB1_INSTRUCTIONS: [u32; 1] = [0xe59ff000]; // mask this with lowest 12 bits to restore instructions
+    const SYMBOL_STUB1_INSTRUCTIONS: [u32; 1] = [0xe59ff000];
+    // mask this with lowest 12 bits to restore instructions
     const SYMBOL_STUB_INSTRUCTIONS: [u32; 2] = [0xe59fc000, 0xe59cf000];
     const PIC_SYMBOL_STUB_INSTRUCTIONS: [u32; 3] = [0xe59fc004, 0xe08fc00c, 0xe59cf000];
 
@@ -280,12 +282,10 @@ impl Dyld {
         self.return_to_host_routine =
             Some(write_return_to_host_routine(mem, Self::SVC_RETURN_TO_HOST));
         self.thread_exit_routine = Some(write_return_to_host_routine(mem, Self::SVC_THREAD_EXIT));
-
         // Currently assuming only the app binary contains Objective-C things.
 
         objc.register_bin_selectors(&bins[0], mem);
         objc.register_host_selectors(mem);
-
         for bin in bins {
             self.setup_lazy_linking(bin, mem);
             // Must happen before `register_bin_classes`, else superclass
@@ -329,7 +329,6 @@ impl Dyld {
             file,
             "{{\n    \"object\":\"lazy_symbols\",\n    \"symbols\": ["
         )?;
-
         'sym: for (i, symbol) in info.indirect_undef_symbols.iter().enumerate() {
             // Why doesn't json allow trailing commas...
             let comma = if i == info.indirect_undef_symbols.len() - 1 {
@@ -437,7 +436,6 @@ impl Dyld {
         let stub_count = stubs.size / entry_size;
         for i in 0..stub_count {
             let ptr: MutPtr<u32> = Ptr::from_bits(stubs.addr + i * entry_size);
-
             for (j, &instr) in expected_instructions.iter().enumerate() {
                 assert!(mem.read(ptr + j.try_into().unwrap()) == instr);
             }
@@ -497,6 +495,16 @@ impl Dyld {
             } else if name == "___CFConstantStringClassReference" {
                 // See ns_string::register_constant_strings
                 nil.cast().cast_const()
+            } else if name == "___mb_cur_max" {
+                // __mb_cur_max is a pointer to the C locale's max
+                // multibyte character byte count. libstdc++ reads
+                // *__mb_cur_max in locale/string code; if this pointer
+                // is NULL the dereference crashes. Provide a static
+                // value of 1 (single-byte / ASCII locale).
+                let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(val_ptr, 1u32);
+                log_dbg!("Stubbed ___mb_cur_max at {:?}", val_ptr);
+                val_ptr.cast().cast_const()
             } else if name == "__NSConcreteGlobalBlock"
                 || name == "__NSConcreteStackBlock"
             {
@@ -582,7 +590,6 @@ impl Dyld {
             };
 
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptrs.addr + i * entry_size);
-
             for other_bin in bins {
                 if let Some(&addr) = other_bin.exported_symbols.get(symbol) {
                     mem.write(ptr_ptr, Ptr::from_bits(addr));
@@ -633,6 +640,60 @@ impl Dyld {
                 continue;
             }
 
+            // C++ / ObjC exception handling symbols. If these are
+            // NULL the C++ unwinder crashes when any @try block is
+            // entered or any ObjC exception is thrown, producing
+            // sequential NULL-page reads followed by UndefinedInst.
+            //
+            // _OBJC_EHTYPE_*: ObjC exception type-info descriptors
+            // used by @catch type matching. A dummy non-null object
+            // is enough to prevent the NULL dereference.
+            //
+            // ___objc_personality_v0: called by _Unwind_RaiseException
+            // for every frame. We install a trivial stub (BX LR) that
+            // returns 0 (_URC_NO_REASON / continue unwinding) so the
+            // unwinder keeps moving instead of branching to 0x0.
+            if symbol == "_OBJC_EHTYPE_id"
+                || symbol == "_OBJC_EHTYPE_$_NSException"
+            {
+                let dummy = mem.alloc(32);
+                mem.write(ptr_ptr, dummy.cast().cast_const());
+                log_dbg!(
+                    "Patched ObjC EH type descriptor {} -> {:#x}",
+                    symbol,
+                    dummy.to_bits()
+                );
+                continue;
+            }
+
+            if symbol == "___objc_personality_v0" {
+                // Minimal ARM32 function: BX LR (returns 0 in R0).
+                // Returning _URC_NO_REASON (0) for every frame tells
+                // the unwinder "no handler here, keep searching".
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                mem.write(ptr_ptr, fn_ptr.cast().cast_const());
+                log_dbg!(
+                    "Stubbed ___objc_personality_v0 -> {:#x}",
+                    fn_ptr.to_bits()
+                );
+                continue;
+            }
+
+            // __mb_cur_max is a pointer-to-int used by libstdc++
+            // locale code. Provide a value of 1 (single-byte locale).
+            if symbol == "___mb_cur_max" {
+                let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(val_ptr, 1u32);
+                mem.write(ptr_ptr, val_ptr.cast().cast_const());
+                log_dbg!(
+                    "Stubbed ___mb_cur_max -> {:#x}",
+                    val_ptr.to_bits()
+                );
+                continue;
+            }
+
             log!(
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
@@ -648,7 +709,6 @@ impl Dyld {
     /// Not to be confused with lazy linking.
     pub fn do_late_linking(env: &mut Environment) {
         // TODO: do symbols ever appear in __nl_symbol_ptr multiple times?
-
         let to_link = std::mem::take(&mut env.dyld.constants_to_link_later);
         for (symbol_ptr_ptr, template) in to_link {
             let symbol_ptr: ConstVoidPtr = match template {
@@ -734,7 +794,6 @@ impl Dyld {
             }
 
             cpu.invalidate_cache_range(stub_function_ptr.to_bits(), instruction_count * 4);
-
             // Update the __la_symbol_ptr
             let la_symbol_ptr: MutPtr<u32> = if entry_size == 12 {
                 // Normal stub: absolute address
@@ -768,13 +827,11 @@ impl Dyld {
                 Some((stubs, pic_offset))
             })
             .unwrap();
-
         let info = stubs.dyld_indirect_symbol_info.as_ref().unwrap();
 
         let offset = svc_pc - stubs.addr;
         assert!(offset.is_multiple_of(info.entry_size));
         let idx = (offset / info.entry_size) as usize;
-
         let symbol = info.indirect_undef_symbols[idx].as_deref().unwrap();
 
         if let Some(&addr) = self.non_lazy_host_functions.get(symbol) {
@@ -810,7 +867,6 @@ impl Dyld {
                 svc |= Self::SVC_LAZY_LINK_RET_FLAG;
             }
             self.linked_host_functions.push((symbol, f));
-
             // Rewrite stub function to call this host function
             let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
             mem.write(stub_function_ptr, encode_a32_svc(svc));
@@ -819,13 +875,11 @@ impl Dyld {
             }
 
             cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
-
             log_dbg!(
                 "Linked {} at {:?} to host implementation",
                 symbol,
                 stub_function_ptr
             );
-
             // Return the host function so that we can call it now that we're
             // done.
             return Some(f);
@@ -865,7 +919,6 @@ impl Dyld {
         symbol: &str,
     ) -> Result<GuestFunction, ()> {
         let function_ptr = self.create_proc_address_no_inval(mem, symbol)?;
-
         // Just in case
         cpu.invalidate_cache_range(function_ptr.addr_without_thumb_bit(), 8);
         Ok(function_ptr)
@@ -903,7 +956,7 @@ impl Dyld {
         let function_ptr: MutPtr<u32> = function_ptr.cast();
         mem.write(function_ptr + 0, encode_a32_svc(svc));
         mem.write(function_ptr + 1, encode_a32_ret());
-
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
 }
+
