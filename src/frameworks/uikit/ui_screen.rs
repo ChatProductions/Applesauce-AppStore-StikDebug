@@ -6,7 +6,7 @@
 //! `UIScreen`.
 
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, TrivialHostObject};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, TrivialHostObject, SEL};
 
 #[derive(Default)]
 pub struct State {
@@ -158,6 +158,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGPoint)convertPoint:(CGPoint)point fromScreen:(id)_other_screen {
     point
+}
+// MARK: - Display Link
+
+- (id)displayLinkWithTarget:(id)target selector:(SEL)selector {
+    msg_class![env; CADisplayLink displayLinkWithTarget:target selector:selector]
 }
 
 @end

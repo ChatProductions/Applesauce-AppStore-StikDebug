@@ -315,6 +315,24 @@ fn pipe(env: &mut Environment, _fds: MutPtr<FileDescriptor>) -> i32 {
     set_errno(env, ENOSYS); -1 
 }
 
+
+fn sbrk(env: &mut Environment, increment: GuestISize) -> GuestISize {
+    // sbrk() is used by legacy malloc implementations to grow the heap.
+    // touchHLE manages guest memory separately — return -1 to signal failure,
+    // causing the C runtime to fall back to mmap-based allocation.
+    log_dbg!("sbrk({}) -> -1 (not supported)", increment);
+    set_errno(env, ENOSYS);
+    -1
+}
+
+fn chmod(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
+    // touchHLE guest filesystem is read-only for bundle files.
+    // chmod is a no-op — return success to keep apps happy.
+    log_dbg!("chmod('{}', ...) -> 0 (stubbed)",
+        env.mem.cstr_at_utf8(path).unwrap_or_default());
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sleep(_)),
     export_c_func!(usleep(_)),
@@ -331,4 +349,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sysconf(_)),
     export_c_func!(pipe(_)),
     export_c_func!(fork()),
+    export_c_func!(sbrk(_)),
+    export_c_func!(chmod(_, _)),
 ];

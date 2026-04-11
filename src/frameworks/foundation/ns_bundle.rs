@@ -884,6 +884,23 @@ fn path_for_resource_helper(
     if directory != nil {
         path = msg![env; path stringByAppendingPathComponent:directory];
     }
+    // SexyAppBase games (e.g. PvZ 1.1) call
+    // [NSBundle.mainBundle pathForResource:@"" ofType:nil] with an empty name.
+    // On real iOS this returns the executable path (a file *inside* the .app),
+    // so the caller can strip the last component with GetFileDir() and obtain
+    // the .app directory (e.g. ".../PvZ.app/"). Returning bundlePath here
+    // would make GetFileDir() strip one level too many.
+    if name == nil {
+        let exec_path = env.bundle.executable_path().as_str().to_string();
+        log!("path_for_resource_helper: nil name -> returning exec path: {}", exec_path);
+        return ns_string::from_rust_string(env, exec_path);
+    }
+    let name_str = ns_string::to_rust_string(env, name);
+    if name_str.is_empty() {
+        let exec_path = env.bundle.executable_path().as_str().to_string();
+        log!("path_for_resource_helper: empty name -> returning exec path: {}", exec_path);
+        return ns_string::from_rust_string(env, exec_path);
+    }
     path = msg![env; path stringByAppendingPathComponent:name];
     if extension != nil {
         path = msg![env; path stringByAppendingPathExtension:extension];

@@ -222,7 +222,6 @@ fn write_return_to_host_routine(mem: &mut Mem, svc: u32) -> GuestFunction {
     assert!(!ptr.is_thumb());
     ptr
 }
-
 pub struct Dyld {
     /// List of host functions that have been "linked" and had SVCs assigned.
     ///
@@ -251,8 +250,7 @@ impl Dyld {
     /// handling the SVC.
     pub const SVC_LAZY_LINK_RET_FLAG: u32 = 0x800000;
 
-    const SYMBOL_STUB1_INSTRUCTIONS: [u32; 1] = [0xe59ff000];
-    // mask this with lowest 12 bits to restore instructions
+    const SYMBOL_STUB1_INSTRUCTIONS: [u32; 1] = [0xe59ff000]; // mask this with lowest 12 bits to restore instructions
     const SYMBOL_STUB_INSTRUCTIONS: [u32; 2] = [0xe59fc000, 0xe59cf000];
     const PIC_SYMBOL_STUB_INSTRUCTIONS: [u32; 3] = [0xe59fc004, 0xe08fc00c, 0xe59cf000];
 
@@ -282,10 +280,12 @@ impl Dyld {
         self.return_to_host_routine =
             Some(write_return_to_host_routine(mem, Self::SVC_RETURN_TO_HOST));
         self.thread_exit_routine = Some(write_return_to_host_routine(mem, Self::SVC_THREAD_EXIT));
+
         // Currently assuming only the app binary contains Objective-C things.
 
         objc.register_bin_selectors(&bins[0], mem);
         objc.register_host_selectors(mem);
+
         for bin in bins {
             self.setup_lazy_linking(bin, mem);
             // Must happen before `register_bin_classes`, else superclass
@@ -329,6 +329,7 @@ impl Dyld {
             file,
             "{{\n    \"object\":\"lazy_symbols\",\n    \"symbols\": ["
         )?;
+
         'sym: for (i, symbol) in info.indirect_undef_symbols.iter().enumerate() {
             // Why doesn't json allow trailing commas...
             let comma = if i == info.indirect_undef_symbols.len() - 1 {
@@ -436,6 +437,7 @@ impl Dyld {
         let stub_count = stubs.size / entry_size;
         for i in 0..stub_count {
             let ptr: MutPtr<u32> = Ptr::from_bits(stubs.addr + i * entry_size);
+
             for (j, &instr) in expected_instructions.iter().enumerate() {
                 assert!(mem.read(ptr + j.try_into().unwrap()) == instr);
             }
@@ -580,6 +582,7 @@ impl Dyld {
             };
 
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptrs.addr + i * entry_size);
+
             for other_bin in bins {
                 if let Some(&addr) = other_bin.exported_symbols.get(symbol) {
                     mem.write(ptr_ptr, Ptr::from_bits(addr));
@@ -645,6 +648,7 @@ impl Dyld {
     /// Not to be confused with lazy linking.
     pub fn do_late_linking(env: &mut Environment) {
         // TODO: do symbols ever appear in __nl_symbol_ptr multiple times?
+
         let to_link = std::mem::take(&mut env.dyld.constants_to_link_later);
         for (symbol_ptr_ptr, template) in to_link {
             let symbol_ptr: ConstVoidPtr = match template {
@@ -730,6 +734,7 @@ impl Dyld {
             }
 
             cpu.invalidate_cache_range(stub_function_ptr.to_bits(), instruction_count * 4);
+
             // Update the __la_symbol_ptr
             let la_symbol_ptr: MutPtr<u32> = if entry_size == 12 {
                 // Normal stub: absolute address
@@ -763,11 +768,13 @@ impl Dyld {
                 Some((stubs, pic_offset))
             })
             .unwrap();
+
         let info = stubs.dyld_indirect_symbol_info.as_ref().unwrap();
 
         let offset = svc_pc - stubs.addr;
         assert!(offset.is_multiple_of(info.entry_size));
         let idx = (offset / info.entry_size) as usize;
+
         let symbol = info.indirect_undef_symbols[idx].as_deref().unwrap();
 
         if let Some(&addr) = self.non_lazy_host_functions.get(symbol) {
@@ -803,6 +810,7 @@ impl Dyld {
                 svc |= Self::SVC_LAZY_LINK_RET_FLAG;
             }
             self.linked_host_functions.push((symbol, f));
+
             // Rewrite stub function to call this host function
             let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
             mem.write(stub_function_ptr, encode_a32_svc(svc));
@@ -811,11 +819,13 @@ impl Dyld {
             }
 
             cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
+
             log_dbg!(
                 "Linked {} at {:?} to host implementation",
                 symbol,
                 stub_function_ptr
             );
+
             // Return the host function so that we can call it now that we're
             // done.
             return Some(f);
@@ -855,6 +865,7 @@ impl Dyld {
         symbol: &str,
     ) -> Result<GuestFunction, ()> {
         let function_ptr = self.create_proc_address_no_inval(mem, symbol)?;
+
         // Just in case
         cpu.invalidate_cache_range(function_ptr.addr_without_thumb_bit(), 8);
         Ok(function_ptr)
@@ -892,8 +903,6 @@ impl Dyld {
         let function_ptr: MutPtr<u32> = function_ptr.cast();
         mem.write(function_ptr + 0, encode_a32_svc(svc));
         mem.write(function_ptr + 1, encode_a32_ret());
+
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
-}
-
-

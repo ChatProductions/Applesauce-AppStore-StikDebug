@@ -728,12 +728,15 @@ pub const CLASSES: ClassExports = objc_classes! {
             string.as_bytes().to_vec()
         },
         NSUTF16LittleEndianStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        // NSUnicodeStringEncoding = NSUTF16StringEncoding: native byte order (LE on ARM)
+        NSUnicodeStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        NSUTF16BigEndianStringEncoding => string.encode_utf16().flat_map(u16::to_be_bytes).collect(),
         _ => unimplemented!("{}", encoding),
     };
     let null_size: GuestUSize = match encoding {
         NSUTF8StringEncoding | NSASCIIStringEncoding | NSMacOSRomanStringEncoding |
         NSISOLatin1StringEncoding | NSUTF32LittleEndianStringEncoding | NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding | NSNextStepLatinStringEncoding => 1,
-        NSUTF16LittleEndianStringEncoding => 2,
+        NSUTF16LittleEndianStringEncoding | NSUnicodeStringEncoding | NSUTF16BigEndianStringEncoding => 2,
         _ => unimplemented!()
     };
     let bytes_size = bytes.len() as GuestUSize;
@@ -1810,4 +1813,3 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
-
