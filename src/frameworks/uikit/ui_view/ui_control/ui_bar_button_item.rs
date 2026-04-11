@@ -569,6 +569,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let UIBarButtonItemHostObject {
         superclass: _,
         title,
+        image,
         style: _,
         target,
         action: _,
