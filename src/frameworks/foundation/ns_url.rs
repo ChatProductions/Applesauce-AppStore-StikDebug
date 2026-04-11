@@ -130,26 +130,48 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initFileURLWithPath:(id)path // NSString*
               isDirectory:(bool)_is_dir {
-    assert!(!to_rust_string(env, path).starts_with("file:"));
-    let path = msg![env; path stringByExpandingTildeInPath];
-    let path: id = msg![env; path copy];
+    let path_str = to_rust_string(env, path);
+    let mut safe_path = path;
+    
+    // Если игра передала путь вместе с префиксом file:, очищаем его
+    if path_str.starts_with("file:") {
+        let stripped = path_str
+            .replacen("file://localhost", "", 1)
+            .replacen("file://", "", 1)
+            .replacen("file:", "", 1);
+        safe_path = autorelease(env, from_rust_string(env, stripped));
+    }
+
+    let expanded_path: id = msg![env; safe_path stringByExpandingTildeInPath];
+    let copied_path: id = msg![env; expanded_path copy];
     *env.objc.borrow_mut(this) = NSURLHostObject::FileURL {
-        ns_string: path,
+        ns_string: copied_path,
         working_directory: env.fs.working_directory().into(),
     };
     this
-}
+              }
 
 - (id)initWithString:(id)url { // NSString*
     if url == nil {
         return nil;
     }
-    assert!(!to_rust_string(env, url).starts_with("file:")); // TODO
+    
+    let url_str = to_rust_string(env, url);
+    // Если это локальный файл, перенаправляем инициализацию в правильный метод
+    if url_str.starts_with("file:") {
+        let stripped = url_str
+            .replacen("file://localhost", "", 1)
+            .replacen("file://", "", 1)
+            .replacen("file:", "", 1);
+        let safe_path = autorelease(env, from_rust_string(env, stripped));
+        return msg![env; this initFileURLWithPath:safe_path isDirectory:false];
+    }
+    
     let url: id = msg![env; url copy];
     *env.objc.borrow_mut(this) = NSURLHostObject::OtherURL { ns_string: url };
     this
 }
-
+    
 - (id)initWithString:(id)url // NSString*
        relativeToURL:(id)base_url { // NSURL*
     if url == nil {
