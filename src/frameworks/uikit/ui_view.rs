@@ -216,6 +216,36 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithCoder:(id)decoder {
+    // Сначала инициализируем базовый объект
+    this = msg![env; this init];
+    if this == nil { return nil; }
+
+    // 1. Декодируем размеры окна (ключ "UIFrame" в NIB-файлах Apple)
+    let frame: CGRect = msg![env; decoder decodeCGRectForKey:get_static_str(env, "UIFrame")];
+    
+    // 2. КРИТИЧЕСКИЙ ФИКС ДЛЯ MINECRAFT:
+    // Если фрейм оказался нулевым (из-за кривого NIB или отсутствия ключа),
+    // принудительно ставим размер всего экрана. Иначе получим черный экран.
+    if frame.size.width == 0.0 || frame.size.height == 0.0 {
+        let screen: id = msg_class![env; UIScreen mainScreen];
+        let bounds: CGRect = msg![env; screen bounds];
+        () = msg![env; this setFrame:bounds];
+    } else {
+        () = msg![env; this setFrame:frame];
+    }
+
+    // 3. Декодируем видимость (UIHidden)
+    let hidden: bool = msg![env; decoder decodeBoolForKey:get_static_str(env, "UIHidden")];
+    () = msg![env; this setHidden:hidden];
+
+    // 4. Декодируем прозрачность (UIOpaque)
+    let opaque: bool = msg![env; decoder decodeBoolForKey:get_static_str(env, "UIOpaque")];
+    () = msg![env; this setOpaque:opaque];
+
+    this
+}
+    
 - (NSInteger)tag {
     env.objc.borrow::<UIViewHostObject>(this).tag
 }
