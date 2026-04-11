@@ -331,15 +331,25 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // ХАК ОТКЛЮЧЕН: Теперь мы вызываем панику при доступе к null-page,
-    // чтобы получить правильный трейс стека для отладки.
+    // ХАК: Убираем панику при доступе к null-page.
+    // Вместо этого логируем и разрешаем доступ.
+    // Это нужно для запуска игр, которые пытаются читать/писать по адресу 0x0.
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
-        panic!(
-            "CRITICAL: NULL-PAGE {} intercepted at address 0x{:08x} (size: 0x{:x}) from caller: {}. Failing immediately to get the real stack trace!",
-            op_type, at, size, caller
-        );
+        // Выводим подробную информацию о проблеме через eprintln! (всегда работает)
+        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
+        eprintln!("Operation: {}", op_type);
+        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
+        eprintln!("Size:      0x{:x} bytes", size);
+        eprintln!("Caller:    {}", caller);
+        eprintln!("===========================================");
+        eprintln!("WARNING: Access ALLOWED (returning zero page).");
+        eprintln!("Game may crash later or behave unexpectedly.");
+        eprintln!("===========================================\n");
+        // Также используем touchHLE логгер если доступен
+        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
+             op_type, at, size, caller);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
@@ -612,4 +622,3 @@ impl Mem {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }
-
