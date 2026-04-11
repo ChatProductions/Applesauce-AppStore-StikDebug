@@ -17,6 +17,7 @@ pub fn get_log_file() -> &'static File {
     static LOG_FILE: LazyLock<File> = LazyLock::new(|| {
         File::create(crate::paths::user_data_base_path().join("touchHLE_log.txt")).unwrap()
     });
+
     &LOG_FILE
 }
 
@@ -69,12 +70,14 @@ macro_rules! echo {
     ($($arg:tt)+) => {
         {
             let formatted_str = format!($($arg)+);
+
             #[cfg(target_os = "android")]
             {
                 sdl2::log::log(&formatted_str);
             }
             #[cfg(not(target_os = "android"))]
             eprintln!("{}", formatted_str);
+
             use std::io::Write;
             let mut log_file = $crate::log::get_log_file();
             let _ = log_file.write_all(formatted_str.as_bytes());
@@ -89,6 +92,7 @@ macro_rules! echo {
             }
             #[cfg(not(target_os = "android"))]
             eprintln!("");
+
             use std::io::Write;
             let _ = $crate::log::get_log_file().write_all(b"\n");
         }
@@ -109,8 +113,4 @@ macro_rules! echo_no_panic {
 
 /// Put modules to enable [log_dbg] for here, e.g. "touchHLE::mem" to see when
 /// memory is allocated and freed.
-pub const ENABLED_MODULES: &[&str] = &[
-    "touchHLE::abi",
-    "touchHLE::dyld",
-    "touchHLE::objc",
-];
+pub const ENABLED_MODULES: &[&str] = &[];
