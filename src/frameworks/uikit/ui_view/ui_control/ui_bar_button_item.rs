@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `UIBarButtonItem`.
 
 use crate::abi::{GuestArg, GuestRet};
@@ -238,6 +240,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             height: 44.0,
         },
     };
+
     let title_label: id = msg_class![env; UILabel new];
     let title_label: id = msg![env; title_label initWithFrame:frame];
     () = msg![env; title_label setTextAlignment:UITextAlignmentCenter];
@@ -294,7 +297,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     let label = match system_item {
-        UIBarButtonSystemItem::FlexibleSpace | UIBarButtonSystemItem::FixedSpace => nil,
+        UIBarButtonSystemItem::FlexibleSpace |
+        UIBarButtonSystemItem::FixedSpace => nil,
         _ => {
             let font: id = msg_class![env; UIFont systemFontOfSize:17_f32];
             let title_color: id = msg_class![env; UIColor blackColor];
@@ -303,6 +307,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             let title_label: id = msg_class![env; UILabel new];
             let title_label: id = msg![env; title_label initWithFrame:frame];
             () = msg![env; title_label setTextAlignment:UITextAlignmentCenter];
+
             let title = from_rust_string(env, system_item.to_string());
             () = msg![env; title_label setText:title];
             () = msg![env; title_label setTextColor:title_color];
@@ -311,7 +316,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
             let layer: id = msg![env; title_label layer];
             () = msg![env; layer setCornerRadius:(10.0 as CGFloat)];
-
             autorelease(env, title);
             title_label
         }
@@ -364,7 +368,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // Инициализируем саму кнопку
     let this: id = msg_super![env; this initWithFrame:frame];
-    
+
     // Добавляем кастомный виджет как subview, чтобы он рендерился
     if custom_view != nil {
         () = msg![env; this addSubview:custom_view];
@@ -423,19 +427,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
-    let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
-    
+    // 1. Сначала извлекаем нужные переменные в отдельной области видимости 
+    //    чтобы сбросить неизменяемое заимствование (immutable borrow).
+    let (custom_view, label) = {
+        let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
+        (host.custom_view, host.label)
+    };
+
     // Если есть custom_view, берём размеры от него
-    if host.custom_view != nil {
-        let custom_view = host.custom_view;
+    if custom_view != nil {
         () = msg![env; custom_view sizeToFit];
         let cv_frame: CGRect = msg![env; custom_view frame];
         CGSize {
             width: cv_frame.size.width + 16.0,
             height: size.height,
         }
-    } else if host.label != nil {
-        let label = host.label;
+    } else if label != nil {
         () = msg![env; label sizeToFit];
         let label_frame: CGRect = msg![env; label frame];
         CGSize {
@@ -448,15 +455,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())layoutSubviews {
-    let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
+    // 1. Опять же, ограничиваем scope неизменяемого заимствования.
+    let (custom_view, label) = {
+        let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
+        (host.custom_view, host.label)
+    };
+    
+    // 2. Теперь мы можем безопасно вызывать msg!, потому что
+    //    borrow::<UIBarButtonItemHostObject> уже завершен.
     let bounds: CGRect = msg![env; this bounds];
     
     // Устанавливаем фрейм для custom_view, если он есть
-    if host.custom_view != nil {
-        let custom_view = host.custom_view;
+    if custom_view != nil {
         () = msg![env; custom_view setFrame:bounds];
-    } else if host.label != nil {
-        let label = host.label;
+    } else if label != nil {
         () = msg![env; label setFrame:bounds];
     }
 }
@@ -494,7 +506,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = std::mem::take(env.objc.borrow_mut(this));
 
     log_dbg!("dealloc [(UIBarButtonItem*){:?} title {:?}, target {:?}, label {:?}, custom_view {:?}]", this, title, target, label, custom_view);
-
+    
     release(env, title);
     release(env, target);
     release(env, label);
@@ -507,4 +519,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-            
+
