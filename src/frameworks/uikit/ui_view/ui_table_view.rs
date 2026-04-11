@@ -6,13 +6,14 @@
 //! `UITableView`, `UITableViewCell`.
 
 use crate::frameworks::core_graphics::CGRect;
+use crate::frameworks::uikit::ui_view; // <-- Добавляем явный импорт модуля
 use crate::objc::{
     id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes, release,
     retain, ClassExports, NSZonePtr,
 };
 
 pub struct UITableViewCellHostObject {
-    superclass: super::ui_view::UIViewHostObject,
+    superclass: ui_view::UIViewHostObject, // <-- Убираем super::
     content_view: id,
 }
 impl_HostObject_with_superclass!(UITableViewCellHostObject);
