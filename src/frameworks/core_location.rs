@@ -536,29 +536,29 @@ const CONSTANTS: ConstantExports = &[
 // Заглушки для CLLocationManager
 #[no_mangle]
 pub extern "C" fn CLLocationManager_new() -> *mut std::ffi::c_void {
-    crate::log!("Warning: CLLocationManager_new: stub called");
+    log_dbg!("Warning: CLLocationManager_new: stub called");
     std::ptr::null_mut()
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_startUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    crate::log!("Warning: CLLocationManager_startUpdatingLocation: stub called");
+    log_dbg!("Warning: CLLocationManager_startUpdatingLocation: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_stopUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    crate::log!("Warning: CLLocationManager_stopUpdatingLocation: stub called");
+    log_dbg!("Warning: CLLocationManager_stopUpdatingLocation: stub called");
 }
 
 #[no_mangle]
 pub extern "C" fn CLLocationManager_setDelegate(_manager: *mut std::ffi::c_void, _delegate: *mut std::ffi::c_void) {
-    crate::log!("Warning: CLLocationManager_setDelegate: stub called");
+    log_dbg!("Warning: CLLocationManager_setDelegate: stub called");
 }
 
 // Заглушки для CLAuthorizationStatus
 #[no_mangle]
 pub extern "C" fn CLAuthorizationStatus() -> i32 {
-    crate::log!("Warning: CLAuthorizationStatus: stub called");
+    log_dbg!("Warning: CLAuthorizationStatus: stub called");
     3 // Возвращаем CL_AUTHORIZATION_STATUS_AUTHORIZED
 }
 
