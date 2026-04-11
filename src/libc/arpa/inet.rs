@@ -16,12 +16,15 @@ use std::net::Ipv4Addr;
 type in_addr_t = u32;
 
 const INADDR_NONE: in_addr_t = u32::MAX;
+#[allow(dead_code)]
 const INADDR_ANY: in_addr_t = 0x00000000;
+#[allow(dead_code)]
 const INADDR_BROADCAST: in_addr_t = 0xFFFFFFFF;
-// 127.0.0.1 in host byte order
+/// 127.0.0.1 in host byte order
+#[allow(dead_code)]
 const INADDR_LOOPBACK: in_addr_t = 0x7F000001;
 
-/// AF_INET6 \u2014 we don't support IPv6 but accept the constant gracefully.
+/// AF_INET6 — we don't support IPv6 but accept the constant gracefully.
 const AF_INET6: i32 = 30;
 
 #[derive(Copy, Clone, Debug)]
@@ -49,8 +52,8 @@ fn inet_addr(env: &mut Environment, str: ConstPtr<u8>) -> in_addr_t {
     }
 }
 
-/// `inet_aton` \u2014 converts a dotted-decimal string into an `in_addr`.
-/// Returns 1 on success, 0 on failure (opposite of `inet_addr` convention).
+/// `inet_aton` — converts a dotted-decimal string into an `in_addr`.
+/// Returns 1 on success, 0 on failure.
 fn inet_aton(
     env: &mut Environment,
     str: ConstPtr<u8>,
@@ -79,8 +82,10 @@ fn inet_aton(
 
 // MARK: - inet_ntoa
 
-/// `inet_ntoa` \u2014 converts an `in_addr` (passed as raw u32) to a
-/// dotted-decimal string.  Returns a pointer to a per-call guest buffer.
+/// `inet_ntoa` — converts an in_addr (passed as raw u32) to a
+/// dotted-decimal string. Returns a pointer to a per-call guest buffer.
+/// Takes in_addr_t instead of in_addr because in_addr does not implement
+/// GuestArg.
 fn inet_ntoa(env: &mut Environment, s_addr: in_addr_t) -> ConstPtr<u8> {
     let octets = s_addr.to_le_bytes();
     let s = format!(
@@ -89,7 +94,6 @@ fn inet_ntoa(env: &mut Environment, s_addr: in_addr_t) -> ConstPtr<u8> {
     );
     log_dbg!("inet_ntoa({:#010x}) => {:?}", s_addr, s);
     let bytes = s.as_bytes();
-    // Allocate a fresh buffer each call (leaked \u2014 tiny and rare per real usage).
     let buf: MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
     env.mem
         .bytes_at_mut(buf, bytes.len() as u32)
@@ -175,43 +179,40 @@ fn inet_pton(
                 "inet_pton: unsupported address family {}, returning -1",
                 af
             );
-            -1 // EAFNOSUPPORT
+            -1
         }
     }
 }
 
 // MARK: - Byte order (htonl / htons / ntohl / ntohs)
 
-/// `htonl` \u2014 host to network byte order (32-bit).
+/// `htonl` — host to network byte order (32-bit).
 fn htonl(_env: &mut Environment, hostlong: u32) -> u32 {
     hostlong.to_be()
 }
 
-/// `htons` \u2014 host to network byte order (16-bit).
+/// `htons` — host to network byte order (16-bit).
 fn htons(_env: &mut Environment, hostshort: u16) -> u16 {
     hostshort.to_be()
 }
 
-/// `ntohl` \u2014 network to host byte order (32-bit).
+/// `ntohl` — network to host byte order (32-bit).
 fn ntohl(_env: &mut Environment, netlong: u32) -> u32 {
     u32::from_be(netlong)
 }
 
-/// `ntohs` \u2014 network to host byte order (16-bit).
+/// `ntohs` — network to host byte order (16-bit).
 fn ntohs(_env: &mut Environment, netshort: u16) -> u16 {
     u16::from_be(netshort)
 }
 
 // MARK: - inet_lnaof / inet_netof / inet_makeaddr / inet_network
 
-/// `inet_lnaof` \u2014 extract host portion of a Class A/B/C address.
-/// Accepts the raw `s_addr` field (u32) rather than the struct, because
-/// `in_addr` does not implement `GuestArg`.
+/// `inet_lnaof` — extract host portion of a Class A/B/C address.
+/// Takes in_addr_t instead of in_addr because in_addr does not implement
+/// GuestArg.
 fn inet_lnaof(_env: &mut Environment, s_addr: in_addr_t) -> in_addr_t {
     let a = u32::from_be(s_addr);
-    // Class A: top bit 0 -> 24-bit host part
-    // Class B: top 2 bits 10 -> 16-bit host part
-    // Class C: top 3 bits 110 -> 8-bit host part
     if a & 0x8000_0000 == 0 {
         a & 0x00FF_FFFF
     } else if a & 0x4000_0000 == 0 {
@@ -221,7 +222,7 @@ fn inet_lnaof(_env: &mut Environment, s_addr: in_addr_t) -> in_addr_t {
     }
 }
 
-/// `inet_netof` \u2014 extract network portion of a classful address.
+/// `inet_netof` — extract network portion of a classful address.
 fn inet_netof(_env: &mut Environment, s_addr: in_addr_t) -> in_addr_t {
     let a = u32::from_be(s_addr);
     if a & 0x8000_0000 == 0 {
@@ -233,9 +234,9 @@ fn inet_netof(_env: &mut Environment, s_addr: in_addr_t) -> in_addr_t {
     }
 }
 
-/// `inet_makeaddr` \u2014 construct an `in_addr` from a network number and host
-/// part. Returns the raw `s_addr` value (u32) rather than the struct, because
-/// `in_addr` does not implement `GuestRet`.
+/// `inet_makeaddr` — construct an in_addr from a network number and host
+/// part. Returns in_addr_t instead of in_addr because in_addr does not
+/// implement GuestRet.
 fn inet_makeaddr(_env: &mut Environment, net: u32, host: u32) -> in_addr_t {
     let addr = if net < 128 {
         (net << 24) | (host & 0x00FF_FFFF)
@@ -247,13 +248,12 @@ fn inet_makeaddr(_env: &mut Environment, net: u32, host: u32) -> in_addr_t {
     addr.to_be()
 }
 
-/// `inet_network` \u2014 parse a network address in the form `a.b.c.d` and return
-/// it in *host* byte order (unlike `inet_addr` which returns network order).
+/// `inet_network` — parse a network address and return it in host byte order.
 fn inet_network(env: &mut Environment, str: ConstPtr<u8>) -> in_addr_t {
     let s = env.mem.cstr_at_utf8(str).unwrap_or_default().to_owned();
     match s.parse::<Ipv4Addr>() {
         Ok(addr) => {
-            let val = u32::from_be_bytes(addr.octets()); // host byte order
+            let val = u32::from_be_bytes(addr.octets());
             log_dbg!("inet_network({:?}) => {:#010x}", s, val);
             val
         }
@@ -271,4 +271,12 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(inet_ntop(_, _, _, _)),
     export_c_func!(inet_pton(_, _, _)),
     export_c_func!(htonl(_)),
-    
+    export_c_func!(htons(_)),
+    export_c_func!(ntohl(_)),
+    export_c_func!(ntohs(_)),
+    export_c_func!(inet_lnaof(_)),
+    export_c_func!(inet_netof(_)),
+    export_c_func!(inet_makeaddr(_, _)),
+    export_c_func!(inet_network(_)),
+];
+
