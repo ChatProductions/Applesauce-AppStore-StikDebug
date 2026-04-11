@@ -472,6 +472,14 @@ impl Dyld {
     /// binaries symbols may be looked up in.
     fn do_non_lazy_linking(&mut self, bin: &MachO, bins: &[MachO], mem: &mut Mem, objc: &mut ObjC) {
         let mut unhandled_relocations: HashMap<&str, Vec<u32>> = HashMap::new();
+        // Cache for Objective-C blocks runtime class descriptors.
+        // All relocation sites for the same name must resolve to the same
+        // non-null guest address so that `block->isa == &_NSConcreteGlobalBlock`
+        // identity checks in the blocks runtime work correctly.
+        // Without this, the isa field of every global/stack block is NULL (0x0),
+        // causing a NULL-page read the first time the ObjC runtime tries to
+        // retain or release a block object.
+        let mut block_class_addrs: HashMap<String, u32> = HashMap::new();
         for &(ptr_ptr, ref name) in &bin.external_relocations {
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptr_ptr);
             // There will be an existing value at the address, which is an
@@ -489,6 +497,21 @@ impl Dyld {
             } else if name == "___CFConstantStringClassReference" {
                 // See ns_string::register_constant_strings
                 nil.cast().cast_const()
+            } else if name == "__NSConcreteGlobalBlock"
+                || name == "__NSConcreteStackBlock"
+            {
+                // Blocks runtime class descriptor. Allocate a small dummy
+                // object in guest memory so isa != NULL. All sites for the
+                // same symbol share one address (cached above).
+                let addr = *block_class_addrs
+                    .entry(name.clone())
+                    .or_insert_with(|| mem.alloc(16).to_bits());
+                log_dbg!(
+                    "Patched block class descriptor {} -> {:#x}",
+                    name,
+                    addr
+                );
+                Ptr::from_bits(addr)
             } else if let Some(&external_addr) = bins
                 .iter()
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
@@ -590,6 +613,23 @@ impl Dyld {
                 // Delay linking of constant until we have a `&mut Environment`,
                 // that makes it much easier to build NSString objects etc.
                 self.constants_to_link_later.push((ptr_ptr, template));
+                continue;
+            }
+
+            // Blocks runtime class descriptors in __nl_symbol_ptr.
+            // Must be non-null so block->isa != NULL; otherwise the
+            // first retain/release of any stack block causes a
+            // NULL-page read at 0x0.
+            if symbol == "__NSConcreteStackBlock"
+                || symbol == "__NSConcreteGlobalBlock"
+            {
+                let dummy = mem.alloc(16);
+                mem.write(ptr_ptr, dummy.cast().cast_const());
+                log_dbg!(
+                    "Patched non-lazy block class {} -> {:#x}",
+                    symbol,
+                    dummy.to_bits()
+                );
                 continue;
             }
 
@@ -866,4 +906,3 @@ impl Dyld {
 
         GuestFunction::from_addr_with_thumb_bit(function_ptr.to_bits())
     }
-        }

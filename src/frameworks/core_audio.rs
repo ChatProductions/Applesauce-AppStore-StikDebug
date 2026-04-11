@@ -1,26 +1,16 @@
 /*
-* Stub implementation for CoreAudio.framework
-* Uses types from core_audio_types.rs
-*/
-use crate::dyld::{export_c_func, FunctionExports};
-use crate::Environment;
-use crate::mem::{ConstPtr, MutPtr};
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+//! Stub for `CoreAudio.framework/CoreAudio`.
+//!
+//! On iOS, CoreAudio exposes no public C API that games call directly.
+//! The audio session and audio queue APIs live in AudioToolbox, not here.
+//! This stub exists solely so that apps whose Mach-O dependency list
+//! includes CoreAudio (e.g. those built with older SDKs or certain
+//! third-party libraries) do not trigger "unimplemented dylib" warnings.
 
-// Import types from your existing file
-use super::core_audio_types::*;
+use crate::dyld::FunctionExports;
 
-// Stub for AudioSession (often required by iOS 3.0 games)
-fn AudioSessionInitialize(
-    env: &mut Environment,
-    inRunLoop: MutPtr<u8>,
-    inRunLoopMode: ConstPtr<u8>,
-    inInterruptionListener: u32,
-    inClientData: MutPtr<u8>
-) -> u32 {
-    0 // No error
-}
-
-pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioSessionInitialize(_, _, _, _)),
-    // Add other AudioSession functions here if the log complains later
-];
+pub const FUNCTIONS: FunctionExports = &[];

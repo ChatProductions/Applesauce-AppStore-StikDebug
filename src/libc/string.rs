@@ -574,6 +574,18 @@ fn bcopy(env: &mut Environment, src: ConstVoidPtr, dest: MutVoidPtr, count: Gues
     memmove(env, dest, src, count);
 }
 
+fn strnlen(env: &mut Environment, s: ConstPtr<u8>, maxlen: GuestUSize) -> GuestUSize {
+    let mut len: GuestUSize = 0;
+    while len < maxlen {
+        let c = env.mem.read(s + len);
+        if c == b'\0' {
+            return len;
+        }
+        len += 1;
+    }
+    maxlen
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strtok(_, _)),
     export_c_func!(bzero(_, _)),
@@ -624,4 +636,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strerror(_)),
     export_c_func!(strerror_r(_, _, _)),
     export_c_func!(bcopy(_, _, _)),
+    export_c_func!(strnlen(_, _)),
 ];

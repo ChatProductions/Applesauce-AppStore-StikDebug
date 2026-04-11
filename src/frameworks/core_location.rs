@@ -1,19 +1,16 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //!
 //! The Core Location framework.
 //!
 //! Proper implementation of this framework _could_ make sense on Android,
-//!
 //! but it seems like early iOS games were using it exclusively to
 //! ~~spy on~~ track users without actual location-based gameplay.
 //!
 //! Some apps (e.g. maps) would _require_ location support to work properly,
-//!
 //! but it is not the current focus of the touchHLE. The current focus is,
 //! you know, **GAMES**.
 
@@ -325,7 +322,7 @@ const CLASSES: ClassExports = objc_classes! {
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env;
-                delegate locationManager:this
+            delegate locationManager:this
                               didChangeAuthorizationStatus:CL_AUTHORIZATION_STATUS_DENIED];
         }
     }
@@ -531,4 +528,37 @@ const CONSTANTS: ConstantExports = &[
     ("_kCLErrorDomain",
         HostConstant::NSString("kCLErrorDomain")),
 ];
+
+// =========================================================================
+// MARK: - Added Stubs
+// =========================================================================
+
+// Заглушки для CLLocationManager
+#[no_mangle]
+pub extern "C" fn CLLocationManager_new() -> *mut std::ffi::c_void {
+    log_dbg!("Warning: CLLocationManager_new: stub called");
+    std::ptr::null_mut()
+}
+
+#[no_mangle]
+pub extern "C" fn CLLocationManager_startUpdatingLocation(_manager: *mut std::ffi::c_void) {
+    log_dbg!("Warning: CLLocationManager_startUpdatingLocation: stub called");
+}
+
+#[no_mangle]
+pub extern "C" fn CLLocationManager_stopUpdatingLocation(_manager: *mut std::ffi::c_void) {
+    log_dbg!("Warning: CLLocationManager_stopUpdatingLocation: stub called");
+}
+
+#[no_mangle]
+pub extern "C" fn CLLocationManager_setDelegate(_manager: *mut std::ffi::c_void, _delegate: *mut std::ffi::c_void) {
+    log_dbg!("Warning: CLLocationManager_setDelegate: stub called");
+}
+
+// Заглушки для CLAuthorizationStatus
+#[no_mangle]
+pub extern "C" fn CLAuthorizationStatus() -> i32 {
+    log_dbg!("Warning: CLAuthorizationStatus: stub called");
+    3 // Возвращаем CL_AUTHORIZATION_STATUS_AUTHORIZED
+}
 
