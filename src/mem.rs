@@ -237,10 +237,6 @@ pub struct Mem {
     /// fault occurs.
     bytes: *mut Bytes,
 
-    /// The sizearmic) accesses memory via this pointer directly except when a page
-    /// fault occurs.
-    bytes: *mut Bytes,
-
     /// The size of the __PAGE_ZERO segment, where pointer accesses are trapped
     /// to prevent null pointer derefrences.
     ///
