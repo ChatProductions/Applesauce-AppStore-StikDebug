@@ -180,6 +180,7 @@ struct UIBarButtonItemHostObject {
     action: Option<SEL>,
     system_item: UIBarButtonSystemItem,
     pub label: id,
+    custom_view: id, // <-- Добавлено хранилище для customView
     width: CGFloat,
 }
 
@@ -195,6 +196,7 @@ impl Default for UIBarButtonItemHostObject {
             action: None,
             system_item: UIBarButtonSystemItem::Done,
             label: nil,
+            custom_view: nil, // <-- Инициализируем нулем
             width: 0.0,
         }
     }
@@ -333,6 +335,57 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// MARK: - НОВЫЙ МЕТОД: initWithCustomView:
+
+- (id)initWithCustomView:(id)custom_view {
+    log_dbg!(
+        "[(UIBarButtonItem*){:?} initWithCustomView:{:?}]",
+        this,
+        custom_view
+    );
+
+    // Определяем размеры кнопки по размеру переданного view (если он есть)
+    let frame = if custom_view != nil {
+        let f: CGRect = msg![env; custom_view frame];
+        f
+    } else {
+        CGRect {
+            origin: CGPoint { x: 0.0, y: 0.0 },
+            size: CGSize { width: 0.0, height: 44.0 },
+        }
+    };
+
+    let host = env.objc.borrow_mut::<UIBarButtonItemHostObject>(this);
+    host.custom_view = custom_view;
+
+    if custom_view != nil {
+        retain(env, custom_view);
+    }
+
+    // Инициализируем саму кнопку
+    let this: id = msg_super![env; this initWithFrame:frame];
+    
+    // Добавляем кастомный виджет как subview, чтобы он рендерился
+    if custom_view != nil {
+        () = msg![env; this addSubview:custom_view];
+    }
+    
+    this
+}
+
+// Геттер и сеттер для customView на всякий случай
+
+- (id)customView {
+    env.objc.borrow::<UIBarButtonItemHostObject>(this).custom_view
+}
+
+- (())setCustomView:(id)custom_view {
+    let old = env.objc.borrow::<UIBarButtonItemHostObject>(this).custom_view;
+    release(env, old);
+    retain(env, custom_view);
+    env.objc.borrow_mut::<UIBarButtonItemHostObject>(this).custom_view = custom_view;
+}
+
 - (id)label {
     env.objc.borrow::<UIBarButtonItemHostObject>(this).label
 }
@@ -370,8 +423,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
-    let label = env.objc.borrow::<UIBarButtonItemHostObject>(this).label;
-    if label != nil {
+    let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
+    
+    // Если есть custom_view, берём размеры от него
+    if host.custom_view != nil {
+        let custom_view = host.custom_view;
+        () = msg![env; custom_view sizeToFit];
+        let cv_frame: CGRect = msg![env; custom_view frame];
+        CGSize {
+            width: cv_frame.size.width + 16.0,
+            height: size.height,
+        }
+    } else if host.label != nil {
+        let label = host.label;
         () = msg![env; label sizeToFit];
         let label_frame: CGRect = msg![env; label frame];
         CGSize {
@@ -384,9 +448,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())layoutSubviews {
-    let label = env.objc.borrow::<UIBarButtonItemHostObject>(this).label;
-    if label != nil {
-        let bounds: CGRect = msg![env; this bounds];
+    let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
+    let bounds: CGRect = msg![env; this bounds];
+    
+    // Устанавливаем фрейм для custom_view, если он есть
+    if host.custom_view != nil {
+        let custom_view = host.custom_view;
+        () = msg![env; custom_view setFrame:bounds];
+    } else if host.label != nil {
+        let label = host.label;
         () = msg![env; label setFrame:bounds];
     }
 }
@@ -410,6 +480,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
+    // Деструктурируем объект, чтобы извлечь custom_view
     let UIBarButtonItemHostObject {
         superclass: _,
         title,
@@ -418,17 +489,22 @@ pub const CLASSES: ClassExports = objc_classes! {
         action: _,
         system_item: _,
         label,
+        custom_view,
         width: _,
     } = std::mem::take(env.objc.borrow_mut(this));
 
-    log_dbg!("dealloc [(UIBarButtonItem*){:?} title {:?}, target {:?}, label {:?}]", this, title, target, label);
+    log_dbg!("dealloc [(UIBarButtonItem*){:?} title {:?}, target {:?}, label {:?}, custom_view {:?}]", this, title, target, label, custom_view);
 
     release(env, title);
     release(env, target);
     release(env, label);
+    // Не забываем очистить кастомный виджет
+    release(env, custom_view);
+    
     msg_super![env; this dealloc]
 }
 
 @end
 
 };
+            
