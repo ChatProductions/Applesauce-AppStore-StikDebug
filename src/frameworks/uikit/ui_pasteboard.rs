@@ -20,6 +20,8 @@ struct UIPasteboardHostObject {
     string: id,
     /// Хранилище данных по типам (UTI -> NSData)
     data_by_type: HashMap<String, id>,
+    /// Флаг, сохраняется ли буфер обмена после завершения приложения
+    persistent: bool,
 }
 
 impl HostObject for UIPasteboardHostObject {}
@@ -43,6 +45,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         name: nil,
         string: nil,
         data_by_type: HashMap::new(),
+        persistent: false, // По умолчанию буфер не персистентный
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -51,7 +54,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     // В большинстве игр используется для быстрого копирования текста. 
     // Создаем базовый инстанс.
     let instance: id = msg_class![env; UIPasteboard alloc];
-    msg![env; instance init]
+    let instance: id = msg![env; instance init];
+    
+    // generalPasteboard по умолчанию persistent = YES в iOS
+    env.objc.borrow_mut::<UIPasteboardHostObject>(instance).persistent = true;
+    
+    instance
 }
 
 + (id)pasteboardWithName:(id)name create:(bool)_create {
@@ -95,6 +103,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
+// MARK: - Свойства (Properties)
+
 - (id)name { // NSString*
     env.objc.borrow::<UIPasteboardHostObject>(this).name
 }
@@ -113,6 +123,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Записываем новое значение
     env.objc.borrow_mut::<UIPasteboardHostObject>(this).string = string;
+}
+
+- (bool)isPersistent {
+    env.objc.borrow::<UIPasteboardHostObject>(this).persistent
+}
+
+- (())setPersistent:(bool)value {
+    env.objc.borrow_mut::<UIPasteboardHostObject>(this).persistent = value;
 }
 
 // MARK: - Работа с данными (NSData)
