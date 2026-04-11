@@ -16,7 +16,9 @@ use std::collections::{HashMap, VecDeque};
 use crate::environment::{MutexId, ThreadBlock, ThreadId};
 
 #[repr(C, packed)]
-pub struct pthread_condattr_t {}
+pub struct pthread_condattr_t {
+    _pad: [u8; 4],  // Apple's pthread_condattr_t = 4 bytes
+}
 unsafe impl SafeRead for pthread_condattr_t {}
 
 #[repr(C, packed)]
@@ -65,7 +67,10 @@ pub fn pthread_cond_init(
     cond: MutPtr<pthread_cond_t>,
     attr: ConstPtr<pthread_condattr_t>,
 ) -> i32 {
-    assert!(attr.is_null()); // Временно предполагаем дефолтные атрибуты
+    // Игнорируем атрибуты, используем дефолтные значения
+    // MCPE передаёт ненулевой attr, но нам он не нужен
+    let _ = attr;
+    
     let opaque = pthread_cond_t {
         magic: MAGIC_COND,
         _unused: [0; 6],
@@ -239,7 +244,7 @@ pub fn pthread_condattr_init(
     attr: MutPtr<pthread_condattr_t>,
 ) -> i32 {
     if !attr.is_null() {
-        env.mem.write(attr, pthread_condattr_t {});
+        env.mem.write(attr, pthread_condattr_t { _pad: [0; 4] });
     }
     0
 }
