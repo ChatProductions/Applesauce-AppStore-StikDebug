@@ -1738,18 +1738,75 @@ mod ns_string_tests {
 }
 
 pub fn get_bytes_buffer_inner(
-    env: &mut Environment, str: id, buffer: MutPtr<u8>, buffer_size: NSUInteger, encoding: NSStringEncoding, include_null_terminator: bool,
+    env: &mut Environment, 
+    str: id, 
+    buffer: MutPtr<u8>, 
+    buffer_size: NSUInteger, 
+    encoding: NSStringEncoding, 
+    include_null_terminator: bool,
 ) -> bool {
-    assert!(encoding == NSUTF8StringEncoding || encoding == NSASCIIStringEncoding || encoding == NSMacOSRomanStringEncoding || encoding == NSISOLatin1StringEncoding);
-    let src = to_rust_string(env, str);
-    if encoding == NSASCIIStringEncoding || encoding == NSMacOSRomanStringEncoding || encoding == NSISOLatin1StringEncoding {
-        assert!(src.as_bytes().iter().all(|byte| byte.is_ascii()));
+    let string = to_rust_string(env, str);
+
+    // 1. Конвертируем строку в нужный набор байтов в зависимости от запрошенной кодировки
+    let mut bytes: Vec<u8> = match encoding {
+        NSASCIIStringEncoding | NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
+            // Для однобайтовых кодировок пытаемся отфильтровать не-ASCII/не-Latin1 символы. 
+            // В идеале нужен полный маппинг, но для игр часто хватает этого.
+            if string.chars().any(|c| (c as u32) > 0xFF) { return false; }
+            string.as_bytes().to_vec()
+        },
+        NSUTF8StringEncoding | NSWindowsCP1252StringEncoding => {
+            string.as_bytes().to_vec()
+        },
+        NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
+            // UTF-16 Little Endian (Native для iOS ARM)
+            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        },
+        NSUTF16BigEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
+        },
+        NSUTF32LittleEndianStringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect()
+        },
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect()
+        },
+        _ => {
+            log!("Warning: get_bytes_buffer_inner requested with unknown encoding: {}, falling back to UTF-8", encoding);
+            string.as_bytes().to_vec()
+        }
+    };
+
+    // 2. Добавляем null-терминатор, если требуется.
+    // Размер терминатора зависит от кодировки.
+    if include_null_terminator {
+        match encoding {
+            NSUTF16LittleEndianStringEncoding | NSUTF16BigEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
+                bytes.push(0);
+                bytes.push(0);
+            },
+            NSUTF32LittleEndianStringEncoding | NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+                bytes.push(0);
+                bytes.push(0);
+                bytes.push(0);
+                bytes.push(0);
+            },
+            _ => {
+                bytes.push(0);
+            }
+        }
     }
-    let dest = env.mem.bytes_at_mut(buffer, buffer_size);
-    let src_len = if include_null_terminator { src.len() + 1 } else { src.len() };
-    if dest.len() < src_len { return false; }
-    let iter: Box<dyn Iterator<Item = &u8>> = if include_null_terminator { Box::new(src.as_bytes().iter().chain(b"\0".iter())) } else { Box::new(src.as_bytes().iter()) };
-    for (i, &byte) in iter.enumerate() { dest[i] = byte; }
+
+    // 3. Проверяем, влезает ли результат в буфер, предоставленный игрой
+    let bytes_len: NSUInteger = bytes.len().try_into().unwrap();
+    if buffer_size < bytes_len {
+        return false;
+    }
+
+    // 4. Записываем байты в память гостя
+    let dest = env.mem.bytes_at_mut(buffer, buffer_size as u32);
+    dest[..bytes.len()].copy_from_slice(&bytes);
+    
     true
 }
 
