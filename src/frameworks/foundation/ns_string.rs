@@ -2037,16 +2037,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-/// This helper is used in `initWithFormat:` on our private subclasses
-/// _touchHLE_NSString and _touchHLE_NSMutableString
+// This helper is used in `initWithFormat:` on our private subclasses
+// _touchHLE_NSString and _touchHLE_NSMutableString
 fn init_with_format_inner(env: &mut Environment, this: id, format: id, args: VaList) -> id {
     let res = with_format(env, format, args);
     *env.objc.borrow_mut::<StringHostObject>(this) = StringHostObject::Utf8(res.into());
     this
 }
 
-/// This helper is used in `dataUsingEncoding:allowLossyConversion:` on our
-/// private subclasses _touchHLE_NSString and _touchHLE_NSMutableString
+// This helper is used in `dataUsingEncoding:allowLossyConversion:` on our
+// private subclasses _touchHLE_NSString and _touchHLE_NSMutableString
 fn data_using_encoding_lossy_inner(
     env: &mut Environment,
     this: id,
@@ -2055,28 +2055,68 @@ fn data_using_encoding_lossy_inner(
 ) -> id {
     if lossy {
         log!(
-            "Warning: ignoring allowLossyConversion for '{}'",
+            "Warning: lossy conversion requested for '{}'",
             to_rust_string(env, this)
         );
     }
-    assert!(
-        encoding == NSUTF8StringEncoding
-            || encoding == NSASCIIStringEncoding
-            || encoding == NSISOLatin1StringEncoding
-    );
+    
     let string = to_rust_string(env, this);
-    if encoding == NSASCIIStringEncoding || encoding == NSISOLatin1StringEncoding {
-        assert!(string.as_bytes().iter().all(|byte| byte.is_ascii()));
-    }
-    let c_string = env.mem.alloc_and_write_cstr(string.as_bytes());
-    let length: NSUInteger = (string.len() + 1).try_into().unwrap();
 
-    msg_class![env; NSData dataWithBytesNoCopy:(c_string.cast_void()) length:length]
+    // Честно конвертируем строку в нужные байты в зависимости от запрашиваемой кодировки.
+    // Убираем жесткий assert! и поддерживаем нужные играм кодировки.
+    let bytes: Vec<u8> = match encoding {
+        NSUTF16LittleEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        },
+        NSUTF16BigEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
+        },
+        NSUTF16StringEncoding => {
+            // На iOS/ARM по умолчанию используется Little Endian
+            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        },
+        NSUTF32LittleEndianStringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect()
+        },
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+            string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect()
+        },
+        NSASCIIStringEncoding | NSISOLatin1StringEncoding | NSMacOSRomanStringEncoding => {
+            if lossy {
+                // Если разрешена конвертация с потерями, заменяем не-ASCII символы на '?'
+                string.chars().map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' }).collect()
+            } else {
+                // Если конвертация без потерь невозможна, по документации Apple возвращается nil
+                if string.chars().any(|c| (c as u32) > 0xFF) {
+                    return nil;
+                }
+                string.chars().map(|c| c as u8).collect()
+            }
+        },
+        NSUTF8StringEncoding | _ => {
+            // Для UTF-8 и любых неизвестных кодировок fallback на UTF-8
+            string.as_bytes().to_vec()
+        },
+    };
+
+    let length: NSUInteger = bytes.len().try_into().unwrap();
+
+    // Выделяем память в госте. Выделяем минимум 1 байт, чтобы избежать крашей с alloc(0)
+    let alloc_size = if length > 0 { length } else { 1 };
+    let buf_ptr: MutPtr<u8> = env.mem.alloc(alloc_size as u32).cast();
+    
+    if length > 0 {
+        env.mem.bytes_at_mut(buf_ptr, length as u32).copy_from_slice(&bytes);
+    }
+
+    // Передаем управление NSData. Важно: теперь длина точная и без нуль-терминатора,
+    // как и должна вести себя NSData (в отличие от старого alloc_and_write_cstr).
+    msg_class![env; NSData dataWithBytesNoCopy:(buf_ptr.cast_void()) length:length]
 }
 
-/// For use by [crate::dyld]: Handle static strings listed in the app binary.
-/// Sets up host objects and updates `isa` fields
-/// (`___CFConstantStringClassReference` is ignored by our dyld).
+// For use by [crate::dyld]: Handle static strings listed in the app binary.
+// Sets up host objects and updates `isa` fields
+// (`___CFConstantStringClassReference` is ignored by our dyld).
 pub fn register_constant_strings(bin: &MachO, mem: &mut Mem, objc: &mut ObjC) {
     let Some(cfstrings) = bin.get_section("__cfstring") else {
         return;
