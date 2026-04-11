@@ -139,7 +139,10 @@ pub const CLASSES: ClassExports = objc_classes! {
             .replacen("file://localhost", "", 1)
             .replacen("file://", "", 1)
             .replacen("file:", "", 1);
-        safe_path = autorelease(env, from_rust_string(env, stripped));
+            
+        // Выделяем создание строки в отдельный шаг, чтобы порадовать borrow checker
+        let new_ns_string = from_rust_string(env, stripped);
+        safe_path = autorelease(env, new_ns_string);
     }
 
     let expanded_path: id = msg![env; safe_path stringByExpandingTildeInPath];
@@ -149,7 +152,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         working_directory: env.fs.working_directory().into(),
     };
     this
-              }
+}
 
 - (id)initWithString:(id)url { // NSString*
     if url == nil {
@@ -163,7 +166,11 @@ pub const CLASSES: ClassExports = objc_classes! {
             .replacen("file://localhost", "", 1)
             .replacen("file://", "", 1)
             .replacen("file:", "", 1);
-        let safe_path = autorelease(env, from_rust_string(env, stripped));
+            
+        // То же самое: разбиваем на два шага
+        let new_ns_string = from_rust_string(env, stripped);
+        let safe_path = autorelease(env, new_ns_string);
+        
         return msg![env; this initFileURLWithPath:safe_path isDirectory:false];
     }
     
