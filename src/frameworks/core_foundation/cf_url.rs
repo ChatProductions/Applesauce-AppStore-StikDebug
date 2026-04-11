@@ -159,7 +159,8 @@ fn CFURLCreateFromFileSystemRepresentationRelativeToBase(
         msg![env; url initFileURLWithPath:string isDirectory:is_directory]
     } else {
         let file_url: id = msg_class![env; NSURL fileURLWithPath:string isDirectory:is_directory];
-        let absolute_string: id = msg![env; file_url absoluteString];
+        // Явное указание типа : id
+        let absolute_string: id = msg![env; file_url absoluteString]; 
         msg![env; url initWithString:absolute_string relativeToURL:base_url]
     };
     
@@ -354,6 +355,7 @@ fn CFURLCreateCopyAppendingPathComponent(
         return nil;
     }
 
+    // Явное указание типа : id
     let new_url: id = msg![env; url URLByAppendingPathComponent:path_component isDirectory:is_directory];
     if new_url.is_null() {
         return nil;
@@ -376,6 +378,7 @@ fn CFURLCreateCopyAppendingPathExtension(
         return nil;
     }
 
+    // Явное указание типа : id
     let new_url: id = msg![env; url URLByAppendingPathExtension:extension];
     if new_url.is_null() {
         return nil;
@@ -397,6 +400,7 @@ fn CFURLCreateCopyDeletingLastPathComponent(
         return nil;
     }
 
+    // Явное указание типа : id
     let new_url: id = msg![env; url URLByDeletingLastPathComponent];
     if new_url.is_null() {
         return nil;
@@ -418,6 +422,7 @@ fn CFURLCreateCopyDeletingPathExtension(
         return nil;
     }
 
+    // Явное указание типа : id
     let new_url: id = msg![env; url URLByDeletingPathExtension];
     if new_url.is_null() {
         return nil;
@@ -482,11 +487,13 @@ pub fn CFURLCopyPathExtension(env: &mut Environment, url: CFURLRef) -> CFStringR
         return nil;
     }
 
+    // Явное указание типа : id
     let path: id = msg![env; url path];
     if path.is_null() {
         return nil;
     }
 
+    // Явное указание типа : id
     let ext: id = msg![env; path pathExtension];
     if ext.is_null() {
         return nil;
@@ -542,7 +549,7 @@ fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
         let nsstring_class = env.objc.get_known_class("NSString", &mut env.mem);
         let sel = env.objc.lookup_selector("stringWithFormat:").expect("Unknown selector");
         
-        // Выносим вызов get_static_str в отдельную переменную
+        // Выносим получение формата в отдельную переменную, чтобы не заимствовать env дважды
         let format_str = get_static_str(env, "%@:%@");
         
         let net_location: id = crate::objc::msg_send(
@@ -791,6 +798,7 @@ fn CFURLGetBytes(
     // Calculate length
     let mut length: CFIndex = 0;
     loop {
+        // Приведение типа к u32
         if env.mem.read(c_string + (length as u32)) == 0 {
             break;
         }
@@ -800,8 +808,11 @@ fn CFURLGetBytes(
     if !buffer.is_null() && buffer_length > 0 {
         let copy_length = length.min(buffer_length - 1);
         for i in 0..copy_length {
-            env.mem.write(buffer + (i as u32), env.mem.read(c_string + (i as u32)));
+            // Разделение read/write во избежание двойного заимствования
+            let byte = env.mem.read(c_string + (i as u32));
+            env.mem.write(buffer + (i as u32), byte);
         }
+        // Приведение типа к u32
         env.mem.write(buffer + (copy_length as u32), 0);
         // Null terminate
     }
