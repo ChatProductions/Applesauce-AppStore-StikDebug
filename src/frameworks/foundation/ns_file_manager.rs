@@ -785,6 +785,60 @@ pub const CLASSES: ClassExports = objc_classes!
 
 @end
 
+@implementation NSDirectoryEnumerator: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    // Дефолтная пустышка, реальные данные уже заполняются в твоем enumeratorAtPath:
+    let host = Box::new(NSDirectoryEnumeratorHostObject {
+        iterator: Vec::new().into_iter(),
+        base_path: GuestPathBuf::from(GuestPath::new("")),
+    });
+    env.objc.alloc_object(this, host, &mut env.mem)
+}
+
+- (())dealloc {
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+// Главный метод: игра вызывает его в цикле, пока он не вернет nil
+- (id)nextObject {
+    let mut host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
+    
+    if let Some(path) = host.iterator.next() {
+        let path_str = path.as_str();
+        let base_str = host.base_path.as_str();
+        
+        // По документации Apple, NSDirectoryEnumerator возвращает пути относительно базовой директории.
+        // Поэтому мы честно отрезаем base_path от начала строки.
+        let rel_path = if path_str.starts_with(base_str) {
+            let mut stripped = &path_str[base_str.len()..];
+            if stripped.starts_with('/') {
+                stripped = &stripped[1..];
+            }
+            stripped
+        } else {
+            path_str
+        };
+        
+        let ns_str = ns_string::from_rust_string(env, rel_path.to_string());
+        autorelease(env, ns_str)
+    } else {
+        nil
+    }
+}
+
+- (id)fileAttributes {
+    // Иногда игры параллельно запрашивают атрибуты каждого файла (размер/тип).
+    // Возвращаем пустой словарь, чтобы не было крэша "unrecognized selector".
+    msg_class![env; NSDictionary dictionary]
+}
+
+- (())skipDescendants {
+    // no-op: метод существует на случай, если игра захочет пропустить подпапку
+}
+
+@end
+    
 };
 
 // Helper functions for path manipulation
