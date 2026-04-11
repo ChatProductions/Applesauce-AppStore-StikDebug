@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UIView`.
@@ -176,6 +177,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+/* * Оригинальный initWithCoder закомментирован, чтобы избежать ошибки
+ * дублирования метода в классе (Objective-C не поддерживает перегрузку методов).
+ * Оставлен только новый кастомный вариант.
+ */
+/*
 - (id)initWithCoder:(id)coder {
     let this = init_common(env, this);
     let key_ns_string = get_static_str(env, "UIBounds");
@@ -215,11 +221,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     this
 }
+*/
 
 - (id)initWithCoder:(id)decoder {
-- (id)initWithCoder:(id)decoder {
-    // Сначала инициализируем базовый объект
-    this = msg![env; this init];
+    // Сначала инициализируем базовый объект с помощью стандартной утилиты
+    let this = init_common(env, this);
     if this == nil { return nil; }
 
     // Выносим ключи в переменные, так как макрос msg! не принимает вызовы функций в аргументах
@@ -296,9 +302,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if !host.is_animating {
         host.is_animating = true;
-        
         // Примечание: В оригинальном коде iOS здесь создается NSTimer, который 
-        // дергает метод drawView. В touchHLE цикл рендеринга OpenGL часто 
+        // дергает метод drawView. В эмуляторе цикл рендеринга OpenGL часто 
         // работает на уровне самого эмулятора, поэтому честного переключения 
         // внутреннего state (is_animating) достаточно для корректной работы логики игры.
     }
@@ -353,14 +358,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         retain(env, view);
         () = msg![env; view removeFromSuperview];
-        
         // Разбиваем работу с памятью на блоки, чтобы избежать паники при вызове msg!
         let subview_layer = {
             let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
             subview_obj.superview = this;
             subview_obj.layer
         };
-        
         let this_layer = {
             let this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
             this_obj.subviews.push(view);
@@ -368,7 +371,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         };
         
         () = msg![env; this_layer addSublayer:subview_layer];
-        
         // Заставляем вьюшку пересчитать свои размеры и инициализироваться
         () = msg![env; view layoutSubviews];
         () = msg![env; this setNeedsLayout];
@@ -572,7 +574,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     () = msg![env; layer setBounds:bounds];
-    
     // Если размер изменился — обязательно триггерим layoutSubviews
     if old_bounds.size.width != bounds.size.width || old_bounds.size.height != bounds.size.height {
         () = msg![env; this layoutSubviews];
@@ -602,7 +603,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     () = msg![env; layer setFrame:frame];
     () = msg![env; this setNeedsLayout];
-    
     // Если размер изменился — обязательно триггерим layoutSubviews
     if old_frame.size.width != frame.size.width || old_frame.size.height != frame.size.height {
         () = msg![env; this layoutSubviews];
@@ -739,4 +739,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
