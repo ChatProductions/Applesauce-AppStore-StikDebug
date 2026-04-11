@@ -1,12 +1,15 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! UIKit NIB Archives decoder. This is _not_ a part of public API!
 //!
 //! Resources:
 //! - [UIKit NIB Archives](https://www.mothersruin.com/software/Archaeology/reverse/uinib.html)
+//!
 //! - [NibArchive File Format](https://github.com/matsmattsson/nibsqueeze/blob/master/NibArchive.md)
 
 use crate::environment::Environment;
@@ -54,7 +57,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let length: NSUInteger = msg![env; data length];
     let bytes: ConstVoidPtr = msg![env; data bytes];
-
     let archive: NIBArchive = NIBArchive::from_bytes(env.mem.bytes_at(bytes.cast(), length)).unwrap();
 
     // for (i, object) in archive.objects().iter().enumerate() {
@@ -72,22 +74,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_obj = env.objc.borrow_mut::<NIBArchiveDecoderHostObject>(this);
     assert!(host_obj.already_unarchived.is_empty());
     assert!(host_obj.current_object_idx.is_none());
-
     let objects_count = archive.objects().len();
 
     host_obj.already_unarchived = vec![None; objects_count];
     host_obj.archive = archive;
-
     // we start from the 'top'
     host_obj.current_object_idx = Some(0);
-
     this
 }
 
 - (())dealloc {
     let host_obj: &mut NIBArchiveDecoderHostObject = env.objc.borrow_mut(this);
     let already_unarchived = std::mem::take(&mut host_obj.already_unarchived);
-
     for &object in already_unarchived.iter().flatten() {
         release(env, object);
     }
@@ -105,7 +103,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NIBArchiveDecoderHostObject>(this).delegate
 }
 
-// These methods drive most of the decoding. They get called in two cases:
+// These methods drive most of the decoding.
+// They get called in two cases:
 // - By the code that initiates the unarchival, e.g. UINib, to retrieve
 //   top-level objects.
 // - By the object currently being unarchived, i.e. something that had
@@ -162,7 +161,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &ValueVariant::ObjectRef(idx) = val.value() else {
         unreachable!()
     };
-
     let object = unarchive_obj(env, this, idx);
 
     // on behalf of the caller
@@ -187,8 +185,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("decoded CGPoint {} {}", x, y);
     CGPoint { x, y }
 }
+
 - (CGRect)decodeCGRectForKey:(id)key { // NSString*
-    let val = get_value_to_decode_for_key(env, this, key).unwrap();
+    let Some(val) = get_value_to_decode_for_key(env, this, key) else {
+        return CGRect {
+            origin: CGPoint { x: 0.0, y: 0.0 },
+            size: CGSize { width: 0.0, height: 0.0 },
+        };
+    };
+    
     let ValueVariant::Data(data) = val.value() else {
         unreachable!()
     };
@@ -203,26 +208,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         size: CGSize { width, height },
     }
 }
-
-- (CGRect)decodeCGRectForKey:(id)key_str {
-    let key = to_rust_string(env, key_str);
-    let host_obj = borrow_host_obj(env, this);
-    let current_idx = host_obj.current_object_idx.expect("No current object");
-    let object = host_obj.archive.objects().get(current_idx as usize).unwrap();
-    
-    for value in object.values(host_obj.archive.values()) {
-        if value.key(host_obj.archive.keys()) == key {
-            if let ValueVariant::Rect(r) = value.value() {
-                return CGRect {
-                    origin: CGPoint { x: r.origin.x as CGFloat, y: r.origin.y as CGFloat },
-                    size: CGSize { width: r.size.width as CGFloat, height: r.size.height as CGFloat },
-                };
-            }
-        }
-    }
-    // Если ключ не найден, возвращаем нулевой CGRect
-    CGRect::zero()
-}
     
 @end
 
@@ -233,10 +218,10 @@ fn borrow_host_obj(env: &mut Environment, unarchiver: id) -> &mut NIBArchiveDeco
 }
 
 fn get_value_to_decode_for_key(env: &mut Environment, unarchiver: id, key: id) -> Option<&Value> {
-    let key = to_rust_string(env, key); // TODO: avoid copying string
+    let key = to_rust_string(env, key);
+    // TODO: avoid copying string
     let host_obj = borrow_host_obj(env, unarchiver);
     let current_idx = host_obj.current_object_idx.unwrap();
-
     let obj = host_obj
         .archive
         .objects()
@@ -256,13 +241,11 @@ fn unarchive_obj(env: &mut Environment, unarchiver: id, idx: u32) -> id {
 
     let object = host_obj.archive.objects().get(idx as usize).unwrap();
     let class_name = object.class_name(host_obj.archive.class_names()).name();
-
     log_dbg!(
         "Unarchiving object of a class '{}' at index {}",
         class_name,
         idx
     );
-
     let class = {
         // get_known_class needs &mut ObjC, so we can't call it
         // while holding a reference to the class name, since it
@@ -271,7 +254,8 @@ fn unarchive_obj(env: &mut Environment, unarchiver: id, idx: u32) -> id {
         env.objc.get_known_class(&class_name, &mut env.mem)
     };
 
-    let host_obj = borrow_host_obj(env, unarchiver); // reborrow
+    let host_obj = borrow_host_obj(env, unarchiver);
+    // reborrow
     let old_current_idx = host_obj.current_object_idx;
     host_obj.current_object_idx = Some(idx);
 
@@ -280,7 +264,6 @@ fn unarchive_obj(env: &mut Environment, unarchiver: id, idx: u32) -> id {
 
     let host_obj = borrow_host_obj(env, unarchiver); // reborrow
     host_obj.current_object_idx = old_current_idx;
-
     let host_obj = borrow_host_obj(env, unarchiver); // reborrow
     host_obj.already_unarchived[idx as usize] = Some(new_object);
     new_object
@@ -310,7 +293,6 @@ pub fn decode_current_array(env: &mut Environment, unarchiver: id) -> Vec<id> {
             continue;
         }
         assert_eq!("UINibEncoderEmptyKey", key);
-
         let &ValueVariant::ObjectRef(next_idx) = inner_value else {
             unreachable!()
         };
@@ -319,15 +301,16 @@ pub fn decode_current_array(env: &mut Environment, unarchiver: id) -> Vec<id> {
 
     let mut array: Vec<id> = vec![];
     for next_idx in indicies {
-        let host_obj = borrow_host_obj(env, unarchiver); // reborrow
+        let host_obj = borrow_host_obj(env, unarchiver);
+        // reborrow
         let old_current_idx = host_obj.current_object_idx;
         host_obj.current_object_idx = Some(next_idx);
-
         let next_obj = unarchive_obj(env, unarchiver, next_idx);
         retain(env, next_obj);
         array.push(next_obj);
 
-        let host_obj = borrow_host_obj(env, unarchiver); // reborrow
+        let host_obj = borrow_host_obj(env, unarchiver);
+        // reborrow
         host_obj.current_object_idx = old_current_idx;
     }
     array
@@ -362,12 +345,10 @@ pub fn decode_current_string(env: &mut Environment, unarchiver: id) -> id {
     let value = &values[0];
     let key = value.key(host_obj.archive.keys());
     assert_eq!("NS.bytes", key);
-
     let inner_value = value.value();
     let ValueVariant::Data(inner_data) = inner_value else {
         unreachable!()
     };
-
     let str = String::from_utf8(inner_data.clone()).unwrap();
     log_dbg!("decode_current_string {str}");
     from_rust_string(env, str)
@@ -387,15 +368,16 @@ pub fn decode_current_number(env: &mut Environment, unarchiver: id) -> id {
 
     let value = &values[0];
     let key = value.key(host_obj.archive.keys());
-
     match key.as_str() {
         "NS.intval" => {
             let ns_key: id = get_static_str(env, "NS.intval");
             let int: NSInteger = msg![env; unarchiver decodeIntegerForKey:ns_key];
             release(env, ns_key);
             let num = msg_class![env; NSNumber alloc];
-            msg![env; num initWithInteger:int]
+            msg![env;
+            num initWithInteger:int]
         }
         _ => unimplemented!("decode_current_number: {key}"),
     }
 }
+
