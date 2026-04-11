@@ -12,6 +12,9 @@
 use crate::{msg, Environment};
 use std::time::Instant;
 
+use crate::dyld::HostConstant;
+use crate::mem::{MutPtr, ConstVoidPtr};
+
 pub mod ui_accelerometer;
 pub mod ui_action_sheet;
 pub mod ui_activity_indicator_view;
@@ -38,6 +41,18 @@ pub mod ui_tab_bar_controller;
 pub mod ui_touch;
 pub mod ui_view;
 pub mod ui_view_controller;
+
+fn ui_background_task_invalid(env: &mut Environment) -> ConstVoidPtr {
+    // UIBackgroundTaskInvalid == NSUIntegerMax == 0xFFFF_FFFF
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 0xFFFF_FFFFu32);
+    ptr.cast().cast_const()
+}
+
+pub const CONSTANTS: &[(&str, HostConstant)] = &[
+    ("_UIBackgroundTaskInvalid", HostConstant::Custom(ui_background_task_invalid)),
+    ("_UIScreenDidConnectNotification", HostConstant::NSString("UIScreenDidConnectNotification")),
+];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/UIKit.framework/UIKit",
@@ -93,6 +108,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_keyboard::CONSTANTS,
         ui_view::ui_control::ui_text_field::CONSTANTS,
         ui_view::ui_window::CONSTANTS,
+        CONSTANTS,
     ],
     function_exports: &[
         ui_application::FUNCTIONS,
@@ -175,6 +191,7 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 let responder = env.framework_state.uikit.ui_responder.first_responder;
                 let class = msg![env; responder class];
                 let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
+
                 if !responder.is_null() && env.objc.class_is_subclass_of(class, ui_text_field_class)
                 {
                     match text_event {
