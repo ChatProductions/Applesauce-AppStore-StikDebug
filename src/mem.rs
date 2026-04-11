@@ -67,14 +67,12 @@ impl<T, const MUT: bool> std::hash::Hash for Ptr<T, MUT> {
 
 /// Constant guest pointer type (like Rust's `*const T`).
 pub type ConstPtr<T> = Ptr<T, false>;
-
 /// Mutable guest pointer type (like Rust's `*mut T`).
 pub type MutPtr<T> = Ptr<T, true>;
 
 #[allow(dead_code)]
 /// Constant guest pointer-to-void type (like C's `const void *`)
 pub type ConstVoidPtr = ConstPtr<std::ffi::c_void>;
-
 /// Mutable guest pointer-to-void type (like C's `void *`)
 pub type MutVoidPtr = MutPtr<std::ffi::c_void>;
 
@@ -134,7 +132,6 @@ impl<T, const MUT: bool> std::fmt::Debug for Ptr<T, MUT> {
 // C-like pointer arithmetic
 impl<T, const MUT: bool> std::ops::Add<GuestUSize> for Ptr<T, MUT> {
     type Output = Self;
-
     fn add(self, other: GuestUSize) -> Self {
         let size: GuestUSize = guest_size_of::<T>();
         assert_ne!(size, 0);
@@ -152,7 +149,6 @@ impl<T, const MUT: bool> std::ops::AddAssign<GuestUSize> for Ptr<T, MUT> {
 }
 impl<T, const MUT: bool> std::ops::Sub<GuestUSize> for Ptr<T, MUT> {
     type Output = Self;
-
     fn sub(self, other: GuestUSize) -> Self {
         let size: GuestUSize = guest_size_of::<T>();
         assert_ne!(size, 0);
@@ -286,7 +282,6 @@ impl Mem {
             0,
             "Failed to align host memory with guest memory"
         );
-
         let bytes = ptr as *mut Bytes;
 
         let allocator = allocator::Allocator::new();
@@ -336,26 +331,15 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // ХАК: Убираем панику при доступе к null-page. Вместо этого логируем и разрешаем доступ.
-    // Это нужно для запуска игр, которые пытаются читать/писать по адресу 0x0.
+    // ХАК ОТКЛЮЧЕН: Теперь мы вызываем панику при доступе к null-page,
+    // чтобы получить правильный трейс стека для отладки.
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
-        
-        // Выводим подробную информацию о проблеме через eprintln! (всегда работает)
-        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
-        eprintln!("Operation: {}", op_type);
-        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
-        eprintln!("Size:      0x{:x} bytes", size);
-        eprintln!("Caller:    {}", caller);
-        eprintln!("===========================================");
-        eprintln!("WARNING: Access ALLOWED (returning zero page).");
-        eprintln!("Game may crash later or behave unexpectedly.");
-        eprintln!("===========================================\n");
-        
-        // Также используем touchHLE логгер если доступен
-        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
-             op_type, at, size, caller);
+        panic!(
+            "CRITICAL: NULL-PAGE {} intercepted at address 0x{:08x} (size: 0x{:x}) from caller: {}. Failing immediately to get the real stack trace!",
+            op_type, at, size, caller
+        );
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
@@ -391,12 +375,10 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at] for that).
     pub fn bytes_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>, count: GuestUSize) -> &[u8] {
-        // ХАК: Вместо паники логируем и разрешаем доступ к null-page
         // Проверяем <= чтобы гарантированно ловить 0x0 даже при null_segment_size = 0
         if ptr.to_bits() <= self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, false, "bytes_at");
         }
-        // Возвращаем доступ к памяти (даже если это null-page)
         &self.bytes()[ptr.to_bits() as usize..][..count as usize]
     }
     /// Get a slice for reading `count` bytes without a null-page check.
@@ -419,11 +401,9 @@ impl Mem {
     /// when deriving a pointer from the slice consistent (though you should use
     /// [Self::ptr_at_mut] for that).
     pub fn bytes_at_mut(&mut self, ptr: MutPtr<u8>, count: GuestUSize) -> &mut [u8] {
-        // ХАК: Вместо паники логируем и разрешаем доступ к null-page
         if ptr.to_bits() <= self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
         }
-        // Возвращаем доступ к памяти (даже если это null-page)
         &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
     }
 
