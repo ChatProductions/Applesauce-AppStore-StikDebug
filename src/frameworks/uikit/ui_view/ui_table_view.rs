@@ -126,4 +126,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+@implementation UITableViewController: UIViewController
+
+- (id)initWithStyle:(i32)_style {
+    // Пробрасываем базовую инициализацию в UIViewController
+    msg_super![env; this init]
+}
+
+- (id)tableView { nil }
+- (())setTableView:(id)_view {}
+
+- (bool)clearsSelectionOnViewWillAppear { true }
+- (())setClearsSelectionOnViewWillAppear:(bool)_clears {}
+
+@end
+    
 };
