@@ -342,25 +342,29 @@ impl Mem {
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool) {
         let op_type = if is_write { "WRITE" } else { "READ" };
         
-        // Выводим подробную информацию о проблеме
-        log::warn!("╔══════════════════════════════════════════════════════════════════╗");
-        log::warn!("║  touchHLE NULL-PAGE ACCESS DETECTED (HACK ACTIVE)               ║");
-        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
-        log::warn!("║  Operation: {}                                                    ", op_type);
-        log::warn!("║  Address:  {:#010x} (NULL + {:#x} bytes)                          ", at, at);
-        log::warn!("║  Size:     {:#x} bytes                                           ", size);
-        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
+        // Используем eprintln! для вывода в консоль (всегда видно, не зависит от настроек логирования)
+        eprintln!("╔══════════════════════════════════════════════════════════════════╗");
+        eprintln!("║  touchHLE NULL-PAGE ACCESS DETECTED (HACK ACTIVE)               ║");
+        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
+        eprintln!("║  Operation: {:<51} ║", op_type);
+        eprintln!("║  Address:   0x{:08x} (NULL + 0x{:x} bytes)                     ║", at, at);
+        eprintln!("║  Size:      0x{:x} bytes                                         ║", size);
+        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
         
-        // Пытаемся получить backtrace хоста (Rust)
-        log::warn!("║  Host Backtrace (Rust):                                          ");
+        // Выводим backtrace хоста (Rust)
+        eprintln!("║  Host Backtrace (Rust):                                          ║");
         let backtrace = std::backtrace::Backtrace::capture();
-        for line in format!("{:?}", backtrace).lines().take(20) {
-            log::warn!("║    {}", line);
+        for (i, line) in format!("{:?}", backtrace).lines().enumerate().take(15) {
+            if i == 0 { continue; } // Пропускаем первую строку "Backtrace captured"
+            eprintln!("║  {:<64} ║", &line[..line.len().min(64)]);
         }
         
-        log::warn!("╠══════════════════════════════════════════════════════════════════╣");
-        log::warn!("║  NOTE: Access ALLOWED (returning zero page). Game may crash later ║");
-        log::warn!("╚══════════════════════════════════════════════════════════════════╝");
+        eprintln!("╠══════════════════════════════════════════════════════════════════╣");
+        eprintln!("║  NOTE: Access ALLOWED (returning zero page). Game may crash later ║");
+        eprintln!("╚══════════════════════════════════════════════════════════════════╝");
+        
+        // Также логируем через touchHLE логгер, если доступен
+        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) - HACK ACTIVE", op_type, at, size);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
