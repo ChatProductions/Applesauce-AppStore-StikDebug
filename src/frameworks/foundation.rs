@@ -45,6 +45,7 @@ pub mod ns_keyed_unarchiver;
 pub mod ns_locale;
 pub mod ns_lock;
 pub mod ns_log;
+pub mod ns_metadata_query;
 pub mod ns_notification;
 pub mod ns_notification_center;
 pub mod ns_null;
@@ -287,6 +288,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_keyed_unarchiver::CLASSES,
         ns_locale::CLASSES,
         ns_lock::CLASSES,
+        ns_metadata_query::CLASSES,
         ns_notification::CLASSES,
         ns_notification_center::CLASSES,
         ns_null::CLASSES,
