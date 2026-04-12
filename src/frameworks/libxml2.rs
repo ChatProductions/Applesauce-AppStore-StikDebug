@@ -140,7 +140,8 @@ fn dup_cstr(env: &mut Environment, src_ptr: u32) -> u32 {
 //   <MenuElements>          (depth=0, OPEN, pos=0)
 //     <Image>               (depth=1, OPEN, pos=1)
 //     </Image>              (depth=1, CLOSE, pos=2)
-//     <Button>              (depth=1, OPEN, pos=3)
+//     <Button>              
+//     (depth=1, OPEN, pos=3)
 //     </Button>             (depth=1, CLOSE, pos=4)
 //     <Text>                (depth=1, OPEN, pos=5)
 //     </Text>               (depth=1, CLOSE, pos=6)
@@ -252,11 +253,11 @@ fn get_reader(env: &Environment, reader_ptr: u32) -> FakeXmlReader {
 
 fn set_reader(env: &mut Environment, reader_ptr: u32, reader: &FakeXmlReader) {
     env.mem.write(
-        crate::mem::Ptr::<u32, false>::from_bits(reader_ptr),
+        crate::mem::Ptr::<u32, true>::from_bits(reader_ptr),
         reader.position,
     );
     env.mem.write(
-        crate::mem::Ptr::<u32, false>::from_bits(reader_ptr + 4),
+        crate::mem::Ptr::<u32, true>::from_bits(reader_ptr + 4),
         reader.max_position,
     );
 }
@@ -607,4 +608,4 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     }
     env.mem.write(dst + len, 0u8);
     dst.to_bits()
-    }
+}
