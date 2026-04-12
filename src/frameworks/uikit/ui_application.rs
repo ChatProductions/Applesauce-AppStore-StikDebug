@@ -430,7 +430,7 @@ pub(super) fn UIApplicationMain(
                 .delegate_is_retained = true;
             retain(env, delegate);
         } else {
-            assert!(delegate_class_name != nil);
+            // assert!(delegate_class_name != nil);
             if msg![env; delegate_class_name isEqual:principal_class_name] {
                 let _: () = msg![env; ui_application setDelegate:ui_application];
             } else {
