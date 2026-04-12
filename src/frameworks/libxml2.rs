@@ -10,7 +10,6 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 };
 
 const FUNCTIONS: FunctionExports = &[
-    // --- существующие ---
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
@@ -27,7 +26,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlHasProp(_, _)),
     export_c_func!(xmlStrcmp(_, _)),
     export_c_func!(xmlNodeGetContent(_)),
-    // --- TextReader API ---
+    // TextReader API
     export_c_func!(xmlReaderForFile(_, _, _)),
     export_c_func!(xmlFreeTextReader(_)),
     export_c_func!(xmlTextReaderRead(_)),
@@ -47,18 +46,21 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlTextReaderLocalName(_)),
     export_c_func!(xmlTextReaderPrefix(_)),
     export_c_func!(xmlTextReaderNamespaceUri(_)),
+    // Строковые утилиты
     export_c_func!(xmlStrdup(_)),
     export_c_func!(xmlStrlen(_)),
     export_c_func!(xmlStrsub(_, _, _)),
 ];
+
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, Ptr};
 
 // ============================================================
 // Хелперы
 // ============================================================
 
 fn alloc_xml_mem(env: &mut Environment) -> u32 {
-    let size = 512u32;
-    let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
+    let size: GuestUSize = 512;
+    let ptr: MutPtr<u8> = env.mem.alloc(size).cast();
     let slice = env.mem.bytes_at_mut(ptr, size);
     for byte in slice.iter_mut() {
         *byte = 0;
@@ -67,9 +69,17 @@ fn alloc_xml_mem(env: &mut Environment) -> u32 {
 }
 
 fn alloc_empty_string(env: &mut Environment) -> u32 {
-    let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(1).cast();
+    let ptr: MutPtr<u8> = env.mem.alloc(1).cast();
     env.mem.write(ptr, 0u8);
     ptr.to_bits()
+}
+
+fn str_ptr_to_utf8<'a>(env: &'a Environment, ptr: u32) -> &'a str {
+    if ptr == 0 {
+        return "";
+    }
+    let cptr: ConstPtr<u8> = Ptr::from_bits(ptr);
+    env.mem.cstr_at_utf8(cptr).unwrap_or("")
 }
 
 // ============================================================
@@ -175,13 +185,7 @@ fn xmlNodeGetContent(_env: &mut Environment, _node: u32) -> u32 {
 ///                                    int options);
 #[allow(non_snake_case)]
 fn xmlReaderForFile(env: &mut Environment, filename: u32, _encoding: u32, _options: u32) -> u32 {
-    let filename_str = if filename != 0 {
-        env.mem
-            .cstr_at_utf8(crate::mem::Ptr::from_bits(filename))
-            .unwrap_or("<invalid>")
-    } else {
-        "<null>"
-    };
+    let filename_str = str_ptr_to_utf8(env, filename);
     log!(
         "xmlReaderForFile(\"{}\") — returning stub reader",
         filename_str
@@ -306,14 +310,13 @@ fn xmlStrdup(env: &mut Environment, src_ptr: u32) -> u32 {
     if src_ptr == 0 {
         return 0;
     }
-    let src = crate::mem::Ptr::from_bits(src_ptr);
-    let cstr = env.mem.cstr_at_utf8(src).unwrap_or("");
-    let len = cstr.len() + 1;
-    let dst: crate::mem::MutPtr<u8> = env.mem.alloc(len).cast();
+    let cstr = str_ptr_to_utf8(env, src_ptr);
+    let len: GuestUSize = (cstr.len() as GuestUSize) + 1;
+    let dst: MutPtr<u8> = env.mem.alloc(len).cast();
     for (i, &b) in cstr.as_bytes().iter().enumerate() {
-        env.mem.write(dst + (i as u32), b);
+        env.mem.write(dst + (i as GuestUSize), b);
     }
-    env.mem.write(dst + (cstr.len() as u32), 0u8);
+    env.mem.write(dst + (cstr.len() as GuestUSize), 0u8);
     dst.to_bits()
 }
 
@@ -324,7 +327,7 @@ fn xmlStrlen(env: &mut Environment, str_ptr: u32) -> i32 {
         return 0;
     }
     let mut len: i32 = 0;
-    let mut ptr = crate::mem::Ptr::<u8>::from_bits(str_ptr);
+    let mut ptr: ConstPtr<u8> = Ptr::from_bits(str_ptr);
     loop {
         let byte: u8 = env.mem.read(ptr);
         if byte == 0 {
@@ -342,12 +345,12 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     if str_ptr == 0 {
         return 0;
     }
-    let src = crate::mem::Ptr::from_bits(str_ptr + start);
-    let dst: crate::mem::MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    let src: ConstPtr<u8> = Ptr::from_bits(str_ptr + start);
+    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
     for i in 0..len {
         let byte: u8 = env.mem.read(src + i);
         env.mem.write(dst + i, byte);
     }
     env.mem.write(dst + len, 0u8);
     dst.to_bits()
-                     }
+    }
