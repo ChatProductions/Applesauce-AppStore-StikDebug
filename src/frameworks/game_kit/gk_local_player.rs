@@ -5,10 +5,8 @@
  */
 //! `GKLocalPlayer`.
 
-use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::ns_string;
-use crate::mem::Ptr;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
 };
@@ -149,43 +147,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<GKLocalPlayerHostObject>(this).underage
 }
 
-// Call the completion block synchronously so the game can handle the
-// "not authenticated" state immediately rather than hanging forever.
-// Block layout (ARM): +0x00 isa, +0x04 flags, +0x08 reserved,
-// +0x0C invoke — void (*invoke)(void *block, NSError *error).
-- (())authenticateWithCompletionHandler:(id)completion_handler {
-    log!("GKLocalPlayer authenticateWithCompletionHandler: stubbed (not authenticated)");
-    if completion_handler == nil {
-        return;
-    }
-    // Read the invoke function pointer from the block descriptor.
-    let invoke_field: crate::mem::ConstPtr<u32> =
-        Ptr::from_bits(completion_handler.to_bits() + 0x0C);
-    let invoke_bits = env.mem.read(invoke_field);
-    if invoke_bits == 0 {
-        return;
-    }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_bits);
-    // Call block(block_ptr, nil_error).
-    () = invoke.call_from_host(env, (completion_handler, nil));
+// The app targets iOS 3.0 — it does not pass real ObjC blocks here.
+// Reading the invoke pointer at +0x0C dereferences garbage and jumps
+// to an invalid address. Simply stub these out.
+- (())authenticateWithCompletionHandler:(id)_completion_handler {
+    log!("GKLocalPlayer authenticateWithCompletionHandler: stubbed");
 }
 
-// iOS 6+ variant — block signature: void(^)(UIViewController*, NSError*).
-// +0x0C invoke: void (*invoke)(void *block, UIViewController*, NSError*).
-- (())setAuthenticateHandler:(id)handler {
-    log!("GKLocalPlayer setAuthenticateHandler: stubbed (not authenticated)");
-    if handler == nil {
-        return;
-    }
-    let invoke_field: crate::mem::ConstPtr<u32> =
-        Ptr::from_bits(handler.to_bits() + 0x0C);
-    let invoke_bits = env.mem.read(invoke_field);
-    if invoke_bits == 0 {
-        return;
-    }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_bits);
-    // Call block(block_ptr, nil_view_controller, nil_error).
-    () = invoke.call_from_host(env, (handler, nil, nil));
+- (())setAuthenticateHandler:(id)_handler {
+    log!("GKLocalPlayer setAuthenticateHandler: stubbed");
 }
 
 // MARK: - Friends
