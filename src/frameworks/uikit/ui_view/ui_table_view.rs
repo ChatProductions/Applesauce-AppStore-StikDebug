@@ -160,6 +160,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this initWithFrame:frame]
 }
 
+- (id)visibleCells {
+    // In a full implementation, this would calculate which cells intersect the current bounds.
+    // Since we aren't rendering the table view or tracking cell positions, returning an empty NSArray
+    // is the most accurate reflection of our current state (no cells are visible).
+    let empty_array: id = msg_class![env; NSArray array];
+    empty_array
+}
+    
 - (id)delegate { nil }
 - (())setDelegate:(id)_delegate {}
 - (id)dataSource { nil }
