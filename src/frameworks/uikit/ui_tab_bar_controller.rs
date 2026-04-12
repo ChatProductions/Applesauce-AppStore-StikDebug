@@ -33,6 +33,7 @@ struct UITabBarControllerHostObject {
     delegate: id,
     /// The managed `UITabBar*`
     tab_bar: id,
+    more_navigation_controller: id,
 }
 impl HostObject for UITabBarControllerHostObject {}
 
@@ -231,6 +232,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         selected_index: 0,
         delegate: nil,
         tab_bar: nil,
+        more_navigation_controller: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -247,6 +249,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// MARK: - More Navigation Controller
+
+- (id)moreNavigationController {
+    // Проверяем, был ли уже создан UINavigationController
+    let current_nav = env.objc.borrow::<UITabBarControllerHostObject>(this).more_navigation_controller;
+    
+    if current_nav != nil {
+        return current_nav;
+    }
+
+    // Честное создание реального UINavigationController, если его еще нет
+    let nav_controller: id = msg_class![env; UINavigationController alloc];
+    let nav_controller: id = msg![env; nav_controller init];
+    
+    // Сохраняем в HostObject для последующих вызовов
+    env.objc.borrow_mut::<UITabBarControllerHostObject>(this).more_navigation_controller = nav_controller;
+    
+    nav_controller
+}
+    
 - (())dealloc {
     let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
     let (view_controllers, delegate, tab_bar) =
@@ -254,6 +276,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, view_controllers);
     release(env, delegate);
     release(env, tab_bar);
+    release(env, more_nav);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
