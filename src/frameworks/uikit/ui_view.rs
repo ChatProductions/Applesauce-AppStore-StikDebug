@@ -177,13 +177,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-/* * Оригинальный initWithCoder закомментирован, чтобы избежать ошибки
- * дублирования метода в классе (Objective-C не поддерживает перегрузку методов).
- * Оставлен только новый кастомный вариант.
- */
-/*
 - (id)initWithCoder:(id)coder {
     let this = init_common(env, this);
+    
     let key_ns_string = get_static_str(env, "UIBounds");
     let bounds: CGRect = msg![env; coder decodeCGRectForKey:key_ns_string];
 
@@ -192,6 +188,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_ns_string = get_static_str(env, "UIHidden");
     let hidden: bool = msg![env; coder decodeBoolForKey:key_ns_string];
+    
     let key_ns_string = get_static_str(env, "UIOpaque");
     let opaque: bool = msg![env; coder decodeBoolForKey:key_ns_string];
 
@@ -200,6 +197,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_ns_string = get_static_str(env, "UITag");
     let tag: NSInteger = msg![env; coder decodeIntegerForKey:key_ns_string];
+    
     let key_ns_string = get_static_str(env, "UIMultipleTouchEnabled");
     let multi_touch_enabled: bool = msg![env; coder decodeBoolForKey:key_ns_string];
 
@@ -207,51 +205,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     let subviews: id = msg![env; coder decodeObjectForKey:key_ns_string];
     let subview_count: NSUInteger = msg![env; subviews count];
 
-    () = msg![env; this setBounds:bounds];
-    () = msg![env; this setCenter:center];
+    // ФИКС ДЛЯ MINECRAFT: Если фрейм нулевой, берем экран
+    if bounds.size.width == 0.0 || bounds.size.height == 0.0 {
+        let screen: id = msg_class![env; UIScreen mainScreen];
+        let screen_bounds: CGRect = msg![env; screen bounds];
+        () = msg![env; this setBounds:screen_bounds];
+        
+        let new_center = CGPoint { 
+            x: screen_bounds.size.width / 2.0, 
+            y: screen_bounds.size.height / 2.0 
+        };
+        () = msg![env; this setCenter:new_center];
+    } else {
+        () = msg![env; this setBounds:bounds];
+        () = msg![env; this setCenter:center];
+    }
+
     () = msg![env; this setHidden:hidden];
     () = msg![env; this setOpaque:opaque];
     () = msg![env; this setBackgroundColor:bg_color];
     () = msg![env; this setTag:tag];
     () = msg![env; this setMultipleTouchEnabled:multi_touch_enabled];
+    
     for i in 0..subview_count {
         let subview: id = msg![env; subviews objectAtIndex:i];
         () = msg![env; this addSubview:subview];
     }
-
-    this
-}
-*/
-
-- (id)initWithCoder:(id)decoder {
-    // Сначала инициализируем базовый объект с помощью стандартной утилиты
-    let this = init_common(env, this);
-    if this == nil { return nil; }
-
-    // Выносим ключи в переменные, так как макрос msg! не принимает вызовы функций в аргументах
-    let ui_frame_key = get_static_str(env, "UIFrame");
-    let ui_hidden_key = get_static_str(env, "UIHidden");
-    let ui_opaque_key = get_static_str(env, "UIOpaque");
-
-    // 1. Декодируем размеры окна
-    let frame: CGRect = msg![env; decoder decodeCGRectForKey:ui_frame_key];
-    
-    // 2. ФИКС ДЛЯ MINECRAFT: если фрейм 0x0, берем размер экрана
-    if frame.size.width == 0.0 || frame.size.height == 0.0 {
-        let screen: id = msg_class![env; UIScreen mainScreen];
-        let bounds: CGRect = msg![env; screen bounds];
-        () = msg![env; this setFrame:bounds];
-    } else {
-        () = msg![env; this setFrame:frame];
-    }
-
-    // 3. Декодируем видимость
-    let hidden: bool = msg![env; decoder decodeBoolForKey:ui_hidden_key];
-    () = msg![env; this setHidden:hidden];
-
-    // 4. Декодируем прозрачность
-    let opaque: bool = msg![env; decoder decodeBoolForKey:ui_opaque_key];
-    () = msg![env; this setOpaque:opaque];
 
     this
 }
@@ -539,16 +518,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setOpacity:alpha]
 }
 
-// MARK: - Scale / Retina Support
-
 - (CGFloat)contentScaleFactor {
-    // Жестко задаем масштаб 1.0 (стандартный не-Retina экран)
     1.0
 }
 
 - (())setContentScaleFactor:(CGFloat)scale {
-    // Заглушка, чтобы игра не упала, если попытается сама установить масштаб
-    log_dbg!("UIView setContentScaleFactor: {} (stubbed)", scale);
+    // Заглушка, чтобы не крашилось
 }
     
 - (id)backgroundColor {
