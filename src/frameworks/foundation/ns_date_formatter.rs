@@ -46,34 +46,37 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("date_format before: {:?}", format_str);
 
     let ti: NSTimeInterval = msg![env; date timeIntervalSinceReferenceDate];
-    // Получаем время в UTC (т.к. передаем nil вместо таймзоны)
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, ti, nil);
+    
+    // Копируем поля упакованной структуры в локальные переменные,
+    // чтобы избежать ошибки E0793 (unaligned reference) в макросе format!
+    let year = greg_date.year;
+    let month = greg_date.month;
+    let day = greg_date.day;
+    let hours = greg_date.hours;
+    let minutes = greg_date.minutes;
+    let seconds = greg_date.seconds;
     
     let mut result = String::new();
     let mut chars = format_str.chars().peekable();
     let mut in_quotes = false;
 
     while let Some(c) = chars.next() {
-        // Обработка экранирования через одинарные кавычки
         if c == '\'' {
             if chars.peek() == Some(&'\'') {
-                // Два апострофа подряд означают один реальный апостроф в строке
                 result.push('\'');
                 chars.next();
             } else {
-                // Переключаем режим "внутри кавычек"
                 in_quotes = !in_quotes;
             }
             continue;
         }
 
-        // Если мы внутри кавычек (например 'T'), просто добавляем символ как есть
         if in_quotes {
             result.push(c);
             continue;
         }
 
-        // Если символ - буква, собираем токен (например: yyyy, MM, ZZZZ)
         if c.is_ascii_alphabetic() {
             let mut token = String::from(c);
             while let Some(&next_c) = chars.peek() {
@@ -84,31 +87,27 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
 
-            // Подставляем значения согласно стандарту Unicode TR35
             match token.as_str() {
-                "yyyy" | "YYYY" => result.push_str(&format!("{:04}", greg_date.year)),
-                "MM" => result.push_str(&format!("{:02}", greg_date.month)),
-                "M" => result.push_str(&format!("{}", greg_date.month)),
-                "dd" => result.push_str(&format!("{:02}", greg_date.day)),
-                "d" => result.push_str(&format!("{}", greg_date.day)),
-                "HH" => result.push_str(&format!("{:02}", greg_date.hours)),
-                "H" => result.push_str(&format!("{}", greg_date.hours)),
-                "mm" => result.push_str(&format!("{:02}", greg_date.minutes)),
-                "m" => result.push_str(&format!("{}", greg_date.minutes)),
-                "ss" => result.push_str(&format!("{:02}", greg_date.seconds)),
-                "s" => result.push_str(&format!("{}", greg_date.seconds)),
+                "yyyy" | "YYYY" => result.push_str(&format!("{:04}", year)),
+                "MM" => result.push_str(&format!("{:02}", month)),
+                "M" => result.push_str(&format!("{}", month)),
+                "dd" => result.push_str(&format!("{:02}", day)),
+                "d" => result.push_str(&format!("{}", day)),
+                "HH" => result.push_str(&format!("{:02}", hours)),
+                "H" => result.push_str(&format!("{}", hours)),
+                "mm" => result.push_str(&format!("{:02}", minutes)),
+                "m" => result.push_str(&format!("{}", minutes)),
+                "ss" => result.push_str(&format!("{:02}", seconds)),
+                "s" => result.push_str(&format!("{}", seconds)),
                 
-                // Правильная реализация таймзон (UTC/GMT)
                 "Z" | "ZZ" | "ZZZ" => result.push_str("+0000"),
                 "ZZZZ" => result.push_str("GMT+00:00"),
                 "ZZZZZ" => result.push_str("+00:00"),
                 "z" | "zz" | "zzz" | "zzzz" => result.push_str("GMT"),
                 
-                // Если игре нужен паттерн, которого тут нет, она упадет здесь
                 _ => unimplemented!("date string contains unsubstituted format pattern: {}", token),
             }
         } else {
-            // Разделители (пробелы, тире, двоеточия) оставляем как есть
             result.push(c);
         }
     }
@@ -122,3 +121,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
