@@ -141,18 +141,18 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
         return -1;
     }
 
-    // БЕЗОПАСНАЯ РАСПАКОВКА: Пытаемся прочитать UTF-8. Если там мусор — возвращаем ошибку.
+    // ИСПРАВЛЕНИЕ 1: Делаем путь владеемой строкой (String). 
+    // Это «отвязывает» нас от заимствования env.mem.
     let path_str = match env.mem.cstr_at_utf8(path) {
-        Ok(s) => s,
+        Ok(s) => s.to_string(),
         Err(_) => {
             set_errno(env, ENOENT);
             return -1;
         }
     };
 
-    let guest_path = GuestPath::new(path_str);
+    let guest_path = GuestPath::new(&path_str);
 
-    // Честно проверяем существование в виртуальной ФС
     if !env.fs.exists(guest_path) {
         set_errno(env, ENOENT);
         return -1;
@@ -160,33 +160,30 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
 
     let mut st = stat::default();
 
-    // Заполняем st_mode и st_nlink в зависимости от типа
     if env.fs.is_dir(guest_path) {
-        st.st_mode = S_IFDIR | 0o755; // Директория
-        st.st_nlink = 2;              // У директорий минимум 2 хардлинка
+        st.st_mode = S_IFDIR | 0o755;
+        st.st_nlink = 2;
     } else {
-        st.st_mode = S_IFREG | 0o644; // Обычный файл
+        st.st_mode = S_IFREG | 0o644;
         st.st_nlink = 1;
     }
 
-    // Заполняем размер и блоки
     if let Ok(size) = env.fs.size(guest_path) {
         st.st_size = size as off_t;
         st.st_blksize = 4096;
         st.st_blocks = ((size as u64 + 511) / 512) as blkcnt_t;
     }
 
-    // Достаем время модификации
     if let Ok(mtime) = env.fs.modified(guest_path) {
-        let ts = timespec {
-            tv_sec: mtime as i32,
-            tv_nsec: 0,
-        };
-        st.st_mtimespec = ts;
-        st.st_atimespec = ts;
-        st.st_ctimespec = ts;
+        let sec = mtime as i32;
+        // ИСПРАВЛЕНИЕ 2: Создаем структуру для каждого поля отдельно, 
+        // так как timespec не умеет копироваться автоматически.
+        st.st_mtimespec = timespec { tv_sec: sec, tv_nsec: 0 };
+        st.st_atimespec = timespec { tv_sec: sec, tv_nsec: 0 };
+        st.st_ctimespec = timespec { tv_sec: sec, tv_nsec: 0 };
     }
 
+    // Теперь env.mem свободен для записи, так как path_str — это String, а не ссылка.
     env.mem.write(buf, st);
 
     log_dbg!(
