@@ -282,23 +282,16 @@ fn exit(env: &mut Environment, exit_code: i32) {
 }
 
 fn abort(env: &mut Environment) {
-    // BypassExceptionUnwind
-    let mut fp = env.cpu.regs()[7];
-    for _ in 0..30 {
-        if fp == 0 {
-            break;
+    log!("Guest called abort() — the application encountered a fatal error.");
+    // Flush any open files before exiting so data is not lost.
+    for file_opt in &mut env.libc_state.posix_io.files {
+        if let Some(file) = file_opt.as_mut() {
+            if file.needs_flush {
+                let _ = file.file.flush();
+            }
         }
-        let prev_fp: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp));
-        let lr: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp + 4));
-        if lr > 0 && lr < 0x10000000 {
-            env.cpu.regs_mut()[7] = prev_fp;
-            env.cpu.regs_mut()[13] = fp + 8;
-            env.cpu.regs_mut()[0] = 0;
-            env.cpu.branch(GuestFunction::from_addr_with_thumb_bit(lr));
-            return;
-        }
-        fp = prev_fp;
     }
+    std::process::exit(134) // 128 + SIGABRT(6)
 }
 
 fn bsearch(
