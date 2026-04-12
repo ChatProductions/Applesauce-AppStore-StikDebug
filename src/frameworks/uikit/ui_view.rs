@@ -337,27 +337,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         retain(env, view);
         () = msg![env; view removeFromSuperview];
-        // Разбиваем работу с памятью на блоки, чтобы избежать паники при вызове msg!
-        let subview_layer = {
-            let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
-            subview_obj.superview = this;
-            subview_obj.layer
-        };
-        let this_layer = {
-            let this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
-            this_obj.subviews.push(view);
-            this_obj.layer
-        };
-        
+        let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+        subview_obj.superview = this;
+        let subview_layer = subview_obj.layer;
+        let this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
+        this_obj.subviews.push(view);
+        let this_layer = this_obj.layer;
         () = msg![env; this_layer addSublayer:subview_layer];
-        // Заставляем вьюшку пересчитать свои размеры и инициализироваться
-        () = msg![env; view layoutSubviews];
-        () = msg![env; this setNeedsLayout];
     }
 }
 
 - (())insertSubview:(id)view atIndex:(NSInteger)index {
-    assert!(view != nil);
+    // assert!(view != nil);
     retain(env, view);
     () = msg![env; view removeFromSuperview];
     let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
@@ -556,15 +547,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer bounds]
 }
 - (())setBounds:(CGRect)bounds {
-    // Получаем текущие размеры ДО изменения
-    let old_bounds: CGRect = msg![env; this bounds];
-    
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    () = msg![env; layer setBounds:bounds];
-    // Если размер изменился — обязательно триггерим layoutSubviews
-    if old_bounds.size.width != bounds.size.width || old_bounds.size.height != bounds.size.height {
-        () = msg![env; this layoutSubviews];
-    }
+    msg![env; layer setBounds:bounds]
 }
 - (CGPoint)center {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -576,7 +560,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNeedsLayout {
-    () = msg![env; this layoutSubviews];
+    nil
 }
 
 - (CGRect)frame {
@@ -584,16 +568,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer frame]
 }
 - (())setFrame:(CGRect)frame {
-    // Получаем текущие размеры ДО изменения
-    let old_frame: CGRect = msg![env; this frame];
-    
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    () = msg![env; layer setFrame:frame];
-    () = msg![env; this setNeedsLayout];
-    // Если размер изменился — обязательно триггерим layoutSubviews
-    if old_frame.size.width != frame.size.width || old_frame.size.height != frame.size.height {
-        () = msg![env; this layoutSubviews];
-    }
+    msg![env; layer setFrame:frame];
 }
 - (CGAffineTransform)transform {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
