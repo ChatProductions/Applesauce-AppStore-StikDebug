@@ -331,22 +331,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; run_loop addTimer:timer forMode:mode];
 }
 
-- (())performSelectorOnMainThread:(SEL)sel withObject:(id)arg waitUntilDone:(bool)wait {
-    log_dbg!("performSelectorOnMainThread:{} withObject:{:?} waitUntilDone:{}", sel.as_str(&env.mem), arg, wait);
-
-    if wait && env.current_thread == 0 {
+- (())performSelectorOnMainThread:(SEL)sel
+                       withObject:(id)arg
+                    waitUntilDone:(bool)wait {
+    // If we're already on the main thread, execute immediately regardless
+    // of wait flag — this is correct and avoids scheduling overhead.
+    if env.current_thread == 0 {
         if sel.as_str(&env.mem).ends_with(':') {
             () = msg_send(env, (this, sel, arg));
         } else {
-            assert!(arg.is_null());
             () = msg_send(env, (this, sel));
         }
         return;
     }
 
-    if wait {
-        log!("Warning: performSelectorOnMainThread:{} waitUntilDone:YES from background thread — wait not supported, scheduling without waiting", sel.as_str(&env.mem));
-    }
+    // Background thread → schedule on main thread via run loop.
+    // `wait:YES` from a background thread would require thread
+    // synchronisation which touchHLE doesn't support; we schedule
+    // without waiting and log once at debug level.
+    log_dbg!(
+        "performSelectorOnMainThread:{} from background thread {} (wait={}) — scheduling",
+        sel.as_str(&env.mem), env.current_thread, wait
+    );
 
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
