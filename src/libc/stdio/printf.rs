@@ -1354,6 +1354,60 @@ fn vfprintf(env: &mut Environment, stream: MutPtr<FILE>, format: ConstPtr<u8>, a
     res.len().try_into().unwrap()
 }
 
+fn vwprintf(
+    env: &mut Environment,
+    format: ConstPtr<wchar_t>,
+    arg: VaList,
+) -> i32 {
+    // Очищаем errno перед выполнением
+    set_errno(env, 0);
+    
+    // Используем 'C' локаль для корректной работы с широкими символами, 
+    // как это реализовано в vswprintf
+    let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
+    assert_eq!(env.mem.read(ctype_locale), b'C');
+
+    let wcstr_format = env.mem.wcstr_at(format);
+    log_dbg!(
+        "vwprintf({:?} ({:?}), ...)",
+        format,
+        wcstr_format
+    );
+    
+    let wcstr_format_bytes = wcstr_format.as_bytes();
+    let len: GuestUSize = wcstr_format_bytes.len() as GuestUSize;
+    
+    // Передаем байты формата в printf_inner
+    let res = printf_inner::<false, _>(
+        env,
+        |_mem, idx| {
+            if idx == len {
+                b'\0'
+            } else {
+                wcstr_format_bytes[idx as usize]
+            }
+        },
+        arg,
+    );
+    
+    // Пишем результат напрямую в стандартный вывод (stdout)
+    let _ = std::io::stdout().write_all(&res);
+    res.len().try_into().unwrap()
+}
+
+fn wprintf(
+    env: &mut Environment,
+    format: ConstPtr<wchar_t>,
+    args: DotDotDot,
+) -> i32 {
+    // Очищаем errno
+    set_errno(env, 0);
+    log_dbg!("wprintf() implemented as a wrapper of vwprintf()");
+
+    // Оборачиваем вызов к vwprintf
+    vwprintf(env, format, args.start())
+}
+        
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sscanf(_, _, _)),
     export_c_func!(swscanf(_, _, _)),
@@ -1372,6 +1426,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(printf(_, _)),
     export_c_func!(fprintf(_, _, _)),
     export_c_func!(vfprintf(_, _, _)),
+    export_c_func!(wprintf(_, _)),
+    export_c_func!(vwprintf(_, _)),
 ];
 
 // Helper function, not a part of printf family
