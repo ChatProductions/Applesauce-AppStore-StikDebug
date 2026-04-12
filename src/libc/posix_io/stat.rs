@@ -62,7 +62,6 @@ unsafe impl SafeRead for stat {}
 fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     let path_str = env.mem.cstr_at_utf8(path).unwrap();
     // TODO: respect the mode
     match env.fs.create_dir(GuestPath::new(&path_str)) {
@@ -99,13 +98,11 @@ fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> 
     // FIXME: This implementation is highly incomplete. fstat() returns a huge
     // struct with many kinds of data in it. This code is assuming the caller
     // only wants a small part of it.
-
     let mut stat = stat::default();
 
     match file.file {
         GuestFile::File(_) | GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => {
             stat.st_mode |= S_IFREG;
-
             // TODO: use `std::fs::metadata()` instead
 
             // Obtain file size
@@ -113,20 +110,17 @@ fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> 
         }
         GuestFile::Directory => {
             stat.st_mode |= S_IFDIR;
-
             // TODO: st_size
         }
         _ => unimplemented!(),
     }
 
     env.mem.write(buf, stat);
-
     0 // success
 }
 
 fn fstat(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
     set_errno(env, 0);
-
     // Убираем бесячий варнинг, функция fstat_inner работает нормально
     let result = fstat_inner(env, fd, buf);
     log_dbg!("fstat({:?}, {:?}) -> {}", fd, buf, result);
@@ -135,7 +129,6 @@ fn fstat(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
 
 fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     set_errno(env, 0);
-
     if path.is_null() {
         set_errno(env, ENOENT);
         return -1;
@@ -152,7 +145,6 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     };
 
     let guest_path = GuestPath::new(&path_str);
-
     if !env.fs.exists(guest_path) {
         set_errno(env, ENOENT);
         return -1;
@@ -176,8 +168,8 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
 
     if let Ok(mtime) = env.fs.modified(guest_path) {
         let sec = mtime as i32;
-        // ИСПРАВЛЕНИЕ 2: Создаем структуру для каждого поля отдельно, 
-        // так как timespec не умеет копироваться автоматически.
+        // ИСПРАВЛЕНИЕ 2: Создаем структуру для каждого поля отдельно.
+        // ВАЖНО: Требует `pub tv_sec` и `pub tv_nsec` в файле time.rs!
         st.st_mtimespec = timespec { tv_sec: sec, tv_nsec: 0 };
         st.st_atimespec = timespec { tv_sec: sec, tv_nsec: 0 };
         st.st_ctimespec = timespec { tv_sec: sec, tv_nsec: 0 };
@@ -197,7 +189,6 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
 
 fn lstat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     set_errno(env, 0);
-
     // Поскольку в touchHLE GuestFS пока не поддерживает реальные симлинки,
     // lstat должен работать точно так же, как stat, без костылей.
     let result = stat(env, path, buf);
@@ -209,7 +200,6 @@ fn lstat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
         buf,
         result
     );
-    
     result
 }
 
@@ -219,3 +209,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(stat(_, _)),
     export_c_func!(lstat(_, _)),
 ];
+
