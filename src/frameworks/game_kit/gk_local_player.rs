@@ -5,7 +5,7 @@
  */
 //! `GKLocalPlayer`.
 
-use crate::abi::GuestFunction;
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::ns_string;
 use crate::mem::Ptr;
