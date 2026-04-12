@@ -323,6 +323,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)stringWithContentsOfURL:(id)path {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfFile:path];
+    autorelease(env, new)
+}
+
 + (id)stringWithContentsOfFile:(id)path encoding:(NSStringEncoding)encoding error:(MutPtr<id>)error {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithContentsOfFile:path encoding:encoding error:error];
