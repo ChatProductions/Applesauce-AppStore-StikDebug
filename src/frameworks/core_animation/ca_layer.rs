@@ -274,6 +274,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBounds:new_bounds];
 }
 
+- (())renderInContext {
+
+}
+
 - (bool)isHidden { env.objc.borrow::<CALayerHostObject>(this).hidden }
 - (())setHidden:(bool)hidden { env.objc.borrow_mut::<CALayerHostObject>(this).hidden = hidden; }
 
