@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Handling of Objective-C classes and metaclasses.
@@ -242,7 +243,6 @@ impl ClassHostObject {
             ivars,
             ..
         } = mem.read(data);
-
         let name = mem.cstr_at_utf8(name).unwrap().to_string();
 
         let mut host_object = ClassHostObject {
@@ -275,7 +275,8 @@ fn substitute_classes(
     let class_t { data, .. } = mem.read(class.cast());
     let class_rw_t { name, .. } = mem.read(data);
     let name = mem.cstr_at_utf8(name).unwrap();
-
+    
+    // --- ЗДЕСЬ ДОБАВЛЕНО УСЛОВИЕ ДЛЯ GAD ---
     if !(name.starts_with("AdMob")
         || name.starts_with("AltAds")
         || name.starts_with("Mobclix")
@@ -283,7 +284,8 @@ fn substitute_classes(
         || name.starts_with("Flurry")
         || name.starts_with("OpenFeint")
         || name.starts_with("Tapjoy")
-        || name.starts_with("UA"))
+        || name.starts_with("UA")
+        || name.starts_with("GAD")) 
     {
         return None;
     }
@@ -302,7 +304,6 @@ fn substitute_classes(
         "Note: substituting fake class for {} to improve compatibility",
         name
     );
-
     let class_host_object = Box::new(FakeClass {
         name: name.to_string(),
         is_metaclass: false,
@@ -399,13 +400,11 @@ impl ObjC {
         };
 
         let class = self.alloc_static_object(metaclass, class_host_object, mem);
-
         if name == "NSObject" {
             self.borrow_mut::<ClassHostObject>(metaclass).superclass = class;
         }
 
         self.classes.insert(name.to_string(), class);
-
         if is_metaclass {
             metaclass
         } else {
@@ -442,7 +441,6 @@ impl ObjC {
                 self.register_static_object(metaclass, metaclass_host_object);
                 name
             };
-
             self.classes.insert(name.to_string(), class);
         }
 
@@ -473,7 +471,6 @@ impl ObjC {
             }
         }
         assert!(found_ns_object);
-
         while !queue.is_empty() {
             let next = queue.pop_front().unwrap();
             let (need, mut diff) = self.need_ivar_reconciliation(next);
@@ -484,7 +481,6 @@ impl ObjC {
                     ref mut ivars,
                     ..
                 } = self.borrow_mut(next);
-
                 if !ivars.is_empty() {
                     let mut max_alignment: u32 = 1;
                     for (offset, align) in ivars.values() {
@@ -597,7 +593,6 @@ impl ObjC {
             let data = mem.read(cat_ptr);
             let class = data.class;
             let metaclass = Self::read_isa(class, mem);
-
             for (target_class, methods) in [
                 (class, data.instance_methods),
                 (metaclass, data.class_methods),
@@ -680,7 +675,6 @@ pub fn objc_getClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class 
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -707,7 +701,6 @@ pub fn objc_begin_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Cla
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -734,7 +727,6 @@ pub fn objc_end_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -761,7 +753,6 @@ pub fn objc_exception_throw(env: &mut crate::Environment, name: ConstPtr<u8>) ->
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -812,7 +803,6 @@ pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, name: Co
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -839,7 +829,6 @@ pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -866,7 +855,6 @@ pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     // Проверяем, зарегистрирован ли уже этот класс (среди известных)
     // Обратите внимание на амперсанд & перед name_str
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
@@ -906,7 +894,7 @@ pub fn class_getInstanceSize(env: &mut crate::Environment, cls: Class, name: SEL
             if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
                 // Если селектор зарегистрирован в данном классе
                 if class_obj.methods.contains_key(&name) {
-                    // Возвращаем non-null указатель. 
+                    // Возвращаем non-null указатель.
                     // В реальном iOS/macOS это указатель на структуру `method_t`.
                     // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
                     // и не выделяет под них память в гостевом пространстве, 
@@ -919,7 +907,6 @@ pub fn class_getInstanceSize(env: &mut crate::Environment, cls: Class, name: SEL
         
         // Поднимаемся вверх по иерархии к суперклассу
         let next = env.objc.get_superclass(curr);
-        
         // Защита от бесконечного цикла, если иерархия зациклена
         if next == curr {
             break;
@@ -944,7 +931,7 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
             if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
                 // Если селектор зарегистрирован в данном классе
                 if class_obj.methods.contains_key(&name) {
-                    // Возвращаем non-null указатель. 
+                    // Возвращаем non-null указатель.
                     // В реальном iOS/macOS это указатель на структуру `method_t`.
                     // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
                     // и не выделяет под них память в гостевом пространстве, 
@@ -957,7 +944,6 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
         
         // Поднимаемся вверх по иерархии к суперклассу
         let next = env.objc.get_superclass(curr);
-        
         // Защита от бесконечного цикла, если иерархия зациклена
         if next == curr {
             break;
@@ -982,7 +968,7 @@ pub fn method_getImplementation(env: &mut crate::Environment, cls: Class, name: 
             if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
                 // Если селектор зарегистрирован в данном классе
                 if class_obj.methods.contains_key(&name) {
-                    // Возвращаем non-null указатель. 
+                    // Возвращаем non-null указатель.
                     // В реальном iOS/macOS это указатель на структуру `method_t`.
                     // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
                     // и не выделяет под них память в гостевом пространстве, 
@@ -995,7 +981,6 @@ pub fn method_getImplementation(env: &mut crate::Environment, cls: Class, name: 
         
         // Поднимаемся вверх по иерархии к суперклассу
         let next = env.objc.get_superclass(curr);
-        
         // Защита от бесконечного цикла, если иерархия зациклена
         if next == curr {
             break;
@@ -1020,7 +1005,7 @@ pub fn method_setImplementation(env: &mut crate::Environment, cls: Class, name: 
             if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
                 // Если селектор зарегистрирован в данном классе
                 if class_obj.methods.contains_key(&name) {
-                    // Возвращаем non-null указатель. 
+                    // Возвращаем non-null указатель.
                     // В реальном iOS/macOS это указатель на структуру `method_t`.
                     // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
                     // и не выделяет под них память в гостевом пространстве, 
@@ -1033,7 +1018,6 @@ pub fn method_setImplementation(env: &mut crate::Environment, cls: Class, name: 
         
         // Поднимаемся вверх по иерархии к суперклассу
         let next = env.objc.get_superclass(curr);
-        
         // Защита от бесконечного цикла, если иерархия зациклена
         if next == curr {
             break;
@@ -1058,7 +1042,7 @@ pub fn method_getTypeEncoding(env: &mut crate::Environment, cls: Class, name: SE
             if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
                 // Если селектор зарегистрирован в данном классе
                 if class_obj.methods.contains_key(&name) {
-                    // Возвращаем non-null указатель. 
+                    // Возвращаем non-null указатель.
                     // В реальном iOS/macOS это указатель на структуру `method_t`.
                     // Но поскольку touchHLE абстрагирует методы в хостовый `HashMap`
                     // и не выделяет под них память в гостевом пространстве, 
@@ -1071,7 +1055,6 @@ pub fn method_getTypeEncoding(env: &mut crate::Environment, cls: Class, name: SE
         
         // Поднимаемся вверх по иерархии к суперклассу
         let next = env.objc.get_superclass(curr);
-        
         // Защита от бесконечного цикла, если иерархия зациклена
         if next == curr {
             break;
@@ -1082,3 +1065,4 @@ pub fn method_getTypeEncoding(env: &mut crate::Environment, cls: Class, name: SE
     // Если прошли всю цепочку и ничего не нашли, метод не существует
     ConstVoidPtr::null()
 }
+
