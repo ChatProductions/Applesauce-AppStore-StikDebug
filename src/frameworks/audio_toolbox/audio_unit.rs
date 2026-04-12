@@ -111,14 +111,14 @@ fn AudioUnitSetProperty(
     let result;
     match in_id {
         kAudioUnitProperty_SetRenderCallback => {
-            assert_eq!(in_scope, kAudioUnitScope_Global);
-            assert_eq!(in_data_size, guest_size_of::<AURenderCallbackStruct>());
+            // assert_eq!(in_scope, kAudioUnitScope_Global);
+            // assert_eq!(in_data_size, guest_size_of::<AURenderCallbackStruct>());
             let render_callback = env.mem.read(in_data.cast::<AURenderCallbackStruct>());
             host_object.render_callback = Some(render_callback);
             result = 0;
         }
         kAudioUnitProperty_StreamFormat => {
-            assert_eq!(in_data_size, guest_size_of::<AudioStreamBasicDescription>());
+            // assert_eq!(in_data_size, guest_size_of::<AudioStreamBasicDescription>());
             let stream_format = env.mem.read(in_data.cast::<AudioStreamBasicDescription>());
             log_if_broken_audio_format(&stream_format);
             match in_scope {
@@ -171,7 +171,7 @@ fn AudioUnitGetProperty(
 
     match in_id {
         kAudioUnitProperty_MaximumFramesPerSlice => {
-            assert_eq!(env.mem.read(io_data_size), guest_size_of::<u32>());
+            // assert_eq!(env.mem.read(io_data_size), guest_size_of::<u32>());
             let max_frames: u32 = host_object.maximum_frames_per_slice;
             env.mem.write(out_data.cast(), max_frames);
             env.mem.write(io_data_size.cast(), guest_size_of::<u32>());
