@@ -359,8 +359,9 @@ fn init_with_objects_for_keys_count_common(
     let mut host_object = <DictionaryHostObject as Default>::default();
 
     for i in 0..count {
-        let key: id = env.mem.read(keys + i as usize);
-        let object: id = env.mem.read(objects + i as usize);
+        // Убрали `as usize` для правильной работы адресной арифметики
+        let key: id = env.mem.read(keys + i);
+        let object: id = env.mem.read(objects + i);
         assert_ne!(key, nil); // TODO: raise proper exception
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
@@ -1122,4 +1123,5 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     let desc_imm = msg![env; desc copy];
     release(env, desc);
     autorelease(env, desc_imm)
-        }
+}
+
