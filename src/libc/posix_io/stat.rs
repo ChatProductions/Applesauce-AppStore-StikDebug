@@ -141,8 +141,16 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
         return -1;
     }
 
-    let path_str = env.mem.cstr_at_utf8(path);
-    let guest_path = GuestPath::new(&path_str);
+    // БЕЗОПАСНАЯ РАСПАКОВКА: Пытаемся прочитать UTF-8. Если там мусор — возвращаем ошибку.
+    let path_str = match env.mem.cstr_at_utf8(path) {
+        Ok(s) => s,
+        Err(_) => {
+            set_errno(env, ENOENT);
+            return -1;
+        }
+    };
+
+    let guest_path = GuestPath::new(path_str);
 
     // Честно проверяем существование в виртуальной ФС
     if !env.fs.exists(guest_path) {
