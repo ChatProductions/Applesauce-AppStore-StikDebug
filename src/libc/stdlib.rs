@@ -281,9 +281,24 @@ fn exit(env: &mut Environment, exit_code: i32) {
     // std::process::exit(exit_code);
 }
 
-fn abort(_env: &mut Environment) {
-    echo!("App called abort()! The guest application encountered a fatal error.");
-    std::process::exit(1);
+fn abort(env: &mut Environment) {
+    // BypassExceptionUnwind
+    let mut fp = env.cpu.regs()[7];
+    for _ in 0..30 {
+        if fp == 0 {
+            break;
+        }
+        let prev_fp: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp));
+        let lr: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp + 4));
+        if lr > 0 && lr < 0x10000000 {
+            env.cpu.regs_mut()[7] = prev_fp;
+            env.cpu.regs_mut()[13] = fp + 8;
+            env.cpu.regs_mut()[0] = 0;
+            env.cpu.branch(GuestFunction::from_addr_with_thumb_bit(lr));
+            return;
+        }
+        fp = prev_fp;
+    }
 }
 
 fn bsearch(
