@@ -273,9 +273,9 @@ pub const CLASSES: ClassExports = objc_classes!
     }
 }
 
-- (ConstPtr<u8>)fileSystemRepresentation {
-    let file_manager: id = msg_class![env; NSFileManager defaultManager];
-    msg![env; file_manager fileSystemRepresentationWithPath:this]
+- (id)fileSystemRepresentationWithPath:(id)path {
+    let error: MutPtr<id> = Ptr::null();
+    msg![env; this subpathsOfDirectoryAtPath:path error:error]
 }
 
 // MARK: - Discovering Directory Contents
