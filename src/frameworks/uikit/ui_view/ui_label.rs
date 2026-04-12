@@ -125,6 +125,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this dealloc]
 }
 
+- (id)shadowOffset {
+    nil
+}
+
 // TODO: initWithCoder:
 
 - (id)text {
