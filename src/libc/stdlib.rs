@@ -607,22 +607,20 @@ fn _gcvt(
     ndigit: i32,
     buf: MutPtr<u8>,
 ) -> MutPtr<u8> {
-    // В C функция _gcvt обычно реализуется через sprintf(buf, "%.*g", ndigit, value).
-    // Мы можем в точности повторить это поведение, используя встроенный в Rust
-    // форматтер {:.*g}, который отвечает за вывод значимых цифр (significant digits).
     set_errno(env, 0); //
     
     let ndigit = ndigit.max(0) as usize;
-    let s = format!("{:.*g}", ndigit, value);
+    
+    // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт Display
+    // с указанием точности (количества знаков после запятой).
+    let s = format!("{:.*}", ndigit, value);
     
     let bytes = s.as_bytes();
-    let len = bytes.len() as GuestUSize;
+    let len = bytes.len() as GuestUSize; //
     
     if !buf.is_null() {
-        // Копируем байты сгенерированной строки в память гостя
-        env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes);
-        // Записываем нуль-терминатор в конце C-строки
-        env.mem.write(buf + len, b'\0');
+        env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes); //
+        env.mem.write(buf + len, b'\0'); //
     }
     
     buf
