@@ -26,6 +26,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
+- (id)load_sound_files {
+    nil
+}
+
 @end
 
 };
