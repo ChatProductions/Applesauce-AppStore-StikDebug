@@ -14,7 +14,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
-    export_c_func!(xmlReadFile(_, _, _, _, _, _)),
+    export_c_func!(xmlReadFile(_, _, _)),
     export_c_func!(xmlReadMemory(_, _, _, _, _)),
     export_c_func!(xmlParseMemory(_, _)),
     export_c_func!(xmlDocGetRootElement(_)),
@@ -27,7 +27,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlHasProp(_, _)),
     export_c_func!(xmlStrcmp(_, _)),
     export_c_func!(xmlNodeGetContent(_)),
-    // --- НОВЫЕ: XML TextReader API ---
+    // --- TextReader API ---
     export_c_func!(xmlReaderForFile(_, _, _)),
     export_c_func!(xmlFreeTextReader(_)),
     export_c_func!(xmlTextReaderRead(_)),
@@ -43,7 +43,6 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlTextReaderIsEmptyElement(_)),
     export_c_func!(xmlTextReaderNext(_)),
     export_c_func!(xmlTextReaderNextSibling(_)),
-    export_c_func!(xmlTextReaderNodeType(_)),
     export_c_func!(xmlTextReaderValue(_)),
     export_c_func!(xmlTextReaderLocalName(_)),
     export_c_func!(xmlTextReaderPrefix(_)),
@@ -54,11 +53,11 @@ const FUNCTIONS: FunctionExports = &[
 ];
 
 // ============================================================
-// Хелпер для выделения памяти под фейковые XML-структуры
+// Хелперы
 // ============================================================
 
 fn alloc_xml_mem(env: &mut Environment) -> u32 {
-    let size = 512;
+    let size = 512u32;
     let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(size).cast();
     let slice = env.mem.bytes_at_mut(ptr, size);
     for byte in slice.iter_mut() {
@@ -67,7 +66,6 @@ fn alloc_xml_mem(env: &mut Environment) -> u32 {
     ptr.to_bits()
 }
 
-/// Возвращает указатель на пустую строку (null-terminator) в guest memory
 fn alloc_empty_string(env: &mut Environment) -> u32 {
     let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(1).cast();
     env.mem.write(ptr, 0u8);
@@ -169,15 +167,12 @@ fn xmlNodeGetContent(_env: &mut Environment, _node: u32) -> u32 {
 }
 
 // ============================================================
-// XML TextReader API (stream-based parser)
+// XML TextReader API
 // ============================================================
 
 /// xmlTextReaderPtr xmlReaderForFile(const char *filename,
 ///                                    const char *encoding,
 ///                                    int options);
-///
-/// Создаёт reader для разбора XML-файла.
-/// Возвращает NULL при ошибке, иначе — валидный указатель.
 #[allow(non_snake_case)]
 fn xmlReaderForFile(env: &mut Environment, filename: u32, _encoding: u32, _options: u32) -> u32 {
     let filename_str = if filename != 0 {
@@ -199,14 +194,12 @@ fn xmlReaderForFile(env: &mut Environment, filename: u32, _encoding: u32, _optio
 fn xmlFreeTextReader(_env: &mut Environment, _reader: u32) {}
 
 /// int xmlTextReaderRead(xmlTextReaderPtr reader);
-/// Возвращает 1 = есть узел, 0 = конец документа, -1 = ошибка.
 #[allow(non_snake_case)]
 fn xmlTextReaderRead(_env: &mut Environment, _reader: u32) -> i32 {
     0
 }
 
 /// int xmlTextReaderNodeType(xmlTextReaderPtr reader);
-/// Типы: 1=element, 3=text, 14=whitespace, ...
 #[allow(non_snake_case)]
 fn xmlTextReaderNodeType(_env: &mut Environment, _reader: u32) -> i32 {
     0
@@ -229,3 +222,132 @@ fn xmlTextReaderConstValue(env: &mut Environment, _reader: u32) -> u32 {
 fn xmlTextReaderReadInnerXml(env: &mut Environment, _reader: u32) -> u32 {
     alloc_empty_string(env)
 }
+
+/// xmlChar *xmlTextReaderReadOuterXml(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderReadOuterXml(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// xmlChar *xmlTextReaderGetAttribute(xmlTextReaderPtr reader,
+///                                     const xmlChar *name);
+#[allow(non_snake_case)]
+fn xmlTextReaderGetAttribute(env: &mut Environment, _reader: u32, _name: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// int xmlTextReaderAttributeCount(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderAttributeCount(_env: &mut Environment, _reader: u32) -> i32 {
+    0
+}
+
+/// int xmlTextReaderDepth(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderDepth(_env: &mut Environment, _reader: u32) -> i32 {
+    0
+}
+
+/// int xmlTextReaderHasAttributes(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderHasAttributes(_env: &mut Environment, _reader: u32) -> i32 {
+    0
+}
+
+/// int xmlTextReaderIsEmptyElement(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderIsEmptyElement(_env: &mut Environment, _reader: u32) -> i32 {
+    1
+}
+
+/// int xmlTextReaderNext(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderNext(_env: &mut Environment, _reader: u32) -> i32 {
+    0
+}
+
+/// int xmlTextReaderNextSibling(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderNextSibling(_env: &mut Environment, _reader: u32) -> i32 {
+    0
+}
+
+/// const xmlChar *xmlTextReaderValue(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderValue(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// const xmlChar *xmlTextReaderLocalName(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderLocalName(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// const xmlChar *xmlTextReaderPrefix(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderPrefix(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// const xmlChar *xmlTextReaderNamespaceUri(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderNamespaceUri(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+// ============================================================
+// Строковые утилиты libxml2
+// ============================================================
+
+/// xmlChar *xmlStrdup(const xmlChar *str);
+#[allow(non_snake_case)]
+fn xmlStrdup(env: &mut Environment, src_ptr: u32) -> u32 {
+    if src_ptr == 0 {
+        return 0;
+    }
+    let src = crate::mem::Ptr::from_bits(src_ptr);
+    let cstr = env.mem.cstr_at_utf8(src).unwrap_or("");
+    let len = cstr.len() + 1;
+    let dst: crate::mem::MutPtr<u8> = env.mem.alloc(len).cast();
+    for (i, &b) in cstr.as_bytes().iter().enumerate() {
+        env.mem.write(dst + (i as u32), b);
+    }
+    env.mem.write(dst + (cstr.len() as u32), 0u8);
+    dst.to_bits()
+}
+
+/// int xmlStrlen(const xmlChar *str);
+#[allow(non_snake_case)]
+fn xmlStrlen(env: &mut Environment, str_ptr: u32) -> i32 {
+    if str_ptr == 0 {
+        return 0;
+    }
+    let mut len: i32 = 0;
+    let mut ptr = crate::mem::Ptr::<u8>::from_bits(str_ptr);
+    loop {
+        let byte: u8 = env.mem.read(ptr);
+        if byte == 0 {
+            break;
+        }
+        len += 1;
+        ptr = ptr + 1u32;
+    }
+    len
+}
+
+/// xmlChar *xmlStrsub(const xmlChar *str, int start, int len);
+#[allow(non_snake_case)]
+fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
+    if str_ptr == 0 {
+        return 0;
+    }
+    let src = crate::mem::Ptr::from_bits(str_ptr + start);
+    let dst: crate::mem::MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    for i in 0..len {
+        let byte: u8 = env.mem.read(src + i);
+        env.mem.write(dst + i, byte);
+    }
+    env.mem.write(dst + len, 0u8);
+    dst.to_bits()
+                     }
