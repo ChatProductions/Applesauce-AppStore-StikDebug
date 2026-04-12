@@ -276,7 +276,6 @@ fn substitute_classes(
     let class_rw_t { name, .. } = mem.read(data);
     let name = mem.cstr_at_utf8(name).unwrap();
     
-    // --- ЗДЕСЬ ДОБАВЛЕНО УСЛОВИЕ ДЛЯ GAD ---
     if !(name.starts_with("AdMob")
         || name.starts_with("AltAds")
         || name.starts_with("Mobclix")
@@ -375,18 +374,40 @@ impl ObjC {
                 self,
             ));
         } else {
-            if !use_placeholder {
+            // ЗДЕСЬ ДОБАВЛЕНА ЛОГИКА ДЛЯ ДИНАМИЧЕСКИХ КЛАССОВ (GAD и др.)
+            let is_fake = name.starts_with("AdMob")
+                || name.starts_with("AltAds")
+                || name.starts_with("Mobclix")
+                || name.starts_with("FB")
+                || name.starts_with("Flurry")
+                || name.starts_with("OpenFeint")
+                || name.starts_with("Tapjoy")
+                || name.starts_with("UA")
+                || name.starts_with("GAD");
+
+            if !use_placeholder && !is_fake {
                 panic!("Missing implementation for class {name}!");
             }
 
-            class_host_object = Box::new(UnimplementedClass {
-                name: name.to_string(),
-                is_metaclass: false,
-            });
-            metaclass_host_object = Box::new(UnimplementedClass {
-                name: name.to_string(),
-                is_metaclass: true,
-            });
+            if is_fake {
+                class_host_object = Box::new(FakeClass {
+                    name: name.to_string(),
+                    is_metaclass: false,
+                });
+                metaclass_host_object = Box::new(FakeClass {
+                    name: name.to_string(),
+                    is_metaclass: true,
+                });
+            } else {
+                class_host_object = Box::new(UnimplementedClass {
+                    name: name.to_string(),
+                    is_metaclass: false,
+                });
+                metaclass_host_object = Box::new(UnimplementedClass {
+                    name: name.to_string(),
+                    is_metaclass: true,
+                });
+            }
         }
 
         let metaclass = if name == "NSObject" {
