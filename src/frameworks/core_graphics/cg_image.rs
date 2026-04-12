@@ -15,7 +15,7 @@ use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
 use crate::image::Image;
 use crate::mem::{ConstPtr, GuestUSize, MutPtr};
-use crate::objc::{autorelease, nil, objc_classes, ClassExports, HostObject, ObjC};
+use crate::objc::{autorelease, id, nil, objc_classes, ClassExports, HostObject, ObjC};
 use crate::Environment;
 
 pub type CGImageAlphaInfo = u32;
@@ -47,6 +47,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 (env, this, _cmd);
 
 @implementation _touchHLE_CGImage: NSObject
+
+- (id)systemUptime {
+    nil
+}
+
+- (id)tick_audio {
+    nil
+}
+
 @end
 };
 
