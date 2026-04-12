@@ -117,7 +117,7 @@ fn language_from_locale_identifier(identifier: &str) -> &str {
 fn country_from_locale_identifier(identifier: &str) -> Option<&str> {
     let sep = identifier.find('_').or_else(|| identifier.find('-'))?;
     let rest = &identifier[sep + 1..];
-    // Strip script code if present (e.g. "zh_Hans_CN" → "CN")
+    // Strip script code if present (e.g. "zh_Hans_CN" -> "CN")
     if let Some(second) = rest.find('_').or_else(|| rest.find('-')) {
         Some(&rest[second + 1..])
     } else {
@@ -171,6 +171,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         Box::new(NSLocaleHostObject { country_code, language_code }),
         &mut env.mem,
     );
+    // Retain so the singleton lives beyond any autorelease pool drain.
+    retain(env, new);
     State::get(env).current_locale = Some(new);
     new
 }
@@ -184,6 +186,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         Box::new(NSLocaleHostObject { country_code: nil, language_code: nil }),
         &mut env.mem,
     );
+    // Retain so the singleton lives beyond any autorelease pool drain.
+    retain(env, new);
     State::get(env).system_locale = Some(new);
     new
 }
@@ -205,6 +209,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         .map(|l| ns_string::from_rust_string(env, l))
         .collect();
     let new = ns_array::from_vec(env, ns_strings);
+    // Retain so the singleton lives beyond any autorelease pool drain.
+    retain(env, new);
     State::get(env).preferred_languages = Some(new);
     new
 }
@@ -221,7 +227,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)ISOLanguageCodes {
-    let codes = ["en","fr","de","ja","zh","es","it","pt","ru","ko","ar","nl","sv","pl","tr"];
+    let codes = [
+        "en","fr","de","ja","zh","es","it","pt","ru","ko","ar","nl","sv","pl","tr",
+    ];
     let ns_strings: Vec<id> = codes
         .iter()
         .map(|s| ns_string::from_rust_string(env, s.to_string()))
@@ -231,7 +239,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)ISOCountryCodes {
-    let codes = ["US","GB","FR","DE","JP","CN","ES","IT","PT","RU","KR","SA","NL","SE","PL"];
+    let codes = [
+        "US","GB","FR","DE","JP","CN","ES","IT","PT","RU","KR","SA","NL","SE","PL",
+    ];
     let ns_strings: Vec<id> = codes
         .iter()
         .map(|s| ns_string::from_rust_string(env, s.to_string()))
@@ -326,10 +336,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Identifier
 
-// Pattern to fix all three occurrences —
-// copy the ids out first, then drop the borrow, then use env freely.
-
-// For localeIdentifier (line ~330):
 - (id)localeIdentifier {
     let host = env.objc.borrow::<NSLocaleHostObject>(this);
     let (language_code, country_code) = (host.language_code, host.country_code);
@@ -349,59 +355,61 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)objectForKey:(id)key {
     let key_str = ns_string::to_rust_string(env, key).into_owned();
-    let host = env.objc.borrow::<NSLocaleHostObject>(this);
     match key_str.as_str() {
-        NSLocaleCountryCode | kCFLocaleCountryCode => host.country_code,
-        NSLocaleLanguageCode | kCFLocaleLanguageCode => host.language_code,
-        // For objectForKey: NSLocaleIdentifier branch (line ~346-353):
-        NSLocaleIdentifier | kCFLocaleIdentifier => {
-        let host = env.objc.borrow::<NSLocaleHostObject>(this);
-        let (language_code, country_code) = (host.language_code, host.country_code);
-        drop(host);
-        let lang    = ns_string::to_rust_string(env, language_code).into_owned();
-        let country = ns_string::to_rust_string(env, country_code).into_owned();
-        let id_str  = locale_identifier(&lang, &country);
-        let ns = ns_string::from_rust_string(env, id_str);
-        autorelease(env, ns)
+        // Simple id-valued fields: copy the id out, drop borrow, return.
+        NSLocaleCountryCode | kCFLocaleCountryCode => {
+            env.objc.borrow::<NSLocaleHostObject>(this).country_code
         }
-        NSLocaleDecimalSeparator  => {
+        NSLocaleLanguageCode | kCFLocaleLanguageCode => {
+            env.objc.borrow::<NSLocaleHostObject>(this).language_code
+        }
+        NSLocaleIdentifier | kCFLocaleIdentifier => {
+            let host = env.objc.borrow::<NSLocaleHostObject>(this);
+            let (language_code, country_code) = (host.language_code, host.country_code);
             drop(host);
+            let lang    = ns_string::to_rust_string(env, language_code).into_owned();
+            let country = ns_string::to_rust_string(env, country_code).into_owned();
+            let id_str  = locale_identifier(&lang, &country);
+            let ns = ns_string::from_rust_string(env, id_str);
+            autorelease(env, ns)
+        }
+        NSLocaleDecimalSeparator => {
             let ns = ns_string::from_rust_string(env, ".".to_string());
             autorelease(env, ns)
         }
         NSLocaleGroupingSeparator => {
-            drop(host);
             let ns = ns_string::from_rust_string(env, ",".to_string());
             autorelease(env, ns)
         }
-        NSLocaleCurrencyCode   => {
-            drop(host);
+        NSLocaleCurrencyCode => {
             let ns = ns_string::from_rust_string(env, "USD".to_string());
             autorelease(env, ns)
         }
         NSLocaleCurrencySymbol => {
-            drop(host);
             let ns = ns_string::from_rust_string(env, "$".to_string());
             autorelease(env, ns)
         }
         NSLocaleUsesMetricSystem => {
-            drop(host);
-            // Return NSNumber YES/NO based on country.
             msg_class![env; NSNumber numberWithBool:false]
         }
+        NSLocaleCalendar => {
+            msg_class![env; NSCalendar currentCalendar]
+        }
         NSLocaleQuotationBeginDelimiterKey => {
-            drop(host);
-            let ns = ns_string::from_rust_string(env, "\u{201C}".to_string()); // "
+            // Left double quotation mark U+201C
+            let ns = ns_string::from_rust_string(env, "\u{201C}".to_string());
             autorelease(env, ns)
         }
         NSLocaleQuotationEndDelimiterKey => {
-            drop(host);
-            let ns = ns_string::from_rust_string(env, "\u{201D}".to_string()); // "
+            // Right double quotation mark U+201D
+            let ns = ns_string::from_rust_string(env, "\u{201D}".to_string());
             autorelease(env, ns)
         }
         _ => {
-            log_dbg!("NSLocale objectForKey:{:?} — unimplemented, returning nil", key_str);
-            drop(host);
+            log_dbg!(
+                "NSLocale objectForKey:{} - unimplemented, returning nil",
+                key_str
+            );
             nil
         }
     }
@@ -410,7 +418,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - displayNameForKey:value:
 
 - (id)displayNameForKey:(id)key value:(id)value {
-    log_dbg!("NSLocale displayNameForKey:value: — returning value as-is");
+    log_dbg!("NSLocale displayNameForKey:value: - returning value as-is");
     value
 }
 
@@ -465,11 +473,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)quotationBeginDelimiter {
+    // Left double quotation mark U+201C
     let ns = ns_string::from_rust_string(env, "\u{201C}".to_string());
     autorelease(env, ns)
 }
 
 - (id)quotationEndDelimiter {
+    // Right double quotation mark U+201D
     let ns = ns_string::from_rust_string(env, "\u{201D}".to_string());
     autorelease(env, ns)
 }
