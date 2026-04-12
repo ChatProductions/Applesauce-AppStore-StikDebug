@@ -309,13 +309,18 @@ fn xmlStrdup(env: &mut Environment, src_ptr: u32) -> u32 {
     if src_ptr == 0 {
         return 0;
     }
-    let cstr = str_ptr_to_utf8(env, src_ptr);
-    let len: GuestUSize = (cstr.len() as GuestUSize) + 1;
-    let dst: MutPtr<u8> = env.mem.alloc(len).cast();
-    for (i, &b) in cstr.as_bytes().iter().enumerate() {
-        env.mem.write(dst + (i as GuestUSize), b);
+    
+    // ИСПРАВЛЕНИЕ: Вычисляем длину с помощью xmlStrlen, не удерживая иммутабельную ссылку
+    let len = xmlStrlen(env, src_ptr) as GuestUSize;
+    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    let src: ConstPtr<u8> = Ptr::from_bits(src_ptr);
+    
+    // Прямое копирование байтов без проверок UTF-8
+    for i in 0..len {
+        let byte: u8 = env.mem.read(src + i);
+        env.mem.write(dst + i, byte);
     }
-    env.mem.write(dst + (cstr.len() as GuestUSize), 0u8);
+    env.mem.write(dst + len, 0u8);
     dst.to_bits()
 }
 
@@ -352,4 +357,4 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     }
     env.mem.write(dst + len, 0u8);
     dst.to_bits()
-    }
+}
