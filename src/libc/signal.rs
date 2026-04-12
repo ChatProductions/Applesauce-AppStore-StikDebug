@@ -33,8 +33,17 @@ fn sigprocmask(env: &mut Environment, how: i32, set: ConstVoidPtr, old_set: MutV
     0
 }
 
+fn sigaltstack(env: &mut Environment, how: i32, set: ConstVoidPtr, old_set: MutVoidPtr) -> i32 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    log!("TODO: sigaltstack({}, {:?}, {:?})", how, set, old_set);
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sigaction(_, _, _)),
     export_c_func!(signal(_, _)),
     export_c_func!(sigprocmask(_, _, _)),
+    export_c_func!(sigaltstack(_, _, _)),
 ];
