@@ -873,19 +873,17 @@ fn path_for_resource_helper(
     env: &mut Environment,
     bundle: id,
     name: id,
-    localization: id,
-    sub_dir: id,
+    lproj: id,      // Ожидается кодом ниже
+    directory: id,  // Ожидается кодом ниже
     extension: id,
 ) -> id {
     if name == nil {
         // В реальной iOS метод pathForResource:ofType: при name == nil 
         // обязан возвращать nil.
-        // Предыдущий код-заглушка возвращал путь к исполняемому файлу,
-        // из-за чего игры пытались грузить бинарник как текстуры и падали
-        // с нехваткой памяти при попытке парсинга мусорных данных.
         log!("path_for_resource_helper: name is nil, returning nil");
         return nil;
     }
+    
     let mut path: id = msg![env; bundle resourcePath];
     if lproj != nil {
         path = msg![env; path stringByAppendingPathComponent:lproj];
