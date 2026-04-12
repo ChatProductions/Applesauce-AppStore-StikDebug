@@ -226,4 +226,6 @@ fn xmlTextReaderConstValue(env: &mut Environment, _reader: u32) -> u32 {
 
 /// xmlChar *xmlTextReaderReadInnerXml(xmlTextReaderPtr reader);
 #[allow(non_snake_case)]
-fn xmlTextReaderReadInnerXml(env: &mut Environment, _reader: 
+fn xmlTextReaderReadInnerXml(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
