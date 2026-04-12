@@ -27,17 +27,6 @@ pub struct State {
     arc4random: u32,
 }
 
-impl State {
-    pub fn flush_all_files(&mut self) {
-        for file_opt in &mut self.files {
-            if let Some(file) = file_opt.as_mut() {
-                if file.needs_flush {
-                    let _ = file.file.flush();
-                }
-            }
-        }
-    }
-}
 fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if size == 0 {
@@ -292,11 +281,9 @@ fn exit(env: &mut Environment, exit_code: i32) {
     // std::process::exit(exit_code);
 }
 
-fn abort(env: &mut Environment) {
-    log!("Guest called abort() — the application encountered a fatal error.");
-    // Flush any open files before exiting so data is not lost.
-    env.libc_state.posix_io.flush_all_files();
-    std::process::exit(134) // 128 + SIGABRT(6)
+fn abort(_env: &mut Environment) {
+    echo!("App called abort()! The guest application encountered a fatal error.");
+    std::process::exit(1);
 }
 
 fn bsearch(
@@ -877,4 +864,3 @@ where
     };
     Ok((res, whitespace_len + len))
 }
-
