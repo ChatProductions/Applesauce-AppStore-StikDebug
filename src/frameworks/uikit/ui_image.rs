@@ -391,6 +391,14 @@ pub const CLASSES: ClassExports = objc_classes!
     this
 }
 
+- (id)systemUptime {
+    nil
+}
+
+- (id)tick_audio {
+    nil
+}
+
 - (id)stretchableImageWithLeftCapWidth:(NSInteger)_leftCapWidth
                           topCapHeight:(NSInteger)_topCapHeight {
     log!("TODO: properly support stretchableImageWithLeftCapWidth:topCapHeight:");
