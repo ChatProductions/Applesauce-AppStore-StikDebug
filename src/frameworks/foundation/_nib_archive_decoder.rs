@@ -173,10 +173,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     get_value_to_decode_for_key(env, this, key).is_some()
 }
 
-// These come from a category in UIKit's UIGeometry.h
 - (CGPoint)decodeCGPointForKey:(id)key { // NSString*
-    let val = get_value_to_decode_for_key(env, this, key).unwrap();
-    let ValueVariant::Data(data) = val.value() else {
+    let val = get_value_to_decode_for_key(env, this, key);
+    if val.is_none() { 
+        return CGPoint { x: 0.0, y: 0.0 }; 
+    }
+    let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
     };
     assert_eq!(6, data[0]);
@@ -187,14 +189,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGRect)decodeCGRectForKey:(id)key { // NSString*
-    let Some(val) = get_value_to_decode_for_key(env, this, key) else {
-        return CGRect {
-            origin: CGPoint { x: 0.0, y: 0.0 },
-            size: CGSize { width: 0.0, height: 0.0 },
-        };
-    };
-    
-    let ValueVariant::Data(data) = val.value() else {
+    let val = get_value_to_decode_for_key(env, this, key);
+    if val.is_none() { 
+        return CGRect { 
+            origin: CGPoint { x: 0.0, y: 0.0 }, 
+            size: CGSize { width: 0.0, height: 0.0 } 
+        }; 
+    }
+    let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
     };
     assert_eq!(6, data[0]);
