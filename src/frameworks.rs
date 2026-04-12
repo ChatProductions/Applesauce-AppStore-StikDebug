@@ -21,7 +21,7 @@
 #![allow(clippy::enum_variant_names)] // Lots of Apple enums have the same prefix
 #![allow(clippy::too_many_arguments)] // It's not our fault!
 
-pub mod address_book; // <-- НАШ НОВЫЙ ФРЕЙМВОРК
+pub mod address_book;
 pub mod audio_toolbox;
 pub mod avfoundation;
 pub mod carbon_core;
@@ -32,12 +32,12 @@ pub mod core_foundation;
 pub mod core_graphics;
 pub mod core_location;
 pub mod core_motion;
-pub mod core_video; // <--- ДОБАВЛЕНО: МОДУЛЬ КАМЕРЫ (ОБЯЗАТЕЛЬНАЯ СТРОКА)
+pub mod core_video;
 pub mod foundation;
 pub mod game_kit;
-pub mod libicucore; // <--- ДОБАВЛЕНА БИБЛИОТЕКА ICU
+pub mod libicucore;
 pub mod libsqlite3;
-pub mod libxml2; // <-- ДОБАВЛЕНО ДЛЯ ПОДДЕРЖКИ XML (Rolando)
+pub mod libxml2;
 pub mod media_player;
 pub mod openal;
 pub mod opengles;
@@ -53,6 +53,7 @@ pub struct State {
     audio_toolbox: audio_toolbox::State,
     core_animation: core_animation::State,
     foundation: foundation::State,
+    pub game_kit: game_kit::State,
     media_player: media_player::State,
     openal: openal::State,
     opengles: opengles::State,
