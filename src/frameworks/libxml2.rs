@@ -1,5 +1,4 @@
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports};
-use crate::mem::{ConstPtr, GuestUSize, MutPtr, Ptr};
 use crate::Environment;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -11,6 +10,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 };
 
 const FUNCTIONS: FunctionExports = &[
+    // --- существующие ---
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
@@ -27,13 +27,15 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlHasProp(_, _)),
     export_c_func!(xmlStrcmp(_, _)),
     export_c_func!(xmlNodeGetContent(_)),
-    // TextReader API
+    // --- TextReader API ---
     export_c_func!(xmlReaderForFile(_, _, _)),
     export_c_func!(xmlFreeTextReader(_)),
     export_c_func!(xmlTextReaderRead(_)),
     export_c_func!(xmlTextReaderNodeType(_)),
     export_c_func!(xmlTextReaderConstName(_)),
     export_c_func!(xmlTextReaderConstValue(_)),
+    export_c_func!(xmlTextReaderName(_)),
+    export_c_func!(xmlTextReaderValue(_)),
     export_c_func!(xmlTextReaderReadInnerXml(_)),
     export_c_func!(xmlTextReaderReadOuterXml(_)),
     export_c_func!(xmlTextReaderGetAttribute(_, _)),
@@ -43,15 +45,22 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlTextReaderIsEmptyElement(_)),
     export_c_func!(xmlTextReaderNext(_)),
     export_c_func!(xmlTextReaderNextSibling(_)),
-    export_c_func!(xmlTextReaderValue(_)),
     export_c_func!(xmlTextReaderLocalName(_)),
     export_c_func!(xmlTextReaderPrefix(_)),
     export_c_func!(xmlTextReaderNamespaceUri(_)),
-    // Строковые утилиты
+    // --- DOM tree ---
+    export_c_func!(xmlChildrenNode(_)),
+    export_c_func!(xmlGetLastChild(_)),
+    export_c_func!(xmlNextElementSibling(_)),
+    export_c_func!(xmlFirstElementChild(_)),
+    export_c_func!(xmlNodeListGetString(_, _, _)),
+    // --- Строковые утилиты ---
     export_c_func!(xmlStrdup(_)),
     export_c_func!(xmlStrlen(_)),
     export_c_func!(xmlStrsub(_, _, _)),
 ];
+
+use crate::mem::{GuestUSize, MutPtr};
 
 // ============================================================
 // Хелперы
@@ -73,12 +82,49 @@ fn alloc_empty_string(env: &mut Environment) -> u32 {
     ptr.to_bits()
 }
 
-fn str_ptr_to_utf8<'a>(env: &'a Environment, ptr: u32) -> &'a str {
-    if ptr == 0 {
-        return "";
+/// Читает C-строку из guest memory, возвращает Vec<u8> (владеющий).
+/// Не держит ссылку на env, поэтому после вызова можно снова использовать env.
+fn read_cstr_bytes(env: &Environment, str_ptr: u32) -> Vec<u8> {
+    if str_ptr == 0 {
+        return Vec::new();
     }
-    let cptr: ConstPtr<u8> = Ptr::from_bits(ptr);
-    env.mem.cstr_at_utf8(cptr).unwrap_or("")
+    let mut result = Vec::new();
+    let mut offset: GuestUSize = 0;
+    loop {
+        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + offset));
+        if byte == 0 {
+            break;
+        }
+        result.push(byte);
+        offset += 1;
+    }
+    result
+}
+
+/// Копирует C-строку из guest memory в новую guest-строку (выделяет память).
+/// Возвращает указатель на новую аллоцированную строку.
+fn dup_cstr(env: &mut Environment, src_ptr: u32) -> u32 {
+    if src_ptr == 0 {
+        return 0;
+    }
+    let bytes = read_cstr_bytes(env, src_ptr);
+    let len: GuestUSize = bytes.len() as GuestUSize;
+    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    for (i, &b) in bytes.iter().enumerate() {
+        env.mem.write(dst + (i as GuestUSize), b);
+    }
+    env.mem.write(dst + len, 0u8);
+    dst.to_bits()
+}
+
+/// Читаем имя файла для лога: собираем String (владеющую) из байтов,
+/// чтобы не держать ссылку на env.
+fn read_cstr_as_string(env: &Environment, str_ptr: u32) -> String {
+    if str_ptr == 0 {
+        return "<null>".to_string();
+    }
+    let bytes = read_cstr_bytes(env, str_ptr);
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 // ============================================================
@@ -184,11 +230,8 @@ fn xmlNodeGetContent(_env: &mut Environment, _node: u32) -> u32 {
 ///                                    int options);
 #[allow(non_snake_case)]
 fn xmlReaderForFile(env: &mut Environment, filename: u32, _encoding: u32, _options: u32) -> u32 {
-    let filename_str = str_ptr_to_utf8(env, filename);
-    log!(
-        "xmlReaderForFile(\"{}\") — returning stub reader",
-        filename_str
-    );
+    let filename_str = read_cstr_as_string(env, filename);
+    log!("xmlReaderForFile(\"{}\") — returning stub", filename_str);
     alloc_xml_mem(env)
 }
 
@@ -217,6 +260,18 @@ fn xmlTextReaderConstName(env: &mut Environment, _reader: u32) -> u32 {
 /// const xmlChar *xmlTextReaderConstValue(xmlTextReaderPtr reader);
 #[allow(non_snake_case)]
 fn xmlTextReaderConstValue(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// xmlChar *xmlTextReaderName(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderName(env: &mut Environment, _reader: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+/// xmlChar *xmlTextReaderValue(xmlTextReaderPtr reader);
+#[allow(non_snake_case)]
+fn xmlTextReaderValue(env: &mut Environment, _reader: u32) -> u32 {
     alloc_empty_string(env)
 }
 
@@ -275,12 +330,6 @@ fn xmlTextReaderNextSibling(_env: &mut Environment, _reader: u32) -> i32 {
     0
 }
 
-/// const xmlChar *xmlTextReaderValue(xmlTextReaderPtr reader);
-#[allow(non_snake_case)]
-fn xmlTextReaderValue(env: &mut Environment, _reader: u32) -> u32 {
-    alloc_empty_string(env)
-}
-
 /// const xmlChar *xmlTextReaderLocalName(xmlTextReaderPtr reader);
 #[allow(non_snake_case)]
 fn xmlTextReaderLocalName(env: &mut Environment, _reader: u32) -> u32 {
@@ -300,28 +349,48 @@ fn xmlTextReaderNamespaceUri(env: &mut Environment, _reader: u32) -> u32 {
 }
 
 // ============================================================
+// DOM tree traversal
+// ============================================================
+
+/// xmlNodePtr xmlChildrenNode(xmlNodePtr node);
+#[allow(non_snake_case)]
+fn xmlChildrenNode(_env: &mut Environment, _node: u32) -> u32 {
+    0
+}
+
+/// xmlNodePtr xmlGetLastChild(xmlNodePtr node);
+#[allow(non_snake_case)]
+fn xmlGetLastChild(_env: &mut Environment, _node: u32) -> u32 {
+    0
+}
+
+/// xmlNodePtr xmlNextElementSibling(xmlNodePtr node);
+#[allow(non_snake_case)]
+fn xmlNextElementSibling(_env: &mut Environment, _node: u32) -> u32 {
+    0
+}
+
+/// xmlNodePtr xmlFirstElementChild(xmlNodePtr node);
+#[allow(non_snake_case)]
+fn xmlFirstElementChild(_env: &mut Environment, _node: u32) -> u32 {
+    0
+}
+
+/// xmlChar *xmlNodeListGetString(xmlDocPtr doc, xmlNodePtr list,
+///                                int inLine);
+#[allow(non_snake_case)]
+fn xmlNodeListGetString(env: &mut Environment, _doc: u32, _list: u32, _inline: u32) -> u32 {
+    alloc_empty_string(env)
+}
+
+// ============================================================
 // Строковые утилиты libxml2
 // ============================================================
 
 /// xmlChar *xmlStrdup(const xmlChar *str);
 #[allow(non_snake_case)]
 fn xmlStrdup(env: &mut Environment, src_ptr: u32) -> u32 {
-    if src_ptr == 0 {
-        return 0;
-    }
-    
-    // ИСПРАВЛЕНИЕ: Вычисляем длину с помощью xmlStrlen, не удерживая иммутабельную ссылку
-    let len = xmlStrlen(env, src_ptr) as GuestUSize;
-    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
-    let src: ConstPtr<u8> = Ptr::from_bits(src_ptr);
-    
-    // Прямое копирование байтов без проверок UTF-8
-    for i in 0..len {
-        let byte: u8 = env.mem.read(src + i);
-        env.mem.write(dst + i, byte);
-    }
-    env.mem.write(dst + len, 0u8);
-    dst.to_bits()
+    dup_cstr(env, src_ptr)
 }
 
 /// int xmlStrlen(const xmlChar *str);
@@ -331,14 +400,14 @@ fn xmlStrlen(env: &mut Environment, str_ptr: u32) -> i32 {
         return 0;
     }
     let mut len: i32 = 0;
-    let mut ptr: ConstPtr<u8> = Ptr::from_bits(str_ptr);
+    let mut offset: GuestUSize = 0;
     loop {
-        let byte: u8 = env.mem.read(ptr);
+        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + offset));
         if byte == 0 {
             break;
         }
         len += 1;
-        ptr = ptr + 1u32;
+        offset += 1;
     }
     len
 }
@@ -349,11 +418,16 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     if str_ptr == 0 {
         return 0;
     }
-    let src: ConstPtr<u8> = Ptr::from_bits(str_ptr + start);
-    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    // Читаем байты в Vec (владеющий), не держим ссылку на env
+    let mut bytes: Vec<u8> = Vec::new();
     for i in 0..len {
-        let byte: u8 = env.mem.read(src + i);
-        env.mem.write(dst + i, byte);
+        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + start + i));
+        bytes.push(byte);
+    }
+    // Теперь можно мутировать env
+    let dst: MutPtr<u8> = env.mem.alloc(len + 1).cast();
+    for (i, &b) in bytes.iter().enumerate() {
+        env.mem.write(dst + (i as GuestUSize), b);
     }
     env.mem.write(dst + len, 0u8);
     dst.to_bits()
