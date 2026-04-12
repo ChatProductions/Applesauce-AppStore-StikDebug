@@ -91,7 +91,8 @@ fn read_cstr_bytes(env: &Environment, str_ptr: u32) -> Vec<u8> {
     let mut result = Vec::new();
     let mut offset: GuestUSize = 0;
     loop {
-        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + offset));
+        // ИСПРАВЛЕНИЕ: Добавлен турбофиш ::<u8, false>
+        let byte: u8 = env.mem.read(crate::mem::Ptr::<u8, false>::from_bits(str_ptr + offset));
         if byte == 0 {
             break;
         }
@@ -402,7 +403,8 @@ fn xmlStrlen(env: &mut Environment, str_ptr: u32) -> i32 {
     let mut len: i32 = 0;
     let mut offset: GuestUSize = 0;
     loop {
-        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + offset));
+        // ИСПРАВЛЕНИЕ: Добавлен турбофиш ::<u8, false>
+        let byte: u8 = env.mem.read(crate::mem::Ptr::<u8, false>::from_bits(str_ptr + offset));
         if byte == 0 {
             break;
         }
@@ -421,7 +423,8 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     // Читаем байты в Vec (владеющий), не держим ссылку на env
     let mut bytes: Vec<u8> = Vec::new();
     for i in 0..len {
-        let byte: u8 = env.mem.read(crate::mem::Ptr::from_bits(str_ptr + start + i));
+        // ИСПРАВЛЕНИЕ: Добавлен турбофиш ::<u8, false>
+        let byte: u8 = env.mem.read(crate::mem::Ptr::<u8, false>::from_bits(str_ptr + start + i));
         bytes.push(byte);
     }
     // Теперь можно мутировать env
@@ -432,3 +435,4 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
     env.mem.write(dst + len, 0u8);
     dst.to_bits()
 }
+
