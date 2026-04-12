@@ -369,7 +369,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     }
                 } else {
                     let tmp = if precision.is_some_and(|value| value > 0) {
-                        format!("{}{:01$o}", prefix, uint, precision.unwrap())
+                        let prec = precision.unwrap();
+                        format!("{}{:0>1$o}", prefix, uint, prec)
                     } else {
                         format!("{}{:o}", prefix, uint)
                     };
@@ -418,7 +419,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     }
                 } else {
                     let tmp = if precision.is_some_and(|value| value > 0) {
-                        format!("{}{:01$x}", prefix, uint, precision.unwrap())
+                        let prec = precision.unwrap();
+                        format!("{}{:0>1$x}", prefix, uint, prec)
                     } else {
                         if let Some(precision) = precision {
                             assert!(precision == 0 && uint != 0);
@@ -1504,4 +1506,4 @@ pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
     c.is_ascii_whitespace() ||
     c == b'\x0b'
-                    }
+        }
