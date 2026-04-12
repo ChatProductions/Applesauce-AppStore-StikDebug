@@ -539,6 +539,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setOpacity:alpha]
 }
 
+// MARK: - Scale / Retina Support
+
+- (CGFloat)contentScaleFactor {
+    // Жестко задаем масштаб 1.0 (стандартный не-Retina экран)
+    1.0
+}
+
+- (())setContentScaleFactor:(CGFloat)scale {
+    // Заглушка, чтобы игра не упала, если попытается сама установить масштаб
+    log_dbg!("UIView setContentScaleFactor: {} (stubbed)", scale);
+}
+    
 - (id)backgroundColor {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     let cg_color: CGColorRef = msg![env; layer backgroundColor];
