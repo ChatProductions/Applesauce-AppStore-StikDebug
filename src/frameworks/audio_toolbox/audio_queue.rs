@@ -445,6 +445,7 @@ fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
     match property_id {
         kAudioQueueProperty_IsRunning => Some(guest_size_of::<u32>()),
         kAudioQueueProperty_MagicCookie => Some(0),
+        kAudioQueueProperty_StreamDescription => Some(guest_size_of::<AudioStreamBasicDescription>()),
         _ => None,
     }
 }
