@@ -911,7 +911,7 @@ pub const PROT_READ: i32 = 0x01;
 pub const PROT_WRITE: i32 = 0x02;
 pub const PROT_EXEC: i32 = 0x04;
 
-fn _mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32 {
+fn mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32 {
     set_errno(env, 0);
 
     // ПОЛНОЦЕННАЯ РЕАЛИЗАЦИЯ POSIX: 
@@ -923,7 +923,7 @@ fn _mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i3
         return -1;
     }
 
-    log_dbg!("_mprotect(addr: {:#x}, len: {:#x}, prot: {:#x}) => 0", addr, len, prot);
+    log_dbg!("mprotect(addr: {:#x}, len: {:#x}, prot: {:#x}) => 0", addr, len, prot);
 
     // Если в твоем менеджере памяти (env.mem) когда-нибудь появится реальный контроль 
     // прав доступа к страницам (NX bit), то здесь нужно будет вызвать:
@@ -950,7 +950,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fsync(_)),
     export_c_func!(ftruncate(_, _)),
     export_c_func!(writev(_, _, _)),
-    export_c_func!(_mprotect(_, _, _)),
+    export_c_func!(mprotect(_, _, _)),
 ];
 fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env.libc_state.posix_io.files.iter().position(|f| f.is_none()) {
