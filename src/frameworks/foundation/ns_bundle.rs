@@ -872,10 +872,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 fn path_for_resource_helper(
     env: &mut Environment,
     bundle: id,
-    name: id,      // NSString*
-    extension: id, // NSString*
-    _sub_dir: id,  // NSString*
-) -> id { // NSString*
+    name: id,
+    localization: id,
+    sub_dir: id,
+    extension: id,
+) -> id {
     if name == nil {
         // В реальной iOS метод pathForResource:ofType: при name == nil 
         // обязан возвращать nil.
@@ -885,7 +886,6 @@ fn path_for_resource_helper(
         log!("path_for_resource_helper: name is nil, returning nil");
         return nil;
     }
-    
     let mut path: id = msg![env; bundle resourcePath];
     if lproj != nil {
         path = msg![env; path stringByAppendingPathComponent:lproj];
