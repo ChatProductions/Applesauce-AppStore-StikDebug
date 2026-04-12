@@ -122,6 +122,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, this)
 }
 
+- (id)initWithScheme:(id)scheme host:(id)host path:(id)path {
+    // Преобразуем входящие NSString (id) в Rust-строки
+    let scheme_str = to_rust_string(env, scheme);
+    let host_str = to_rust_string(env, host);
+    let path_str = to_rust_string(env, path);
+
+    // Собираем полный URL в формате scheme://host/path
+    // NSURL обычно ожидает, что path уже содержит ведущий слеш, 
+    // но мы можем добавить проверку, если это необходимо.
+    let full_url = if path_str.starts_with('/') {
+        format!("{}://{}{}", scheme_str, host_str, path_str)
+    } else {
+        format!("{}://{}/{}", scheme_str, host_str, path_str)
+    };
+
+    // Создаем внутренний NSString для хранения результата
+    let ns_string = from_rust_string(env, full_url);
+
+    // Обновляем состояние Host-объекта
+    *env.objc.borrow_mut::<NSURLHostObject>(this) = NSURLHostObject::OtherURL {
+        ns_string,
+    };
+
+    // Возвращаем инициализированный объект
+    this
+}
+    
 // MARK: - Init
 
 - (id)initFileURLWithPath:(id)path { // NSString*
