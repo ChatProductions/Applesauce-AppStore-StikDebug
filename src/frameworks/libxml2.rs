@@ -1,4 +1,5 @@
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, Ptr};
 use crate::Environment;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -51,8 +52,6 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlStrlen(_)),
     export_c_func!(xmlStrsub(_, _, _)),
 ];
-
-use crate::mem::{ConstPtr, GuestUSize, MutPtr, Ptr};
 
 // ============================================================
 // Хелперы
