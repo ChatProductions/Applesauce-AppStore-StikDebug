@@ -376,6 +376,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
+- (id)interfaceOrientation {
+    nil
+}
+
 - (id)navigationItem {
     // Return a stub navigation item with the VC's class name as title.
     let class: Class = msg![env; this class];
