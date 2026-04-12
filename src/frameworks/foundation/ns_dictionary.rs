@@ -358,10 +358,14 @@ fn init_with_objects_for_keys_count_common(
 ) -> id {
     let mut host_object = <DictionaryHostObject as Default>::default();
 
+    let keys_bits = keys.to_bits();
+    let objects_bits = objects.to_bits();
+    let elem_size = std::mem::size_of::<id>() as NSUInteger;
+
     for i in 0..count {
-        // Убрали `as usize` для правильной работы адресной арифметики
-        let key: id = env.mem.read(keys + i);
-        let object: id = env.mem.read(objects + i);
+        let offset = i * elem_size;
+        let key: id = env.mem.read(ConstPtr::from_bits(keys_bits + offset));
+        let object: id = env.mem.read(ConstPtr::from_bits(objects_bits + offset));
         assert_ne!(key, nil); // TODO: raise proper exception
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
@@ -1123,5 +1127,4 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     let desc_imm = msg![env; desc copy];
     release(env, desc);
     autorelease(env, desc_imm)
-}
-
+                               }
