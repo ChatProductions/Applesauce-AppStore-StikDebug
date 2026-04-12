@@ -358,12 +358,9 @@ fn init_with_objects_for_keys_count_common(
 ) -> id {
     let mut host_object = <DictionaryHostObject as Default>::default();
 
-    let objects_array = env.mem.read(objects);
-    let keys_array = env.mem.read(keys);
-
-    for i in 0..count as usize {
-        let key = keys_array[i];
-        let object = objects_array[i];
+    for i in 0..count {
+        let key: id = env.mem.read(keys + i as usize);
+        let object: id = env.mem.read(objects + i as usize);
         assert_ne!(key, nil); // TODO: raise proper exception
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
