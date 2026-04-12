@@ -273,6 +273,11 @@ pub const CLASSES: ClassExports = objc_classes!
     }
 }
 
+- (ConstPtr<u8>)fileSystemRepresentation {
+    let file_manager: id = msg_class![env; NSFileManager defaultManager];
+    msg![env; file_manager fileSystemRepresentationWithPath:this]
+}
+
 // MARK: - Discovering Directory Contents
 
 - (id)contentsOfDirectoryAtPath:(id)path
