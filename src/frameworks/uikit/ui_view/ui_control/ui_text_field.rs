@@ -748,7 +748,7 @@ pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
     log_dbg!("handle_text for {:?} with '{}'", text_field, text);
     let txt = ns_string::from_rust_string(env, text);
     let txt_len: NSUInteger = msg![env; txt length];
-    assert_eq!(txt_len, 1);
+    // assert_eq!(txt_len, 1);
 
     let text_label = env.objc.borrow::<UITextFieldHostObject>(text_field).text_label;
     let mut curr_text: id = msg![env; text_label text];
