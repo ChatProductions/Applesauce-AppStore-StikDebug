@@ -348,6 +348,30 @@ fn init_with_objects_for_keys_common(env: &mut Environment, this: id, objects: i
     this
 }
 
+/// Helper function for initWithObjects:forKeys:count: implementation
+fn init_with_objects_for_keys_count_common(
+    env: &mut Environment,
+    this: id,
+    objects: ConstPtr<id>,
+    keys: ConstPtr<id>,
+    count: NSUInteger,
+) -> id {
+    let mut host_object = <DictionaryHostObject as Default>::default();
+
+    let objects_array = env.mem.read(objects);
+    let keys_array = env.mem.read(keys);
+
+    for i in 0..count as usize {
+        let key = keys_array[i];
+        let object = objects_array[i];
+        assert_ne!(key, nil); // TODO: raise proper exception
+        host_object.insert(env, key, object, /* copy_key: */ true);
+    }
+
+    *env.objc.borrow_mut(this) = host_object;
+    this
+}
+
 /// Helper function to share `allKeys` implementations
 fn all_keys_common(env: &mut Environment, this: id) -> id {
     let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
@@ -420,6 +444,16 @@ pub const CLASSES: ClassExports = objc_classes! {
                     forKeys:(id)keys { //NSArray *
     let new_dict: id = msg![env; this alloc];
     let new_dict: id = msg![env; new_dict initWithObjects:objects forKeys:keys];
+    autorelease(env, new_dict)
+}
+
+// FIX: Added missing class method dictionaryWithObjects:forKeys:count:
+// This method takes C arrays (not NSArrays) with a count
++ (id)dictionaryWithObjects:(ConstPtr<id>)objects
+                    forKeys:(ConstPtr<id>)keys
+                      count:(NSUInteger)count {
+    let new_dict: id = msg![env; this alloc];
+    let new_dict: id = msg![env; new_dict initWithObjects:objects forKeys:keys count:count];
     autorelease(env, new_dict)
 }
 
@@ -614,6 +648,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     init_with_objects_for_keys_common(env, this, objects, keys)
 }
 
+// FIX: Added missing instance method initWithObjects:forKeys:count:
+// This method takes C arrays (not NSArrays) with a count
+- (id)initWithObjects:(ConstPtr<id>)objects
+              forKeys:(ConstPtr<id>)keys
+                count:(NSUInteger)count {
+    init_with_objects_for_keys_count_common(env, this, objects, keys, count)
+}
+
 // TODO: enumeration, more init methods, etc
 
 - (NSUInteger)count {
@@ -749,6 +791,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithObjects:(id)objects //NSArray *
               forKeys:(id)keys { //NSArray *
     init_with_objects_for_keys_common(env, this, objects, keys)
+}
+
+// FIX: Added missing instance method initWithObjects:forKeys:count: for mutable dictionary
+- (id)initWithObjects:(ConstPtr<id>)objects
+              forKeys:(ConstPtr<id>)keys
+                count:(NSUInteger)count {
+    init_with_objects_for_keys_count_common(env, this, objects, keys, count)
 }
 
 // TODO: enumeration, more init methods, etc
@@ -1077,4 +1126,3 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     release(env, desc);
     autorelease(env, desc_imm)
 }
-
