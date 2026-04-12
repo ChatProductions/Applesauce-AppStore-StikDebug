@@ -271,12 +271,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     
 - (())dealloc {
     let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
-    let (view_controllers, delegate, tab_bar) =
-        (host.view_controllers, host.delegate, host.tab_bar);
+    let (view_controllers, delegate, tab_bar, more_nav) =
+        (host.view_controllers, host.delegate, host.tab_bar, host.more_navigation_controller);
     release(env, view_controllers);
     release(env, delegate);
     release(env, tab_bar);
-    release(env, more_nav);
+    release(env, more_nav); // <-- ДОБАВЛЕНО
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
