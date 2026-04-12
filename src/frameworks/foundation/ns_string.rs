@@ -960,6 +960,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     ui_font::size_with_font(env, font, &text, None)
 }
 
+- (CGSize)sizeWithFont:(id)font forWidth:(CGFloat)width lineBreakMode:(UILineBreakMode)line_break_mode {
+    // В iOS этот метод рассчитывает размер текста для одной строки, ограниченной по ширине,
+    // с применением выбранного режима обрезки (например, UILineBreakModeTailTruncation).
+    let text = to_rust_string(env, this);
+    
+    // Передаем ширину, а высоту задаем "бесконечной", чтобы движок шрифтов 
+    // touchHLE мог сам обрезать строку по ширине согласно line_break_mode.
+    let size = CGSize { width, height: 99999.0 };
+    
+    ui_font::size_with_font(env, font, &text, Some((size, line_break_mode)))
+}
+    
 - (CGSize)sizeWithFont:(id)font constrainedToSize:(CGSize)size {
     msg![env; this sizeWithFont:font constrainedToSize:size lineBreakMode:UILineBreakModeWordWrap]
 }
