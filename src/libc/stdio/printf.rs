@@ -67,14 +67,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             false
         };
 
-        if get_format_char(&env.mem, format_char_idx) == b'#' {
-            // Alternative form handling
+        let alternative_form = if get_format_char(&env.mem, format_char_idx) == b'#' {
+            // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix for octal
             format_char_idx += 1;
-            // TODO: other specifiers
-            assert!(get_format_char(&env.mem, format_char_idx) == b'.');
-            // TODO: other cases
-            assert!(get_format_char(&env.mem, format_char_idx + 2) == b'd');
-        }
+            true
+        } else {
+            false
+        };
 
         let pad_char = if get_format_char(&env.mem, format_char_idx) == b'0' {
             format_char_idx += 1;
@@ -333,6 +332,50 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     write!(&mut res, "(null)").unwrap();
                 }
             }
+            b'o' => {
+                // Octal specifier
+                assert!(!prepend_sign);
+                let uint: u32 = if length_modifier == Some("ll") {
+                    let uint: u64 = args.next(env);
+                    uint.try_into().unwrap()
+                } else if length_modifier == Some("hh") {
+                    let uint: u8 = args.next(env);
+                    uint.into()
+                } else if length_modifier == Some("h") {
+                    let uint: u16 = args.next(env);
+                    uint.into()
+                } else {
+                    let uint: u32 = args.next(env);
+                    uint
+                };
+
+                let prefix = if alternative_form && uint != 0 { "0" } else { "" };
+                
+                if pad_width > 0 {
+                    let pad_width = pad_width as usize;
+                    let formatted = format!("{}{:o}", prefix, uint);
+                    if pad_char == '0' && precision.is_none() && !left_justified {
+                        // For zero padding with alternative form, prefix goes before zeros
+                        if alternative_form && uint != 0 {
+                            let remaining_width = pad_width.saturating_sub(1);
+                            write!(&mut res, "0{:0>1$o}", uint, remaining_width).unwrap();
+                        } else {
+                            write!(&mut res, "{:0>pad_width$o}", uint).unwrap();
+                        }
+                    } else if left_justified {
+                        write!(&mut res, "{:<pad_width$}", formatted).unwrap();
+                    } else {
+                        write!(&mut res, "{:>pad_width$}", formatted).unwrap();
+                    }
+                } else {
+                    let tmp = if precision.is_some_and(|value| value > 0) {
+                        format!("{}{:01$o}", prefix, uint, precision.unwrap())
+                    } else {
+                        format!("{}{:o}", prefix, uint)
+                    };
+                    res.extend_from_slice(tmp.as_bytes());
+                }
+            }
             b'x' => {
                 assert!(!prepend_sign);
                 // Note: on 32-bit system unsigned int and unsigned long
@@ -351,26 +394,37 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     uint
                 };
 
+                let prefix = if alternative_form && uint != 0 { "0x" } else { "" };
+
                 if pad_width > 0 {
                     assert!(precision.is_none());
                     // TODO
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        write!(&mut res, "{uint:0>pad_width$x}").unwrap();
-                    } else if left_justified {
-                        write!(&mut res, "{uint:<pad_width$x}").unwrap();
+                        // For zero padding with alternative form, prefix goes before zeros
+                        if alternative_form && uint != 0 {
+                            let remaining_width = pad_width.saturating_sub(2);
+                            write!(&mut res, "0x{:0>1$x}", uint, remaining_width).unwrap();
+                        } else {
+                            write!(&mut res, "{:0>pad_width$x}", uint).unwrap();
+                        }
                     } else {
-                        write!(&mut res, "{uint:>pad_width$x}").unwrap();
+                        let formatted = format!("{}{:x}", prefix, uint);
+                        if left_justified {
+                            write!(&mut res, "{:<pad_width$}", formatted).unwrap();
+                        } else {
+                            write!(&mut res, "{:>pad_width$}", formatted).unwrap();
+                        }
                     }
                 } else {
                     let tmp = if precision.is_some_and(|value| value > 0) {
-                        format!("{:01$x}", uint, precision.unwrap())
+                        format!("{}{:01$x}", prefix, uint, precision.unwrap())
                     } else {
                         if let Some(precision) = precision {
                             assert!(precision == 0 && uint != 0);
                             // TODO
                         }
-                        format!("{uint:x}")
+                        format!("{}{:x}", prefix, uint)
                     };
                     res.extend_from_slice(tmp.as_bytes());
                 }
@@ -394,19 +448,28 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     uint
                 };
 
+                let prefix = if alternative_form && uint != 0 { "0X" } else { "" };
+
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        write!(&mut res, "{uint:0>pad_width$X}").unwrap();
-                    } else if left_justified {
-                        write!(&mut res, "{uint:<pad_width$X}").unwrap();
+                        // For zero padding with alternative form, prefix goes before zeros
+                        if alternative_form && uint != 0 {
+                            let remaining_width = pad_width.saturating_sub(2);
+                            write!(&mut res, "0X{:0>1$X}", uint, remaining_width).unwrap();
+                        } else {
+                            write!(&mut res, "{:0>pad_width$X}", uint).unwrap();
+                        }
                     } else {
-                        assert!(pad_char == ' ');
-                        // TODO
-                        write!(&mut res, "{uint:>pad_width$X}").unwrap();
+                        let formatted = format!("{}{:X}", prefix, uint);
+                        if left_justified {
+                            write!(&mut res, "{:<pad_width$}", formatted).unwrap();
+                        } else {
+                            write!(&mut res, "{:>pad_width$}", formatted).unwrap();
+                        }
                     }
                 } else {
-                    res.extend_from_slice(format!("{uint:X}").as_bytes());
+                    res.extend_from_slice(format!("{}{:X}", prefix, uint).as_bytes());
                 }
             }
             b'p' => {
@@ -1441,5 +1504,4 @@ pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
     c.is_ascii_whitespace() ||
     c == b'\x0b'
-}
-
+                    }
