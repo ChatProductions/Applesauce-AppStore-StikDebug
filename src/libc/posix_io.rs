@@ -50,7 +50,6 @@ pub struct PosixFileHostObject {
     path: Option<String>,
 }
 
-
 // TODO: stdin/stdout/stderr handling somehow
 fn file_idx_to_fd(idx: usize) -> FileDescriptor {
     FileDescriptor::try_from(idx)
@@ -85,7 +84,6 @@ pub const O_NOFOLLOW: OpenFlag = 0x100;
 pub const O_CREAT: OpenFlag = 0x200;
 pub const O_TRUNC: OpenFlag = 0x400;
 pub const O_EXCL: OpenFlag = 0x800;
-
 /// File control command flags.
 /// This alias is for readability, POSIX just uses `int`.
 pub type FileControlCommand = i32;
@@ -132,7 +130,6 @@ pub type RecordLockingFlag = i16;
 pub const F_RDLCK: RecordLockingFlag = 1;
 pub const F_UNLCK: RecordLockingFlag = 2;
 pub const F_WRLCK: RecordLockingFlag = 3;
-
 #[repr(C, packed)]
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -166,7 +163,7 @@ fn open(env: &mut Environment, path: ConstPtr<u8>, flags: i32, _args: DotDotDot)
     self::open_direct(env, path, flags)
 }
 
-fn creat(env: &mut Environment, path: ConstPtr<u8>, mode: u32) -> i32 {
+fn creat(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
     // Согласно стандарту, creat(path, mode) это абсолютно то же самое, что:
     // open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
     
@@ -176,9 +173,8 @@ fn creat(env: &mut Environment, path: ConstPtr<u8>, mode: u32) -> i32 {
     // O_TRUNC  = 0x0400
     let flags = 0x0001 | 0x0200 | 0x0400;
     
-    // Пробрасываем вызов в существующий полноценный open.
-    // Если твой open принимает mode как i32, поменяй `mode` на `mode as i32`
-    open(env, path, flags, _args)
+    // ИСПРАВЛЕНИЕ: Вызываем open_direct напрямую, так как для open() нужен объект DotDotDot
+    self::open_direct(env, path, flags)
 }
 
 pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> FileDescriptor {
@@ -273,7 +269,6 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
                 }
 
                 if let Some(m) = found_match {
-                  
                   if !current_path.is_empty() && !current_path.ends_with('/') {
                         current_path.push('/');
                     }
@@ -303,7 +298,6 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             let host_object = PosixFileHostObject {
                 file,
                 needs_flush,
-     
                 reached_eof: false,
                 flags: 0,
                 status_flags: flags & (O_ACCMODE | O_APPEND | O_NONBLOCK),
@@ -423,8 +417,7 @@ pub fn write(
 ) -> GuestISize {
     set_errno(env, 0);
     // ПЕРЕХВАТ КОНСОЛИ! Ловим stdout и stderr от Unity.
-    if fd == STDOUT_FILENO ||
-        fd == STDERR_FILENO {
+    if fd == STDOUT_FILENO || fd == STDERR_FILENO {
         let buffer_slice = env.mem.bytes_at(buffer.cast(), size);
         let msg = String::from_utf8_lossy(buffer_slice);
         print!("{}", msg);
@@ -496,7 +489,6 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Ok(pos) => pos,
             Err(seek_error) => {
                 match seek_error.kind() {
-                   
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
                     _ => unimplemented!("Unexpected seek error {:?}", seek_error),
                 }
@@ -508,7 +500,6 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Err(seek_error) => {
                 match seek_error.kind() {
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
-           
                     _ => unimplemented!("Unexpected seek error {:?}", seek_error),
                 }
                 return -1;
@@ -527,7 +518,6 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             let (error_msg, errno) = if offset >= 0 {
                 ("Seek position does not fit in off_t.", EOVERFLOW)
             } else {
-         
                ("Negative seek position.", EINVAL)
             };
             log!("Warning: lseek({:?}, {:#x}, {}) => -1. {}", fd, offset, whence, error_msg);
@@ -551,7 +541,6 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
                 std::io::ErrorKind::InvalidInput => set_errno(env, EINVAL),
                 std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
                 _ => unimplemented!("Unexpected seek error {:?}", seek_error),
-        
             }
             log!("Warning: lseek({:?}, {:#x}, {}) failed with error: {:?}, returning -1", fd, offset, whence, seek_error);
             return -1;
@@ -568,8 +557,7 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
         return 0;
     }
 
-    if fd < 0 ||
-        env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
+    if fd < 0 || env.libc_state.posix_io.files.get(fd_to_file_idx(fd)).is_none() {
         set_errno(env, EBADF);
         log!("Warning: close({:?}) failed, returning -1", fd);
         return -1;
@@ -586,18 +574,14 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
                 _ => {
                     if !file.needs_flush {
                         0
-                    
                     } else {
                         match file.file.sync_all() {
                             Ok(()) => 0,
-                      
                             Err(_) => -1
-            
                         }
                     }
                 }
             }
-        
         }
         None => {
             set_errno(env, EBADF);
@@ -760,8 +744,7 @@ fn fcntl(
         // ----------------------------------------------------------------
         // Duplicate file descriptor (stub — GuestFile is not Clone)
         // ----------------------------------------------------------------
-        F_DUPFD |
-        F_DUPFD_CLOEXEC => {
+        F_DUPFD | F_DUPFD_CLOEXEC => {
             let min_fd: i32 = args.start().next(env);
             log!(
                 "TODO: fcntl({}, {}) F_DUPFD min_fd={} — dup not supported",
@@ -810,7 +793,6 @@ fn fcntl(
                 .files
                 .get(fd_to_file_idx(fd))
                 .and_then(|s| s.as_ref())
-                
                 .and_then(|f| f.path.clone());
             if let Some(path) = path_opt {
                 let bytes = path.as_bytes();
@@ -830,11 +812,9 @@ fn fcntl(
             log_dbg!("fcntl({}, F_CHKCLEAN) — returning 0", fd);
         }
         F_ADDSIGS
-        |
-        F_ADDFILESIGS
+        | F_ADDFILESIGS
         | F_ADDFILESIGS_FOR_DYLD_SIM
-        |
-        F_ADDFILESIGS_RETURN
+        | F_ADDFILESIGS_RETURN
         | F_ADDFILESUPPL => {
             log_dbg!("fcntl({}, {:#x}) code-signing — ignored", fd, cmd);
         }
@@ -925,10 +905,8 @@ pub const PROT_NONE: i32 = 0x00;
 pub const PROT_READ: i32 = 0x01;
 pub const PROT_WRITE: i32 = 0x02;
 pub const PROT_EXEC: i32 = 0x04;
-
 fn mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32 {
     set_errno(env, 0);
-
     // ПОЛНОЦЕННАЯ РЕАЛИЗАЦИЯ POSIX: 
     // Адрес (addr) должен быть выровнен по границе системной страницы (обычно 4096 байт).
     // Если адрес не выровнен, mprotect обязан вернуть -1 и установить errno = EINVAL.
@@ -939,7 +917,6 @@ fn mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32
     }
 
     log_dbg!("mprotect(addr: {:#x}, len: {:#x}, prot: {:#x}) => 0", addr, len, prot);
-
     // Если в твоем менеджере памяти (env.mem) когда-нибудь появится реальный контроль 
     // прав доступа к страницам (NX bit), то здесь нужно будет вызвать:
     // env.mem.set_protection(addr, len, prot).unwrap_or(-1)
