@@ -142,11 +142,11 @@ const NSUNDOMANAGER_CLASSES: ClassExports = objc_classes! {
 - (())removeAllActionsWithTarget:(id)target {
     let state = &mut env.framework_state.uikit.undo_manager;
     state.undo_stack.retain(|inv| {
-        let inv_target: id = msg![env; inv target];
+        let inv_target: id = msg![env; *inv target];
         inv_target != target
     });
     state.redo_stack.retain(|inv| {
-        let inv_target: id = msg![env; inv target];
+        let inv_target: id = msg![env; *inv target];
         inv_target != target
     });
 }
@@ -162,7 +162,12 @@ const NSUNDOMANAGER_CLASSES: ClassExports = objc_classes! {
 - (())registerUndoWithTarget:(id)target
                     selector:(SEL)selector
                       object:(id)object {
-    let signature: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:"v@:@"];
+    
+    let types_ptr: MutPtr<[u8; 5]> = env.mem.alloc(5).cast();
+    env.mem.write(types_ptr, *b"v@:@\0");
+    let types_arg: ConstVoidPtr = types_ptr.cast().cast_const();
+    
+    let signature: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:types_arg];
 
     let invocation: id = msg_class![env; NSInvocation invocationWithMethodSignature:signature];
     () = msg![env; invocation setTarget:target];
@@ -184,7 +189,11 @@ const NSUNDOMANAGER_CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)methodSignatureForSelector:(SEL)_selector {
-    msg_class![env; NSMethodSignature signatureWithObjCTypes:"v@:"]
+    let types_ptr: MutPtr<[u8; 4]> = env.mem.alloc(4).cast();
+    env.mem.write(types_ptr, *b"v@:\0");
+    let types_arg: ConstVoidPtr = types_ptr.cast().cast_const();
+    
+    msg_class![env; NSMethodSignature signatureWithObjCTypes:types_arg]
 }
 
 - (id)delegate {
@@ -371,7 +380,6 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
         let Some(event) = env.window_mut().pop_event() else {
             break;
         };
-
         match event {
             Event::Quit => {
                 echo!("User requested quit, exiting.");
@@ -415,7 +423,6 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 let responder = env.framework_state.uikit.ui_responder.first_responder;
                 let class = msg![env; responder class];
                 let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
-
                 if !responder.is_null() && env.objc.class_is_subclass_of(class, ui_text_field_class)
                 {
                     match text_event {
@@ -436,3 +443,4 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
 
     ui_accelerometer::handle_accelerometer(env)
 }
+
