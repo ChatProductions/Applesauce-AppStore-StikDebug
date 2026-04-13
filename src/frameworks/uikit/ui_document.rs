@@ -49,7 +49,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     - (id)initWithFileURL:(id)url {
-        let this: id = msg![env; super init];
+        // Вместо msg![env; super init] используем msg_super!
+        let this: id = msg_super![env; this init]; 
+        
         if url != nil {
             retain(env, url);
         }
@@ -57,12 +59,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         this
     }
 
-    - ((()) )dealloc {
+    - (())dealloc {
         let url = env.objc.borrow::<UIDocumentHostObject>(this).file_url;
         if url != nil {
             release(env, url);
         }
-        msg![env; super dealloc]
+        // Здесь тоже меняем на msg_super!
+        msg_super![env; this dealloc] 
     }
 
     - (id)fileURL {
