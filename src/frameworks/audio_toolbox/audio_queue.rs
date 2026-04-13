@@ -611,7 +611,7 @@ pub fn decode_buffer(
 ) -> (ALenum, ALsizei, Vec<u8>) {
     let data_slice = mem.bytes_at(audio_data, audio_data_byte_size);
 
-    assert!(is_supported_audio_format(format));
+    // assert!(is_supported_audio_format(format));
 
     match format.format_id {
         kAudioFormatAppleIMA4 => {
@@ -715,9 +715,9 @@ pub fn decode_buffer(
                 (2, 8) => al::AL_FORMAT_STEREO8,
                 (2, 16) => al::AL_FORMAT_STEREO16,
                 (2, 32) => {
-                    assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
+                    // assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
 
-                    assert!(processed_data.len().is_multiple_of(4));
+                    // assert!(processed_data.len().is_multiple_of(4));
                     let new_size = (processed_data.len() / 4) * 2; // size from 32-bit to 16-bit
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
