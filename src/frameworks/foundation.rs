@@ -1,13 +1,17 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! The Foundation framework.
 //!
 //! A concept that Foundation really likes is "class clusters": abstract classes
-//! with private concrete implementations. Apple has their own explanation of it
+//! with private concrete implementations.
+//! Apple has their own explanation of it
 //! in [Cocoa Core Competencies](https://developer.apple.com/library/archive/documentation/General/Conceptual/DevPedia-CocoaCore/ClassCluster.html).
+//!
 //! Being aware of this concept will make common types like `NSArray` and
 //! `NSString` easier to understand.
 
@@ -66,6 +70,7 @@ pub mod ns_thread;
 pub mod ns_time_zone;
 pub mod ns_timer;
 pub mod ns_ubiquitous_key_value_store;
+pub mod ns_undo_manager;
 pub mod ns_url;
 pub mod ns_url_connection;
 pub mod ns_url_request;
@@ -80,7 +85,7 @@ pub fn NSGetSizeAndAlignment(
     align_out: MutPtr<NSUInteger>,
 ) -> ConstPtr<u8> {
     let (next_ptr, size, align) = parse_objc_type(env, type_ptr);
-    
+
     if !size_out.is_null() {
         env.mem.write(size_out, size as NSUInteger);
     }
@@ -95,8 +100,10 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
     // Пропускаем модификаторы типа (const, in, out, inout, bycopy, byref, oneway)
     loop {
         let c = env.mem.read(ptr) as char;
+
         match c {
-            'r' | 'n' | 'N' | 'o' | 'O' | 'R' | 'V' => {
+            'r' | 'n' | 'N' |
+            'o' | 'O' | 'R' | 'V' => {
                 ptr = ptr + 1;
             }
             _ => break,
@@ -104,38 +111,49 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
     }
 
     let c = env.mem.read(ptr) as char;
+
     ptr = ptr + 1;
 
     match c {
         // Базовые типы
-        'c' | 'C' | 'B' => (ptr, 1, 1),
-        's' | 'S' => (ptr, 2, 2),
-        'i' | 'I' | 'l' | 'L' | 'f' | 'W' => (ptr, 4, 4),
-        'q' | 'Q' | 'd' => (ptr, 8, 8),
+        'c' |
+        'C' | 'B' => (ptr, 1, 1),
+        's' |
+        'S' => (ptr, 2, 2),
+        'i' | 'I' | 'l' | 'L' |
+        'f' | 'W' => (ptr, 4, 4),
+        'q' | 'Q' |
+        'd' => (ptr, 8, 8),
         'v' => (ptr, 0, 1), // void
         
         // Указатели, объекты (id), классы (Class), селекторы (SEL), неизвестные указатели (?)
-        '*' | '@' | '#' | ':' | '?' => (ptr, 4, 4),
+        '*' |
+        '@' | '#' | ':' | '?' => (ptr, 4, 4),
         
         // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип, на который он указывает
         '^' => {
             let (next_ptr, _, _) = parse_objc_type(env, ptr);
+
             (next_ptr, 4, 4)
         }
         
         // Массивы: [len+type]
         '[' => {
             let mut len = 0;
+
             loop {
                 let c = env.mem.read(ptr) as char;
+
                 if c.is_ascii_digit() {
                     len = len * 10 + c.to_digit(10).unwrap();
+
                     ptr = ptr + 1;
                 } else {
                     break;
                 }
             }
             let (mut next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+
             if env.mem.read(next_ptr) as char == ']' {
                 next_ptr = next_ptr + 1;
             }
@@ -146,36 +164,47 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         '{' => {
             loop {
                 let c = env.mem.read(ptr) as char;
+
                 ptr = ptr + 1;
-                if c == '=' || c == '}' {
-                    if c == '}' { return (ptr, 0, 1); } // Opaque
+                if c == '=' ||
+                c == '}' {
+                    if c == '}' { return (ptr, 0, 1);
+                    } // Opaque
                     break;
                 }
             }
             let mut total_size = 0;
+
             let mut max_align = 1;
             loop {
                 let c = env.mem.read(ptr) as char;
+
                 if c == '}' {
                     ptr = ptr + 1;
+
                     break;
                 }
-                if c == '\0' { break; }
+                if c == '\0' { break;
+                }
                 
                 // Пропускаем имена полей (например: "x"f)
                 if c == '"' {
                     ptr = ptr + 1;
+                   
                     loop {
                         let nc = env.mem.read(ptr) as char;
                         ptr = ptr + 1;
-                        if nc == '"' { break; }
+                        if nc == '"' { break;
+                        }
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+
                     ptr = next_ptr;
                     
                     if elem_align > 0 {
                         let rem = total_size % elem_align;
+
                         if rem != 0 {
                             total_size += elem_align - rem;
                         }
@@ -188,6 +217,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             }
             if max_align > 0 {
                 let rem = total_size % max_align;
+
                 if rem != 0 {
                     total_size += max_align - rem;
                 }
@@ -199,34 +229,45 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         '(' => {
             loop {
                 let c = env.mem.read(ptr) as char;
+    
                 ptr = ptr + 1;
                 if c == '=' || c == ')' {
-                    if c == ')' { return (ptr, 0, 1); }
+                    if c == ')' { return (ptr, 0, 1);
+                    }
                     break;
                 }
             }
             let mut max_size = 0;
+
             let mut max_align = 1;
             loop {
                 let c = env.mem.read(ptr) as char;
+
                 if c == ')' {
                     ptr = ptr + 1;
+
                     break;
                 }
-                if c == '\0' { break; }
+                if c == '\0' { break;
+                }
                 
                 if c == '"' {
                     ptr = ptr + 1;
                     loop {
+                   
                         let nc = env.mem.read(ptr) as char;
                         ptr = ptr + 1;
-                        if nc == '"' { break; }
+                        if nc == '"' { break;
+                        }
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
+
                     ptr = next_ptr;
-                    if elem_size > max_size { max_size = elem_size; }
-                    if elem_align > max_align { max_align = elem_align; }
+                    if elem_size > max_size { max_size = elem_size;
+                    }
+                    if elem_align > max_align { max_align = elem_align;
+                    }
                 }
             }
             (ptr, max_size, max_align)
@@ -235,16 +276,20 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         // Битовые поля: bNUM
         'b' => {
             let mut bits = 0;
+
             loop {
                 let c = env.mem.read(ptr) as char;
+
                 if c.is_ascii_digit() {
                     bits = bits * 10 + c.to_digit(10).unwrap();
+
                     ptr = ptr + 1;
                 } else {
                     break;
                 }
             }
             let bytes = (bits + 7) / 8;
+
             (ptr, bytes, 1)
         }
         
@@ -270,6 +315,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_calendar::CLASSES,
         ns_character_set::CLASSES,
         ns_coder::CLASSES,
+       
         ns_condition::CLASSES,
         ns_data::CLASSES,
         ns_date::CLASSES,
@@ -283,6 +329,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
         ns_input_stream::CLASSES,
+   
         ns_invocation::CLASSES,
         ns_keyed_archiver::CLASSES,
         ns_keyed_unarchiver::CLASSES,
@@ -295,6 +342,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_number_formatter::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,
+       
         ns_persistent_store_coordinator::CLASSES,
         ns_predicate::CLASSES,
         ns_process_info::CLASSES,
@@ -308,6 +356,8 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_timer::CLASSES,
         ns_time_zone::CLASSES,
         ns_ubiquitous_key_value_store::CLASSES,
+        ns_undo_manager::CLASSES,
+   
         ns_url::CLASSES,
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,
@@ -321,6 +371,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_exception::CONSTANTS,
         ns_file_manager::CONSTANTS,
         ns_keyed_unarchiver::CONSTANTS,
+      
         ns_locale::CONSTANTS,
         ns_run_loop::CONSTANTS,
         STUB_CONSTANTS,
@@ -348,10 +399,12 @@ pub struct State {
     ns_string: ns_string::State,
     ns_thread: ns_thread::State,
     pub ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
+    pub ns_undo_manager: ns_undo_manager::State,
     ns_user_defaults: ns_user_defaults::State,
 }
 
 pub type NSInteger = i32;
+
 pub type NSUInteger = u32;
 
 // this should be equal to NSIntegerMax
@@ -365,6 +418,7 @@ pub struct NSRange {
 }
 unsafe impl crate::mem::SafeRead for NSRange {}
 crate::abi::impl_GuestRet_for_large_struct!(NSRange);
+
 impl crate::abi::GuestArg for NSRange {
     const REG_COUNT: usize = 2;
 
@@ -376,18 +430,21 @@ impl crate::abi::GuestArg for NSRange {
     }
     fn to_regs(self, regs: &mut [u32]) {
         self.location.to_regs(&mut regs[0..1]);
+
         self.length.to_regs(&mut regs[1..2]);
     }
 }
 
 fn NSStringFromRange(env: &mut Environment, range: NSRange) -> id {
     let loc = range.location;
+
     let len = range.length;
     let string = format!("{{{loc}, {len}}}");
     ns_string::from_rust_string(env, string)
 }
 
 pub type NSComparisonResult = NSInteger;
+
 pub const NSOrderedAscending: NSComparisonResult = -1;
 pub const NSOrderedSame: NSComparisonResult = 0;
 pub const NSOrderedDescending: NSComparisonResult = 1;
@@ -401,11 +458,13 @@ pub type unichar = u16;
 
 /// Utility to help with implementing the `hash` method, which various classes
 /// in Foundation have to do.
+
 fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     use std::hash::Hasher;
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     hashable.hash(&mut hasher);
+
     let hash_u64: u64 = hasher.finish();
     (hash_u64 as u32) ^ ((hash_u64 >> 32) as u32)
 }
@@ -415,3 +474,4 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSGetSizeAndAlignment(_, _, _)),
     export_c_func!(CFStringGetCharactersPtr(_)),
 ];
+
