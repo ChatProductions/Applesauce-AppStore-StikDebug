@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! Virtual filesystem, or "guest filesystem".
 //!
 //! This lets us put files and directories where the guest app expects them to
@@ -161,6 +162,7 @@ pub const APPLICATIONS: &GuestPath = GuestPath::new_const("/var/mobile/Applicati
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct GuestPath(str);
+
 impl GuestPath {
     const fn new_const(s: &str) -> &GuestPath {
         unsafe { &*(s as *const str as *const GuestPath) }
@@ -179,7 +181,8 @@ impl GuestPath {
     /// would have to implement it for everything that can derference to `&str`.
     /// It's easier to just use `&str`.
     ///
-    /// Warning! This function should only be used for internal touchHLE
+    /// Warning!
+    /// This function should only be used for internal touchHLE
     /// purposes.
     /// For Foundation case, use `[NSString stringByAppendingPathComponent:]`
     pub fn join<P: AsRef<str>>(&self, path: P) -> GuestPathBuf {
@@ -190,20 +193,24 @@ impl GuestPath {
     pub fn parent_and_file_name(&self) -> Option<(&GuestPath, &str)> {
         // TODO
         assert!(!self.as_str().ends_with('/'));
+
         // FIXME: this should do the same resolution as `std::path::file_name()`
         let (parent_name, file_name) = self.as_str().rsplit_once('/')?;
+
         Some((GuestPath::new(parent_name), file_name))
     }
 
     /// Get the final component of the path.
     pub fn file_name(&self) -> Option<&str> {
         let (_, file_name) = self.parent_and_file_name()?;
+
         Some(file_name)
     }
 
     /// Get the parent directory of the path.
     pub fn parent(&self) -> Option<&GuestPath> {
         let (parent_name, _) = self.parent_and_file_name()?;
+
         Some(parent_name)
     }
 }
@@ -253,6 +260,7 @@ impl std::ops::Deref for GuestPathBuf {
 
     fn deref(&self) -> &GuestPath {
         let s: &str = &self.0;
+
         s.as_ref()
     }
 }
@@ -279,11 +287,13 @@ fn apply_path_component<'a>(components: &mut Vec<&'a str>, component: &'a str) {
 }
 
 /// Resolve a path so that it is absolute and has no `.`, `..` or empty
-/// components. The result is a series of zero or more path components forming
+/// components.
+/// The result is a series of zero or more path components forming
 /// an absolute path (e.g. `["foo", "bar"]` means `/foo/bar`).
 ///
 /// `relative_to` is the starting point for resolving a relative path, e.g. the
-/// current directory. It must be an absolute path. It is optional if `path`
+/// current directory.
+/// It must be an absolute path. It is optional if `path`
 /// is absolute.
 pub fn resolve_path<'a>(path: &'a GuestPath, relative_to: Option<&'a GuestPath>) -> Vec<&'a str> {
     log_dbg!("Resolving {:?} relative to {:?}", path, relative_to);
@@ -293,6 +303,7 @@ pub fn resolve_path<'a>(path: &'a GuestPath, relative_to: Option<&'a GuestPath>)
     if !path.as_str().starts_with('/') {
         let relative_to = relative_to.unwrap().as_str();
         assert!(relative_to.starts_with('/'));
+
         for component in relative_to.split('/') {
             apply_path_component(&mut components, component);
         }
@@ -350,7 +361,8 @@ impl GuestOpenOptions {
 }
 
 /// Handles host I/O errors by panicking. This is intended specifically for
-/// opening files. The assumption is that the guest filesystem contains all the
+/// opening files.
+/// The assumption is that the guest filesystem contains all the
 /// information needed to tell if opening a file should succeed, so if opening
 /// the file nonetheless fails, there's either a bug or the user has done
 /// something wrong.
@@ -394,7 +406,8 @@ impl GuestFile {
     pub fn sync_all(&self) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.sync_all(),
-            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Ok(()),
+            GuestFile::IpaBundleFile(_) |
+            GuestFile::ResourceFile(_) => Ok(()),
             GuestFile::Directory => {
                 log!("Warning: syncing directory as a guest file.");
                 Ok(())
@@ -486,7 +499,8 @@ impl Seek for GuestFile {
             GuestFile::IpaBundleFile(file) => file.seek(pos),
             GuestFile::ResourceFile(file) => file.get().seek(pos),
             GuestFile::Directory => {
-                // Note: directories as supposed to be seekable on iOS! https://stackoverflow.com/questions/65911066/what-does-lseek-mean-for-a-directory-file-descriptor
+                // Note: directories as supposed to be seekable on iOS!
+                // https://stackoverflow.com/questions/65911066/what-does-lseek-mean-for-a-directory-file-descriptor
                 // As far as I can (f)tell, apps are really not using that
                 // properly and returning -1 on fseek/ftell is fine.
                 // TODO: implement seeking properly and return "cookie" values
@@ -510,18 +524,22 @@ pub struct Fs {
 }
 impl Fs {
     /// Construct a filesystem containing a home directory for the app, its
-    /// bundle and documents, and the bundled shared libraries. Returns the new
+    /// bundle and documents, and the bundled shared libraries.
+    /// Returns the new
     /// filesystem and the guest path of the bundle.
     ///
     /// The `bundle_dir_name` argument will be used as the name of the bundle
     /// directory in the guest filesystem, and must end in `.app`.
     /// This allows the host directory for the bundle to be renamed from its
-    /// original name without confusing the app. Supposedly Apple does something
+    /// original name without confusing the app.
+    /// Supposedly Apple does something
     /// similar when executing iOS apps on modern Macs.
     ///
     /// The `bundle_id` argument should be some value that uniquely identifies
-    /// the app. This will be used to construct the host path for the app's
-    /// sandbox directory, where documents can be stored. A directory will be
+    /// the app.
+    /// This will be used to construct the host path for the app's
+    /// sandbox directory, where documents can be stored.
+    /// A directory will be
     /// created at that path if it does not already exist.
     ///
     /// `read_only_mode` can be used when the app won't actually be run, just
@@ -535,7 +553,6 @@ impl Fs {
         read_only_mode: bool,
     ) -> (Fs, GuestPathBuf) {
         const FAKE_UUID: &str = "00000000-0000-0000-0000-000000000000";
-
         let home_directory = APPLICATIONS.join(FAKE_UUID);
         let working_directory = GuestPathBuf::from("/".to_string());
 
@@ -548,6 +565,7 @@ impl Fs {
                     .join(paths::SANDBOX_DIR)
                     .join(bundle_id)
                     .join(dir);
+
                 if dir == "tmp" {
                     // We clean temporary directory for current app at startup.
                     // This is no-op if directory doesn't exist.
@@ -570,7 +588,6 @@ impl Fs {
                 None
             }
         });
-
         if !read_only_mode {
             // Special case: Some apps may create save files at
             // Library/Preferences at the start, thus presence of that
@@ -620,7 +637,6 @@ impl Fs {
                 "libz.1.1.3.dylib",
                 FsNode::resource_file(format!("{DYLIBS_DIR}/libz.1.2.3.dylib")),
             );
-
         let mut app_dir_children = HashMap::new();
         app_dir_children.insert(bundle_dir_name, app_bundle.into_fs_node());
         for (dir, host_path) in directories.iter().zip(host_path_directories.iter()) {
@@ -636,7 +652,6 @@ impl Fs {
             Some(host_path) => FsNode::from_host_dir(host_path, true),
             None => FsNode::dir(),
         };
-
         let root = FsNode::dir()
             .with_child(
                 "var",
@@ -657,7 +672,6 @@ impl Fs {
                 ),
             )
             .with_child("usr", FsNode::dir().with_child("lib", usr_lib));
-
         log_dbg!("Initial filesystem layout: {:#?}", root);
 
         let fs = Fs {
@@ -683,7 +697,8 @@ impl Fs {
         &self.home_directory
     }
 
-    /// Get the absolute path of the current working directory. The resulting
+    /// Get the absolute path of the current working directory.
+    /// The resulting
     /// path may be invalid if the directory was moved or deleted.
     pub fn working_directory(&self) -> &GuestPath {
         &self.working_directory
@@ -734,7 +749,8 @@ impl Fs {
     }
 
     /// Get the parent of the node at a given path, if it exists, and return it
-    /// together with the final path component. This is an alternative to
+    /// together with the final path component.
+    /// This is an alternative to
     /// [Self::lookup_node] useful when writing to a file, where it might not
     /// exist yet (but its parent directory does).
     fn lookup_parent_node(&mut self, path: &GuestPath) -> Option<(&mut FsNode, String)> {
@@ -819,9 +835,18 @@ impl Fs {
                         })
                         .map_err(|_| ())
                 }
-                _ => unimplemented!(),
+                FileLocation::ResourceFilePath(_) => Ok(0),
             },
-            _ => unimplemented!(),
+            FsNode::Directory { writeable, .. } => {
+                if let Some(host_path) = writeable {
+                    fs::metadata(host_path)
+                        .and_then(|m| m.modified())
+                        .map(|t| t.duration_since(UNIX_EPOCH).unwrap().as_secs().try_into().unwrap())
+                        .map_err(|_| ())
+                } else {
+                    Ok(0)
+                }
+            }
         }
     }
 
@@ -834,9 +859,15 @@ impl Fs {
                 FileLocation::Path(path) => {
                     fs::metadata(path).map(|meta| meta.len()).map_err(|_| ())
                 }
-                _ => unimplemented!(),
+                FileLocation::ResourceFilePath(_) => Ok(0),
             },
-            _ => unimplemented!(),
+            FsNode::Directory { writeable, .. } => {
+                if let Some(host_path) = writeable {
+                    fs::metadata(host_path).map(|meta| meta.len()).map_err(|_| ())
+                } else {
+                    Ok(4096)
+                }
+            }
         }
     }
 
@@ -883,7 +914,6 @@ impl Fs {
         let mut paths = Vec::new();
         let mut component_stack: Vec<&str> = Vec::new();
         let mut iterator_stack = vec![children.iter()];
-
         loop {
             let current_iterator = iterator_stack.last_mut().unwrap();
             if let Some((next_component, next_node)) = current_iterator.next() {
@@ -902,7 +932,6 @@ impl Fs {
             }
         }
         assert!(component_stack.is_empty() && iterator_stack.is_empty());
-
         Ok(paths)
     }
 
@@ -962,7 +991,6 @@ impl Fs {
             }
             _ => unimplemented!(),
         };
-
         if self.lookup_node(to.as_ref()).is_none() {
             // In case target guest node do not exist, we need to create one
             let mut options = GuestOpenOptions::new();
@@ -1069,7 +1097,6 @@ impl Fs {
                 }
             }
         };
-
         // Create a new file otherwise
 
         if !create {
@@ -1091,7 +1118,6 @@ impl Fs {
         }
 
         let host_path = dir_host_path.join(&new_filename);
-
         let file = handle_open_err(
             File::options()
                 .read(read)
@@ -1117,15 +1143,14 @@ impl Fs {
         Ok(GuestFile::File(file))
     }
 
-    /// Removes a file or a directory. If the node is a directory, it must be
+    /// Removes a file or a directory.
+    /// If the node is a directory, it must be
     /// empty.
     pub fn remove<P: AsRef<GuestPath>>(&mut self, path: P) -> Result<(), FsError> {
         let path = path.as_ref();
-
         let (parent_node, node_name) = self
             .lookup_parent_node(path)
             .ok_or(FsError::NonexistentParentDir)?;
-
         // Parent directory is not a directory
         let FsNode::Directory {
             children,
@@ -1150,7 +1175,8 @@ impl Fs {
                 location,
                 writeable,
             } => {
-                // Read-only files can't be removed. (This is probably not
+                // Read-only files can't be removed.
+                // (This is probably not
                 // correct, but it is safer for now.)
                 if !writeable {
                     return Err(FsError::AccessDenied);
@@ -1158,9 +1184,9 @@ impl Fs {
 
                 let host_path = match location {
                     FileLocation::Path(host_path) => host_path,
-                    FileLocation::IpaFileRef(_) | FileLocation::ResourceFilePath(_) => panic!(),
+                    FileLocation::IpaFileRef(_) |
+                    FileLocation::ResourceFilePath(_) => panic!(),
                 };
-
                 handle_open_err(std::fs::remove_file(host_path), host_path);
                 log_dbg!(
                     "Deleted file at path {:?} (host path: {:?})",
@@ -1176,7 +1202,8 @@ impl Fs {
                 if !children.is_empty() {
                     return Err(FsError::DirectoryNotEmpty);
                 }
-                // Read-only directories can't be removed. (This is probably not
+                // Read-only directories can't be removed.
+                // (This is probably not
                 // correct, but it is safer for now.)
                 let Some(host_path) = writeable else {
                     return Err(FsError::AccessDenied);
@@ -1192,7 +1219,6 @@ impl Fs {
         }
 
         children.remove(&node_name).unwrap();
-
         Ok(())
     }
 
@@ -1207,7 +1233,8 @@ impl Fs {
             tmp_vec.push(component);
             let res = self.create_dir(GuestPathBuf::from(tmp_vec.join("/")));
             match res {
-                Ok(_) | Err(FsError::AlreadyExist) => {}
+                Ok(_) |
+                Err(FsError::AlreadyExist) => {}
                 _ => return res,
             }
         }
@@ -1217,11 +1244,9 @@ impl Fs {
     /// Like [std::fs::create_dir] but for the guest filesystem.
     pub fn create_dir<P: AsRef<GuestPath>>(&mut self, path: P) -> Result<(), FsError> {
         let path = path.as_ref();
-
         let (parent_node, new_dir_name) = self
             .lookup_parent_node(path)
             .ok_or(FsError::NonexistentParentDir)?;
-
         // Parent directory is not a directory
         let FsNode::Directory {
             children,
@@ -1248,7 +1273,6 @@ impl Fs {
         }
 
         let host_path = dir_host_path.join(&new_dir_name);
-
         handle_open_err(std::fs::create_dir(&host_path), &host_path);
         log_dbg!(
             "Created directory at path {:?} (host path: {:?})",
