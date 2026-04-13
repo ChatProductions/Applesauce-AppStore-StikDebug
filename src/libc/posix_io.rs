@@ -166,6 +166,21 @@ fn open(env: &mut Environment, path: ConstPtr<u8>, flags: i32, _args: DotDotDot)
     self::open_direct(env, path, flags)
 }
 
+fn creat(env: &mut Environment, path: ConstPtr<u8>, mode: u32) -> i32 {
+    // Согласно стандарту, creat(path, mode) это абсолютно то же самое, что:
+    // open(path, O_WRONLY | O_CREAT | O_TRUNC, mode)
+    
+    // Флаги для Darwin/iOS:
+    // O_WRONLY = 0x0001
+    // O_CREAT  = 0x0200
+    // O_TRUNC  = 0x0400
+    let flags = 0x0001 | 0x0200 | 0x0400;
+    
+    // Пробрасываем вызов в существующий полноценный open.
+    // Если твой open принимает mode как i32, поменяй `mode` на `mode as i32`
+    open(env, path, flags, mode)
+}
+
 pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> FileDescriptor {
     assert!(
         flags
@@ -936,6 +951,7 @@ fn mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(open(_, _, _)),
+    export_c_func!(creat(_, _)),
     export_c_func!(read(_, _, _)),
     export_c_func!(pread(_, _, _, _)),
     export_c_func!(write(_, _, _)),
