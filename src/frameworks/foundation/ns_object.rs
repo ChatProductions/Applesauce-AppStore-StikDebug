@@ -443,10 +443,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 }
 
-- (()) {
-
-}
-
 - (())version {
 
 }
