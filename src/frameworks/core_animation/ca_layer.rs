@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `CALayer`.
 
 use crate::dyld::{ConstantExports, HostConstant};
@@ -38,6 +40,7 @@ pub(super) struct CALayerHostObject {
     superlayer: id,
     pub(super) bounds: CGRect,
     pub(super) position: CGPoint,
+    pub(super) z_position: CGFloat, // <-- ДОБАВЛЕНО СВОЙСТВО Z-POSITION
     pub(super) anchor_point: CGPoint,
     pub(super) affine_transform: CGAffineTransform,
     pub(super) hidden: bool,
@@ -103,6 +106,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             size: CGSize { width: 0.0, height: 0.0 }
         },
         position: CGPoint { x: 0.0, y: 0.0 },
+        z_position: 0.0, // <-- ИНИЦИАЛИЗАЦИЯ Z-POSITION
         anchor_point: CGPoint { x: 0.5, y: 0.5 },
         affine_transform: CGAffineTransformIdentity,
         hidden: false,
@@ -125,6 +129,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         name: None,
         mask: nil,
     });
+
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
@@ -143,6 +148,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         ref mut sublayers,
         ..
     } = env.objc.borrow_mut(this);
+
     let sublayers = std::mem::take(sublayers);
 
     if drawable_properties != nil { release(env, drawable_properties); }
@@ -151,6 +157,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(cg_context) = cg_context { CGContextRelease(env, cg_context); }
 
     assert!(superlayer == nil);
+
     for sublayer in sublayers {
         env.objc.borrow_mut::<CALayerHostObject>(sublayer).superlayer = nil;
         release(env, sublayer);
@@ -235,10 +242,18 @@ pub const CLASSES: ClassExports = objc_classes! {
         () = msg![env; this setNeedsDisplay];
     }
 }
+
 - (CGPoint)position { env.objc.borrow::<CALayerHostObject>(this).position }
 - (())setPosition:(CGPoint)position { env.objc.borrow_mut::<CALayerHostObject>(this).position = position; }
+
+// --- ДОБАВЛЕНЫ МЕТОДЫ ДЛЯ Z-POSITION ---
+- (CGFloat)zPosition { env.objc.borrow::<CALayerHostObject>(this).z_position }
+- (())setZPosition:(CGFloat)z_position { env.objc.borrow_mut::<CALayerHostObject>(this).z_position = z_position; }
+// ---------------------------------------
+
 - (CGPoint)anchorPoint { env.objc.borrow::<CALayerHostObject>(this).anchor_point }
 - (())setAnchorPoint:(CGPoint)anchor_point { env.objc.borrow_mut::<CALayerHostObject>(this).anchor_point = anchor_point; }
+
 - (CGAffineTransform)affineTransform { env.objc.borrow::<CALayerHostObject>(this).affine_transform }
 - (())setAffineTransform:(CGAffineTransform)affine_transform { env.objc.borrow_mut::<CALayerHostObject>(this).affine_transform = affine_transform; }
 
@@ -260,12 +275,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: frame.size
     }).size;
+
     let transformed_offset = inverse_transform.apply_to_point(CGPoint { x: 0.0, y: 0.0 });
 
     let new_position = CGPoint {
         x: frame.origin.x + transformed_offset.x,
         y: frame.origin.y + transformed_offset.y,
     };
+
     () = msg![env; this setPosition:new_position];
     let new_bounds = CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
@@ -329,6 +346,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         delegate,
         ..
     } = env.objc.borrow_mut(this);
+
     if !std::mem::take(needs_display) { return; }
     if delegate == nil { return; }
 
@@ -359,6 +377,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             CGBitmapContextGetWidth(env, existing) != int_width ||
             CGBitmapContextGetHeight(env, existing) != int_height
     );
+
     let cg_context = if need_new_context {
         if let Some(old_context) = cg_context { CGContextRelease(env, old_context); }
         let color_space = CGColorSpaceCreateDeviceRGB(env);
@@ -479,11 +498,12 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
 
     let mut this_map = HashMap::from([(this, CGAffineTransformIdentity)]);
     let mut other_map = HashMap::from([(other, CGAffineTransformIdentity)]);
+
     let mut this_superlayer = this;
     let mut this_transform = CGAffineTransformIdentity;
     let mut other_superlayer = other;
     let mut other_transform = CGAffineTransformIdentity;
-    
+
     let (common_ancestor, this_transform, other_transform) = loop {
         if this_superlayer != nil {
             let this_hostobj: &CALayerHostObject = env.objc.borrow(this_superlayer);
@@ -518,4 +538,3 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
     assert!((common_ancestor == nil) != need_common_ancestor);
     other_transform.concat(this_transform.invert())
 }
-
