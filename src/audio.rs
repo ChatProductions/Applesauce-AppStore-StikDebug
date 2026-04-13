@@ -210,8 +210,8 @@ impl AudioFile {
                 // Hound supports unsigned 8-bit, signed 16-bit, signed 24-bit
                 // and floating-point 32-bit linear PCM. We should expose all of
                 // these eventually, but we should only expose formats we've tested.
-                // assert!(matches!(bits_per_sample, 8 | 16));
-                // assert!(sample_format == hound::SampleFormat::Int);
+                assert!(matches!(bits_per_sample, 8 | 16));
+                assert!(sample_format == hound::SampleFormat::Int);
 
                 AudioDescription {
                     sample_rate: sample_rate.into(),
