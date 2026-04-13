@@ -8,7 +8,7 @@
 use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetGregorianDate;
 use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
 use crate::objc::{autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
-ClassExports, HostObject, NSZonePtr};
+todo_objc_setter, ClassExports, HostObject, NSZonePtr};
 
 // MARK: - Style constants
 
@@ -123,6 +123,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setTimeStyle:(NSDateFormatterStyle)style {
     env.objc.borrow_mut::<NSDateFormatterHostObject>(this).time_style = style;
+}
+
+- (())setShortMonthSymbols:(bool)symbols {
+    todo_objc_setter!(this, symbols);
 }
 
 // MARK: - Locale / TimeZone / Calendar
