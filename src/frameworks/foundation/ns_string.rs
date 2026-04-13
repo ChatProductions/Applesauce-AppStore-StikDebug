@@ -62,7 +62,7 @@ pub const NSBackwardsSearch: NSUInteger = 4;
 pub const NSNumericSearch: NSUInteger = 64;
 
 /// Encodings that C strings (null-terminated byte strings) can use.
-const C_STRING_FRIENDLY_ENCODings: &[NSStringEncoding] = &[
+const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSASCIIStringEncoding,
     NSUTF8StringEncoding,
     NSWindowsCP1252StringEncoding,
