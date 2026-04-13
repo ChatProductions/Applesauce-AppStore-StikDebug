@@ -101,7 +101,14 @@ fn objc_msgSend_inner(
             // ------------------------------------------------------------------------
         }
 
-        let host_object = env.objc.get_host_object(class).unwrap();
+let Some(host_object) = env.objc.get_host_object(class) else {
+    log_dbg!(
+        "Warning: class {:?} in superclass chain of {:?} has no host object — stopping dispatch",
+        class, receiver
+    );
+    env.cpu.regs_mut()[0..2].fill(0);
+    return;
+};
         if let Some(&super::ClassHostObject {
             superclass,
             ref methods,
