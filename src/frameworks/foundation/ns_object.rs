@@ -20,8 +20,10 @@ use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, msg_send_no_type_checking, nil, objc_classes,
     retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
 };
+
 // Хранилище для отмененных таймеров (target, имя селектора в виде строки)
 pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> = std::vec::Vec::new();
+
 // ДОБАВЛЕНА РЕАЛИЗАЦИЯ NSAllocateObject
 fn NSAllocateObject(
     env: &mut Environment,
@@ -34,14 +36,14 @@ fn NSAllocateObject(
     }
     
     // Перенаправляем вызов в стандартный метод alloc данного класса
-    msg![env;
-class alloc]
+    msg![env; class alloc]
 }
 
 // ДОБАВЛЕН ЭКСПОРТ ФУНКЦИЙ ДЛЯ ДИНАМИЧЕСКОГО ЛИНКЕРА
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSAllocateObject(_, _, _)),
 ];
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -49,8 +51,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSObject
 
 + (id)alloc {
-    msg![env;
-this allocWithZone:(MutVoidPtr::null())]
+    msg![env; this allocWithZone:(MutVoidPtr::null())]
 }
 + (id)allocWithZone:(NSZonePtr)_zone { 
     log_dbg!("[{:?} allocWithZone:]", this);
@@ -59,8 +60,7 @@ this allocWithZone:(MutVoidPtr::null())]
 
 + (id)new {
     let new_object: id = msg![env; this alloc];
-    msg![env;
-new_object init]
+    msg![env; new_object init]
 }
 
 + (Class)class {
@@ -103,8 +103,7 @@ new_object init]
 }
 
 + (id)instanceMethodSignatureForSelector:(SEL)selector {
-    let sig: id = msg_class![env;
-NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
     
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
@@ -124,8 +123,7 @@ NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
 }
 
 + (id)debugDescription {
-    msg![env;
-this description]
+    msg![env; this description]
 }
 
 + (())cancelPreviousPerformRequestsWithTarget:(id)target
@@ -176,8 +174,7 @@ this description]
     ObjC::read_isa(this, &env.mem)
 }
 - (bool)isMemberOfClass:(Class)class {
-    let this_class: Class = msg![env;
-this class];
+    let this_class: Class = msg![env; this class];
     class == this_class
 }
 - (bool)isKindOfClass:(Class)class {
@@ -194,8 +191,7 @@ this class];
 }
 
 - (id)copy {
-    msg![env;
-this copyWithZone:(MutVoidPtr::null())]
+    msg![env; this copyWithZone:(MutVoidPtr::null())]
 }
 
 - (id)mutableCopy {
@@ -279,8 +275,7 @@ this copyWithZone:(MutVoidPtr::null())]
 }
 
 - (id)methodSignatureForSelector:(SEL)selector {
-    let sig: id = msg_class![env;
-NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
     
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
@@ -317,12 +312,13 @@ NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
 
     let selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
     let timer:id = msg_class![env;
-NSTimer timerWithTimeInterval:delay
+        NSTimer timerWithTimeInterval:delay
                                target:this
                              selector:selector
                              userInfo:dict
-          
-                     repeats:false];
+                              repeats:false
+    ];
+    
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let mode: id = get_static_str(env, NSDefaultRunLoopMode);
     () = msg![env; run_loop addTimer:timer forMode:mode];
@@ -343,11 +339,11 @@ NSTimer timerWithTimeInterval:delay
     }
 
     // Background thread → schedule on main thread via run loop.
-// `wait:YES` from a background thread would require thread
+    // `wait:YES` from a background thread would require thread
     // synchronisation which touchHLE doesn't support;
-we schedule
+    // we schedule
     // without waiting and log once at debug level.
-log_dbg!(
+    log_dbg!(
         "performSelectorOnMainThread:{} from background thread {} (wait={}) — scheduling",
         sel.as_str(&env.mem), env.current_thread, wait
     );
@@ -422,8 +418,7 @@ log_dbg!(
 }
 
 - (())setValue:(id)value forKeyPath:(id)key_path {
-    msg![env;
-this setValue:value forKey:key_path]
+    msg![env; this setValue:value forKey:key_path]
 }
 
 // MARK: - Key-Value Observing (KVO)
@@ -436,11 +431,11 @@ this setValue:value forKey:key_path]
 - (())didChangeValueForKey:(id)_key {
 }
 
-- (id)r#self {
-    this
-}
+// Закомментировано: 'self' является зарезервированным словом в Rust и не может 
+// быть использовано как имя метода в этом макросе. Рантайм Objective-C справится с ним сам.
+// - (id)self { ... }
 
-+ (NSUInteger)version {
+- (NSUInteger)version {
     0
 }
 
