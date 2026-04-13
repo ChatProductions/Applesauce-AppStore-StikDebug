@@ -1,8 +1,10 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! The `NSString` class cluster, including `NSMutableString`.
 //!
 //! Resources:
@@ -60,7 +62,7 @@ pub const NSBackwardsSearch: NSUInteger = 4;
 pub const NSNumericSearch: NSUInteger = 64;
 
 /// Encodings that C strings (null-terminated byte strings) can use.
-const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
+const C_STRING_FRIENDLY_ENCODings: &[NSStringEncoding] = &[
     NSASCIIStringEncoding,
     NSUTF8StringEncoding,
     NSWindowsCP1252StringEncoding,
@@ -124,7 +126,8 @@ impl StringHostObject {
                 let string = String::from_utf8_lossy(&bytes).into_owned();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSUTF32LittleEndianStringEncoding | NSUTF32StringEncoding | NSUTF32BigEndianStringEncoding | NSNextStepLatinStringEncoding | NSWindowsCP1252StringEncoding => {
+            NSUTF32LittleEndianStringEncoding |
+            NSUTF32StringEncoding | NSUTF32BigEndianStringEncoding | NSNextStepLatinStringEncoding | NSWindowsCP1252StringEncoding => {
                 let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
@@ -149,7 +152,6 @@ impl StringHostObject {
                     },
                     _ => unreachable!(),
                 };
-
                 StringHostObject::Utf16(if is_big_endian {
                     bytes
                         .chunks(2)
@@ -414,7 +416,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (utf16, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { log_dbg!("[{:?} characterAtIndex:{:?}]: converted string to UTF-16", this, index); }
-    utf16[index as usize]
+    
+    let idx = index as usize;
+    if idx >= utf16.len() {
+        log!("WARNING: characterAtIndex: index {} out of bounds (len {})", index, utf16.len());
+        return 0;
+    }
+    utf16[idx]
 }
 
 - (NSRange)rangeOfCharacterFromSet:(id)set {
@@ -438,7 +446,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let end_bound = (search_loc + search_len).min(len);
     let is_backwards = (options & NSBackwardsSearch) != 0;
-
     if is_backwards {
         for i in (search_loc..end_bound).rev() {
             let c: u16 = msg![env; this characterAtIndex:i];
@@ -500,7 +507,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let search_len = search_range.length;
     let len: NSUInteger = msg![env; this length];
     let len_search: NSUInteger = msg![env; search_string length];
-
     if len_search == 0 || search_loc >= len || search_len == 0 {
         return NSRange { location: NSNotFound as NSUInteger, length: 0 };
     }
@@ -607,7 +613,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     assert_ne!(other, nil);
     let mut a_iter = env.objc.borrow::<StringHostObject>(this).iter_code_units().peekable();
     let mut b_iter = env.objc.borrow::<StringHostObject>(other).iter_code_units().peekable();
-
     let mask = if mask == 0 { NSLiteralSearch } else { mask };
     match mask {
         NSCaseInsensitiveSearch => {
@@ -628,7 +633,6 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let b_next = b_iter.next();
                 let (Some(a_unit), Some(b_unit)) = (a_next, b_next) else { return from_rust_ordering(a_next.cmp(&b_next)); };
                 let (Some(a_c), Some(b_c)) = (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) else { panic!("Invalid chars!"); };
-
                 if a_c.is_ascii_digit() && b_c.is_ascii_digit() {
                     let a_int = ascii_number(&mut a_iter, a_c);
                     let b_int = ascii_number(&mut b_iter, b_c);
@@ -679,7 +683,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let mut main_iter = env.objc.borrow::<StringHostObject>(this).iter_code_units();
     let sep_iter = env.objc.borrow::<StringHostObject>(separator).iter_code_units();
-    
     if sep_iter.clone().next().is_none() {
         let res = ns_array::from_vec(env, vec![this]);
         return autorelease(env, res);
@@ -699,7 +702,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     components.push(current_component);
-
     let class = env.objc.get_known_class("_touchHLE_NSString", &mut env.mem);
     let component_ns_strings: Vec<id> = components.drain(..).map(|utf16| {
         let host_object = Box::new(StringHostObject::Utf16(utf16));
@@ -734,7 +736,6 @@ pub const CLASSES: ClassExports = objc_classes! {
             string.as_bytes().to_vec()
         },
         NSUTF16LittleEndianStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
-        // NSUnicodeStringEncoding = NSUTF16StringEncoding: native byte order (LE on ARM)
         NSUnicodeStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
         NSUTF16BigEndianStringEncoding => string.encode_utf16().flat_map(u16::to_be_bytes).collect(),
         _ => unimplemented!("{}", encoding),
@@ -759,7 +760,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (ConstPtr<u8>)UTF8String { msg![env; this cStringUsingEncoding:NSUTF8StringEncoding] }
 
 - (id)substringToIndex:(NSUInteger)to {
-    let mut res_utf16: Utf16String = Vec::with_capacity(to as usize);
+    let cap = (to as usize).min(1024); 
+    let mut res_utf16: Utf16String = Vec::with_capacity(cap);
     for_each_code_unit(env, this, |idx, c| { if idx < to { res_utf16.push(c); } });
     let res = msg_class![env; _touchHLE_NSString alloc];
     *env.objc.borrow_mut(res) = StringHostObject::Utf16(res_utf16);
@@ -767,7 +769,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)substringFromIndex:(NSUInteger)from {
-    let mut res_utf16: Utf16String = Vec::with_capacity(from as usize);
+    let mut res_utf16: Utf16String = Vec::new();
     for_each_code_unit(env, this, |idx, c| { if idx >= from { res_utf16.push(c); } });
     let res = msg_class![env; _touchHLE_NSString alloc];
     *env.objc.borrow_mut(res) = StringHostObject::Utf16(res_utf16);
@@ -967,14 +969,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGSize)sizeWithFont:(id)font forWidth:(CGFloat)width lineBreakMode:(UILineBreakMode)line_break_mode {
-    // В iOS этот метод рассчитывает размер текста для одной строки, ограниченной по ширине,
-    // с применением выбранного режима обрезки (например, UILineBreakModeTailTruncation).
     let text = to_rust_string(env, this);
-    
-    // Передаем ширину, а высоту задаем "бесконечной", чтобы движок шрифтов 
-    // touchHLE мог сам обрезать строку по ширине согласно line_break_mode.
     let size = CGSize { width, height: 99999.0 };
-    
     ui_font::size_with_font(env, font, &text, Some((size, line_break_mode)))
 }
     
@@ -1196,7 +1192,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// === ВОЗВРАЩЕНО ПРАВИЛЬНОЕ ПОВЕДЕНИЕ (return nil при отсутствии файла) ===
 - (id)initWithContentsOfFile:(id)path { 
     if path == nil {
         release(env, this);
@@ -1224,7 +1219,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// === ВОЗВРАЩЕНО ПРАВИЛЬНОЕ ПОВЕДЕНИЕ (return nil) ===
 - (id)initWithContentsOfFile:(id)path encoding:(NSStringEncoding)encoding error:(MutPtr<id>)error {
     if path == nil {
         release(env, this);
@@ -1236,7 +1230,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         Err(_) => {
             log!("WARNING: File not found: {}, returning nil", path_str);
             if !error.is_null() {
-                env.mem.write(error, nil); 
+                env.mem.write(error, nil);
             }
             release(env, this);
             return nil;
@@ -1247,7 +1241,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// === ВОЗВРАЩЕНО ПРАВИЛЬНОЕ ПОВЕДЕНИЕ (return nil) ===
 - (id)initWithContentsOfFile:(id)path usedEncoding:(MutPtr<NSUInteger>)enc error:(MutPtr<id>)error {
     if path == nil {
         release(env, this);
@@ -1397,7 +1390,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (orig_string, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { log_dbg!("[{:?} substringWithRange]: converted string to UTF-16", this); }
-    let host_string = orig_string[(range.location as usize)..((range.location + range.length) as usize)].to_vec();
+    
+    let start = range.location as usize;
+    let end = start.saturating_add(range.length as usize);
+    
+    // Защита от выхода за пределы строки
+    if start > orig_string.len() || end > orig_string.len() {
+        log!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
+        let res = from_u16_vec(env, Vec::new());
+        return autorelease(env, res);
+    }
+    
+    let host_string = orig_string[start..end].to_vec();
     let res = from_u16_vec(env, host_string);
     autorelease(env, res)
 }
@@ -1540,7 +1544,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (orig_string, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { log_dbg!("[{:?} substringWithRange]: converted string to UTF-16", this); }
-    let host_string = orig_string[(range.location as usize)..((range.location + range.length) as usize)].to_vec();
+    
+    let start = range.location as usize;
+    let end = start.saturating_add(range.length as usize);
+    
+    // Защита от выхода за пределы строки
+    if start > orig_string.len() || end > orig_string.len() {
+        log!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
+        let res = from_u16_vec(env, Vec::new());
+        return autorelease(env, res);
+    }
+    
+    let host_string = orig_string[start..end].to_vec();
     let res = from_u16_vec(env, host_string);
     autorelease(env, res)
 }
@@ -1597,7 +1612,6 @@ pub fn register_constant_strings(bin: &MachO, mem: &mut Mem, objc: &mut ObjC) {
     for i in 0..(cfstrings.size / guest_size_of::<cfstringStruct>()) {
         let cfstr_ptr = base + i;
         let cfstringStruct { _isa, flags, bytes, length } = mem.read(cfstr_ptr);
-        
         let (host_object, class_name) = if flags == 0x7C8 {
             let decoded = String::from_utf8_lossy(mem.bytes_at(bytes, length)).into_owned();
             (StringHostObject::Utf8(Cow::Owned(decoded)), "_touchHLE_NSString_CFConstantString_UTF8")
@@ -1720,7 +1734,8 @@ fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_
                 0x0085 | 0x2028 | 0x2029 => { end_pos = cend_pos + 1; break; }
                 0x000A => {
                     if cend_pos > 0 && string[cend_pos - 1] == 0x000D {
-                        cend_pos -= 1; end_pos = cend_pos + 2;
+                        cend_pos -= 1;
+                        end_pos = cend_pos + 2;
                     } else { end_pos = cend_pos + 1; }
                     break;
                 }
@@ -1729,7 +1744,8 @@ fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_
                         let after_cr: u16 = string[cend_pos + 1];
                         if after_cr == 0x000A { end_pos = cend_pos + 2; break; }
                     }
-                    end_pos = cend_pos + 1; break;
+                    end_pos = cend_pos + 1;
+                    break;
                 }
                 _ => {}
             }
@@ -1776,11 +1792,10 @@ pub fn get_bytes_buffer_inner(
     include_null_terminator: bool,
 ) -> bool {
     let string = to_rust_string(env, str);
-
     // 1. Конвертируем строку в нужный набор байтов в зависимости от запрошенной кодировки
     let mut bytes: Vec<u8> = match encoding {
         NSASCIIStringEncoding | NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
-            // Для однобайтовых кодировок пытаемся отфильтровать не-ASCII/не-Latin1 символы. 
+            // Для однобайтовых кодировок пытаемся отфильтровать не-ASCII/не-Latin1 символы.
             // В идеале нужен полный маппинг, но для игр часто хватает этого.
             if string.chars().any(|c| (c as u32) > 0xFF) { return false; }
             string.as_bytes().to_vec()
@@ -1900,3 +1915,4 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
+
