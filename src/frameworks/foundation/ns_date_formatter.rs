@@ -42,7 +42,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
-@implementation NSDateFormatter: NSFormatter
+@implementation NSDateFormatter: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(NSDateFormatterHostObject {
