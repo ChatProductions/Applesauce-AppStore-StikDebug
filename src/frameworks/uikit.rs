@@ -141,12 +141,12 @@ const NSUNDOMANAGER_CLASSES: ClassExports = objc_classes! {
 
 - (())removeAllActionsWithTarget:(id)target {
     let state = &mut env.framework_state.uikit.undo_manager;
-    state.undo_stack.retain(|inv| {
-        let inv_target: id = msg![env; *inv target];
+    state.undo_stack.retain(|&inv| {
+        let inv_target: id = msg![env; inv target];
         inv_target != target
     });
-    state.redo_stack.retain(|inv| {
-        let inv_target: id = msg![env; *inv target];
+    state.redo_stack.retain(|&inv| {
+        let inv_target: id = msg![env; inv target];
         inv_target != target
     });
 }
@@ -443,4 +443,3 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
 
     ui_accelerometer::handle_accelerometer(env)
 }
-
