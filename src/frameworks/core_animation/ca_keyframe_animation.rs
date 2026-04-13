@@ -30,7 +30,16 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         });
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
-
+    // Тот самый метод, на котором упала игра
+    + (id)animationWithKeyPath:(id)path {
+        let anim: id = msg![env; this alloc];
+        let anim: id = msg![env; anim init];
+        if path != nil {
+            () = msg![env; anim setKeyPath:path];
+        }
+        autorelease(env, anim)
+    }
+    
     - (id)init {
         this
     }
@@ -42,16 +51,6 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         if host.key_times != nil { release(env, host.key_times); }
         
         env.objc.dealloc_object(this, &mut env.mem)
-    }
-
-    // Тот самый метод, на котором упала игра
-    + (id)animationWithKeyPath:(id)path {
-        let anim: id = msg![env; this alloc];
-        let anim: id = msg![env; anim init];
-        if path != nil {
-            () = msg![env; anim setKeyPath:path];
-        }
-        autorelease(env, anim)
     }
 
     // --- Геттеры и сеттеры свойств 애니메이션 ---
