@@ -979,17 +979,22 @@ pub fn AudioQueueStart(
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
 
-    host_object.is_running = AudioQueueIsRunning::Running;
-
     if is_supported_audio_format(&host_object.format) {
+        host_object.is_running = AudioQueueIsRunning::Running;
         let al_source = host_object.al_source.unwrap();
         unsafe { context.SourcePlay(al_source) };
         assert!(unsafe { context.GetError() } == 0);
     } else {
+        // For unsupported formats (e.g. AAC used by PvZ for music),
+        // leave the queue Stopped and do NOT fire the is_running
+        // callback. Firing it would cause the app to launch an audio
+        // decode thread that subsequently crashes in the virtual
+        // filesystem (stat() on a directory node).
         log!(
-            "AudioQueueStart: Unsupported format {:?}",
+            "AudioQueueStart: Unsupported format {:?}, not starting",
             host_object.format
         );
+        return 0;
     }
 
     notify_aq_is_running(env, in_aq);
@@ -1255,3 +1260,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
 ];
+
