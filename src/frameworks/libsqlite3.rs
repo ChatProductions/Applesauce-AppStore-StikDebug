@@ -126,14 +126,13 @@ pub fn sqlite3_close_v2(_env: &mut Environment, p_db: u32) -> u32 {
 // void sqlite3_free(void *ptr);
 pub fn sqlite3_free(env: &mut Environment, ptr: u32) {
     if ptr == 0 {
-        return; // По спецификации SQLite, вызов free(NULL) безопасен и ничего не делает
+        return; // По спецификации SQLite, вызов free(NULL) безопасен
     }
     
-    // Преобразуем u32 в MutVoidPtr (MutPtr<()>) для взаимодействия с памятью гостя
-    let mem_ptr = crate::mem::MutPtr::<()>::from_bits(ptr);
+    // ИСПРАВЛЕНО: Используем MutVoidPtr вместо MutPtr<()>
+    let mem_ptr = crate::mem::MutVoidPtr::from_bits(ptr);
     
     // Освобождаем память в куче гостя
-    // (Подразумевается, что память была ранее выделена через гостевой malloc/sqlite3_malloc)
     env.mem.free(mem_ptr);
 }
 
