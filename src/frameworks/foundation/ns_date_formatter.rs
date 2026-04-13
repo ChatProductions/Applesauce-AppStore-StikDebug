@@ -61,6 +61,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
++ (id)localizedStringFromDate:(id)date
+                    dateStyle:(NSDateFormatterStyle)date_style
+                    timeStyle:(NSDateFormatterStyle)time_style {
+    let formatter: id = msg_class![env; NSDateFormatter new];
+    () = msg![env; formatter setDateStyle:date_style];
+    () = msg![env; formatter setTimeStyle:time_style];
+    let result: id = msg![env; formatter stringFromDate:date];
+    release(env, formatter);
+    result
+}
+
++ (id)dateFormatFromTemplate:(id)_tmpl
+                     options:(NSUInteger)_opts
+                      locale:(id)_locale {
+    // Full CLDR template resolution is complex; return the template unchanged.
+    _tmpl
+}
+
 - (())dealloc {
     let host = env.objc.borrow::<NSDateFormatterHostObject>(this);
     let (fmt, locale, tz, cal, tds, dd) = (
@@ -178,28 +196,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, date);
     env.objc.borrow_mut::<NSDateFormatterHostObject>(this).default_date = date;
 }
-
-// MARK: - localizedStringFromDate:dateStyle:timeStyle: (class method)
-
-+ (id)localizedStringFromDate:(id)date
-                    dateStyle:(NSDateFormatterStyle)date_style
-                    timeStyle:(NSDateFormatterStyle)time_style {
-    let formatter: id = msg_class![env; NSDateFormatter new];
-    () = msg![env; formatter setDateStyle:date_style];
-    () = msg![env; formatter setTimeStyle:time_style];
-    let result: id = msg![env; formatter stringFromDate:date];
-    release(env, formatter);
-    result
-}
-
-+ (id)dateFormatFromTemplate:(id)_tmpl
-                     options:(NSUInteger)_opts
-                      locale:(id)_locale {
-    // Full CLDR template resolution is complex; return the template unchanged.
-    _tmpl
-}
-
-// MARK: - stringFromDate:
 
 - (id)stringFromDate:(id)date { // NSDate*
     if date == nil { return nil; }
