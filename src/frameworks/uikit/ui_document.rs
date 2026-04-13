@@ -5,18 +5,20 @@
  */
 //! `UIDocument`.
 
-use crate::abi::{GuestFunction, CallFromHost};
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::frameworks::foundation::NSUInteger;
-use crate::mem::Ptr;
+use crate::mem::{ConstPtr, Ptr}; // Добавили ConstPtr
 use crate::objc::{
-    id, impl_HostObject, msg, msg_class, nil, objc_classes, release, retain, ClassExports, NSZonePtr,
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 
 pub struct UIDocumentHostObject {
     file_url: id,
 }
-impl_HostObject!(UIDocumentHostObject);
+
+// Явная реализация трейта для устранения ошибки E0277
+impl HostObject for UIDocumentHostObject {}
 
 impl Default for UIDocumentHostObject {
     fn default() -> Self {
@@ -24,15 +26,14 @@ impl Default for UIDocumentHostObject {
     }
 }
 
-// Вспомогательная функция для честного вызова Objective-C блоков (Completion Handlers)
+// Вспомогательная функция для вызова Objective-C блоков
 fn call_bool_block(env: &mut Environment, block: id, arg: bool) {
     if block != nil {
         let block_ptr = block.to_bits();
-        // В 32-битной архитектуре iOS указатель на функцию invoke находится по смещению 12 байт в структуре блока
-        let invoke_addr: u32 = env.mem.read(Ptr::from_bits(block_ptr + 12));
+        // Явно указываем ConstPtr::<u32>, чтобы компилятор не гадал о параметрах MUT и T
+        let invoke_addr: u32 = env.mem.read(ConstPtr::<u32>::from_bits(block_ptr + 12));
         let invoke_func = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
         
-        // Первый аргумент блока — всегда сам блок, затем идут пользовательские аргументы
         let _: () = invoke_func.call_from_host(env, (block, arg as u32));
     }
 }
@@ -56,7 +57,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         this
     }
 
-    - (())dealloc {
+    - ((()) )dealloc {
         let url = env.objc.borrow::<UIDocumentHostObject>(this).file_url;
         if url != nil {
             release(env, url);
@@ -69,26 +70,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     - (NSUInteger)documentState {
-        0 // UIDocumentStateNormal (0) означает, что документ открыт и готов к работе
+        0 // UIDocumentStateNormal
     }
 
     - (())openWithCompletionHandler:(id)completionHandler {
-        // Сообщаем игре, что документ успешно открыт
         call_bool_block(env, completionHandler, true);
     }
 
     - (())closeWithCompletionHandler:(id)completionHandler {
-        // Сообщаем игре, что документ успешно закрыт
         call_bool_block(env, completionHandler, true);
     }
 
     - (())saveToURL:(id)_url forSaveOperation:(NSUInteger)_operation completionHandler:(id)completionHandler {
-        // Сообщаем игре, что сохранение прошло успешно
         call_bool_block(env, completionHandler, true);
     }
 
     - (())updateChangeCount:(NSUInteger)_change {
-        // Требуется игрой для отметки изменений, в базовой реализации просто принимаем
+        // Ничего не делаем, просто принимаем вызов
     }
     
     - (id)localizedName {
