@@ -6,7 +6,7 @@
 //! `CAEAGLLayer`.
 
 use super::ca_layer::CALayerHostObject;
-use crate::frameworks::core_graphics::{CGPoint, CGRect};
+use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect};
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{id, msg, msg_class, nil, objc_classes, retain, release, Class, ClassExports};
 use crate::Environment;
@@ -108,6 +108,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)init {
     let _: () = msg![env; this setOpaque:true];
     this
+}
+
+// MARK: - Scale / Retina Support
+
+- (CGFloat)contentScaleFactor {
+    // Жестко задаем масштаб 1.0 (стандартный не-Retina экран)
+    1.0
+}
+
+- (())setContentScaleFactor:(CGFloat)scale {
+    // Заглушка, чтобы игра не упала, если попытается сама установить масштаб
+    log_dbg!("CAEAGLLAYER setContentScaleFactor: {} (stubbed)", scale);
 }
 
 - (id)initWithLayer:(id)layer {
