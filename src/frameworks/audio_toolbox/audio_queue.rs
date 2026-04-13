@@ -1331,7 +1331,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
     export_c_func!(AudioQueueGetProperty(_, _, _, _)),
     export_c_func!(AudioQueueSetProperty(_, _, _, _)),
-    export_c_func!(AudioQueuePrime(_, _, _, _)),
+    export_c_func!(AudioQueuePrime(_, _, _)),
     export_c_func!(AudioQueueStart(_, _)),
     export_c_func!(AudioQueuePause(_)),
     export_c_func!(AudioQueueStop(_, _)),
