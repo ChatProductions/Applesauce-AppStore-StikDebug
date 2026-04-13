@@ -586,6 +586,36 @@ fn strnlen(env: &mut Environment, s: ConstPtr<u8>, maxlen: GuestUSize) -> GuestU
     maxlen
 }
 
+fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>) -> MutPtr<u8> {
+    // Если указатели нулевые, безопасно возвращаем null, чтобы избежать краша
+    if haystack.is_null() || needle.is_null() {
+        return Ptr::null();
+    }
+
+    // Читаем C-строки из памяти эмулятора в виде слайсов байтов &[u8]
+    let haystack_str = env.mem.cstr_at(haystack.as_const());
+    let needle_str = env.mem.cstr_at(needle);
+
+    // Если искомая подстрока пустая, стандартное поведение — вернуть саму строку
+    if needle_str.is_empty() {
+        return haystack;
+    }
+
+    let needle_len = needle_str.len();
+    
+    // Ищем совпадение, используя стандартный метод Rust без учета ASCII-регистра
+    for i in 0..=haystack_str.len().saturating_sub(needle_len) {
+        let window = &haystack_str[i..i + needle_len];
+        if window.eq_ignore_ascii_case(needle_str) {
+            // Возвращаем указатель на начало найденной подстроки
+            return haystack + i;
+        }
+    }
+
+    // Если ничего не найдено, возвращаем null
+    Ptr::null()
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strtok(_, _)),
     export_c_func!(bzero(_, _)),
@@ -637,4 +667,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strerror_r(_, _, _)),
     export_c_func!(bcopy(_, _, _)),
     export_c_func!(strnlen(_, _)),
+    export_c_func!(strcasestr(_, _)),
 ];
