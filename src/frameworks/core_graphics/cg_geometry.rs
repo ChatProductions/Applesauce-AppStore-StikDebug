@@ -12,7 +12,9 @@ use std::ops::{Add, Mul, Sub};
 use super::CGFloat;
 use crate::abi::{impl_GuestRet_for_large_struct, GuestArg};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::frameworks::core_foundation::CFTypeRef;
 use crate::mem::SafeRead;
+use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
 fn parse_tuple(s: &str) -> Result<(f32, f32), ()> {
@@ -265,6 +267,175 @@ fn CGRectContainsPoint(_env: &mut Environment, rect: CGRect, point: CGPoint) -> 
         && rect.origin.y + rect.size.height > point.y
 }
 
+
+// MARK: - CGPoint dictionary representation
+
+fn CGPointCreateDictionaryRepresentation(
+    env: &mut Environment,
+    point: CGPoint,
+) -> CFTypeRef {
+    let dict: id = msg_class![env; NSMutableDictionary new];
+    let x_key = crate::frameworks::foundation::ns_string::get_static_str(env, "X");
+    let y_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Y");
+    let x_num: id = msg_class![env; NSNumber numberWithDouble:(point.x as f64)];
+    let y_num: id = msg_class![env; NSNumber numberWithDouble:(point.y as f64)];
+    () = msg![env; dict setObject:x_num forKey:x_key];
+    () = msg![env; dict setObject:y_num forKey:y_key];
+    crate::objc::autorelease(env, dict)
+}
+
+fn CGPointMakeWithDictionaryRepresentation(
+    env: &mut Environment,
+    dict: CFTypeRef,
+    point: crate::mem::MutPtr<CGPoint>,
+) -> bool {
+    if dict.is_null() || point.is_null() {
+        return false;
+    }
+    let x_key = crate::frameworks::foundation::ns_string::get_static_str(env, "X");
+    let y_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Y");
+    let x_val: id = msg![env; dict objectForKey:x_key];
+    let y_val: id = msg![env; dict objectForKey:y_key];
+    if x_val == nil || y_val == nil {
+        return false;
+    }
+    let x: f64 = msg![env; x_val doubleValue];
+    let y: f64 = msg![env; y_val doubleValue];
+    env.mem.write(point, CGPoint { x: x as _, y: y as _ });
+    true
+}
+
+// MARK: - CGSize dictionary representation
+
+fn CGSizeCreateDictionaryRepresentation(
+    env: &mut Environment,
+    size: CGSize,
+) -> CFTypeRef {
+    let dict: id = msg_class![env; NSMutableDictionary new];
+    let w_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Width");
+    let h_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Height");
+    let w_num: id = msg_class![env; NSNumber numberWithDouble:(size.width  as f64)];
+    let h_num: id = msg_class![env; NSNumber numberWithDouble:(size.height as f64)];
+    () = msg![env; dict setObject:w_num forKey:w_key];
+    () = msg![env; dict setObject:h_num forKey:h_key];
+    crate::objc::autorelease(env, dict)
+}
+
+fn CGSizeMakeWithDictionaryRepresentation(
+    env: &mut Environment,
+    dict: CFTypeRef,
+    size: crate::mem::MutPtr<CGSize>,
+) -> bool {
+    if dict.is_null() || size.is_null() {
+        return false;
+    }
+    let w_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Width");
+    let h_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Height");
+    let w_val: id = msg![env; dict objectForKey:w_key];
+    let h_val: id = msg![env; dict objectForKey:h_key];
+    if w_val == nil || h_val == nil {
+        return false;
+    }
+    let w: f64 = msg![env; w_val doubleValue];
+    let h: f64 = msg![env; h_val doubleValue];
+    env.mem.write(size, CGSize { width: w as _, height: h as _ });
+    true
+}
+
+// MARK: - CGRect dictionary representation
+
+fn CGRectCreateDictionaryRepresentation(
+    env: &mut Environment,
+    rect: CGRect,
+) -> CFTypeRef {
+    let dict: id = msg_class![env; NSMutableDictionary new];
+    let x_key = crate::frameworks::foundation::ns_string::get_static_str(env, "X");
+    let y_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Y");
+    let w_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Width");
+    let h_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Height");
+    let x_num: id = msg_class![env; NSNumber numberWithDouble:(rect.origin.x    as f64)];
+    let y_num: id = msg_class![env; NSNumber numberWithDouble:(rect.origin.y    as f64)];
+    let w_num: id = msg_class![env; NSNumber numberWithDouble:(rect.size.width  as f64)];
+    let h_num: id = msg_class![env; NSNumber numberWithDouble:(rect.size.height as f64)];
+    () = msg![env; dict setObject:x_num forKey:x_key];
+    () = msg![env; dict setObject:y_num forKey:y_key];
+    () = msg![env; dict setObject:w_num forKey:w_key];
+    () = msg![env; dict setObject:h_num forKey:h_key];
+    crate::objc::autorelease(env, dict)
+}
+
+fn CGRectMakeWithDictionaryRepresentation(
+    env: &mut Environment,
+    dict: CFTypeRef,
+    rect: crate::mem::MutPtr<CGRect>,
+) -> bool {
+    if dict.is_null() || rect.is_null() {
+        return false;
+    }
+    let x_key = crate::frameworks::foundation::ns_string::get_static_str(env, "X");
+    let y_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Y");
+    let w_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Width");
+    let h_key = crate::frameworks::foundation::ns_string::get_static_str(env, "Height");
+    let x_val: id = msg![env; dict objectForKey:x_key];
+    let y_val: id = msg![env; dict objectForKey:y_key];
+    let w_val: id = msg![env; dict objectForKey:w_key];
+    let h_val: id = msg![env; dict objectForKey:h_key];
+    if x_val == nil || y_val == nil || w_val == nil || h_val == nil {
+        return false;
+    }
+    let x: f64 = msg![env; x_val doubleValue];
+    let y: f64 = msg![env; y_val doubleValue];
+    let w: f64 = msg![env; w_val doubleValue];
+    let h: f64 = msg![env; h_val doubleValue];
+    env.mem.write(rect, CGRect {
+        origin: CGPoint { x: x as _, y: y as _ },
+        size:   CGSize  { width: w as _, height: h as _ },
+    });
+    true
+}
+
+// MARK: - CGAffineTransform dictionary representation
+
+fn CGAffineTransformCreateDictionaryRepresentation(
+    env: &mut Environment,
+    transform: crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform,
+) -> CFTypeRef {
+    let dict: id = msg_class![env; NSMutableDictionary new];
+    let keys = ["a","b","c","d","tx","ty"];
+    let vals = [transform.a, transform.b, transform.c,
+                transform.d, transform.tx, transform.ty];
+    for (k, v) in keys.iter().zip(vals.iter()) {
+        let ns_key = crate::frameworks::foundation::ns_string::get_static_str(env, k);
+        let ns_val: id = msg_class![env; NSNumber numberWithDouble:(*v as f64)];
+        () = msg![env; dict setObject:ns_val forKey:ns_key];
+    }
+    crate::objc::autorelease(env, dict)
+}
+
+fn CGAffineTransformMakeWithDictionaryRepresentation(
+    env: &mut Environment,
+    dict: CFTypeRef,
+    transform: crate::mem::MutPtr<
+        crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform>,
+) -> bool {
+    use crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform;
+    if dict.is_null() || transform.is_null() { return false; }
+    let keys = ["a","b","c","d","tx","ty"];
+    let mut vals = [0f64; 6];
+    for (i, k) in keys.iter().enumerate() {
+        let ns_key = crate::frameworks::foundation::ns_string::get_static_str(env, k);
+        let val: id = msg![env; dict objectForKey:ns_key];
+        if val == nil { return false; }
+        vals[i] = msg![env; val doubleValue];
+    }
+    env.mem.write(transform, CGAffineTransform {
+        a: vals[0] as _, b: vals[1] as _,
+        c: vals[2] as _, d: vals[3] as _,
+        tx: vals[4] as _, ty: vals[5] as _,
+    });
+    true
+}
+
 fn CGRectContainsRect(_env: &mut Environment, outer: CGRect, inner: CGRect) -> bool {
     outer.origin.x <= inner.origin.x
         && outer.origin.y <= inner.origin.y
@@ -507,6 +678,14 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGRectIntegral(_)),
     // CGVector
     export_c_func!(CGVectorMake(_, _)),
+    export_c_func!(CGPointCreateDictionaryRepresentation(_)),
+    export_c_func!(CGPointMakeWithDictionaryRepresentation(_, _)),
+    export_c_func!(CGSizeCreateDictionaryRepresentation(_)),
+    export_c_func!(CGSizeMakeWithDictionaryRepresentation(_, _)),
+    export_c_func!(CGRectCreateDictionaryRepresentation(_)),
+    export_c_func!(CGRectMakeWithDictionaryRepresentation(_, _)),
+    export_c_func!(CGAffineTransformCreateDictionaryRepresentation(_)),
+    export_c_func!(CGAffineTransformMakeWithDictionaryRepresentation(_, _)),
 ];
 
 pub const CONSTANTS: ConstantExports = &[
