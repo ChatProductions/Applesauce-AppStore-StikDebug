@@ -3,30 +3,30 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! `UIAlertView`.
+//! `UIAlertView` — shows an SDL2 message box dialog.
 
+use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
+use crate::window;
 
-// UIAlertViewStyle constants
 pub type UIAlertViewStyle = NSInteger;
-pub const UIAlertViewStyleDefault:             UIAlertViewStyle = 0;
-pub const UIAlertViewStyleSecureTextInput:     UIAlertViewStyle = 1;
-pub const UIAlertViewStylePlainTextInput:      UIAlertViewStyle = 2;
+pub const UIAlertViewStyleDefault:               UIAlertViewStyle = 0;
+pub const UIAlertViewStyleSecureTextInput:       UIAlertViewStyle = 1;
+pub const UIAlertViewStylePlainTextInput:        UIAlertViewStyle = 2;
 pub const UIAlertViewStyleLoginAndPasswordInput: UIAlertViewStyle = 3;
 
-struct UIAlertViewHostObject {
-    title: id,
-    message: id,
-    delegate: id,
-    /// NSMutableArray* of NSString* button titles
-    button_titles: id,
+pub struct UIAlertViewHostObject {
+    title:               id,
+    message:             id,
+    delegate:            id,
+    button_titles:       id,
     cancel_button_index: NSInteger,
-    visible: bool,
-    alert_view_style: UIAlertViewStyle,
-    tag: NSInteger,
+    visible:             bool,
+    alert_view_style:    UIAlertViewStyle,
+    tag:                 NSInteger,
 }
 impl HostObject for UIAlertViewHostObject {}
 
@@ -34,25 +34,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
-@implementation UIAlertView: UIView
+@implementation UIAlertView: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIAlertViewHostObject {
-        title: nil,
-        message: nil,
-        delegate: nil,
-        button_titles: nil,
+        title:               nil,
+        message:             nil,
+        delegate:            nil,
+        button_titles:       nil,
         cancel_button_index: -1,
-        visible: false,
-        alert_view_style: UIAlertViewStyleDefault,
-        tag: 0,
+        visible:             false,
+        alert_view_style:    UIAlertViewStyleDefault,
+        tag:                 0,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
-
-// =========================================================================
-// MARK: - Designated initializer
-// =========================================================================
 
 - (id)initWithTitle:(id)title
             message:(id)message
@@ -60,8 +56,6 @@ pub const CLASSES: ClassExports = objc_classes! {
   cancelButtonTitle:(id)cancel_title
   otherButtonTitles:(id)other_titles {
     let buttons: id = msg_class![env; NSMutableArray new];
-    env.objc.borrow_mut::<UIAlertViewHostObject>(this).button_titles = buttons;
-
     retain(env, title);
     retain(env, message);
     retain(env, delegate);
@@ -70,35 +64,21 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.title    = title;
         host.message  = message;
         host.delegate = delegate;
+        host.button_titles = buttons;
     }
-
-    // Add cancel button first (index 0 when present).
     if cancel_title != nil {
         let idx: NSUInteger = msg![env; buttons count];
         let _: () = msg![env; buttons addObject:cancel_title];
-        env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index =
-            idx as NSInteger;
+        env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index = idx as NSInteger;
     }
-
-    // Add first "other" button (varargs not supported — one arg only).
     if other_titles != nil {
         let _: () = msg![env; buttons addObject:other_titles];
     }
-
-    let title_str = if title != nil {
-        ns_string::to_rust_string(env, title).into_owned()
-    } else { "(nil)".into() };
-    let msg_str = if message != nil {
-        ns_string::to_rust_string(env, message).into_owned()
-    } else { "(nil)".into() };
+    let title_str = if title != nil { ns_string::to_rust_string(env, title).into_owned() } else { "(nil)".into() };
+    let msg_str   = if message != nil { ns_string::to_rust_string(env, message).into_owned() } else { "(nil)".into() };
     log!("UIAlertView init title={:?} message={:?}", title_str, msg_str);
-
     this
 }
-
-// =========================================================================
-// MARK: - Dealloc
-// =========================================================================
 
 - (())dealloc {
     let host = env.objc.borrow::<UIAlertViewHostObject>(this);
@@ -111,205 +91,135 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
-// =========================================================================
-// MARK: - Title / message
-// =========================================================================
-
-- (id)title { // NSString*
-    env.objc.borrow::<UIAlertViewHostObject>(this).title
-}
-
+- (id)title   { env.objc.borrow::<UIAlertViewHostObject>(this).title }
+- (id)message { env.objc.borrow::<UIAlertViewHostObject>(this).message }
+- (id)delegate { env.objc.borrow::<UIAlertViewHostObject>(this).delegate }
 - (())setTitle:(id)title {
     let old = env.objc.borrow::<UIAlertViewHostObject>(this).title;
-    release(env, old);
-    retain(env, title);
+    release(env, old); retain(env, title);
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).title = title;
 }
-
-- (id)message { // NSString*
-    env.objc.borrow::<UIAlertViewHostObject>(this).message
-}
-
 - (())setMessage:(id)message {
     let old = env.objc.borrow::<UIAlertViewHostObject>(this).message;
-    release(env, old);
-    retain(env, message);
+    release(env, old); retain(env, message);
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).message = message;
 }
-
-// =========================================================================
-// MARK: - Delegate
-// =========================================================================
-
-- (id)delegate {
-    env.objc.borrow::<UIAlertViewHostObject>(this).delegate
-}
-
 - (())setDelegate:(id)delegate {
     let old = env.objc.borrow::<UIAlertViewHostObject>(this).delegate;
-    release(env, old);
-    retain(env, delegate);
+    release(env, old); retain(env, delegate);
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).delegate = delegate;
 }
+- (NSInteger)tag { env.objc.borrow::<UIAlertViewHostObject>(this).tag }
+- (())setTag:(NSInteger)tag { env.objc.borrow_mut::<UIAlertViewHostObject>(this).tag = tag; }
+- (UIAlertViewStyle)alertViewStyle { env.objc.borrow::<UIAlertViewHostObject>(this).alert_view_style }
+- (())setAlertViewStyle:(UIAlertViewStyle)style { env.objc.borrow_mut::<UIAlertViewHostObject>(this).alert_view_style = style; }
+- (bool)isVisible { env.objc.borrow::<UIAlertViewHostObject>(this).visible }
 
-// =========================================================================
-// MARK: - Tag
-// =========================================================================
-
-- (NSInteger)tag {
-    env.objc.borrow::<UIAlertViewHostObject>(this).tag
-}
-
-- (())setTag:(NSInteger)tag {
-    env.objc.borrow_mut::<UIAlertViewHostObject>(this).tag = tag;
-}
-
-// =========================================================================
-// MARK: - Style
-// =========================================================================
-
-- (UIAlertViewStyle)alertViewStyle {
-    env.objc.borrow::<UIAlertViewHostObject>(this).alert_view_style
-}
-
-- (())setAlertViewStyle:(UIAlertViewStyle)style {
-    env.objc.borrow_mut::<UIAlertViewHostObject>(this).alert_view_style = style;
-}
-
-// =========================================================================
-// MARK: - Buttons
-// =========================================================================
-
-- (NSInteger)addButtonWithTitle:(id)title { // NSString* -> button index
+- (NSInteger)addButtonWithTitle:(id)title {
     let buttons = env.objc.borrow::<UIAlertViewHostObject>(this).button_titles;
     let idx: NSUInteger = msg![env; buttons count];
     let _: () = msg![env; buttons addObject:title];
-    log_dbg!("UIAlertView addButtonWithTitle:{:?} => {}",
-        if title != nil { ns_string::to_rust_string(env, title).into_owned() } else { "(nil)".into() },
-        idx);
     idx as NSInteger
 }
-
 - (NSUInteger)numberOfButtons {
     let buttons = env.objc.borrow::<UIAlertViewHostObject>(this).button_titles;
     msg![env; buttons count]
 }
-
-- (id)buttonTitleAtIndex:(NSInteger)index { // NSString*
+- (id)buttonTitleAtIndex:(NSInteger)index {
     let buttons = env.objc.borrow::<UIAlertViewHostObject>(this).button_titles;
     let count: NSUInteger = msg![env; buttons count];
-    if index < 0 || index as NSUInteger >= count {
-        return nil;
-    }
+    if index < 0 || index as NSUInteger >= count { return nil; }
     msg![env; buttons objectAtIndex:(index as NSUInteger)]
 }
-
-- (NSInteger)cancelButtonIndex {
-    env.objc.borrow::<UIAlertViewHostObject>(this).cancel_button_index
-}
-
-- (())setCancelButtonIndex:(NSInteger)index {
-    env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index = index;
-}
-
+- (NSInteger)cancelButtonIndex { env.objc.borrow::<UIAlertViewHostObject>(this).cancel_button_index }
+- (())setCancelButtonIndex:(NSInteger)index { env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index = index; }
 - (NSInteger)firstOtherButtonIndex {
-    let host = env.objc.borrow::<UIAlertViewHostObject>(this);
+    let host    = env.objc.borrow::<UIAlertViewHostObject>(this);
     let buttons = host.button_titles;
-    let cancel = host.cancel_button_index;
+    let cancel  = host.cancel_button_index;
     let count: NSUInteger = msg![env; buttons count];
-    for i in 0..count {
-        if i as NSInteger != cancel {
-            return i as NSInteger;
-        }
-    }
+    for i in 0..count { if i as NSInteger != cancel { return i as NSInteger; } }
     -1
 }
+- (id)textFieldAtIndex:(NSInteger)_index { nil }
 
-// =========================================================================
-// MARK: - Text fields (stub — no real input UI)
-// =========================================================================
-
-- (id)textFieldAtIndex:(NSInteger)_index { // UITextField*
-    log_dbg!("UIAlertView textFieldAtIndex: — returning nil (no input UI)");
-    nil
+- (())addSubview:(id)_view {
+    // UIAlertView doesn't support subviews in touchHLE (SDL2 dialog implementation)
+    log_dbg!("UIAlertView addSubview: ignored");
 }
-
-// =========================================================================
-// MARK: - Visibility
-// =========================================================================
-
-- (bool)isVisible {
-    env.objc.borrow::<UIAlertViewHostObject>(this).visible
+- (())removeFromSuperview {
+    log_dbg!("UIAlertView removeFromSuperview: ignored");
 }
-
-// =========================================================================
-// MARK: - Show / dismiss
-// touchHLE has no alert UI. We immediately fire the cancel callback so
-// the app's delegate can clean up.
-// =========================================================================
+- (())setHidden:(bool)_hidden {
+    log_dbg!("UIAlertView setHidden: ignored");
+}
+- (CGRect)frame {
+    CGRect { origin: CGPoint { x: 0.0, y: 0.0 }, size: CGSize { width: 0.0, height: 0.0 } }
+}
+- (())setFrame:(CGRect)_frame {
+    log_dbg!("UIAlertView setFrame: ignored");
+}
 
 - (())show {
-    log!("UIAlertView show — no UI, dismissing immediately via cancel button");
+    log!("UIAlertView show (SDL2 dialog)");
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = true;
-    let cancel = env.objc.borrow::<UIAlertViewHostObject>(this).cancel_button_index;
-    let dismiss_index = if cancel >= 0 { cancel } else { 0 };
+
+    let (title, message, buttons, cancel_index) = {
+        let h = env.objc.borrow::<UIAlertViewHostObject>(this);
+        (h.title, h.message, h.button_titles, h.cancel_button_index)
+    };
+
+    let title_str: String = if title != nil {
+        ns_string::to_rust_string(env, title).into_owned()
+    } else { "Alert".into() };
+    let message_str: String = if message != nil {
+        ns_string::to_rust_string(env, message).into_owned()
+    } else { "".into() };
+
+    let btn_count: NSUInteger = msg![env; buttons count];
+    let mut btn_strings: Vec<String> = Vec::new();
+    for i in 0..btn_count {
+        let btn: id = msg![env; buttons objectAtIndex:i];
+        btn_strings.push(if btn != nil {
+            ns_string::to_rust_string(env, btn).into_owned()
+        } else { format!("Button {}", i) });
+    }
+    if btn_strings.is_empty() { btn_strings.push("OK".into()); }
+
+    let btn_refs: Vec<&str> = btn_strings.iter().map(|s| s.as_str()).collect();
+    let clicked = window::show_alert_dialog(env, &title_str, &message_str, &btn_refs);
+
+    let dismiss_index = if clicked >= 0 && (clicked as NSUInteger) < btn_count {
+        clicked as NSInteger
+    } else if cancel_index >= 0 {
+        cancel_index
+    } else { 0 };
+
     let _: () = msg![env; this dismissWithClickedButtonIndex:dismiss_index animated:false];
 }
 
-- (())dismissWithClickedButtonIndex:(NSInteger)button_index
-                           animated:(bool)_animated {
+- (())dismissWithClickedButtonIndex:(NSInteger)button_index animated:(bool)_animated {
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = false;
-
     let delegate = env.objc.borrow::<UIAlertViewHostObject>(this).delegate;
     if delegate == nil { return; }
-
-    // alertView:clickedButtonAtIndex:
-    if let Some(sel_clicked) = env.objc
-        .lookup_selector("alertView:clickedButtonAtIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel_clicked];
-        if responds {
-            let _: () = msg![env; delegate alertView:this
-                                 clickedButtonAtIndex:button_index];
-        }
+    if let Some(sel) = env.objc.lookup_selector("alertView:clickedButtonAtIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel];
+        if responds { let _: () = msg![env; delegate alertView:this clickedButtonAtIndex:button_index]; }
     }
-
-    // alertView:willDismissWithButtonIndex:
-    if let Some(sel_will) = env.objc
-        .lookup_selector("alertView:willDismissWithButtonIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel_will];
-        if responds {
-            let _: () = msg![env; delegate alertView:this
-                            willDismissWithButtonIndex:button_index];
-        }
+    if let Some(sel) = env.objc.lookup_selector("alertView:willDismissWithButtonIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel];
+        if responds { let _: () = msg![env; delegate alertView:this willDismissWithButtonIndex:button_index]; }
     }
-
-    // alertView:didDismissWithButtonIndex:
-    if let Some(sel_did) = env.objc
-        .lookup_selector("alertView:didDismissWithButtonIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel_did];
-        if responds {
-            let _: () = msg![env; delegate alertView:this
-                             didDismissWithButtonIndex:button_index];
-        }
+    if let Some(sel) = env.objc.lookup_selector("alertView:didDismissWithButtonIndex:") {
+        let responds: bool = msg![env; delegate respondsToSelector:sel];
+        if responds { let _: () = msg![env; delegate alertView:this didDismissWithButtonIndex:button_index]; }
     }
 }
 
-// =========================================================================
-// MARK: - Description
-// =========================================================================
-
 - (id)description {
-    let (title, visible) = {
-        let h = env.objc.borrow::<UIAlertViewHostObject>(this);
-        (h.title, h.visible)
-    };
-    let title_str = if title != nil {
-        ns_string::to_rust_string(env, title).into_owned()
-    } else { "(nil)".into() };
-    let s = format!(
-        "<UIAlertView: {:?}; title={:?}; visible={}>",
-        this, title_str, visible
-    );
+    let (title, visible) = { let h = env.objc.borrow::<UIAlertViewHostObject>(this); (h.title, h.visible) };
+    let title_str = if title != nil { ns_string::to_rust_string(env, title).into_owned() } else { "(nil)".into() };
+    let s = format!("<UIAlertView: {:?}; title={:?}; visible={}>", this, title_str, visible);
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
 }
