@@ -23,6 +23,8 @@ pub struct State {
     /// [UIApplication sharedApplication]
     shared_application: Option<id>,
     pub(super) status_bar_hidden: bool,
+    /// Whether shake to edit is enabled
+    pub(super) application_supports_shake_to_edit: bool,
 }
 
 struct UIApplicationHostObject {
@@ -304,6 +306,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Stub.
 }
 
+- (bool)applicationSupportsShakeToEdit {
+    env.framework_state.uikit.ui_application.application_supports_shake_to_edit
+}
+
+- (())setApplicationSupportsShakeToEdit:(bool)value {
+    env.framework_state.uikit.ui_application.application_supports_shake_to_edit = value;
+}
+
 - (())clearKeychainIfNecessary {
     // Stub.
 }
@@ -537,4 +547,3 @@ pub const CONSTANTS: ConstantExports = &[
 ];
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
-
