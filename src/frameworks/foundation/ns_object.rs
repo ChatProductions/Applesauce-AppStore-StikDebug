@@ -20,10 +20,8 @@ use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, msg_send_no_type_checking, nil, objc_classes,
     retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
 };
-
 // Хранилище для отмененных таймеров (target, имя селектора в виде строки)
 pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> = std::vec::Vec::new();
-
 // ДОБАВЛЕНА РЕАЛИЗАЦИЯ NSAllocateObject
 fn NSAllocateObject(
     env: &mut Environment,
@@ -36,14 +34,14 @@ fn NSAllocateObject(
     }
     
     // Перенаправляем вызов в стандартный метод alloc данного класса
-    msg![env; class alloc]
+    msg![env;
+class alloc]
 }
 
 // ДОБАВЛЕН ЭКСПОРТ ФУНКЦИЙ ДЛЯ ДИНАМИЧЕСКОГО ЛИНКЕРА
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSAllocateObject(_, _, _)),
 ];
-
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -51,7 +49,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSObject
 
 + (id)alloc {
-    msg![env; this allocWithZone:(MutVoidPtr::null())]
+    msg![env;
+this allocWithZone:(MutVoidPtr::null())]
 }
 + (id)allocWithZone:(NSZonePtr)_zone { 
     log_dbg!("[{:?} allocWithZone:]", this);
@@ -60,7 +59,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)new {
     let new_object: id = msg![env; this alloc];
-    msg![env; new_object init]
+    msg![env;
+new_object init]
 }
 
 + (Class)class {
@@ -91,7 +91,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let dyld = &mut env.dyld;
     let mem = &mut env.mem;
     let cpu = &mut env.cpu;
-    
     match dyld.create_proc_address(mem, cpu, "_objc_msgSend") {
         Ok(guest_func) => guest_func.addr_with_thumb_bit(),
         Err(_) => {
@@ -104,14 +103,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)instanceMethodSignatureForSelector:(SEL)selector {
-    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    let sig: id = msg_class![env;
+NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
     
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
-    
     let total_args = explicit_args + 2;
     () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
-    
     sig
 }
 
@@ -126,7 +124,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)debugDescription {
-    msg![env; this description]
+    msg![env;
+this description]
 }
 
 + (())cancelPreviousPerformRequestsWithTarget:(id)target
@@ -177,7 +176,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     ObjC::read_isa(this, &env.mem)
 }
 - (bool)isMemberOfClass:(Class)class {
-    let this_class: Class = msg![env; this class];
+    let this_class: Class = msg![env;
+this class];
     class == this_class
 }
 - (bool)isKindOfClass:(Class)class {
@@ -194,7 +194,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)copy {
-    msg![env; this copyWithZone:(MutVoidPtr::null())]
+    msg![env;
+this copyWithZone:(MutVoidPtr::null())]
 }
 
 - (id)mutableCopy {
@@ -212,7 +213,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let value_class = msg![env; value class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
     assert!(!env.objc.class_is_subclass_of(value_class, ns_value_class));
-
     if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
         if env.objc.class_has_method(class, sel) {
             () = msg_send(env, (this, sel, value));
@@ -229,7 +229,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
     let accessInstanceVariablesDirectly = msg_send(env, (class, sel));
-
     if accessInstanceVariablesDirectly {
         if let Some(ivar_ptr) = env.objc.object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
             .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("_is{camel_case_key_string}")))
@@ -268,7 +267,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let dyld = &mut env.dyld;
     let mem = &mut env.mem;
     let cpu = &mut env.cpu;
-    
     match dyld.create_proc_address(mem, cpu, "_objc_msgSend") {
         Ok(guest_func) => guest_func.addr_with_thumb_bit(),
         Err(_) => {
@@ -281,14 +279,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)methodSignatureForSelector:(SEL)selector {
-    let sig: id = msg_class![env; NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
+    let sig: id = msg_class![env;
+NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
     
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
-    
     let total_args = explicit_args + 2;
     () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
-    
     sig
 }
     
@@ -320,12 +317,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
     let timer:id = msg_class![env;
-        NSTimer timerWithTimeInterval:delay
+NSTimer timerWithTimeInterval:delay
                                target:this
                              selector:selector
                              userInfo:dict
-                              repeats:false];
-    
+          
+                     repeats:false];
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let mode: id = get_static_str(env, NSDefaultRunLoopMode);
     () = msg![env; run_loop addTimer:timer forMode:mode];
@@ -346,14 +343,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // Background thread → schedule on main thread via run loop.
-    // `wait:YES` from a background thread would require thread
-    // synchronisation which touchHLE doesn't support; we schedule
+// `wait:YES` from a background thread would require thread
+    // synchronisation which touchHLE doesn't support;
+we schedule
     // without waiting and log once at debug level.
-    log_dbg!(
+log_dbg!(
         "performSelectorOnMainThread:{} from background thread {} (wait={}) — scheduling",
         sel.as_str(&env.mem), env.current_thread, wait
     );
-
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
@@ -366,7 +363,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let arg_key: id = get_static_str(env, "arg");
     let arg: id = msg![env; dict objectForKey:arg_key];
-
     let target_bits = this.to_bits();
     let mut cancelled = false;
     
@@ -426,7 +422,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setValue:(id)value forKeyPath:(id)key_path {
-    msg![env; this setValue:value forKey:key_path]
+    msg![env;
+this setValue:value forKey:key_path]
 }
 
 // MARK: - Key-Value Observing (KVO)
@@ -439,16 +436,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())didChangeValueForKey:(id)_key {
 }
 
-- (())self {
-
+- (id)r#self {
+    this
 }
 
-- (())version {
-
++ (NSUInteger)version {
+    0
 }
 
-- (())superclass {
-
+- (Class)superclass {
+    nil
 }
 
 - (())addObserver:(id)_observer forKeyPath:(id)_keyPath options:(NSUInteger)_options context:(id)_context {
