@@ -285,6 +285,57 @@ fn CCHmac(
     log!("TODO: CCHmac");
 }
 
+
+// =========================================================================
+// MARK: - Security framework stubs (Keychain Services)
+// =========================================================================
+// These are no-ops — touchHLE has no keychain. Apps that use keychain
+// for license checks or settings will gracefully handle errSecItemNotFound.
+
+// OSStatus error codes
+const errSecSuccess:       i32 = 0;
+const errSecItemNotFound:  i32 = -25300;
+const errSecParam:         i32 = -50;
+
+#[allow(non_snake_case)]
+fn SecItemCopyMatching(
+    _env: &mut Environment,
+    _query: crate::mem::ConstVoidPtr,
+    _result: crate::mem::MutVoidPtr,
+) -> i32 {
+    log_dbg!("SecItemCopyMatching -> errSecItemNotFound (stubbed)");
+    errSecItemNotFound
+}
+
+#[allow(non_snake_case)]
+fn SecItemAdd(
+    _env: &mut Environment,
+    _attributes: crate::mem::ConstVoidPtr,
+    _result: crate::mem::MutVoidPtr,
+) -> i32 {
+    log_dbg!("SecItemAdd -> errSecSuccess (stubbed)");
+    errSecSuccess
+}
+
+#[allow(non_snake_case)]
+fn SecItemUpdate(
+    _env: &mut Environment,
+    _query: crate::mem::ConstVoidPtr,
+    _attributes_to_update: crate::mem::ConstVoidPtr,
+) -> i32 {
+    log_dbg!("SecItemUpdate -> errSecItemNotFound (stubbed)");
+    errSecItemNotFound
+}
+
+#[allow(non_snake_case)]
+fn SecItemDelete(
+    _env: &mut Environment,
+    _query: crate::mem::ConstVoidPtr,
+) -> i32 {
+    log_dbg!("SecItemDelete -> errSecItemNotFound (stubbed)");
+    errSecItemNotFound
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _)),
     export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)), 
@@ -293,6 +344,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_MD5_Init(_)),           // Было (_, _), нужно (_)
     export_c_func!(CC_MD5_Update(_, _, _)),    // Было (_, _, _, _), нужно (_, _, _)
     export_c_func!(CC_MD5_Final(_, _)),       // Было (_, _, _), нужно (_, _)
+    export_c_func!(SecItemCopyMatching(_, _)),
+    export_c_func!(SecItemAdd(_, _)),
+    export_c_func!(SecItemUpdate(_, _)),
+    export_c_func!(SecItemDelete(_)),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

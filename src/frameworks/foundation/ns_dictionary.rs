@@ -906,17 +906,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setObject:(id)object
          forKey:(id)key {
-    // TODO: raise NSInvalidArgumentException
-    // assert_ne!(object, nil);
-    // TODO: raise NSInvalidArgumentException
-    // assert_ne!(key, nil);
+    // On real iOS these raise NSInvalidArgumentException.
+    // We log and return early to avoid crashing.
+    if object == nil {
+        log!("Warning: [NSMutableDictionary setObject:forKey:] object is nil — ignored");
+        return;
+    }
+    if key == nil {
+        log!("Warning: [NSMutableDictionary setObject:forKey:] key is nil — ignored");
+        return;
+    }
     let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
     host_obj.insert(env, key, object, /* copy_key: */ true);
     *env.objc.borrow_mut(this) = host_obj;
 }
 
 - (())removeObjectForKey:(id)key {
-    assert!(!key.is_null());
+    if key.is_null() {
+        log!("Warning: [NSMutableDictionary removeObjectForKey:] key is nil — ignored");
+        return;
+    }
     let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
     host_obj.remove(env, key);
     *env.objc.borrow_mut(this) = host_obj;

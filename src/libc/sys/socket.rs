@@ -425,8 +425,18 @@ fn listen(env: &mut Environment, socket: i32, backlog: i32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    let type_ = State::get(env).sockets.get(&socket).unwrap().type_;
-    assert!(type_ == SOCK_STREAM);
+    let type_ = match State::get(env).sockets.get(&socket) {
+        Some(s) => s.type_,
+        None => {
+            log!("listen: unknown socket fd={}, returning EBADF", socket);
+            set_errno(env, EBADF);
+            return -1;
+        }
+    };
+    if type_ != SOCK_STREAM {
+        set_errno(env, ESOCKTNOSUPPORT);
+        return -1;
+    }
 
     log!(
         "Warning: listen(socket: {}, backlog: {}), ignoring",
@@ -895,8 +905,18 @@ fn recvfrom(
         return -1;
     }
 
-    let type_ = State::get(env).sockets.get(&socket).unwrap().type_;
-    assert!(type_ == SOCK_STREAM || type_ == SOCK_DGRAM);
+    let type_ = match State::get(env).sockets.get(&socket) {
+        Some(s) => s.type_,
+        None => {
+            log!("socket op: unknown fd={}, returning EBADF", socket);
+            set_errno(env, EBADF);
+            return -1;
+        }
+    };
+    if type_ != SOCK_STREAM && type_ != SOCK_DGRAM {
+        set_errno(env, ESOCKTNOSUPPORT);
+        return -1;
+    }
 
     assert_eq!(flags, 0); // TODO
 
@@ -1070,10 +1090,23 @@ fn sendto(
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    let type_ = State::get(env).sockets.get(&socket).unwrap().type_;
-    assert!(type_ == SOCK_DGRAM);
+    let type_ = match State::get(env).sockets.get(&socket) {
+        Some(s) => s.type_,
+        None => {
+            log!("sendto: unknown socket fd={}, returning EBADF", socket);
+            set_errno(env, EBADF);
+            return -1;
+        }
+    };
+    if type_ != SOCK_DGRAM {
+        log!("sendto: socket fd={} is not SOCK_DGRAM, returning ESOCKTNOSUPPORT", socket);
+        set_errno(env, ESOCKTNOSUPPORT);
+        return -1;
+    }
 
-    assert_eq!(flags, 0); // TODO
+    if flags != 0 {
+        log!("sendto: flags={} ignored", flags);
+    }
 
     assert_eq!(dest_address_len, guest_size_of::<sockaddr>());
     let sockaddr_val = env.mem.read(dest_address);

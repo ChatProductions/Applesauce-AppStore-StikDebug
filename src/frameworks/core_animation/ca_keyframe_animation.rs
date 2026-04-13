@@ -31,7 +31,6 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
 
-    // Тот самый метод, на котором упала игра
     + (id)animationWithKeyPath:(id)path {
         let anim: id = msg![env; this alloc];
         let anim: id = msg![env; anim init];
@@ -40,27 +39,23 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         }
         autorelease(env, anim)
     }
-    
+
     - (id)init {
         this
     }
 
     - (())dealloc {
-        // ИСПРАВЛЕНИЕ: Извлекаем значения в отдельном блоке, 
-        // чтобы заимствование (host) завершилось до вызова release.
         let (key_path, values, key_times) = {
-            let host = env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this);
+            let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
             (host.key_path, host.values, host.key_times)
         };
-        
         if key_path != nil { release(env, key_path); }
         if values != nil { release(env, values); }
         if key_times != nil { release(env, key_times); }
-        
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
-    // --- Геттеры и сеттеры свойств анимации ---
+    // --- Геттеры и сеттеры свойств 애니메이션 ---
 
     - (id)keyPath { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_path }
     - (())setKeyPath:(id)val {
