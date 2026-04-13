@@ -218,7 +218,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         let ds = env.objc.borrow::<NSDateFormatterHostObject>(this).date_style;
         let ts = env.objc.borrow::<NSDateFormatterHostObject>(this).time_style;
-        style_to_format(ds, ts)
+        style_to_format(ds, ts.into())
     };
 
     let result = apply_format(&fmt_str, year, month, day, hours, minutes, seconds);
