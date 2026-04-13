@@ -123,12 +123,27 @@ pub fn sqlite3_close_v2(_env: &mut Environment, p_db: u32) -> u32 {
     }
 }
 
+// void sqlite3_free(void *ptr);
+pub fn sqlite3_free(env: &mut Environment, ptr: u32) {
+    if ptr == 0 {
+        return; // По спецификации SQLite, вызов free(NULL) безопасен и ничего не делает
+    }
+    
+    // Преобразуем u32 в MutVoidPtr (MutPtr<()>) для взаимодействия с памятью гостя
+    let mem_ptr = crate::mem::MutPtr::<()>::from_bits(ptr);
+    
+    // Освобождаем память в куче гостя
+    // (Подразумевается, что память была ранее выделена через гостевой malloc/sqlite3_malloc)
+    env.mem.free(mem_ptr);
+}
+
 // Экспортируем функции через макрос из dyld.rs
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_open(_, _)),
     export_c_func!(sqlite3_close(_)),
     export_c_func!(sqlite3_open_v2(_, _)),
     export_c_func!(sqlite3_close_v2(_)),
+    export_c_func!(sqlite3_free(_)),
 ];
 
 // Собираем всё в HostDylib, как требует архитектура dyld
