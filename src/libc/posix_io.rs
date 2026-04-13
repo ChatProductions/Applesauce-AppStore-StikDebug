@@ -178,7 +178,7 @@ fn creat(env: &mut Environment, path: ConstPtr<u8>, mode: u32) -> i32 {
     
     // Пробрасываем вызов в существующий полноценный open.
     // Если твой open принимает mode как i32, поменяй `mode` на `mode as i32`
-    open(env, path, flags, mode)
+    open(env, path, flags, _args)
 }
 
 pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> FileDescriptor {
