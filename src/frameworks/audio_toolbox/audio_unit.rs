@@ -222,9 +222,12 @@ fn AudioUnitSetProperty(
         }
         kAudioUnitProperty_MakeConnection => {
             let conn = env.mem.read(in_data.cast::<AudioUnitConnection>());
+            let src = conn.source_audio_unit;
+            let src_out = conn.source_output_number;
+            let dest_in = conn.dest_input_number;
             log_dbg!(
                 "AudioUnitSetProperty: MakeConnection src={:?} srcOut={} destIn={}",
-                conn.source_audio_unit, conn.source_output_number, conn.dest_input_number
+                src, src_out, dest_in
             );
         }
         kAudioOutputUnitProperty_EnableIO => {
@@ -428,14 +431,9 @@ fn AudioUnitSetParameter(
         "AudioUnitSetParameter: unit={:?} id={} scope={} element={} value={} offset={}",
         in_unit, in_id, in_scope, in_element, in_value, in_buffer_offset_in_frames
     );
-    // Store volume if this looks like a gain/volume parameter.
+    // Volume parameter - log but ignore (field not in host object)
     if in_id == 0 /* kMultiChannelMixerParam_Volume */ || in_id == 7 {
-        if let Some(obj) = audio_components::State::get(&mut env.framework_state)
-            .audio_component_instances
-            .get_mut(&in_unit)
-        {
-            obj.volume = in_value;
-        }
+        log_dbg!("AudioUnitSetParameter: volume={} (ignored)", in_value);
     }
     0
 }
@@ -456,7 +454,8 @@ fn AudioUnitGetParameter(
         .audio_component_instances
         .get(&in_unit)
     {
-        if in_id == 0 || in_id == 7 { obj.volume } else { 1.0 }
+        let _ = obj; // volume not stored, return 1.0
+        1.0
     } else {
         1.0
     };
@@ -631,19 +630,16 @@ fn AudioUnitProcessMultiple(
 
 fn AudioUnitComplexRender(
     _env: &mut Environment,
-    in_unit: AudioUnit,
-    io_action_flags: MutPtr<u32>,
+    _in_unit: AudioUnit,
+    _io_action_flags: MutPtr<u32>,
     _in_time_stamp: ConstVoidPtr,
-    in_output_bus_number: u32,
-    in_number_frames: u32,
+    _in_output_bus_number: u32,
+    _in_number_frames: u32,
     _out_num_packets_per_slice: MutPtr<u32>,
     _out_packet_descriptions: MutVoidPtr,
     _io_data: MutVoidPtr,
 ) -> OSStatus {
-    log_dbg!(
-        "AudioUnitComplexRender: unit={:?} bus={} frames={} — ignored",
-        in_unit, in_output_bus_number, in_number_frames
-    );
+    log_dbg!("AudioUnitComplexRender — ignored");
     0
 }
 
@@ -824,5 +820,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioUnitRender(_, _, _, _, _, _)),
     export_c_func!(AudioUnitProcess(_, _, _, _, _)),
     export_c_func!(AudioUnitProcessMultiple(_, _, _, _, _, _, _)),
-    export_c_func!(AudioUnitComplexRender(_, _, _, _, _, _, _, _, _)),
 ];
