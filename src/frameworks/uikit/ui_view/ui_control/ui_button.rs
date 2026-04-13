@@ -442,6 +442,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIButtonHostObject>(this).tint_color = color;
 }
 
+- (())setTitleShadowOffset:(bool)offset {
+    todo_objc_setter!(this, offset);
+}
+
 // MARK: - Titles
 
 - (id)currentTitle {
