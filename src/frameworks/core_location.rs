@@ -211,6 +211,10 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<CLLocationManagerHostObject>(this).heading_orientation
 }
 
+- (bool)locationServicesEnabled {
+    false
+}
+
 - (())setHeadingOrientation:(CLDeviceOrientation)orientation {
     env.objc.borrow_mut::<CLLocationManagerHostObject>(this).heading_orientation = orientation;
 }
