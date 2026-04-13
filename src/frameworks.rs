@@ -44,6 +44,7 @@ pub mod opengles;
 pub mod store_kit;
 pub mod system_configuration;
 pub mod uikit;
+pub mod ui_undo_manager;
 pub mod core_audio;
 pub mod cf_network;
 
