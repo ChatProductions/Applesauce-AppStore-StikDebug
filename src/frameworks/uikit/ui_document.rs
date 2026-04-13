@@ -5,7 +5,7 @@
  */
 //! `UIDocument`.
 
-use crate::abi::GuestFunction;
+use crate::abi::{GuestFunction, CallFromHost};
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::Ptr;
 use crate::objc::{
