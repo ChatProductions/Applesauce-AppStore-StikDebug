@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `string.h`
@@ -28,7 +29,6 @@ fn strtok(env: &mut Environment, s: MutPtr<u8>, sep: ConstPtr<u8>) -> MutPtr<u8>
     } else {
         s
     };
-
     let sep = env.mem.cstr_at(sep);
 
     let mut token_start = s;
@@ -393,13 +393,11 @@ fn strtok_r(
     } else {
         env.mem.read(saveptr)
     };
-
     if start.is_null() {
         return Ptr::null();
     }
 
     let sep_bytes = env.mem.cstr_at(sep);
-
     // Skip leading separators.
     let mut i: GuestUSize = 0;
     loop {
@@ -440,7 +438,6 @@ fn strverscmp(env: &mut Environment, a: ConstPtr<u8>, b: ConstPtr<u8>) -> i32 {
 
     let mut ia = sa.chars().peekable();
     let mut ib = sb.chars().peekable();
-
     loop {
         match (ia.peek().copied(), ib.peek().copied()) {
             (None, None) => return 0,
@@ -593,7 +590,7 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
     }
 
     // Читаем C-строки из памяти эмулятора в виде слайсов байтов &[u8]
-    let haystack_str = env.mem.cstr_at(haystack.as_const());
+    let haystack_str = env.mem.cstr_at(haystack.cast_const());
     let needle_str = env.mem.cstr_at(needle);
 
     // Если искомая подстрока пустая, стандартное поведение — вернуть саму строку
@@ -608,7 +605,7 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
         let window = &haystack_str[i..i + needle_len];
         if window.eq_ignore_ascii_case(needle_str) {
             // Возвращаем указатель на начало найденной подстроки
-            return haystack + i;
+            return haystack + i as GuestUSize;
         }
     }
 
@@ -669,3 +666,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strnlen(_, _)),
     export_c_func!(strcasestr(_, _)),
 ];
+
