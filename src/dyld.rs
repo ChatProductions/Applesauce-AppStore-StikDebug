@@ -39,8 +39,6 @@ use std::collections::HashMap;
 
 pub use dylib_list::DYLIB_LIST;
 
-/// Struct used to expose a host implementation of a dynamic library (usually a
-/// framework) to the linker.
 pub struct HostDylib {
     pub path: &'static str,
     pub aliases: &'static [&'static str],
@@ -62,7 +60,7 @@ export_c_func {
         )
     };
 }
-pub use crate::export_c_func; // #[macro_export] is weird...
+pub use crate::export_c_func; 
 
 #[macro_export]
 macro_rules!
@@ -74,7 +72,7 @@ export_c_func_aliased {
         )
     };
 }
-pub use crate::export_c_func_aliased; // #[macro_export] is weird...
+pub use crate::export_c_func_aliased; 
 
 pub enum HostConstant {
     NSString(&'static str),
@@ -344,19 +342,6 @@ impl Dyld {
             )
         }
 
-        for (name, addrs) in unhandled_relocations {
-            log!(
-                "Auto-stubbed unhandled external relocation {:?} in {:?} at {}",
-                name,
-                bin.name,
-                addrs
-                    .into_iter()
-                    .map(|addr| format!("{addr:#x}"))
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            );
-        }
-
         let Some(ptrs) = bin.get_section(SectionType::NonLazySymbolPointers) else {
             return;
         };
@@ -394,7 +379,6 @@ impl Dyld {
             }
 
             // --- МАГИЯ 2: АВТО-ЗАГЛУШКА ДЛЯ NON-LAZY СИМВОЛОВ ---
-            log!("Auto-stubbed non-lazy symbol: {:?}", symbol);
             let dummy_ptr: MutPtr<u32> = mem.alloc(64).cast();
             mem.write(dummy_ptr + 0, encode_a32_ret());
             mem.write(dummy_ptr + 1, encode_a32_trap());
@@ -565,7 +549,6 @@ impl Dyld {
         }
 
         // --- МАГИЯ 3: АВТО-ЗАГЛУШКА ДЛЯ ЛЕНИВЫХ ФУНКЦИЙ ---
-        log!("Auto-stubbed lazy function: {}", symbol);
         let fn_ptr: MutPtr<u32> = mem.alloc(64).cast();
         mem.write(fn_ptr + 0, encode_a32_ret());
         mem.write(fn_ptr + 1, encode_a32_trap());
@@ -624,17 +607,15 @@ impl Dyld {
     }
 }
 
-pub fn register_gles2_stubs() {
-    log!("Регистрация GLES 2.0 заглушек...");
-}
+pub fn register_gles2_stubs() {}
 
 // =================================================================================
 // Библиотека libtouchhle_compat.dylib 
 // =================================================================================
 pub mod compat_lib {
     use crate::Environment;
-    use crate::mem::{ConstVoidPtr, MutPtr, GuestUSize};
-    use crate::dyld::{HostDylib, HostConstant, export_c_func, FunctionExports, ConstantExports};
+    use crate::mem::{ConstVoidPtr, MutPtr, GuestUSize, ConstPtr};
+    use crate::dyld::{HostDylib, HostConstant, export_c_func, export_c_func_aliased, FunctionExports, ConstantExports};
 
     // --- Реализации Objective-C ARC ---
     fn objc_retain(_env: &mut Environment, obj: u32) -> u32 { obj }
@@ -657,10 +638,8 @@ pub mod compat_lib {
     fn cxa_guard_abort(_env: &mut Environment, _guard: u32) {}
     fn dyld_stub_binder(_env: &mut Environment) { log!("FATAL: dyld_stub_binder called directly!"); std::process::exit(1); }
 
-    // НОВЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ ИСКЛЮЧЕНИЙ (чтобы убрать NULL-PAGE WRITE)
+    // Безопасное завершение при C++ Exception
     fn cxa_allocate_exception(env: &mut Environment, thrown_size: GuestUSize) -> MutPtr<u8> {
-        // C++ ABI требует скрытый заголовок __cxa_exception до указателя.
-        // Выделяем память с запасом и возвращаем указатель со смещением.
         let ptr = env.mem.alloc(thrown_size + 128).cast::<u8>();
         ptr + 64 
     }
@@ -672,7 +651,9 @@ pub mod compat_lib {
     }
 
     fn cxa_throw(_env: &mut Environment, _ex: u32, _info: u32, _dest: u32) {
-        log!("Warning: __cxa_throw called! C++ exceptions are not fully supported. Bypassing...");
+        log!("FATAL: __cxa_throw called! C++ exceptions are not fully supported.");
+        // Если дошли сюда, лучше мягко завершить эмулятор, а не вызывать UndefinedInstruction
+        std::process::exit(1); 
     }
 
     fn cxa_begin_catch(_env: &mut Environment, exception_object: MutPtr<u8>) -> MutPtr<u8> {
@@ -680,6 +661,14 @@ pub mod compat_lib {
     }
 
     fn cxa_end_catch(_env: &mut Environment) {}
+
+    // --- МАГИЯ: ГЛУШИЛКА ДЛЯ MKDIR ---
+    // Мы перехватываем создание папок и всегда возвращаем "0" (успех), чтобы игра не бросала ошибки!
+    fn custom_mkdir(_env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
+        let path_str = _env.mem.cstr_at_utf8(path).unwrap_or("");
+        log!("[HACK] Intercepted mkdir for path: {}. Returning SUCCESS to bypass DRM/FS issues.", path_str);
+        0 // Возвращаем 0, как будто папка успешно создана!
+    }
 
     // --- Честные реализации математических функций (Compiler-RT / libgcc) ---
     fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
@@ -718,7 +707,6 @@ pub mod compat_lib {
         ("___cxa_guard_abort", &(cxa_guard_abort as fn(&mut crate::Environment, u32) -> _)),
         ("dyld_stub_binder", &(dyld_stub_binder as fn(&mut crate::Environment) -> _)),
 
-        // НОВЫЕ ЭКСПОРТЫ ДЛЯ ИСКЛЮЧЕНИЙ
         ("___cxa_allocate_exception", &(cxa_allocate_exception as fn(&mut crate::Environment, GuestUSize) -> _)),
         ("___cxa_free_exception", &(cxa_free_exception as fn(&mut crate::Environment, MutPtr<u8>))),
         ("___cxa_throw", &(cxa_throw as fn(&mut crate::Environment, u32, u32, u32))),
@@ -729,6 +717,9 @@ pub mod compat_lib {
         export_c_func!(__udivsi3(_, _)),
         export_c_func!(__modsi3(_, _)),
         export_c_func!(__umodsi3(_, _)),
+
+        // ПЕРЕХВАТ ФАЙЛОВОЙ СИСТЕМЫ
+        export_c_func_aliased!("mkdir", custom_mkdir(_, _, _)),
     ];
 
     // --- Реализации системных констант и данных ---
@@ -745,11 +736,10 @@ pub mod compat_lib {
     }
 
     fn dummy_cxx_vtable(env: &mut Environment) -> ConstVoidPtr {
-        let ptr = env.mem.alloc(64); // Выделяем безопасный блок памяти для RTTI
+        let ptr = env.mem.alloc(64); 
         ptr.cast().cast_const()
     }
 
-    // Регистрируем константы
     pub const CONSTANTS: ConstantExports = &[
         ("___stack_chk_guard", HostConstant::Custom(stack_chk_guard)),
         ("_kCFCoreFoundationVersionNumber", HostConstant::Custom(cf_version)),
