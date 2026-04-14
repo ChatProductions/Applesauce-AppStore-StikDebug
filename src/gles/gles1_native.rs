@@ -363,7 +363,7 @@ impl GLES for GLES1Native<'_> {
         gles11::Normal3x(nx, ny, nz)
     }
 
-    // Pointers (MALI FIX ADDED HERE)
+    // Pointers
     unsafe fn ColorPointer(
         &mut self,
         size: GLint,
@@ -371,11 +371,9 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
-        if pointer.is_null() { return; }
         gles11::ColorPointer(size, type_, stride, pointer)
     }
     unsafe fn NormalPointer(&mut self, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
-        if pointer.is_null() { return; }
         gles11::NormalPointer(type_, stride, pointer)
     }
     unsafe fn TexCoordPointer(
@@ -385,7 +383,6 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
-        if pointer.is_null() { return; }
         gles11::TexCoordPointer(size, type_, stride, pointer)
     }
     unsafe fn VertexPointer(
@@ -395,11 +392,10 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
-        if pointer.is_null() { return; }
         gles11::VertexPointer(size, type_, stride, pointer)
     }
 
-    // Drawing (MALI FIX ADDED HERE)
+    // Drawing
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
         gles11::DrawArrays(mode, first, count)
     }
@@ -410,7 +406,6 @@ impl GLES for GLES1Native<'_> {
         type_: GLenum,
         indices: *const GLvoid,
     ) {
-        if indices.is_null() { return; }
         gles11::DrawElements(mode, count, type_, indices)
     }
 
@@ -556,7 +551,6 @@ impl GLES for GLES1Native<'_> {
         image_size: GLsizei,
         data: *const GLvoid,
     ) {
-        if data.is_null() { return; } // MALI FIX
         let data = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize) };
         // IMG_texture_compression_pvrtc (only on Imagination/Apple GPUs)
         // TODO: It would be more efficient to use hardware decoding where
