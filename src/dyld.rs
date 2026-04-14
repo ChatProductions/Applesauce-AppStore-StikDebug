@@ -334,7 +334,6 @@ impl Dyld {
                 continue;
             } else {
                 // --- МАГИЯ 1: АВТО-ЗАГЛУШКА ДЛЯ ВНЕШНИХ РЕЛОКАЦИЙ ---
-                // Создаем 64-байтный блок нулей. Запись/Чтение сюда не сломает эмулятор.
                 let dummy = mem.alloc(64);
                 unhandled_relocations.entry(name).or_default().push(ptr_ptr.to_bits());
                 Ptr::from_bits(dummy.to_bits())
@@ -395,8 +394,6 @@ impl Dyld {
             }
 
             // --- МАГИЯ 2: АВТО-ЗАГЛУШКА ДЛЯ NON-LAZY СИМВОЛОВ ---
-            // Пишем BX LR инструкцию на случай, если игра решит вызвать этот адрес как функцию,
-            // а заодно даем блок в 64 байта на случай, если это переменная.
             log!("Auto-stubbed non-lazy symbol: {:?}", symbol);
             let dummy_ptr: MutPtr<u32> = mem.alloc(64).cast();
             mem.write(dummy_ptr + 0, encode_a32_ret());
@@ -568,8 +565,6 @@ impl Dyld {
         }
 
         // --- МАГИЯ 3: АВТО-ЗАГЛУШКА ДЛЯ ЛЕНИВЫХ ФУНКЦИЙ ---
-        // Если функция не реализована, мы не падаем с panic!, 
-        // а создаем заглушку BX LR (которая просто мгновенно делает return).
         log!("Auto-stubbed lazy function: {}", symbol);
         let fn_ptr: MutPtr<u32> = mem.alloc(64).cast();
         mem.write(fn_ptr + 0, encode_a32_ret());
@@ -638,7 +633,53 @@ pub fn register_gles2_stubs() {
 // =================================================================================
 pub mod compat_lib {
     use crate::Environment;
-    use crate::dyld::{HostDylib, export_c_func, FunctionExports};
+    use crate::mem::{ConstVoidPtr, MutPtr, GuestUSize};
+    use crate::dyld::{HostDylib, HostConstant, export_c_func, FunctionExports, ConstantExports};
+
+    // --- Реализации Objective-C ARC ---
+    fn objc_retain(_env: &mut Environment, obj: u32) -> u32 { obj }
+    fn objc_release(_env: &mut Environment, _obj: u32) {}
+    fn objc_autorelease(_env: &mut Environment, obj: u32) -> u32 { obj }
+    fn objc_retainAutoreleasedReturnValue(_env: &mut Environment, obj: u32) -> u32 { obj }
+    fn objc_autoreleaseReturnValue(_env: &mut Environment, obj: u32) -> u32 { obj }
+
+    // --- Реализации C++ ABI & Exceptions ---
+    fn cxa_pure_virtual(_env: &mut Environment) { log!("FATAL: Pure virtual function called!"); std::process::exit(1); }
+    fn cxa_new_handler(_env: &mut Environment) { log!("FATAL: OOM (C++)"); std::process::exit(1); }
+    fn cxa_unexpected_handler(_env: &mut Environment) { log!("FATAL: Unexpected C++ exception"); std::process::exit(1); }
+    fn cxa_terminate_handler(_env: &mut Environment) { log!("FATAL: C++ terminate"); std::process::exit(1); }
+    fn Unwind_SjLj_Register(_env: &mut Environment) {}
+    fn Unwind_SjLj_Unregister(_env: &mut Environment) {}
+    fn Unwind_SjLj_Resume(_env: &mut Environment) {}
+    fn gxx_personality_sj0(_env: &mut Environment) -> i32 { 0 }
+    fn cxa_guard_acquire(_env: &mut Environment, _guard: u32) -> i32 { 1 } // Всегда разрешаем инициализацию статики
+    fn cxa_guard_release(_env: &mut Environment, _guard: u32) {}
+    fn cxa_guard_abort(_env: &mut Environment, _guard: u32) {}
+    fn dyld_stub_binder(_env: &mut Environment) { log!("FATAL: dyld_stub_binder called directly!"); std::process::exit(1); }
+
+    // НОВЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ ИСКЛЮЧЕНИЙ (чтобы убрать NULL-PAGE WRITE)
+    fn cxa_allocate_exception(env: &mut Environment, thrown_size: GuestUSize) -> MutPtr<u8> {
+        // C++ ABI требует скрытый заголовок __cxa_exception до указателя.
+        // Выделяем память с запасом и возвращаем указатель со смещением.
+        let ptr = env.mem.alloc(thrown_size + 128).cast::<u8>();
+        ptr + 64 
+    }
+
+    fn cxa_free_exception(env: &mut Environment, ptr: MutPtr<u8>) {
+        if !ptr.is_null() {
+            env.mem.free((ptr - 64).cast());
+        }
+    }
+
+    fn cxa_throw(_env: &mut Environment, _ex: u32, _info: u32, _dest: u32) {
+        log!("Warning: __cxa_throw called! C++ exceptions are not fully supported. Bypassing...");
+    }
+
+    fn cxa_begin_catch(_env: &mut Environment, exception_object: MutPtr<u8>) -> MutPtr<u8> {
+        exception_object
+    }
+
+    fn cxa_end_catch(_env: &mut Environment) {}
 
     // --- Честные реализации математических функций (Compiler-RT / libgcc) ---
     fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
@@ -658,17 +699,71 @@ pub mod compat_lib {
     }
 
     pub const FUNCTIONS: FunctionExports = &[
+        export_c_func!(objc_retain(_)),
+        export_c_func!(objc_release(_)),
+        export_c_func!(objc_autorelease(_)),
+        export_c_func!(objc_retainAutoreleasedReturnValue(_)),
+        export_c_func!(objc_autoreleaseReturnValue(_)),
+        
+        ("___cxa_pure_virtual", &(cxa_pure_virtual as fn(&mut crate::Environment) -> _)),
+        ("___cxa_new_handler", &(cxa_new_handler as fn(&mut crate::Environment) -> _)),
+        ("___cxa_unexpected_handler", &(cxa_unexpected_handler as fn(&mut crate::Environment) -> _)),
+        ("___cxa_terminate_handler", &(cxa_terminate_handler as fn(&mut crate::Environment) -> _)),
+        ("__Unwind_SjLj_Register", &(Unwind_SjLj_Register as fn(&mut crate::Environment) -> _)),
+        ("__Unwind_SjLj_Unregister", &(Unwind_SjLj_Unregister as fn(&mut crate::Environment) -> _)),
+        ("__Unwind_SjLj_Resume", &(Unwind_SjLj_Resume as fn(&mut crate::Environment) -> _)),
+        ("___gxx_personality_sj0", &(gxx_personality_sj0 as fn(&mut crate::Environment) -> _)),
+        ("___cxa_guard_acquire", &(cxa_guard_acquire as fn(&mut crate::Environment, u32) -> _)),
+        ("___cxa_guard_release", &(cxa_guard_release as fn(&mut crate::Environment, u32) -> _)),
+        ("___cxa_guard_abort", &(cxa_guard_abort as fn(&mut crate::Environment, u32) -> _)),
+        ("dyld_stub_binder", &(dyld_stub_binder as fn(&mut crate::Environment) -> _)),
+
+        // НОВЫЕ ЭКСПОРТЫ ДЛЯ ИСКЛЮЧЕНИЙ
+        ("___cxa_allocate_exception", &(cxa_allocate_exception as fn(&mut crate::Environment, GuestUSize) -> _)),
+        ("___cxa_free_exception", &(cxa_free_exception as fn(&mut crate::Environment, MutPtr<u8>))),
+        ("___cxa_throw", &(cxa_throw as fn(&mut crate::Environment, u32, u32, u32))),
+        ("___cxa_begin_catch", &(cxa_begin_catch as fn(&mut crate::Environment, MutPtr<u8>) -> _)),
+        ("___cxa_end_catch", &(cxa_end_catch as fn(&mut crate::Environment))),
+        
         export_c_func!(__divsi3(_, _)),
         export_c_func!(__udivsi3(_, _)),
         export_c_func!(__modsi3(_, _)),
         export_c_func!(__umodsi3(_, _)),
     ];
 
+    // --- Реализации системных констант и данных ---
+    fn stack_chk_guard(env: &mut Environment) -> ConstVoidPtr {
+        let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+        env.mem.write(ptr, 0x00590041); // Классическая канарейка стека (Apple)
+        ptr.cast().cast_const()
+    }
+
+    fn cf_version(env: &mut Environment) -> ConstVoidPtr {
+        let ptr: MutPtr<f64> = env.mem.alloc(8).cast();
+        env.mem.write(ptr, 675.0); // _kCFCoreFoundationVersionNumber (iOS 5.0 = 675.0)
+        ptr.cast().cast_const()
+    }
+
+    fn dummy_cxx_vtable(env: &mut Environment) -> ConstVoidPtr {
+        let ptr = env.mem.alloc(64); // Выделяем безопасный блок памяти для RTTI
+        ptr.cast().cast_const()
+    }
+
+    // Регистрируем константы
+    pub const CONSTANTS: ConstantExports = &[
+        ("___stack_chk_guard", HostConstant::Custom(stack_chk_guard)),
+        ("_kCFCoreFoundationVersionNumber", HostConstant::Custom(cf_version)),
+        ("_NSUserDefaultsDidChangeNotification", HostConstant::NSString("NSUserDefaultsDidChangeNotification")),
+        ("__ZTVN10__cxxabiv117__class_type_infoE", HostConstant::Custom(dummy_cxx_vtable)),
+        ("__ZTVN10__cxxabiv120__si_class_type_infoE", HostConstant::Custom(dummy_cxx_vtable)),
+        ("__ZTVN10__cxxabiv121__vmi_class_type_infoE", HostConstant::Custom(dummy_cxx_vtable)),
+    ];
+
     pub const DYLIB: HostDylib = HostDylib {
         path: "/usr/lib/libtouchhle_compat.dylib",
         aliases: &[],
         class_exports: &[],
-        constant_exports: &[],
+        constant_exports: &[CONSTANTS],
         function_exports: &[FUNCTIONS],
     };
 }
