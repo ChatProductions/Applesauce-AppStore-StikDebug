@@ -450,7 +450,7 @@ impl Dyld {
         }
 
         for (name, addrs) in unhandled_relocations {
-            crate::log!(
+            log!(
                 "Warning: unhandled external relocation {:?} in {:?} at {}",
                 name,
                 bin.name,
@@ -525,7 +525,7 @@ impl Dyld {
                 continue;
             }
 
-            crate::log!(
+            log!(
                 "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
                 symbol,
                 ptr_ptr,
@@ -742,7 +742,7 @@ impl Dyld {
 }
 
 pub fn register_gles2_stubs() {
-    crate::log!("Регистрация GLES 2.0 заглушек...");
+    log!("Регистрация GLES 2.0 заглушек...");
 }
 
 // =================================================================================
@@ -763,10 +763,10 @@ pub mod compat_lib {
     fn objc_autoreleaseReturnValue(_env: &mut Environment, obj: u32) -> u32 { obj }
 
     // --- Реализации C++ ABI & Exceptions ---
-    fn cxa_pure_virtual(_env: &mut Environment) { crate::log!("FATAL: Pure virtual function called!"); std::process::exit(1); }
-    fn cxa_new_handler(_env: &mut Environment) { crate::log!("FATAL: OOM (C++)"); std::process::exit(1); }
-    fn cxa_unexpected_handler(_env: &mut Environment) { crate::log!("FATAL: Unexpected C++ exception"); std::process::exit(1); }
-    fn cxa_terminate_handler(_env: &mut Environment) { crate::log!("FATAL: C++ terminate"); std::process::exit(1); }
+    fn cxa_pure_virtual(_env: &mut Environment) { log!("FATAL: Pure virtual function called!"); std::process::exit(1); }
+    fn cxa_new_handler(_env: &mut Environment) { log!("FATAL: OOM (C++)"); std::process::exit(1); }
+    fn cxa_unexpected_handler(_env: &mut Environment) { log!("FATAL: Unexpected C++ exception"); std::process::exit(1); }
+    fn cxa_terminate_handler(_env: &mut Environment) { log!("FATAL: C++ terminate"); std::process::exit(1); }
     fn Unwind_SjLj_Register(_env: &mut Environment) {}
     fn Unwind_SjLj_Unregister(_env: &mut Environment) {}
     fn Unwind_SjLj_Resume(_env: &mut Environment) {}
@@ -776,7 +776,7 @@ pub mod compat_lib {
     fn cxa_guard_abort(_env: &mut Environment, _guard: u32) {}
 
     // --- Dyld fallback ---
-    fn dyld_stub_binder(_env: &mut Environment) { crate::log!("FATAL: dyld_stub_binder called directly!"); std::process::exit(1); }
+    fn dyld_stub_binder(_env: &mut Environment) { log!("FATAL: dyld_stub_binder called directly!"); std::process::exit(1); }
 
     // Экспортируем функции с явным указанием C-символов (чтобы избежать лишних подчеркиваний)
     pub const FUNCTIONS: FunctionExports = &[
