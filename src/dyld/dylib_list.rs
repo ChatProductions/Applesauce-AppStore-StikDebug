@@ -46,17 +46,18 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::media_player::DYLIB,
     &frameworks::openal::DYLIB,
     &frameworks::opengles::DYLIB,
+    &frameworks::security::DYLIB,
     &frameworks::store_kit::DYLIB,
     &frameworks::system_configuration::DYLIB,
     &frameworks::uikit::DYLIB,
     &frameworks::libicucore::DYLIB,
     &frameworks::libsqlite3::DYLIB,
-    &frameworks::libxml2::DYLIB, // Добавлена поддержка libxml2 (необходима для Rolando)
+    &frameworks::libxml2::DYLIB,
     &frameworks::common_crypto::DYLIB,
-    &frameworks::core_video::DYLIB, // <--- МЫ ДОБАВИЛИ ЭТУ СТРОКУ ДЛЯ ПОДДЕРЖКИ КАМЕРЫ
+    &frameworks::core_video::DYLIB,
     &frameworks::address_book::DYLIB,
-    &CORE_AUDIO, // <-- Добавлено CoreAudio
-    &CF_NETWORK, // <-- Добавлено CFNetwork
+    &CORE_AUDIO,
+    &CF_NETWORK,
 ];
 
 #[cfg(test)]
@@ -90,15 +91,22 @@ mod tests {
 
             for (method_name, _) in *class_methods {
                 if !seen_class_methods.insert(method_name) {
-                    panic!("Found duplicate class method {method_name} for class {class_name}")
+                    panic!(
+                        "Found duplicate class method {method_name} \
+                        for class {class_name}"
+                    )
                 }
             }
 
-            let mut seen_instance_methods = HashSet::with_capacity(instance_methods.len());
+            let mut seen_instance_methods =
+                HashSet::with_capacity(instance_methods.len());
 
             for (method_name, _) in *instance_methods {
                 if !seen_instance_methods.insert(method_name) {
-                    panic!("Found duplicate instance method {method_name} for class {class_name}")
+                    panic!(
+                        "Found duplicate instance method {method_name} \
+                        for class {class_name}"
+                    )
                 }
             }
         }
@@ -136,3 +144,4 @@ mod tests {
         }
     }
 }
+
