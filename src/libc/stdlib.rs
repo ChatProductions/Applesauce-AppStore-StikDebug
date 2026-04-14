@@ -30,7 +30,8 @@ pub struct State {
 fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if size == 0 {
-        size = 1; // Защита от падения при выделении 0 байт
+        size = 1;
+        // Защита от падения при выделении 0 байт
     }
     env.mem.alloc(size)
 }
@@ -43,7 +44,8 @@ fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoid
     set_errno(env, 0);
     let mut total = size.checked_mul(count).unwrap();
     if total == 0 {
-        total = 1; // Защита от падения
+        total = 1;
+        // Защита от падения
     }
     env.mem.calloc(total)
 }
@@ -99,7 +101,7 @@ fn reallocf(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> Mut
 
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
     if env.objc.get_host_object(ptr.cast()).is_some() {
-        log!(
+        crate::log!(
             "App attempted to call free({:?}) on an object, calling dealloc_object() instead!",
             ptr
         );
@@ -114,7 +116,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
 }
 
 fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
-    log!("TODO: atexit({:?}) (unimplemented)", func);
+    crate::log!("TODO: atexit({:?}) (unimplemented)", func);
     0
 }
 
@@ -165,7 +167,7 @@ fn atof(env: &mut Environment, s: ConstPtr<u8>) -> f64 {
 
 fn strtod(env: &mut Environment, nptr: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>) -> f64 {
     set_errno(env, 0);
-    log_dbg!("strtod nptr {}", env.mem.cstr_at_utf8(nptr).unwrap());
+    crate::log_dbg!("strtod nptr {}", env.mem.cstr_at_utf8(nptr).unwrap());
     let (res, len) = atof_inner(env, nptr).unwrap_or((0.0, 0));
     if !endptr.is_null() {
         env.mem.write(endptr, (nptr + len).cast_mut());
@@ -189,7 +191,7 @@ fn srand(env: &mut Environment, seed: u32) {
 fn sranddev(env: &mut Environment) {
     let seed = arc4random(env);
     env.libc_state.stdlib.rand = seed;
-    log!("sranddev() stubbed: seeded rand with {}", seed);
+    crate::log!("sranddev() stubbed: seeded rand with {}", seed);
 }
 
 fn rand(env: &mut Environment) -> i32 {
@@ -228,7 +230,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
     let Some(&value) = env.env_vars.get(name_cstr) else {
         if name_str != "LUA_PATH" && name_str != "LUA_CPATH" {
-            log!(
+            crate::log!(
                 "Warning: getenv() for {:?} ({:?}) unhandled",
                 name,
                 name_str
@@ -236,7 +238,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
         }
         return Ptr::null();
     };
-    log_dbg!("getenv({:?}) => {:?}", name, value);
+    crate::log_dbg!("getenv({:?}) => {:?}", name, value);
     value
 }
 
@@ -245,7 +247,6 @@ fn setenv(env: &mut Environment, name: ConstPtr<u8>, value: ConstPtr<u8>, overwr
     set_errno(env, 0);
     // Сохраняем имя в отдельный вектор, чтобы отпустить блокировку памяти
     let name_bytes = env.mem.cstr_at(name).to_vec();
-    
     if let Some(&existing) = env.env_vars.get(&name_bytes) {
         if overwrite == 0 {
             return 0;
@@ -262,7 +263,6 @@ fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
     set_errno(env, 0);
     // Сохраняем имя в отдельный вектор
     let name_bytes = env.mem.cstr_at(name).to_vec();
-    
     if let Some(&existing) = env.env_vars.get(&name_bytes) {
         env.mem.free(existing.cast());
         env.env_vars.remove(&name_bytes);
@@ -277,12 +277,12 @@ fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
     // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
     // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
-    echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
+    crate::echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
     // std::process::exit(exit_code);
 }
 
 fn abort(_env: &mut Environment) {
-    echo!("App called abort()! The guest application encountered a fatal error.");
+    crate::echo!("App called abort()! The guest application encountered a fatal error.");
     std::process::exit(1);
 }
 
@@ -472,10 +472,11 @@ fn wcstombs(
 
 fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     if cmd.is_null() {
-        return 1; // shell is available
+        return 1;
+        // shell is available
     }
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
-    log!("system({:?})", cmd_str);
+    crate::log!("system({:?})", cmd_str);
     // split_whitespace() автоматически игнорирует пробелы в начале и конце
     let parts: Vec<&str> = cmd_str.split_whitespace().collect();
     if parts.is_empty() {
@@ -491,11 +492,11 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
                 // use create_dir_all to support mkdir -p semantics
                 match env.fs.create_dir_all(guest_path) {
                     Ok(_) => {
-                        log!("system: mkdir {:?} => success", path);
+                        crate::log!("system: mkdir {:?} => success", path);
                         0
                     }
                     Err(e) => {
-                        log!("system: mkdir {:?} => error: {:?}", path, e);
+                        crate::log!("system: mkdir {:?} => error: {:?}", path, e);
                         1
                     }
                 }
@@ -504,7 +505,7 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
             }
         }
         _ => {
-            log!(
+            crate::log!(
                 "Warning: system({:?}) not implemented, returning 0",
                 cmd_str
             );
@@ -546,7 +547,7 @@ fn __assert_rtn(
     let func_str = read_cstr_safe(env, func);
     let file_str = read_cstr_safe(env, file);
     let expr_str = read_cstr_safe(env, expr);
-    log!(
+    crate::log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
         expr_str, func_str, file_str, line
     );
@@ -560,7 +561,7 @@ fn __assert(
 ) {
     let expr_str = read_cstr_safe(env, expr);
     let file_str = read_cstr_safe(env, file);
-    log!(
+    crate::log!(
         "Assertion failed: ({}) in file {}, line {}.",
         expr_str, file_str, line
     );
@@ -576,7 +577,7 @@ fn __assert_fail(
     let expr_str = read_cstr_safe(env, expr);
     let file_str = read_cstr_safe(env, file);
     let func_str = read_cstr_safe(env, func);
-    log!(
+    crate::log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
         expr_str, func_str, file_str, line
     );
@@ -607,23 +608,89 @@ fn _gcvt(
     ndigit: i32,
     buf: MutPtr<u8>,
 ) -> MutPtr<u8> {
-    set_errno(env, 0); //
+    set_errno(env, 0);
     
     let ndigit = ndigit.max(0) as usize;
-    
     // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт Display
     // с указанием точности (количества знаков после запятой).
     let s = format!("{:.*}", ndigit, value);
     
     let bytes = s.as_bytes();
-    let len = bytes.len() as GuestUSize; //
+    let len = bytes.len() as GuestUSize;
     
     if !buf.is_null() {
-        env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes); //
-        env.mem.write(buf + len, b'\0'); //
+        env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes);
+        env.mem.write(buf + len, b'\0');
     }
     
     buf
+}
+
+fn mbtowc_l(
+    env: &mut Environment,
+    pwc: MutPtr<u32>, // wchar_t на iOS/ARM32 — это 32-битный int
+    s: ConstVoidPtr,
+    n: GuestUSize, // size_t
+    _loc: ConstVoidPtr, // locale_t (игнорируем, так как используем стандартный UTF-8)
+) -> i32 {
+    if s.is_null() {
+        return 0;
+    }
+
+    if n == 0 {
+        return -1;
+    }
+
+    let s_ptr: ConstPtr<u8> = s.cast();
+    let first_byte: u8 = env.mem.read(s_ptr);
+
+    if first_byte == 0 {
+        if !pwc.is_null() {
+            env.mem.write(pwc, 0);
+        }
+        return 0;
+    }
+
+    if first_byte < 0x80 {
+        if !pwc.is_null() {
+            env.mem.write(pwc, first_byte as u32);
+        }
+        return 1;
+    }
+
+    let mut codepoint = 0u32;
+    let bytes_to_read: u32;
+
+    if (first_byte & 0xE0) == 0xC0 {
+        codepoint = (first_byte & 0x1F) as u32;
+        bytes_to_read = 1;
+    } else if (first_byte & 0xF0) == 0xE0 {
+        codepoint = (first_byte & 0x0F) as u32;
+        bytes_to_read = 2;
+    } else if (first_byte & 0xF8) == 0xF0 {
+        codepoint = (first_byte & 0x07) as u32;
+        bytes_to_read = 3;
+    } else {
+        return -1;
+    }
+
+    if n < (bytes_to_read + 1) as GuestUSize {
+        return -1;
+    }
+
+    for i in 1..=bytes_to_read {
+        let next_byte: u8 = env.mem.read(s_ptr + i as GuestUSize);
+        if (next_byte & 0xC0) != 0x80 {
+            return -1;
+        }
+        codepoint = (codepoint << 6) | ((next_byte & 0x3F) as u32);
+    }
+
+    if !pwc.is_null() {
+        env.mem.write(pwc, codepoint);
+    }
+
+    (bytes_to_read + 1) as i32
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -672,6 +739,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dladdr(_, _)),
     export_c_func!(kqueue()),
     export_c_func!(kevent(_, _, _, _, _, _)),
+    export_c_func!(mbtowc_l(_, _, _, _, _)),
 ];
 
 pub fn atof_inner(
@@ -891,3 +959,4 @@ where
     };
     Ok((res, whitespace_len + len))
 }
+
