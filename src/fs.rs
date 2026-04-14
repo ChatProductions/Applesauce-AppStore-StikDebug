@@ -603,20 +603,24 @@ impl Fs {
         }
 
         // Some Free Software libraries are bundled with touchHLE.
+                // Some Free Software libraries are bundled with touchHLE.
         use paths::DYLIBS_DIR;
         let usr_lib = FsNode::dir()
             .with_child(
                 "libgcc_s.1.dylib",
-                FsNode::resource_file(format!("{DYLIBS_DIR}/libgcc_s.1.dylib")),
+                FsNode::resource_file(format!("{}/libgcc_s.1.dylib", DYLIBS_DIR)),
             )
             .with_child(
-                // symlink
                 "libstdc++.6.dylib",
-                FsNode::resource_file(format!("{DYLIBS_DIR}/libstdc++.6.0.9.dylib")),
+                FsNode::resource_file(format!("{}/libstdc++.6.0.9.dylib", DYLIBS_DIR)),
             )
             .with_child(
                 "libstdc++.6.0.9.dylib",
-                FsNode::resource_file(format!("{DYLIBS_DIR}/libstdc++.6.0.9.dylib")),
+                FsNode::resource_file(format!("{}/libstdc++.6.0.9.dylib", DYLIBS_DIR)),
+            )
+            .with_child(
+                "libc++.1.dylib",
+                FsNode::resource_file(format!("{}/libc++.1.dylib", DYLIBS_DIR)),
             )
             .with_child(
                 "libz.1.2.3.dylib",
