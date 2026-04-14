@@ -175,7 +175,8 @@ impl<T, const MUT: bool> std::ops::SubAssign<GuestUSize> for Ptr<T, MUT> {
 ///
 /// # Safety
 /// Reading from guest memory is essentially doing a [std::mem::transmute],
-/// which is notoriously unsafe in Rust. Only types for which all possible bit
+/// which is notoriously unsafe in Rust.
+/// Only types for which all possible bit
 /// patterns are legal (e.g. integers) should have this trait.
 pub unsafe trait SafeRead: Sized {}
 // bool is one byte in size and has 0 as false, 1 as true in both Rust and ObjC
@@ -194,7 +195,8 @@ unsafe impl<T, const MUT: bool> SafeRead for Ptr<T, MUT> {}
 
 /// Marker trait for types that can be written to guest memory.
 ///
-/// Unlike for [SafeRead], there is no (Rust) safety consideration here; it's
+/// Unlike for [SafeRead], there is no (Rust) safety consideration here;
+/// it's
 /// just a way to catch accidental use of types unintended for guest use.
 /// This was added after discovering that `()` is "[Sized]" and therefore a
 /// single stray semicolon can wreak havoc...
@@ -224,7 +226,8 @@ pub struct Mem {
     ///
     /// This is a raw pointer because inevitably we will have to hand out
     /// pointers to memory sometimes, and being able to hold a `&mut` on this
-    /// array simultaneously seems like an undefined behavior trap. This also
+    /// array simultaneously seems like an undefined behavior trap.
+    /// This also
     /// means that the underlying memory should never be moved, and therefore
     /// the array can't be growable.
     ///
@@ -249,7 +252,8 @@ pub struct Mem {
     /// or on alloc (`false`).
     ///
     /// Right now only one game, Spore Origin, is setting this value to `false`
-    /// via a game-specific hack. See [crate::Environment] for more info.
+    /// via a game-specific hack.
+    /// See [crate::Environment] for more info.
     pub(super) zero_memory_on_free: bool,
 
     /// ХАК: Страница-заглушка для null-page доступов.
@@ -263,7 +267,6 @@ impl Drop for Mem {
     fn drop(&mut self) {
         unsafe {
             crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
-
             // Освобождаем страницу-заглушку
             if !self.null_stub_page.is_null() {
                 crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize).unwrap();
@@ -296,7 +299,6 @@ impl Mem {
             0,
             "Failed to align host memory with guest memory"
         );
-
         let bytes = ptr as *mut Bytes;
 
         // ХАК: Создаём страницу-заглушку для null-page (4KB)
@@ -308,7 +310,7 @@ impl Mem {
             let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
             let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
             
-            // 1. Заполняем всё нулями. 
+            // 1. Заполняем всё нулями.
             // Чтение *(void**)0 вернет 0x00000000 (NULL).
             // Вызов адреса 0x0 запустит выполнение безвредных NOP-ов (MOVS R0, R0).
             stub_slice.fill(0);
@@ -318,12 +320,10 @@ impl Mem {
             let last_idx = (PAGE_SIZE as usize) - 2;
             stub_slice[last_idx] = 0x70;
             stub_slice[last_idx + 1] = 0x47;
-            
             page as *mut u8
         };
 
         let allocator = allocator::Allocator::new();
-
         Mem {
             bytes,
             null_segment_size: 0,
@@ -333,14 +333,18 @@ impl Mem {
         }
     }
 
-    /// Sets up the null segment of the given size. There's no reason to call
+    /// Sets up the null segment of the given size.
+    /// There's no reason to call
     /// this outside of binary loading, and it won't be respected even if you
-    /// do. The size must not have been set already, and must be page aligned.
+    /// do.
+    /// The size must not have been set already, and must be page aligned.
     pub fn set_null_segment_size(&mut self, new_null_segment_size: VAddr) {
         // TODO?: Maybe this should be replaced with a per-page rwx/callback
-        //        setting? Currently we don't properly follow segment
+        //        setting?
+        //        Currently we don't properly follow segment
         //        protections, which means that applications can write into
-        //        segments they shouldn't be able to. Adding that would fix
+        //        segments they shouldn't be able to.
+        //        Adding that would fix
         //        this, along with removing this special case.
         assert!(self.null_segment_size == 0);
         assert!(new_null_segment_size.is_multiple_of(0x1000));
@@ -353,11 +357,13 @@ impl Mem {
         self.null_segment_size
     }
 
-    /// Get a pointer to the full 4GiB of memory. This is only for use when
+    /// Get a pointer to the full 4GiB of memory.
+    /// This is only for use when
     /// setting up the CPU, never call this otherwise.
     ///
     /// Safety: You must ensure that this pointer does not outlive the instance
-    /// of [Mem]. You must not use it while a `&mut` is held on some region of
+    /// of [Mem].
+    /// You must not use it while a `&mut` is held on some region of
     /// guest memory.
     pub unsafe fn direct_memory_access_ptr(&mut self) -> *mut std::ffi::c_void {
         self.bytes.cast()
@@ -371,29 +377,19 @@ impl Mem {
     }
 
     // ХАК: Улучшенный обработчик null-page доступов
-    // Вместо паники логируем и возвращаем данные из stub-страницы
+    // Вызываем панику для дампа регистров!
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
-
-        // Выводим подробную информацию о проблеме через eprintln! (всегда работает)
-        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
-        eprintln!("Operation: {}", op_type);
-        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
-        eprintln!("Size:      0x{:x} bytes", size);
-        eprintln!("Caller:    {}", caller);
-        eprintln!("===========================================");
-        eprintln!("WARNING: Access ALLOWED (returning stub page with BX LR).");
-        eprintln!("Game may behave unexpectedly but should not crash.");
-        eprintln!("===========================================\n");
-
-        // Также используем touchHLE логгер если доступен
-        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
-             op_type, at, size, caller);
+        panic!(
+            "FATAL: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {}! Эмулятор падает здесь. Смотри дамп регистров ниже!",
+            op_type, at, size, caller
+        );
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
-    /// panicking on failure. Only for use by [crate::gdb::GdbServer].
+    /// panicking on failure.
+    /// Only for use by [crate::gdb::GdbServer].
     pub fn get_bytes_fallible(&self, addr: ConstVoidPtr, count: GuestUSize) -> Option<&[u8]> {
         if addr.to_bits() < self.null_segment_size {
             // Для GDB возвращаем stub-страницу
@@ -409,21 +405,24 @@ impl Mem {
             .get(..count as usize)
     }
     /// Special version of [Self::bytes_at_mut] that returns [None] rather than
-    /// panicking on failure. Only for use by [crate::gdb::GdbServer].
+    /// panicking on failure.
+    /// Only for use by [crate::gdb::GdbServer].
     pub fn get_bytes_fallible_mut(
         &mut self,
         addr: ConstVoidPtr,
         count: GuestUSize,
     ) -> Option<&mut [u8]> {
         if addr.to_bits() < self.null_segment_size {
-            return None; // GDB не должен писать в null-page
+            return None;
+            // GDB не должен писать в null-page
         }
         self.bytes_mut()
             .get_mut(addr.to_bits() as usize..)?
             .get_mut(..count as usize)
     }
 
-    /// Get a slice for reading `count` bytes. This is the basic primitive for
+    /// Get a slice for reading `count` bytes.
+    /// This is the basic primitive for
     /// safe read-only memory access.
     ///
     /// This will panic when `ptr` is within the null page, even if `count` is
@@ -434,7 +433,6 @@ impl Mem {
         // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, false, "bytes_at");
-
             // Возвращаем данные из stub-страницы вместо реальной памяти
             // Это предотвращает UndefinedInstruction когда игра использует
             // прочитанные значения как указатели на функции
@@ -442,7 +440,6 @@ impl Mem {
             let count_usize = count as usize;
             let available = PAGE_SIZE as usize - offset;
             let actual_count = count_usize.min(available);
-
             return unsafe {
                 std::slice::from_raw_parts(self.null_stub_page.add(offset), actual_count)
             };
@@ -461,7 +458,8 @@ impl Mem {
     ) -> &[u8] {
         &self.bytes()[ptr.to_bits() as usize..][..count as usize]
     }
-    /// Get a slice for reading or writing `count` bytes. This is the basic
+    /// Get a slice for reading or writing `count` bytes.
+    /// This is the basic
     /// primitive for safe read-write memory access.
     ///
     /// This will panic when `ptr` is within the null page, even if `count` is
@@ -472,13 +470,11 @@ impl Mem {
         // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
-
             // Для записи в null-page - возвращаем stub-страницу (запись будет проигнорирована)
             let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let available = PAGE_SIZE as usize - offset;
             let actual_count = count_usize.min(available);
-
             return unsafe {
                 std::slice::from_raw_parts_mut(self.null_stub_page.add(offset), actual_count)
             };
@@ -494,7 +490,8 @@ impl Mem {
     ///
     /// No guarantee is made about the alignment of the resulting pointer!
     /// Pointers that are well-aligned for the guest are not necessarily
-    /// well-aligned for the host. Rust strictly requires pointers to be
+    /// well-aligned for the host.
+    /// Rust strictly requires pointers to be
     /// well-aligned when dereferencing them, or when constructing references or
     /// slices from them, so **be very careful**.
     pub fn ptr_at<T, const MUT: bool>(&self, ptr: Ptr<T, MUT>, count: GuestUSize) -> *const T
@@ -521,14 +518,16 @@ impl Mem {
         self.unchecked_bytes_at(ptr.cast(), size).as_ptr().cast()
     }
     /// Get a pointer for reading or writing to an array of `count` elements of
-    /// type `T`. Only use this for interfacing with unsafe C-like APIs.
+    /// type `T`.
+    /// Only use this for interfacing with unsafe C-like APIs.
     ///
     /// The `count` argument is purely for bounds-checking and does not affect
     /// the result.
     ///
     /// No guarantee is made about the alignment of the resulting pointer!
     /// Pointers that are well-aligned for the guest are not necessarily
-    /// well-aligned for the host. Rust strictly requires pointers to be
+    /// well-aligned for the host.
+    /// Rust strictly requires pointers to be
     /// well-aligned when dereferencing them, or when constructing references or
     /// slices from them, so **be very careful**.
     pub fn ptr_at_mut<T>(&mut self, ptr: MutPtr<T>, count: GuestUSize) -> *mut T
@@ -540,21 +539,21 @@ impl Mem {
     }
 
     /// Transform a host pointer addressing a location in guest memory back into
-    /// a guest pointer. This exists solely to deal with OpenGL `glGetPointerv`.
+    /// a guest pointer.
+    /// This exists solely to deal with OpenGL `glGetPointerv`.
     /// You should never have another reason to use this.
     ///
     /// Panics if the host pointer is not addressing a location in guest memory.
     pub fn host_ptr_to_guest_ptr(&self, host_ptr: *const std::ffi::c_void) -> ConstVoidPtr {
         let host_ptr = host_ptr.cast::<u8>();
-
         let guest_mem_range = self.bytes().as_ptr_range();
         assert!(guest_mem_range.contains(&host_ptr));
         let guest_addr = host_ptr as usize - guest_mem_range.start as usize;
-
         Ptr::from_bits(u32::try_from(guest_addr).unwrap())
     }
 
-    /// Read a value for memory. This is the preferred way to read memory in
+    /// Read a value for memory.
+    /// This is the preferred way to read memory in
     /// most cases.
     pub fn read<T, const MUT: bool>(&self, ptr: Ptr<T, MUT>) -> T
     where
@@ -565,7 +564,8 @@ impl Mem {
         // This would also be unsafe if the non-unaligned method was used.
         unsafe { self.ptr_at(ptr, 1).read_unaligned() }
     }
-    /// Write a value to memory. This is the preferred way to write memory in
+    /// Write a value to memory.
+    /// This is the preferred way to write memory in
     /// most cases.
     pub fn write<T>(&mut self, ptr: MutPtr<T>, value: T)
     where
@@ -586,7 +586,6 @@ impl Mem {
         let src = src.to_bits() as usize;
         let dest = dest.to_bits() as usize;
         let size = size as usize;
-
         self.bytes_mut()
             .copy_within(src..src.checked_add(size).unwrap(), dest)
     }
@@ -594,13 +593,11 @@ impl Mem {
     /// Allocate `size` bytes.
     pub fn alloc(&mut self, size: GuestUSize) -> MutVoidPtr {
         let ptr = Ptr::from_bits(self.allocator.alloc(size));
-
         if !self.zero_memory_on_free {
             self.bytes_at_mut(ptr.cast(), size).fill(0);
         }
 
         log_dbg!("Allocated {:?} ({:#x} bytes)", ptr, size);
-
         ptr
     }
 
@@ -623,7 +620,6 @@ impl Mem {
         // TODO: for a moment we always assume that we do not have enough size
         //       to realloc inplace
         let old_size = self.allocator.find_allocated_size(old_ptr.to_bits());
-
         if old_size >= size {
             return old_ptr;
         }
@@ -631,14 +627,12 @@ impl Mem {
         let new_ptr = self.alloc(size);
         self.memmove(new_ptr, old_ptr.cast_const(), old_size);
         self.free(old_ptr);
-
         new_ptr
     }
 
     /// Free an allocation made with one of the `alloc` methods on this type.
     pub fn free(&mut self, ptr: MutVoidPtr) {
         let size = self.allocator.free(ptr.to_bits());
-
         if self.zero_memory_on_free {
             self.bytes_at_mut(ptr.cast(), size).fill(0);
         }
@@ -647,7 +641,8 @@ impl Mem {
     }
 
     /// Allocate memory large enough for a value of type `T` and write the value
-    /// to it. Equivalent to [Self::alloc] + [Self::write].
+    /// to it.
+    /// Equivalent to [Self::alloc] + [Self::write].
     pub fn alloc_and_write<T>(&mut self, value: T) -> MutPtr<T>
     where
         T: SafeWrite,
@@ -657,7 +652,8 @@ impl Mem {
         ptr
     }
 
-    /// Allocate and write a C string. This method will add a null terminator,
+    /// Allocate and write a C string.
+    /// This method will add a null terminator,
     /// so it is optimal if the input slice does not already contain one.
     pub fn alloc_and_write_cstr(&mut self, str_bytes: &[u8]) -> MutPtr<u8> {
         let len = str_bytes.len().try_into().unwrap();
@@ -667,11 +663,11 @@ impl Mem {
         ptr
     }
 
-    /// Get a C string (null-terminated) as a slice. The null terminator is not
+    /// Get a C string (null-terminated) as a slice.
+    /// The null terminator is not
     /// included in the slice.
     pub fn cstr_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>) -> &[u8] {
         let mut len = 0;
-
         while self.read(ptr + len) != b'\0' {
             len += 1;
         }
@@ -680,7 +676,8 @@ impl Mem {
     }
 
     /// Get a C string (null-terminated) as a string slice, if it is valid
-    /// UTF-8, otherwise returning a byte slice. The null terminator is not
+    /// UTF-8, otherwise returning a byte slice.
+    /// The null terminator is not
     /// included in the slice.
     pub fn cstr_at_utf8<const MUT: bool>(&self, ptr: Ptr<u8, MUT>) -> Result<&str, &[u8]> {
         let bytes = self.cstr_at(ptr);
@@ -689,7 +686,6 @@ impl Mem {
 
     pub fn wcstr_at<const MUT: bool>(&self, ptr: Ptr<wchar_t, MUT>) -> String {
         let mut len = 0;
-
         while self.read(ptr + len) != wchar_t::default() {
             len += 1;
         }
@@ -698,7 +694,6 @@ impl Mem {
             .bytes_at(ptr.cast(), len * guest_size_of::<wchar_t>())
             .chunks(4)
             .map(|chunk| char::from_u32(u32::from_le_bytes(chunk.try_into().unwrap())).unwrap());
-
         String::from_iter(iter)
     }
 
@@ -708,3 +703,4 @@ impl Mem {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }
+
