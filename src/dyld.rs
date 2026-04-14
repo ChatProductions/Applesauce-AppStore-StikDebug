@@ -1,19 +1,26 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! Dynamic linker.
 //!
 //! iPhone OS's dynamic linker, `dyld`, is the namesake of this module.
 //!
+//!
 //! This is where the magic of "high-level emulation" can begin to happen.
+//!
 //! The guest app will reference various functions, constants, classes etc from
 //! iPhone OS's system frameworks and other dynamically-linked libraries, but
+//!
 //! instead of actually loading and linking the original framework binaries,
 //! this "dynamic linker" will generate appropriate stubs for calling into
+//!
 //! touchHLE's own implementations of the frameworks, which are "host code"
 //! (i.e. not themselves running under emulation).
+//!
 //!
 //! This also does normal dynamic linking for libgcc, libstdc++, etc.
 //!
@@ -37,7 +44,8 @@ pub use dylib_list::DYLIB_LIST;
 ///
 /// Each module that wants to expose a library to guest code should export a
 /// constant using this type, which collects all the relevant [ClassExports],
-/// [ConstantExports] and [FunctionExports] for the library. For example:
+/// [ConstantExports] and [FunctionExports] for the library.
+/// For example:
 ///
 /// ```ignore
 /// pub const DYLIB: HostDylib = HostDylib {
@@ -51,7 +59,8 @@ pub use dylib_list::DYLIB_LIST;
 ///
 /// The `path` should be the canonical notional filesystem path that the library
 /// is referenced by on the real OS, for example `"/usr/lib/libobjc.A.dylib"`
-/// or `"/System/Library/Frameworks/Foundation.framework/Foundation"`. For
+/// or `"/System/Library/Frameworks/Foundation.framework/Foundation"`.
+/// For
 /// libraries that have several symlinked paths, non-canonical alternate
 /// paths can be listed under `aliases`, for example `"/usr/lib/libobjc.dylib"`.
 pub struct HostDylib {
@@ -108,10 +117,12 @@ pub type FunctionExports = &'static [(&'static str, HostFunction)];
 ///
 /// The function needs to be explicitly casted because a bare function reference
 /// defaults to a different type than a pure fn pointer, which is the type that
-/// [CallFromGuest] is implemented on. This macro will do the casting for you,
+/// [CallFromGuest] is implemented on.
+/// This macro will do the casting for you,
 /// but you will need to supply an underscore for each parameter.
 #[macro_export]
-macro_rules! export_c_func {
+macro_rules!
+export_c_func {
     ($name:ident ($($_:ty),*)) => {
         (
             concat!("_", stringify!($name)),
@@ -122,10 +133,12 @@ macro_rules! export_c_func {
 pub use crate::export_c_func; // #[macro_export] is weird...
 
 /// Other variant of [export_c_func] macro, allowing to define an alias
-/// for the exporting function. This is useful then alias may contain
+/// for the exporting function.
+/// This is useful then alias may contain
 /// characters not normally allowed for Rust function's names. (e.g. `$`)
 #[macro_export]
-macro_rules! export_c_func_aliased {
+macro_rules!
+export_c_func_aliased {
     ($alias:literal, $name:ident ($($_:ty),*)) => {
         (
             concat!("_", $alias),
@@ -136,7 +149,8 @@ macro_rules! export_c_func_aliased {
 pub use crate::export_c_func_aliased; // #[macro_export] is weird...
 
 /// Type for describing a constant (C `extern const` symbol) that will be
-/// created by the linker if the guest app references it. See [ConstantExports].
+/// created by the linker if the guest app references it.
+/// See [ConstantExports].
 pub enum HostConstant {
     NSString(&'static str),
     NullPtr,
@@ -171,9 +185,11 @@ where
     F: Fn(&HostDylib) -> &'static [&'static [(&'static str, T)]],
 {
     // TODO: In general, we should rarely if ever need to search the full set
-    //       of dylibs for a symbol. Now that we know which symbols belong to
+    //       of dylibs for a symbol.
+    //       Now that we know which symbols belong to
     //       which libraries, we should at least only search libraries that are
-    //       referenced by the app and currently "loaded". We probably should
+    //       referenced by the app and currently "loaded".
+    //       We probably should
     //       also implement the Mach-O two-level symbol namespacing eventually.
     DYLIB_LIST
         .iter()
@@ -208,7 +224,8 @@ fn write_return_to_host_routine(mem: &mut Mem, svc: u32) -> GuestFunction {
     let routine = [
         encode_a32_svc(svc),
         // When a return-to-host occurs, it's the host's responsibility
-        // to reset the PC to somewhere else. So something has gone
+        // to reset the PC to somewhere else.
+        // So something has gone
         // wrong if this is executed.
         encode_a32_trap(),
     ];
@@ -263,6 +280,7 @@ impl Dyld {
         }
     }
 
+ 
     pub fn return_to_host_routine(&self) -> GuestFunction {
         self.return_to_host_routine.unwrap()
     }
@@ -306,8 +324,10 @@ impl Dyld {
     ///     "symbols": [
     ///         {
     ///             "symbol": ((name of symbol)),
-    ///             "linked_to": "host" | "dylib" | null,
-    ///             "dylib": ((name of dylib)) | null,
+    ///             "linked_to": "host" |
+    /// "dylib" | null,
+    ///             "dylib": ((name of dylib)) |
+    /// null,
     ///         },
     ///         ...
     ///     ]
@@ -332,12 +352,14 @@ impl Dyld {
                 ""
             } else {
                 ","
+         
             };
             let symbol = symbol.as_ref().unwrap();
             if let Some(&(_, _)) = search_host_dylibs(|dylib| dylib.function_exports, symbol) {
                 writeln!(
                     file,
                     "        {{ \"symbol\": \"{symbol}\", \"linked_to\": \"host\"}}{comma}"
+                
                 )?;
                 continue;
             }
@@ -345,6 +367,7 @@ impl Dyld {
                 if dylib.exported_symbols.contains_key(symbol) {
                     writeln!(
                         file,
+                    
                         "        {{ \"symbol\": \"{}\", \"linked_to\": \"dylib\", \"dylib\": \"{}\"}}{}",
                         symbol, dylib.name, comma
                     )?;
@@ -383,6 +406,7 @@ impl Dyld {
                     file,
                     "void {}() {{}}",
                     function_symbol.strip_prefix("_").unwrap()
+     
                 )?;
             }
         }
@@ -405,7 +429,8 @@ impl Dyld {
     ///
     /// Dynamic linking of functions on iPhone OS usually happens "lazily",
     /// which means that the linking is delayed until the function is first
-    /// called. This is achieved by using stub functions. Instead of calling the
+    /// called.
+    /// This is achieved by using stub functions. Instead of calling the
     /// external function directly, the app code will call a stub function, and
     /// that stub will either jump to the dynamic linker (which will link in the
     /// external function and then jump to it), or on subsequent calls, jump
@@ -426,6 +451,7 @@ impl Dyld {
             4 => &[],
             12 => Self::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
             16 => Self::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
+            
             _ => unimplemented!(),
         };
 
@@ -459,7 +485,8 @@ impl Dyld {
     ///
     /// These are usually constants, Objective-C classes, or vtable pointers.
     /// Since the linking must be done upfront, we can't in general delay errors
-    /// about missing implementations until the point of use. For that reason,
+    /// about missing implementations until the point of use.
+    /// For that reason,
     /// this will spit out a warning to stderr for everything missing, so that
     /// there's at least some indication about why the emulator might crash.
     ///
@@ -486,27 +513,35 @@ impl Dyld {
                     .cast()
                     .cast_const()
             } else if let Some(name) = name.strip_prefix("_OBJC_METACLASS_$_") {
-                objc.link_class(name, /* is_metaclass: */ true, mem)
+           
+                 objc.link_class(name, /* is_metaclass: */ true, mem)
                     .cast()
                     .cast_const()
             } else if name == "___CFConstantStringClassReference" {
                 // See ns_string::register_constant_strings
+              
                 nil.cast().cast_const()
             } else if name == "___mb_cur_max" {
                 // __mb_cur_max is a pointer to the C locale's max
-                // multibyte character byte count. libstdc++ reads
-                // *__mb_cur_max in locale/string code; if this pointer
-                // is NULL the dereference crashes. Provide a static
+                // multibyte character byte count.
+                // libstdc++ reads
+                // *__mb_cur_max in locale/string code;
+                // if this pointer
+                // is NULL the dereference crashes.
+                // Provide a static
                 // value of 1 (single-byte / ASCII locale).
                 let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(val_ptr, 1u32);
                 log_dbg!("Stubbed ___mb_cur_max at {:?}", val_ptr);
                 val_ptr.cast().cast_const()
             } else if name == "__NSConcreteGlobalBlock"
-                || name == "__NSConcreteStackBlock"
+                ||
+                name == "__NSConcreteStackBlock"
             {
-                // Blocks runtime class descriptor. Allocate a small dummy
-                // object in guest memory so isa != NULL. All sites for the
+                // Blocks runtime class descriptor.
+                // Allocate a small dummy
+                // object in guest memory so isa != NULL.
+                // All sites for the
                 // same symbol share one address (cached above).
                 let addr = *block_class_addrs
                     .entry(name.clone())
@@ -522,12 +557,14 @@ impl Dyld {
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
                 .next()
             {
-                // Often used for C++ RTTI
+                // Often used for C++ 
+                // RTTI
                 Ptr::from_bits(external_addr)
             } else if let Some((symbol, _)) =
                 search_host_dylibs(|dylib| dylib.function_exports, name)
             {
                 // We want the same symbol name to always point to the same
+        
                 // function.
                 let trampoline_ptr = self
                     .create_proc_address_no_inval(mem, symbol)
@@ -550,7 +587,8 @@ impl Dyld {
                     .push(ptr_ptr.to_bits());
                 continue;
             };
-            // wrapping_add() is used in case the offset is negative. I haven't
+            // wrapping_add() is used in case the offset is negative.
+            // I haven't
             // seen it happen, but it would make sense if that is allowed.
             mem.write(
                 ptr_ptr,
@@ -565,6 +603,7 @@ impl Dyld {
                 name,
                 bin.name,
                 addrs
+           
                     .into_iter()
                     .map(|addr| format!("{addr:#x}"))
                     .collect::<Vec<String>>()
@@ -596,7 +635,8 @@ impl Dyld {
 
             if let Some((symbol, _)) = search_host_dylibs(|dylib| dylib.function_exports, symbol) {
                 // We want the same symbol name to always point to the same
-                // function. It could point to a specific stub entry, but it's
+                // function.
+                // It could point to a specific stub entry, but it's
                 // easier to just create a new function and point all the stub
                 // entries to it.
                 let trampoline_ptr = self
@@ -616,6 +656,7 @@ impl Dyld {
             {
                 // Delay linking of constant until we have a `&mut Environment`,
                 // that makes it much easier to build NSString objects etc.
+              
                 self.constants_to_link_later.push((ptr_ptr, template));
                 continue;
             }
@@ -625,7 +666,8 @@ impl Dyld {
             // first retain/release of any stack block causes a
             // NULL-page read at 0x0.
             if symbol == "__NSConcreteStackBlock"
-                || symbol == "__NSConcreteGlobalBlock"
+                ||
+                symbol == "__NSConcreteGlobalBlock"
             {
                 let dummy = mem.alloc(16);
                 mem.write(ptr_ptr, dummy.cast().cast_const());
@@ -637,21 +679,25 @@ impl Dyld {
                 continue;
             }
 
-            // C++ / ObjC exception handling symbols. If these are
+            // C++ / ObjC exception handling symbols.
+            // If these are
             // NULL the C++ unwinder crashes when any @try block is
             // entered or any ObjC exception is thrown, producing
             // sequential NULL-page reads followed by UndefinedInst.
             //
             // _OBJC_EHTYPE_*: ObjC exception type-info descriptors
-            // used by @catch type matching. A dummy non-null object
+            // used by @catch type matching.
+            // A dummy non-null object
             // is enough to prevent the NULL dereference.
             //
             // ___objc_personality_v0: called by _Unwind_RaiseException
-            // for every frame. We install a trivial stub (BX LR) that
+            // for every frame.
+            // We install a trivial stub (BX LR) that
             // returns 0 (_URC_NO_REASON / continue unwinding) so the
             // unwinder keeps moving instead of branching to 0x0.
             if symbol == "_OBJC_EHTYPE_id"
-                || symbol == "_OBJC_EHTYPE_$_NSException"
+                ||
+                symbol == "_OBJC_EHTYPE_$_NSException"
             {
                 let dummy = mem.alloc(32);
                 mem.write(ptr_ptr, dummy.cast().cast_const());
@@ -663,7 +709,7 @@ impl Dyld {
                 continue;
             }
 
-            if symbol == "___objc_personality_v0" {
+            if symbol == "___objc_personality_v0" || symbol == "___gxx_personality_sj0" {
                 // Minimal ARM32 function: BX LR (returns 0 in R0).
                 // Returning _URC_NO_REASON (0) for every frame tells
                 // the unwinder "no handler here, keep searching".
@@ -672,14 +718,16 @@ impl Dyld {
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 mem.write(ptr_ptr, fn_ptr.cast().cast_const());
                 log_dbg!(
-                    "Stubbed ___objc_personality_v0 -> {:#x}",
+                    "Stubbed {} -> {:#x}",
+                    symbol,
                     fn_ptr.to_bits()
                 );
                 continue;
             }
 
             // __mb_cur_max is a pointer-to-int used by libstdc++
-            // locale code. Provide a value of 1 (single-byte locale).
+            // locale code.
+            // Provide a value of 1 (single-byte locale).
             if symbol == "___mb_cur_max" {
                 let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(val_ptr, 1u32);
@@ -700,7 +748,7 @@ impl Dyld {
         }
 
         // FIXME: check for internal relocations?
-    }
+        }
 
     /// Do linking that can only be done once there is a full [Environment].
     /// Not to be confused with lazy linking.
@@ -726,7 +774,8 @@ impl Dyld {
     }
 
     /// Return a host function that can be called to handle an SVC instruction
-    /// encountered during CPU emulation. If `None` is returned, the execution
+    /// encountered during CPU emulation.
+    // If `None` is returned, the execution
     /// needs to resume at `svc_pc`.
     pub fn get_svc_handler(
         &mut self,
@@ -747,6 +796,7 @@ impl Dyld {
                 let f = self.linked_host_functions.get(
                     ((svc & !Self::SVC_LAZY_LINK_RET_FLAG) - Self::SVC_LINKED_FUNCTIONS_BASE)
                         as usize,
+            
                 );
                 let Some(&(symbol, f)) = f else {
                     panic!("Unexpected SVC #{svc} at {svc_pc:#x}");
@@ -781,6 +831,7 @@ impl Dyld {
                 12 => Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 16 => Dyld::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 _ => unreachable!(),
+          
             };
             let instruction_count: GuestUSize = original_instructions.len().try_into().unwrap();
 
@@ -792,6 +843,7 @@ impl Dyld {
                 for (i, &instr) in original_instructions.iter().enumerate() {
                     mem.write(stub_function_ptr + i.try_into().unwrap(), instr)
                 }
+   
             }
 
             cpu.invalidate_cache_range(stub_function_ptr.to_bits(), instruction_count * 4);
@@ -820,11 +872,13 @@ impl Dyld {
             .find_map(|bin| {
                 let stubs = bin.get_section(SectionType::SymbolStubs)?;
                 if !(stubs.addr..(stubs.addr + stubs.size)).contains(&svc_pc) {
+             
                     return None;
                 }
                 let pic_offset = bin
                     .get_section(SectionType::LazySymbolPointers)
                     .map_or(0, |lazy_ptrs| lazy_ptrs.addr - stubs.addr);
+             
                 Some((stubs, pic_offset))
             })
             .unwrap();
@@ -835,6 +889,24 @@ impl Dyld {
         let idx = (offset / info.entry_size) as usize;
         let symbol = info.indirect_undef_symbols[idx].as_deref().unwrap();
 
+        if symbol == "__Unwind_SjLj_Register" || symbol == "__Unwind_SjLj_Unregister" || symbol == "__Unwind_SjLj_Resume" {
+            let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+            mem.write(fn_ptr + 0, encode_a32_ret()); 
+            mem.write(fn_ptr + 1, encode_a32_trap());
+            
+            let (_, _) = link_by_restoring_stub(
+                mem,
+                cpu,
+                fn_ptr.to_bits(),
+                svc_pc,
+                info.entry_size,
+                pic_offset,
+            );
+            
+            crate::log!("Stubbed C++ SjLj function {} -> {:#x}", symbol, fn_ptr.to_bits());
+            return None;
+        }
+
         if let Some(&addr) = self.non_lazy_host_functions.get(symbol) {
             // The host function was already linked non-lazily, point the
             // stub and __la_symbol_ptr to the function.
@@ -844,6 +916,7 @@ impl Dyld {
                 addr.addr_with_thumb_bit(),
                 svc_pc,
                 info.entry_size,
+                
                 pic_offset,
             );
             log_dbg!(
@@ -852,6 +925,7 @@ impl Dyld {
                 stub_function_ptr,
                 la_symbol_ptr,
                 addr,
+           
             );
             // The stub jumps to the non-lazy function, which calls the
             // host function.
@@ -895,6 +969,7 @@ impl Dyld {
                     symbol,
                     stub_function_ptr,
                     la_symbol_ptr,
+             
                     addr,
                     dylib.name
                 );
@@ -907,11 +982,13 @@ impl Dyld {
     }
 
     /// Creates a guest function that will call a host function with the name
-    /// `symbol`. This can be used to implement "get proc address" functions.
+    /// `symbol`.
+    // This can be used to implement "get proc address" functions.
     /// Note that no attempt is made to deduplicate or deallocate these, so
     /// excessive use would create a memory leak.
     ///
-    /// The name must be the mangled symbol name. Returns [Err] if there's no
+    /// The name must be the mangled symbol name.
+    // Returns [Err] if there's no
     /// such function.
     pub fn create_proc_address(
         &mut self,
@@ -963,7 +1040,7 @@ impl Dyld {
 
 /// Вызывается из `lib.rs` для регистрации GLES 2.0 заглушек.
 pub fn register_gles2_stubs() {
-    log!("Регистрация GLES 2.0 заглушек...");
+    crate::log!("Регистрация GLES 2.0 заглушек...");
     // В зависимости от того, как устроен ваш модуль gles2_stubs, здесь можно вызвать:
     // crate::gles::gles2_stubs::register();
     // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
