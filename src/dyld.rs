@@ -903,7 +903,7 @@ impl Dyld {
                 pic_offset,
             );
             
-            crate::log!("Stubbed C++ SjLj function {} -> {:#x}", symbol, fn_ptr.to_bits());
+            log_dbg!("Stubbed C++ SjLj function {} -> {:#x}", symbol, fn_ptr.to_bits());
             return None;
         }
 
@@ -1040,9 +1040,8 @@ impl Dyld {
 
 /// Вызывается из `lib.rs` для регистрации GLES 2.0 заглушек.
 pub fn register_gles2_stubs() {
-    crate::log!("Регистрация GLES 2.0 заглушек...");
+    log!("Регистрация GLES 2.0 заглушек...");
     // В зависимости от того, как устроен ваш модуль gles2_stubs, здесь можно вызвать:
     // crate::gles::gles2_stubs::register();
     // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
 }
-
