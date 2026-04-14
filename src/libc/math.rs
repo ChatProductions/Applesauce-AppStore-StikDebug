@@ -551,6 +551,9 @@ fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_env: &mut Environment, ar
 fn _ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     arg1.min(arg2)
 }
+fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+    arg1.min(arg2)
+}
 
 fn rint(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
@@ -704,7 +707,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_, _)),
-    // Other
+    export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(_, _)),
+        // Other
     export_c_func!(rint(_)),
     export_c_func!(rintf(_)),
     export_c_func!(nan(_)),
