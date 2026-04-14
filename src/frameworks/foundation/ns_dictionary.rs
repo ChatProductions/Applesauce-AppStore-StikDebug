@@ -67,7 +67,6 @@ impl DictionaryHostObject {
         let hash: Hash = msg![env; key hash];
 
         let value = retain(env, value);
-
         let Some(collisions) = self.map.get_mut(&hash) else {
             self.map.insert(hash, vec![(key, value)]);
             self.count += 1;
@@ -311,7 +310,6 @@ pub fn init_with_objects_and_keys(
 /// Helper function to share `initWithDictionary:` implementations
 fn init_with_dictionary_common(env: &mut Environment, this: id, other_dict: id) -> id {
     let other_host_object: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(other_dict));
-
     let mut host_object = <DictionaryHostObject as Default>::default();
 
     for key in other_host_object.iter_keys() {
@@ -357,11 +355,9 @@ fn init_with_objects_for_keys_count_common(
     count: NSUInteger,
 ) -> id {
     let mut host_object = <DictionaryHostObject as Default>::default();
-
     let keys_bits = keys.to_bits();
     let objects_bits = objects.to_bits();
     let elem_size = std::mem::size_of::<id>() as NSUInteger;
-
     for i in 0..count {
         let offset = i * elem_size;
         let key: id = env.mem.read(ConstPtr::from_bits(keys_bits + offset));
@@ -402,6 +398,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // - (NSEnumerator*)keyEnumerator
 // We can pick whichever subclass we want for the various alloc methods.
 // For the time being, that will always be _touchHLE_NSDictionary.
+
 @implementation NSDictionary: NSObject
 
 + (id)allocWithZone:(NSZonePtr)zone {
@@ -628,7 +625,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     std::mem::take(env.objc.borrow_mut::<DictionaryHostObject>(this)).release(env);
-
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -678,7 +674,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
     let values: Vec<id> = host_obj.map.values().flatten().map(|&(_key, value)| value).collect();
     *env.objc.borrow_mut(this) = host_obj;
-
     for &val in &values {
         retain(env, val);
     }
@@ -736,7 +731,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     std::mem::take(env.objc.borrow_mut::<DictionaryHostObject>(this)).release(env);
-
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -781,7 +775,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         unimplemented!()
     };
-
     release(env, this);
     let dict = dict_from_keys_and_objects(env, &tuples);
 
@@ -829,21 +822,19 @@ pub const CLASSES: ClassExports = objc_classes! {
         let pairs: Vec<(id, id)> = host.map.values()
            .flat_map(|v| v.iter().copied())
            .collect();
-            drop(host);
+        drop(host);
 
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];
-
         for (k, v) in &pairs {
-        let key = *k;
-        let val = *v;
-        () = msg![env; keys_array addObject:key];
-        () = msg![env; objects_array addObject:val];
-    }
+            let key = *k;
+            let val = *v;
+            () = msg![env; keys_array addObject:key];
+            () = msg![env; objects_array addObject:val];
+        }
 
         let keys_str = from_rust_string(env, "NS.keys".to_string());
         let objects_str = from_rust_string(env, "NS.objects".to_string());
-
         () = msg![env; coder encodeObject:keys_array forKey:keys_str];
         () = msg![env; coder encodeObject:objects_array forKey:objects_str];
 
@@ -906,16 +897,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setObject:(id)object
          forKey:(id)key {
-    // On real iOS these raise NSInvalidArgumentException.
-    // We log and return early to avoid crashing.
+    // Дебаг-паника для отлова nil
     if object == nil {
-        log!("Warning: [NSMutableDictionary setObject:forKey:] object is nil — ignored");
-        return;
+        let key_str = if key != nil { 
+            crate::frameworks::foundation::ns_string::to_rust_string(env, key) 
+        } else { 
+            "nil".to_string() 
+        };
+        panic!("FATAL: Попытка положить nil в словарь! Ключ: {}. Смотри дамп регистров ниже.", key_str);
     }
+    
     if key == nil {
-        log!("Warning: [NSMutableDictionary setObject:forKey:] key is nil — ignored");
-        return;
+        panic!("FATAL: Попытка использовать nil в качестве ключа! Смотри дамп регистров ниже.");
     }
+
     let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
     host_obj.insert(env, key, object, /* copy_key: */ true);
     *env.objc.borrow_mut(this) = host_obj;
@@ -956,7 +951,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
     let values: Vec<id> = host_obj.map.values().flatten().map(|&(_key, value)| value).collect();
     *env.objc.borrow_mut(this) = host_obj;
-
     for &val in &values {
         retain(env, val);
     }
@@ -1066,10 +1060,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
 /// Direct constructor for use by host code, similar to
 /// `[[NSDictionary alloc] initWithObjectsAndKeys:]` but without variadics and
-/// with a more intuitive argument order. Unlike [super::ns_array::from_vec],
+/// with a more intuitive argument order.
+/// Unlike [super::ns_array::from_vec],
 /// this **does** copy and retain!
 pub fn dict_from_keys_and_objects(env: &mut Environment, keys_and_objects: &[(id, id)]) -> id {
     let dict: id = msg_class![env; NSDictionary alloc];
@@ -1136,4 +1130,5 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     let desc_imm = msg![env; desc copy];
     release(env, desc);
     autorelease(env, desc_imm)
-                               }
+}
+
