@@ -376,15 +376,21 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // ХАК: Улучшенный обработчик null-page доступов
-    // Вызываем панику для дампа регистров!
+    // ХАК: Мягкий обработчик null-page доступов. Без паники!
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
         let op_type = if is_write { "WRITE" } else { "READ" };
-        panic!(
-            "FATAL: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {}! Эмулятор падает здесь. Смотри дамп регистров ниже!",
-            op_type, at, size, caller
-        );
+        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
+        eprintln!("Operation: {}", op_type);
+        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
+        eprintln!("Size:      0x{:x} bytes", size);
+        eprintln!("Caller:    {}", caller);
+        eprintln!("===========================================");
+        eprintln!("WARNING: Access ALLOWED (returning stub page with BX LR).");
+        eprintln!("Game may behave unexpectedly but should not crash.");
+        eprintln!("===========================================\n");
+        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
+             op_type, at, size, caller);
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
