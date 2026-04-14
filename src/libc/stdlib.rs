@@ -101,7 +101,7 @@ fn reallocf(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> Mut
 
 fn free(env: &mut Environment, ptr: MutVoidPtr) {
     if env.objc.get_host_object(ptr.cast()).is_some() {
-        crate::log!(
+        log!(
             "App attempted to call free({:?}) on an object, calling dealloc_object() instead!",
             ptr
         );
@@ -116,7 +116,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
 }
 
 fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
-    crate::log!("TODO: atexit({:?}) (unimplemented)", func);
+    log!("TODO: atexit({:?}) (unimplemented)", func);
     0
 }
 
@@ -167,7 +167,7 @@ fn atof(env: &mut Environment, s: ConstPtr<u8>) -> f64 {
 
 fn strtod(env: &mut Environment, nptr: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>) -> f64 {
     set_errno(env, 0);
-    crate::log_dbg!("strtod nptr {}", env.mem.cstr_at_utf8(nptr).unwrap());
+    log_dbg!("strtod nptr {}", env.mem.cstr_at_utf8(nptr).unwrap());
     let (res, len) = atof_inner(env, nptr).unwrap_or((0.0, 0));
     if !endptr.is_null() {
         env.mem.write(endptr, (nptr + len).cast_mut());
@@ -191,7 +191,7 @@ fn srand(env: &mut Environment, seed: u32) {
 fn sranddev(env: &mut Environment) {
     let seed = arc4random(env);
     env.libc_state.stdlib.rand = seed;
-    crate::log!("sranddev() stubbed: seeded rand with {}", seed);
+    log!("sranddev() stubbed: seeded rand with {}", seed);
 }
 
 fn rand(env: &mut Environment) -> i32 {
@@ -230,7 +230,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
     let Some(&value) = env.env_vars.get(name_cstr) else {
         if name_str != "LUA_PATH" && name_str != "LUA_CPATH" {
-            crate::log!(
+            log!(
                 "Warning: getenv() for {:?} ({:?}) unhandled",
                 name,
                 name_str
@@ -238,7 +238,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
         }
         return Ptr::null();
     };
-    crate::log_dbg!("getenv({:?}) => {:?}", name, value);
+    log_dbg!("getenv({:?}) => {:?}", name, value);
     value
 }
 
@@ -277,12 +277,12 @@ fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
     // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
     // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
-    crate::echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
+    echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
     // std::process::exit(exit_code);
 }
 
 fn abort(_env: &mut Environment) {
-    crate::echo!("App called abort()! The guest application encountered a fatal error.");
+    echo!("App called abort()! The guest application encountered a fatal error.");
     std::process::exit(1);
 }
 
@@ -476,7 +476,7 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
         // shell is available
     }
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
-    crate::log!("system({:?})", cmd_str);
+    log!("system({:?})", cmd_str);
     // split_whitespace() автоматически игнорирует пробелы в начале и конце
     let parts: Vec<&str> = cmd_str.split_whitespace().collect();
     if parts.is_empty() {
@@ -492,11 +492,11 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
                 // use create_dir_all to support mkdir -p semantics
                 match env.fs.create_dir_all(guest_path) {
                     Ok(_) => {
-                        crate::log!("system: mkdir {:?} => success", path);
+                        log!("system: mkdir {:?} => success", path);
                         0
                     }
                     Err(e) => {
-                        crate::log!("system: mkdir {:?} => error: {:?}", path, e);
+                        log!("system: mkdir {:?} => error: {:?}", path, e);
                         1
                     }
                 }
@@ -505,7 +505,7 @@ fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
             }
         }
         _ => {
-            crate::log!(
+            log!(
                 "Warning: system({:?}) not implemented, returning 0",
                 cmd_str
             );
@@ -547,7 +547,7 @@ fn __assert_rtn(
     let func_str = read_cstr_safe(env, func);
     let file_str = read_cstr_safe(env, file);
     let expr_str = read_cstr_safe(env, expr);
-    crate::log!(
+    log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
         expr_str, func_str, file_str, line
     );
@@ -561,7 +561,7 @@ fn __assert(
 ) {
     let expr_str = read_cstr_safe(env, expr);
     let file_str = read_cstr_safe(env, file);
-    crate::log!(
+    log!(
         "Assertion failed: ({}) in file {}, line {}.",
         expr_str, file_str, line
     );
@@ -577,7 +577,7 @@ fn __assert_fail(
     let expr_str = read_cstr_safe(env, expr);
     let file_str = read_cstr_safe(env, file);
     let func_str = read_cstr_safe(env, func);
-    crate::log!(
+    log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
         expr_str, func_str, file_str, line
     );
@@ -739,7 +739,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dladdr(_, _)),
     export_c_func!(kqueue()),
     export_c_func!(kevent(_, _, _, _, _, _)),
-    export_c_func!(mbtowc_l(_, _, _, _, _)),
+    export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
 ];
 
 pub fn atof_inner(
