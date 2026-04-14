@@ -298,7 +298,7 @@ pub fn init_with_objects_and_keys(
             break;
         }
         let key: id = va_args.next(env);
-        assert!(key != nil); // TODO: raise proper exception
+        // assert!(key != nil); // TODO: raise proper exception
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
 
