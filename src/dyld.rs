@@ -778,13 +778,37 @@ pub mod compat_lib {
     // --- Dyld fallback ---
     fn dyld_stub_binder(_env: &mut Environment) { log!("FATAL: dyld_stub_binder called directly!"); std::process::exit(1); }
 
-    // Экспортируем функции с явным указанием C-символов (чтобы избежать лишних подчеркиваний)
+    // --- Честные реализации математических функций (Compiler-RT / libgcc) ---
+    // Мы используем встроенные безопасные функции Rust, чтобы обрабатывать деление и остаток
+    
+    // Signed Division (a / b)
+    fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+        a.checked_div(b).unwrap_or(if b == 0 { 0 } else { i32::MIN })
+    }
+
+    // Unsigned Division (a / b)
+    fn __udivsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+        a.checked_div(b).unwrap_or(0)
+    }
+
+    // Signed Modulo (a % b)
+    fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+        a.checked_rem(b).unwrap_or(0)
+    }
+
+    // Unsigned Modulo (a % b)
+    fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+        a.checked_rem(b).unwrap_or(0)
+    }
+
+    // Экспортируем функции с явным указанием C-символов
     pub const FUNCTIONS: FunctionExports = &[
         export_c_func!(objc_retain(_)),
         export_c_func!(objc_release(_)),
         export_c_func!(objc_autorelease(_)),
         export_c_func!(objc_retainAutoreleasedReturnValue(_)),
         export_c_func!(objc_autoreleaseReturnValue(_)),
+        
         ("___cxa_pure_virtual", &(cxa_pure_virtual as fn(&mut crate::Environment) -> _)),
         ("___cxa_new_handler", &(cxa_new_handler as fn(&mut crate::Environment) -> _)),
         ("___cxa_unexpected_handler", &(cxa_unexpected_handler as fn(&mut crate::Environment) -> _)),
@@ -797,6 +821,12 @@ pub mod compat_lib {
         ("___cxa_guard_release", &(cxa_guard_release as fn(&mut crate::Environment, u32) -> _)),
         ("___cxa_guard_abort", &(cxa_guard_abort as fn(&mut crate::Environment, u32) -> _)),
         ("dyld_stub_binder", &(dyld_stub_binder as fn(&mut crate::Environment) -> _)),
+        
+        // Экспорт новых математических функций
+        export_c_func!(__divsi3(_, _)),
+        export_c_func!(__udivsi3(_, _)),
+        export_c_func!(__modsi3(_, _)),
+        export_c_func!(__umodsi3(_, _)),
     ];
 
     // --- Реализации системных констант и данных ---
