@@ -86,7 +86,6 @@ impl FsNode {
             let kind = entry.file_type().unwrap();
             let host_path = entry.path();
             let name = entry.file_name().into_string().unwrap();
-
             // There is no support for symlinks within the virtual filesystem,
             // but symlinks aren't uncommon in app bundles, so we treat a
             // symlink as if it were a copy of the file it points to.
@@ -95,7 +94,6 @@ impl FsNode {
             } else {
                 kind
             };
-
             if kind.is_file() {
                 children.insert(
                     name,
@@ -154,7 +152,6 @@ impl FsNode {
 }
 
 // Put well-known paths in the guest filesystem here.
-
 /// Path of the applications directory in the guest filesystem.
 pub const APPLICATIONS: &GuestPath = GuestPath::new_const("/var/mobile/Applications");
 
@@ -162,7 +159,6 @@ pub const APPLICATIONS: &GuestPath = GuestPath::new_const("/var/mobile/Applicati
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct GuestPath(str);
-
 impl GuestPath {
     const fn new_const(s: &str) -> &GuestPath {
         unsafe { &*(s as *const str as *const GuestPath) }
@@ -193,24 +189,20 @@ impl GuestPath {
     pub fn parent_and_file_name(&self) -> Option<(&GuestPath, &str)> {
         // TODO
         assert!(!self.as_str().ends_with('/'));
-
         // FIXME: this should do the same resolution as `std::path::file_name()`
         let (parent_name, file_name) = self.as_str().rsplit_once('/')?;
-
         Some((GuestPath::new(parent_name), file_name))
     }
 
     /// Get the final component of the path.
     pub fn file_name(&self) -> Option<&str> {
         let (_, file_name) = self.parent_and_file_name()?;
-
         Some(file_name)
     }
 
     /// Get the parent directory of the path.
     pub fn parent(&self) -> Option<&GuestPath> {
         let (parent_name, _) = self.parent_and_file_name()?;
-
         Some(parent_name)
     }
 }
@@ -231,7 +223,6 @@ impl AsRef<GuestPath> for str {
 }
 impl ToOwned for GuestPath {
     type Owned = GuestPathBuf;
-
     fn to_owned(&self) -> GuestPathBuf {
         GuestPathBuf::from(self)
     }
@@ -257,10 +248,8 @@ impl From<GuestPathBuf> for String {
 }
 impl std::ops::Deref for GuestPathBuf {
     type Target = GuestPath;
-
     fn deref(&self) -> &GuestPath {
         let s: &str = &self.0;
-
         s.as_ref()
     }
 }
@@ -297,13 +286,11 @@ fn apply_path_component<'a>(components: &mut Vec<&'a str>, component: &'a str) {
 /// is absolute.
 pub fn resolve_path<'a>(path: &'a GuestPath, relative_to: Option<&'a GuestPath>) -> Vec<&'a str> {
     log_dbg!("Resolving {:?} relative to {:?}", path, relative_to);
-
     let mut components = Vec::new();
 
     if !path.as_str().starts_with('/') {
         let relative_to = relative_to.unwrap().as_str();
         assert!(relative_to.starts_with('/'));
-
         for component in relative_to.split('/') {
             apply_path_component(&mut components, component);
         }
@@ -603,7 +590,6 @@ impl Fs {
         }
 
         // Some Free Software libraries are bundled with touchHLE.
-                // Some Free Software libraries are bundled with touchHLE.
         use paths::DYLIBS_DIR;
         let usr_lib = FsNode::dir()
             .with_child(
@@ -640,7 +626,12 @@ impl Fs {
                 // symlink
                 "libz.1.1.3.dylib",
                 FsNode::resource_file(format!("{DYLIBS_DIR}/libz.1.2.3.dylib")),
+            )
+            .with_child(
+                "libc++abi.dylib",
+                FsNode::resource_file(format!("{DYLIBS_DIR}/libc++abi.dylib")),
             );
+            
         let mut app_dir_children = HashMap::new();
         app_dir_children.insert(bundle_dir_name, app_bundle.into_fs_node());
         for (dir, host_path) in directories.iter().zip(host_path_directories.iter()) {
@@ -844,7 +835,8 @@ impl Fs {
             FsNode::Directory { writeable, .. } => {
                 if let Some(host_path) = writeable {
                     fs::metadata(host_path)
-                        .and_then(|m| m.modified())
+                        .and_then(|m|
+m.modified())
                         .map(|t| t.duration_since(UNIX_EPOCH).unwrap().as_secs().try_into().unwrap())
                         .map_err(|_| ())
                 } else {
