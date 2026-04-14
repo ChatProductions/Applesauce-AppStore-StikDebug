@@ -542,7 +542,12 @@ fn sqlite3_column_name(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
 fn sqlite3_bind_parameter_index(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     arg1.min(arg2)
 }
-
+fn _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+    arg1.min(arg2)
+}
+fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+    arg1.min(arg2)
+}
 fn rint(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -692,6 +697,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_column_count(_, _)),
     export_c_func!(sqlite3_column_name(_, _)),
     export_c_func!(sqlite3_bind_parameter_index(_, _)),
+    export_c_func!(_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_, _)),
+    export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_, _)),
     // Other
     export_c_func!(rint(_)),
     export_c_func!(rintf(_)),
