@@ -363,7 +363,7 @@ impl GLES for GLES1Native<'_> {
         gles11::Normal3x(nx, ny, nz)
     }
 
-    // Pointers
+    // Pointers (MALI FIX ADDED HERE)
     unsafe fn ColorPointer(
         &mut self,
         size: GLint,
@@ -371,9 +371,11 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
+        if pointer.is_null() { return; }
         gles11::ColorPointer(size, type_, stride, pointer)
     }
     unsafe fn NormalPointer(&mut self, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+        if pointer.is_null() { return; }
         gles11::NormalPointer(type_, stride, pointer)
     }
     unsafe fn TexCoordPointer(
@@ -383,6 +385,7 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
+        if pointer.is_null() { return; }
         gles11::TexCoordPointer(size, type_, stride, pointer)
     }
     unsafe fn VertexPointer(
@@ -392,10 +395,11 @@ impl GLES for GLES1Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
+        if pointer.is_null() { return; }
         gles11::VertexPointer(size, type_, stride, pointer)
     }
 
-    // Drawing
+    // Drawing (MALI FIX ADDED HERE)
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
         gles11::DrawArrays(mode, first, count)
     }
@@ -406,6 +410,7 @@ impl GLES for GLES1Native<'_> {
         type_: GLenum,
         indices: *const GLvoid,
     ) {
+        if indices.is_null() { return; }
         gles11::DrawElements(mode, count, type_, indices)
     }
 
@@ -551,6 +556,7 @@ impl GLES for GLES1Native<'_> {
         image_size: GLsizei,
         data: *const GLvoid,
     ) {
+        if data.is_null() { return; } // MALI FIX
         let data = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize) };
         // IMG_texture_compression_pvrtc (only on Imagination/Apple GPUs)
         // TODO: It would be more efficient to use hardware decoding where
@@ -565,17 +571,17 @@ impl GLES for GLES1Native<'_> {
             border,
             data,
         ) {
-            log_dbg!("Decoded PVRTC");
+            // log_dbg!("Decoded PVRTC"); // can be spammed
             return;
         }
 
         // OES_compressed_paletted_texture is in the common profile of OpenGL ES
         // 1.1, so we can reasonably assume it's supported.
         if PalettedTextureFormat::get_info(internalformat).is_none() {
-            log_dbg!("Unsupported CompressedTexImage2D internalformat: {:#x}", internalformat);
+            // log_dbg!("Unsupported CompressedTexImage2D internalformat: {:#x}", internalformat);
             return;
         }
-        log_dbg!("Directly supported texture format: {:#x}", internalformat);
+        // log_dbg!("Directly supported texture format: {:#x}", internalformat);
         gles11::CompressedTexImage2D(
             target,
             level,
@@ -631,7 +637,7 @@ impl GLES for GLES1Native<'_> {
                     .unwrap()
                     .contains("EXT_texture_lod_bias")
                 {
-                    log_dbg!("GL_EXT_texture_lod_bias is unsupported, skipping TexEnvfv({:#x}, {:#x}, ...) call", target, pname);
+                    // log_dbg!("GL_EXT_texture_lod_bias is unsupported, skipping TexEnvfv({:#x}, {:#x}, ...) call", target, pname);
                     return;
                 }
             };
@@ -923,3 +929,4 @@ impl GLES for GLES1Native<'_> {
         gles11::UnmapBufferOES(target)
     }
 }
+
