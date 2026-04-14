@@ -889,21 +889,51 @@ impl Dyld {
         let idx = (offset / info.entry_size) as usize;
         let symbol = info.indirect_undef_symbols[idx].as_deref().unwrap();
 
+        // 1. Заглушки для обработки исключений
         if symbol == "__Unwind_SjLj_Register" || symbol == "__Unwind_SjLj_Unregister" || symbol == "__Unwind_SjLj_Resume" {
             let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
             mem.write(fn_ptr + 0, encode_a32_ret()); 
             mem.write(fn_ptr + 1, encode_a32_trap());
             
-            let (_, _) = link_by_restoring_stub(
-                mem,
-                cpu,
-                fn_ptr.to_bits(),
-                svc_pc,
-                info.entry_size,
-                pic_offset,
-            );
-            
+            let (_, _) = link_by_restoring_stub(mem, cpu, fn_ptr.to_bits(), svc_pc, info.entry_size, pic_offset);
             log_dbg!("Stubbed C++ SjLj function {} -> {:#x}", symbol, fn_ptr.to_bits());
+            return None;
+        }
+
+        // 2. Заглушка для запроса инициализации статических переменных C++
+        if symbol == "___cxa_guard_acquire" {
+            let fn_ptr: MutPtr<u32> = mem.alloc(20).cast();
+            mem.write(fn_ptr + 0, 0xe5901000);
+            mem.write(fn_ptr + 1, 0xe31100ff);
+            mem.write(fn_ptr + 2, 0x03a00001);
+            mem.write(fn_ptr + 3, 0x13a00000);
+            mem.write(fn_ptr + 4, encode_a32_ret());
+            
+            let (_, _) = link_by_restoring_stub(mem, cpu, fn_ptr.to_bits(), svc_pc, info.entry_size, pic_offset);
+            log_dbg!("Stubbed {} -> {:#x}", symbol, fn_ptr.to_bits());
+            return None;
+        }
+
+        // 3. Заглушка для завершения инициализации статических переменных C++
+        if symbol == "___cxa_guard_release" || symbol == "___cxa_guard_abort" {
+            let fn_ptr: MutPtr<u32> = mem.alloc(12).cast();
+            mem.write(fn_ptr + 0, 0xe3a01001);
+            mem.write(fn_ptr + 1, 0xe5801000);
+            mem.write(fn_ptr + 2, encode_a32_ret());
+            
+            let (_, _) = link_by_restoring_stub(mem, cpu, fn_ptr.to_bits(), svc_pc, info.entry_size, pic_offset);
+            log_dbg!("Stubbed {} -> {:#x}", symbol, fn_ptr.to_bits());
+            return None;
+        }
+
+        // 4. Игнорируем вызовы чистых виртуальных функций
+        if symbol == "___cxa_pure_virtual" {
+            let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+            mem.write(fn_ptr + 0, encode_a32_trap());
+            mem.write(fn_ptr + 1, encode_a32_trap());
+            
+            let (_, _) = link_by_restoring_stub(mem, cpu, fn_ptr.to_bits(), svc_pc, info.entry_size, pic_offset);
+            log_dbg!("Stubbed {} -> {:#x}", symbol, fn_ptr.to_bits());
             return None;
         }
 
@@ -1045,3 +1075,4 @@ pub fn register_gles2_stubs() {
     // crate::gles::gles2_stubs::register();
     // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
 }
+
