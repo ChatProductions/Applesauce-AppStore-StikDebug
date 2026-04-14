@@ -933,4 +933,202 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())addEntriesFromDictionary:(id)other { // NSDictionary *
     let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(other));
-    for (k, v) in
+    for (k, v) in host_obj.map.values().flatten() {
+        () = msg![env; this setObject:(*v) forKey:(*k)];
+    }
+    *env.objc.borrow_mut(other) = host_obj;
+}
+
+- (id)description {
+    build_description(env, this)
+}
+
+- (id)allKeys {
+    all_keys_common(env, this)
+}
+
+- (id)allValues {
+    let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    let values: Vec<id> = host_obj.map.values().flatten().map(|&(_key, value)| value).collect();
+    *env.objc.borrow_mut(this) = host_obj;
+    for &val in &values {
+        retain(env, val);
+    }
+    let res = ns_array::from_vec(env, values);
+    autorelease(env, res)
+}
+
+- (id)allKeysForObject:(id)obj {
+    let res: id = msg_class![env; NSMutableArray new];
+
+    let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    host_obj.map.values().flatten().for_each(|&(key, value)| {
+        let equal = msg![env; obj isEqual:value];
+        if equal {
+            () = msg![env; res addObject:key];
+        }
+    });
+    *env.objc.borrow_mut(this) = host_obj;
+
+    let res_imm = msg![env; res copy];
+    release(env, res);
+    autorelease(env, res_imm)
+}
+
+- (id)objectEnumerator { // NSEnumerator*
+    let values: id = msg![env; this allValues];
+    msg![env; values objectEnumerator]
+}
+
+@end
+
+// Special variant for use by CFDictionary with NULL callbacks: objects aren't
+// necessarily Objective-C objects and won't be retained/released.
+// TODO: refactor with lookup/insert methods to use callbacks
+@implementation _touchHLE_NSMutableDictionary_non_retaining: _touchHLE_NSMutableDictionary
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::<CFDictionaryHostObject>::default();
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+// our custom init, not a part of API
+- (id)initWithKeyCallbacks:(ConstPtr<CFDictionaryKeyCallBacks>)key_callbacks
+         andValueCallbacks:(ConstPtr<CFDictionaryValueCallBacks>)value_callbacks {
+    if !key_callbacks.is_null() {
+        assert!(!value_callbacks.is_null());
+        let host_object = env.objc.borrow_mut::<CFDictionaryHostObject>(this);
+        host_object.key_callbacks = env.mem.read(key_callbacks);
+        host_object.value_callbacks = env.mem.read(value_callbacks);
+    };
+    this
+}
+
+- (())dealloc {
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
+- (id)initWithObjectsAndKeys:(id)_first_object, ..._dots {
+    todo!();
+}
+- (id)description {
+    todo!();
+}
+- (id)copyWithZone:(NSZonePtr)_zone {
+    todo!();
+}
+- (id)mutableCopyWithZone:(NSZonePtr)_zone {
+    todo!();
+}
+
+- (id)objectForKey:(id)key {
+    let host_obj: CFDictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    let res = host_obj.lookup(env, key);
+    *env.objc.borrow_mut(this) = host_obj;
+    res
+}
+
+- (id)valueForKey:(id)_key {
+    panic!("Unexpected call to valueForKey: for _touchHLE_NSMutableDictionary_non_retaining object {this:?}");
+}
+
+- (())setObject:(id)object
+         forKey:(id)key {
+    assert!(!key.is_null());
+    let mut host_obj: CFDictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    host_obj.insert(env, key, object);
+    *env.objc.borrow_mut(this) = host_obj;
+}
+
+- (())removeObjectForKey:(id)key {
+    assert!(!key.is_null());
+    let mut host_obj: CFDictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    host_obj.remove(env, key);
+    *env.objc.borrow_mut(this) = host_obj;
+}
+
+- (id)allKeys {
+    let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+    let keys: Vec<id> = host_obj.map.values().flatten().map(|&(key, _value)| key).collect();
+    *env.objc.borrow_mut(this) = host_obj;
+
+    let array: id = msg_class![env; _touchHLE_NSArray_non_retaining alloc];
+    env.objc.borrow_mut::<ArrayHostObject>(array).array = keys;
+    array
+}
+
+@end
+
+};
+/// Direct constructor for use by host code, similar to
+/// `[[NSDictionary alloc] initWithObjectsAndKeys:]` but without variadics and
+/// with a more intuitive argument order.
+/// Unlike [super::ns_array::from_vec],
+/// this **does** copy and retain!
+pub fn dict_from_keys_and_objects(env: &mut Environment, keys_and_objects: &[(id, id)]) -> id {
+    let dict: id = msg_class![env; NSDictionary alloc];
+
+    let mut host_object = <DictionaryHostObject as Default>::default();
+    for &(key, object) in keys_and_objects {
+        host_object.insert(env, key, object, /* copy_key: */ true);
+    }
+    *env.objc.borrow_mut(dict) = host_object;
+
+    dict
+}
+
+/// Direct constructor for use by host code, similar to
+/// `[[NSMutableDictionary alloc] initWithObjectsAndKeys:]` but without
+/// variadics and with a more intuitive argument order.
+/// Unlike [super::ns_array::mutable_from_vec], this **does** copy and retain!
+pub fn mutable_dict_from_keys_and_objects(
+    env: &mut Environment,
+    keys_and_objects: &[(id, id)],
+) -> id {
+    let dict: id = msg_class![env; NSMutableDictionary alloc];
+
+    let mut host_object = <DictionaryHostObject as Default>::default();
+    for &(key, object) in keys_and_objects {
+        host_object.insert(env, key, object, /* copy_key: */ true);
+    }
+    *env.objc.borrow_mut(dict) = host_object;
+
+    dict
+}
+
+/// A helper to build a description NSString
+/// for a NSDictionary or a NSMutableDictionary.
+fn build_description(env: &mut Environment, dict: id) -> id {
+    // According to docs, this description should be formatted as property list.
+    // But by the same docs, it's meant to be used for debugging purposes only.
+    let desc: id = msg_class![env; NSMutableString new];
+    let prefix: id = from_rust_string(env, "{\n".to_string());
+    () = msg![env; desc appendString:prefix];
+    release(env, prefix);
+    let keys: Vec<id> = env
+        .objc
+        .borrow_mut::<DictionaryHostObject>(dict)
+        .iter_keys()
+        .collect();
+    for key in keys {
+        let key_desc: id = msg![env; key description];
+        let value: id = msg![env; dict objectForKey:key];
+        let val_desc: id = msg![env; value description];
+        // TODO: respect nesting and padding
+        let format = format!(
+            "\t{} = {};\n",
+            to_rust_string(env, key_desc),
+            to_rust_string(env, val_desc)
+        );
+        let format = from_rust_string(env, format);
+        () = msg![env; desc appendString:format];
+        release(env, format);
+    }
+    let suffix: id = from_rust_string(env, "}".to_string());
+    () = msg![env; desc appendString:suffix];
+    release(env, suffix);
+    let desc_imm = msg![env; desc copy];
+    release(env, desc);
+    autorelease(env, desc_imm)
+}
+
