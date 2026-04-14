@@ -641,62 +641,225 @@ pub fn register_gles2_stubs() {}
 // Реальная реализация недостающих функций C/C++ через системный модуль
 // =================================================================================
 pub mod compat_lib {
+    use crate::objc::{id, msg, nil};
     use crate::Environment;
     use crate::mem::{ConstVoidPtr, MutPtr, GuestUSize};
     use crate::dyld::{HostDylib, HostConstant, export_c_func, FunctionExports, ConstantExports};
 
-    // --- Реализации математики (Compiler-RT / libgcc) ---
+    // =========================================================================
+    // MARK: - Integer arithmetic (Compiler-RT / libgcc)
+    // =========================================================================
+
     fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
-        a.checked_div(b).unwrap_or(if b == 0 { 0 } else { i32::MIN })
+        if b == 0 { return 0; }
+        a.wrapping_div(b)
     }
 
     fn __udivsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
-        a.checked_div(b).unwrap_or(0)
+        if b == 0 { return 0; }
+        a / b
     }
 
     fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
-        a.checked_rem(b).unwrap_or(0)
+        if b == 0 { return 0; }
+        a.wrapping_rem(b)
     }
 
     fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
-        a.checked_rem(b).unwrap_or(0)
+        if b == 0 { return 0; }
+        a % b
     }
 
-    // --- Реализации C++ ABI & Исключения ---
-    fn cxa_pure_virtual(_env: &mut Environment) { 
-        println!("Game called pure virtual function!"); 
-        std::process::exit(1); 
-    }
-    
-    fn Unwind_SjLj_Register(_env: &mut Environment, _fc: u32) {}
-    fn Unwind_SjLj_Unregister(_env: &mut Environment, _fc: u32) {}
-    fn Unwind_SjLj_Resume(_env: &mut Environment, _exc: u32) {}
-    
-    fn gxx_personality_sj0(_env: &mut Environment, _a: u32, _b: u32, _c: u32, _d: u32, _e: u32) -> i32 { 0 }
-    fn objc_personality_v0(_env: &mut Environment, _a: u32, _b: u32, _c: u32, _d: u32, _e: u32) -> i32 { 0 }
-    
-    fn cxa_guard_acquire(_env: &mut Environment, _guard: u32) -> i32 { 1 }
-    fn cxa_guard_release(_env: &mut Environment, _guard: u32) {}
-    fn cxa_guard_abort(_env: &mut Environment, _guard: u32) {}
-    
-    fn dyld_stub_binder(_env: &mut Environment) { 
-        println!("FATAL: dyld_stub_binder called directly!"); 
-        std::process::exit(1); 
+    fn __divdi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
+        if b == 0 { return 0; }
+        a.wrapping_div(b)
     }
 
-    // Выделение памяти под ошибки. Честно аллоцируем с приведением типов (.cast())
+    fn __udivdi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+        if b == 0 { return 0; }
+        a / b
+    }
+
+    fn __moddi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
+        if b == 0 { return 0; }
+        a.wrapping_rem(b)
+    }
+
+    fn __umoddi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+        if b == 0 { return 0; }
+        a % b
+    }
+
+    fn __muldi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
+        a.wrapping_mul(b)
+    }
+
+    fn __ctzsi2(_env: &mut Environment, x: u32) -> u32 {
+        x.trailing_zeros()
+    }
+
+    fn __clzsi2(_env: &mut Environment, x: u32) -> u32 {
+        x.leading_zeros()
+    }
+
+    fn __popcountsi2(_env: &mut Environment, x: u32) -> u32 {
+        x.count_ones()
+    }
+
+    fn __ashldi3(_env: &mut Environment, a: u64, b: u32) -> u64 {
+        if b >= 64 { 0 } else { a << b }
+    }
+
+    fn __ashrdi3(_env: &mut Environment, a: i64, b: u32) -> i64 {
+        if b >= 64 { a >> 63 } else { a >> b }
+    }
+
+    fn __lshrdi3(_env: &mut Environment, a: u64, b: u32) -> u64 {
+        if b >= 64 { 0 } else { a >> b }
+    }
+
+    // =========================================================================
+    // MARK: - Stack protection
+    // =========================================================================
+
+    fn __stack_chk_fail(_env: &mut Environment) {
+        log!("FATAL: __stack_chk_fail — stack smashing detected!");
+        std::process::exit(1);
+    }
+
+    // =========================================================================
+    // MARK: - C++ personality / Unwind (SjLj — setjmp/longjmp based)
+    // =========================================================================
+    //
+    // Peggle iOS 2 and many other ARM iOS apps use SjLj-based unwinding
+    // (LLVM/Apple's -fsjlj-exceptions). The runtime registers a function
+    // context with __Unwind_SjLj_Register at function entry and unregisters
+    // it at exit. On a throw, __Unwind_SjLj_RaiseException walks the chain.
+    //
+    // Since touchHLE is single-threaded and we can't actually unwind the
+    // host stack into guest frames, we do the minimal thing: register/
+    // unregister are no-ops (the chain is never walked in normal execution),
+    // and RaiseException logs + returns so the app can continue rather than
+    // crashing.
+
+    fn Unwind_SjLj_Register(_env: &mut Environment, _fc: u32) {
+        // No-op: function context registration.
+    }
+
+    fn Unwind_SjLj_Unregister(_env: &mut Environment, _fc: u32) {
+        // No-op: function context unregistration.
+    }
+
+    fn Unwind_SjLj_Resume(_env: &mut Environment, _exc: u32) {
+        log!("Warning: __Unwind_SjLj_Resume called — C++ exception resume ignored");
+    }
+
+    fn Unwind_SjLj_Resume_or_Rethrow(_env: &mut Environment, _exc: u32) {
+        log!("Warning: __Unwind_SjLj_Resume_or_Rethrow — ignored");
+    }
+
+    fn Unwind_SjLj_RaiseException(_env: &mut Environment, _exc: u32) -> u32 {
+        log!("Warning: __Unwind_SjLj_RaiseException — C++ exception raise ignored, returning 0");
+        // Return _URC_NO_REASON (0) so the caller doesn't enter an infinite loop.
+        0
+    }
+
+    fn Unwind_SjLj_ForcedUnwind(_env: &mut Environment, _exc: u32, _stop: u32, _stop_arg: u32) -> u32 {
+        log!("Warning: __Unwind_SjLj_ForcedUnwind — ignored, returning 0");
+        0
+    }
+
+    fn Unwind_GetLanguageSpecificData(_env: &mut Environment, _ctx: u32) -> u32 {
+        0
+    }
+
+    fn Unwind_GetRegionStart(_env: &mut Environment, _ctx: u32) -> u32 {
+        0
+    }
+
+    fn Unwind_SetGR(_env: &mut Environment, _ctx: u32, _reg: u32, _val: u32) {}
+
+    fn Unwind_SetIP(_env: &mut Environment, _ctx: u32, _val: u32) {}
+
+    fn Unwind_GetIP(_env: &mut Environment, _ctx: u32) -> u32 { 0 }
+
+    fn Unwind_GetIPInfo(_env: &mut Environment, _ctx: u32, _out: MutPtr<u32>) -> u32 { 0 }
+
+    // =========================================================================
+    // MARK: - C++ personality functions
+    // =========================================================================
+
+    fn gxx_personality_sj0(
+        _env: &mut Environment,
+        _version: u32,
+        _actions: u32,
+        _exc_class: u32,
+        _exc: u32,
+        _ctx: u32,
+    ) -> i32 {
+        // _URC_CONTINUE_UNWIND = 8
+        8
+    }
+
+    fn objc_personality_v0(
+        _env: &mut Environment,
+        _version: u32,
+        _actions: u32,
+        _exc_class: u32,
+        _exc: u32,
+        _ctx: u32,
+    ) -> i32 {
+        8
+    }
+
+    // =========================================================================
+    // MARK: - C++ static initialiser guards
+    // =========================================================================
+
+    fn cxa_guard_acquire(_env: &mut Environment, guard: MutPtr<u32>) -> i32 {
+        // Guard layout on Darwin/ARM: byte 0 = initialised flag.
+        // Return 1 = "not yet initialised, proceed"; 0 = "already done".
+        let val = _env.mem.read(guard);
+        if val & 1 == 0 { 1 } else { 0 }
+    }
+
+    fn cxa_guard_release(_env: &mut Environment, guard: MutPtr<u32>) {
+        // Mark as initialised.
+        _env.mem.write(guard, 1u32);
+    }
+
+    fn cxa_guard_abort(_env: &mut Environment, _guard: MutPtr<u32>) {
+        // Initialisation failed — leave guard at 0 so the next call retries.
+    }
+
+    // =========================================================================
+    // MARK: - C++ exception allocation / throw / catch
+    // =========================================================================
+
     fn cxa_allocate_exception(env: &mut Environment, thrown_size: GuestUSize) -> MutPtr<u8> {
-        env.mem.alloc(thrown_size).cast()
+        // Apple's runtime prepends a 128-byte header before the exception object.
+        let total = thrown_size + 128;
+        let raw: MutPtr<u8> = env.mem.alloc(total).cast();
+        // Return pointer past the header.
+        raw + 128
     }
 
     fn cxa_free_exception(env: &mut Environment, ptr: MutPtr<u8>) {
         if !ptr.is_null() {
-            env.mem.free(ptr.cast());
+            // Subtract the header we added in cxa_allocate_exception.
+            env.mem.free((ptr - 128u32).cast());
         }
     }
 
     fn cxa_throw(_env: &mut Environment, _ex: u32, _info: u32, _dest: u32) {
-        println!("Game threw a C++ exception! (touchHLE doesn't unwind natively yet)");
+        // We cannot unwind guest frames from host code. The best we can do is
+        // log and return — the app will reach __cxa_begin_catch eventually if
+        // it has a catch block, or will call terminate() if it doesn't.
+        log!("Warning: __cxa_throw called — C++ exception thrown (no real unwinding)");
+    }
+
+    fn cxa_rethrow(_env: &mut Environment) {
+        log!("Warning: __cxa_rethrow called — ignored");
     }
 
     fn cxa_begin_catch(_env: &mut Environment, exception_object: MutPtr<u8>) -> MutPtr<u8> {
@@ -705,49 +868,214 @@ pub mod compat_lib {
 
     fn cxa_end_catch(_env: &mut Environment) {}
 
-    // --- Реализация Objective-C ARC ---
-    fn objc_retain(_env: &mut Environment, obj: u32) -> u32 { obj }
-    fn objc_release(_env: &mut Environment, _obj: u32) {}
-    fn objc_autorelease(_env: &mut Environment, obj: u32) -> u32 { obj }
-    fn objc_retainAutoreleasedReturnValue(_env: &mut Environment, obj: u32) -> u32 { obj }
-    fn objc_autoreleaseReturnValue(_env: &mut Environment, obj: u32) -> u32 { obj }
+    fn cxa_current_exception_type(_env: &mut Environment) -> u32 {
+        // NULL = no active exception.
+        0
+    }
+
+    fn cxa_pure_virtual(_env: &mut Environment) {
+        log!("FATAL: __cxa_pure_virtual called — abstract method invoked!");
+        std::process::exit(1);
+    }
+
+    fn terminate(_env: &mut Environment) {
+        log!("FATAL: std::terminate() called!");
+        std::process::exit(1);
+    }
+
+    fn unexpected(_env: &mut Environment) {
+        log!("Warning: std::unexpected() called — ignored");
+    }
+
+    // =========================================================================
+    // MARK: - dyld stub binder
+    // =========================================================================
+
+    fn dyld_stub_binder(_env: &mut Environment) {
+        log!("FATAL: dyld_stub_binder called directly — symbol binding failed!");
+        std::process::exit(1);
+    }
+
+    // =========================================================================
+    // MARK: - Objective-C ARC
+    //
+    // Route through the real ObjC retain/release machinery so that reference
+    // counts are correct for objects managed by touchHLE's host implementations.
+    // =========================================================================
+
+    fn objc_retain(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        msg![env; obj retain]
+    }
+
+    fn objc_release(env: &mut Environment, obj: id) {
+        if obj == nil { return; }
+        let _: () = msg![env; obj release];
+    }
+
+    fn objc_autorelease(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        msg![env; obj autorelease]
+    }
+
+    fn objc_retainAutorelease(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        let _: id = msg![env; obj retain];
+        msg![env; obj autorelease]
+    }
+
+    fn objc_retainAutoreleaseReturnValue(env: &mut Environment, obj: id) -> id {
+        objc_retainAutorelease(env, obj)
+    }
+
+    fn objc_retainAutoreleasedReturnValue(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        msg![env; obj retain]
+    }
+
+    fn objc_autoreleaseReturnValue(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        msg![env; obj autorelease]
+    }
+
+    fn objc_retainBlock(env: &mut Environment, obj: id) -> id {
+        if obj == nil { return nil; }
+        msg![env; obj copy]
+    }
+
+    fn objc_releaseBlock(env: &mut Environment, obj: id) {
+        if obj == nil { return; }
+        let _: () = msg![env; obj release];
+    }
+
+    fn objc_storeStrong(env: &mut Environment, location: MutPtr<id>, obj: id) {
+        let old = env.mem.read(location);
+        let new_obj: id = if obj != nil { msg![env; obj retain] } else { nil };
+        env.mem.write(location, new_obj);
+        if old != nil {
+            let _: () = msg![env; old release];
+        }
+    }
+
+    fn objc_storeWeak(env: &mut Environment, location: MutPtr<id>, obj: id) -> id {
+        // Simplified: treat weak like strong for now.
+        env.mem.write(location, obj);
+        obj
+    }
+
+    fn objc_loadWeakRetained(env: &mut Environment, location: MutPtr<id>) -> id {
+        let obj = env.mem.read(location);
+        if obj == nil { return nil; }
+        msg![env; obj retain]
+    }
+
+    fn objc_loadWeak(env: &mut Environment, location: MutPtr<id>) -> id {
+        env.mem.read(location)
+    }
+
+    fn objc_destroyWeak(_env: &mut Environment, _location: MutPtr<id>) {
+        // No-op — weak table not implemented.
+    }
+
+    fn objc_copyWeak(env: &mut Environment, dest: MutPtr<id>, src: MutPtr<id>) {
+        let val = env.mem.read(src);
+        env.mem.write(dest, val);
+    }
+
+    fn objc_moveWeak(env: &mut Environment, dest: MutPtr<id>, src: MutPtr<id>) {
+        let val = env.mem.read(src);
+        env.mem.write(dest, val);
+        env.mem.write(src, nil);
+    }
+
+    fn objc_initWeak(env: &mut Environment, location: MutPtr<id>, obj: id) -> id {
+        env.mem.write(location, obj);
+        obj
+    }
+
+    // =========================================================================
+    // MARK: - FUNCTIONS table
+    // =========================================================================
 
     pub const FUNCTIONS: FunctionExports = &[
+        // Integer arithmetic
         export_c_func!(__divsi3(_, _)),
         export_c_func!(__udivsi3(_, _)),
         export_c_func!(__modsi3(_, _)),
         export_c_func!(__umodsi3(_, _)),
-        
-        ("___cxa_pure_virtual", &(cxa_pure_virtual as fn(&mut crate::Environment) -> _)),
-        ("__Unwind_SjLj_Register", &(Unwind_SjLj_Register as fn(&mut crate::Environment, u32) -> _)),
-        ("__Unwind_SjLj_Unregister", &(Unwind_SjLj_Unregister as fn(&mut crate::Environment, u32) -> _)),
-        ("__Unwind_SjLj_Resume", &(Unwind_SjLj_Resume as fn(&mut crate::Environment, u32) -> _)),
-        ("___gxx_personality_sj0", &(gxx_personality_sj0 as fn(&mut crate::Environment, u32, u32, u32, u32, u32) -> _)),
-        ("___objc_personality_v0", &(objc_personality_v0 as fn(&mut crate::Environment, u32, u32, u32, u32, u32) -> _)),
-        
-        ("___cxa_guard_acquire", &(cxa_guard_acquire as fn(&mut crate::Environment, u32) -> _)),
-        ("___cxa_guard_release", &(cxa_guard_release as fn(&mut crate::Environment, u32) -> _)),
-        ("___cxa_guard_abort", &(cxa_guard_abort as fn(&mut crate::Environment, u32) -> _)),
-        
-        ("___cxa_allocate_exception", &(cxa_allocate_exception as fn(&mut crate::Environment, GuestUSize) -> _)),
-        ("___cxa_free_exception", &(cxa_free_exception as fn(&mut crate::Environment, MutPtr<u8>))),
-        ("___cxa_throw", &(cxa_throw as fn(&mut crate::Environment, u32, u32, u32))),
-        ("___cxa_begin_catch", &(cxa_begin_catch as fn(&mut crate::Environment, MutPtr<u8>) -> _)),
-        ("___cxa_end_catch", &(cxa_end_catch as fn(&mut crate::Environment))),
-        
-        ("dyld_stub_binder", &(dyld_stub_binder as fn(&mut crate::Environment) -> _)),
-        
+        export_c_func!(__divdi3(_, _)),
+        export_c_func!(__udivdi3(_, _)),
+        export_c_func!(__moddi3(_, _)),
+        export_c_func!(__umoddi3(_, _)),
+        export_c_func!(__muldi3(_, _)),
+        export_c_func!(__ctzsi2(_)),
+        export_c_func!(__clzsi2(_)),
+        export_c_func!(__popcountsi2(_)),
+        export_c_func!(__ashldi3(_, _)),
+        export_c_func!(__ashrdi3(_, _)),
+        export_c_func!(__lshrdi3(_, _)),
+        // Stack protection
+        ("___stack_chk_fail", &((__stack_chk_fail) as fn(&mut crate::Environment))),
+        // SjLj Unwind
+        ("__Unwind_SjLj_Register",          &((Unwind_SjLj_Register)          as fn(&mut crate::Environment, u32))),
+        ("__Unwind_SjLj_Unregister",        &((Unwind_SjLj_Unregister)        as fn(&mut crate::Environment, u32))),
+        ("__Unwind_SjLj_Resume",            &((Unwind_SjLj_Resume)            as fn(&mut crate::Environment, u32))),
+        ("__Unwind_SjLj_Resume_or_Rethrow", &((Unwind_SjLj_Resume_or_Rethrow) as fn(&mut crate::Environment, u32))),
+        ("__Unwind_SjLj_RaiseException",    &((Unwind_SjLj_RaiseException)    as fn(&mut crate::Environment, u32) -> u32)),
+        ("__Unwind_SjLj_ForcedUnwind",      &((Unwind_SjLj_ForcedUnwind)      as fn(&mut crate::Environment, u32, u32, u32) -> u32)),
+        ("__Unwind_GetLanguageSpecificData", &((Unwind_GetLanguageSpecificData) as fn(&mut crate::Environment, u32) -> u32)),
+        ("__Unwind_GetRegionStart",         &((Unwind_GetRegionStart)         as fn(&mut crate::Environment, u32) -> u32)),
+        ("__Unwind_SetGR",                  &((Unwind_SetGR)                  as fn(&mut crate::Environment, u32, u32, u32))),
+        ("__Unwind_SetIP",                  &((Unwind_SetIP)                  as fn(&mut crate::Environment, u32, u32))),
+        ("__Unwind_GetIP",                  &((Unwind_GetIP)                  as fn(&mut crate::Environment, u32) -> u32)),
+        ("__Unwind_GetIPInfo",              &((Unwind_GetIPInfo)              as fn(&mut crate::Environment, u32, MutPtr<u32>) -> u32)),
+        // Personality functions
+        ("___gxx_personality_sj0",  &((gxx_personality_sj0)  as fn(&mut crate::Environment, u32, u32, u32, u32, u32) -> i32)),
+        ("___objc_personality_v0",  &((objc_personality_v0)  as fn(&mut crate::Environment, u32, u32, u32, u32, u32) -> i32)),
+        // Static init guards
+        ("___cxa_guard_acquire", &((cxa_guard_acquire) as fn(&mut crate::Environment, MutPtr<u32>) -> i32)),
+        ("___cxa_guard_release", &((cxa_guard_release) as fn(&mut crate::Environment, MutPtr<u32>))),
+        ("___cxa_guard_abort",   &((cxa_guard_abort)   as fn(&mut crate::Environment, MutPtr<u32>))),
+        // Exception handling
+        ("___cxa_allocate_exception",     &((cxa_allocate_exception)     as fn(&mut crate::Environment, GuestUSize) -> MutPtr<u8>)),
+        ("___cxa_free_exception",         &((cxa_free_exception)         as fn(&mut crate::Environment, MutPtr<u8>))),
+        ("___cxa_throw",                  &((cxa_throw)                  as fn(&mut crate::Environment, u32, u32, u32))),
+        ("___cxa_rethrow",                &((cxa_rethrow)                as fn(&mut crate::Environment))),
+        ("___cxa_begin_catch",            &((cxa_begin_catch)            as fn(&mut crate::Environment, MutPtr<u8>) -> MutPtr<u8>)),
+        ("___cxa_end_catch",              &((cxa_end_catch)              as fn(&mut crate::Environment))),
+        ("___cxa_current_exception_type", &((cxa_current_exception_type) as fn(&mut crate::Environment) -> u32)),
+        ("___cxa_pure_virtual",           &((cxa_pure_virtual)           as fn(&mut crate::Environment))),
+        ("__ZSt9terminatev",              &((terminate)                  as fn(&mut crate::Environment))),
+        ("__ZSt10unexpectedv",            &((unexpected)                 as fn(&mut crate::Environment))),
+        // dyld
+        ("dyld_stub_binder", &((dyld_stub_binder) as fn(&mut crate::Environment))),
+        // ObjC ARC
         export_c_func!(objc_retain(_)),
         export_c_func!(objc_release(_)),
         export_c_func!(objc_autorelease(_)),
+        export_c_func!(objc_retainAutorelease(_)),
+        export_c_func!(objc_retainAutoreleaseReturnValue(_)),
         export_c_func!(objc_retainAutoreleasedReturnValue(_)),
         export_c_func!(objc_autoreleaseReturnValue(_)),
+        export_c_func!(objc_retainBlock(_)),
+        export_c_func!(objc_releaseBlock(_)),
+        export_c_func!(objc_storeStrong(_, _)),
+        export_c_func!(objc_storeWeak(_, _)),
+        export_c_func!(objc_loadWeakRetained(_)),
+        export_c_func!(objc_loadWeak(_)),
+        export_c_func!(objc_destroyWeak(_)),
+        export_c_func!(objc_copyWeak(_, _)),
+        export_c_func!(objc_moveWeak(_, _)),
+        export_c_func!(objc_initWeak(_, _)),
     ];
 
-    // --- Системные переменные ---
+    // =========================================================================
+    // MARK: - CONSTANTS table
+    // =========================================================================
+
     fn stack_chk_guard(env: &mut Environment) -> ConstVoidPtr {
         let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
-        env.mem.write(ptr, 0xDEADBEEF); // Настоящая канарейка выделяется в памяти эмулятора
+        env.mem.write(ptr, 0xDEADBEEF);
         ptr.cast().cast_const()
     }
 
@@ -763,4 +1091,3 @@ pub mod compat_lib {
         function_exports: &[FUNCTIONS],
     };
 }
-
