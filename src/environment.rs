@@ -392,9 +392,15 @@ impl Environment {
                 // based on base addresses of those dylibs prior to iOS 3.1
                 // TODO: implement some kind of ASLR instead of hardcoding
                 assert!(dylib_path.as_str().starts_with("/usr/lib/"));
-                let name = dylib_path.file_name().unwrap();
+                                let name = dylib_path.file_name().unwrap();
                 let dylib_slide = match name {
                     "libstdc++.6.dylib" | "libstdc++.6.0.9.dylib" => 0x3748a000,
+                    
+                    // ДОБАВИТЬ ЭТО: Честный базовый адрес для libc++ (iOS 5.0+)
+                    "libc++.1.dylib" => 0x38000000,
+                    // На случай, если игра также потянет за собой libc++abi
+                    "libc++abi.dylib" => 0x38100000, 
+                    
                     "libgcc_s.1.dylib" => 0x30000000,
                     "libz.1.dylib" | "libz.1.2.3.dylib" | "libz.dylib" | "libz.1.1.3.dylib" => {
                         // We build `libz` from sources with our OSS toolchain,
