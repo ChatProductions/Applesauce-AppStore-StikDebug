@@ -684,14 +684,14 @@ pub mod compat_lib {
         std::process::exit(1); 
     }
 
-    // Выделение памяти под ошибки. Честно аллоцируем.
+    // Выделение памяти под ошибки. Честно аллоцируем с приведением типов (.cast())
     fn cxa_allocate_exception(env: &mut Environment, thrown_size: GuestUSize) -> MutPtr<u8> {
-        env.mem.alloc(thrown_size)
+        env.mem.alloc(thrown_size).cast()
     }
 
     fn cxa_free_exception(env: &mut Environment, ptr: MutPtr<u8>) {
         if !ptr.is_null() {
-            env.mem.free(ptr);
+            env.mem.free(ptr.cast());
         }
     }
 
