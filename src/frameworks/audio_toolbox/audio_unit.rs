@@ -10,9 +10,10 @@ use std::time::Instant;
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
+// ИСПРАВЛЕНИЕ: Убраны несуществующие константы 3D-звука из импорта
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
 
-// Константы OpenAL напрямую (в формате i32, чтобы компилятор не ругался)
+// ИСПРАВЛЕНИЕ: Объявляем нужные константы напрямую как i32 (соответствует ALenum)
 const AL_POSITION: i32 = 0x1004;
 const AL_REFERENCE_DISTANCE: i32 = 0x1020;
 const AL_ROLLOFF_FACTOR: i32 = 0x1021;
@@ -188,7 +189,7 @@ fn AudioUnitSetProperty(
             if let Some(source) = bus.al_source {
                 let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                 unsafe {
-                    // Исправлено: Убрали 'as u32', теперь типы совпадают (i32)
+                    // ИСПРАВЛЕНИЕ: Передаем константы напрямую (они уже i32)
                     context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
                     context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
                     context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
@@ -346,7 +347,7 @@ fn AudioUnitSetParameter(
             if let Some(source) = bus.al_source {
                  let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                  unsafe {
-                     // Исправлено: Убрали 'as u32'
+                     // ИСПРАВЛЕНИЕ: Используем AL_POSITION напрямую
                      context.Source3f(source, AL_POSITION, bus.position[0], bus.position[1], bus.position[2]);
                  }
             }
@@ -492,7 +493,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         }],
     });
 
-    // Решение ошибки с packed-структурами (скопировали поля в локальные переменные)
     let input_proc = callback.input_proc;
     let input_proc_ref_con = callback.input_proc_ref_con;
 
