@@ -1,13 +1,13 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Traits for application binary interface (ABI) translation, in particular
 //! calling conventions.
 //!
 //! Useful resources:
+//!
 //! * Apple's [Writing ARMv6 code for iOS](https://developer.apple.com/documentation/xcode/writing-armv6-code-for-ios), read together with Arm's [Procedure Call Standard for the Arm Architecture (AAPCS32)](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst).
 //!
 //! See also: [crate::mem::SafeRead] and [crate::mem::SafeWrite].
@@ -25,6 +25,7 @@ pub const FRAME_POINTER: usize = 7;
 /// It is wrapped in a struct to prevent mixing with other pointers.
 #[derive(Copy, Clone, Debug)]
 pub struct GuestFunction(ConstVoidPtr);
+
 unsafe impl SafeRead for GuestFunction {}
 impl GuestFunction {
     pub const THUMB_BIT: u32 = 0x1;
@@ -68,9 +69,11 @@ impl GuestFunction {
             "Begin call to guest function {:?} (no new stack frame)",
             self
         );
+
         let (old_pc, old_lr) = env
             .cpu
             .branch_with_link(self, env.dyld.return_to_host_routine());
+
         env.run_call();
 
         env.cpu.branch(old_pc);
@@ -181,6 +184,11 @@ impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P
 impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8);
 impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9);
 impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10);
+impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11);
+impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12);
+impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13);
+impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13, 14 => P14);
+impl_CallFromGuest!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13, 14 => P14, 15 => P15);
 
 /// This trait represents a guest or host function that can be called from host
 /// code, but using the guest ABI. See [CallFromGuest], which this is the
@@ -237,14 +245,18 @@ macro_rules! impl_CallFromHost {
                     write_next_arg(&mut reg_offset, regs, &mut env.mem, ptr);
                     ptr
                 });
+
                 let old_sp = extend_stack_for_args(
                     0 $(+ <$P as GuestArg>::REG_COUNT)*,
                     regs,
                 );
+
                 $(write_next_arg::<$P>(&mut reg_offset, regs, &mut env.mem, args.$p);)*
                 self.call_from_guest(env);
+
                 let regs = env.cpu.regs_mut(); // reborrow
                 regs[Cpu::SP] = old_sp;
+
                 if let Some(retval_ptr) = retval_ptr {
                     regs[Cpu::SP] += R::SIZE_IN_MEM.unwrap();
                     <R as GuestRet>::from_mem(retval_ptr, &env.mem)
@@ -264,9 +276,11 @@ macro_rules! impl_CallFromHost {
                 args: ($($P,)*),
             ) -> R {
                 log_dbg!("Begin call to guest function {:?}", self);
+
                 let (old_pc, old_lr) = env
                     .cpu
                     .branch_with_link(*self, env.dyld.return_to_host_routine());
+
                 // Create a new guest stack frame. This is redundant considering
                 // we are storing this data on the host stack, but this makes
                 // stack traces work nicely. :)
@@ -276,17 +290,21 @@ macro_rules! impl_CallFromHost {
                     let old_fp = regs[FRAME_POINTER];
                     regs[Cpu::SP] -= 8;
                     regs[FRAME_POINTER] = regs[Cpu::SP];
+
                     env.mem
                         .write(Ptr::from_bits(regs[Cpu::SP]), old_fp);
                     env.mem.write(Ptr::from_bits(regs[Cpu::SP] + 4), old_lr);
                     (old_sp, old_fp)
                 };
+
                 assert!(R::SIZE_IN_MEM.is_none()); // pointer return TODO
                 let regs = env.cpu.regs_mut();
+
                 let _ = extend_stack_for_args(
                     0 $(+ <$P as GuestArg>::REG_COUNT)*,
                     regs,
                 );
+
                 let mut reg_offset = 0;
                 $(write_next_arg::<$P>(&mut reg_offset, regs, &mut env.mem, args.$p);)*
 
@@ -321,6 +339,13 @@ impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5);
 impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6);
 impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7);
 impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13, 14 => P14);
+impl_CallFromHost!(0 => P0, 1 => P1, 2 => P2, 3 => P3, 4 => P4, 5 => P5, 6 => P6, 7 => P7, 8 => P8, 9 => P9, 10 => P10, 11 => P11, 12 => P12, 13 => P13, 14 => P14, 15 => P15);
 
 /// Calling convention translation for a function argument type.
 pub trait GuestArg: std::fmt::Debug + Sized {
@@ -469,7 +494,8 @@ impl_GuestArg_with!(u16, u32);
 impl_GuestArg_with!(i16, u32);
 impl_GuestArg_with!(u8, u32);
 impl_GuestArg_with!(i8, u32);
-impl_GuestArg_with!(usize, u32); // <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
+impl_GuestArg_with!(usize, u32);
+// <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
 
 impl GuestArg for bool {
     const REG_COUNT: usize = 1;
@@ -522,6 +548,7 @@ impl GuestArg for VaList {
         }
     }
     fn to_regs(self, _regs: &mut [u32]) {
+        
         todo!()
     }
 }
@@ -597,6 +624,7 @@ macro_rules! impl_GuestRet_with {
                 <$with as GuestRet>::from_regs(regs) as $for
             }
             fn to_regs(self, regs: &mut [u32]) {
+         
                 <$with as GuestRet>::to_regs(self as $with, regs)
             }
         }
@@ -651,7 +679,8 @@ impl_GuestRet_with!(u16, u32);
 impl_GuestRet_with!(i16, u32);
 impl_GuestRet_with!(u8, u32);
 impl_GuestRet_with!(i8, u32);
-impl_GuestRet_with!(usize, u32); // <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
+impl_GuestRet_with!(usize, u32);
+// <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
 
 impl GuestRet for bool {
     fn from_regs(regs: &[u32]) -> Self {
@@ -667,6 +696,7 @@ impl GuestRet for f32 {
         Self::from_bits(<u32 as GuestRet>::from_regs(regs))
     }
     fn to_regs(self, regs: &mut [u32]) {
+    
         <u32 as GuestRet>::to_regs(self.to_bits(), regs)
     }
 }
