@@ -524,6 +524,11 @@ fn kqueue(_env: &mut Environment) -> i32 {
     999
 }
 
+fn _NSGetExecutablePath(_env: &mut Environment) -> i32 {
+    // FakeKqueue
+    999
+}
+
 fn kevent(
     _env: &mut Environment,
     _kq: i32,
@@ -757,6 +762,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(system(_)),
     export_c_func!(dladdr(_, _)),
     export_c_func!(kqueue()),
+    export_c_func!(_NSGetExecutablePath()),
     export_c_func!(kevent(_, _, _, _, _, _)),
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
     export_c_func!(putenv(_)),
