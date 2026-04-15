@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! Audio file decoding and OpenAL bindings.
 
 mod ima4;
@@ -104,7 +105,6 @@ impl AudioFile {
         let Ok(bytes) = fs.read(path.as_ref()) else {
             return Err(AudioFileOpenError::FileReadError);
         };
-
         if let Ok(file) = Self::read_from_vec(bytes) {
             Ok(file)
         } else {
@@ -305,7 +305,7 @@ impl AudioFile {
                 Ok(bytes_to_read)
             }
             AudioFileInner::Aac(ref aac) => aac.read_bytes(offset, buffer),
-            AudioFileInner::Caf(ref mut reader) => {
+            AudioFileInner::Caf(ref mut _reader) => {
                 // Implement your CAF read logic here.
                 todo!("Caf read_bytes unimplemented")
             }
@@ -336,7 +336,6 @@ fn try_parse_caf_aac(bytes: &[u8]) -> Option<AacPackets> {
             }
         })
         .unwrap_or_default();
-        
     let packet_count = reader.get_packet_count()?;
     let mut packet_bytes = Vec::new();
     let mut packet_offsets = Vec::with_capacity(packet_count as usize + 1);
@@ -400,7 +399,6 @@ fn parse_adts_aac(bytes: Vec<u8>) -> Result<AacPackets, ()> {
     let mut packet_bytes: Vec<u8> = Vec::new();
     let mut packet_offsets: Vec<usize> = Vec::new();
     let mut first = true;
-
     while pos + 7 <= bytes.len() {
         if bytes[pos] != 0xFF || (bytes[pos + 1] & 0xF0) != 0xF0 {
             if packet_offsets.is_empty() {
