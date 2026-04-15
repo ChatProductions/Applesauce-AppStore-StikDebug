@@ -693,6 +693,25 @@ fn mbtowc_l(
     (bytes_to_read + 1) as i32
 }
 
+fn putenv(env: &mut Environment, string: MutPtr<u8>) -> i32 {
+    if string.is_null() {
+        set_errno(env, EINVAL);
+        return -1;
+    }
+    let s = match env.mem.cstr_at_utf8(string.cast_const()) {
+        Ok(s) => s.to_owned(),
+        Err(_) => {
+            set_errno(env, EINVAL);
+            return -1;
+        }
+    };
+    log_dbg!("putenv({:?})", s);
+    // putenv is a no-op in touchHLE — we have no real environment block.
+    // Return 0 (success) so apps that call it to set e.g. timezone or locale
+    // hints don't abort on the return code.
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(malloc(_)),
     export_c_func!(malloc_size(_)),
@@ -740,6 +759,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(kqueue()),
     export_c_func!(kevent(_, _, _, _, _, _)),
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
+    export_c_func!(putenv(_)),
 ];
 
 pub fn atof_inner(
