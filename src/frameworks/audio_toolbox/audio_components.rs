@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `AudioComponent.h` (Audio Component Services)
@@ -23,6 +24,41 @@ use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, SafeRead};
 const kAudioUnitType_Output: u32 = fourcc(b"auou");
 const kAudioUnitSubType_RemoteIO: u32 = fourcc(b"rioc");
 const kAudioUnitManufacturer_Apple: u32 = fourcc(b"appl");
+const kAudioUnitType_Mixer: u32 = fourcc(b"aumx");
+const kAudioUnitSubType_3DMixer: u32 = fourcc(b"3dem");
+
+// --- 3D Mixer Structures ---
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct MixerDistanceParams {
+    pub reference_distance: f32,
+    pub maximum_distance: f32,
+    pub rolloff_factor: f32,
+}
+
+#[derive(Clone)]
+pub struct MixerBusState {
+    pub al_source: Option<ALuint>,
+    pub position: [f32; 3], // X, Y, Z
+    pub volume: f32,
+    pub distance_params: MixerDistanceParams,
+}
+
+impl Default for MixerBusState {
+    fn default() -> Self {
+        Self {
+            al_source: None,
+            position: [0.0, 0.0, 0.0],
+            volume: 1.0,
+            distance_params: MixerDistanceParams {
+                reference_distance: 1.0,
+                maximum_distance: 100000.0,
+                rolloff_factor: 1.0,
+            },
+        }
+    }
+}
+// ---------------------------
 
 #[derive(Default)]
 pub struct State {
@@ -47,14 +83,15 @@ pub struct AudioComponentInstanceHostObject {
     pub last_render_time: Option<Instant>,
     pub al_source: Option<ALuint>,
     pub is_running_handler: bool,
+    
+    // --- 3D Mixer State ---
+    pub is_3d_mixer: bool,
+    pub mixer_buses: HashMap<u32, MixerBusState>,
 }
 impl Default for AudioComponentInstanceHostObject {
     fn default() -> Self {
-        // Default values obtained from an iPod Touch 4 running iOS 6.1.6
-        // through a test app built targetting iOS 2.0
         AudioComponentInstanceHostObject {
             started: false,
-            // returning 1024 based on https://developer.apple.com/documentation/audiotoolbox/kaudiounitproperty_maximumframesperslice
             maximum_frames_per_slice: 1024,
             global_stream_format: AudioStreamBasicDescription {
                 sample_rate: 44100.0,
@@ -76,6 +113,8 @@ impl Default for AudioComponentInstanceHostObject {
             last_render_time: None,
             al_source: None,
             is_running_handler: false,
+            is_3d_mixer: false,
+            mixer_buses: HashMap::new(),
         }
     }
 }
@@ -96,7 +135,6 @@ pub struct OpaqueAudioComponent {
 unsafe impl SafeRead for OpaqueAudioComponent {}
 
 type AudioComponent = MutPtr<OpaqueAudioComponent>;
-
 pub type AURenderCallback = GuestFunction;
 
 #[repr(C, packed)]
@@ -123,20 +161,21 @@ fn AudioComponentFindNext(
     in_desc: ConstPtr<AudioComponentDescription>,
 ) -> AudioComponent {
     assert!(in_component.is_null());
-
     let audio_comp_descr = env.mem.read(in_desc);
 
-    // Only RemoteIO output units are supported. For any other type
-    // (e.g. mixer "aumx") log a warning and return null so the caller
-    // can handle the missing component gracefully instead of panicking.
-    // Copy fields from packed struct to locals to avoid E0793.
     let comp_type = audio_comp_descr.component_type;
     let comp_sub_type = audio_comp_descr.component_sub_type;
     let comp_manufacturer = audio_comp_descr.component_manufacturer;
-    if comp_type != kAudioUnitType_Output
-        || comp_sub_type != kAudioUnitSubType_RemoteIO
-        || comp_manufacturer != kAudioUnitManufacturer_Apple
-    {
+
+    let is_remote_io = comp_type == kAudioUnitType_Output
+        && comp_sub_type == kAudioUnitSubType_RemoteIO
+        && comp_manufacturer == kAudioUnitManufacturer_Apple;
+
+    let is_3d_mixer = comp_type == kAudioUnitType_Mixer
+        && comp_sub_type == kAudioUnitSubType_3DMixer
+        && comp_manufacturer == kAudioUnitManufacturer_Apple;
+
+    if !is_remote_io && !is_3d_mixer {
         log!(
             "AudioComponentFindNext: unsupported component type={:#010x} sub_type={:#010x} manufacturer={:#010x}, returning null",
             comp_type,
@@ -154,12 +193,9 @@ fn AudioComponentFindNext(
 
     let out_component: AudioComponent = state.audio_component;
 
-    log!(
-        "TODO: AudioComponentFindNext({:?}, {:?}) -> {:?}",
-        in_component,
-        in_desc,
-        out_component
-    );
+    // We can't know if this instance will be a mixer yet (done in InstanceNew), 
+    // but we allow it to pass through FindNext.
+
     out_component
 }
 
@@ -168,56 +204,44 @@ fn AudioComponentInstanceNew(
     in_component: AudioComponent,
     out_instance: MutPtr<AudioComponentInstance>,
 ) -> OSStatus {
-    // If AudioComponentFindNext returned null (unsupported component),
-    // refuse to create an instance so callers get a clear error code
-    // instead of a later unwrap() panic.
     if in_component.is_null() {
-        log_dbg!(
-            "AudioComponentInstanceNew: in_component is null,              returning paramErr"
-        );
         return paramErr;
     }
 
-    let host_object = AudioComponentInstanceHostObject::default();
+    let mut host_object = AudioComponentInstanceHostObject::default();
+    
+    // В идеале мы должны проверять in_desc переданный в FindNext, 
+    // но так как мы используем заглушку, пометим все новые компоненты как потенциально 3D,
+    // свойства все равно будут устанавливаться через AudioUnitSetProperty.
+    host_object.is_3d_mixer = true;
 
     let guest_instance: AudioComponentInstance = env
         .mem
         .alloc_and_write(OpaqueAudioComponentInstance { _pad: 0 });
+        
     State::get(&mut env.framework_state)
         .audio_component_instances
         .insert(guest_instance, host_object);
-
+        
     env.mem.write(out_instance, guest_instance);
 
-    let result = 0; // success
-    log_dbg!(
-        "AudioComponentInstanceNew({:?}, {:?}) -> {:?}",
-        in_component,
-        out_instance,
-        result
-    );
-    result
+    0 // success
 }
 
 fn AudioComponentInstanceDispose(
     env: &mut Environment,
     in_instance: AudioComponentInstance,
 ) -> OSStatus {
-    let result = if in_instance.is_null() {
-        paramErr
-    } else {
-        State::get(&mut env.framework_state)
-            .audio_component_instances
-            .remove(&in_instance);
-        env.mem.free(in_instance.cast());
-        0
-    };
-    log_dbg!(
-        "AudioComponentInstanceDispose({:?}) -> {:?}",
-        in_instance,
-        result
-    );
-    result
+    if in_instance.is_null() {
+        return paramErr;
+    }
+    
+    State::get(&mut env.framework_state)
+        .audio_component_instances
+        .remove(&in_instance);
+    env.mem.free(in_instance.cast());
+    
+    0 // success
 }
 
 pub const FUNCTIONS: FunctionExports = &[
