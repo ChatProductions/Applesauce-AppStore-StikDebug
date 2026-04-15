@@ -15,13 +15,12 @@ use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
 use crate::frameworks::carbon_core::OSStatus;
-use crate::frameworks::core_audio_types::{AudioStreamBasicDescription, fourcc, debug_fourcc};
-use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, SafeRead, Mem};
+use crate::frameworks::core_audio_types::{AudioStreamBasicDescription, debug_fourcc};
+use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
 
 // OSStatus error codes
 const kAudioConverterErr_InvalidInputSize: OSStatus = -50;
-const kAudioConverterErr_UnspecifiedError: OSStatus = 1718449215; // 'what'
 
 // CoreAudio types needed for buffer filling
 #[repr(C, packed)]
@@ -48,13 +47,6 @@ pub struct AudioStreamPacketDescription {
 unsafe impl SafeRead for AudioStreamPacketDescription {}
 
 /// Callback type used by the game to feed compressed data to our converter
-/// OSStatus (*AudioConverterComplexInputDataProc)(
-///     AudioConverterRef inAudioConverter,
-///     u32 *ioNumberDataPackets,
-///     AudioBufferList *ioData,
-///     AudioStreamPacketDescription **outDataPacketDescription,
-///     void *inUserData
-/// )
 pub type AudioConverterComplexInputDataProc = GuestFunction;
 
 // Обновленная структура, которая теперь хранит форматы
@@ -155,7 +147,9 @@ fn AudioConverterFillComplexBuffer(
     out_output_data: MutPtr<AudioBufferList>,
     out_packet_description: MutPtr<MutPtr<AudioStreamPacketDescription>>,
 ) -> OSStatus {
-    return_if_null!(in_audio_converter);
+    if in_audio_converter.is_null() {
+        return kAudioConverterErr_InvalidInputSize;
+    }
     
     let requested_packets = env.mem.read(io_output_data_packet_size);
     log_dbg!(
@@ -170,7 +164,7 @@ fn AudioConverterFillComplexBuffer(
         mNumberBuffers: 0,
         mBuffers: [AudioBuffer { mNumberChannels: 0, mDataByteSize: 0, mData: MutPtr::null() }],
     });
-    let out_data_packet_description_ptr: MutPtr<MutPtr<AudioStreamPacketDescription>> = env.mem.alloc_and_write(MutPtr::null());
+    let out_data_packet_description_ptr = env.mem.alloc_and_write::<MutPtr<AudioStreamPacketDescription>>(MutPtr::null());
 
     // Делаем вызов обратно в игру, чтобы она отдала нам порцию сжатых аудиоданных
     let callback_status: OSStatus = in_input_data_proc.call_from_host(
@@ -199,15 +193,15 @@ fn AudioConverterFillComplexBuffer(
     // Пока мы просто возвращаем 0 пакетов, чтобы игра не зависла
     env.mem.write(io_output_data_packet_size, 0);
 
-    0 // Успешно возвращаем управление (но без звука)
+    0 // Успешно возвращаем управление
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioConverterNew(_, _, _, _)),
-    export_c_func!(AudioConverterDispose(_, _)),
-    export_c_func!(AudioConverterReset(_, _)),
-    export_c_func!(AudioConverterGetProperty(_, _, _, _, _)),
-    export_c_func!(AudioConverterSetProperty(_, _, _, _, _)),
-    export_c_func!(AudioConverterFillComplexBuffer(_, _, _, _, _, _, _)), // НОВАЯ ФУНКЦИЯ
+    export_c_func!(AudioConverterNew(_, _, _)),
+    export_c_func!(AudioConverterDispose(_)),
+    export_c_func!(AudioConverterReset(_)),
+    export_c_func!(AudioConverterGetProperty(_, _, _, _)),
+    export_c_func!(AudioConverterSetProperty(_, _, _, _)),
+    export_c_func!(AudioConverterFillComplexBuffer(_, _, _, _, _, _)),
 ];
 
