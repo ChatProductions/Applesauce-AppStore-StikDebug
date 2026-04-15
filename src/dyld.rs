@@ -63,6 +63,7 @@ pub struct HostDylib {
 }
 
 pub type HostFunction = &'static dyn CallFromGuest;
+
 /// Type for lists of functions exported by host implementations of dynamic
 /// libraries (usually frameworks).
 ///
@@ -93,6 +94,7 @@ pub type HostFunction = &'static dyn CallFromGuest;
 ///
 /// See also [ConstantExports] and [ClassExports].
 pub type FunctionExports = &'static [(&'static str, HostFunction)];
+
 /// Macro for exporting a function with C-style name mangling. See
 /// [FunctionExports].
 ///
@@ -163,6 +165,7 @@ pub enum HostConstant {
 ///
 /// See also [FunctionExports], [ClassExports].
 pub type ConstantExports = &'static [(&'static str, HostConstant)];
+
 /// Search the list of [HostDylib]s for a class/constant/function by its symbol.
 ///
 /// Example usage: `search_host_dylibs(|dylib| dylib.function_exports, "_foo")`
@@ -455,7 +458,7 @@ impl Dyld {
         }
     }
 
-        /// Link non-lazy symbols for a loaded binary.
+    /// Link non-lazy symbols for a loaded binary.
     ///
     /// These are usually constants, Objective-C classes, or vtable pointers.
     /// Since the linking must be done upfront, we can't in general delay errors
@@ -513,9 +516,7 @@ impl Dyld {
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 log_dbg!("Stubbed dyld_stub_binder at {:?}", fn_ptr);
                 fn_ptr.cast().cast_const()
-            } else if name == "__NSConcreteGlobalBlock"
-                || name == "__NSConcreteStackBlock"
-            {
+            } else if name == "__NSConcreteGlobalBlock" || name == "__NSConcreteStackBlock" {
                 // Blocks runtime class descriptor. Allocate a small dummy
                 // object in guest memory so isa != NULL. All sites for the
                 // same symbol share one address (cached above).
@@ -538,8 +539,7 @@ impl Dyld {
             } else if let Some((symbol, _)) =
                 search_host_dylibs(|dylib| dylib.function_exports, name)
             {
-                // We want the same symbol name to always point to the same
-                // function.
+                // We want the same symbol name to always point to the same function.
                 let trampoline_ptr = self
                     .create_proc_address_no_inval(mem, symbol)
                     .unwrap()
@@ -635,9 +635,7 @@ impl Dyld {
             // Must be non-null so block->isa != NULL; otherwise the
             // first retain/release of any stack block causes a
             // NULL-page read at 0x0.
-            if symbol == "__NSConcreteStackBlock"
-                || symbol == "__NSConcreteGlobalBlock"
-            {
+            if symbol == "__NSConcreteStackBlock" || symbol == "__NSConcreteGlobalBlock" {
                 let dummy = mem.alloc(16);
                 mem.write(ptr_ptr, dummy.cast().cast_const());
                 log_dbg!(
@@ -661,139 +659,7 @@ impl Dyld {
             // for every frame. We install a trivial stub (BX LR) that
             // returns 0 (_URC_NO_REASON / continue unwinding) so the
             // unwinder keeps moving instead of branching to 0x0.
-            if symbol == "_OBJC_EHTYPE_id"
-                || symbol == "_OBJC_EHTYPE_$_NSException"
-            {
-                let dummy = mem.alloc(32);
-                mem.write(ptr_ptr, dummy.cast().cast_const());
-                log_dbg!(
-                    "Patched ObjC EH type descriptor {} -> {:#x}",
-                    symbol,
-                    dummy.to_bits()
-                );
-                continue;
-            }
-
-            if symbol == "___objc_personality_v0" {
-                // Minimal ARM32 function: BX LR (returns 0 in R0).
-                // Returning _URC_NO_REASON (0) for every frame tells
-                // the unwinder "no handler here, keep searching".
-                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
-                mem.write(fn_ptr + 0, encode_a32_ret());
-                mem.write(fn_ptr + 1, encode_a32_trap());
-                mem.write(ptr_ptr, fn_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___objc_personality_v0 -> {:#x}",
-                    fn_ptr.to_bits()
-                );
-                continue;
-            }
-
-            // __mb_cur_max is a pointer-to-int used by libstdc++
-            // locale code. Provide a value of 1 (single-byte locale).
-            if symbol == "___mb_cur_max" {
-                let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
-                mem.write(val_ptr, 1u32);
-                mem.write(ptr_ptr, val_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___mb_cur_max -> {:#x}",
-                    val_ptr.to_bits()
-                );
-                continue;
-            }
-
-            log!(
-                "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
-                symbol,
-                ptr_ptr,
-                bin.name
-            );
-        }
-
-        // FIXME: check for internal relocations?
-    }
-
-        let Some(ptrs) = bin.get_section(SectionType::NonLazySymbolPointers) else {
-            return;
-        };
-        let info = ptrs.dyld_indirect_symbol_info.as_ref().unwrap();
-
-        let entry_size = info.entry_size;
-        assert!(entry_size == 4);
-        assert!(ptrs.size % entry_size == 0);
-        let ptr_count = ptrs.size / entry_size;
-        'ptr_loop: for i in 0..ptr_count {
-            let Some(symbol) = info.indirect_undef_symbols[i as usize].as_deref() else {
-                continue;
-            };
-
-            let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptrs.addr + i * entry_size);
-            for other_bin in bins {
-                if let Some(&addr) = other_bin.exported_symbols.get(symbol) {
-                    mem.write(ptr_ptr, Ptr::from_bits(addr));
-                    continue 'ptr_loop;
-                }
-            }
-
-            if let Some((symbol, _)) = search_host_dylibs(|dylib| dylib.function_exports, symbol) {
-                // We want the same symbol name to always point to the same
-                // function. It could point to a specific stub entry, but it's
-                // easier to just create a new function and point all the stub
-                // entries to it.
-                let trampoline_ptr = self
-                    .create_proc_address_no_inval(mem, symbol)
-                    .unwrap()
-                    .to_ptr();
-                mem.write(ptr_ptr, trampoline_ptr);
-                log_dbg!(
-                    "Linked non-lazy host function {} at {:?}",
-                    symbol,
-                    trampoline_ptr
-                );
-                log_dbg!("{:?}", self.non_lazy_host_functions);
-                continue;
-            }
-            if let Some((_, template)) = search_host_dylibs(|dylib| dylib.constant_exports, symbol)
-            {
-                // Delay linking of constant until we have a `&mut Environment`,
-                // that makes it much easier to build NSString objects etc.
-                self.constants_to_link_later.push((ptr_ptr, template));
-                continue;
-            }
-
-            // Blocks runtime class descriptors in __nl_symbol_ptr.
-            // Must be non-null so block->isa != NULL; otherwise the
-            // first retain/release of any stack block causes a
-            // NULL-page read at 0x0.
-            if symbol == "__NSConcreteStackBlock"
-                || symbol == "__NSConcreteGlobalBlock"
-            {
-                let dummy = mem.alloc(16);
-                mem.write(ptr_ptr, dummy.cast().cast_const());
-                log_dbg!(
-                    "Patched non-lazy block class {} -> {:#x}",
-                    symbol,
-                    dummy.to_bits()
-                );
-                continue;
-            }
-
-            // C++ / ObjC exception handling symbols. If these are
-            // NULL the C++ unwinder crashes when any @try block is
-            // entered or any ObjC exception is thrown, producing
-            // sequential NULL-page reads followed by UndefinedInst.
-            //
-            // _OBJC_EHTYPE_*: ObjC exception type-info descriptors
-            // used by @catch type matching. A dummy non-null object
-            // is enough to prevent the NULL dereference.
-            //
-            // ___objc_personality_v0: called by _Unwind_RaiseException
-            // for every frame. We install a trivial stub (BX LR) that
-            // returns 0 (_URC_NO_REASON / continue unwinding) so the
-            // unwinder keeps moving instead of branching to 0x0.
-            if symbol == "_OBJC_EHTYPE_id"
-                || symbol == "_OBJC_EHTYPE_$_NSException"
-            {
+            if symbol == "_OBJC_EHTYPE_id" || symbol == "_OBJC_EHTYPE_$_NSException" {
                 let dummy = mem.alloc(32);
                 mem.write(ptr_ptr, dummy.cast().cast_const());
                 log_dbg!(
@@ -878,12 +744,10 @@ impl Dyld {
         svc: u32,
     ) -> Option<HostFunction> {
         match svc {
-            Self::SVC_LAZY_LINK |
-            Self::SVC_LAZY_LINK_RET_FLAG => {
+            Self::SVC_LAZY_LINK | Self::SVC_LAZY_LINK_RET_FLAG => {
                 self.do_lazy_link(bins, mem, cpu, svc_pc)
             }
-            Self::SVC_THREAD_EXIT |
-            Self::SVC_RETURN_TO_HOST => unreachable!(), // don't handle here
+            Self::SVC_THREAD_EXIT | Self::SVC_RETURN_TO_HOST => unreachable!(), // don't handle here
             Self::SVC_LINKED_FUNCTIONS_BASE.. => {
                 let f = self.linked_host_functions.get(
                     ((svc & !Self::SVC_LAZY_LINK_RET_FLAG) - Self::SVC_LINKED_FUNCTIONS_BASE)
@@ -1109,3 +973,4 @@ pub fn register_gles2_stubs() {
     // crate::gles::gles2_stubs::register();
     // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
 }
+
