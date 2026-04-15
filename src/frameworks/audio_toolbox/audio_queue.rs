@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
@@ -180,6 +181,32 @@ pub fn AudioQueueNewOutput(
         }
     }
 
+    // ДОБАВЛЕННЫЙ ХАК ДЛЯ PLANTS VS ZOMBIES (Symphony Engine)
+    if env.bundle.bundle_identifier() == "com.popcap.PvZ" && format.format_id == kAudioFormatLinearPCM {
+        log!("Applying game-specific hack for PvZ: Fixing empty LPCM values from Symphony engine.");
+        
+        // Движок передает нули, из-за чего is_supported_audio_format возвращает false.
+        // Жестко задаем стандартные параметры для 16-битного PCM.
+        if format.bits_per_channel == 0 {
+            format.bits_per_channel = 16;
+        }
+        
+        if format.bytes_per_frame == 0 {
+            let bytes_per_channel = format.bits_per_channel / 8;
+            format.bytes_per_frame = format.channels_per_frame * bytes_per_channel;
+        }
+        
+        // Игра странно выставляет 1024 фрейма на пакет (что типично для AAC, а не LPCM).
+        // Сбрасываем до 1, чтобы декодер LPCM не сошел с ума.
+        if format.frames_per_packet == 1024 {
+            format.frames_per_packet = 1;
+        }
+        
+        if format.bytes_per_packet == 0 {
+            format.bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
+        }
+    }
+
     let host_object = AudioQueueHostObject {
         format,
         callback_proc: in_callback_proc,
@@ -229,11 +256,9 @@ pub fn AudioQueueGetParameter(
     out_value: MutPtr<AudioQueueParameterValue>,
 ) -> OSStatus {
     return_if_null!(in_aq);
-
     assert!(in_param_id == kAudioQueueParam_Volume); // others unimplemented
 
     let state = State::get(&mut env.framework_state);
-
     let host_object = match state.audio_queues.get_mut(&in_aq) {
         Some(obj) => obj,
         None => return 0,
@@ -251,11 +276,9 @@ pub fn AudioQueueSetParameter(
     in_value: AudioQueueParameterValue,
 ) -> OSStatus {
     return_if_null!(in_aq);
-
     // assert!(in_param_id == kAudioQueueParam_Volume); // others unimplemented
 
     let state = State::get(&mut env.framework_state);
-
     let host_object = match state.audio_queues.get_mut(&in_aq) {
         Some(obj) => obj,
         None => return 0,
@@ -728,6 +751,7 @@ pub fn decode_buffer(
                     // assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
                     // assert!(processed_data.len().is_multiple_of(4));
                     let new_size = (processed_data.len() / 4) * 2;
+
                     // size from 32-bit to 16-bit
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
@@ -858,7 +882,6 @@ fn unqueue_buffers<F: FnMut(ALuint)>(al_source: ALuint, context: &OpenAL<'_>, mu
         }
 
         let mut al_buffer = 0;
-
         unsafe {
             context.SourceUnqueueBuffers(al_source, 1, &mut al_buffer);
             assert!(context.GetError() == 0);
@@ -947,7 +970,6 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     if is_running == AudioQueueIsRunning::Stopping {
         let mut al_source_state = 0;
-
         unsafe {
             context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut al_source_state);
             assert!(context.GetError() == 0);
@@ -1042,7 +1064,6 @@ pub fn AudioQueueStart(
     in_device_start_time: ConstPtr<AudioTimeStamp>,
 ) -> OSStatus {
     return_if_null!(in_aq);
-
     assert!(in_device_start_time.is_null()); // TODO
 
     prime_audio_queue(env, in_aq);
@@ -1082,6 +1103,7 @@ pub fn AudioQueuePause(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus 
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+
     // FIXME: is this correct? is it notifiable?
     host_object.is_running = AudioQueueIsRunning::Stopped;
 
@@ -1200,6 +1222,7 @@ fn AudioQueueFreeBuffer(
 
     if let Some(index) = host_object.buffers.iter().position(|x| x == &in_buffer) {
         host_object.buffers.remove(index);
+
         log_dbg!("Freeing buffer: {:?}", in_buffer);
 
         let buffer = env.mem.read(in_buffer);
@@ -1218,7 +1241,6 @@ pub fn AudioQueueDispose(
     in_immediate: bool,
 ) -> OSStatus {
     return_if_null!(in_aq);
-
     assert!(in_immediate); // TODO
 
     let (state, context) =
@@ -1270,7 +1292,6 @@ pub fn AudioQueueNewInput(
     out_aq: MutPtr<AudioQueueRef>,
 ) -> OSStatus {
     log!("TODO: AudioQueueNewInput(...) stubbed");
-
     assert!(in_flags == 0);
 
     let in_callback_run_loop = if in_callback_run_loop.is_null() {
@@ -1347,3 +1368,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
 ];
+
