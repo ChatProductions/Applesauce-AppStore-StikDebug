@@ -3,6 +3,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+
 //! `CAAnimation` and its subclasses
 
 use crate::dyld::{ConstantExports, HostConstant};
@@ -27,6 +28,10 @@ pub const kCAFillModeBackwards: &str = "backwards";
 pub const kCAFillModeBoth: &str = "both";
 pub const kCAFillModeForwards: &str = "forwards";
 pub const kCAFillModeRemoved: &str = "removed";
+
+pub const kCAAnimationDiscrete: &str = "discrete";
+pub const kCAAnimationLinear: &str = "linear";
+pub const kCAAnimationPaced: &str = "paced";
 
 pub const CONSTANTS: ConstantExports = &[
     // `CATransitionType` values.
@@ -59,6 +64,19 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCAFillModeRemoved",
         HostConstant::NSString(kCAFillModeRemoved),
+    ),
+    // `CAAnimation` calculation modes.
+    (
+        "_kCAAnimationDiscrete",
+        HostConstant::NSString(kCAAnimationDiscrete),
+    ),
+    (
+        "_kCAAnimationLinear",
+        HostConstant::NSString(kCAAnimationLinear),
+    ),
+    (
+        "_kCAAnimationPaced",
+        HostConstant::NSString(kCAAnimationPaced),
     ),
 ];
 
@@ -105,6 +123,13 @@ struct CABasicAnimationHostObject {
     by_value: id,
 }
 impl_HostObject_with_superclass!(CABasicAnimationHostObject);
+
+#[derive(Default)]
+struct CAAnimationGroupHostObject {
+    superclass: CAAnimationHostObject,
+    animations: id, // NSArray*
+}
+impl_HostObject_with_superclass!(CAAnimationGroupHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -305,6 +330,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 
+@implementation CAAnimationGroup: CAAnimation
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::<CAAnimationGroupHostObject>::default();
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (())setAnimations:(id)animations { // NSArray*
+    log_dbg!("[(CAAnimationGroup*){:?} setAnimations:{:?}]", this, animations);
+    env.objc.borrow_mut::<CAAnimationGroupHostObject>(this).animations = animations;
+    retain(env, animations);
+}
+
+- (id)animations {
+    env.objc.borrow::<CAAnimationGroupHostObject>(this).animations
+}
+
+- (())dealloc {
+    let &CAAnimationGroupHostObject { animations, .. } = env.objc.borrow(this);
+    if animations != nil {
+        release(env, animations);
+    }
+
+    msg_super![env; this dealloc]
+}
+
+@end
+
+
 @implementation CATransition : CAAnimation
 
 + (id)allocWithZone:(NSZonePtr)_zone {
@@ -329,3 +383,4 @@ pub fn get_animation_start_time(
         .borrow_mut::<CAAnimationHostObject>(animation)
         .started_at
 }
+
