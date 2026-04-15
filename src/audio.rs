@@ -312,7 +312,7 @@ impl AudioFile {
                     return Err(());
                 }
 
-                let start_packet = (offset / bytes_per_packet) as u32;
+                let start_packet = (offset / bytes_per_packet) as usize;
                 let offset_in_first_packet = (offset % bytes_per_packet) as usize;
 
                 if reader.seek_to_packet(start_packet).is_err() {
@@ -322,11 +322,11 @@ impl AudioFile {
                 let mut bytes_read = 0;
                 while bytes_read < buffer.len() {
                     let pkt_size = match reader.next_packet_size() {
-                        Ok(size) => size,
-                        Err(_) => break, // Достигнут конец файла
+                        Some(size) => size,
+                        None => break, // Достигнут конец файла
                     };
 
-                    let mut packet_data = vec![0u8; pkt_size as usize];
+                    let mut packet_data = vec![0u8; pkt_size];
                     if reader.read_packet_into(&mut packet_data).is_err() {
                         break;
                     }
