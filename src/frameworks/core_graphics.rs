@@ -36,6 +36,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     ],
     constant_exports: &[
         cg_affine_transform::CONSTANTS,
+        cg_color::CONSTANTS,
         cg_color_space::CONSTANTS,
         cg_geometry::CONSTANTS,
     ],
