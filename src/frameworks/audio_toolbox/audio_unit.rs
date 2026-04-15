@@ -1,12 +1,14 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `AudioUnit.h` (Audio Unit Services)
 
 use std::time::Instant;
 
+use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
 
@@ -19,7 +21,7 @@ use crate::frameworks::audio_toolbox::audio_queue::{
     is_supported_audio_format, log_if_broken_audio_format,
 };
 use crate::frameworks::carbon_core::{paramErr, OSStatus};
-use crate::frameworks::core_audio_types::AudioStreamBasicDescription;
+use crate::frameworks::core_audio_types::{AudioStreamBasicDescription, fourcc};
 use crate::frameworks::core_foundation::cf_run_loop::CFRunLoopGetMain;
 use crate::frameworks::foundation::ns_run_loop;
 use crate::mem::{guest_size_of, ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
@@ -30,6 +32,7 @@ use super::audio_queue::decode_buffer;
 use super::audio_session;
 
 pub type AudioUnit = AudioComponentInstance;
+
 type AudioUnitPropertyID = u32;
 type AudioUnitScope = u32;
 type AudioUnitElement = u32;
@@ -121,6 +124,17 @@ const kAudioMixerProperty_Volume:                AudioUnitPropertyID = 7;
 const kAudioMixerProperty_Metering:              AudioUnitPropertyID = 1003;
 const kAudioUnitProperty_MeteringMode:           AudioUnitPropertyID = 1003;
 
+// 3D Mixer Property IDs
+const kAudioUnitProperty_3DMixerDistanceParams:  AudioUnitPropertyID = fourcc(b"3ddp");
+const kAudioUnitProperty_MatrixLevels:           AudioUnitPropertyID = fourcc(b"mxmv");
+const kAudioUnitProperty_SpatializationAlgorithm:AudioUnitPropertyID = fourcc(b"spat");
+const kAudioUnitProperty_3DMixerRenderingFlags:  AudioUnitPropertyID = fourcc(b"3drf");
+
+// 3D Mixer Parameter IDs
+const k3DMixerParam_Azimuth: AudioUnitParameterID = 0;
+const k3DMixerParam_Elevation: AudioUnitParameterID = 1;
+const k3DMixerParam_Distance: AudioUnitParameterID = 2;
+
 // =========================================================================
 // MARK: - AudioUnitInitialize / Uninitialize
 // =========================================================================
@@ -152,15 +166,9 @@ fn AudioUnitSetProperty(
     in_data: ConstVoidPtr,
     in_data_size: u32,
 ) -> OSStatus {
-    if in_element != 0 {
-        log_dbg!(
-            "AudioUnitSetProperty: ignoring non-zero element {}",
-            in_element
-        );
-        // Don't return error — many apps set properties on bus 1 etc.
-        return 0;
-    }
-
+    // В микшерах in_element используется как номер шины (bus), поэтому мы больше 
+    // не игнорируем вызовы, где in_element != 0, если это 3D-микшер.
+    
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
         .get_mut(&in_unit)
@@ -173,6 +181,27 @@ fn AudioUnitSetProperty(
     };
 
     match in_id {
+        kAudioUnitProperty_3DMixerDistanceParams => {
+            let params = env.mem.read::<audio_components::MixerDistanceParams>(in_data.cast());
+            let bus = host_object.mixer_buses.entry(in_element).or_default();
+            bus.distance_params = params;
+
+            if let Some(source) = bus.al_source {
+                let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+                unsafe {
+                    context.Sourcef(source, al::AL_REFERENCE_DISTANCE, params.reference_distance);
+                    context.Sourcef(source, al::AL_MAX_DISTANCE, params.maximum_distance);
+                    context.Sourcef(source, al::AL_ROLLOFF_FACTOR, params.rolloff_factor);
+                }
+            }
+            log_dbg!("Set 3D Mixer Distance Params for bus {}: {:?}", in_element, params);
+        }
+        kAudioUnitProperty_MatrixLevels => {
+            log_dbg!("Stubbed kAudioUnitProperty_MatrixLevels for bus {}", in_element);
+        }
+        kAudioUnitProperty_SpatializationAlgorithm | kAudioUnitProperty_3DMixerRenderingFlags => {
+            log_dbg!("AudioUnitSetProperty: spatialization/rendering flags ignored");
+        }
         kAudioUnitProperty_SetRenderCallback => {
             let render_callback = env.mem.read(in_data.cast::<AURenderCallbackStruct>());
             host_object.render_callback = Some(render_callback);
@@ -233,7 +262,8 @@ fn AudioUnitSetProperty(
         kAudioOutputUnitProperty_EnableIO => {
             log_dbg!("AudioUnitSetProperty: EnableIO (ignored)");
         }
-        kAudioMixerProperty_Volume | kAudioMixerProperty_Metering => {
+        kAudioMixerProperty_Volume |
+        kAudioMixerProperty_Metering => {
             log_dbg!("AudioUnitSetProperty: mixer property {} (ignored)", in_id);
         }
         kAudioUnitProperty_OfflineRender => {
@@ -327,7 +357,8 @@ fn AudioUnitGetProperty(
             env.mem.write(io_data_size, guest_size_of::<u32>());
         }
         kAudioUnitProperty_InPlaceProcessing => {
-            let v: u32 = 1; // yes, in-place is supported
+            let v: u32 = 1;
+            // yes, in-place is supported
             env.mem.write(out_data.cast(), v);
             env.mem.write(io_data_size, guest_size_of::<u32>());
         }
@@ -431,10 +462,40 @@ fn AudioUnitSetParameter(
         "AudioUnitSetParameter: unit={:?} id={} scope={} element={} value={} offset={}",
         in_unit, in_id, in_scope, in_element, in_value, in_buffer_offset_in_frames
     );
-    // Volume parameter - log but ignore (field not in host object)
-    if in_id == 0 /* kMultiChannelMixerParam_Volume */ || in_id == 7 {
-        log_dbg!("AudioUnitSetParameter: volume={} (ignored)", in_value);
+
+    let Some(host_object) = audio_components::State::get(&mut env.framework_state)
+        .audio_component_instances
+        .get_mut(&in_unit)
+    else {
+        return paramErr;
+    };
+
+    match in_id {
+        k3DMixerParam_Azimuth | k3DMixerParam_Elevation | k3DMixerParam_Distance => {
+            let bus = host_object.mixer_buses.entry(in_element).or_default();
+            
+            if in_id == k3DMixerParam_Azimuth {
+                 let radians = in_value.to_radians();
+                 bus.position[0] = radians.sin(); // X
+                 bus.position[2] = -radians.cos(); // Z
+            } else if in_id == k3DMixerParam_Elevation {
+                 let radians = in_value.to_radians();
+                 bus.position[1] = radians.sin(); // Y
+            }
+            
+            if let Some(source) = bus.al_source {
+                 let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+                 unsafe {
+                     context.Source3f(source, al::AL_POSITION, bus.position[0], bus.position[1], bus.position[2]);
+                 }
+            }
+        }
+        0 /* kMultiChannelMixerParam_Volume */ | 7 => {
+            log_dbg!("AudioUnitSetParameter: volume={} (ignored)", in_value);
+        }
+        _ => {}
     }
+    
     0
 }
 
@@ -454,7 +515,8 @@ fn AudioUnitGetParameter(
         .audio_component_instances
         .get(&in_unit)
     {
-        let _ = obj; // volume not stored, return 1.0
+        let _ = obj;
+        // volume not stored, return 1.0
         1.0
     } else {
         1.0
@@ -682,7 +744,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             obj.render_callback,
         )
     };
-
     if !started || is_running_handler { return; }
 
     {
@@ -702,7 +763,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let sample_rate = input_stream_format
         .map(|f| f.sample_rate)
         .unwrap_or(current_hardware_sample_rate);
-
     let Some(al_source)       = al_source       else { return; };
     let Some(last_render_time) = last_render_time else { return; };
     let Some(callback)         = render_callback  else { return; };
@@ -743,7 +803,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
 
     let input_proc         = callback.input_proc;
     let input_proc_ref_con = callback.input_proc_ref_con;
-
     let _: OSStatus = input_proc.call_from_host(
         env,
         (
@@ -759,7 +818,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     let (al_format, _, processed_data) = decode_buffer(
         &env.mem, &stream_format, buffer_data.cast(), buffer_size,
     );
-
     {
         let at = &mut env.framework_state.audio_toolbox;
         let context = at.al_context.make_al_context_current(&mut env.openal_manager);
@@ -791,7 +849,6 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     env.mem.free(action_flags.cast_void());
     env.mem.free(buffer_data.cast_void());
     env.mem.free(abl_ptr.cast_void());
-
     if let Some(obj) = env.framework_state
         .audio_toolbox
         .audio_components
@@ -821,3 +878,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioUnitProcess(_, _, _, _, _)),
     export_c_func!(AudioUnitProcessMultiple(_, _, _, _, _, _, _)),
 ];
+
