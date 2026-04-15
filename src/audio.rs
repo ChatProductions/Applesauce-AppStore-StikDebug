@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
@@ -305,9 +306,46 @@ impl AudioFile {
                 Ok(bytes_to_read)
             }
             AudioFileInner::Aac(ref aac) => aac.read_bytes(offset, buffer),
-            AudioFileInner::Caf(ref mut _reader) => {
-                // Implement your CAF read logic here.
-                todo!("Caf read_bytes unimplemented")
+            AudioFileInner::Caf(ref mut reader) => {
+                let bytes_per_packet = reader.audio_desc.bytes_per_packet as u64;
+                if bytes_per_packet == 0 {
+                    return Err(());
+                }
+
+                let start_packet = (offset / bytes_per_packet) as u32;
+                let offset_in_first_packet = (offset % bytes_per_packet) as usize;
+
+                if reader.seek_to_packet(start_packet).is_err() {
+                    return Err(());
+                }
+
+                let mut bytes_read = 0;
+                while bytes_read < buffer.len() {
+                    let pkt_size = match reader.next_packet_size() {
+                        Ok(size) => size,
+                        Err(_) => break, // Достигнут конец файла
+                    };
+
+                    let mut packet_data = vec![0u8; pkt_size as usize];
+                    if reader.read_packet_into(&mut packet_data).is_err() {
+                        break;
+                    }
+
+                    let start_idx = if bytes_read == 0 { offset_in_first_packet } else { 0 };
+                    
+                    if start_idx >= packet_data.len() {
+                        continue;
+                    }
+
+                    let bytes_to_copy = (packet_data.len() - start_idx).min(buffer.len() - bytes_read);
+
+                    buffer[bytes_read..bytes_read + bytes_to_copy]
+                        .copy_from_slice(&packet_data[start_idx..start_idx + bytes_to_copy]);
+
+                    bytes_read += bytes_to_copy;
+                }
+
+                Ok(bytes_read)
             }
         }
     }
