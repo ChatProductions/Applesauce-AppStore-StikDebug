@@ -28,13 +28,16 @@ const kAudioUnitType_Mixer: u32 = fourcc(b"aumx");
 const kAudioUnitSubType_3DMixer: u32 = fourcc(b"3dem");
 
 // --- 3D Mixer Structures ---
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct MixerDistanceParams {
     pub reference_distance: f32,
     pub maximum_distance: f32,
     pub rolloff_factor: f32,
 }
+
+// ИСПРАВЛЕНИЕ: Реализация SafeRead для возможности чтения из памяти
+unsafe impl SafeRead for MixerDistanceParams {}
 
 #[derive(Clone)]
 pub struct MixerBusState {
@@ -88,6 +91,7 @@ pub struct AudioComponentInstanceHostObject {
     pub is_3d_mixer: bool,
     pub mixer_buses: HashMap<u32, MixerBusState>,
 }
+
 impl Default for AudioComponentInstanceHostObject {
     fn default() -> Self {
         AudioComponentInstanceHostObject {
@@ -161,7 +165,7 @@ fn AudioComponentFindNext(
     in_desc: ConstPtr<AudioComponentDescription>,
 ) -> AudioComponent {
     assert!(in_component.is_null());
-    let audio_comp_descr = env.mem.read(in_desc);
+    let audio_comp_descr = env.mem.read::<_, false>(in_desc);
 
     let comp_type = audio_comp_descr.component_type;
     let comp_sub_type = audio_comp_descr.component_sub_type;
@@ -191,12 +195,7 @@ fn AudioComponentFindNext(
             env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
     }
 
-    let out_component: AudioComponent = state.audio_component;
-
-    // We can't know if this instance will be a mixer yet (done in InstanceNew), 
-    // but we allow it to pass through FindNext.
-
-    out_component
+    state.audio_component
 }
 
 fn AudioComponentInstanceNew(
@@ -209,10 +208,6 @@ fn AudioComponentInstanceNew(
     }
 
     let mut host_object = AudioComponentInstanceHostObject::default();
-    
-    // В идеале мы должны проверять in_desc переданный в FindNext, 
-    // но так как мы используем заглушку, пометим все новые компоненты как потенциально 3D,
-    // свойства все равно будут устанавливаться через AudioUnitSetProperty.
     host_object.is_3d_mixer = true;
 
     let guest_instance: AudioComponentInstance = env
@@ -225,7 +220,7 @@ fn AudioComponentInstanceNew(
         
     env.mem.write(out_instance, guest_instance);
 
-    0 // success
+    0
 }
 
 fn AudioComponentInstanceDispose(
@@ -241,7 +236,7 @@ fn AudioComponentInstanceDispose(
         .remove(&in_instance);
     env.mem.free(in_instance.cast());
     
-    0 // success
+    0
 }
 
 pub const FUNCTIONS: FunctionExports = &[
