@@ -896,25 +896,28 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setObject:(id)object
-         forKey:(id)key {
-    // Дебаг-паника для отлова nil
-    if object == nil {
-        let key_str = if key != nil { 
-            crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string() 
-        } else { 
-            "nil".to_string() 
-        };
-        panic!("FATAL: Попытка положить nil в словарь! Ключ: {}. Смотри дамп регистров ниже.", key_str);
-    }
-    
-    if key == nil {
-        panic!("FATAL: Попытка использовать nil в качестве ключа! Смотри дамп регистров ниже.");
-    }
+             forKey:(id)key {
+        // Если объект nil, по правилам iOS должно быть исключение NSInvalidArgumentException.
+        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем добавление.
+        if object == nil {
+            let key_str = if key != nil { 
+                crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string() 
+            } else { 
+                "nil".to_string() 
+            };
+            log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to insert nil object for key {} — ignoring", key_str);
+            return;
+        }
+        
+        if key == nil {
+            log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to use nil key — ignoring");
+            return;
+        }
 
-    let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
-    host_obj.insert(env, key, object, /* copy_key: */ true);
-    *env.objc.borrow_mut(this) = host_obj;
-}
+        let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
+        host_obj.insert(env, key, object, /* copy_key: */ true);
+        *env.objc.borrow_mut(this) = host_obj;
+    }
 
 - (())removeObjectForKey:(id)key {
     if key.is_null() {
