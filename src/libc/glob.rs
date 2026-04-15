@@ -5,7 +5,7 @@
 use crate::dyld::FunctionExports;
 use crate::environment::Environment;
 use crate::export_c_func;
-use crate::mem::{ConstPtr, MutPtr};
+use crate::mem::{ConstPtr, MutPtr, SafeRead};
 
 // Точная структура glob_t для 32-битного ARM (iOS/macOS)
 #[repr(C)]
@@ -22,6 +22,8 @@ pub struct GuestGlobT {
     pub gl_lstat: MutPtr<()>,
     pub gl_stat: MutPtr<()>,
 }
+
+unsafe impl SafeRead for GuestGlobT {}
 
 const GLOB_SUCCESS: i32 = 0;
 const GLOB_NOMATCH: i32 = -3; // Специфичное для Apple значение
