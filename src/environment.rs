@@ -392,7 +392,7 @@ impl Environment {
                 // based on base addresses of those dylibs prior to iOS 3.1
                 // TODO: implement some kind of ASLR instead of hardcoding
                 assert!(dylib_path.as_str().starts_with("/usr/lib/"));
-                                let name = dylib_path.file_name().unwrap();
+                let name = dylib_path.file_name().unwrap();
                 let dylib_slide = match name {
                     "libstdc++.6.dylib" | "libstdc++.6.0.9.dylib" => 0x3748a000,
                     
@@ -2019,3 +2019,4 @@ mod dylib_sorting_tests {
         );
     }
 }
+
