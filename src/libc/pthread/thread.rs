@@ -279,10 +279,18 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-// ИЗМЕНЕНО: Возвращаемый тип `-> !` удален, чтобы макрос не выдавал ошибку.
-pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) {
+pub fn pthread_exit(env: &mut Environment, retval: MutVoidPtr) {
     log_dbg!("pthread_exit({:?})", retval);
-    panic!("pthread_exit({:?}): thread exit not yet implemented", retval);
+    
+    // Честно говорим эмулятору завершить текущий поток с нужным кодом возврата.
+    // Под капотом touchHLE сам выкинет специальный unwinding-payload,
+    // чтобы безопасно прервать бесконечный цикл процессора (CPU loop).
+    env.exit_thread(retval);
+    
+    // Ставим unreachable!(), чтобы показать компилятору, что возврата 
+    // в гостевой код не будет. Макрос при этом ругаться не станет,
+    // так как формальная сигнатура функции осталась без `-> !`.
+    unreachable!("Thread should have exited");
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {
