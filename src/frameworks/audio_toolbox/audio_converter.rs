@@ -123,26 +123,6 @@ fn AudioConverterSetProperty(
     0
 }
 
-/// Simple buffer conversion (Direct copy for LPCM -> LPCM)
-fn AudioConverterConvertBuffer(
-    env: &mut Environment,
-    _in_audio_converter: AudioConverterRef,
-    in_input_data_size: u32,
-    in_input_data: ConstVoidPtr,
-    io_output_data_size: MutPtr<u32>,
-    out_output_data: MutVoidPtr,
-) -> OSStatus {
-    let out_size_limit = env.mem.read(io_output_data_size);
-    let copy_size = std::cmp::min(in_input_data_size, out_size_limit);
-    
-    let in_slice = env.mem.bytes_at(in_input_data, copy_size as usize);
-    let out_slice = env.mem.mut_bytes_at(out_output_data, copy_size as usize);
-    out_slice.copy_from_slice(in_slice);
-    
-    env.mem.write(io_output_data_size, copy_size);
-    0
-}
-
 /// Complex buffer conversion (Passthrough for LPCM -> LPCM)
 fn AudioConverterFillComplexBuffer(
     env: &mut Environment,
@@ -178,11 +158,11 @@ fn AudioConverterFillComplexBuffer(
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioConverterNew(_, _, _, _)),
-    export_c_func!(AudioConverterDispose(_, _)),
-    export_c_func!(AudioConverterReset(_, _)),
-    export_c_func!(AudioConverterGetProperty(_, _, _, _, _)),
-    export_c_func!(AudioConverterSetProperty(_, _, _, _, _)),
-    export_c_func!(AudioConverterConvertBuffer(_, _, _, _, _, _)), // Добавлена обычная конвертация
-    export_c_func!(AudioConverterFillComplexBuffer(_, _, _, _, _, _, _)),
+    export_c_func!(AudioConverterNew(_, _, _)),
+    export_c_func!(AudioConverterDispose(_)),
+    export_c_func!(AudioConverterReset(_)),
+    export_c_func!(AudioConverterGetProperty(_, _, _, _)),
+    export_c_func!(AudioConverterSetProperty(_, _, _, _)),
+    // У функции 6 аргументов помимо env, поэтому 6 подчеркиваний
+    export_c_func!(AudioConverterFillComplexBuffer(_, _, _, _, _, _)),
 ];
