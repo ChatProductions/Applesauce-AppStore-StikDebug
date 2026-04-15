@@ -565,6 +565,20 @@ fn rint(env: &mut Environment, arg: f64) -> f64 {
     arg.log10()
 }
 
+fn llroundf(env: &mut Environment, arg: f32) -> f32 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    arg.log10()
+}
+
+fn llround(env: &mut Environment, arg: f64) -> f64 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    arg.log10()
+}
+
 fn rintf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -722,6 +736,8 @@ pub const FUNCTIONS: FunctionExports = &[
         // Other
     export_c_func!(rint(_)),
     export_c_func!(rintf(_)),
+    export_c_func!(llroundf(_)),
+    export_c_func!(llround(_)),
     export_c_func!(nan(_)),
     export_c_func!(hypot(_, _)),
     export_c_func!(hypotf(_, _)),
