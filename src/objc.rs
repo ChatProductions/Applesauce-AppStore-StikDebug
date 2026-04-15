@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Objective-C runtime.
@@ -148,7 +149,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_sync_exit(_)),
     export_c_func!(sel_registerName(_)),
     export_c_func!(objc_getClass(_)),
-    export_c_func!(objc_getMetaClass(_)),
+    export_c_func!(objc_getMetaClass(_, _)), // <-- ИСПРАВЛЕНИЕ: Добавлен второй _
     export_c_func!(object_getClassName(_)),
     export_c_func!(object_getClass(_)),
     export_c_func!(objc_retainAutoreleasedReturnValue(_)),
@@ -165,3 +166,4 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(method_getTypeEncoding(_, _)),
     export_c_func!(_Block_object_dispose(_, _)),
 ];
+
