@@ -132,7 +132,9 @@ macro_rules! impl_CallFromGuest {
                 let args: ($($P,)*) = {
                     ($(read_next_arg::<$P>(&mut reg_offset, regs, Ptr::from_bits(regs[Cpu::SP]), &env.mem),)*)
                 };
-                log_dbg!("CallFromGuest {:?}", args);
+                
+                log_dbg!("CallFromGuest"); // Убрали попытку вывести args из-за ограничений трейта Debug
+                
                 let retval = self(env, $(args.$p),*);
                 log_dbg!("CallFromGuest => {:?}", retval);
                 if let Some(retval_ptr) = retval_ptr {
@@ -159,7 +161,9 @@ macro_rules! impl_CallFromGuest {
                     reg_offset,
                     stack_pointer: Ptr::from_bits(regs[Cpu::SP])
                 });
-                log_dbg!("CallFromGuest {:?}, ...{:?}", args, va_list);
+                
+                log_dbg!("CallFromGuest with va_list: {:?}", va_list); // Аналогично убрали args
+                
                 let retval = self(env, $(args.$p,)* va_list);
                 log_dbg!("CallFromGuest => {:?}", retval);
                 if let Some(retval_ptr) = retval_ptr {
@@ -495,7 +499,6 @@ impl_GuestArg_with!(i16, u32);
 impl_GuestArg_with!(u8, u32);
 impl_GuestArg_with!(i8, u32);
 impl_GuestArg_with!(usize, u32);
-// <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
 
 impl GuestArg for bool {
     const REG_COUNT: usize = 1;
@@ -680,7 +683,6 @@ impl_GuestRet_with!(i16, u32);
 impl_GuestRet_with!(u8, u32);
 impl_GuestRet_with!(i8, u32);
 impl_GuestRet_with!(usize, u32);
-// <--- ДОБАВЛЕНО ДЛЯ РЕШЕНИЯ ОШИБКИ
 
 impl GuestRet for bool {
     fn from_regs(regs: &[u32]) -> Self {
