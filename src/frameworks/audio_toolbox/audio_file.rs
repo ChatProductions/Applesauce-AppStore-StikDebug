@@ -11,9 +11,9 @@ use crate::audio::AudioDescription;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::{eofErr, OSStatus};
 use crate::frameworks::core_audio_types::{
-    debug_fourcc, fourcc, kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian,
-    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger,
-    kAudioFormatLinearPCM, AudioStreamBasicDescription,
+    debug_fourcc, fourcc, kAudioFormatFlagIsBigEndian, kAudioFormatFlagIsFloat,
+    kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
+    AudioStreamBasicDescription,
 };
 use crate::frameworks::core_foundation::cf_url::CFURLRef;
 use crate::frameworks::foundation::ns_url::to_rust_path;
@@ -43,12 +43,20 @@ unsafe impl SafeRead for OpaqueAudioFileID {}
 
 pub type AudioFileID = MutPtr<OpaqueAudioFileID>;
 
+#[repr(C, packed)]
+struct AudioFilePacketTableInfo {
+    number_valid_frames: i64,
+    priming_frames: i32,
+    remainder_frames: i32,
+}
+unsafe impl SafeRead for AudioFilePacketTableInfo {}
+
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
 const kAudioFileNotOpenError: OSStatus = -38;
 const kAudioFileSuccess: OSStatus = 1;
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
-const kAudioFileUnsupportedProperty: OSStatus = fourcc(b"pty?") as _;
+const kAudioFileUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
 const kAudioFileUnspecifiedError: OSStatus = fourcc(b"wht?") as _;
 
@@ -68,7 +76,7 @@ pub const kAudioFilePropertyPacketSizeUpperBound: AudioFilePropertyID = fourcc(b
 const kAudioFilePropertyMagicCookieData: AudioFilePropertyID = fourcc(b"mgic");
 const kAudioFilePropertyChannelLayout: AudioFilePropertyID = fourcc(b"cmap");
 const kAudioFilePropertyEstimatedDuration: AudioFilePropertyID = fourcc(b"edur");
-const kAudioFileProperty_PacketTable: AudioFilePropertyID = fourcc(b"pnfo");
+const kAudioFilePropertyPacketTableInfo: AudioFilePropertyID = fourcc(b"pnfo");
 const kAudioFilePropertyPacketToFrame: AudioFilePropertyID = fourcc(b"flst");
 
 pub fn AudioFileOpenURL(
@@ -221,7 +229,7 @@ fn property_size(property_id: AudioFilePropertyID) -> GuestUSize {
         kAudioFilePropertyAudioDataPacketCount => guest_size_of::<u64>(),
         kAudioFilePropertyPacketSizeUpperBound => guest_size_of::<u32>(),
         kAudioFilePropertyEstimatedDuration => guest_size_of::<f64>(),
-        kAudioFileProperty_PacketTable => guest_size_of::<f64>(),
+        kAudioFilePropertyPacketTableInfo => guest_size_of::<AudioFilePacketTableInfo>(),
         kAudioFilePropertyPacketToFrame => guest_size_of::<f64>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
     }
@@ -249,7 +257,7 @@ fn AudioFileGetPropertyInfo(
         if !is_writable.is_null() {
             env.mem.write(is_writable, 0);
         }
-        return kAudioFileUnsupportedProperty;
+        return kAudioFileUnsupportedPropertyError;
     }
     if !out_data_size.is_null() {
         env.mem.write(out_data_size, property_size(in_property_id));
@@ -313,19 +321,6 @@ pub fn AudioFileGetProperty(
                         _reserved: 0,
                     }
                 }
-                audio::AudioFormat::AppleIma4 => {
-                    AudioStreamBasicDescription {
-                        sample_rate,
-                        format_id: kAudioFormatAppleIMA4,
-                        format_flags: 0,
-                        bytes_per_packet,
-                        frames_per_packet,
-                        bytes_per_frame: 0, // compressed
-                        channels_per_frame,
-                        bits_per_channel,
-                        _reserved: 0,
-                    }
-                }
                 // ИСПРАВЛЕНИЕ: Добавлена поддержка Mpeg4Aac формата
                 audio::AudioFormat::Mpeg4Aac => {
                     AudioStreamBasicDescription {
@@ -368,6 +363,10 @@ pub fn AudioFileGetProperty(
                 * frames_per_packet as f64
                 / (bytes_per_packet as f64 * sample_rate);
             env.mem.write(out_property_data.cast(), estimated_duration);
+        }
+        kAudioFilePropertyPacketTableInfo => {
+            log!("TODO: AudioFileGetProperty({:?}, kAudioFilePropertyPacketTableInfo, {:?}, {:?}) -> kAudioFileUnsupportedPropertyError", in_audio_file, io_data_size, out_property_data);
+            return kAudioFileUnsupportedPropertyError;
         }
         kAudioFileProperty_PacketTable => {
             let AudioDescription {
