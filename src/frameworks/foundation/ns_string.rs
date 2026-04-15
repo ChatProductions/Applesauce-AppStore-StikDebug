@@ -1286,6 +1286,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
+- (id)CGImage {
+    nil
+}
+
 - (NSUInteger)lengthOfBytesUsingEncoding:(NSUInteger)encoding {
     let s = ns_string::to_rust_string(env, this);
     match encoding {
