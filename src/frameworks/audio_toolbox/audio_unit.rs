@@ -10,10 +10,13 @@ use std::time::Instant;
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
-use crate::audio::openal::{
-    AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE, 
-    AL_REFERENCE_DISTANCE, AL_MAX_DISTANCE, AL_ROLLOFF_FACTOR, AL_POSITION
-};
+use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
+
+// Добавляем недостающие константы OpenAL напрямую
+const AL_POSITION: i32 = 0x1004;
+const AL_REFERENCE_DISTANCE: i32 = 0x1020;
+const AL_ROLLOFF_FACTOR: i32 = 0x1021;
+const AL_MAX_DISTANCE: i32 = 0x1023;
 
 use crate::abi::CallFromHost;
 use crate::dyld::FunctionExports;
@@ -167,7 +170,7 @@ fn AudioUnitSetProperty(
     in_scope: AudioUnitScope,
     in_element: AudioUnitElement,
     in_data: ConstVoidPtr,
-    in_data_size: u32,
+    _in_data_size: u32,
 ) -> OSStatus {
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
@@ -178,7 +181,6 @@ fn AudioUnitSetProperty(
 
     match in_id {
         kAudioUnitProperty_3DMixerDistanceParams => {
-            // Исправлено: убраны явные generic-параметры для корректного вывода компилятором
             let params = env.mem.read(in_data.cast::<audio_components::MixerDistanceParams>());
             let bus = host_object.mixer_buses.entry(in_element).or_default();
             bus.distance_params = params;
@@ -186,9 +188,9 @@ fn AudioUnitSetProperty(
             if let Some(source) = bus.al_source {
                 let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                 unsafe {
-                    context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
-                    context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
-                    context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
+                    context.Sourcef(source, AL_REFERENCE_DISTANCE as u32, params.reference_distance);
+                    context.Sourcef(source, AL_MAX_DISTANCE as u32, params.maximum_distance);
+                    context.Sourcef(source, AL_ROLLOFF_FACTOR as u32, params.rolloff_factor);
                 }
             }
         }
@@ -244,7 +246,7 @@ fn AudioUnitGetProperty(
     in_unit: AudioUnit,
     in_id: AudioUnitPropertyID,
     in_scope: AudioUnitScope,
-    in_element: AudioUnitElement,
+    _in_element: AudioUnitElement,
     out_data: MutVoidPtr,
     io_data_size: MutPtr<u32>,
 ) -> OSStatus {
@@ -343,7 +345,7 @@ fn AudioUnitSetParameter(
             if let Some(source) = bus.al_source {
                  let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                  unsafe {
-                     context.Source3f(source, AL_POSITION, bus.position[0], bus.position[1], bus.position[2]);
+                     context.Source3f(source, AL_POSITION as u32, bus.position[0], bus.position[1], bus.position[2]);
                  }
             }
         }
@@ -488,8 +490,13 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         }],
     });
 
-    let _: OSStatus = callback.input_proc.call_from_host(env, (
-        callback.input_proc_ref_con, action_flags, nil.cast_void().cast_const(), 0u32, frames, abl.cast::<AudioBufferList<1>>(),
+    // ИСПРАВЛЕНИЕ ОШИБКИ E0793:
+    // Копируем поля packed-структуры во временные переменные, чтобы безопасно взять ссылку
+    let input_proc = callback.input_proc;
+    let input_proc_ref_con = callback.input_proc_ref_con;
+
+    let _: OSStatus = input_proc.call_from_host(env, (
+        input_proc_ref_con, action_flags, nil.cast_void().cast_const(), 0u32, frames, abl.cast::<AudioBufferList<1>>(),
     ));
 
     let (al_fmt, _, processed) = decode_buffer(&env.mem, &stream_format, buffer_data.cast(), buffer_size);
