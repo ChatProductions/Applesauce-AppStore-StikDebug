@@ -10,10 +10,8 @@ use std::time::Instant;
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
-// ИСПРАВЛЕНИЕ: Убраны несуществующие константы 3D-звука из импорта
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
 
-// ИСПРАВЛЕНИЕ: Объявляем нужные константы напрямую как i32 (соответствует ALenum)
 const AL_POSITION: i32 = 0x1004;
 const AL_REFERENCE_DISTANCE: i32 = 0x1020;
 const AL_ROLLOFF_FACTOR: i32 = 0x1021;
@@ -173,69 +171,80 @@ fn AudioUnitSetProperty(
     in_data: ConstVoidPtr,
     _in_data_size: u32,
 ) -> OSStatus {
-    let Some(host_object) = audio_components::State::get(&mut env.framework_state)
-        .audio_component_instances
-        .get_mut(&in_unit)
-    else {
-        return paramErr;
-    };
+    let mut update_al_distance = None;
 
-    match in_id {
-        kAudioUnitProperty_3DMixerDistanceParams => {
-            let params = env.mem.read::<audio_components::MixerDistanceParams, false>(in_data.cast());
-            let bus = host_object.mixer_buses.entry(in_element).or_default();
-            bus.distance_params = params;
+    // Ограничиваем область видимости заимствования
+    {
+        let Some(host_object) = audio_components::State::get(&mut env.framework_state)
+            .audio_component_instances
+            .get_mut(&in_unit)
+        else {
+            return paramErr;
+        };
 
-            if let Some(source) = bus.al_source {
-                let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
-                unsafe {
-                    // ИСПРАВЛЕНИЕ: Передаем константы напрямую (они уже i32)
-                    context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
-                    context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
-                    context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
+        match in_id {
+            kAudioUnitProperty_3DMixerDistanceParams => {
+                let params = env.mem.read::<audio_components::MixerDistanceParams, false>(in_data.cast());
+                let bus = host_object.mixer_buses.entry(in_element).or_default();
+                bus.distance_params = params;
+
+                // Сохраняем значения для OpenAL, чтобы применить их после завершения borrow
+                if let Some(source) = bus.al_source {
+                    update_al_distance = Some((source, params));
                 }
             }
-        }
-        kAudioUnitProperty_MatrixLevels => {
-            log_dbg!("Stubbed kAudioUnitProperty_MatrixLevels for bus {}", in_element);
-        }
-        kAudioUnitProperty_SpatializationAlgorithm |
-        kAudioUnitProperty_3DMixerRenderingFlags => {
-            log_dbg!("AudioUnitSetProperty: spatialization/rendering flags ignored");
-        }
-        kAudioUnitProperty_SetRenderCallback => {
-            let render_callback = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
-            host_object.render_callback = Some(render_callback);
-        }
-        kAudioOutputUnitProperty_SetInputCallback => {
-            let cb = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
-            host_object.render_callback = Some(cb);
-        }
-        kAudioUnitProperty_StreamFormat => {
-            let stream_format = env.mem.read::<AudioStreamBasicDescription, false>(in_data.cast());
-            log_if_broken_audio_format(&stream_format);
-            match in_scope {
-                kAudioUnitScope_Global => host_object.global_stream_format = stream_format,
-                kAudioUnitScope_Output => host_object.output_stream_format = Some(stream_format),
-                kAudioUnitScope_Input  => host_object.input_stream_format  = Some(stream_format),
-                _ => log_dbg!("AudioUnitSetProperty StreamFormat: unsupported scope {}", in_scope),
+            kAudioUnitProperty_MatrixLevels => {
+                log_dbg!("Stubbed kAudioUnitProperty_MatrixLevels for bus {}", in_element);
+            }
+            kAudioUnitProperty_SpatializationAlgorithm |
+            kAudioUnitProperty_3DMixerRenderingFlags => {
+                log_dbg!("AudioUnitSetProperty: spatialization/rendering flags ignored");
+            }
+            kAudioUnitProperty_SetRenderCallback => {
+                let render_callback = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
+                host_object.render_callback = Some(render_callback);
+            }
+            kAudioOutputUnitProperty_SetInputCallback => {
+                let cb = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
+                host_object.render_callback = Some(cb);
+            }
+            kAudioUnitProperty_StreamFormat => {
+                let stream_format = env.mem.read::<AudioStreamBasicDescription, false>(in_data.cast());
+                log_if_broken_audio_format(&stream_format);
+                match in_scope {
+                    kAudioUnitScope_Global => host_object.global_stream_format = stream_format,
+                    kAudioUnitScope_Output => host_object.output_stream_format = Some(stream_format),
+                    kAudioUnitScope_Input  => host_object.input_stream_format  = Some(stream_format),
+                    _ => log_dbg!("AudioUnitSetProperty StreamFormat: unsupported scope {}", in_scope),
+                }
+            }
+            kAudioUnitProperty_SampleRate => {
+                let rate: f64 = env.mem.read::<f64, false>(in_data.cast());
+                host_object.global_stream_format.sample_rate = rate;
+            }
+            kAudioUnitProperty_MaximumFramesPerSlice => {
+                let frames: u32 = env.mem.read::<u32, false>(in_data.cast());
+                host_object.maximum_frames_per_slice = frames;
+            }
+            kAudioUnitProperty_MakeConnection => {
+                let _conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
+            }
+            _ => {
+                log_dbg!("AudioUnitSetProperty: property {} ignored", in_id);
             }
         }
-        kAudioUnitProperty_SampleRate => {
-            let rate: f64 = env.mem.read::<f64, false>(in_data.cast());
-            host_object.global_stream_format.sample_rate = rate;
-        }
-        kAudioUnitProperty_MaximumFramesPerSlice => {
-            let frames: u32 = env.mem.read::<u32, false>(in_data.cast());
-            host_object.maximum_frames_per_slice = frames;
-        }
-        kAudioUnitProperty_MakeConnection => {
-            let _conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
-        }
-        _ => {
-            log_dbg!("AudioUnitSetProperty: property {} ignored", in_id);
+    } // Конец заимствования host_object и env.framework_state
+
+    // Теперь безопасно вызываем OpenAL
+    if let Some((source, params)) = update_al_distance {
+        let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+        unsafe {
+            context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
+            context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
+            context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
         }
     }
+
     0
 }
 
@@ -325,35 +334,46 @@ fn AudioUnitSetParameter(
     in_value: AudioUnitParameterValue,
     _in_offset: u32,
 ) -> OSStatus {
-    let Some(host_object) = audio_components::State::get(&mut env.framework_state)
-        .audio_component_instances
-        .get_mut(&in_unit)
-    else {
-        return paramErr;
-    };
+    let mut update_al_pos = None;
 
-    match in_id {
-        k3DMixerParam_Azimuth | k3DMixerParam_Elevation | k3DMixerParam_Distance => {
-            let bus = host_object.mixer_buses.entry(in_element).or_default();
-            if in_id == k3DMixerParam_Azimuth {
-                 let radians = in_value.to_radians();
-                 bus.position[0] = radians.sin();
-                 bus.position[2] = -radians.cos();
-            } else if in_id == k3DMixerParam_Elevation {
-                 let radians = in_value.to_radians();
-                 bus.position[1] = radians.sin();
+    // Ограничиваем область видимости заимствования
+    {
+        let Some(host_object) = audio_components::State::get(&mut env.framework_state)
+            .audio_component_instances
+            .get_mut(&in_unit)
+        else {
+            return paramErr;
+        };
+
+        match in_id {
+            k3DMixerParam_Azimuth | k3DMixerParam_Elevation | k3DMixerParam_Distance => {
+                let bus = host_object.mixer_buses.entry(in_element).or_default();
+                if in_id == k3DMixerParam_Azimuth {
+                     let radians = in_value.to_radians();
+                     bus.position[0] = radians.sin();
+                     bus.position[2] = -radians.cos();
+                } else if in_id == k3DMixerParam_Elevation {
+                     let radians = in_value.to_radians();
+                     bus.position[1] = radians.sin();
+                }
+                
+                // Сохраняем значения для OpenAL
+                if let Some(source) = bus.al_source {
+                     update_al_pos = Some((source, bus.position));
+                }
             }
-            
-            if let Some(source) = bus.al_source {
-                 let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
-                 unsafe {
-                     // ИСПРАВЛЕНИЕ: Используем AL_POSITION напрямую
-                     context.Source3f(source, AL_POSITION, bus.position[0], bus.position[1], bus.position[2]);
-                 }
-            }
+            _ => {}
         }
-        _ => {}
+    } // Конец заимствования
+
+    // Теперь безопасно вызываем OpenAL
+    if let Some((source, pos)) = update_al_pos {
+        let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
+        unsafe {
+             context.Source3f(source, AL_POSITION, pos[0], pos[1], pos[2]);
+        }
     }
+
     0
 }
 
