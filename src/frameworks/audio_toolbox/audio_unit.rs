@@ -12,7 +12,7 @@ use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
 
-// Добавляем недостающие константы OpenAL напрямую
+// Константы OpenAL напрямую (в формате i32, чтобы компилятор не ругался)
 const AL_POSITION: i32 = 0x1004;
 const AL_REFERENCE_DISTANCE: i32 = 0x1020;
 const AL_ROLLOFF_FACTOR: i32 = 0x1021;
@@ -181,16 +181,17 @@ fn AudioUnitSetProperty(
 
     match in_id {
         kAudioUnitProperty_3DMixerDistanceParams => {
-            let params = env.mem.read(in_data.cast::<audio_components::MixerDistanceParams>());
+            let params = env.mem.read::<audio_components::MixerDistanceParams, false>(in_data.cast());
             let bus = host_object.mixer_buses.entry(in_element).or_default();
             bus.distance_params = params;
 
             if let Some(source) = bus.al_source {
                 let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                 unsafe {
-                    context.Sourcef(source, AL_REFERENCE_DISTANCE as u32, params.reference_distance);
-                    context.Sourcef(source, AL_MAX_DISTANCE as u32, params.maximum_distance);
-                    context.Sourcef(source, AL_ROLLOFF_FACTOR as u32, params.rolloff_factor);
+                    // Исправлено: Убрали 'as u32', теперь типы совпадают (i32)
+                    context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
+                    context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
+                    context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
                 }
             }
         }
@@ -202,15 +203,15 @@ fn AudioUnitSetProperty(
             log_dbg!("AudioUnitSetProperty: spatialization/rendering flags ignored");
         }
         kAudioUnitProperty_SetRenderCallback => {
-            let render_callback = env.mem.read(in_data.cast::<AURenderCallbackStruct>());
+            let render_callback = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
             host_object.render_callback = Some(render_callback);
         }
         kAudioOutputUnitProperty_SetInputCallback => {
-            let cb = env.mem.read(in_data.cast::<AURenderCallbackStruct>());
+            let cb = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
             host_object.render_callback = Some(cb);
         }
         kAudioUnitProperty_StreamFormat => {
-            let stream_format = env.mem.read(in_data.cast::<AudioStreamBasicDescription>());
+            let stream_format = env.mem.read::<AudioStreamBasicDescription, false>(in_data.cast());
             log_if_broken_audio_format(&stream_format);
             match in_scope {
                 kAudioUnitScope_Global => host_object.global_stream_format = stream_format,
@@ -220,15 +221,15 @@ fn AudioUnitSetProperty(
             }
         }
         kAudioUnitProperty_SampleRate => {
-            let rate: f64 = env.mem.read(in_data.cast());
+            let rate: f64 = env.mem.read::<f64, false>(in_data.cast());
             host_object.global_stream_format.sample_rate = rate;
         }
         kAudioUnitProperty_MaximumFramesPerSlice => {
-            let frames: u32 = env.mem.read(in_data.cast());
+            let frames: u32 = env.mem.read::<u32, false>(in_data.cast());
             host_object.maximum_frames_per_slice = frames;
         }
         kAudioUnitProperty_MakeConnection => {
-            let _conn = env.mem.read(in_data.cast::<AudioUnitConnection>());
+            let _conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
         }
         _ => {
             log_dbg!("AudioUnitSetProperty: property {} ignored", in_id);
@@ -345,7 +346,8 @@ fn AudioUnitSetParameter(
             if let Some(source) = bus.al_source {
                  let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
                  unsafe {
-                     context.Source3f(source, AL_POSITION as u32, bus.position[0], bus.position[1], bus.position[2]);
+                     // Исправлено: Убрали 'as u32'
+                     context.Source3f(source, AL_POSITION, bus.position[0], bus.position[1], bus.position[2]);
                  }
             }
         }
@@ -490,8 +492,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         }],
     });
 
-    // ИСПРАВЛЕНИЕ ОШИБКИ E0793:
-    // Копируем поля packed-структуры во временные переменные, чтобы безопасно взять ссылку
+    // Решение ошибки с packed-структурами (скопировали поля в локальные переменные)
     let input_proc = callback.input_proc;
     let input_proc_ref_con = callback.input_proc_ref_con;
 
