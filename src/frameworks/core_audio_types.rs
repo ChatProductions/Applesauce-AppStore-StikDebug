@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! The Core Audio Types framework. (Yes, it's not part of Core Audio?)
@@ -9,11 +10,13 @@ use crate::mem::SafeRead;
 
 // The audio frameworks love FourCC's, and we currently don't need these
 // anywhere else, so this is as good a place to put this as any.
+
 /// Get the 32-bit integer corresponding to a FourCC. Where you'd write
 /// `'e.g.'` in C, write `fourcc(b"e.g.")` in Rust.
 pub const fn fourcc(fourcc: &[u8; 4]) -> u32 {
     u32::from_be_bytes(*fourcc)
 }
+
 /// Display a FourCC appropriately for debugging.
 pub fn debug_fourcc(fourcc: u32) -> String {
     if let Ok(utf8) = std::str::from_utf8(&fourcc.to_be_bytes()) {
@@ -38,6 +41,7 @@ pub struct AudioStreamBasicDescription {
     pub _reserved: u32,
 }
 unsafe impl SafeRead for AudioStreamBasicDescription {}
+
 impl std::fmt::Debug for AudioStreamBasicDescription {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let &AudioStreamBasicDescription {
@@ -51,6 +55,7 @@ impl std::fmt::Debug for AudioStreamBasicDescription {
             bits_per_channel,
             _reserved,
         } = self;
+
         f.debug_struct("AudioStreamBasicDescription")
             .field("sample_rate", &sample_rate)
             .field("format_id", &debug_fourcc(format_id))
@@ -78,6 +83,32 @@ impl std::fmt::Debug for AudioStreamBasicDescription {
             .finish()
     }
 }
+
+#[repr(C, packed)]
+pub struct SMPTETime {
+    pub subframes: i16,
+    pub subframe_divisor: i16,
+    pub counter: u32,
+    pub type_: u32,
+    pub flags: u32,
+    pub hours: i16,
+    pub minutes: i16,
+    pub seconds: i16,
+    pub frames: i16,
+}
+unsafe impl SafeRead for SMPTETime {}
+
+#[repr(C, packed)]
+pub struct AudioTimeStamp {
+    pub sample_time: f64,
+    pub host_time: u64,
+    pub rate_scalar: f64,
+    pub world_clock_type: u64,
+    pub SMPTE_time: SMPTETime,
+    pub flags: u32,
+    pub _reserved: u32,
+}
+unsafe impl SafeRead for AudioTimeStamp {}
 
 /// Usually a FourCC.
 pub type AudioFormatID = u32;
