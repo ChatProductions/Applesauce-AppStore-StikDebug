@@ -139,12 +139,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, url);
 
     // Create a dummy view to avoid null pointer dereferences when the app
-    // accesses player.view.  We retain it explicitly so the host object
+    // accesses player.view.
+    // We retain it explicitly so the host object
     // conceptually owns it.
     let view_alloc: id = msg_class![env; UIView alloc];
     let view: id = msg![env; view_alloc init];
     retain(env, view);
-
     {
         let host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
         host.content_url = url;
@@ -157,7 +157,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         this,
         Instant::now(),
     ));
-
     this
 }
 
@@ -328,7 +327,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())prepareToPlay {
-    // Act as if we are immediately prepared; no real playback yet.
+    // Act as if we are immediately prepared;
+    // no real playback yet.
 }
 
 // Apparently an undocumented, private API, but Spore Origins uses it.
@@ -357,7 +357,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Movie player is retained by the runtime until it is stopped
     retain(env, this);
     env.framework_state.media_player.movie_player.active_player = Some(this);
-
     // Act as if playback immediately completed after 1 second
     // (various apps wait for this, such as BIA and Hero of Sparta).
     let notif = (
@@ -450,4 +449,3 @@ pub(super) fn handle_players(env: &mut Environment) {
         let _: () = msg![env; center postNotificationName:name object:object];
     }
 }
-
