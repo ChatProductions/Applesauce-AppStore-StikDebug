@@ -225,6 +225,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     44100.0
 }
 
+- (f64)currentHardwareSampleRate {
+    msg![env; this sampleRate]
+}
+
+- (f64)preferredHardwareSampleRate {
+    msg![env; this preferredSampleRate]
+}
+
+- (bool)setPreferredHardwareSampleRate:(f64)rate error:(MutPtr<id>)error {
+    // Честно пробрасываем в уже существующий метод
+    msg![env; this setPreferredSampleRate:rate error:error]
+}
+
+- (f32)currentHardwareOutputVolume {
+    msg![env; this outputVolume]
+}
+
+- (f64)currentHardwareInputLatency {
+    msg![env; this inputLatency]
+}
+
+- (f64)currentHardwareOutputLatency {
+    msg![env; this outputLatency]
+}
+
+- (NSInteger)currentHardwareInputNumberOfChannels {
+    msg![env; this maximumInputNumberOfChannels]
+}
+
+- (NSInteger)currentHardwareOutputNumberOfChannels {
+    msg![env; this maximumOutputNumberOfChannels]
+}
+    
 - (f64)outputLatency {
     0.005 // 5ms — typical for built-in speaker
 }
