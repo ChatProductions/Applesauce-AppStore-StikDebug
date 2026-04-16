@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 //! AddressBook.framework stub
 
-use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
+use crate::dyld::{export_c_func, FunctionExports, HostDylib};
 use crate::frameworks::core_foundation::CFIndex;
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::mem::{MutVoidPtr, Ptr};
@@ -358,18 +358,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ABMultiValueRemoveValueAndLabelAtIndex(_, _)),
 ];
 
-// Добавляем экспорт глобальных свойств AddressBook
-pub const CONSTANTS: ConstantExports = &[
-    // kABPersonEmailProperty — это ID свойства (int32). 
-    // Используем S32 (Signed 32-bit), так как I32 не найден.
-    ("_kABPersonEmailProperty", HostConstant::U32(5)),
-];
-
 pub const DYLIB: HostDylib = HostDylib {
     path: "/System/Library/Frameworks/AddressBook.framework/AddressBook",
     aliases: &[],
     class_exports: &[],
-    constant_exports: &[CONSTANTS],
+    constant_exports: &[],
     function_exports: &[FUNCTIONS],
 };
 
