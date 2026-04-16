@@ -15,3 +15,8 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[],
     function_exports: &[],
 };
+
+#[derive(Default)]
+pub struct State {
+    pub payment_queue: sk_payment_queue::State,
+}

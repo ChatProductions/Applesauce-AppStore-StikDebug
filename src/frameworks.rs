@@ -37,7 +37,6 @@ pub mod core_location;
 pub mod core_motion;
 pub mod core_video;
 pub mod foundation;
-pub mod game_controller;
 pub mod game_kit;
 pub mod libicucore;
 pub mod libsqlite3;
@@ -58,6 +57,7 @@ pub struct State {
     core_animation: core_animation::State,
     foundation: foundation::State,
     pub game_kit: game_kit::State,
+	pub store_kit: store_kit::State,
     media_player: media_player::State,
     openal: openal::State,
     opengles: opengles::State,

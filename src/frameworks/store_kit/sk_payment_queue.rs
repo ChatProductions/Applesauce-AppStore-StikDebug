@@ -11,6 +11,21 @@ use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
+use crate::Environment;
+
+// MARK: - Per-process state
+
+/// Singleton cache for `[SKPaymentQueue defaultQueue]`.
+#[derive(Default)]
+pub struct State {
+    default_queue: Option<id>,
+}
+
+impl State {
+    fn get(env: &mut Environment) -> &mut State {
+        &mut env.framework_state.store_kit.payment_queue
+    }
+}
 
 struct SKPaymentQueueHostObject {
     /// SKPaymentTransactionObserver — weak reference
@@ -34,10 +49,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Singleton
 
 + (id)defaultQueue {
-    // Return a fresh autoreleased stub instance.
+    // Always return the same singleton so observers are not lost between calls.
+    if let Some(queue) = State::get(env).default_queue {
+        return queue;
+    }
     let queue: id = msg![env; this alloc];
     let queue: id = msg![env; queue init];
-    autorelease(env, queue)
+    // refcount=1 is our singleton retain — do NOT autorelease
+    State::get(env).default_queue = Some(queue);
+    log!("SKPaymentQueue defaultQueue: singleton created");
+    queue
 }
 
 + (bool)canMakePayments {
