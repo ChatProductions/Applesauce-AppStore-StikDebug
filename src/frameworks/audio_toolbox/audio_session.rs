@@ -297,28 +297,6 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
     }
 }
 
-fn AudioSessionInitialize(
-    env: &mut Environment,
-    _in_run_loop: CFRunLoopRef,
-    _in_run_loop_mode: CFRunLoopMode,
-    in_interruption_listener: AudioSessionInterruptionListener,
-    in_client_data: MutVoidPtr,
-) -> OSStatus {
-    let state = &mut env.framework_state.audio_toolbox.audio_session;
-    
-    // Сохраняем обработчик прерываний (например, для имитации паузы аудио)
-    state.interruption_listener = Some(in_interruption_listener);
-    state.client_data = in_client_data;
-
-    log!(
-        "AudioSession initialized with listener {:?} and data {:?}",
-        in_interruption_listener,
-        in_client_data
-    );
-
-    0 // kAudioSessionNoError
-}
-
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
     export_c_func!(AudioSessionGetProperty(_, _, _)),
