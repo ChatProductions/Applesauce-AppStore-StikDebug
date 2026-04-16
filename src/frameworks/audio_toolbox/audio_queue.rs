@@ -32,9 +32,6 @@ use crate::objc::msg;
 use crate::Environment;
 use std::collections::{HashMap, VecDeque};
 
-// Недостающая OpenAL константа для таймлайна
-pub const AL_SAMPLE_OFFSET: ALenum = 0x1025;
-
 #[derive(Default)]
 pub struct State {
     audio_queues: HashMap<AudioQueueRef, AudioQueueHostObject>,
@@ -79,7 +76,6 @@ struct AudioQueueHostObject {
     is_running_handler: bool,
     is_input: bool,
     input_delay: u32,
-    timeline: Option<AudioQueueTimelineRef>,
 }
 
 /// Track whether the audio queue is meant to be running, in order to handle
@@ -100,26 +96,6 @@ pub struct OpaqueAudioQueue {
 unsafe impl SafeRead for OpaqueAudioQueue {}
 
 pub type AudioQueueRef = MutPtr<OpaqueAudioQueue>;
-
-#[repr(C, packed)]
-pub struct OpaqueAudioQueueTimeline {
-    _filler: u8,
-}
-unsafe impl SafeRead for OpaqueAudioQueueTimeline {}
-
-pub type AudioQueueTimelineRef = MutPtr<OpaqueAudioQueueTimeline>;
-
-#[repr(C)]
-pub struct TimelineAudioTimeStamp {
-    pub sample_time: f64,
-    pub host_time: u64,
-    pub rate_scalar: f64,
-    pub word_clock_time: u64,
-    pub smpte_time: [u8; 24],
-    pub flags: u32,
-    pub reserved: u32,
-}
-unsafe impl SafeRead for TimelineAudioTimeStamp {}
 
 #[repr(C, packed)]
 pub struct AudioQueueBuffer {
@@ -149,6 +125,7 @@ pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
 const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
 const kAudioQueueProperty_StreamDescription: AudioQueuePropertyID = fourcc(b"aqft");
+const kAudioQueueDeviceProperty_SampleRate: AudioQueuePropertyID = fourcc(b"aqsr");
 type AudioQueuePropertyListenerProc = GuestFunction;
 
 const kAudioQueueErr_InvalidBuffer: OSStatus = -66687;
@@ -238,6 +215,7 @@ pub fn AudioQueueNewOutput(
             
             // Если bytes_per_frame дает стандартный битрейт (8, 16, 24, 32), верим ему
             if true_bits_per_channel == 8 || true_bits_per_channel == 16 || true_bits_per_channel == 24 || true_bits_per_channel == 32 {
+                // Копируем значения в локальные переменные для безопасной передачи в макрос
                 let old_bits = format.bits_per_channel;
                 let current_bytes_per_frame = format.bytes_per_frame;
                 
@@ -245,6 +223,7 @@ pub fn AudioQueueNewOutput(
                      old_bits, true_bits_per_channel, current_bytes_per_frame);
                 format.bits_per_channel = true_bits_per_channel;
             } else {
+                // Копируем значение
                 let old_bytes_per_frame = format.bytes_per_frame;
                 log!("Applying generic hack: Fixing inconsistent bytes_per_frame from {} to {}", 
                      old_bytes_per_frame, expected_bytes_per_frame);
@@ -255,6 +234,7 @@ pub fn AudioQueueNewOutput(
         // Также исправляем bytes_per_packet, если он сломан
         let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
         if format.bytes_per_packet > 0 && format.bytes_per_packet != expected_bytes_per_packet {
+            // Копируем значение
             let old_bytes_per_packet = format.bytes_per_packet;
             log!("Applying generic hack: Fixing inconsistent bytes_per_packet from {} to {}", 
                  old_bytes_per_packet, expected_bytes_per_packet);
@@ -278,7 +258,6 @@ pub fn AudioQueueNewOutput(
         is_running_handler: false,
         is_input: false,
         input_delay: 0,
-        timeline: None,
     };
 
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
@@ -289,6 +268,7 @@ pub fn AudioQueueNewOutput(
 
     ns_run_loop::add_audio_queue(env, in_callback_run_loop, aq_ref);
 
+    // Теперь формат исправлен и эта проверка не выдаст предупреждение для 32/16-битной путаницы
     log_if_broken_audio_format(&format);
     if !is_supported_audio_format(&format) {
         log_dbg!("Warning: Audio queue {:?} will be ignored because its format is not yet supported: {:#?}", aq_ref, format);
@@ -329,6 +309,8 @@ pub fn AudioQueueSetParameter(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
+    // assert!(in_param_id == kAudioQueueParam_Volume); // others unimplemented
+
     let state = State::get(&mut env.framework_state);
     let host_object = match state.audio_queues.get_mut(&in_aq) {
         Some(obj) => obj,
@@ -344,10 +326,15 @@ pub fn AudioQueueSetParameter(
             .framework_state
             .audio_toolbox
             .make_al_context_current(&mut env.openal_manager);
+        // If not clamped, OpenAL generates an error.
+        // While Apple's docs states that this range is expected,
+        // setting outside of range values do not generate errors
+        // (tested on both macOS and iOS).
         let in_value = in_value.clamp(0.0, 1.0);
 
         unsafe {
             context.Sourcef(al_source, al::AL_MAX_GAIN, in_value);
+            // assert!(context.GetError() == 0);
         }
     }
 
@@ -520,6 +507,7 @@ fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
         kAudioQueueProperty_IsRunning => Some(guest_size_of::<u32>()),
         kAudioQueueProperty_MagicCookie => Some(0),
         kAudioQueueProperty_StreamDescription => Some(guest_size_of::<AudioStreamBasicDescription>()),
+        kAudioQueueDeviceProperty_SampleRate => Some(guest_size_of::<f64>()),
         _ => None,
     }
 }
@@ -591,6 +579,10 @@ fn AudioQueueGetProperty(
         }
         kAudioQueueProperty_StreamDescription => {
             env.mem.write(out_property_data.cast(), host_object.format);
+        }
+        kAudioQueueDeviceProperty_SampleRate => {
+            // Возвращаем частоту дискретизации аудио как 8-байтовое float-число
+            env.mem.write(out_property_data.cast(), host_object.format.sample_rate);
         }
         _ => unreachable!(),
     }
@@ -671,6 +663,7 @@ pub fn decode_buffer(
     audio_data_byte_size: GuestUSize,
 ) -> (ALenum, ALsizei, Vec<u8>) {
     let data_slice = mem.bytes_at(audio_data, audio_data_byte_size);
+    // assert!(is_supported_audio_format(format));
 
     match format.format_id {
         kAudioFormatAppleIMA4 => {
@@ -1239,10 +1232,6 @@ pub fn AudioQueueDispose(
     let mut host_object = state.audio_queues.remove(&in_aq).unwrap();
     log_dbg!("Disposing of audio queue {:?}", in_aq);
 
-    if let Some(timeline) = host_object.timeline {
-        env.mem.free(timeline.cast());
-    }
-
     env.mem.free(in_aq.cast());
     for buffer_ptr in host_object.buffers {
         let buffer = env.mem.read(buffer_ptr);
@@ -1308,7 +1297,6 @@ pub fn AudioQueueNewInput(
         is_running_handler: false,
         is_input: true,
         input_delay: 0,
-        timeline: None,
     };
     let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
     State::get(&mut env.framework_state)
@@ -1320,117 +1308,6 @@ pub fn AudioQueueNewInput(
 
     ns_run_loop::add_audio_queue(env, in_callback_run_loop, aq_ref);
     0
-}
-
-pub fn AudioQueueCreateTimeline(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    out_timeline: MutPtr<AudioQueueTimelineRef>,
-) -> OSStatus {
-    return_if_null!(in_aq);
-    if out_timeline.is_null() {
-        return -50; // paramErr
-    }
-
-    let state = State::get(&mut env.framework_state);
-    let host_object = match state.audio_queues.get_mut(&in_aq) {
-        Some(obj) => obj,
-        None => return -50,
-    };
-
-    if let Some(existing_timeline) = host_object.timeline {
-        env.mem.free(existing_timeline.cast());
-    }
-
-    let timeline_ref = env.mem.alloc_and_write(OpaqueAudioQueueTimeline { _filler: 0 });
-    host_object.timeline = Some(timeline_ref);
-    env.mem.write(out_timeline, timeline_ref);
-
-    log_dbg!("AudioQueueCreateTimeline: created timeline {:?} for queue {:?}", timeline_ref, in_aq);
-    0
-}
-
-pub fn AudioQueueDisposeTimeline(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    in_timeline: AudioQueueTimelineRef,
-) -> OSStatus {
-    return_if_null!(in_aq);
-    return_if_null!(in_timeline);
-
-    let state = State::get(&mut env.framework_state);
-    let host_object = match state.audio_queues.get_mut(&in_aq) {
-        Some(obj) => obj,
-        None => return -50,
-    };
-
-    if host_object.timeline == Some(in_timeline) {
-        env.mem.free(in_timeline.cast());
-        host_object.timeline = None;
-        log_dbg!("AudioQueueDisposeTimeline: disposed timeline {:?} for queue {:?}", in_timeline, in_aq);
-        0
-    } else {
-        -50
-    }
-}
-
-pub fn AudioQueueGetCurrentTime(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    _in_timeline: AudioQueueTimelineRef,
-    out_time_stamp: MutVoidPtr,
-    out_timeline_discontinuity: MutPtr<u8>,
-) -> OSStatus {
-    return_if_null!(in_aq);
-    if out_time_stamp.is_null() {
-        return -50;
-    }
-
-    let (state, context) = State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
-    let host_object = match state.audio_queues.get_mut(&in_aq) {
-        Some(obj) => obj,
-        None => return -50,
-    };
-
-    let mut sample_time = 0.0f64;
-
-    if host_object.is_running != AudioQueueIsRunning::Stopped {
-        if let Some(al_source) = host_object.al_source {
-            let mut sample_offset = 0;
-            unsafe {
-                context.GetSourcei(al_source, AL_SAMPLE_OFFSET, &mut sample_offset);
-            }
-            sample_time = sample_offset as f64;
-        }
-    }
-
-    let timestamp = TimelineAudioTimeStamp {
-        sample_time,
-        host_time: 0,
-        rate_scalar: 1.0,
-        word_clock_time: 0,
-        smpte_time: [0; 24],
-        flags: 1, // kAudioTimeStampSampleTimeValid
-        reserved: 0,
-    };
-
-    env.mem.write(out_time_stamp.cast(), timestamp);
-
-    if !out_timeline_discontinuity.is_null() {
-        env.mem.write(out_timeline_discontinuity, 0); // No discontinuity in current emulation
-    }
-
-    0
-}
-
-pub fn AudioQueueDeviceGetCurrentTime(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    out_time_stamp: MutVoidPtr,
-) -> OSStatus {
-    // В рамках абстракции OpenAL для эмулятора, время устройства
-    // по факту совпадает с временем конкретной очереди.
-    AudioQueueGetCurrentTime(env, in_aq, Ptr::null(), out_time_stamp, Ptr::null())
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -1466,11 +1343,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueFreeBuffer(_, _)),
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
-    
-    // Новые функции таймлайна с правильным количеством параметров
-    export_c_func!(AudioQueueCreateTimeline(_, _)),
-    export_c_func!(AudioQueueDisposeTimeline(_, _)),
-    export_c_func!(AudioQueueGetCurrentTime(_, _, _, _)),
-    export_c_func!(AudioQueueDeviceGetCurrentTime(_, _)),
 ];
 
