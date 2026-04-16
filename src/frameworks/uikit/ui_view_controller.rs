@@ -271,10 +271,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         return host.nib_name;
     }
 
-    let bundle = msg![env; this nibBundle];
+    let bundle: id = msg![env; this nibBundle];
     if bundle == nil { return nil; }
 
-    let class_name: id = NSStringFromClass(env, msg![env; this class]);
+    // ИСПРАВЛЕНО: Разбито на две строки, чтобы избежать E0499 (multiple mutable borrows)
+    let class: Class = msg![env; this class];
+    let class_name: id = NSStringFromClass(env, class);
+    
     let resolved = resolve_nib_name_from_class(env, bundle, class_name);
     release(env, class_name);
     if resolved != nil {
