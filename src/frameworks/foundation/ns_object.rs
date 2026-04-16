@@ -439,6 +439,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     0
 }
 
+- (())zone {
+
+}
+
 - (Class)superclass {
     nil
 }
