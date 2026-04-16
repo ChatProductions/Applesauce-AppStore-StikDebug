@@ -120,6 +120,7 @@ fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
     0
 }
 
+#[allow(rustdoc::broken_intra_doc_links)]
 fn count_whitespace_generic<
     T,
     U,
@@ -238,7 +239,13 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
         }
         return Ptr::null();
     };
-    log_dbg!("getenv({:?}) => {:?}", name, value);
+    log_dbg!(
+        "getenv({:?} ({:?})) => {:?} ({:?})",
+        name,
+        name_cstr,
+        value,
+        env.mem.cstr_at_utf8(value),
+    );
     value
 }
 
@@ -292,21 +299,33 @@ fn bsearch(
     items: ConstVoidPtr,
     item_count: GuestUSize,
     item_size: GuestUSize,
-    compare_callback: GuestFunction,
+    compare_callback: GuestFunction, // (*int)(const void*, const void*)
 ) -> ConstVoidPtr {
+    log_dbg!(
+        "binary search for {:?} in {} items of size {:#x} starting at {:?}",
+        key,
+        item_count,
+        item_size,
+        items
+    );
     let mut low = 0;
     let mut len = item_count;
     while len > 0 {
         let half_len = len / 2;
         let item: ConstVoidPtr = (items.cast::<u8>() + item_size * (low + half_len)).cast();
+        // key must be first argument
         let cmp_result: i32 = compare_callback.call_from_host(env, (key, item));
         (low, len) = match cmp_result.signum() {
-            0 => return item,
+            0 => {
+                log_dbg!("=> {:?}", item);
+                return item;
+            }
             1 => (low + half_len + 1, len - half_len - 1),
             -1 => (low, half_len),
             _ => unreachable!(),
         }
     }
+    log_dbg!("=> NULL (not found)");
     Ptr::null()
 }
 
@@ -331,9 +350,9 @@ pub fn strtoul(
         |env, s, idx| Ok(env.mem.read(s + idx)),
         |_, _, _| (),
         str.cast_mut(),
-        0,
+        0, // starting offset
         base.try_into().unwrap(),
-        u32::MAX,
+        u32::MAX, // max_length
         |s, base| u32::from_str_radix(s, base).unwrap_or(u32::MAX),
         |num| num.wrapping_neg(),
     );
@@ -365,7 +384,7 @@ fn strtoull(
         |env, s, idx| Ok(env.mem.read(s + idx)),
         |_, _, _| (),
         str.cast_mut(),
-        0,
+        0, // starting offset
         base.try_into().unwrap(),
         u32::MAX, // <--- ИСПРАВЛЕНО НА u32::MAX
         |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
@@ -472,8 +491,7 @@ fn wcstombs(
 
 fn system(env: &mut Environment, cmd: ConstPtr<u8>) -> i32 {
     if cmd.is_null() {
-        return 1;
-        // shell is available
+        return 1; // shell is available
     }
     let cmd_str = env.mem.cstr_at_utf8(cmd).unwrap_or("").to_string();
     log!("system({:?})", cmd_str);
@@ -614,7 +632,6 @@ fn _gcvt(
     buf: MutPtr<u8>,
 ) -> MutPtr<u8> {
     set_errno(env, 0);
-    
     let ndigit = ndigit.max(0) as usize;
     // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт Display
     // с указанием точности (количества знаков после запятой).
@@ -622,7 +639,6 @@ fn _gcvt(
     
     let bytes = s.as_bytes();
     let len = bytes.len() as GuestUSize;
-    
     if !buf.is_null() {
         env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes);
         env.mem.write(buf + len, b'\0');
@@ -648,7 +664,6 @@ fn mbtowc_l(
 
     let s_ptr: ConstPtr<u8> = s.cast();
     let first_byte: u8 = env.mem.read(s_ptr);
-
     if first_byte == 0 {
         if !pwc.is_null() {
             env.mem.write(pwc, 0);
@@ -726,7 +741,6 @@ struct div_t {
 }
 unsafe impl SafeRead for div_t {}
 impl_GuestRet_for_large_struct!(div_t);
-
 fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
     div_t {
         quot: numer.wrapping_div(denom),
@@ -799,7 +813,13 @@ pub fn atof_inner(
     )
 }
 
-pub fn atof_inner_generic<T, U, F1, F2>(
+#[allow(rustdoc::broken_intra_doc_links)]
+pub fn atof_inner_generic<
+    T,
+    U,
+    F1: Fn(&mut Environment, MutPtr<U>, GuestUSize) -> Result<T, ()>,
+    F2: Fn(&mut Environment, MutPtr<U>, u8), 
+>(
     env: &mut Environment,
     getc_fn: F1,
     ungetc_fn: F2,
@@ -808,8 +828,6 @@ pub fn atof_inner_generic<T, U, F1, F2>(
 ) -> Result<(f64, u32), <f64 as FromStr>::Err>
 where
     u8: From<T>,
-    F1: Fn(&mut Environment, MutPtr<U>, GuestUSize) -> Result<T, ()>,
-    F2: Fn(&mut Environment, MutPtr<U>, u8),
 {
     let mut whitespace_len = 0;
     let mut len = 0;
@@ -863,9 +881,12 @@ where
             }
         }
         ungetc_fn(env, subject, curr);
+        assert_eq!(chars.len() as u32, len);
         Ok(())
     }();
+    
     let s = std::str::from_utf8(&chars).unwrap();
+    log_dbg!("atof_inner_generic('{}')", s);
     s.parse().map(|result| (result, whitespace_len + len))
 }
 
@@ -985,9 +1006,14 @@ where
             curr = getc_fn(env, subject, offset + whitespace_len + len)?.into();
         }
         ungetc_fn(env, subject, curr);
+        assert_eq!(chars.len() as u32, len - prefix_length);
         Ok(())
     }();
+    
     let s = std::str::from_utf8(&chars).unwrap();
+    log_dbg!("strtol_inner_generic('{}', {})", s, base);
+
+    assert!((2..=36).contains(&base));
     let magnitude_len = len - prefix_length;
     let res = if magnitude_len > 0 {
         let mut res = from_str_radix_fn(s, base);
