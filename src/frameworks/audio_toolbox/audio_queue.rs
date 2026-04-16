@@ -27,7 +27,6 @@ use crate::frameworks::core_foundation::cf_run_loop::{
 };
 use crate::frameworks::foundation::ns_run_loop;
 use crate::frameworks::foundation::ns_string::get_static_str;
-// ИСПРАВЛЕНИЕ: Добавлен ConstVoidPtr в импорт ниже
 use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::objc::msg;
 use crate::Environment;
@@ -561,6 +560,9 @@ fn AudioQueueGetProperty(
             // No magic cookie available; size is 0, nothing to write.
             log_dbg!("AudioQueueGetProperty: kAudioQueueProperty_MagicCookie requested, returning empty.");
         }
+        kAudioQueueProperty_StreamDescription => {
+            env.mem.write(out_property_data.cast(), host_object.format);
+        }
         _ => unreachable!(),
     }
 
@@ -748,11 +750,7 @@ pub fn decode_buffer(
                 (2, 8) => al::AL_FORMAT_STEREO8,
                 (2, 16) => al::AL_FORMAT_STEREO16,
                 (2, 32) => {
-                    // assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
-                    // assert!(processed_data.len().is_multiple_of(4));
                     let new_size = (processed_data.len() / 4) * 2;
-
-                    // size from 32-bit to 16-bit
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
                     for chunk in processed_data.chunks(4) {
@@ -762,6 +760,22 @@ pub fn decode_buffer(
                     }
                     return (
                         al::AL_FORMAT_STEREO16,
+                        format.sample_rate as ALsizei,
+                        new_processed_data,
+                    );
+                }
+                // ИСПРАВЛЕНИЕ: Добавлена поддержка 32-битного моно звука для избежания паники
+                (1, 32) => {
+                    let new_size = (processed_data.len() / 4) * 2;
+                    let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
+
+                    for chunk in processed_data.chunks(4) {
+                        let val: i32 = i32::from_le_bytes(chunk.try_into().unwrap());
+                        let new_val: i16 = (val >> 16) as i16;
+                        new_processed_data.extend(new_val.to_le_bytes());
+                    }
+                    return (
+                        al::AL_FORMAT_MONO16,
                         format.sample_rate as ALsizei,
                         new_processed_data,
                     );
@@ -1368,4 +1382,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
 ];
-
