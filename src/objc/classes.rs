@@ -1160,3 +1160,11 @@ pub fn class_replaceMethod(env: &mut crate::Environment, cls: Class, name: SEL) 
     // Если прошли всю цепочку и ничего не нашли, метод не существует
     ConstVoidPtr::null()
 }
+
+pub fn objc_retain(env: &mut crate::Environment, obj: id) -> id {
+    if !obj.is_null() {
+        // Честно вызываем внутренний механизм удержания объекта эмулятором
+        crate::objc::retain(env, obj);
+    }
+    obj
+}
