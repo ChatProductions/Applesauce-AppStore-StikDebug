@@ -32,6 +32,9 @@ use crate::objc::msg;
 use crate::Environment;
 use std::collections::{HashMap, VecDeque};
 
+// Недостающая OpenAL константа для таймлайна
+pub const AL_SAMPLE_OFFSET: ALenum = 0x1025;
+
 #[derive(Default)]
 pub struct State {
     audio_queues: HashMap<AudioQueueRef, AudioQueueHostObject>,
@@ -107,7 +110,7 @@ unsafe impl SafeRead for OpaqueAudioQueueTimeline {}
 pub type AudioQueueTimelineRef = MutPtr<OpaqueAudioQueueTimeline>;
 
 #[repr(C)]
-pub struct ImplAudioTimeStamp {
+pub struct TimelineAudioTimeStamp {
     pub sample_time: f64,
     pub host_time: u64,
     pub rate_scalar: f64,
@@ -116,7 +119,7 @@ pub struct ImplAudioTimeStamp {
     pub flags: u32,
     pub reserved: u32,
 }
-unsafe impl SafeRead for ImplAudioTimeStamp {}
+unsafe impl SafeRead for TimelineAudioTimeStamp {}
 
 #[repr(C, packed)]
 pub struct AudioQueueBuffer {
@@ -1395,13 +1398,13 @@ pub fn AudioQueueGetCurrentTime(
         if let Some(al_source) = host_object.al_source {
             let mut sample_offset = 0;
             unsafe {
-                context.GetSourcei(al_source, al::AL_SAMPLE_OFFSET, &mut sample_offset);
+                context.GetSourcei(al_source, AL_SAMPLE_OFFSET, &mut sample_offset);
             }
             sample_time = sample_offset as f64;
         }
     }
 
-    let timestamp = ImplAudioTimeStamp {
+    let timestamp = TimelineAudioTimeStamp {
         sample_time,
         host_time: 0,
         rate_scalar: 1.0,
@@ -1448,7 +1451,7 @@ pub const FUNCTIONS: FunctionExports = &[
         _,
         _,
         _
-    )), // бля нахуя сисиплюсплюс так сделал сука
+    )),
     export_c_func!(AudioQueueAddPropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueRemovePropertyListener(_, _, _, _)),
     export_c_func!(AudioQueueGetPropertySize(_, _, _)),
@@ -1463,9 +1466,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueFreeBuffer(_, _)),
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
-    export_c_func!(AudioQueueCreateTimeline(_, _, _)),
-    export_c_func!(AudioQueueDisposeTimeline(_, _, _)),
-    export_c_func!(AudioQueueGetCurrentTime(_, _, _, _, _)),
-    export_c_func!(AudioQueueDeviceGetCurrentTime(_, _, _)),
+    
+    // Новые функции таймлайна с правильным количеством параметров
+    export_c_func!(AudioQueueCreateTimeline(_, _)),
+    export_c_func!(AudioQueueDisposeTimeline(_, _)),
+    export_c_func!(AudioQueueGetCurrentTime(_, _, _, _)),
+    export_c_func!(AudioQueueDeviceGetCurrentTime(_, _)),
 ];
 
