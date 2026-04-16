@@ -58,6 +58,9 @@ pub(super) struct UIViewHostObject {
     delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
     animation_interval: f64,
     is_animating: bool,
+    // --- ПОЛЯ ДЛЯ AUTORESIZING (ДОБАВЛЕНЫ) ---
+    autoresizing_mask: NSUInteger,
+    autoresizes_subviews: bool,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -74,6 +77,9 @@ impl Default for UIViewHostObject {
             delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
             animation_interval: 1.0 / 60.0,
             is_animating: false,
+            // --- ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ДЛЯ AUTORESIZING (ДОБАВЛЕНЫ) ---
+            autoresizing_mask: 0,
+            autoresizes_subviews: true,
         }
     }
 }
@@ -281,10 +287,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if !host.is_animating {
         host.is_animating = true;
-        // Примечание: В оригинальном коде iOS здесь создается NSTimer, который 
-        // дергает метод drawView. В эмуляторе цикл рендеринга OpenGL часто 
-        // работает на уровне самого эмулятора, поэтому честного переключения 
-        // внутреннего state (is_animating) достаточно для корректной работы логики игры.
     }
 }
 
@@ -348,7 +350,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())insertSubview:(id)view atIndex:(NSInteger)index {
-    // assert!(view != nil);
     retain(env, view);
     () = msg![env; view removeFromSuperview];
     let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
@@ -440,56 +441,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     todo_objc_setter!(this, clips);
 }
 
-// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
-- (())setStyle:(u32)_style {
-    // Заглушка, чтобы эмулятор не падал при настройке фейковых элементов (например, FBLoginButton)
-}
-// -----------------------------------------
+// --- УБРАНЫ todo_objc_setter! ДЛЯ AUTORESIZING И ДОБАВЛЕНЫ НОРМАЛЬНЫЕ ГЕТТЕРЫ/СЕТТЕРЫ ---
 
-// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ EAGLView ---
-- (id)context {
-    nil // Возвращаем пустоту, так как настоящего контекста у обычного UIView нет
+- (NSUInteger)autoresizingMask {
+    env.objc.borrow::<UIViewHostObject>(this).autoresizing_mask
+}
+- (())setAutoresizingMask:(NSUInteger)mask {
+    env.objc.borrow_mut::<UIViewHostObject>(this).autoresizing_mask = mask;
 }
 
-- (())setContext:(id)_context {
-    // Ничего не делаем, просто игнорируем попытку игры передать нам контекст
+- (bool)autoresizesSubviews {
+    env.objc.borrow::<UIViewHostObject>(this).autoresizes_subviews
 }
-// ------------------------------------
-
-// =========================================================================
-// MARK: - OpenGL ES / EAGLView lifecycle stubs
-// These are called by apps that subclass UIView as an EAGLView.
-// =========================================================================
-
-- (())resume {
-    log_dbg!("UIView resume {:?}", this);
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
-    host.is_animating = true;
+- (())setAutoresizesSubviews:(bool)enabled {
+    env.objc.borrow_mut::<UIViewHostObject>(this).autoresizes_subviews = enabled;
 }
 
-- (())flushBuffer {
-    // Called by some EAGLView implementations after rendering a frame to
-    // present the renderbuffer. The actual present is handled by EAGLContext
-    // presentRenderBuffer: — this is just a hook some apps call before that.
-    log_dbg!("UIView flushBuffer {:?}", this);
-    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    // Forward to the layer's display if it has content to present.
-    let _: () = msg![env; layer display];
-}
-
-- (())setupView {
-    // Called by EAGLView subclasses to set up the OpenGL ES state
-    // (viewport, projection matrix, etc.) before rendering begins.
-    // The actual GL setup is done by the app's own override; the base
-    // UIView implementation is a no-op.
-    log_dbg!("UIView setupView {:?}", this);
-}
-
-- (())endDrawing {
-    // Called by some EAGLView implementations at the end of a render pass.
-    // No-op at the UIView level — the app's override does the real work.
-    log_dbg!("UIView endDrawing {:?}", this);
-}
+// ----------------------------------------------------------------------------------------
 
 - (bool)isOpaque {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -509,14 +477,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setOpacity:alpha]
 }
 
-- (CGFloat)contentScaleFactor {
-    1.0
-}
-
-- (())setContentScaleFactor:(CGFloat)scale {
-    // Заглушка, чтобы не крашилось
-}
-    
 - (id)backgroundColor {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     let cg_color: CGColorRef = msg![env; layer backgroundColor];
@@ -559,9 +519,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setPosition:center]
 }
 
-- (())setNeedsLayout {
-
-}
+- (())setNeedsLayout { }
 
 - (CGRect)frame {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -687,9 +645,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let other_layer = env.objc.borrow::<UIViewHostObject>(other).layer;
     msg![env; this_layer convertRect:rect toLayer:other_layer]
 }
-
-- (())setAutoresizingMask:(NSUInteger)mask { todo_objc_setter!(this, mask); }
-- (())setAutoresizesSubviews:(bool)enabled { todo_objc_setter!(this, enabled); }
 
 - (CGSize)sizeThatFits:(CGSize)size { size }
 - (())sizeToFit {
