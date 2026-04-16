@@ -123,10 +123,10 @@ const CONSTANTS: ConstantExports = &[
     ("_OBJC_EHTYPE_$_NSException", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_id", HostConstant::NullPtr),
     ("_kCFTypeArrayCallBacks", HostConstant::NullPtr),
-    ("_NSHTTPCookieDomain", HostConstant::String("NSHTTPCookieDomain")),
-    ("_NSHTTPCookieValue", HostConstant::String("NSHTTPCookieValue")),
-    ("_NSHTTPCookieName", HostConstant::String("NSHTTPCookieName")),
-    ("_NSHTTPCookiePath", HostConstant::String("NSHTTPCookiePath")),
+    ("_NSHTTPCookieDomain", HostConstant::NSString("NSHTTPCookieDomain")),
+    ("_NSHTTPCookieValue", HostConstant::NSString("NSHTTPCookieValue")),
+    ("_NSHTTPCookieName", HostConstant::NSString("NSHTTPCookieName")),
+    ("_NSHTTPCookiePath", HostConstant::NSString("NSHTTPCookiePath")),
 ];
 
 /// Block support is iOS 4+, but it seems like Block Runtime Helpers
