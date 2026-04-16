@@ -41,6 +41,9 @@ type MPMovieRepeatMode = NSInteger;
 
 type MPMoviePlaybackState = NSInteger;
 const MPMoviePlaybackStateStopped: MPMoviePlaybackState = 0;
+const MPMoviePlaybackStatePlaying: MPMoviePlaybackState = 1;
+const MPMoviePlaybackStatePaused: MPMoviePlaybackState = 2;
+
 // Values might not be correct, but as these are linked symbol constants, it
 // shouldn't matter.
 pub const MPMoviePlayerPlaybackDidFinishNotification: &str =
@@ -79,12 +82,14 @@ struct MPMoviePlayerControllerHostObject {
     content_url: id,
     // UIView *
     view: id,
+    background_view: id,
     scaling_mode: MPMovieScalingMode,
     control_style: MPMovieControlStyle,
     source_type: MPMovieSourceType,
     repeat_mode: MPMovieRepeatMode,
     should_autoplay: bool,
     initial_playback_time: f64,
+    playback_state: MPMoviePlaybackState,
 }
 impl HostObject for MPMoviePlayerControllerHostObject {}
 
@@ -107,6 +112,23 @@ fn ensure_view(env: &mut Environment, this: id) -> id {
     view
 }
 
+fn ensure_background_view(env: &mut Environment, this: id) -> id {
+    let existing = env
+        .objc
+        .borrow::<MPMoviePlayerControllerHostObject>(this)
+        .background_view;
+    if existing != nil {
+        return existing;
+    }
+    let view_alloc: id = msg_class![env; UIView alloc];
+    let view: id = msg![env; view_alloc init];
+    retain(env, view);
+    env.objc
+        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
+        .background_view = view;
+    view
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -119,12 +141,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(MPMoviePlayerControllerHostObject {
         content_url: nil,
         view: nil,
+        background_view: nil,
         scaling_mode: 0,
         control_style: 0,
         source_type: 0,
         repeat_mode: 0,
         should_autoplay: true,
         initial_playback_time: -1.0,
+        playback_state: MPMoviePlaybackStateStopped,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -138,18 +162,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     );
     retain(env, url);
 
-    // Create a dummy view to avoid null pointer dereferences when the app
-    // accesses player.view.
-    // We retain it explicitly so the host object
-    // conceptually owns it.
-    let view_alloc: id = msg_class![env; UIView alloc];
-    let view: id = msg![env; view_alloc init];
-    retain(env, view);
     {
-        let host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
+        let mut host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
         host.content_url = url;
-        host.view = view;
     }
+    
+    // Ensure views exist immediately
+    ensure_view(env, this);
+    ensure_background_view(env, this);
 
     // Act as if loading immediately completed (Spore Origins waits for this).
     State::get(env).pending_notifications.push_back((
@@ -172,6 +192,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         .borrow::<MPMoviePlayerControllerHostObject>(this)
         .view;
     release(env, view);
+    
+    let bg_view = env
+        .objc
+        .borrow::<MPMoviePlayerControllerHostObject>(this)
+        .background_view;
+    release(env, bg_view);
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -292,7 +318,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)backgroundView {
-    nil // TODO
+    ensure_background_view(env, this)
 }
 - (())setBackgroundView:(id)view {
     todo_objc_setter!(this, view);
@@ -301,11 +327,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 // --- Playback state / time ---
 
 - (MPMoviePlaybackState)playbackState {
-    MPMoviePlaybackStateStopped // TODO
+    env.objc
+        .borrow::<MPMoviePlayerControllerHostObject>(this)
+        .playback_state
 }
 
 - (f64)currentPlaybackTime {
-    0.0 // TODO
+    0.0 // Dummy time
 }
 - (())setCurrentPlaybackTime:(f64)time {
     todo_objc_setter!(this, time);
@@ -323,7 +351,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (f64)duration {
-    0.0 // TODO
+    1.0 // Return non-zero to prevent division by zero in game engines
+}
+- (f64)playableDuration {
+    1.0 
+}
+- (bool)isPreparedToPlay {
+    true
 }
 
 - (())prepareToPlay {
@@ -345,18 +379,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MPMediaPlayback implementation
 - (())play {
     log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
-    if let Some(old) = env.framework_state.media_player.movie_player.active_player {
-        let _: () = msg![env; old stop];
+    
+    let current_active = env.framework_state.media_player.movie_player.active_player;
+    if current_active != Some(this) {
+        if let Some(old) = current_active {
+            let _: () = msg![env; old stop];
+        }
+        retain(env, this);
+        env.framework_state.media_player.movie_player.active_player = Some(this);
     }
-    assert!(env
-        .framework_state
-        .media_player
-        .movie_player
-        .active_player
-        .is_none());
-    // Movie player is retained by the runtime until it is stopped
-    retain(env, this);
-    env.framework_state.media_player.movie_player.active_player = Some(this);
+    
+    env.objc
+        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
+        .playback_state = MPMoviePlaybackStatePlaying;
+
     // Act as if playback immediately completed after 1 second
     // (various apps wait for this, such as BIA and Hero of Sparta).
     let notif = (
@@ -379,30 +415,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())pause {
     log!("TODO: [(MPMoviePlayerController*){:?} pause]", this);
+    env.objc
+        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
+        .playback_state = MPMoviePlaybackStatePaused;
 }
 
 - (())stop {
     log!("TODO: [(MPMoviePlayerController*){:?} stop]", this);
+    
+    env.objc
+        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
+        .playback_state = MPMoviePlaybackStateStopped;
+
     if env
         .framework_state
         .media_player
         .movie_player
-        .active_player
-        .is_some()
+        .active_player == Some(this)
     {
-        // Some applications (like NOVA2) may send 2 `stop` messages for each
-        // 1 `play` message for the player.
-        // In that case, we want to release
-        // the active player only once.
-        assert!(
-            this == env
-                .framework_state
-                .media_player
-                .movie_player
-                .active_player
-                .take()
-                .unwrap()
-        );
+        env.framework_state.media_player.movie_player.active_player = None;
         release(env, this);
     }
 }
@@ -426,7 +457,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
 /// For use by `NSRunLoop` via [super::handle_players]: check movie players'
 /// status, send notifications if necessary.
 pub(super) fn handle_players(env: &mut Environment) {
@@ -449,3 +479,4 @@ pub(super) fn handle_players(env: &mut Environment) {
         let _: () = msg![env; center postNotificationName:name object:object];
     }
 }
+
