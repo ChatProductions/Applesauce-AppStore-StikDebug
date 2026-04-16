@@ -4,8 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! `AudioSession.h` (Audio Session) // TODO: is this the real name?
-
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::carbon_core::OSStatus;
@@ -19,38 +17,28 @@ type AudioSessionPropertyListener = GuestFunction;
 
 const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 
-/// Usually a FourCC.
 type AudioSessionPropertyID = u32;
-const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID =
-    fourcc(b"othr");
-const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID =
-    fourcc(b"acat");
-const kAudioSessionProperty_CurrentHardwareSampleRate: AudioSessionPropertyID =
-    fourcc(b"chsr");
-const kAudioSessionProperty_CurrentHardwareOutputNumberChannels:
-    AudioSessionPropertyID = fourcc(b"choc");
-const kAudioSessionProperty_CurrentHardwareOutputVolume: AudioSessionPropertyID =
-    fourcc(b"chov");
-const kAudioSessionProperty_PreferredHardwareIOBufferDuration:
-    AudioSessionPropertyID = fourcc(b"iobd");
-const kAudioSessionProperty_PreferredHardwareSampleRate:
-    AudioSessionPropertyID = fourcc(b"hwsr");
-const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID =
-    fourcc(b"aiav");
-const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID =
-    fourcc(b"rout");
+const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
+const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID = fourcc(b"acat");
+const kAudioSessionProperty_CurrentHardwareSampleRate: AudioSessionPropertyID = fourcc(b"chsr");
+const kAudioSessionProperty_CurrentHardwareOutputNumberChannels: AudioSessionPropertyID = fourcc(b"choc");
+const kAudioSessionProperty_CurrentHardwareOutputVolume: AudioSessionPropertyID = fourcc(b"chov");
+const kAudioSessionProperty_PreferredHardwareIOBufferDuration: AudioSessionPropertyID = fourcc(b"iobd");
+const kAudioSessionProperty_PreferredHardwareSampleRate: AudioSessionPropertyID = fourcc(b"hwsr");
+const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
+const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID = fourcc(b"rout");
 
 const kAudioSessionCategory_SoloAmbientSound: u32 = fourcc(b"solo");
-const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 =
-    fourcc(b"chbd");
+const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 = fourcc(b"chbd");
 
+// --- ОБНОВЛЕННЫЙ STATE ---
 pub struct State {
     audio_session_category: u32,
     pub current_hardware_sample_rate: f64,
     pub current_hardware_output_number_channels: u32,
     current_hardware_output_volume: f32,
     current_hardware_io_buffer_duration: f32,
-    // Добавляем хранение слушателя и данных
+    // Теперь храним данные, а не просто игнорируем их
     interruption_listener: Option<AudioSessionInterruptionListener>,
     client_data: MutVoidPtr,
 }
@@ -69,23 +57,26 @@ impl Default for State {
     }
 }
 
+// --- ИСПРАВЛЕННЫЙ INITIALIZE ---
 fn AudioSessionInitialize(
-    _env: &mut Environment,
-    in_run_loop: CFRunLoopRef,
-    in_run_loop_mode: CFRunLoopMode,
+    env: &mut Environment,
+    _in_run_loop: CFRunLoopRef,
+    _in_run_loop_mode: CFRunLoopMode,
     in_interruption_listener: AudioSessionInterruptionListener,
     in_client_data: MutVoidPtr,
 ) -> OSStatus {
-    let result = 0; // success
+    let state = &mut env.framework_state.audio_toolbox.audio_session;
+    
+    // Сохраняем колбэк гостевого приложения
+    state.interruption_listener = Some(in_interruption_listener);
+    state.client_data = in_client_data;
+
     log!(
-        "TODO: AudioSessionInitialize({:?}, {:?}, {:?}, {:?}) -> {:?}",
-        in_run_loop,
-        in_run_loop_mode,
+        "AudioSessionInitialize: registered listener {:?} with data {:?}",
         in_interruption_listener,
-        in_client_data,
-        result
+        in_client_data
     );
-    result
+    0 // kAudioSessionNoError (успех)
 }
 
 fn AudioSessionGetPropertySize(
