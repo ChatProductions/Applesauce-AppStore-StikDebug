@@ -937,14 +937,19 @@ impl Dyld {
         mem: &mut Mem,
         symbol: &str,
     ) -> Result<GuestFunction, ()> {
-        // Нативно обрабатываем рудимент ленивой загрузки Apple:
+                // Нативно обрабатываем рудимент ленивой загрузки Apple:
         if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
-            if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol) {
+            // Используем "dyld_stub_binder" (это &'static str), а не переменную symbol
+            let symbol_name = "dyld_stub_binder"; 
+            
+            if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol_name) {
                 return Ok(cached_fn);
             }
+            
             let (_, f) = export_c_func!(dyld_stub_binder(_));
-            let function_ptr = self.create_guest_function(mem, symbol, f);
-            self.non_lazy_host_functions.insert(symbol, function_ptr);
+            // Передаем именно статическую строку
+            let function_ptr = self.create_guest_function(mem, symbol_name, f);
+            self.non_lazy_host_functions.insert(symbol_name, function_ptr);
             return Ok(function_ptr);
         }
         
