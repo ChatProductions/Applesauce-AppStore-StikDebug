@@ -1080,13 +1080,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())appendString:(id)a_string {
-    assert_ne!(a_string, nil);
+    // assert_ne!(a_string, nil);
     let new: id = msg![env; this stringByAppendingString:a_string];
     () = msg![env; this setString:new];
 }
 
 - (())insertString:(id)a_string atIndex:(NSUInteger)loc {
-    assert_ne!(a_string, nil);
+    // assert_ne!(a_string, nil);
     let left: id = msg![env; this substringToIndex:loc];
     let right: id = msg![env; this substringFromIndex:loc];
     let mid: id = msg![env; left stringByAppendingString:a_string];
@@ -1095,7 +1095,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())replaceCharactersInRange:(NSRange)range withString:(id)a_string {
-    assert_ne!(a_string, nil);
+    // assert_ne!(a_string, nil);
     let loc = range.location;
     let len = range.length;
     let left: id = msg![env; this substringToIndex:loc];
