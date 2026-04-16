@@ -122,6 +122,7 @@ const CONSTANTS: ConstantExports = &[
     ("__objc_empty_cache", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_$_NSException", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_id", HostConstant::NullPtr),
+    ("_kCFTypeArrayCallBacks", HostConstant::NullPtr),
 ];
 
 /// Block support is iOS 4+, but it seems like Block Runtime Helpers
