@@ -54,7 +54,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // UIKit convenience: `indexPathForRow:inSection:`
 + (id)indexPathForRow:(NSUInteger)row inSection:(NSUInteger)section {
     let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithIndexes:(crate::mem::MutPtr::null()) length:0u32];
+    let new: id = msg![env; new initWithIndexes:(ConstPtr::<NSUInteger>::null()) length:0u32];
     {
         let host = env.objc.borrow_mut::<NSIndexPathHostObject>(new);
         host.indexes = vec![section, row];
