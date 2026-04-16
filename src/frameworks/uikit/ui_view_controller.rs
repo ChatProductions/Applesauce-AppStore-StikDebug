@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UIViewController`.
@@ -17,7 +18,7 @@ use crate::frameworks::uikit::ui_application::{
 };
 use crate::frameworks::uikit::ui_view::set_view_controller;
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
+    autorelease, id, msg, msg_class, msg_super, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
     HostObject, NSZonePtr,
 };
 use crate::Environment;
@@ -78,14 +79,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).nib_name = nib_name;
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).bundle = bundle;
-
     this
 }
 
 - (id)initWithCoder:(id)coder {
     let key_ns_string = get_static_str(env, "UIView");
     let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
-
     () = msg![env; this setView:view];
 
     // Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
@@ -115,7 +114,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let &UIViewControllerHostObject { view, nib_name, bundle, title, .. } = env.objc.borrow(this);
-
     release(env, view);
     release(env, nib_name);
     release(env, bundle);
@@ -135,8 +133,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())loadView {
-    let nib_name = msg![env; this nibName];
-    let bundle = msg![env; this nibBundle];
+    let nib_name: id = msg![env; this nibName];
+    let bundle: id = msg![env; this nibBundle];
     
     if nib_name != nil {
         let nib: id = msg_class![env; UINib nibWithNibName:nib_name bundle:bundle];
@@ -215,7 +213,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setTitle:(id)title {
     let old_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
-    release(env, old_title); // Освобождаем старую строку
+    release(env, old_title);
+    // Освобождаем старую строку
     retain(env, title);      // Удерживаем новую
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
 }
@@ -227,10 +226,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dismissModalViewControllerAnimated:(bool)animated {
-    log!("TODO: [(UIViewController*){:?} dismissModalViewControllerAnimated:{}]", this, animated); // TODO
+    log!("TODO: [(UIViewController*){:?} dismissModalViewControllerAnimated:{}]", this, animated);
+    // TODO
 }
 - (())dismissMoviePlayerViewControllerAnimated {
-    log!("TODO: [(UIViewController*){:?} dismissMoviePlayerViewControllerAnimated]", this); // TODO
+    log!("TODO: [(UIViewController*){:?} dismissMoviePlayerViewControllerAnimated]", this);
+    // TODO
 }
 
 - (bool)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interface_orientation {
@@ -276,7 +277,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let class_name: id = NSStringFromClass(env, msg![env; this class]);
     let resolved = resolve_nib_name_from_class(env, bundle, class_name);
     release(env, class_name);
-
     if resolved != nil {
         // Кешируем результат, чтобы не сканировать диск каждый раз
         retain(env, resolved);
@@ -458,7 +458,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Закрываем модальное окно
     () = msg![env; this dismissModalViewControllerAnimated:false];
-    
     // На всякий случай удаляем View, если оно было добавлено напрямую
     let view: id = msg![env; this view];
     if view != nil {
@@ -486,7 +485,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 };
 
 /// A helper function to resolve suitable NIB name for a `view_controller`
-/// in the `bundle`. Returns nil if fails.
+/// in the `bundle`.
+/// Returns nil if fails.
 ///
 /// Note: It's a responsibility of a caller to release the returned name
 /// if not-nil!
@@ -495,7 +495,6 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
         .objc
         .borrow::<UIViewControllerHostObject>(view_controller)
         .nib_name;
-        
     if provider_nib_name != nil {
         let resolved = check_and_resolve_nib(env, bundle, provider_nib_name);
         if resolved != nil {
@@ -506,7 +505,6 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
     let class: Class = msg![env; view_controller class];
     let class_name: id = NSStringFromClass(env, class);
     let class_name_str = to_rust_string(env, class_name);
-
     if let Some(name) = class_name_str.strip_suffix("Controller") {
         let ns_name: id = from_rust_string(env, name.to_string());
         let resolved = check_and_resolve_nib(env, bundle, ns_name);
@@ -533,11 +531,9 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     }
     let type_: id = get_static_str(env, "nib");
     let base_name_str = to_rust_string(env, base_name);
-    
     // Перебираем варианты регистра и суффиксов
     let bases = [base_name_str.to_string(), base_name_str.to_lowercase()];
     let suffixes = ["", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad"];
-    
     for base in &bases {
         for suffix in &suffixes {
             let candidate = format!("{}{}", base, suffix);
@@ -546,7 +542,8 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
             // Проверяем существование файла
             let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
             if path != nil {
-                release(env, path); // Путь нам не нужен, только подтверждение
+                release(env, path);
+                // Путь нам не нужен, только подтверждение
                 // Возвращаем именно имя (candidate_ns), а не путь!
                 return autorelease(env, candidate_ns); 
             }
@@ -567,7 +564,7 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
     let class_str = to_rust_string(env, class_name);
     if class_str.ends_with("Controller") {
         let short_name = &class_str[..class_str.len() - "Controller".len()];
-        let short_ns = from_rust_string(env, short_name);
+        let short_ns = from_rust_string(env, short_name.to_string()); // ИСПРАВЛЕНО: добавлено .to_string()
         let res = check_and_resolve_nib(env, bundle, short_ns);
         release(env, short_ns);
         if res != nil { return res; }
