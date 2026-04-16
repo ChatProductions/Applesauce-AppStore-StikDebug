@@ -594,11 +594,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let delegate: id = env.objc.borrow::<UITextFieldHostObject>(this).delegate;
-    let sel: SEL = env.objc.register_host_selector(
-        "textFieldShouldBeginEditing:".to_string(), &mut env.mem);
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-    if delegate != nil && responds && !msg![env; delegate textFieldShouldBeginEditing:this] {
-        return false;
+    let mut delegate_alive = false;
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        delegate_alive = isa != 0;
+    }
+
+    if delegate_alive {
+        let sel: SEL = env.objc.register_host_selector(
+            "textFieldShouldBeginEditing:".to_string(), &mut env.mem);
+        if msg![env; delegate respondsToSelector:sel] && !msg![env; delegate textFieldShouldBeginEditing:this] {
+            return false;
+        }
     }
 
     // Clear text if needed.
@@ -607,7 +614,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let _: () = msg![env; this setText:empty];
     }
 
-    // If text is nil, normalise to empty string.
+    // Если текст nil, нормализуем
     let text_label = env.objc.borrow::<UITextFieldHostObject>(this).text_label;
     let curr_text: id = msg![env; text_label text];
     if curr_text == nil {
@@ -627,14 +634,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     env.objc.borrow_mut::<UITextFieldHostObject>(this).editing = true;
 
-    // Post begin-editing notification.
     let name = ns_string::get_static_str(env, UITextFieldTextDidBeginEditingNotification);
     let _: () = msg![env; center postNotificationName:name object:this userInfo:nil];
 
-    let sel: SEL = env.objc.register_host_selector(
-        "textFieldDidBeginEditing:".to_string(), &mut env.mem);
-    if msg![env; delegate respondsToSelector:sel] {
-        let _: () = msg![env; delegate textFieldDidBeginEditing:this];
+    if delegate_alive {
+        let sel: SEL = env.objc.register_host_selector(
+            "textFieldDidBeginEditing:".to_string(), &mut env.mem);
+        if msg![env; delegate respondsToSelector:sel] {
+            let _: () = msg![env; delegate textFieldDidBeginEditing:this];
+        }
     }
 
     true
@@ -648,11 +656,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let delegate: id = env.objc.borrow::<UITextFieldHostObject>(this).delegate;
-    let sel: SEL = env.objc.register_host_selector(
-        "textFieldShouldEndEditing:".to_string(), &mut env.mem);
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-    if delegate != nil && responds && !msg![env; delegate textFieldShouldEndEditing:this] {
-        return false;
+    let mut delegate_alive = false;
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        delegate_alive = isa != 0;
+    }
+
+    if delegate_alive {
+        let sel: SEL = env.objc.register_host_selector(
+            "textFieldShouldEndEditing:".to_string(), &mut env.mem);
+        if msg![env; delegate respondsToSelector:sel] && !msg![env; delegate textFieldShouldEndEditing:this] {
+            return false;
+        }
     }
 
     let center: id = msg_class![env; NSNotificationCenter defaultCenter];
@@ -667,14 +682,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     env.objc.borrow_mut::<UITextFieldHostObject>(this).editing = false;
 
-    // Post end-editing notification.
     let name = ns_string::get_static_str(env, UITextFieldTextDidEndEditingNotification);
     let _: () = msg![env; center postNotificationName:name object:this userInfo:nil];
 
-    let sel: SEL = env.objc.register_host_selector(
-        "textFieldDidEndEditing:".to_string(), &mut env.mem);
-    if msg![env; delegate respondsToSelector:sel] {
-        let _: () = msg![env; delegate textFieldDidEndEditing:this];
+    if delegate_alive {
+        let sel: SEL = env.objc.register_host_selector(
+            "textFieldDidEndEditing:".to_string(), &mut env.mem);
+        if msg![env; delegate respondsToSelector:sel] {
+            let _: () = msg![env; delegate textFieldDidEndEditing:this];
+        }
     }
 
     true
@@ -748,32 +764,36 @@ pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
     log_dbg!("handle_text for {:?} with '{}'", text_field, text);
     let txt = ns_string::from_rust_string(env, text);
     let txt_len: NSUInteger = msg![env; txt length];
-    // assert_eq!(txt_len, 1);
 
     let text_label = env.objc.borrow::<UITextFieldHostObject>(text_field).text_label;
     let mut curr_text: id = msg![env; text_label text];
     if curr_text == nil {
         curr_text = ns_string::get_static_str(env, "");
     }
-    log_dbg!("handle_text curr_text: {}", ns_string::to_rust_string(env, curr_text));
 
     let len: NSUInteger = msg![env; curr_text length];
     let range = NSRange { location: len, length: 0 };
 
     let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
-    let sel: SEL = env.objc.register_host_selector(
-        "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
-        &mut env.mem,
-    );
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-    let should = delegate == nil
-        || !responds
-        || msg![env; delegate textField:text_field
-                 shouldChangeCharactersInRange:range
-                           replacementString:txt];
+    let mut should = true;
+    
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        if isa != 0 {
+            let sel: SEL = env.objc.register_host_selector(
+                "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
+                &mut env.mem,
+            );
+            if msg![env; delegate respondsToSelector:sel] {
+                should = msg![env; delegate textField:text_field
+                         shouldChangeCharactersInRange:range
+                                   replacementString:txt];
+            }
+        }
+    }
+
     if should {
         let new_text: id = msg![env; curr_text stringByAppendingString:txt];
-        log_dbg!("handle_text new_text: {}", ns_string::to_rust_string(env, new_text));
         let _: () = msg![env; text_label setText:new_text];
         let _: () = msg![env; text_field setNeedsDisplay];
         release(env, new_text);
@@ -794,19 +814,25 @@ pub fn handle_backspace(env: &mut Environment, text_field: id) {
     let empty = ns_string::get_static_str(env, "");
 
     let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
-    let sel: SEL = env.objc.register_host_selector(
-        "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
-        &mut env.mem,
-    );
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-    let should = delegate == nil
-        || !responds
-        || msg![env; delegate textField:text_field
-                 shouldChangeCharactersInRange:range
-                           replacementString:empty];
+    let mut should = true;
+    
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        if isa != 0 {
+            let sel: SEL = env.objc.register_host_selector(
+                "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
+                &mut env.mem,
+            );
+            if msg![env; delegate respondsToSelector:sel] {
+                should = msg![env; delegate textField:text_field
+                         shouldChangeCharactersInRange:range
+                                   replacementString:empty];
+            }
+        }
+    }
+
     if should {
         let new_text: id = msg![env; curr_text substringToIndex:(len - 1)];
-        log_dbg!("handle_backspace new_text: {}", ns_string::to_rust_string(env, new_text));
         let _: () = msg![env; text_label setText:new_text];
         let _: () = msg![env; text_field setNeedsDisplay];
         release(env, new_text);
@@ -816,9 +842,14 @@ pub fn handle_backspace(env: &mut Environment, text_field: id) {
 pub fn handle_return(env: &mut Environment, text_field: id) {
     log_dbg!("handle_return for {:?}", text_field);
     let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
-    let sel: SEL = env.objc.register_host_selector(
-        "textFieldShouldReturn:".to_string(), &mut env.mem);
-    if msg![env; delegate respondsToSelector:sel] {
-        let _: () = msg![env; delegate textFieldShouldReturn:text_field];
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        if isa != 0 {
+            let sel: SEL = env.objc.register_host_selector(
+                "textFieldShouldReturn:".to_string(), &mut env.mem);
+            if msg![env; delegate respondsToSelector:sel] {
+                let _: () = msg![env; delegate textFieldShouldReturn:text_field];
+            }
+        }
     }
-    }
+}
