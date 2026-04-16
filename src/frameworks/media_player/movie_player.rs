@@ -106,7 +106,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, url);
     
     // Create a dummy view to avoid null pointer dereferences if the app accesses it
-    let view: id = msg![env; msg_class![env; UIView alloc] init];
+    let view_alloc: id = msg_class![env; UIView alloc];
+    let view: id = msg![env; view_alloc init];
 
     {
         let mut host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
