@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UIWebView`.
@@ -46,6 +47,7 @@ struct UIWebViewHostObject {
     gap_between_pages: f64,
     /// NSString* — last URL string passed to loadRequest:
     current_url: id,
+   
     loading: bool,
     /// Simple back/forward stack — NSString* items.
     back_stack: Vec<id>,
@@ -74,6 +76,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         media_playback_allows_air_play: true,
         suppress_incremental_rendering: false,
         keyboard_display_requires_user_action: true,
+  
         pagination_mode: 0,
         pagination_breaking_mode: 0,
         page_length: 0.0,
@@ -158,7 +161,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         for u in fwd { release(env, u); }
     }
     release(env, old_url);
-
     let ns_url = ns_string::from_rust_string(env, url_string.clone());
     {
         let host = env.objc.borrow_mut::<UIWebViewHostObject>(this);
@@ -229,7 +231,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let current = env.objc.borrow::<UIWebViewHostObject>(this).current_url;
     if current == nil { return; }
     retain(env, current);
-    let ns_req: id = msg_class![env; NSURLRequest requestWithURL:(msg_class![env; NSURL URLWithString:current])];
+    
+    // Вынесено в отдельную переменную для предотвращения ошибки E0283
+    let url: id = msg_class![env; NSURL URLWithString:current];
+    let ns_req: id = msg_class![env; NSURLRequest requestWithURL:url];
+    
     let _: () = msg![env; this loadRequest:ns_req];
     release(env, current);
 }
@@ -474,3 +480,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
