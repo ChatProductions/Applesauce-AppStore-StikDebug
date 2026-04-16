@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `math.h`
@@ -41,87 +42,73 @@ fn fabs(_env: &mut Environment, arg: f64) -> f64 {
 fn sin(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sin()
 }
 fn sinf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sin()
 }
 fn cos(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.cos()
 }
 fn cosf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.cos()
 }
 fn tan(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.tan()
 }
 fn tanf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.tan()
 }
 
 fn asin(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.asin()
 }
 fn asinf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.asin()
 }
 fn acos(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.acos()
 }
 fn acosf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.acos()
 }
 fn atan(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.atan()
 }
 fn atanf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.atan()
 }
 
 fn atan2f(env: &mut Environment, arg1: f32, arg2: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1.atan2(arg2)
 }
 fn atan2(env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1.atan2(arg2)
 }
 
@@ -130,74 +117,62 @@ fn atan2(env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
 fn sinh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sinh()
 }
 fn sinhf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sinh()
 }
 fn cosh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.cosh()
 }
 fn coshf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.cosh()
 }
 fn tanh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.tanh()
 }
 fn tanhf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.tanh()
 }
 
 fn asinh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.asinh()
 }
 fn asinhf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.asinh()
 }
 fn acosh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.acosh()
 }
 fn acoshf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.acosh()
 }
 fn atanh(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.atanh()
 }
 fn atanhf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.atanh()
 }
 
@@ -206,91 +181,76 @@ fn atanhf(env: &mut Environment, arg: f32) -> f32 {
 fn log(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ln()
 }
 fn logf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ln()
 }
 fn log1p(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ln_1p()
 }
 fn log1pf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ln_1p()
 }
 fn log2(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log2()
 }
 fn log2f(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log2()
 }
 fn log10(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 fn log10f(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 fn exp(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp()
 }
 fn expf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp()
 }
 fn expm1(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp_m1()
 }
 fn expm1f(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp_m1()
 }
 fn exp2(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp2()
 }
 fn exp2f(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.exp2()
 }
 fn ldexp(env: &mut Environment, arg: f64, n: i32) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     assert!(!arg.is_infinite()); // TODO
 
     arg * 2f64.powf(n as _)
@@ -298,7 +258,6 @@ fn ldexp(env: &mut Environment, arg: f64, n: i32) -> f64 {
 fn ldexpf(env: &mut Environment, arg: f32, n: i32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     assert!(!arg.is_infinite()); // TODO
 
     arg * 2f32.powf(n as _)
@@ -326,25 +285,21 @@ fn frexp(env: &mut Environment, arg: f64, exp: MutPtr<i32>) -> f64 {
 fn pow(env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1.powf(arg2)
 }
 fn powf(env: &mut Environment, arg1: f32, arg2: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1.powf(arg2)
 }
 fn sqrt(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sqrt()
 }
 fn sqrtf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.sqrt()
 }
 
@@ -353,49 +308,41 @@ fn sqrtf(env: &mut Environment, arg: f32) -> f32 {
 fn ceil(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ceil()
 }
 fn ceilf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.ceil()
 }
 fn floor(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.floor()
 }
 fn floorf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.floor()
 }
 fn round(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.round()
 }
 fn roundf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.round()
 }
 fn lround(env: &mut Environment, arg: f64) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.max(i32::MIN as f64).min(i32::MAX as f64).round() as i32
 }
 fn lroundf(env: &mut Environment, arg: f32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.max(i32::MIN as f32).min(i32::MAX as f32).round() as i32
 }
 fn trunc(_env: &mut Environment, arg: f64) -> f64 {
@@ -417,7 +364,6 @@ fn modff(env: &mut Environment, val: f32, iptr: MutPtr<f32>) -> f32 {
 fn lrint(env: &mut Environment, arg: f64) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     let clamped = arg.clamp(i32::MIN as f64, i32::MAX as f64);
     match env.libc_state.math.rounding_direction {
         FE_TONEAREST => {
@@ -438,7 +384,8 @@ fn fegetround(env: &mut Environment) -> i32 {
     env.libc_state.math.rounding_direction
 }
 fn fesetround(env: &mut Environment, round: i32) -> i32 {
-    assert!(round == FE_TONEAREST || round == FE_TOWARDZERO); // TODO
+    assert!(round == FE_TONEAREST || round == FE_TOWARDZERO);
+    // TODO
     env.libc_state.math.rounding_direction = round;
     0 // Success
 }
@@ -448,13 +395,11 @@ fn fesetround(env: &mut Environment, round: i32) -> i32 {
 fn fmod(env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1 % arg2
 }
 fn fmodf(env: &mut Environment, arg1: f32, arg2: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg1 % arg2
 }
 
@@ -561,48 +506,43 @@ fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__norma
 fn rint(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 fn nearbyintf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 fn nearbyint(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 fn llroundf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 fn llround(env: &mut Environment, arg: f64) -> f64 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 fn rintf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     arg.log10()
 }
 
 // Other
 fn nan(env: &mut Environment, arg: ConstPtr<u8>) -> f32 {
-    assert_eq!(env.mem.read(arg), b'\0'); // TODO
+    assert_eq!(env.mem.read(arg), b'\0');
+    // TODO
     f32::NAN
 }
 
@@ -747,11 +687,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(_, _)),
-        // Other
+    // Other
     export_c_func!(rint(_)),
     export_c_func!(rintf(_)),
     export_c_func!(nearbyint(_)),
-    export_c_func!(nearbyintf
+    export_c_func!(nearbyintf(_)),
     export_c_func!(llroundf(_)),
     export_c_func!(llround(_)),
     export_c_func!(nan(_)),
@@ -759,3 +699,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(hypotf(_, _)),
     export_c_func!(__fpclassifyf(_)),
 ];
+
