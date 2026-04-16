@@ -53,6 +53,7 @@ pub mod uikit;
 #[derive(Default)]
 pub struct State {
     audio_toolbox: audio_toolbox::State,
+    avfoundation: avfoundation::State,
     core_animation: core_animation::State,
     foundation: foundation::State,
     pub game_kit: game_kit::State,
