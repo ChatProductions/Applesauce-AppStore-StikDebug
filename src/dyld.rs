@@ -937,6 +937,17 @@ impl Dyld {
         mem: &mut Mem,
         symbol: &str,
     ) -> Result<GuestFunction, ()> {
+        // Нативно обрабатываем рудимент ленивой загрузки Apple:
+        if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
+            if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol) {
+                return Ok(cached_fn);
+            }
+            let (_, f) = export_c_func!(dyld_stub_binder(_));
+            let function_ptr = self.create_guest_function(mem, symbol, f);
+            self.non_lazy_host_functions.insert(symbol, function_ptr);
+            return Ok(function_ptr);
+        }
+        
         let &(symbol, f) = search_host_dylibs(|dylib| dylib.function_exports, symbol).ok_or(())?;
         if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol) {
             return Ok(cached_fn);
@@ -974,3 +985,6 @@ pub fn register_gles2_stubs() {
     // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
 }
 
+fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
+    panic!("dyld_stub_binder was called! Under HLE, all lazy symbols are bound eagerly, making this unreachable.");
+}
