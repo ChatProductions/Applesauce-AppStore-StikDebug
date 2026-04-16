@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Security framework — Keychain Services, SecRandom, SecKey, SecCertificate,
@@ -22,15 +23,15 @@ use crate::Environment;
 
 pub type OSStatus = i32;
 
-pub const ERR_SEC_SUCCESS:           OSStatus = 0;
-pub const ERR_SEC_UNIMPLEMENTED:     OSStatus = -4;
-pub const ERR_SEC_PARAM:             OSStatus = -50;
-pub const ERR_SEC_ALLOC_FAILED:      OSStatus = -108;
-pub const ERR_SEC_NOT_AVAILABLE:     OSStatus = -25291;
-pub const ERR_SEC_ITEM_NOT_FOUND:    OSStatus = -25300;
-pub const ERR_SEC_DUPLICATE_ITEM:    OSStatus = -25299;
-pub const ERR_SEC_DECODE:            OSStatus = -26275;
-pub const ERR_SEC_AUTH_FAILED:       OSStatus = -25293;
+pub const ERR_SEC_SUCCESS:                 OSStatus = 0;
+pub const ERR_SEC_UNIMPLEMENTED:           OSStatus = -4;
+pub const ERR_SEC_PARAM:                   OSStatus = -50;
+pub const ERR_SEC_ALLOC_FAILED:            OSStatus = -108;
+pub const ERR_SEC_NOT_AVAILABLE:           OSStatus = -25291;
+pub const ERR_SEC_ITEM_NOT_FOUND:          OSStatus = -25300;
+pub const ERR_SEC_DUPLICATE_ITEM:          OSStatus = -25299;
+pub const ERR_SEC_DECODE:                  OSStatus = -26275;
+pub const ERR_SEC_AUTH_FAILED:             OSStatus = -25293;
 pub const ERR_SEC_INTERACTION_NOT_ALLOWED: OSStatus = -25308;
 
 // =========================================================================
@@ -49,13 +50,14 @@ pub type SecRandomRef        = CFTypeRef;
 
 // SecTrustResultType
 pub type SecTrustResultType = u32;
-pub const kSecTrustResultInvalid:          SecTrustResultType = 0;
-pub const kSecTrustResultProceed:          SecTrustResultType = 1;
-pub const kSecTrustResultDeny:             SecTrustResultType = 3;
-pub const kSecTrustResultUnspecified:      SecTrustResultType = 4;
+
+pub const kSecTrustResultInvalid:                 SecTrustResultType = 0;
+pub const kSecTrustResultProceed:                 SecTrustResultType = 1;
+pub const kSecTrustResultDeny:                    SecTrustResultType = 3;
+pub const kSecTrustResultUnspecified:             SecTrustResultType = 4;
 pub const kSecTrustResultRecoverableTrustFailure: SecTrustResultType = 5;
-pub const kSecTrustResultFatalTrustFailure: SecTrustResultType = 6;
-pub const kSecTrustResultOtherError:       SecTrustResultType = 7;
+pub const kSecTrustResultFatalTrustFailure:       SecTrustResultType = 6;
+pub const kSecTrustResultOtherError:              SecTrustResultType = 7;
 
 // =========================================================================
 // MARK: - SecItem (Keychain)
@@ -703,10 +705,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(SecKeychainItemFreeAttributesAndData(_, _)),
     export_c_func!(SecKeychainItemDelete(_)),
     export_c_func!(SecKeychainItemModifyAttributesAndData(_, _, _, _)),
-    export_c_func!(SecKeychainAddGenericPassword(_, _, _, _, _, _, _, _, _)),
-    export_c_func!(SecKeychainFindGenericPassword(_, _, _, _, _, _, _, _, _)),
-    export_c_func!(SecKeychainAddInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
-    export_c_func!(SecKeychainFindInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(SecKeychainAddGenericPassword(_, _, _, _, _, _, _, _)),
+    export_c_func!(SecKeychainFindGenericPassword(_, _, _, _, _, _, _, _)),
+    export_c_func!(SecKeychainAddInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(SecKeychainFindInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
     // SecRandom
     export_c_func!(SecRandomCopyBytes(_, _, _)),
     // SecCertificate
@@ -751,3 +753,4 @@ pub const DYLIB: HostDylib = HostDylib {
     constant_exports: &[CONSTANTS],
     function_exports: &[FUNCTIONS],
 };
+
