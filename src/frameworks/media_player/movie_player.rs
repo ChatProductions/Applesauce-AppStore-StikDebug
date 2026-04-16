@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `MPMoviePlayerController` etc.
@@ -21,7 +22,8 @@ pub struct State {
     active_player: Option<id>,
     /// Various apps (e.g. Crash Bandicoot Nitro Kart 3D and Spore Origins)
     /// create or start a player and await some kind of notification, but can't
-    /// handle it if that notification happens immediately. This queue lets us
+    /// handle it if that notification happens immediately.
+    /// This queue lets us
     /// delay such notifications until the app next returns to the run loop,
     /// which seems to be late enough.
     pending_notifications: VecDeque<(&'static str, id, Instant)>,
@@ -37,7 +39,6 @@ type MPMovieControlStyle = NSInteger;
 
 type MPMoviePlaybackState = NSInteger;
 const MPMoviePlaybackStateStopped: MPMoviePlaybackState = 0;
-
 // Values might not be correct, but as these are linked symbol constants, it
 // shouldn't matter.
 pub const MPMoviePlayerPlaybackDidFinishNotification: &str =
@@ -74,6 +75,8 @@ pub const CONSTANTS: ConstantExports = &[
 struct MPMoviePlayerControllerHostObject {
     // NSURL *
     content_url: id,
+    // UIView *
+    view: id,
 }
 impl HostObject for MPMoviePlayerControllerHostObject {}
 
@@ -88,6 +91,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(MPMoviePlayerControllerHostObject {
         content_url: nil,
+        view: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -99,21 +103,31 @@ pub const CLASSES: ClassExports = objc_classes! {
         url,
         ns_url::to_rust_path(env, url),
     );
-
     retain(env, url);
-    env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this).content_url = url;
+    
+    // Create a dummy view to avoid null pointer dereferences if the app accesses it
+    let view: id = msg![env; msg_class![env; UIView alloc] init];
+
+    {
+        let mut host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
+        host.content_url = url;
+        host.view = view;
+    }
 
     // Act as if loading immediately completed (Spore Origins waits for this).
     State::get(env).pending_notifications.push_back(
         (MPMoviePlayerContentPreloadDidFinishNotification, this, Instant::now())
     );
-
+    
     this
 }
 
 - (())dealloc {
     let url = env.objc.borrow::<MPMoviePlayerControllerHostObject>(this).content_url;
     release(env, url);
+    
+    let view = env.objc.borrow::<MPMoviePlayerControllerHostObject>(this).view;
+    release(env, view);
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -143,7 +157,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)view {
-    nil // TODO
+    env.objc.borrow::<MPMoviePlayerControllerHostObject>(this).view
 }
 
 - (MPMoviePlaybackState)playbackState {
@@ -177,7 +191,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // (various apps wait for this, such as BIA and Hero of Sparta).
     let notif = (MPMoviePlayerPlaybackDidFinishNotification, this, Instant::now().checked_add(Duration::from_millis(1000)).unwrap());
     for (name, obj, _) in &mut State::get(env).pending_notifications {
-        // De-duplicate similar notifications. This can happen if app is calling
+        // De-duplicate similar notifications.
+        // This can happen if app is calling
         // `play` twice on the same player object (case of NOVA2).
         if *name == MPMoviePlayerPlaybackDidFinishNotification && *obj == this {
             return;
@@ -194,7 +209,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [(MPMoviePlayerController*){:?} stop]", this);
     if env.framework_state.media_player.movie_player.active_player.is_some() {
         // Some applications (like NOVA2) may send 2 `stop` messages for each
-        // 1 `play` message for the player. In that case, we want to release
+        // 1 `play` message for the player.
+        // In that case, we want to release
         // the active player only once.
         assert!(this == env.framework_state.media_player.movie_player.active_player.take().unwrap());
         release(env, this);
@@ -207,13 +223,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithContentURL:(id)url {
     log!(
-        "TODO: [(MPMoviePlayerViewController*){:?} initWithContentURL:{:?} ({:?})] -> nil",
+        "TODO: [(MPMoviePlayerViewController*){:?} initWithContentURL:{:?} ({:?})]",
         this,
         url,
         ns_url::to_rust_path(env, url),
     );
-    release(env, this);
-    nil // TODO
+    this
 }
 
 @end
@@ -242,3 +257,4 @@ pub(super) fn handle_players(env: &mut Environment) {
         let _: () = msg![env; center postNotificationName:name object:object];
     }
 }
+
