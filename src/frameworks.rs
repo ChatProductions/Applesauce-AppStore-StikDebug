@@ -37,6 +37,7 @@ pub mod core_location;
 pub mod core_motion;
 pub mod core_video;
 pub mod foundation;
+pub mod game_controller;
 pub mod game_kit;
 pub mod libicucore;
 pub mod libsqlite3;
