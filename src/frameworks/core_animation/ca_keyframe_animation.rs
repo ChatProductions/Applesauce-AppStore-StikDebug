@@ -7,13 +7,15 @@ pub(super) struct CAKeyframeAnimationHostObject {
     key_path: id,
     values: id,
     key_times: id,
+    calculation_mode: id,
     duration: f64,
     delegate: id,
     removed_on_completion: bool,
 }
 impl HostObject for CAKeyframeAnimationHostObject {}
 
-pub const CLASSES: crate::objc::ClassExports = objc_classes! {
+pub const CLASSES: crate::objc::ClassExports = objc_classes!
+{
     (env, this, _cmd);
 
     // Наследуемся напрямую от NSObject, чтобы избежать конфликтов HostObject с родительскими классами
@@ -24,6 +26,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
             key_path: nil,
             values: nil,
             key_times: nil,
+            calculation_mode: nil,
             duration: 0.0,
             delegate: nil,
             removed_on_completion: true,
@@ -45,17 +48,19 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
     }
 
     - (())dealloc {
-        let (key_path, values, key_times) = {
+        let (key_path, values, key_times, calculation_mode) = {
             let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
-            (host.key_path, host.values, host.key_times)
+            (host.key_path, host.values, host.key_times, host.calculation_mode)
         };
         if key_path != nil { release(env, key_path); }
         if values != nil { release(env, values); }
         if key_times != nil { release(env, key_times); }
+        if calculation_mode != nil { release(env, calculation_mode); }
+        
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
-    // --- Геттеры и сеттеры свойств 애니메이션 ---
+    // --- Геттеры и сеттеры свойств анимации ---
 
     - (id)keyPath { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_path }
     - (())setKeyPath:(id)val {
@@ -78,6 +83,14 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_times;
         if val != nil { retain(env, val); }
         env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).key_times = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)calculationMode { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).calculation_mode }
+    - (())setCalculationMode:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).calculation_mode;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).calculation_mode = val;
         if old != nil { release(env, old); }
     }
 
