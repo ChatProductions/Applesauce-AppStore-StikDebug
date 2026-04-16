@@ -286,8 +286,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // --- View ---
 
-/// Returns the player's backing view. Created lazily if initWithContentURL:
-/// somehow failed to allocate it, so this always returns a non-nil UIView.
+// Returns the player's backing view. Created lazily if initWithContentURL:
+// somehow failed to allocate it, so this always returns a non-nil UIView.
 - (id)view {
     ensure_view(env, this)
 }
