@@ -46,6 +46,7 @@ fn time(env: &mut Environment, out: MutPtr<time_t>) -> time_t {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
+
     let time = time64 as time_t;
     if time64 != time as u64 {
         log_once!("Warning: [time] system clock is beyond Y2K38 and might confuse the app");
@@ -118,6 +119,7 @@ impl tm {
 const fn is_leap_year(year: i32) -> bool {
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
+
 /// Number of years in a Gregorian calendar cycle (leap year function cycle)
 const CYCLE_YEARS: i32 = 400;
 
@@ -134,13 +136,17 @@ const fn calc_year_to_day() -> ([i32; CYCLE_YEARS as usize], i32) {
     let mut table = [0i32; CYCLE_YEARS as usize];
     let mut day = 0;
     let mut year = 0;
+
     while year < CYCLE_YEARS {
         table[year as usize] = day;
+
         day += if is_leap_year(year) { 366 } else { 365 };
         year += 1;
     }
+
     (table, day)
 }
+
 /// Lookup table where the index is the number of months since the first month
 /// of the year, and the value is the number of days in that month in a non-leap
 /// year.
@@ -151,30 +157,38 @@ const DAYS_IN_MONTH: [i32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
 /// first day and the first day of the year.
 /// Intended for binary search.
 const MONTH_TO_DAY_NONLEAP: [i32; 12] = calc_month_to_day(false);
+
 /// [MONTH_TO_DAY_NONLEAP] but for leap years.
 const MONTH_TO_DAY_LEAP: [i32; 12] = calc_month_to_day(true);
+
 const fn calc_month_to_day(leap_year: bool) -> [i32; 12] {
     let mut table = [0i32; 12];
     let mut day = 0;
     let mut month = 0;
+
     while month < 12 {
         table[month] = day;
+
         day += DAYS_IN_MONTH[month] + ((leap_year && month == 1) as i32);
         month += 1;
     }
+
     table
 }
+
 pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
     let seconds_since_unix_epoch: i32 = timestamp;
 
     // The easy bit: seconds, minutes, hours and days don't vary in length in
     // UNIX time.
+
     let days_since_unix_epoch = seconds_since_unix_epoch.div_euclid(DAY_SECONDS);
     let second_in_day = seconds_since_unix_epoch.rem_euclid(DAY_SECONDS);
 
     const MINUTE_SECONDS: i32 = 60;
     const HOUR_SECONDS: i32 = MINUTE_SECONDS * 60;
     const DAY_SECONDS: i32 = HOUR_SECONDS * 24;
+
     let tm_sec = second_in_day % MINUTE_SECONDS;
     let tm_min = (second_in_day % HOUR_SECONDS) / MINUTE_SECONDS;
     let tm_hour = second_in_day / HOUR_SECONDS;
@@ -185,6 +199,7 @@ pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
     // in the Gregorian calendar resets when the year is a multiple of 400, e.g.
     // the year 2000, so let's adjust the epoch to make things easier.
     let days_since_y2k = days_since_unix_epoch - 10957;
+
     let cycles_since_y2k = days_since_y2k.div_euclid(CYCLE_DAYS);
     let day_in_cycle = days_since_y2k.rem_euclid(CYCLE_DAYS);
 
@@ -192,6 +207,7 @@ pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
     let year = 2000 + cycles_since_y2k * CYCLE_YEARS + year_in_cycle;
     let day_in_year = day_in_cycle - YEAR_TO_DAY[usize::try_from(year_in_cycle).unwrap()];
     let is_leap_year = is_leap_year(year_in_cycle);
+
     assert!(day_in_year < (365 + is_leap_year as i32));
 
     let month_to_day = if is_leap_year {
@@ -199,8 +215,10 @@ pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
     } else {
         &MONTH_TO_DAY_NONLEAP
     };
+
     let month_in_year: i32 = (month_to_day.partition_point(|&day| day <= day_in_year) - 1) as _;
     let day_in_month = day_in_year - month_to_day[usize::try_from(month_in_year).unwrap()];
+
     assert!(day_in_month < DAYS_IN_MONTH[month_in_year as usize] + is_leap_year as i32);
 
     // 0 = Sunday, 1970-01-01 was a Thursday
@@ -222,6 +240,7 @@ pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
         tm_zone: Ptr::null(),
     }
 }
+
 #[cfg(test)]
 #[test]
 fn test_timestamp_to_calendar_date() {
@@ -236,7 +255,9 @@ fn test_timestamp_to_calendar_date() {
             tm_wday,
             ..
         } = timestamp_to_calendar_date(timestamp);
+
         let wday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][tm_wday as usize];
+
         assert_eq!(
             expected,
             &format!(
@@ -251,6 +272,7 @@ fn test_timestamp_to_calendar_date() {
             )
         );
     }
+
     // Random tests generated with this JavaScript:
     //
     //   for (i = 0; i < 12; i++) {
@@ -278,6 +300,7 @@ fn test_timestamp_to_calendar_date() {
 
 pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
     let year = tm.tm_year + 1900;
+
     let mut seconds = 0i64;
 
     // Years
@@ -292,20 +315,25 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
     } else {
         MONTH_TO_DAY_NONLEAP[tm.tm_mon as usize]
     };
+
     seconds += days_in_months_cumul as i64 * 86400;
 
     // Days
     seconds += (tm.tm_mday as i64 - 1) * 86400;
+
     // Hours, minutes and seconds
     seconds += tm.tm_hour as i64 * 3600;
     seconds += tm.tm_min as i64 * 60;
     seconds += tm.tm_sec as i64;
+
     // Adjust for dates before 1970
     if year < 1970 {
         let mut days_before_year = 0i64;
+
         for y in year..1970 {
             days_before_year += if is_leap_year(y) { 366 } else { 365 };
         }
+
         seconds -= days_before_year * 86400;
     }
 
@@ -317,7 +345,9 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
 fn test_calendar_date_to_timestamp() {
     fn do_roundtrip_test(timestamp: time_t) {
         let tm_struct = timestamp_to_calendar_date(timestamp);
+
         let roundtripped = calendar_date_to_timestamp(tm_struct);
+
         assert_eq!(
             roundtripped, timestamp,
             "Roundtrip failed: original={timestamp}, after converting to tm and back={roundtripped}"
@@ -338,6 +368,7 @@ fn test_calendar_date_to_timestamp() {
         1117223147,  // Fri, 2005-05-27T19:45:47
         -466053135,  // Sat, 1955-03-26T20:47:45
     ];
+
     for &timestamp in &test_timestamps {
         do_roundtrip_test(timestamp);
     }
@@ -360,6 +391,7 @@ fn test_calendar_date_to_timestamp_known_dates() {
         tm_gmtoff: 0,
         tm_zone: Ptr::null(),
     };
+
     assert_eq!(calendar_date_to_timestamp(tm_epoch), 0);
 
     // 1970-01-02T00:00:00 UTC
@@ -376,6 +408,7 @@ fn test_calendar_date_to_timestamp_known_dates() {
         tm_gmtoff: 0,
         tm_zone: Ptr::null(),
     };
+
     assert_eq!(calendar_date_to_timestamp(tm_next_day), 86400);
 
     // 1972-03-01T00:00:00 UTC (a leap year)
@@ -392,6 +425,7 @@ fn test_calendar_date_to_timestamp_known_dates() {
         tm_gmtoff: 0,
         tm_zone: Ptr::null(),
     };
+
     assert_eq!(calendar_date_to_timestamp(tm_leap), 68256000);
 
     // 1955-03-26T20:47:45
@@ -408,11 +442,13 @@ fn test_calendar_date_to_timestamp_known_dates() {
         tm_gmtoff: 0,
         tm_zone: Ptr::null(),
     };
+
     assert_eq!(calendar_date_to_timestamp(tm_before_epoch), -466053135);
 }
 
 fn gmtime_r(env: &mut Environment, timestamp: ConstPtr<time_t>, res: MutPtr<tm>) -> MutPtr<tm> {
     let timestamp = env.mem.read(timestamp);
+
     let calendar_date = timestamp_to_calendar_date(timestamp);
     env.mem.write(res, calendar_date);
     res
@@ -423,6 +459,7 @@ fn gmtime(env: &mut Environment, timestamp: ConstPtr<time_t>) -> MutPtr<tm> {
         .time
         .gmtime_tmp
         .get_or_insert_with(|| env.mem.alloc(guest_size_of::<tm>()).cast());
+
     gmtime_r(env, timestamp, tmp)
 }
 
@@ -432,6 +469,7 @@ fn localtime_r(env: &mut Environment, timestamp: ConstPtr<time_t>, res: MutPtr<t
 }
 fn localtime(env: &mut Environment, timestamp: ConstPtr<time_t>) -> MutPtr<tm> {
     // TODO: don't assume local time is UTC?
+
     // This doesn't have to be a unique temporary, gmtime and localtime are
     // allowed to share it.
     gmtime(env, timestamp)
@@ -440,6 +478,7 @@ fn localtime(env: &mut Environment, timestamp: ConstPtr<time_t>) -> MutPtr<tm> {
 fn mktime(env: &mut Environment, tm: MutPtr<tm>) -> time_t {
     // TODO: respect the current timezone setting
     let tm_value = env.mem.read(tm);
+
     let res = calendar_date_to_timestamp(tm_value);
     log_dbg!("mktime({:?}) => {}", tm_value, res);
     res
@@ -460,7 +499,7 @@ pub(super) struct timeval {
 unsafe impl SafeRead for timeval {}
 
 #[allow(non_camel_case_types)]
-#[derive(Default)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct timespec {
     pub tv_sec: time_t,
@@ -483,6 +522,7 @@ fn gettimeofday(
 ) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
+
     if !timezone_ptr.is_null() {
         env.mem.write(
             timezone_ptr,
@@ -500,27 +540,33 @@ fn gettimeofday(
     let time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap();
+
     let time_s_64: u64 = time.as_secs();
     let tv_sec = time_s_64 as time_t;
+
     if time_s_64 != tv_sec as u64 {
         log_once!("Warning: [gettimeofday] system clock is beyond Y2K38 and might confuse the app");
     }
     let tv_usec: suseconds_t = time.subsec_micros().try_into().unwrap();
 
     env.mem.write(timeval_ptr, timeval { tv_sec, tv_usec });
+
     0 // success
 }
 
 fn nanosleep(env: &mut Environment, rqtp: ConstPtr<timespec>, _rmtp: MutPtr<timespec>) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
+
     let t = env.mem.read(rqtp);
     let tv_sec = t.tv_sec;
     let tv_nsec = t.tv_nsec;
     log_dbg!("nanosleep {} {}", tv_sec, tv_nsec);
+
     let total_sleep = Duration::from_secs(tv_sec.try_into().unwrap())
         + Duration::from_nanos(tv_nsec.try_into().unwrap());
     env.sleep(total_sleep);
+
     0 // success
 }
 
@@ -535,31 +581,38 @@ fn strptime(
         env.mem.cstr_at_utf8(buffer),
         env.mem.cstr_at_utf8(format)
     );
+
     let mut time_val = env.mem.read(time_ptr);
 
     let mut conversation_failed = false;
     let mut buffer_char_idx = 0;
     let mut format_char_idx = 0;
+
     loop {
         let c = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
+
         if c == b'\0' {
             break;
         }
         if c != b'%' {
             let mut cc = env.mem.read(buffer + buffer_char_idx);
+
             if isspace(env, format + format_char_idx - 1) {
                 // "All ordinary characters are matched exactly with the buffer
                 // , where white space in the format string will match any
                 // amount of white space in the buffer."
+
                 while isspace_inner(cc) {
                     buffer_char_idx += 1;
+
                     cc = env.mem.read(buffer + buffer_char_idx);
                 }
                 continue;
             }
             if c != cc {
                 conversation_failed = true;
+
                 break;
             }
             buffer_char_idx += 1;
@@ -568,14 +621,17 @@ fn strptime(
 
         let specifier = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
+
         let mut parse_2_digits = |range: Range<i32>| -> Result<i32, ()> {
             let mut num: i32 = 0;
+
             let mut chars_count = 0;
             while let c @ b'0'..=b'9' = env.mem.read(buffer + buffer_char_idx) {
                 if chars_count >= 2 {
                     break;
                 }
                 num = num * 10 + (c - b'0') as i32;
+
                 buffer_char_idx += 1;
                 chars_count += 1;
             }
@@ -583,9 +639,11 @@ fn strptime(
                 Err(())
             } else {
                 assert!(range.contains(&num));
+
                 Ok(num)
             }
         };
+
         match specifier {
             b'H' => match parse_2_digits(0..24) {
                 Ok(hour) => {
@@ -593,6 +651,7 @@ fn strptime(
                 }
                 Err(_) => {
                     conversation_failed = true;
+
                     break;
                 }
             },
@@ -602,6 +661,7 @@ fn strptime(
                 }
                 Err(_) => {
                     conversation_failed = true;
+
                     break;
                 }
             },
@@ -611,6 +671,7 @@ fn strptime(
                 }
                 Err(_) => {
                     conversation_failed = true;
+
                     break;
                 }
             },
@@ -623,6 +684,7 @@ fn strptime(
     }
 
     env.mem.write(time_ptr, time_val);
+
     if conversation_failed {
         Ptr::null()
     } else {
@@ -644,49 +706,60 @@ fn strftime(
         env.mem.cstr_at_utf8(format),
         time_ptr
     );
+
     // TODO: support other locales
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
     assert_eq!(env.mem.read(ctype_locale), b'C');
 
     let time_val = env.mem.read(time_ptr);
+
     let mut res = Vec::<u8>::new();
 
     let mut format_char_idx = 0;
+
     loop {
         let c = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
+
         if c == b'\0' {
             break;
         }
         if c != b'%' {
             res.push(c);
+
             continue;
         }
 
         let specifier = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
+
         match specifier {
             b'm' => {
                 let month = time_val.tm_mon + 1;
+
                 assert!((1..=12).contains(&month));
                 let formatted_month = format!("{:02}", month);
                 res.extend_from_slice(formatted_month.as_bytes());
             }
             b'd' => {
                 let day = time_val.tm_mday;
+
                 // from 1
                 assert!((1..=31).contains(&day));
+
                 let formatted_day = format!("{:02}", day);
                 res.extend_from_slice(formatted_day.as_bytes());
             }
             b'H' => {
                 let hour = time_val.tm_hour;
+
                 assert!((0..24).contains(&hour));
                 let formatted_hour = format!("{:02}", hour);
                 res.extend_from_slice(formatted_hour.as_bytes());
             }
             b'M' => {
                 let minute = time_val.tm_min;
+
                 assert!((0..60).contains(&minute));
                 let formatted_minute = format!("{:02}", minute);
                 res.extend_from_slice(formatted_minute.as_bytes());
@@ -704,6 +777,7 @@ fn strftime(
     } else {
         &res[..]
     };
+
     let dest_slice = env.mem.bytes_at_mut(s, max_size);
     for (i, &byte) in middle.iter().chain(b"\0".iter()).enumerate() {
         dest_slice[i] = byte;
