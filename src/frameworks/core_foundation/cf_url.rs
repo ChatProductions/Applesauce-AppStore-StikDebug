@@ -65,7 +65,7 @@ fn CFURLRetain(env: &mut Environment, url: CFURLRef) -> CFURLRef {
 fn CFURLRelease(env: &mut Environment, url: CFURLRef) {
     if !url.is_null() {
         CFRelease(env, url);
-    }
+}
 }
 
 // MARK: - File System Representation
@@ -80,11 +80,12 @@ pub fn CFURLGetFileSystemRepresentation(
     if url.is_null() ||
 buffer.is_null() || buffer_size <= 0 {
         return false;
-    }
+}
 
     let actual_url = if resolve_against_base {
         // Resolve against base URL if present
-        let absolute_url: id = msg![env; url absoluteURL];
+        let absolute_url: id = msg![env;
+url absoluteURL];
         if !absolute_url.is_null() {
             absolute_url
         } else {
@@ -93,7 +94,7 @@ buffer.is_null() || buffer_size <= 0 {
     } else {
         url
     };
-    let buffer_size: NSUInteger = buffer_size.try_into().unwrap_or(0);
+let buffer_size: NSUInteger = buffer_size.try_into().unwrap_or(0);
     msg![env; actual_url getFileSystemRepresentation:buffer maxLength:buffer_size]
 }
 
@@ -106,26 +107,26 @@ pub fn CFURLCreateFromFileSystemRepresentation(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if buffer.is_null() || buffer_size < 0 {
         return nil;
-    }
+}
 
     let buffer_size: NSUInteger = buffer_size.try_into().unwrap_or(0);
 
     let string: id = msg_class![env; NSString alloc];
-    let string: id = msg![env; string initWithBytes:buffer
+let string: id = msg![env; string initWithBytes:buffer
                                              length:buffer_size
                                            encoding:NSUTF8StringEncoding];
-    if string.is_null() {
+if string.is_null() {
         return nil;
-    }
+}
 
     let url: id = msg_class![env; NSURL alloc];
     let res = msg![env; url initFileURLWithPath:string isDirectory:is_directory];
     release(env, string);
-    res
+res
 }
 
 fn CFURLCreateFromFileSystemRepresentationRelativeToBase(
@@ -138,34 +139,37 @@ fn CFURLCreateFromFileSystemRepresentationRelativeToBase(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if buffer.is_null() || buffer_size < 0 {
         return nil;
-    }
+}
 
     let buffer_size: NSUInteger = buffer_size.try_into().unwrap_or(0);
 
     let string: id = msg_class![env; NSString alloc];
-    let string: id = msg![env; string initWithBytes:buffer
+let string: id = msg![env; string initWithBytes:buffer
                                              length:buffer_size
                                            encoding:NSUTF8StringEncoding];
-    if string.is_null() {
+if string.is_null() {
         return nil;
-    }
+}
 
     let url: id = msg_class![env; NSURL alloc];
-    let res = if base_url.is_null() {
-        msg![env; url initFileURLWithPath:string isDirectory:is_directory]
+let res = if base_url.is_null() {
+        msg![env;
+url initFileURLWithPath:string isDirectory:is_directory]
     } else {
-        let file_url: id = msg_class![env; NSURL fileURLWithPath:string isDirectory:is_directory];
+        let file_url: id = msg_class![env;
+NSURL fileURLWithPath:string isDirectory:is_directory];
         // Явное указание типа : id
-        let absolute_string: id = msg![env; file_url absoluteString]; 
+        let absolute_string: id = msg![env;
+file_url absoluteString]; 
         msg![env; url initWithString:absolute_string relativeToURL:base_url]
     };
     
     release(env, string);
-    res
+res
 }
 
 // MARK: - Creation Functions
@@ -180,32 +184,35 @@ fn CFURLCreateWithBytes(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url_bytes.is_null() || length < 0 {
         return nil;
-    }
+}
 
     if length == 0 {
         return nil;
-    }
+}
 
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let length: NSUInteger = length.try_into().unwrap_or(0);
 
-    let string: id = msg_class![env; NSString alloc];
+    let string: id = msg_class![env;
+NSString alloc];
     let string: id = msg![env; string initWithBytes:url_bytes
                                              length:length
                                            encoding:encoding];
-    if string.is_null() {
+if string.is_null() {
         return nil;
-    }
+}
 
     let url: id = msg_class![env; NSURL alloc];
-    let res = if base_url.is_null() {
-        msg![env; url initWithString:string]
+let res = if base_url.is_null() {
+        msg![env;
+url initWithString:string]
     } else {
-        msg![env; url initWithString:string relativeToURL:base_url]
+        msg![env;
+url initWithString:string relativeToURL:base_url]
     };
     
     release(env, string);
@@ -220,17 +227,19 @@ fn CFURLCreateWithString(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url_string.is_null() {
         return nil;
-    }
+}
 
     let url: id = msg_class![env; NSURL alloc];
-    if base_url.is_null() {
-        msg![env; url initWithString:url_string]
+if base_url.is_null() {
+        msg![env;
+url initWithString:url_string]
     } else {
-        msg![env; url initWithString:url_string relativeToURL:base_url]
+        msg![env;
+url initWithString:url_string relativeToURL:base_url]
     }
 }
 
@@ -245,25 +254,25 @@ fn CFURLCreateAbsoluteURLWithBytes(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     // Create the relative URL first
     let relative_url = CFURLCreateWithBytes(env, allocator, relative_url_bytes, length, encoding, base_url);
-    if relative_url.is_null() {
+if relative_url.is_null() {
         return nil;
-    }
+}
 
     // Get absolute URL
     let absolute_url: id = msg![env; relative_url absoluteURL];
-    // Retain and release appropriately
+// Retain and release appropriately
     if !absolute_url.is_null() {
         retain(env, absolute_url);
-    }
+}
     release(env, relative_url);
     
     // Compatibility mode affects URL parsing - for now we ignore it
     let _ = use_compatibility_mode;
-    absolute_url
+absolute_url
 }
 
 fn CFURLCreateWithFileSystemPath(
@@ -275,11 +284,11 @@ fn CFURLCreateWithFileSystemPath(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if file_path.is_null() {
         return nil;
-    }
+}
 
     // Handle different path styles
     let converted_path = match style {
@@ -288,21 +297,21 @@ fn CFURLCreateWithFileSystemPath(
             // Convert HFS path to POSIX
             // HFS uses ":" as separator, starts with volume name
             log!("TODO: Full HFS path conversion");
-            file_path
+file_path
         }
         kCFURLWindowsPathStyle => {
             // Convert Windows path to POSIX
             log!("TODO: Full Windows path conversion");
-            file_path
+file_path
         }
         _ => {
             log!("Warning: Unknown path style {}", style);
-            file_path
+file_path
         }
     };
 
     let url: id = msg_class![env; NSURL alloc];
-    msg![env; url initFileURLWithPath:converted_path isDirectory:is_directory]
+msg![env; url initFileURLWithPath:converted_path isDirectory:is_directory]
 }
 
 fn CFURLCreateWithFileSystemPathRelativeToBase(
@@ -315,29 +324,29 @@ fn CFURLCreateWithFileSystemPathRelativeToBase(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if file_path.is_null() {
         return nil;
-    }
+}
 
     // First create the file URL
     let file_url = CFURLCreateWithFileSystemPath(env, allocator, file_path, style, is_directory);
-    if file_url.is_null() {
+if file_url.is_null() {
         return nil;
-    }
+}
 
     if base_url.is_null() {
         return file_url;
-    }
+}
 
     // Create relative to base
     let url_string: id = msg![env; file_url absoluteString];
-    let url: id = msg_class![env; NSURL alloc];
+let url: id = msg_class![env; NSURL alloc];
     let result = msg![env; url initWithString:url_string relativeToURL:base_url];
     
     release(env, file_url);
-    result
+result
 }
 
 fn CFURLCreateCopyAppendingPathComponent(
@@ -349,19 +358,21 @@ fn CFURLCreateCopyAppendingPathComponent(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url.is_null() || path_component.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
-    let new_url: id = msg![env; url URLByAppendingPathComponent:path_component isDirectory:is_directory];
+    let new_url: id = msg![env;
+url URLByAppendingPathComponent:path_component isDirectory:is_directory];
     if new_url.is_null() {
         return nil;
     }
 
-    msg![env; new_url copy]
+    msg![env;
+new_url copy]
 }
 
 fn CFURLCreateCopyAppendingPathExtension(
@@ -372,19 +383,20 @@ fn CFURLCreateCopyAppendingPathExtension(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url.is_null() || extension.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
     let new_url: id = msg![env; url URLByAppendingPathExtension:extension];
-    if new_url.is_null() {
+if new_url.is_null() {
         return nil;
     }
 
-    msg![env; new_url copy]
+    msg![env;
+new_url copy]
 }
 
 fn CFURLCreateCopyDeletingLastPathComponent(
@@ -394,19 +406,20 @@ fn CFURLCreateCopyDeletingLastPathComponent(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
     let new_url: id = msg![env; url URLByDeletingLastPathComponent];
-    if new_url.is_null() {
+if new_url.is_null() {
         return nil;
     }
 
-    msg![env; new_url copy]
+    msg![env;
+new_url copy]
 }
 
 fn CFURLCreateCopyDeletingPathExtension(
@@ -416,19 +429,20 @@ fn CFURLCreateCopyDeletingPathExtension(
 ) -> CFURLRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if url.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
     let new_url: id = msg![env; url URLByDeletingPathExtension];
-    if new_url.is_null() {
+if new_url.is_null() {
         return nil;
     }
 
-    msg![env; new_url copy]
+    msg![env;
+new_url copy]
 }
 
 // MARK: - Copying and Conversion
@@ -436,14 +450,15 @@ fn CFURLCreateCopyDeletingPathExtension(
 fn CFURLCopyAbsoluteURL(env: &mut Environment, url: CFURLRef) -> CFURLRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let absolute: id = msg![env; url absoluteURL];
-    if absolute.is_null() {
+if absolute.is_null() {
         return nil;
     }
 
-    msg![env; absolute copy]
+    msg![env;
+absolute copy]
 }
 
 pub fn CFURLCopyFileSystemPath(
@@ -453,31 +468,32 @@ pub fn CFURLCopyFileSystemPath(
 ) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let path: CFStringRef = msg![env; url path];
-    if path.is_null() {
+if path.is_null() {
         return nil;
-    }
+}
 
     // Handle different path styles
     match style {
         kCFURLPOSIXPathStyle => {
-            msg![env; path copy]
+            msg![env;
+path copy]
         }
         kCFURLHFSPathStyle => {
             // Convert POSIX to HFS
             log!("TODO: Full POSIX to HFS path conversion");
-            msg![env; path copy]
+msg![env; path copy]
         }
         kCFURLWindowsPathStyle => {
             // Convert POSIX to Windows
             log!("TODO: Full POSIX to Windows path conversion");
-            msg![env; path copy]
+msg![env; path copy]
         }
         _ => {
             log!("Warning: Unknown path style {}", style);
-            msg![env; path copy]
+msg![env; path copy]
         }
     }
 }
@@ -485,47 +501,50 @@ pub fn CFURLCopyFileSystemPath(
 pub fn CFURLCopyPathExtension(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
     let path: id = msg![env; url path];
-    if path.is_null() {
+if path.is_null() {
         return nil;
-    }
+}
 
     // Явное указание типа : id
     let ext: id = msg![env; path pathExtension];
-    if ext.is_null() {
+if ext.is_null() {
         return nil;
     }
 
-    msg![env; ext copy]
+    msg![env;
+ext copy]
 }
 
 fn CFURLCopyLastPathComponent(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let component: id = msg![env; url lastPathComponent];
-    if component.is_null() {
+if component.is_null() {
         return nil;
     }
 
-    msg![env; component copy]
+    msg![env;
+component copy]
 }
 
 fn CFURLCopyScheme(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let scheme: id = msg![env; url scheme];
-    if scheme.is_null() {
+if scheme.is_null() {
         return nil;
     }
 
-    msg![env; scheme copy]
+    msg![env;
+scheme copy]
 }
 
 fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
@@ -546,16 +565,9 @@ fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     } else {
         let port_str: id = msg![env; port stringValue];
         
-        let nsstring_class = env.objc.get_known_class("NSString", &mut env.mem);
-        let sel = env.objc.lookup_selector("stringWithFormat:").expect("Unknown selector");
-        
-        // Выносим получение формата в отдельную переменную, чтобы не заимствовать env дважды
-        let format_str = get_static_str(env, "%@:%@");
-        
-        let net_location: id = crate::objc::msg_send(
-            env, 
-            (nsstring_class, sel, format_str, host, port_str)
-        );
+        let colon = get_static_str(env, ":");
+        let host_with_colon: id = msg![env; host stringByAppendingString:colon];
+        let net_location: id = msg![env; host_with_colon stringByAppendingString:port_str];
         
         msg![env; net_location copy]
     }
@@ -564,30 +576,31 @@ fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
 fn CFURLCopyPath(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let path: id = msg![env; url path];
-    if path.is_null() {
+if path.is_null() {
         return nil;
     }
 
-    msg![env; path copy]
+    msg![env;
+path copy]
 }
 
 fn CFURLCopyStrictPath(env: &mut Environment, url: CFURLRef, is_absolute: MutPtr<bool>) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let path: id = msg![env; url path];
-    if path.is_null() {
+if path.is_null() {
         return nil;
-    }
+}
 
     if !is_absolute.is_null() {
         // Check if it's an absolute path
         let path_str = to_rust_string(env, path);
-        env.mem.write(is_absolute, path_str.starts_with('/'));
+env.mem.write(is_absolute, path_str.starts_with('/'));
     }
 
     msg![env; path copy]
@@ -596,55 +609,60 @@ fn CFURLCopyStrictPath(env: &mut Environment, url: CFURLRef, is_absolute: MutPtr
 fn CFURLCopyResourceSpecifier(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     // Resource specifier is everything after the path (query + fragment)
-    let resource_specifier: id = msg![env; url resourceSpecifier];
+    let resource_specifier: id = msg![env;
+url resourceSpecifier];
     
     if resource_specifier.is_null() {
         return nil;
     }
 
-    msg![env; resource_specifier copy]
+    msg![env;
+resource_specifier copy]
 }
 
 fn CFURLCopyHostName(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let host: id = msg![env; url host];
-    if host.is_null() {
+if host.is_null() {
         return nil;
     }
 
-    msg![env; host copy]
+    msg![env;
+host copy]
 }
 
 fn CFURLCopyUserName(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let user: id = msg![env; url user];
-    if user.is_null() {
+if user.is_null() {
         return nil;
     }
 
-    msg![env; user copy]
+    msg![env;
+user copy]
 }
 
 fn CFURLCopyPassword(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let password: id = msg![env; url password];
-    if password.is_null() {
+if password.is_null() {
         return nil;
     }
 
-    msg![env; password copy]
+    msg![env;
+password copy]
 }
 
 fn CFURLCopyParameterString(
@@ -654,15 +672,16 @@ fn CFURLCopyParameterString(
 ) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let param_string: id = msg![env; url parameterString];
-    if param_string.is_null() {
+if param_string.is_null() {
         return nil;
-    }
+}
 
     // TODO: Handle characters_to_leave_escaped
-    msg![env; param_string copy]
+    msg![env;
+param_string copy]
 }
 
 fn CFURLCopyQueryString(
@@ -672,15 +691,16 @@ fn CFURLCopyQueryString(
 ) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let query: id = msg![env; url query];
-    if query.is_null() {
+if query.is_null() {
         return nil;
-    }
+}
 
     // TODO: Handle characters_to_leave_escaped
-    msg![env; query copy]
+    msg![env;
+query copy]
 }
 
 fn CFURLCopyFragment(
@@ -690,28 +710,30 @@ fn CFURLCopyFragment(
 ) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     let fragment: id = msg![env; url fragment];
-    if fragment.is_null() {
+if fragment.is_null() {
         return nil;
-    }
+}
 
     // TODO: Handle characters_to_leave_escaped
-    msg![env; fragment copy]
+    msg![env;
+fragment copy]
 }
 
 fn CFURLGetPortNumber(env: &mut Environment, url: CFURLRef) -> i32 {
     if url.is_null() {
         return -1;
-    }
+}
 
     let port: id = msg![env; url port];
-    if port.is_null() {
+if port.is_null() {
         return -1;
     }
 
-    msg![env; port intValue]
+    msg![env;
+port intValue]
 }
 
 // MARK: - URL Properties
@@ -719,48 +741,52 @@ fn CFURLGetPortNumber(env: &mut Environment, url: CFURLRef) -> i32 {
 fn CFURLCanBeDecomposed(env: &mut Environment, url: CFURLRef) -> bool {
     if url.is_null() {
         return false;
-    }
+}
 
     // A URL can be decomposed if it has a scheme
-    let scheme: id = msg![env; url scheme];
+    let scheme: id = msg![env;
+url scheme];
     !scheme.is_null()
 }
 
 fn CFURLHasDirectoryPath(env: &mut Environment, url: CFURLRef) -> bool {
     if url.is_null() {
         return false;
-    }
+}
 
     let path: id = msg![env; url path];
-    if path.is_null() {
+if path.is_null() {
         return false;
-    }
+}
 
     // Check if path ends with "/"
     let path_str = to_rust_string(env, path);
-    if path_str == "//" {
+if path_str == "//" {
         // Special case
         return false;
-    }
+}
 
     // Note: cannot use `lastPathComponent` here!
     let components: id = msg![env; path pathComponents];
-    let count: NSUInteger = msg![env; components count];
+let count: NSUInteger = msg![env; components count];
     
     if count == 0 {
         return false;
-    }
+}
 
     let last: id = msg![env; components objectAtIndex:(count - 1)];
-    msg![env; last isEqual:(get_static_str(env, "/"))]
-        || msg![env; last isEqual:(get_static_str(env, "."))]
-        || msg![env; last isEqual:(get_static_str(env, ".."))]
+    msg![env;
+last isEqual:(get_static_str(env, "/"))]
+        || msg![env;
+last isEqual:(get_static_str(env, "."))]
+        || msg![env;
+last isEqual:(get_static_str(env, ".."))]
 }
 
 fn CFURLGetBaseURL(env: &mut Environment, url: CFURLRef) -> CFURLRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     msg![env; url baseURL]
 }
@@ -768,10 +794,11 @@ fn CFURLGetBaseURL(env: &mut Environment, url: CFURLRef) -> CFURLRef {
 fn CFURLGetString(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     if url.is_null() {
         return nil;
-    }
+}
 
     // Return the relative string, not absolute
-    msg![env; url relativeString]
+    msg![env;
+url relativeString]
 }
 
 fn CFURLGetBytes(
@@ -780,41 +807,42 @@ fn CFURLGetBytes(
     buffer: MutPtr<u8>,
     buffer_length: CFIndex,
 ) -> CFIndex {
-    if url.is_null() || buffer_length < 0 {
+    if url.is_null() ||
+buffer_length < 0 {
         return -1;
-    }
+}
 
     let url_string: id = msg![env; url absoluteString];
-    if url_string.is_null() {
+if url_string.is_null() {
         return -1;
-    }
+}
 
     // Get UTF-8 bytes
     let c_string: ConstPtr<u8> = msg![env; url_string UTF8String];
-    if c_string.is_null() {
+if c_string.is_null() {
         return -1;
-    }
+}
 
     // Calculate length
     let mut length: CFIndex = 0;
-    loop {
+loop {
         // Приведение типа к u32
         if env.mem.read(c_string + (length as u32)) == 0 {
             break;
-        }
+}
         length += 1;
-    }
+}
 
     if !buffer.is_null() && buffer_length > 0 {
         let copy_length = length.min(buffer_length - 1);
-        for i in 0..copy_length {
+for i in 0..copy_length {
             // Разделение read/write во избежание двойного заимствования
             let byte = env.mem.read(c_string + (i as u32));
-            env.mem.write(buffer + (i as u32), byte);
+env.mem.write(buffer + (i as u32), byte);
         }
         // Приведение типа к u32
         env.mem.write(buffer + (copy_length as u32), 0);
-        // Null terminate
+// Null terminate
     }
 
     length
@@ -831,64 +859,73 @@ fn CFURLGetByteRangeForComponent(
             location: super::kCFNotFound,
             length: 0,
         };
-    }
+}
 
     let url_string: id = msg![env; url absoluteString];
-    if url_string.is_null() {
+if url_string.is_null() {
         return super::CFRange {
             location: super::kCFNotFound,
             length: 0,
         };
-    }
+}
 
     // Get the component string
     let component_str: id = match component {
-        kCFURLComponentScheme => msg![env; url scheme],
-        kCFURLComponentHost => msg![env; url host],
+        kCFURLComponentScheme => msg![env;
+url scheme],
+        kCFURLComponentHost => msg![env;
+url host],
         kCFURLComponentPort => {
-            let port: id = msg![env; url port];
+            let port: id = msg![env;
+url port];
             if port.is_null() {
                 nil
             } else {
-                msg![env; port stringValue]
+                msg![env;
+port stringValue]
             }
         }
-        kCFURLComponentPath => msg![env; url path],
-        kCFURLComponentQuery => msg![env; url query],
-        kCFURLComponentFragment => msg![env; url fragment],
-        kCFURLComponentUser => msg![env; url user],
-        kCFURLComponentPassword => msg![env; url password],
+        kCFURLComponentPath => msg![env;
+url path],
+        kCFURLComponentQuery => msg![env;
+url query],
+        kCFURLComponentFragment => msg![env;
+url fragment],
+        kCFURLComponentUser => msg![env;
+url user],
+        kCFURLComponentPassword => msg![env;
+url password],
         _ => {
             log!("TODO: Component type {} not fully supported", component);
-            nil
+nil
         }
     };
-    if component_str.is_null() {
+if component_str.is_null() {
         return super::CFRange {
             location: super::kCFNotFound,
             length: 0,
         };
-    }
+}
 
     // Find the component in the URL string
     use crate::frameworks::foundation::NSRange;
-    let range: NSRange = msg![env; url_string rangeOfString:component_str];
+let range: NSRange = msg![env; url_string rangeOfString:component_str];
     
     if range.location == crate::frameworks::foundation::NSNotFound as NSUInteger {
         return super::CFRange {
             location: super::kCFNotFound,
             length: 0,
         };
-    }
+}
 
     let cf_range = super::CFRange {
         location: range.location.try_into().unwrap_or(super::kCFNotFound),
         length: range.length.try_into().unwrap_or(0),
     };
-    // TODO: Include separators if requested
+// TODO: Include separators if requested
     if !range_incl_separators.is_null() {
         env.mem.write(range_incl_separators, cf_range);
-    }
+}
 
     cf_range
 }
@@ -903,29 +940,33 @@ fn CFURLCreateStringByReplacingPercentEscapes(
 ) -> CFStringRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if original_string.is_null() {
         return nil;
-    }
+}
 
     // If no characters to leave escaped, decode everything
     if characters_to_leave_escaped.is_null() {
-        let decoded: id = msg![env; original_string stringByRemovingPercentEncoding];
+        let decoded: id = msg![env;
+original_string stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
         if decoded.is_null() {
             // If decoding failed, return copy of original
-            return msg![env; original_string copy];
+            return msg![env;
+original_string copy];
         }
         return msg![env; decoded copy];
-    }
+}
 
     // TODO: Handle selective decoding based on characters_to_leave_escaped
     log!("TODO: Selective percent escape replacement");
-    let decoded: id = msg![env; original_string stringByRemovingPercentEncoding];
+let decoded: id = msg![env; original_string stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
     if decoded.is_null() {
-        msg![env; original_string copy]
+        msg![env;
+original_string copy]
     } else {
-        msg![env; decoded copy]
+        msg![env;
+decoded copy]
     }
 }
 
@@ -938,7 +979,7 @@ fn CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
 ) -> CFStringRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     // For UTF-8, use the simpler version
     if encoding == kCFStringEncodingUTF8 {
@@ -948,11 +989,11 @@ fn CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
             original_string,
             characters_to_leave_escaped,
         );
-    }
+}
 
     // TODO: Handle other encodings
     log!("TODO: Percent escape replacement with encoding {:#x}", encoding);
-    CFURLCreateStringByReplacingPercentEscapes(
+CFURLCreateStringByReplacingPercentEscapes(
         env,
         allocator,
         original_string,
@@ -970,32 +1011,33 @@ fn CFURLCreateStringByAddingPercentEscapes(
 ) -> CFStringRef {
     if !validate_allocator(env, allocator) {
         return nil;
-    }
+}
 
     if original_string.is_null() {
         return nil;
-    }
+}
 
     // Convert encoding
     let _ = encoding;
-    // TODO: Use encoding for non-UTF8
+// TODO: Use encoding for non-UTF8
 
     // Use NSString's built-in percent encoding
     if characters_to_leave_unescaped.is_null() && legal_url_characters_to_be_escaped.is_null() {
         // Encode everything that needs encoding
-        let char_set: id = msg_class![env; NSCharacterSet URLQueryAllowedCharacterSet];
-        let encoded: id = msg![env; original_string stringByAddingPercentEncodingWithAllowedCharacters:char_set];
+        let encoded: id = msg![env; original_string stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
         
         if encoded.is_null() {
-            return msg![env; original_string copy];
+            return msg![env;
+original_string copy];
         }
         
-        return msg![env; encoded copy];
+        return msg![env;
+encoded copy];
     }
 
     // TODO: Handle custom character sets
     log!("TODO: Custom percent escaping with character sets");
-    retain(env, original_string)
+retain(env, original_string)
 }
 
 // MARK: - Type Info
@@ -1018,7 +1060,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCreateFromFileSystemRepresentationRelativeToBase(_, _, _, _, _)),
     
     // Creation
-    export_c_func!(CFURLCreateWithBytes(_, _, _, _, _)),
+    export_c_func!(CFURLCreateWithBytes(_, _, _, _, 
+_)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
     export_c_func!(CFURLCreateAbsoluteURLWithBytes(_, _, _, _, _, _)),
     export_c_func!(CFURLCreateWithFileSystemPath(_, _, _, _)),
@@ -1038,6 +1081,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCopyPath(_)),
     export_c_func!(CFURLCopyStrictPath(_, _)),
   
+
     export_c_func!(CFURLCopyResourceSpecifier(_)),
     export_c_func!(CFURLCopyHostName(_)),
     export_c_func!(CFURLCopyUserName(_)),
@@ -1058,9 +1102,10 @@ pub const FUNCTIONS: FunctionExports = &[
     // Percent Escaping
     export_c_func!(CFURLCreateStringByReplacingPercentEscapes(_, _, _)),
     export_c_func!(CFURLCreateStringByReplacingPercentEscapesUsingEncoding(_, _, _, _)),
-    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
+    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, 
+_, _, _, _)),
     
     // Type Info
     export_c_func!(CFURLGetTypeID()),
 ];
-
+ 
