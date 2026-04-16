@@ -50,20 +50,21 @@ pub struct State {
     pub current_hardware_output_number_channels: u32,
     current_hardware_output_volume: f32,
     current_hardware_io_buffer_duration: f32,
+    // Добавляем хранение слушателя и данных
+    interruption_listener: Option<AudioSessionInterruptionListener>,
+    client_data: MutVoidPtr,
 }
 
 impl Default for State {
     fn default() -> Self {
-        // TODO: Check values from a real device
         State {
-            // This is the default value.
             audio_session_category: kAudioSessionCategory_SoloAmbientSound,
-            // Values taken from an iOS 2 simulator
             current_hardware_sample_rate: 44100.0,
             current_hardware_output_number_channels: 2,
             current_hardware_output_volume: 1.0,
-            // Value was checked on both iOS Simulator and iPhone 3GS
             current_hardware_io_buffer_duration: 0.023220,
+            interruption_listener: None,
+            client_data: MutVoidPtr::null(),
         }
     }
 }
@@ -303,6 +304,28 @@ fn get_audio_session_property_size(in_ID: AudioSessionPropertyID) -> GuestUSize 
             guest_size_of::<u32>()
         }
     }
+}
+
+fn AudioSessionInitialize(
+    env: &mut Environment,
+    _in_run_loop: CFRunLoopRef,
+    _in_run_loop_mode: CFRunLoopMode,
+    in_interruption_listener: AudioSessionInterruptionListener,
+    in_client_data: MutVoidPtr,
+) -> OSStatus {
+    let state = &mut env.framework_state.audio_toolbox.audio_session;
+    
+    // Сохраняем обработчик прерываний (например, для имитации паузы аудио)
+    state.interruption_listener = Some(in_interruption_listener);
+    state.client_data = in_client_data;
+
+    log!(
+        "AudioSession initialized with listener {:?} and data {:?}",
+        in_interruption_listener,
+        in_client_data
+    );
+
+    0 // kAudioSessionNoError
 }
 
 pub const FUNCTIONS: FunctionExports = &[
