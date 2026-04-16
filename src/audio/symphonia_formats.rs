@@ -12,16 +12,12 @@
 //! feature list in Cargo.toml).
 
 use std::io::Cursor;
-use symphonia::core::audio::{SampleBuffer, Signal};
-use symphonia::core::codecs::{Decoder, DecoderOptions};
+use symphonia::core::audio::AudioSpec;
 use symphonia::core::codecs::audio::well_known::{
     CODEC_ID_AAC, CODEC_ID_ADPCM_IMA_QT, CODEC_ID_ADPCM_IMA_WAV, CODEC_ID_ALAC, CODEC_ID_MP3,
     CODEC_ID_PCM_S16LE,
 };
-use symphonia::core::formats::FormatReader;
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::probe::Hint;
-use symphonia::core::errors::Error as SymphoniaError;
 
 /// PCM data decoded from an miscellaneous format file.
 pub struct SymphoniaDecodedToPcm {
@@ -34,131 +30,102 @@ pub struct SymphoniaDecodedToPcm {
     pub channels: u32,
 }
 
-/// Потоковый декодер, который можно использовать в AudioToolbox 
-/// для чтения аудиофайлов "на лету" без полной загрузки в RAM.
-pub struct SymphoniaStreamer {
-    pub format_reader: Box<dyn FormatReader>,
-    pub decoder: Box<dyn Decoder>,
-    pub track_id: u32,
-    pub sample_rate: u32,
-    pub channels: u32,
-}
+pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, ()> {
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
-impl SymphoniaStreamer {
-    pub fn open(mss: MediaSourceStream) -> Result<Self, ()> {
-        let mut probed = symphonia::default::get_probe()
-            .probe(
-                &Hint::new(),
-                mss,
-                &Default::default(),
-                &Default::default(),
-            )
-            .map_err(|_| ())?;
+    // If this failed, the container format is not supported.
+    let mut probed = symphonia::default::get_probe()
+        .probe(
+            &Default::default(),
+            mss,
+            Default::default(),
+            Default::default(),
+        )
+        .map_err(|_| ())?;
 
-        let track = probed.format
-            .tracks()
-            .iter()
-            .find(|t| {
-                if let Some(codec_params) = &t.codec_params {
-                    // TouchHLE codec probing logic
-                    codec_params.codec == CODEC_ID_AAC
-                        || codec_params.codec == CODEC_ID_ADPCM_IMA_WAV
-                        || codec_params.codec == CODEC_ID_ADPCM_IMA_QT
-                        || codec_params.codec == CODEC_ID_ALAC
-                        || codec_params.codec == CODEC_ID_MP3
-                        || codec_params.codec == CODEC_ID_PCM_S16LE
+    let track = probed
+        .tracks()
+        .iter()
+        .find(|t| {
+            if let Some(codec_params) = &t.codec_params {
+                if let Some(audio_codec_params) = codec_params.audio() {
+                    audio_codec_params.codec == CODEC_ID_AAC
+                        || audio_codec_params.codec == CODEC_ID_ADPCM_IMA_WAV
+                        || audio_codec_params.codec == CODEC_ID_ADPCM_IMA_QT
+                        || audio_codec_params.codec == CODEC_ID_ALAC
+                        || audio_codec_params.codec == CODEC_ID_MP3
+                        || audio_codec_params.codec == CODEC_ID_PCM_S16LE
                 } else {
                     false
                 }
-            })
-            .ok_or(())?;
-        
-        let track_id = track.id;
-        let codec_params = track.codec_params.clone();
-
-        // Безопасное извлечение sample_rate и channels
-        let sample_rate = codec_params.sample_rate.unwrap_or(44100);
-        let channels = codec_params.channels.map_or(2, |c| c.count() as u32);
-
-        let decoder = symphonia::default::get_codecs()
-            .make_audio_decoder(&codec_params, &DecoderOptions::default())
-            .map_err(|_| ())?;
-
-        Ok(Self {
-            format_reader: probed.format,
-            decoder,
-            track_id,
-            sample_rate,
-            channels,
+            } else {
+                false
+            }
         })
-    }
+        .ok_or(())?;
 
-    /// Читает и декодирует следующий аудиопакет. Возвращает Interleaved PCM (i16 в байтах).
-    pub fn next_pcm_packet(&mut self) -> Result<Option<Vec<u8>>, SymphoniaError> {
+    let track_id = track.id;
+
+    // Not sure why this would fail, maybe an unusual AAC track.
+    let audio_codec_params = track.codec_params.as_ref().unwrap().audio().unwrap();
+
+    let mut decoder = symphonia::default::get_codecs()
+        .make_audio_decoder(audio_codec_params, &Default::default())
+        .map_err(|_| ())?;
+
+    let mut out_pcm = Vec::<u8>::new();
+    let mut audio_spec: Option<AudioSpec> = None;
+
+    {
+        let mut tmp_raw_s16_buf: Option<Vec<u8>> = None;
+
         loop {
-            let packet = match self.format_reader.next_packet() {
-                Ok(packet) => packet,
-                Err(SymphoniaError::IoError(err)) if err.kind() == std::io::ErrorKind::UnexpectedEof => {
-                    return Ok(None); // Конец файла
-                }
-                Err(e) => return Err(e),
+            let packet = match probed.next_packet() {
+                Ok(packet) => match packet {
+                    Some(packet) => packet,
+                    // "If Ok(None) is returned, the media has ended and
+                    // no more packets will be produced until the reader
+                    // is seeked to a new position."
+                    None => break,
+                },
+                // Assume I/O errors can only mean end-of-file, because the
+                // entire file is in-memory.
+                Err(symphonia::core::errors::Error::IoError(_)) => break,
+                Err(_) => return Err(()),
             };
 
-            if packet.track_id() != self.track_id {
+            if packet.track_id() != track_id {
                 continue;
             }
 
-            match self.decoder.decode(&packet) {
-                Ok(audio_buf) => {
-                    // Используем SampleBuffer для правильного interleaved микширования
-                    let mut sample_buf = SampleBuffer::<i16>::new(
-                        audio_buf.capacity() as u64,
-                        *audio_buf.spec(),
-                    );
-                    sample_buf.copy_interleaved_ref(audio_buf);
+            let Ok(decoded_packet) = decoder.decode(&packet) else {
+                break;
+            };
 
-                    let raw_bytes = sample_buf.samples();
-                    
-                    // Переводим массив i16 в массив u8 для отправки в память эмулятора
-                    let byte_slice: &[u8] = unsafe {
-                        std::slice::from_raw_parts(
-                            raw_bytes.as_ptr() as *const u8,
-                            raw_bytes.len() * 2, // 2 байта на 1 сэмпл (16-bit)
-                        )
-                    };
-                    
-                    return Ok(Some(byte_slice.to_vec()));
-                }
-                Err(SymphoniaError::DecodeError(_)) => {
-                    // Пропускаем "битые" пакеты и пытаемся прочитать следующий
-                    continue;
-                }
-                Err(e) => return Err(e),
-            }
+            // For some reason, the "audio spec" (number of channels etc)
+            // is reported per-packet? This is weird because it must be the same
+            // for all of them.
+            let audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
+            assert_eq!(audio_spec, decoded_packet.spec());
+
+            // Note that this assumes every packet's buffer's capacity is the
+            // same, which is a dubious assumption, but Symphonia's own example
+            // code does it, so maybe it's fine?
+            let tmp_raw_s16_buf = tmp_raw_s16_buf
+                .get_or_insert_with(|| Vec::with_capacity(decoded_packet.capacity()));
+
+            tmp_raw_s16_buf.clear();
+            decoded_packet.copy_bytes_to_vec_interleaved_as::<i16>(tmp_raw_s16_buf);
+
+            out_pcm.extend_from_slice(tmp_raw_s16_buf);
         }
     }
-}
 
-pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, ()> {
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-    
-    // Используем наш новый стример для чтения файла до конца
-    let mut streamer = SymphoniaStreamer::open(mss)?;
-    let mut out_pcm = Vec::<u8>::new();
-
-    // Читаем все пакеты по очереди (как было раньше)
-    while let Ok(Some(pcm_bytes)) = streamer.next_pcm_packet() {
-        out_pcm.extend_from_slice(&pcm_bytes);
-    }
-
-    if out_pcm.is_empty() {
-        return Err(());
-    }
+    let audio_spec = audio_spec.ok_or(())?;
 
     Ok(SymphoniaDecodedToPcm {
         bytes: out_pcm,
-        sample_rate: streamer.sample_rate,
-        channels: streamer.channels,
+        sample_rate: audio_spec.rate(),
+        channels: audio_spec.channels().count().try_into().unwrap(),
     })
 }
-
