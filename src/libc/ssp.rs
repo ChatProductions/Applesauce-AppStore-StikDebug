@@ -20,7 +20,7 @@ pub const FUNCTIONS: FunctionExports = &[
 ];
 
 pub const CONSTANTS: ConstantExports = &[
-    // Игра читает значение по указателю ___stack_chk_guard.
-    // Выделяем константу с "магическим" числом-канарейкой (например, 0xDEADBEEF).
-    ("___stack_chk_guard", HostConstant::U32(0xDEADBEEF)),
+    // Используем гарантированно существующий вариант.
+    // Игра получит валидный указатель на 0x00000000 и использует его как канарейку.
+    ("___stack_chk_guard", HostConstant::NullPtr),
 ];
