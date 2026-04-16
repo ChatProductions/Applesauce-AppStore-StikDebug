@@ -2,29 +2,20 @@ use crate::objc_classes;
 use crate::objc::{id, msg, nil, HostObject, retain, release, autorelease};
 use crate::Environment;
 
-// Структура для хранения полного состояния CAKeyframeAnimation согласно спецификации Apple
+// Структура для хранения состояния анимации
 pub(super) struct CAKeyframeAnimationHostObject {
-    // Свойства CAPropertyAnimation
     key_path: id,
-    
-    // Свойства предоставления значений
     values: id,
-    path: id, // CGPathRef
-    
-    // Синхронизация
+    path: id,
     key_times: id,
     timing_functions: id,
     calculation_mode: id,
-    
-    // Атрибуты вращения и кубической моды
     rotation_mode: id,
     tension_values: id,
     continuity_values: id,
     bias_values: id,
-    
-    // Свойства CAAnimation
     duration: f64,
-    delegate: id, // Обычно weak
+    delegate: id,
     removed_on_completion: bool,
 }
 impl HostObject for CAKeyframeAnimationHostObject {}
@@ -51,14 +42,14 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
             delegate: nil,
             removed_on_completion: true,
         });
-        [span_1](start_span)env.objc.alloc_object(this, host_object, &mut env.mem)[span_1](end_span)
+        env.objc.alloc_object(this, host_object, &mut env.mem)
     }
 
     + (id)animationWithKeyPath:(id)path {
-        [span_2](start_span)let anim: id = msg![env; this alloc];[span_2](end_span)
+        let anim: id = msg![env; this alloc];
         let anim: id = msg![env; anim init];
         if path != nil {
-            () [span_3](start_span)= msg![env; anim setKeyPath:path];[span_3](end_span)
+            () = msg![env; anim setKeyPath:path];
         }
         autorelease(env, anim)
     }
@@ -68,19 +59,31 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     }
 
     - (())dealloc {
-        let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
+        // Чтобы избежать ошибки borrow checker, сначала извлекаем все 
+        // значения из объекта (освобождая заимствование env), а затем делаем release.
+        let (
+            key_path, values, path, key_times, timing_functions,
+            calculation_mode, rotation_mode, tension_values,
+            continuity_values, bias_values
+        ) = {
+            let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
+            (
+                host.key_path, host.values, host.path, host.key_times, host.timing_functions,
+                host.calculation_mode, host.rotation_mode, host.tension_values,
+                host.continuity_values, host.bias_values
+            )
+        };
         
-        [span_4](start_span)// Освобождаем все удерживаемые объекты[span_4](end_span)
-        if host.key_path != nil { release(env, host.key_path); }
-        if host.values != nil { release(env, host.values); }
-        if host.path != nil { release(env, host.path); }
-        if host.key_times != nil { release(env, host.key_times); }
-        if host.timing_functions != nil { release(env, host.timing_functions); }
-        if host.calculation_mode != nil { release(env, host.calculation_mode); }
-        if host.rotation_mode != nil { release(env, host.rotation_mode); }
-        if host.tension_values != nil { release(env, host.tension_values); }
-        if host.continuity_values != nil { release(env, host.continuity_values); }
-        if host.bias_values != nil { release(env, host.bias_values); }
+        if key_path != nil { release(env, key_path); }
+        if values != nil { release(env, values); }
+        if path != nil { release(env, path); }
+        if key_times != nil { release(env, key_times); }
+        if timing_functions != nil { release(env, timing_functions); }
+        if calculation_mode != nil { release(env, calculation_mode); }
+        if rotation_mode != nil { release(env, rotation_mode); }
+        if tension_values != nil { release(env, tension_values); }
+        if continuity_values != nil { release(env, continuity_values); }
+        if bias_values != nil { release(env, bias_values); }
         
         env.objc.dealloc_object(this, &mut env.mem)
     }
@@ -90,17 +93,17 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     - (id)keyPath { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_path }
     - (())setKeyPath:(id)val {
         let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_path;
-        if val != nil { retain(env, val); [span_5](start_span)}
+        if val != nil { retain(env, val); }
         env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).key_path = val;
-        if old != nil { release(env, old); }[span_5](end_span)
+        if old != nil { release(env, old); }
     }
 
     - (id)values { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).values }
     - (())setValues:(id)val {
         let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).values;
-        if val != nil { retain(env, val); [span_6](start_span)}
+        if val != nil { retain(env, val); }
         env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).values = val;
-        if old != nil { release(env, old); }[span_6](end_span)
+        if old != nil { release(env, old); }
     }
 
     - (id)path { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).path }
@@ -114,9 +117,9 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     - (id)keyTimes { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_times }
     - (())setKeyTimes:(id)val {
         let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_times;
-        if val != nil { retain(env, val); [span_7](start_span)}
+        if val != nil { retain(env, val); }
         env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).key_times = val;
-        if old != nil { release(env, old); }[span_7](end_span)
+        if old != nil { release(env, old); }
     }
 
     - (id)timingFunctions { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).timing_functions }
@@ -168,14 +171,13 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     }
 
     - (f64)duration { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).duration }
-    - (())setDuration:(f64)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).duration = val; [span_8](start_span)}
+    - (())setDuration:(f64)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).duration = val; }
 
     - (id)delegate { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate }
-    - (())setDelegate:(id)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val; }[span_8](end_span)
+    - (())setDelegate:(id)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val; }
 
     - (bool)removedOnCompletion { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).removed_on_completion }
-    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).removed_on_completion = val; [span_9](start_span)}
+    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).removed_on_completion = val; }
 
     @end
 };
-
