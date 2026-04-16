@@ -216,13 +216,19 @@ pub fn AudioQueueNewOutput(
             
             // Если bytes_per_frame дает стандартный битрейт (8, 16, 24, 32), верим ему
             if true_bits_per_channel == 8 || true_bits_per_channel == 16 || true_bits_per_channel == 24 || true_bits_per_channel == 32 {
+                // Копируем значения в локальные переменные для безопасной передачи в макрос
+                let old_bits = format.bits_per_channel;
+                let current_bytes_per_frame = format.bytes_per_frame;
+                
                 log!("Applying generic hack: Fixing inconsistent bits_per_channel from {} to {} based on actual bytes_per_frame ({})", 
-                     format.bits_per_channel, true_bits_per_channel, format.bytes_per_frame);
+                     old_bits, true_bits_per_channel, current_bytes_per_frame);
                 format.bits_per_channel = true_bits_per_channel;
             } else {
-                // Если нет, принудительно исправляем bytes_per_frame
+                // Копируем значение
+                let old_bytes_per_frame = format.bytes_per_frame;
+                
                 log!("Applying generic hack: Fixing inconsistent bytes_per_frame from {} to {}", 
-                     format.bytes_per_frame, expected_bytes_per_frame);
+                     old_bytes_per_frame, expected_bytes_per_frame);
                 format.bytes_per_frame = expected_bytes_per_frame;
             }
         }
@@ -230,54 +236,15 @@ pub fn AudioQueueNewOutput(
         // Также исправляем bytes_per_packet, если он сломан
         let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
         if format.bytes_per_packet > 0 && format.bytes_per_packet != expected_bytes_per_packet {
+            // Копируем значение
+            let old_bytes_per_packet = format.bytes_per_packet;
+            
             log!("Applying generic hack: Fixing inconsistent bytes_per_packet from {} to {}", 
-                 format.bytes_per_packet, expected_bytes_per_packet);
+                 old_bytes_per_packet, expected_bytes_per_packet);
             format.bytes_per_packet = expected_bytes_per_packet;
         }
     }
 
-    let host_object = AudioQueueHostObject {
-        format,
-        callback_proc: in_callback_proc,
-        callback_user_data: in_user_data,
-        run_loop: in_callback_run_loop,
-        volume: 1.0,
-        buffers: Vec::new(),
-        buffer_queue: VecDeque::new(),
-        is_running: AudioQueueIsRunning::Stopped,
-        al_source: None,
-        al_unused_buffers: Vec::new(),
-        aq_is_running_proc: None,
-        aq_is_running_user_data: None,
-        is_running_handler: false,
-        is_input: false,
-        input_delay: 0,
-    };
-
-    let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
-    State::get(&mut env.framework_state)
-        .audio_queues
-        .insert(aq_ref, host_object);
-
-    env.mem.write(out_aq, aq_ref);
-
-    ns_run_loop::add_audio_queue(env, in_callback_run_loop, aq_ref);
-
-    // Теперь формат исправлен и эта проверка не выдаст предупреждение для 32/16-битной путаницы
-    log_if_broken_audio_format(&format);
-
-    if !is_supported_audio_format(&format) {
-        log_dbg!("Warning: Audio queue {:?} will be ignored because its format is not yet supported: {:#?}", aq_ref, format);
-    }
-
-    log_dbg!(
-        "AudioQueueNewOutput() for format {:#?}, new audio queue handle: {:?}",
-        format,
-        aq_ref,
-    );
-
-    0 // success
-}
 
 pub fn AudioQueueGetParameter(
     env: &mut Environment,
