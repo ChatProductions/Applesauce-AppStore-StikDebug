@@ -1,32 +1,28 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! Conditional variables.
 
 use super::mutex::pthread_mutex_t;
 use crate::dyld::FunctionExports;
-use crate::libc::errno::EINVAL;
+use crate::libc::errno::{EINVAL, ETIMEDOUT};
 use crate::libc::pthread::mutex::pthread_mutex_unlock;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::{export_c_func, Environment};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::Duration;
 
 use crate::environment::{MutexId, ThreadBlock, ThreadId};
+use crate::libc::time::timespec;
 
 #[repr(C, packed)]
 pub struct pthread_condattr_t {
     _pad: [u8; 4],  // Apple's pthread_condattr_t = 4 bytes
 }
 unsafe impl SafeRead for pthread_condattr_t {}
-
-#[repr(C, packed)]
-pub struct Timespec {
-    pub tv_sec:  u32,
-    pub tv_nsec: u32,
-}
-unsafe impl SafeRead for Timespec {}
 
 /// Arbitrarily-chosen magic number for `pthread_cond_t` (not Apple's).
 const MAGIC_COND: u32 = u32::from_be_bytes(*b"COND");
@@ -57,9 +53,10 @@ impl State {
 }
 
 pub struct CondHostObject {
-    waiting: VecDeque<ThreadId>,
+    pub(crate) waiting: VecDeque<ThreadId>,
     pub(crate) waking: VecDeque<ThreadId>,
     pub(crate) curr_mutex: Option<MutexId>,
+    pub(crate) timed_out: HashSet<ThreadId>,
 }
 
 pub fn pthread_cond_init(
@@ -70,7 +67,7 @@ pub fn pthread_cond_init(
     // Игнорируем атрибуты, используем дефолтные значения
     // MCPE передаёт ненулевой attr, но нам он не нужен
     let _ = attr;
-    
+
     let opaque = pthread_cond_t {
         magic: MAGIC_COND,
         _unused: [0; 6],
@@ -84,6 +81,7 @@ pub fn pthread_cond_init(
             waiting: VecDeque::new(),
             waking: VecDeque::new(),
             curr_mutex: None,
+            timed_out: Default::default(),
         },
     );
     0 // success
@@ -107,6 +105,61 @@ fn check_or_register_cond(env: &mut Environment, cond: MutPtr<pthread_cond_t>) -
     }
 }
 
+pub fn pthread_cond_timedwait(
+    env: &mut Environment,
+    cond: MutPtr<pthread_cond_t>,
+    mutex: MutPtr<pthread_mutex_t>,
+    abs_time: ConstPtr<timespec>,
+) -> i32 {
+    let time = env.mem.read(abs_time);
+    let deadline = Duration::from_secs(time.tv_sec.try_into().unwrap())
+        + Duration::from_nanos(time.tv_nsec.try_into().unwrap());
+
+    if let Err(e) = check_or_register_cond(env, cond) {
+        return e;
+    }
+
+    let res = pthread_mutex_unlock(env, mutex);
+    assert_eq!(res, 0);
+
+    log_dbg!(
+        "Thread {} is blocking on condition variable {:?} with deadline {:?}",
+        env.current_thread,
+        cond,
+        deadline
+    );
+
+    let current_thread = env.current_thread;
+    let mutex_id = env.mem.read(mutex).mutex_id;
+    let host_object = State::get_mut(env)
+        .condition_variables
+        .get_mut(&cond)
+        .unwrap();
+
+    // The mutex used must be the same as the currently waiting mutex, or there
+    // must be no other waiters.
+    assert!(
+        host_object.curr_mutex == Some(mutex_id)
+            || host_object.waking.is_empty() && host_object.waiting.is_empty()
+    );
+    host_object.curr_mutex = Some(mutex_id);
+    host_object.waiting.push_back(current_thread);
+
+    env.yield_thread(ThreadBlock::Condition(cond, Some(deadline)));
+
+    let host_object = State::get_mut(env)
+        .condition_variables
+        .get_mut(&cond)
+        .unwrap();
+
+    if host_object.timed_out.contains(&current_thread) {
+        host_object.timed_out.remove(&current_thread);
+        ETIMEDOUT
+    } else {
+        0 // success
+    }
+}
+
 pub fn pthread_cond_wait(
     env: &mut Environment,
     cond: MutPtr<pthread_cond_t>,
@@ -117,18 +170,20 @@ pub fn pthread_cond_wait(
     }
     let res = pthread_mutex_unlock(env, mutex);
     assert_eq!(res, 0);
+
     log_dbg!(
         "Thread {} is blocking on condition variable {:?}",
         env.current_thread,
         cond
     );
+
     let current_thread = env.current_thread;
     let mutex_id = env.mem.read(mutex).mutex_id;
     let host_object = State::get_mut(env)
         .condition_variables
         .get_mut(&cond)
         .unwrap();
-        
+
     // The mutex used must be the same as the currently waiting mutex, or there
     // must be no other waiters.
     assert!(
@@ -137,7 +192,15 @@ pub fn pthread_cond_wait(
     );
     host_object.curr_mutex = Some(mutex_id);
     host_object.waiting.push_back(current_thread);
-    env.yield_thread(ThreadBlock::Condition(cond.cast()));
+
+    env.yield_thread(ThreadBlock::Condition(cond, None));
+
+    let host_object = State::get_mut(env)
+        .condition_variables
+        .get_mut(&cond)
+        .unwrap();
+
+    assert!(!host_object.timed_out.contains(&current_thread));
     0 // success
 }
 
@@ -149,6 +212,7 @@ pub fn pthread_cond_signal(env: &mut Environment, cond: MutPtr<pthread_cond_t>) 
         .condition_variables
         .get_mut(&cond)
         .unwrap();
+
     if let Some(tid) = host_object.waiting.pop_front() {
         host_object.waking.push_back(tid);
         log_dbg!(
@@ -196,35 +260,13 @@ pub fn pthread_cond_destroy(env: &mut Environment, cond: MutPtr<pthread_cond_t>)
     0 // success
 }
 
-/// pthread_cond_timedwait — like pthread_cond_wait but with an absolute timeout.
-/// We ignore the timeout and treat it as a regular wait, which is safe for
-/// game use-cases (the thread will still be woken by signal/broadcast).
-pub fn pthread_cond_timedwait(
-    env: &mut Environment,
-    cond: MutPtr<pthread_cond_t>,
-    mutex: MutPtr<pthread_mutex_t>,
-    abstime: ConstPtr<Timespec>,
-) -> i32 {
-    // Log the timeout for debugging but otherwise behave like cond_wait.
-    if !abstime.is_null() {
-        let ts = env.mem.read(abstime);
-        let sec = ts.tv_sec;
-        let nsec = ts.tv_nsec;
-        log_dbg!(
-            "pthread_cond_timedwait: timeout at tv_sec={} tv_nsec={} (ignored, treating as wait)",
-            sec, nsec
-        );
-    }
-    pthread_cond_wait(env, cond, mutex)
-}
-
 /// pthread_cond_timedwait_relative_np — Apple extension with a relative timeout.
-/// Same stub approach as timedwait.
+/// Same stub approach as timedwait in the fork, effectively acting as wait.
 pub fn pthread_cond_timedwait_relative_np(
     env: &mut Environment,
     cond: MutPtr<pthread_cond_t>,
     mutex: MutPtr<pthread_mutex_t>,
-    reltime: ConstPtr<Timespec>,
+    reltime: ConstPtr<timespec>,
 ) -> i32 {
     if !reltime.is_null() {
         let ts = env.mem.read(reltime);
