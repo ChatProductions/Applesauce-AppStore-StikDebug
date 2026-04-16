@@ -135,53 +135,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())loadView {
-    let bundle: id = env.objc.borrow::<UIViewControllerHostObject>(this).bundle;
-    let bundle: id = if bundle == nil {
-        msg_class![env; NSBundle mainBundle]
-    } else {
-        bundle
-    };
-
-    let nib_name: id = get_nib_name(env, this, bundle);
+    let nib_name = msg![env; this nibName];
+    let bundle = msg![env; this nibBundle];
+    
     if nib_name != nil {
-        // If we do have nib name, try to load it!
-        log_dbg!(
-            "Load {:?} view controller's view by nib, using name {}", this, to_rust_string(env, nib_name)
-        );
-
         let nib: id = msg_class![env; UINib nibWithNibName:nib_name bundle:bundle];
-        release(env, nib_name);
+        if nib != nil {
+            // instantiateWithOwner: подключит outlet 'view' к нашему контроллеру
+            () = msg![env; nib instantiateWithOwner:this options:nil];
+            
+            // Проверяем, привязалась ли вьюшка через outlet
+            if env.objc.borrow::<UIViewControllerHostObject>(this).view != nil {
+                return;
+            }
+        }
+    }
 
-        // The NIB's File's Owner will be substituted by `this`,
-        // implicitly loading the view as well
-        let _: id = msg![env; nib instantiateWithOwner:this options:nil];
-
-        let view = env.objc.borrow::<UIViewControllerHostObject>(this).view;
-        // Having nil view at this point probably mean that
-        // out nib's parsing is wrong.
-        // Also we assume here the case of a "detached nib file"
-        // TODO: support "integrated nib file"
-        assert!(view != nil);
-
-        return;
-    };
-
-    // As a last resort, use plain UIVIew for the root view.
-    // Use full screen bounds (not applicationFrame) so that the view
-    // covers the entire window — games using OpenGL ES expect a
-    // full-screen surface, and using applicationFrame would shift the
-    // view down by the status-bar height (20 px), breaking hit-testing
-    // and touch-coordinate calculations.
-    let class: Class = msg![env; this class];
-    log!("Unable to load {:?} {} view controller's view by nib, using plain UIView", this, env.objc.get_class_name(class).to_string());
-    let view: id = msg_class![env; UIView alloc];
-    let screen: id = msg_class![env; UIScreen mainScreen];
-    // FIX: use bounds (full 320×480) instead of applicationFrame (320×460
-    // starting at y=20) so OpenGL games get a correctly-sized root view
-    // and touch coordinates are not offset by the status-bar height.
-    let screen_bounds: CGRect = msg![env; screen bounds];
-    let view: id = msg![env; view initWithFrame:screen_bounds];
+    // Если NIB не найден или в нем нет связи с view — создаем пустую вьюшку (fallback)
+    let screen = msg_class![env; UIScreen mainScreen];
+    let bounds: CGRect = msg![env; screen bounds];
+    
+    let view = msg_class![env; UIView alloc];
+    let view: id = msg![env; view initWithFrame:bounds];
     () = msg![env; this setView:view];
+    release(env, view);
 }
 
 - (())setView:(id)new_view { // UIView*
@@ -288,7 +265,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)nibName {
-    env.objc.borrow::<UIViewControllerHostObject>(this).nib_name
+    let host = env.objc.borrow::<UIViewControllerHostObject>(this);
+    if host.nib_name != nil {
+        return host.nib_name;
+    }
+
+    let bundle = msg![env; this nibBundle];
+    if bundle == nil { return nil; }
+
+    let class_name: id = NSStringFromClass(env, msg![env; this class]);
+    let resolved = resolve_nib_name_from_class(env, bundle, class_name);
+    release(env, class_name);
+
+    if resolved != nil {
+        // Кешируем результат, чтобы не сканировать диск каждый раз
+        retain(env, resolved);
+        env.objc.borrow_mut::<UIViewControllerHostObject>(this).nib_name = resolved;
+    }
+    resolved
 }
 
 - (id)nibBundle {
@@ -533,9 +527,6 @@ fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
     nil
 }
 
-/// Умный помощник для поиска NIB файлов. Учитывает регистр букв (важно для
-/// Android) и все возможные варианты суффиксов устройств
-/// (~iphone, -iPhone и т.д.)
 fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id {
     if base_name == nil {
         return nil;
@@ -543,24 +534,43 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     let type_: id = get_static_str(env, "nib");
     let base_name_str = to_rust_string(env, base_name);
     
-    // ИСПРАВЛЕНИЕ: Используем .to_string() вместо .clone(),
-    // чтобы типы в массиве совпадали
+    // Перебираем варианты регистра и суффиксов
     let bases = [base_name_str.to_string(), base_name_str.to_lowercase()];
-    
-    // Перебираем все варианты окончаний, которые использовали старые игры
     let suffixes = ["", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad"];
     
     for base in &bases {
         for suffix in &suffixes {
             let candidate = format!("{}{}", base, suffix);
             let candidate_ns: id = from_rust_string(env, candidate);
-            let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
             
+            // Проверяем существование файла
+            let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
             if path != nil {
-                retain(env, candidate_ns);
-                return candidate_ns;
+                release(env, path); // Путь нам не нужен, только подтверждение
+                // Возвращаем именно имя (candidate_ns), а не путь!
+                return autorelease(env, candidate_ns); 
             }
+            release(env, candidate_ns);
         }
+    }
+    nil
+}
+
+fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id) -> id {
+    if class_name == nil { return nil; }
+    
+    // 1. Пробуем полное имя класса (напр. MainViewController)
+    let res = check_and_resolve_nib(env, bundle, class_name);
+    if res != nil { return res; }
+    
+    // 2. Пробуем имя без суффикса "Controller" (напр. MainView)
+    let class_str = to_rust_string(env, class_name);
+    if class_str.ends_with("Controller") {
+        let short_name = &class_str[..class_str.len() - "Controller".len()];
+        let short_ns = from_rust_string(env, short_name);
+        let res = check_and_resolve_nib(env, bundle, short_ns);
+        release(env, short_ns);
+        if res != nil { return res; }
     }
     
     nil
