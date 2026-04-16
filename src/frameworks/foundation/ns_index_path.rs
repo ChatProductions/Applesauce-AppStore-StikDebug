@@ -35,14 +35,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - Constructors
 
-/// `indexPathWithIndex:` — single-component index path.
+// `indexPathWithIndex:` — single-component index path.
 + (id)indexPathWithIndex:(NSUInteger)index {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithIndex:index];
     autorelease(env, new)
 }
 
-/// `indexPathWithIndexes:length:` — from a C array of NSUInteger.
+// `indexPathWithIndexes:length:` — from a C array of NSUInteger.
 + (id)indexPathWithIndexes:(ConstPtr<NSUInteger>)indexes
                    length:(NSUInteger)length {
     let new: id = msg![env; this alloc];
@@ -50,7 +50,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-/// UIKit convenience: `indexPathForRow:inSection:`
+// UIKit convenience: `indexPathForRow:inSection:`
 + (id)indexPathForRow:(NSUInteger)row inSection:(NSUInteger)section {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithIndexes:(crate::mem::MutPtr::null()) length:0u32];
@@ -61,7 +61,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-/// UIKit convenience: `indexPathForItem:inSection:` (collection view)
+// UIKit convenience: `indexPathForItem:inSection:` (collection view)
 + (id)indexPathForItem:(NSUInteger)item inSection:(NSUInteger)section {
     msg_class![env; NSIndexPath indexPathForRow:item inSection:section]
 }
@@ -104,7 +104,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// Write all indexes into a caller-supplied C array.
+// Write all indexes into a caller-supplied C array.
 - (())getIndexes:(MutPtr<NSUInteger>)indexes {
     let host = env.objc.borrow::<NSIndexPathHostObject>(this);
     for (i, &idx) in host.indexes.iter().enumerate() {
@@ -112,7 +112,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// Write a range of indexes into a caller-supplied C array.
+// Write a range of indexes into a caller-supplied C array.
 - (())getIndexes:(MutPtr<NSUInteger>)indexes
            range:(NSUInteger)range_loc :(NSUInteger)range_len {
     let host = env.objc.borrow::<NSIndexPathHostObject>(this);
