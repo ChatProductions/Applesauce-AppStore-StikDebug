@@ -60,13 +60,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Observers
 
 - (())addTransactionObserver:(id)observer {
-    // Получаем доступ к внутреннему объекту (HostObject), чтобы сохранить наблюдателя
-    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).unwrap();
+    // Убрали .unwrap()
+    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
     host_obj.observer = observer;
 }
 
 - (())removeTransactionObserver:(id)_observer {
-    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).unwrap();
+    // Убрали .unwrap()
+    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
     host_obj.observer = nil;
 }
 
@@ -98,13 +99,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())restoreCompletedTransactions {
-    // Это критически важно: многие игры виснут на экране загрузки, 
-    // пока не получат ответ о завершении восстановления покупок.
-    let host_obj = env.objc.borrow::<SKPaymentQueueHostObject>(this).unwrap();
+    // Убрали .unwrap()
+    let host_obj = env.objc.borrow::<SKPaymentQueueHostObject>(this);
     let observer = host_obj.observer;
     
     if observer != nil {
-        // Вызываем метод делегата, сообщая, что "восстановление" успешно завершено (даже если покупок 0)
+        // Вызываем метод делегата, сообщая, что "восстановление" успешно завершено
         let _: () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];
     }
 }
