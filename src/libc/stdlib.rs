@@ -13,9 +13,9 @@ use crate::libc::clocale::{setlocale, LC_CTYPE};
 use crate::libc::errno::{set_errno, EINVAL};
 use crate::libc::string::strlen;
 use crate::libc::wchar::wchar_t;
-use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::objc::id;
-use crate::Environment;
+use crate::{impl_GuestRet_for_large_struct, Environment};
 use std::str::FromStr;
 
 pub mod qsort;
@@ -717,6 +717,23 @@ fn putenv(env: &mut Environment, string: MutPtr<u8>) -> i32 {
     0
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+#[repr(C, packed)]
+struct div_t {
+    quot: i32,
+    rem: i32,
+}
+unsafe impl SafeRead for div_t {}
+impl_GuestRet_for_large_struct!(div_t);
+
+fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
+    div_t {
+        quot: numer.wrapping_div(denom),
+        rem: numer.wrapping_rem(denom),
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(malloc(_)),
     export_c_func!(malloc_size(_)),
@@ -766,6 +783,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(kevent(_, _, _, _, _, _)),
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
     export_c_func!(putenv(_)),
+    export_c_func!(div(_, _)),
 ];
 
 pub fn atof_inner(
