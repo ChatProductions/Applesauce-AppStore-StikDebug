@@ -362,7 +362,7 @@ pub const FUNCTIONS: FunctionExports = &[
 pub const CONSTANTS: ConstantExports = &[
     // kABPersonEmailProperty — это ID свойства (int32). 
     // Используем S32 (Signed 32-bit), так как I32 не найден.
-    ("_kABPersonEmailProperty", HostConstant::S32(5)),
+    ("_kABPersonEmailProperty", HostConstant::U32(5)),
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
