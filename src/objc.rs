@@ -154,7 +154,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(object_getClass(_)),
     export_c_func!(objc_retainAutoreleasedReturnValue(_)),
     export_c_func!(objc_autoreleasePoolPush(_)),
-    export_c_func!(objc_retain(_))
+    export_c_func!(objc_retain(_)),
     export_c_func!(objc_setProperty_nonatomic(_)),
     export_c_func!(objc_exception_throw(_)),
     export_c_func!(objc_begin_catch(_)),
