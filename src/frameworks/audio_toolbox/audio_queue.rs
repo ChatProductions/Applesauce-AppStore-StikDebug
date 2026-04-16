@@ -163,6 +163,8 @@ pub fn AudioQueueNewOutput(
     };
 
     let mut format = env.mem.read(in_format);
+    
+    // ХАК ДЛЯ C&C Red Alert
     if env.bundle.bundle_identifier().starts_with("com.ea.candcra")
         && format.format_id == fourcc(b".mp3")
     {
@@ -180,12 +182,10 @@ pub fn AudioQueueNewOutput(
         }
     }
 
-    // ДОБАВЛЕННЫЙ ХАК ДЛЯ PLANTS VS ZOMBIES (Symphony Engine)
+    // ХАК ДЛЯ PLANTS VS ZOMBIES (Symphony Engine)
     if env.bundle.bundle_identifier() == "com.popcap.PvZ" && format.format_id == kAudioFormatLinearPCM {
         log!("Applying game-specific hack for PvZ: Fixing empty LPCM values from Symphony engine.");
         
-        // Движок передает нули, из-за чего is_supported_audio_format возвращает false.
-        // Жестко задаем стандартные параметры для 16-битного PCM.
         if format.bits_per_channel == 0 {
             format.bits_per_channel = 16;
         }
@@ -195,14 +195,44 @@ pub fn AudioQueueNewOutput(
             format.bytes_per_frame = format.channels_per_frame * bytes_per_channel;
         }
         
-        // Игра странно выставляет 1024 фрейма на пакет (что типично для AAC, а не LPCM).
-        // Сбрасываем до 1, чтобы декодер LPCM не сошел с ума.
         if format.frames_per_packet == 1024 {
             format.frames_per_packet = 1;
         }
         
         if format.bytes_per_packet == 0 {
             format.bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
+        }
+    }
+
+    // --- УНИВЕРСАЛЬНЫЙ ФИКС НЕСОСТЫКОВОК LPCM ---
+    // Лечит ошибку: "Stream format has non-sensical values" когда биты не сходятся с размером фрейма
+    if format.format_id == kAudioFormatLinearPCM && (format.format_flags & kAudioFormatFlagIsPacked) != 0 {
+        let expected_bytes_per_frame = format.channels_per_frame * (format.bits_per_channel / 8);
+        
+        // Если фрейм и биты противоречат друг другу
+        if expected_bytes_per_frame > 0 && format.bytes_per_frame > 0 && expected_bytes_per_frame != format.bytes_per_frame {
+            let true_bytes_per_channel = format.bytes_per_frame / format.channels_per_frame;
+            let true_bits_per_channel = true_bytes_per_channel * 8;
+            
+            // Если bytes_per_frame дает стандартный битрейт (8, 16, 24, 32), верим ему
+            if true_bits_per_channel == 8 || true_bits_per_channel == 16 || true_bits_per_channel == 24 || true_bits_per_channel == 32 {
+                log!("Applying generic hack: Fixing inconsistent bits_per_channel from {} to {} based on actual bytes_per_frame ({})", 
+                     format.bits_per_channel, true_bits_per_channel, format.bytes_per_frame);
+                format.bits_per_channel = true_bits_per_channel;
+            } else {
+                // Если нет, принудительно исправляем bytes_per_frame
+                log!("Applying generic hack: Fixing inconsistent bytes_per_frame from {} to {}", 
+                     format.bytes_per_frame, expected_bytes_per_frame);
+                format.bytes_per_frame = expected_bytes_per_frame;
+            }
+        }
+
+        // Также исправляем bytes_per_packet, если он сломан
+        let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
+        if format.bytes_per_packet > 0 && format.bytes_per_packet != expected_bytes_per_packet {
+            log!("Applying generic hack: Fixing inconsistent bytes_per_packet from {} to {}", 
+                 format.bytes_per_packet, expected_bytes_per_packet);
+            format.bytes_per_packet = expected_bytes_per_packet;
         }
     }
 
@@ -233,6 +263,7 @@ pub fn AudioQueueNewOutput(
 
     ns_run_loop::add_audio_queue(env, in_callback_run_loop, aq_ref);
 
+    // Теперь формат исправлен и эта проверка не выдаст предупреждение для 32/16-битной путаницы
     log_if_broken_audio_format(&format);
 
     if !is_supported_audio_format(&format) {
