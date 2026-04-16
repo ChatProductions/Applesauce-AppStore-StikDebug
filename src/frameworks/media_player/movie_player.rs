@@ -15,7 +15,7 @@ use crate::objc::{
 };
 use crate::Environment;
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Default)]
 pub struct State {
@@ -333,7 +333,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (f64)currentPlaybackTime {
-    0.0 // Dummy time
+    1.0 // Return non-zero dummy time
 }
 - (())setCurrentPlaybackTime:(f64)time {
     todo_objc_setter!(this, time);
@@ -359,6 +359,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isPreparedToPlay {
     true
 }
+- (bool)readyForDisplay {
+    true
+}
 
 - (())prepareToPlay {
     // Act as if we are immediately prepared;
@@ -380,37 +383,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())play {
     log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
     
-    let current_active = env.framework_state.media_player.movie_player.active_player;
-    if current_active != Some(this) {
-        if let Some(old) = current_active {
-            let _: () = msg![env; old stop];
-        }
-        retain(env, this);
-        env.framework_state.media_player.movie_player.active_player = Some(this);
-    }
-    
+    // 1. Ставим плеер в режим проигрывания
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStatePlaying;
 
-    // Act as if playback immediately completed after 1 second
-    // (various apps wait for this, such as BIA and Hero of Sparta).
-    let notif = (
-        MPMoviePlayerPlaybackDidFinishNotification,
-        this,
-        Instant::now()
-            .checked_add(Duration::from_millis(1000))
-            .unwrap(),
-    );
-    for (name, obj, _) in &mut State::get(env).pending_notifications {
-        // De-duplicate similar notifications.
-        // This can happen if app is calling
-        // `play` twice on the same player object (case of NOVA2).
-        if *name == MPMoviePlayerPlaybackDidFinishNotification && *obj == this {
-            return;
-        }
-    }
-    State::get(env).pending_notifications.push_back(notif);
+    // 2. СИНХРОННО уведомляем игру, что ролик закончился. 
+    // Это пробивает "глухую" блокировку цикла игр от Electronic Arts.
+    let name = ns_string::get_static_str(env, MPMoviePlayerPlaybackDidFinishNotification);
+    let center: id = msg_class![env; NSNotificationCenter defaultCenter];
+    let _: () = msg![env; center postNotificationName:name object:this];
+
+    // 3. Ставим плеер в режим остановки
+    env.objc
+        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
+        .playback_state = MPMoviePlaybackStateStopped;
 }
 
 - (())pause {
@@ -479,4 +466,3 @@ pub(super) fn handle_players(env: &mut Environment) {
         let _: () = msg![env; center postNotificationName:name object:object];
     }
 }
-
