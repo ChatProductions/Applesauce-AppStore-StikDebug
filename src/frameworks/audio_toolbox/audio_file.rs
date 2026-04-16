@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `AudioFile.h` (Audio File Services)
@@ -78,6 +79,7 @@ const kAudioFilePropertyChannelLayout: AudioFilePropertyID = fourcc(b"cmap");
 const kAudioFilePropertyEstimatedDuration: AudioFilePropertyID = fourcc(b"edur");
 const kAudioFilePropertyPacketTableInfo: AudioFilePropertyID = fourcc(b"pnfo");
 const kAudioFilePropertyPacketToFrame: AudioFilePropertyID = fourcc(b"flst");
+pub const kAudioFilePropertyFileFormat: AudioFilePropertyID = fourcc(b"ffmt");
 
 pub fn AudioFileOpenURL(
     env: &mut Environment,
@@ -141,7 +143,8 @@ pub fn AudioFileOpenWithCallbacks(
     in_file_type_hint: AudioFileTypeID,
     out_audio_file: MutPtr<AudioFileID>,
 ) -> OSStatus {
-    if _write_callback.to_ptr().is_null() || _setsize_callback.to_ptr().is_null() {
+    if _write_callback.to_ptr().is_null() ||
+        _setsize_callback.to_ptr().is_null() {
         log_dbg!("AudioFileOpenWithCallbacks() called with (unsupported) write({:?})/set_size({:?}) callbacks!",
             _write_callback,
             _setsize_callback);
@@ -214,6 +217,7 @@ fn property_size(property_id: AudioFilePropertyID) -> GuestUSize {
         kAudioFilePropertyEstimatedDuration => guest_size_of::<f64>(),
         kAudioFilePropertyPacketTableInfo => guest_size_of::<AudioFilePacketTableInfo>(),
         kAudioFilePropertyPacketToFrame => guest_size_of::<f64>(),
+        kAudioFilePropertyFileFormat => guest_size_of::<AudioFileTypeID>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
     }
 }
@@ -371,6 +375,9 @@ pub fn AudioFileGetProperty(
                 * frames_per_packet as f64
                 / (bytes_per_packet as f64 * sample_rate);
             env.mem.write(out_property_data.cast(), estimated_duration);
+        }
+        kAudioFilePropertyFileFormat => {
+            env.mem.write(out_property_data.cast(), kAudioFileCAFType);
         }
         _ => unreachable!(),
     }
