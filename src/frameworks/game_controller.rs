@@ -1,19 +1,26 @@
-use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::foundation::ns_string;
-use crate::objc::id;
-use crate::Environment;
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 
-/// Экспортируем константы для линковщика (dyld)
+use crate::dyld::{ConstantExports, HostConstant, HostDylib};
+
 pub const CONSTANTS: ConstantExports = &[
-    ("_GCControllerDidConnectNotification", HostConstant::Id(get_connect_notification)),
-    ("_GCControllerDidDisconnectNotification", HostConstant::Id(get_disconnect_notification)),
+    (
+        "_GCControllerDidConnectNotification",
+        HostConstant::NSString("GCControllerDidConnectNotification"),
+    ),
+    (
+        "_GCControllerDidDisconnectNotification",
+        HostConstant::NSString("GCControllerDidDisconnectNotification"),
+    ),
 ];
 
-fn get_connect_notification(env: &mut Environment) -> id {
-    // Возвращаем реальный NSString, чтобы NSNotificationCenter мог с ним работать
-    ns_string::get_static_str(env, "GCControllerDidConnectNotification")
-}
-
-fn get_disconnect_notification(env: &mut Environment) -> id {
-    ns_string::get_static_str(env, "GCControllerDidDisconnectNotification")
-}
+pub const DYLIB: HostDylib = HostDylib {
+    path: "/System/Library/Frameworks/GameController.framework/GameController",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[CONSTANTS],
+    function_exports: &[],
+};
