@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSIndexPath`.
@@ -179,14 +180,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isEqual:(id)other {
-    if this == other { return true;  }
+    if this == other { return true; }
     if other == nil  { return false; }
     let a = env.objc.borrow::<NSIndexPathHostObject>(this).indexes.clone();
-    let b_opt = env.objc.try_borrow::<NSIndexPathHostObject>(other);
-    match b_opt {
-        Some(b) => a == b.indexes,
-        None    => false,
-    }
+    let b = env.objc.borrow::<NSIndexPathHostObject>(other);
+    a == b.indexes
 }
 
 - (NSUInteger)hash {
@@ -262,3 +260,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
