@@ -245,6 +245,48 @@ pub fn AudioQueueNewOutput(
         }
     }
 
+    let host_object = AudioQueueHostObject {
+        format,
+        callback_proc: in_callback_proc,
+        callback_user_data: in_user_data,
+        run_loop: in_callback_run_loop,
+        volume: 1.0,
+        buffers: Vec::new(),
+        buffer_queue: VecDeque::new(),
+        is_running: AudioQueueIsRunning::Stopped,
+        al_source: None,
+        al_unused_buffers: Vec::new(),
+        aq_is_running_proc: None,
+        aq_is_running_user_data: None,
+        is_running_handler: false,
+        is_input: false,
+        input_delay: 0,
+    };
+
+    let aq_ref = env.mem.alloc_and_write(OpaqueAudioQueue { _filler: 0 });
+    State::get(&mut env.framework_state)
+        .audio_queues
+        .insert(aq_ref, host_object);
+
+    env.mem.write(out_aq, aq_ref);
+
+    ns_run_loop::add_audio_queue(env, in_callback_run_loop, aq_ref);
+
+    // Теперь формат исправлен и эта проверка не выдаст предупреждение для 32/16-битной путаницы
+    log_if_broken_audio_format(&format);
+
+    if !is_supported_audio_format(&format) {
+        log_dbg!("Warning: Audio queue {:?} will be ignored because its format is not yet supported: {:#?}", aq_ref, format);
+    }
+
+    log_dbg!(
+        "AudioQueueNewOutput() for format {:#?}, new audio queue handle: {:?}",
+        format,
+        aq_ref,
+    );
+
+    0 // success
+}
 
 pub fn AudioQueueGetParameter(
     env: &mut Environment,
