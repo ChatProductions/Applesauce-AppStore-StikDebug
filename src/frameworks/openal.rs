@@ -155,12 +155,33 @@ fn alcGetString(
     device: MutPtr<GuestALCdevice>,
     param: ALenum,
 ) -> ConstPtr<u8> {
-    assert!(device.is_null());
+    // Получаем реальный (хостовый) указатель на устройство, если игра его передала
+    let host_device = if device.is_null() {
+        std::ptr::null_mut()
+    } else {
+        match State::get(env).devices.get(&device) {
+            Some(&dev) => dev,
+            None => {
+                log!("Warning: alcGetString called with unknown device {:?}", device);
+                std::ptr::null_mut()
+            }
+        }
+    };
 
-    let res = unsafe { al::alcGetString(std::ptr::null_mut(), param) };
+    // Передаем хостовое устройство (или NULL) в настоящую библиотеку OpenAL Soft
+    let res = unsafe { al::alcGetString(host_device, param) };
+    
+    // Защита от краша, если OpenAL ничего не вернул
+    if res.is_null() {
+        log_dbg!("alcGetString({:?}, {}) returned NULL", device, param);
+        return Ptr::null();
+    }
+
     let s = unsafe { CStr::from_ptr(res) };
-    log_dbg!("alcGetString({:?}) => {:?}", param, s);
+    log_dbg!("alcGetString({:?}, {}) => {:?}", device, param, s);
     log!("TODO: alcGetString({}) leaks memory", param);
+    
+    // Аллоцируем строку в памяти гостя
     env.mem.alloc_and_write_cstr(s.to_bytes()).cast_const()
 }
 
