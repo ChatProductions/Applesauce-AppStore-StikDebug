@@ -10,7 +10,7 @@ use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::mem::MutPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports,
-    TrivialHostObject,
+    HostObject,
 };
 
 // MARK: - Category constants
@@ -134,6 +134,18 @@ pub struct State {
     shared_instance: Option<id>,
 }
 
+// ДОБАВЛЕНО: Полноценный объект состояния (без заглушек)
+pub(super) struct AVAudioSessionHostObject {
+    category: id,
+    category_options: AVAudioSessionCategoryOptions,
+    mode: id,
+    active: bool,
+    preferred_sample_rate: f64,
+    preferred_io_buffer_duration: f64,
+    delegate: id,
+}
+impl HostObject for AVAudioSessionHostObject {}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -141,88 +153,127 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation AVAudioSession: NSObject
 
 + (id)sharedInstance {
-    env.objc.alloc_static_object(
+    // ИСПРАВЛЕНО: Теперь объект действительно работает как синглтон и сохраняет свое состояние
+    if let Some(instance) = env.framework_state.avfoundation.av_audio_session.shared_instance {
+        return instance;
+    }
+    
+    let category = ns_string::get_static_str(env, AVAudioSessionCategorySoloAmbient);
+    let mode = ns_string::get_static_str(env, AVAudioSessionModeDefault);
+    
+    let host_object = Box::new(AVAudioSessionHostObject {
+        category,
+        category_options: 0,
+        mode,
+        active: false,
+        preferred_sample_rate: 44100.0,
+        preferred_io_buffer_duration: 0.005,
+        delegate: nil,
+    });
+    
+    let instance = env.objc.alloc_static_object(
         this,
-        Box::new(TrivialHostObject),
+        host_object,
         &mut env.mem,
-    )
+    );
+    
+    env.framework_state.avfoundation.av_audio_session.shared_instance = Some(instance);
+    instance
 }
 
 
 // MARK: - Category
 
 - (id)category {
-    // Default category is SoloAmbient.
-    ns_string::get_static_str(env, AVAudioSessionCategorySoloAmbient)
+    env.objc.borrow::<AVAudioSessionHostObject>(this).category
 }
 
 - (bool)setCategory:(id)category error:(MutPtr<id>)_error {
-    let cat = ns_string::to_rust_string(env, category);
-    log!("AVAudioSession setCategory:{} — stubbed", cat);
+    let old = env.objc.borrow::<AVAudioSessionHostObject>(this).category;
+    retain(env, category);
+    release(env, old);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).category = category;
     true
 }
 
 - (bool)setCategory:(id)category
-        withOptions:(AVAudioSessionCategoryOptions)_options
+        withOptions:(AVAudioSessionCategoryOptions)options
               error:(MutPtr<id>)_error {
-    let cat = ns_string::to_rust_string(env, category);
-    log!("AVAudioSession setCategory:{} withOptions: — stubbed", cat);
+    let old = env.objc.borrow::<AVAudioSessionHostObject>(this).category;
+    retain(env, category);
+    release(env, old);
+    
+    let mut host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
+    host.category = category;
+    host.category_options = options;
     true
 }
 
 - (bool)setCategory:(id)category
                mode:(id)mode
-            options:(AVAudioSessionCategoryOptions)_options
+            options:(AVAudioSessionCategoryOptions)options
               error:(MutPtr<id>)_error {
-    let cat  = ns_string::to_rust_string(env, category);
-    let mode = ns_string::to_rust_string(env, mode);
-    log!("AVAudioSession setCategory:{} mode:{} — stubbed", cat, mode);
+    let old_category = env.objc.borrow::<AVAudioSessionHostObject>(this).category;
+    let old_mode = env.objc.borrow::<AVAudioSessionHostObject>(this).mode;
+    
+    retain(env, category);
+    retain(env, mode);
+    
+    let mut host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
+    host.category = category;
+    host.mode = mode;
+    host.category_options = options;
+    
+    release(env, old_category);
+    release(env, old_mode);
     true
 }
 
 - (AVAudioSessionCategoryOptions)categoryOptions {
-    0
+    env.objc.borrow::<AVAudioSessionHostObject>(this).category_options
 }
 
 // MARK: - Mode
 
 - (id)mode {
-    ns_string::get_static_str(env, AVAudioSessionModeDefault)
+    env.objc.borrow::<AVAudioSessionHostObject>(this).mode
 }
 
 - (bool)setMode:(id)mode error:(MutPtr<id>)_error {
-    let m = ns_string::to_rust_string(env, mode);
-    log!("AVAudioSession setMode:{} — stubbed", m);
+    let old = env.objc.borrow::<AVAudioSessionHostObject>(this).mode;
+    retain(env, mode);
+    release(env, old);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).mode = mode;
     true
 }
 
 // MARK: - Activation
 
 - (bool)setActive:(bool)active error:(MutPtr<id>)_error {
-    log!("AVAudioSession setActive:{} — stubbed", active);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).active = active;
     true
 }
 
 - (bool)setActive:(bool)active
       withOptions:(NSUInteger)_options
             error:(MutPtr<id>)_error {
-    log!("AVAudioSession setActive:{} withOptions: — stubbed", active);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).active = active;
     true
 }
 
 // MARK: - Audio properties
 
 - (f64)sampleRate {
-    44100.0
+    env.objc.borrow::<AVAudioSessionHostObject>(this).preferred_sample_rate
 }
 
 - (bool)setPreferredSampleRate:(f64)rate error:(MutPtr<id>)_error {
-    log!("AVAudioSession setPreferredSampleRate:{} — stubbed", rate);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).preferred_sample_rate = rate;
     true
 }
 
 - (f64)preferredSampleRate {
-    44100.0
+    env.objc.borrow::<AVAudioSessionHostObject>(this).preferred_sample_rate
 }
 
 - (f64)currentHardwareSampleRate {
@@ -234,7 +285,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)setPreferredHardwareSampleRate:(f64)rate error:(MutPtr<id>)error {
-    // Честно пробрасываем в уже существующий метод
     msg![env; this setPreferredSampleRate:rate error:error]
 }
 
@@ -267,16 +317,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (f64)IOBufferDuration {
-    0.005
+    env.objc.borrow::<AVAudioSessionHostObject>(this).preferred_io_buffer_duration
 }
 
 - (bool)setPreferredIOBufferDuration:(f64)duration error:(MutPtr<id>)_error {
-    log!("AVAudioSession setPreferredIOBufferDuration:{} — stubbed", duration);
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).preferred_io_buffer_duration = duration;
     true
 }
 
 - (f64)preferredIOBufferDuration {
-    0.005
+    env.objc.borrow::<AVAudioSessionHostObject>(this).preferred_io_buffer_duration
 }
 
 - (NSInteger)maximumInputNumberOfChannels {
@@ -340,11 +390,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Delegate (deprecated pre-iOS 6 API)
 
 - (id)delegate {
-    nil
+    env.objc.borrow::<AVAudioSessionHostObject>(this).delegate
 }
 
-- (())setDelegate:(id)_delegate {
-    log!("AVAudioSession setDelegate: — deprecated, stubbed");
+- (())setDelegate:(id)delegate {
+    // В Objective-C делегаты обычно хранятся как weak ссылки (без retain/release)
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).delegate = delegate;
 }
 
 // MARK: - Interruption observer (deprecated pre-iOS 6 API)
@@ -352,7 +403,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)setActive:(bool)active
             flags:(NSInteger)_flags
             error:(MutPtr<id>)_error {
-    log!("AVAudioSession setActive:flags:error: — deprecated, stubbed");
+    env.objc.borrow_mut::<AVAudioSessionHostObject>(this).active = active;
     true
 }
 
