@@ -8,7 +8,7 @@
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::window;
 
@@ -55,6 +55,10 @@ pub const CLASSES: ClassExports = objc_classes! {
            delegate:(id)delegate
   cancelButtonTitle:(id)cancel_title
   otherButtonTitles:(id)other_titles {
+    
+    // ВАЖНО: Вызов базового инициализатора для корректной регистрации объекта
+    let this: id = msg_super![env; this init];
+    
     let buttons: id = msg_class![env; NSMutableArray new];
     retain(env, title);
     retain(env, message);
