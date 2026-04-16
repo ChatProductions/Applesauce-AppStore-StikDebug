@@ -116,6 +116,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
+// Методы класса
 + (id)description {
     let name = env.objc.get_class_name(this);
     let str = from_rust_string(env, name.to_string());
@@ -143,6 +144,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)init {
     this
+}
+
+// ИСПРАВЛЕНИЕ: Добавлены методы ЭКЗЕМПЛЯРА description и debugDescription
+- (id)description {
+    let class: Class = msg![env; this class];
+    let name = env.objc.get_class_name(class);
+    // Формируем классическую строку вида <ClassName: 0xAddress>
+    let desc_str = format!("<{}: 0x{:x}>", name, this.to_bits());
+    let str = from_rust_string(env, desc_str);
+    autorelease(env, str)
+}
+
+- (id)debugDescription {
+    msg![env; this description]
 }
 
 - (NSUInteger)retainCount {
@@ -458,4 +473,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
