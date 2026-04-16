@@ -62,7 +62,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let buttons: id = msg_class![env; NSMutableArray new];
     retain(env, title);
     retain(env, message);
-    retain(env, delegate);
     {
         let host = env.objc.borrow_mut::<UIAlertViewHostObject>(this);
         host.title    = title;
@@ -90,7 +89,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         (host.title, host.message, host.delegate, host.button_titles);
     release(env, title);
     release(env, message);
-    release(env, delegate);
     release(env, buttons);
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -109,8 +107,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).message = message;
 }
 - (())setDelegate:(id)delegate {
-    let old = env.objc.borrow::<UIAlertViewHostObject>(this).delegate;
-    release(env, old); retain(env, delegate);
+    // Делегаты в UIKit не удерживаются!
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).delegate = delegate;
 }
 - (NSInteger)tag { env.objc.borrow::<UIAlertViewHostObject>(this).tag }
@@ -205,18 +202,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dismissWithClickedButtonIndex:(NSInteger)button_index animated:(bool)_animated {
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = false;
     let delegate = env.objc.borrow::<UIAlertViewHostObject>(this).delegate;
-    if delegate == nil { return; }
-    if let Some(sel) = env.objc.lookup_selector("alertView:clickedButtonAtIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel];
-        if responds { let _: () = msg![env; delegate alertView:this clickedButtonAtIndex:button_index]; }
-    }
-    if let Some(sel) = env.objc.lookup_selector("alertView:willDismissWithButtonIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel];
-        if responds { let _: () = msg![env; delegate alertView:this willDismissWithButtonIndex:button_index]; }
-    }
-    if let Some(sel) = env.objc.lookup_selector("alertView:didDismissWithButtonIndex:") {
-        let responds: bool = msg![env; delegate respondsToSelector:sel];
-        if responds { let _: () = msg![env; delegate alertView:this didDismissWithButtonIndex:button_index]; }
+    
+    // Честно проверяем, не был ли делегат удален (isa != 0)
+    if delegate != nil {
+        let isa: u32 = env.mem.read(delegate.cast());
+        if isa != 0 {
+            if let Some(sel) = env.objc.lookup_selector("alertView:clickedButtonAtIndex:") {
+                let responds: bool = msg![env; delegate respondsToSelector:sel];
+                if responds { let _: () = msg![env; delegate alertView:this clickedButtonAtIndex:button_index]; }
+            }
+            if let Some(sel) = env.objc.lookup_selector("alertView:willDismissWithButtonIndex:") {
+                let responds: bool = msg![env; delegate respondsToSelector:sel];
+                if responds { let _: () = msg![env; delegate alertView:this willDismissWithButtonIndex:button_index]; }
+            }
+            if let Some(sel) = env.objc.lookup_selector("alertView:didDismissWithButtonIndex:") {
+                let responds: bool = msg![env; delegate respondsToSelector:sel];
+                if responds { let _: () = msg![env; delegate alertView:this didDismissWithButtonIndex:button_index]; }
+            }
+        }
     }
 }
 
