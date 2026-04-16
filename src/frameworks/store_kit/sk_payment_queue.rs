@@ -60,22 +60,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Observers
 
 - (())addTransactionObserver:(id)observer {
-    log!("SKPaymentQueue addTransactionObserver: stubbed (IAP not supported)");
-
-    let old = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
-    release(env, old);
-    retain(env, observer);
-    env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).observer = observer;
+    // Получаем доступ к внутреннему объекту (HostObject), чтобы сохранить наблюдателя
+    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).unwrap();
+    host_obj.observer = observer;
 }
 
-- (())removeTransactionObserver:(id)observer {
-    log!("SKPaymentQueue removeTransactionObserver: stubbed");
-
-    let current = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
-    if current == observer {
-        release(env, current);
-        env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).observer = nil;
-    }
+- (())removeTransactionObserver:(id)_observer {
+    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this).unwrap();
+    host_obj.observer = nil;
 }
 
 // MARK: - Payment requests
@@ -106,21 +98,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())restoreCompletedTransactions {
-    log!("SKPaymentQueue restoreCompletedTransactions: stubbed — notifying no transactions");
-    let observer = env.objc.borrow::<SKPaymentQueueHostObject>(this).observer;
-
-    if observer == nil {
-        return;
-    }
-
-    let sel = env.objc.register_host_selector(
-        "paymentQueueRestoreCompletedTransactionsFinished:".to_string(),
-        &mut env.mem,
-    );
-
-    let responds: bool = msg![env; observer respondsToSelector:sel];
-    if responds {
-        () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];
+    // Это критически важно: многие игры виснут на экране загрузки, 
+    // пока не получат ответ о завершении восстановления покупок.
+    let host_obj = env.objc.borrow::<SKPaymentQueueHostObject>(this).unwrap();
+    let observer = host_obj.observer;
+    
+    if observer != nil {
+        // Вызываем метод делегата, сообщая, что "восстановление" успешно завершено (даже если покупок 0)
+        let _: () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];
     }
 }
 
