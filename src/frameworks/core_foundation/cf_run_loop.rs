@@ -8,13 +8,14 @@
 //! This is not even toll-free bridged to `NSRunLoop` in Apple's implementation,
 //! but here it is the same type.
 
+use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
-use crate::mem::MutVoidPtr;
-use crate::objc::{id, msg, msg_class, nil};
+use crate::mem::{ConstPtr, MutVoidPtr};
+use crate::objc::{id, msg, msg_class, nil, HostObject};
 use crate::Environment;
 
 pub type CFRunLoopRef     = CFTypeRef;
@@ -22,6 +23,30 @@ pub type CFRunLoopMode    = super::cf_string::CFStringRef;
 pub type CFRunLoopSourceRef = CFTypeRef;
 pub type CFRunLoopObserverRef = CFTypeRef;
 pub type CFRunLoopTimerRef  = CFTypeRef;
+
+// C-структура, в которой игра передаёт информацию о таймере
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct CFRunLoopTimerContext {
+    pub version: isize,
+    pub info: MutVoidPtr,
+    pub retain: GuestFunction,
+    pub release: GuestFunction,
+    pub copyDescription: GuestFunction,
+}
+
+// Наш внутренний объект для хранения таймера в памяти эмулятора
+pub struct CFRunLoopTimerHostObject {
+    pub fire_date: f64,
+    pub interval: f64,
+    pub flags: u32,
+    pub order: i32,
+    pub context: CFRunLoopTimerContext,
+    pub callout: GuestFunction,
+    pub is_valid: bool,
+}
+
+impl HostObject for CFRunLoopTimerHostObject {}
 
 // CFRunLoopRunResult
 const kCFRunLoopRunFinished:     i32 = 1;
@@ -296,17 +321,40 @@ fn CFRunLoopRemoveTimer(
 }
 
 fn CFRunLoopTimerCreate(
-    _env: &mut Environment,
-    _allocator: CFTypeRef,
-    _fire_date: CFTimeInterval,
-    _interval: CFTimeInterval,
-    _flags: u32,
-    _order: i32,
-    _callout: MutVoidPtr,  // CFRunLoopTimerCallBack
-    _context: MutVoidPtr,  // CFRunLoopTimerContext*
+    env: &mut Environment,
+    _allocator: id,
+    fire_date: f64,
+    interval: f64,
+    flags: u32,
+    order: i32,
+    context_ptr: ConstPtr<CFRunLoopTimerContext>,
+    callout: GuestFunction,
 ) -> CFRunLoopTimerRef {
-    log!("CFRunLoopTimerCreate: stubbed, returning null");
-    nil
+    // 1. Честно считываем контекст из памяти гостя, если он передан
+    let context = if !context_ptr.is_null() {
+        env.mem.read(context_ptr)
+    } else {
+        // Если игра передала NULL, заполняем структуру нулями
+        unsafe { std::mem::zeroed() }
+    };
+
+    // 2. Упаковываем все данные в наш HostObject
+    let host_object = CFRunLoopTimerHostObject {
+        fire_date,
+        interval,
+        flags,
+        order,
+        context,
+        callout,
+        is_valid: true, // Таймер активен при создании
+    };
+
+    // 3. Выделяем реальный объект, чтобы игра не получила null.
+    // Используем базовый класс NSObject (или если в touchHLE есть NSTimer, то его)
+    let class = env.objc.get_known_class("NSObject", &mut env.mem);
+    
+    // Возвращаем настоящий валидный указатель на созданный объект
+    env.objc.alloc_object(class, Box::new(host_object), &mut env.mem)
 }
 
 fn CFRunLoopTimerRetain(
