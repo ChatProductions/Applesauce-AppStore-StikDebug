@@ -33,6 +33,7 @@ use std::time::{Duration, Instant};
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DeviceFamily {
     iPhone,
+    iPhone5,
     iPad,
 }
 impl std::fmt::Display for DeviceFamily {
@@ -41,10 +42,29 @@ impl std::fmt::Display for DeviceFamily {
     }
 }
 impl DeviceFamily {
+    /// Portrait (width, height) in logical points.
+    /// iPhone 5 screen is 1136×640 px retina (2×), so 568×320 pts.
     pub fn portrait_size(&self) -> (u32, u32) {
         match self {
-            DeviceFamily::iPhone => (320, 480),
-            DeviceFamily::iPad => (768, 1024),
+            DeviceFamily::iPhone  => (320, 480),
+            DeviceFamily::iPhone5 => (320, 568),
+            DeviceFamily::iPad    => (768, 1024),
+        }
+    }
+    /// UIScreen.scale — retina multiplier.
+    pub fn scale_factor(&self) -> f32 {
+        match self {
+            DeviceFamily::iPhone  => 1.0,
+            DeviceFamily::iPhone5 => 2.0,
+            DeviceFamily::iPad    => 1.0,
+        }
+    }
+    /// hw.machine string returned by sysctl / uname.
+    pub fn machine_name(&self) -> &'static str {
+        match self {
+            DeviceFamily::iPhone  => "iPhone1,1",
+            DeviceFamily::iPhone5 => "iPhone5,1",
+            DeviceFamily::iPad    => "iPad1,1",
         }
     }
 }
@@ -62,9 +82,10 @@ impl TryFrom<&str> for DeviceFamily {
     type Error = ();
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "iphone" => Ok(DeviceFamily::iPhone),
-            "ipad" => Ok(DeviceFamily::iPad),
-            _ => Err(()),
+            "iphone"  => Ok(DeviceFamily::iPhone),
+            "iphone5" => Ok(DeviceFamily::iPhone5),
+            "ipad"    => Ok(DeviceFamily::iPad),
+            _         => Err(()),
         }
     }
 }

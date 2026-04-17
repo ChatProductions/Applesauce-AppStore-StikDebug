@@ -20,7 +20,7 @@ use crate::Environment;
 // Numerical values are from xnu/bsd/sys/sysctl.h
 static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
     // Generic CPU, I/O
-    ((6,1), "hw.machine" , String(b"iPhone1,1")),
+    ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
     ((6,2), "hw.model" , String(b"M68AP")),
     ((6,3), "hw.ncpu" , SysInfoType::Int32(1)),
     ((0,0), "hw.cputype" , SysInfoType::Int32(12)),
@@ -33,10 +33,10 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
     ((6,7), "hw.pagesize" , SysInfoType::Int64(PAGE_SIZE as i64)),
     // High kernel limits
     ((1,1), "kern.ostype" , String(b"Darwin")),
-    ((1,2), "kern.osrelease" , String(b"10.0.0d3")),
-    ((1,3), "kern.osversion" , String(b"7A341")),
+    ((1,2), "kern.osrelease" , String(b"10.4.0")),
+    ((1,3), "kern.osversion" , String(b"8A293")),
     ((1,10), "kern.hostname" , String(b"touchHLE")), // this is arbitrary
-    ((1,4), "kern.version" , String(b"Darwin Kernel Version 10.0.0d3: Wed May 13 22:11:58 PDT 2009; root:xnu-1357.2.89~4/RELEASE_ARM_S5L8900X")),
+    ((1,4), "kern.version" , String(b"Darwin Kernel Version 10.4.0: Thu Jun 10 14:26:58 PDT 2010; root:xnu-1504.58.2~1/RELEASE_ARM_S5L8900X")),
 ];
 
 static STRING_MAP: LazyLock<HashMap<&str, SysInfoType>> = LazyLock::new(|| {
@@ -92,18 +92,38 @@ fn sysctl(
         return -1;
     }
     let (name0, name1) = (env.mem.read(name), env.mem.read(name + 1));
+	
+    // hw.machine depends on the emulated device family
+    if env.mem.cstr_at_utf8(name.cast::<u8>()).unwrap() == "hw.machine" {
+        let machine_bytes: &'static [u8] = env.window().device_family().machine_name().as_bytes();
+        // write directly: length + null terminator
+        let len = machine_bytes.len() as GuestUSize + 1;
+        if oldp.is_null() {
+            env.mem.write(oldlenp, len);
+            return 0;
+        }
+        let oldlen = env.mem.read(oldlenp);
+        if oldlen < len {
+            log!("sysctlbyname hw.machine: buffer too small ({oldlen} < {len})");
+            return -1;
+        }
+        let tmp = env.mem.alloc_and_write_cstr(machine_bytes);
+        env.mem.memmove(oldp, tmp.cast().cast_const(), len);
+        env.mem.free(tmp.cast());
+        env.mem.write(oldlenp, len);
+        return 0;
+    }
+
     sysctl_generic(
         env,
-        |_| {
-            let Some(val) = INT_MAP.get(&(name0, name1)).cloned() else {
-                log!(
-                    "sysctl(): unknown parameter ({}, {}), returning -1",
-                    name0,
-                    name1
-                );
-                return None;
+
+        |env| {
+            let name_str = env.mem.cstr_at_utf8(name.cast::<u8>()).unwrap();
+            let Some((k, val)) = STRING_MAP.get_key_value(name_str) else {
+                unimplemented!("Unknown sysctlbyname parameter {name_str}!")
             };
-            Some(val)
+            // return as Option to match expected type
+            Some((*k, val.clone()))
         },
         oldp,
         oldlenp,
