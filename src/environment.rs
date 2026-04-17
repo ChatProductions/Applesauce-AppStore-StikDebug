@@ -416,6 +416,7 @@ let device_family = match device_family_array.len() {
                     "libc++.1.dylib" => 0x38000000,
                     // На случай, если игра также потянет за собой libc++abi
                     "libc++abi.dylib" => 0x38100000, 
+					"libiconv.2.dylib" => 0x32000000,
                     
                     "libgcc_s.1.dylib" => 0x30000000,
                     "libz.1.dylib" |
