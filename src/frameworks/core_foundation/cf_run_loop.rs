@@ -304,12 +304,18 @@ fn CFRunLoopObserverGetOrder(_env: &mut Environment, _observer: CFRunLoopObserve
 // MARK: - Timers
 
 fn CFRunLoopAddTimer(
-    _env: &mut Environment,
-    _rl: CFRunLoopRef,
-    _timer: CFRunLoopTimerRef,
-    _mode: CFRunLoopMode,
+    env: &mut Environment,
+    rl: CFRunLoopRef,
+    timer: CFRunLoopTimerRef,
+    mode: CFRunLoopMode,
 ) {
-    log!("CFRunLoopAddTimer: stubbed");
+    if rl.is_null() || timer.is_null() {
+        return;
+    }
+
+    // Как сказано в заголовке файла: в touchHLE CFRunLoop и NSRunLoop — это один и тот же тип.
+    // Поэтому мы честно пробрасываем вызов напрямую в NSRunLoop, который умеет работать с таймерами.
+    let _: () = msg![env; rl addTimer:timer forMode:mode];
 }
 
 fn CFRunLoopRemoveTimer(
