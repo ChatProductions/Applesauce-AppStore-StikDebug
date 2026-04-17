@@ -209,3 +209,6 @@ net.hexage.radiant: --force-composition
 
 # BBR3D
 com.digitalchocolate.iwall: --force-composition
+
+# NFSU
+com.ea.nfsucinc: --force-composition
