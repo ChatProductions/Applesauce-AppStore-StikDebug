@@ -31,26 +31,6 @@ type CGDataProviderReleaseDataCallback = GuestFunction;
 // accessing data, but at least for now, we instead only support some specific
 // use-cases.
 
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct CGDataProviderSequentialCallbacks {
-    pub version: u32,
-    pub get_bytes: GuestFunction,
-    pub skip_forward: GuestFunction,
-    pub rewind: GuestFunction,
-    pub release_info: GuestFunction,
-}
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct CGDataProviderDirectCallbacks {
-    pub version: u32,
-    pub get_byte_pointer: GuestFunction,
-    pub release_byte_pointer: GuestFunction,
-    pub get_bytes_at_position: GuestFunction,
-    pub release_info: GuestFunction,
-}
-
 enum CGDataProviderHostObject {
     DataWithSize {
         data: ConstVoidPtr,
@@ -58,15 +38,6 @@ enum CGDataProviderHostObject {
         /// User-provided pointer passed to release callback.
         info: MutVoidPtr,
         release_callback: CGDataProviderReleaseDataCallback,
-    },
-    Sequential {
-        info: MutVoidPtr,
-        callbacks: CGDataProviderSequentialCallbacks,
-    },
-    Direct {
-        info: MutVoidPtr,
-        size: i64,
-        callbacks: CGDataProviderDirectCallbacks,
     },
     // TODO: Maybe we should store image data in guest memory so we don't
     // need a special variant for this.
@@ -206,58 +177,6 @@ fn CGDataProviderCopyData(env: &mut Environment, provider: CGDataProviderRef) ->
             let size = CFDataGetLength(env, cf_data);
             CFDataCreate(env, kCFAllocatorDefault, data.cast(), size)
         }
-                CGDataProviderHostObject::Sequential { info, callbacks } => {
-            let mut all_data = Vec::new();
-            let chunk_size = 4096u32;
-            let buf_addr = env.mem.alloc(chunk_size as GuestUSize);
-            
-            loop {
-                // Вызываем гостевую функцию get_bytes (из C/C++ кода игры), чтобы она наполнила наш буфер!
-                let bytes_read: u32 = callbacks.get_bytes.call_from_host(env, (info, buf_addr, chunk_size));
-                if bytes_read == 0 {
-                    break; // Данные закончились
-                }
-                let slice = env.mem.bytes_at(buf_addr, bytes_read as GuestUSize);
-                all_data.extend_from_slice(slice);
-            }
-            
-            env.mem.free(buf_addr);
-            
-            // Запаковываем скачанные байты в CFData, чтобы их смог съесть декодер картинок
-            let result_buf = env.mem.alloc(all_data.len() as GuestUSize);
-            env.mem.write_bytes(result_buf, &all_data);
-            let cf_data = CFDataCreate(env, kCFAllocatorDefault, result_buf.cast(), all_data.len() as i32);
-            env.mem.free(result_buf);
-            
-            cf_data
-        }
-        
-        CGDataProviderHostObject::Direct { info, size, callbacks } => {
-            // Для Direct провайдеров игра обычно сама отдает нам указатель или просит скопировать кусок
-            let get_byte_pointer_val: u32 = unsafe { std::mem::transmute(callbacks.get_byte_pointer) };
-            let get_bytes_pos_val: u32 = unsafe { std::mem::transmute(callbacks.get_bytes_at_position) };
-
-            if get_byte_pointer_val != 0 {
-                // Игра отдала прямой указатель на память
-                let ptr: u32 = callbacks.get_byte_pointer.call_from_host(env, (info,));
-                let cf_data = CFDataCreate(env, kCFAllocatorDefault, ptr.into(), size as i32);
-                
-                let release_val: u32 = unsafe { std::mem::transmute(callbacks.release_byte_pointer) };
-                if release_val != 0 {
-                    callbacks.release_byte_pointer.call_from_host(env, (info, ptr));
-                }
-                cf_data
-            } else if get_bytes_pos_val != 0 {
-                // Читаем всё одним махом с нулевой позиции
-                let buf = env.mem.alloc(size as GuestUSize);
-                let bytes_read: u32 = callbacks.get_bytes_at_position.call_from_host(env, (info, buf, 0u32, size as u32));
-                let cf_data = CFDataCreate(env, kCFAllocatorDefault, buf.cast(), bytes_read as i32);
-                env.mem.free(buf);
-                cf_data
-            } else {
-                nil
-            }
-        }
     }
 }
 
@@ -332,38 +251,22 @@ fn CGDataProviderGetSize(
 }
 
 fn CGDataProviderCreateSequential(
-    env: &mut Environment,
-    info: MutVoidPtr,
-    callbacks_ptr: ConstPtr<CGDataProviderSequentialCallbacks>,
+    _env: &mut Environment,
+    _info: MutVoidPtr,
+    _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
-    if callbacks_ptr.is_null() {
-        return nil;
-    }
-    // Читаем структуру из памяти гостевой игры
-    let callbacks = env.mem.read(callbacks_ptr);
-    
-    let host_object = CGDataProviderHostObject::Sequential { info, callbacks };
-    
-    let class = env.objc.get_known_class("_touchHLE_CGDataProvider", &mut env.mem);
-    env.objc.alloc_object(class, Box::new(host_object), &mut env.mem)
+    log!("Warning: CGDataProviderCreateSequential is not supported, returning null");
+    nil // <- was std::ptr::null()
 }
 
 fn CGDataProviderCreateDirect(
-    env: &mut Environment,
-    info: MutVoidPtr,
-    size: i64,
-    callbacks_ptr: ConstPtr<CGDataProviderDirectCallbacks>,
+    _env: &mut Environment,
+    _info: MutVoidPtr,
+    _size: i64,
+    _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
-    if callbacks_ptr.is_null() {
-        return nil;
-    }
-    // Читаем структуру из памяти гостевой игры
-    let callbacks = env.mem.read(callbacks_ptr);
-    
-    let host_object = CGDataProviderHostObject::Direct { info, size, callbacks };
-    
-    let class = env.objc.get_known_class("_touchHLE_CGDataProvider", &mut env.mem);
-    env.objc.alloc_object(class, Box::new(host_object), &mut env.mem)
+    log!("Warning: CGDataProviderCreateDirect is not supported, returning null");
+    nil // <- was std::ptr::null()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
