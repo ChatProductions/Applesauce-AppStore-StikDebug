@@ -14,10 +14,6 @@ use crate::libc::sysctl::SysInfoType::String;
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
 use crate::Environment;
 
-// Clippy complains about the type.
-// Below values corresponds to the original iPhone.
-// Reference https://www.mail-archive.com/misc@openbsd.org/msg80988.html
-// Numerical values are from xnu/bsd/sys/sysctl.h
 static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
     // Generic CPU, I/O
     ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
@@ -30,7 +26,7 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
     ((6,5), "hw.physmem" , SysInfoType::Int32(121634816)), // not sure about this type
     ((6,6), "hw.usermem" , SysInfoType::Int32(93564928)), // not sure about this type
     ((6,24), "hw.memsize" , SysInfoType::Int32(121634816)),
-    ((6,7), "hw.pagesize" , SysInfoType::Int64(PAGE_SIZE as i64)),
+    ((6,7), "hw.pagesize" , SysInfoType::Int32(PAGE_SIZE as i32)), // <--- ИСПРАВЛЕНО НА Int32
     // High kernel limits
     ((1,1), "kern.ostype" , String(b"Darwin")),
     ((1,2), "kern.osrelease" , String(b"10.4.0")),
