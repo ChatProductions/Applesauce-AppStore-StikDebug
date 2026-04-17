@@ -86,7 +86,12 @@ pub fn set_view_controller(env: &mut Environment, view: id, controller: id) {
 fn init_common(env: &mut Environment, this: id) -> id {
     let view_class: Class = msg![env; this class];
     let layer_class: Class = msg![env; view_class layerClass];
-    let layer: id = msg![env; layer_class layer];
+    
+    // ФИКС Use-After-Free и nil isa: 
+    // Вместо `layer` (который возвращает autorelease-объект и затем ломается при dealloc),
+    // мы используем `alloc` + `init`, чтобы гарантированно владеть объектом в памяти.
+    let layer_alloc: id = msg![env; layer_class alloc];
+    let layer: id = msg![env; layer_alloc init];
 
     () = msg![env; layer setDelegate:this];
     () = msg![env; layer setOpaque:true];
@@ -102,6 +107,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 (env, this, _cmd);
 @implementation UIView: UIResponder
 
++ (id)alloc {
+    let host_object = Box::<UIViewHostObject>::default();
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+    
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::<UIViewHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
