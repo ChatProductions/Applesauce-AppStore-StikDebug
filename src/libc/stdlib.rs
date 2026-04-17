@@ -625,6 +625,7 @@ fn read_cstr_safe(env: &mut Environment, ptr: ConstPtr<u8>) -> String {
 }
 
 #[allow(non_snake_case)]
+#[allow(non_snake_case)]
 fn _fcvt(
     env: &mut Environment,
     value: f64,
@@ -637,7 +638,7 @@ fn _fcvt(
     let is_negative = value.is_sign_negative() && value != 0.0;
     let val_abs = value.abs();
 
-    // Форматируем число с нужным количеством знаков после запятой
+    // Format the number with the requested fractional digits
     let ndigits_usize = ndigits.max(0) as usize;
     let formatted = format!("{:.*}", ndigits_usize, val_abs);
 
@@ -645,7 +646,7 @@ fn _fcvt(
     let mut decimal_pos = formatted.len() as i32;
     let mut dot_found = false;
 
-    // Извлекаем позицию точки и убираем её из самой строки
+    // Extract decimal position and remove the dot from the string
     for (i, c) in formatted.chars().enumerate() {
         if c == '.' {
             decimal_pos = i as i32;
@@ -659,15 +660,12 @@ fn _fcvt(
         decimal_pos = digits.len() as i32;
     }
 
-    // В оригинальном C fcvt строка обычно не содержит ведущего нуля 
-    // для чисел < 1 (например, 0.14 -> "14", decpt=0).
-    // Rust format! добавляет этот нуль ("0.14"). Убираем его для совместимости.
+    // Remove leading zero for numbers < 1 to match C behavior
     if digits.starts_with('0') && decimal_pos == 1 && digits.len() > 1 {
         digits.remove(0);
         decimal_pos -= 1;
     }
 
-    // Записываем позицию точки и знак по указателям (если игра их передала)
     if !decpt.is_null() {
         env.mem.write(decpt, decimal_pos);
     }
@@ -675,10 +673,9 @@ fn _fcvt(
         env.mem.write(sign, if is_negative { 1 } else { 0 });
     }
 
-    // В оригинале fcvt использует статический внутренний буфер.
-    // Для эмулятора безопаснее выделить небольшой кусок в памяти гостя.
+    // Allocate in guest memory and CAST to a u8 pointer
     let buf_len = (digits.len() + 1) as GuestUSize;
-    let buf = env.mem.alloc(buf_len);
+    let buf: MutPtr<u8> = env.mem.alloc(buf_len).cast(); 
     
     env.mem.bytes_at_mut(buf, digits.len() as GuestUSize).copy_from_slice(digits.as_bytes());
     env.mem.write(buf + digits.len() as GuestUSize, b'\0');
@@ -851,7 +848,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__assert_rtn(_, _, _, _)),
     export_c_func!(__assert(_, _, _)),
     export_c_func!(__assert_fail(_, _, _, _)),
-    export_c_func!(_fcvt(_, _, _, _, _)),
+    export_c_func!(_fcvt(_, _, _, _)),
     export_c_func!(_gcvt(_, _, _)),
     export_c_func!(system(_)),
     export_c_func!(dladdr(_, _)),
