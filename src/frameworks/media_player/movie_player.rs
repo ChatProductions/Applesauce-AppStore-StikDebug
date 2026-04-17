@@ -166,12 +166,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         let mut host = env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this);
         host.content_url = url;
     }
-    
+
     // Ensure views exist immediately
     ensure_view(env, this);
     ensure_background_view(env, this);
 
     // Act as if loading immediately completed (Spore Origins waits for this).
+    // Retain this so the object stays alive until handle_players fires.
+    retain(env, this);
     State::get(env).pending_notifications.push_back((
         MPMoviePlayerContentPreloadDidFinishNotification,
         this,
@@ -192,7 +194,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         .borrow::<MPMoviePlayerControllerHostObject>(this)
         .view;
     release(env, view);
-    
+
     let bg_view = env
         .objc
         .borrow::<MPMoviePlayerControllerHostObject>(this)
@@ -354,7 +356,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     1.0 // Return non-zero to prevent division by zero in game engines
 }
 - (f64)playableDuration {
-    1.0 
+    1.0
 }
 - (bool)isPreparedToPlay {
     true
@@ -382,16 +384,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MPMediaPlayback implementation
 - (())play {
     log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
-    
-    // Ставим плеер в режим проигрывания
+
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStatePlaying;
 
-    // АСИНХРОННО ставим уведомление в очередь (с задержкой 50мс).
-    // Это позволяет методу play безопасно завершиться, а игре – 
-    // войти в RunLoop. Таким образом, даже если игра удалит плеер при 
-    // получении уведомления, это произойдет безопасно в основном цикле.
+    // Retain this so the object stays alive until handle_players fires and
+    // we release it after posting the notification. Without the retain, if
+    // the game releases the player immediately after calling play() the
+    // object may be freed before handle_players runs, causing a
+    // use-after-free (manifests as NULL-PAGE READ at 0x10).
+    retain(env, this);
     State::get(env).pending_notifications.push_back((
         MPMoviePlayerPlaybackDidFinishNotification,
         this,
@@ -408,7 +411,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())stop {
     log!("TODO: [(MPMoviePlayerController*){:?} stop]", this);
-    
+
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStateStopped;
@@ -459,10 +462,10 @@ pub(super) fn handle_players(env: &mut Environment) {
             i += 1;
         }
     }
-    
+
     for (name_str, object) in notifs_to_run {
-        // Меняем статус плеера прямо перед отправкой уведомления.
-        // Это гарантирует, что когда игра начнет его проверять, он будет остановлен.
+        // Update playback state before posting so that any handler which
+        // checks [player playbackState] sees Stopped immediately.
         if name_str == MPMoviePlayerPlaybackDidFinishNotification {
             env.objc
                 .borrow_mut::<MPMoviePlayerControllerHostObject>(object)
@@ -471,7 +474,32 @@ pub(super) fn handle_players(env: &mut Environment) {
 
         let name = ns_string::get_static_str(env, name_str);
         let center: id = msg_class![env; NSNotificationCenter defaultCenter];
-        // TODO: should there be some user info attached?
-        let _: () = msg![env; center postNotificationName:name object:object];
+
+        if name_str == MPMoviePlayerPlaybackDidFinishNotification {
+            // Many apps (including NFSU) read
+            // MPMoviePlayerPlaybackDidFinishReasonUserInfoKey from the
+            // notification's userInfo. Without it the game dereferences nil
+            // at offset 0x10, causing a NULL-PAGE READ crash.
+            // MPMovieFinishReasonPlaybackEnded = 0
+            let reason_num: id =
+                msg_class![env; NSNumber numberWithInt:0i32];
+            let reason_key = ns_string::get_static_str(
+                env,
+                MPMoviePlayerPlaybackDidFinishReasonUserInfoKey,
+            );
+            let user_info: id = msg_class![env; NSDictionary
+                dictionaryWithObject:reason_num
+                forKey:reason_key];
+            let _: () = msg![env; center postNotificationName:name
+                                                       object:object
+                                                     userInfo:user_info];
+        } else {
+            let _: () = msg![env; center postNotificationName:name
+                                                       object:object];
+        }
+
+        // Release the retain we took when queuing this notification.
+        release(env, object);
     }
 }
+
