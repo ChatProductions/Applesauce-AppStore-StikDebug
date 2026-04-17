@@ -148,6 +148,9 @@ struct AppPickerDelegateHostObject {
     analog_stick_tilt_controls: Option<bool>,
     network: Option<bool>,
     fullscreen: Option<bool>,
+    device_family_iphone: bool,
+    device_family_ipad: bool,
+    device_family_iphone5: bool,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -232,6 +235,15 @@ const CLASSES: ClassExports = objc_classes! {
 - (())fullscreen:(id)switch { // UISwitch*
     let switch_state: bool = msg![env; switch isOn];
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).fullscreen = Some(switch_state);
+}
+- (())deviceFamilyIphone {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_iphone = true;
+}
+- (())deviceFamilyIpad {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_ipad = true;
+}
+- (())deviceFamilyIphone5 {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_iphone5 = true;
 }
 
 - (())openFileManager {
@@ -528,6 +540,7 @@ fn app_picker_inner(
     let mut quick_options_orientation: Option<DeviceOrientation> = None;
     let mut quick_options_analog_stick_tilt_controls = true;
     let mut quick_options_network = false;
+    let mut quick_options_device_family: Option<&str> = None;
 
     fn update_quick_option_buttons(env: &mut Environment, buttons: &[id], selected_idx: usize) {
         for (idx, &button) in buttons.iter().enumerate() {
@@ -557,6 +570,23 @@ fn app_picker_inner(
             }),
         );
     }
+	fn update_device_family_buttons(
+		env: &mut Environment,
+		buttons: &[id],
+		value: Option<&str>,
+	) {
+		update_quick_option_buttons(
+			env,
+			buttons,
+			value.map_or(0, |v| match v {
+				"iphone" => 0,
+				"ipad" => 1,
+				"iphone5" => 2,
+				_ => 0,
+			})
+			.min(buttons.len() - 1),
+		);
+	}
     update_scale_hack_buttons(
         env,
         &quick_options_stuff.scale_hack_buttons,
@@ -566,6 +596,11 @@ fn app_picker_inner(
         env,
         &quick_options_stuff.orientation_buttons,
         quick_options_orientation,
+    );
+    update_device_family_buttons(
+        env,
+        &quick_options_stuff.device_family_buttons,
+        quick_options_device_family,
     );
 
     () = msg![env; window makeKeyAndVisible];
@@ -698,6 +733,27 @@ fn app_picker_inner(
                 &quick_options_stuff.orientation_buttons,
                 quick_options_orientation,
             );
+        } else if std::mem::take(&mut host_obj.device_family_iphone) {
+            quick_options_device_family = Some("iphone");
+            update_device_family_buttons(
+                env,
+                &quick_options_stuff.device_family_buttons,
+                quick_options_device_family,
+            );
+        } else if std::mem::take(&mut host_obj.device_family_ipad) {
+            quick_options_device_family = Some("ipad");
+            update_device_family_buttons(
+                env,
+                &quick_options_stuff.device_family_buttons,
+                quick_options_device_family,
+            );
+        } else if std::mem::take(&mut host_obj.device_family_iphone5) {
+            quick_options_device_family = Some("iphone5");
+            update_device_family_buttons(
+                env,
+                &quick_options_stuff.device_family_buttons,
+                quick_options_device_family,
+            );
         } else if let Some(enabled) = std::mem::take(&mut host_obj.analog_stick_tilt_controls) {
             quick_options_analog_stick_tilt_controls = enabled;
         } else if let Some(enabled) = std::mem::take(&mut host_obj.network) {
@@ -732,6 +788,10 @@ fn app_picker_inner(
     }
     if quick_options_network {
         option_args.push("--allow-network-access".to_string());
+    }
+
+    if let Some(family) = quick_options_device_family {
+        option_args.push(format!("--device-family={}", family));
     }
 
     // Return the environment so some parts of it can be salvaged.
@@ -1251,6 +1311,7 @@ struct QuickOptionsStuff {
     main_view: id,
     scale_hack_buttons: [id; 5],
     orientation_buttons: [id; 3],
+    device_family_buttons: [id; 3],
 }
 
 fn setup_quick_options(
@@ -1328,6 +1389,12 @@ fn setup_quick_options(
             ("Default", "orientationDefault"),
             ("←", "orientationLandscapeLeft"),
             ("→", "orientationLandscapeRight"),
+        ]),
+        RowKind::Label("Device Mode"),
+        RowKind::Buttons(&[
+            ("iPhone", "deviceFamilyIphone"),
+            ("iPad", "deviceFamilyIpad"),
+            ("iPhone 5", "deviceFamilyIphone5"),
         ]),
         RowKind::Label("Network access"),
         RowKind::Switch("network:", false),
@@ -1407,5 +1474,6 @@ fn setup_quick_options(
         main_view,
         scale_hack_buttons: button_rows[0][..].try_into().unwrap(),
         orientation_buttons: button_rows[1][..].try_into().unwrap(),
+        device_family_buttons: button_rows[2][..].try_into().unwrap(),
     }
 }
