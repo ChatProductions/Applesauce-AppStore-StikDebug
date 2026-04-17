@@ -55,6 +55,7 @@ pub(super) struct UIViewHostObject {
     clears_context_before_drawing: bool,
     user_interaction_enabled: bool,
     multiple_touch_enabled: bool,
+    exclusive_touch: bool,
     delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
     animation_interval: f64,
     is_animating: bool,
@@ -71,6 +72,7 @@ impl Default for UIViewHostObject {
             clears_context_before_drawing: true,
             user_interaction_enabled: true,
             multiple_touch_enabled: false,
+            exclusive_touch: false,
             delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
             animation_interval: 1.0 / 60.0,
             is_animating: false,
@@ -302,8 +304,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewHostObject>(this).multiple_touch_enabled = enabled;
 }
 
+- (bool)isExclusiveTouch {
+    env.objc.borrow::<UIViewHostObject>(this).exclusive_touch
+}
+
 - (())setExclusiveTouch:(bool)exclusive {
-    log!("TODO: ignoring setExclusiveTouch:{} for view {:?}", exclusive, this);
+    env.objc.borrow_mut::<UIViewHostObject>(this).exclusive_touch = exclusive;
 }
 
 - (())layoutSubviews { }
