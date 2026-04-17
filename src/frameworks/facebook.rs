@@ -11,42 +11,39 @@ use crate::objc::{objc_classes, ClassExports};
 pub mod fb_classes {
     use super::*;
 
-    // В твоей версии макрос требует (env, this, _cmd); перед списком классов
-    pub const CLASSES: ClassExports = &objc_classes!(
-        (env, this, _cmd); 
-
-        FBSession : NSObject {
-            "-" => "resume" => |env, this| -> u8 { 
+    pub const CLASSES: ClassExports = &objc_classes![
+        @implementation FBSession : NSObject {
+            "-" => "resume" => |_env, _self: MutVoidPtr| -> u8 { 
                 crate::log_dbg!("FBSession resume called");
                 1 
             },
-            "-" => "isConnected" => |env, this| -> u8 { 0 },
-            "-" => "logout" => |env, this| {},
-        },
-        
-        FBRequest : NSObject {
-            "-" => "connect" => |env, this| {
+            "-" => "isConnected" => |_env, _self: MutVoidPtr| -> u8 { 0 },
+            "-" => "logout" => |_env, _self: MutVoidPtr| {},
+        }
+
+        @implementation FBRequest : NSObject {
+            "-" => "connect" => |_env, _self: MutVoidPtr| {
                 crate::log_dbg!("FBRequest connect called");
             },
-        },
+        }
         
-        FBXMLHandler : NSObject {},
+        @implementation FBXMLHandler : NSObject {}
         
-        FBDialog : UIView {
-            "-" => "show" => |env, this| {
+        @implementation FBDialog : UIView {
+            "-" => "show" => |_env, _self: MutVoidPtr| {
                 crate::log_dbg!("FBDialog show called");
             },
-            "-" => "dismissWithSuccess:animated:" => |env, this, _success: u8, _animated: u8| {
+            "-" => "dismissWithSuccess:animated:" => |_env, _self: MutVoidPtr, _success: u8, _animated: u8| {
                 crate::log_dbg!("FBDialog dismiss called");
             },
-        },
+        }
         
-        FBFeedDialog : FBDialog {},
-        FBLoginDialog : FBDialog {},
-        FBPermissionDialog : FBDialog {},
+        @implementation FBFeedDialog : FBDialog {}
+        @implementation FBLoginDialog : FBDialog {}
+        @implementation FBPermissionDialog : FBDialog {}
         
-        FBLoginButton : UIButton {}
-    );
+        @implementation FBLoginButton : UIButton {}
+    ];
 }
 
 pub const DYLIB: HostDylib = HostDylib {
