@@ -11,31 +11,34 @@ use crate::objc::{objc_classes, ClassExports};
 pub mod fb_classes {
     use super::*;
 
-    pub const CLASSES: ClassExports = &objc_classes![
+    pub const CLASSES: ClassExports = &objc_classes!(
+        (env, this, _cmd); // 1. Сначала обязательный заголовок
+
+        // 2. Затем каждый класс через @implementation
         @implementation FBSession : NSObject {
-            "-" => "resume" => |_env, _self: MutVoidPtr| -> u8 { 
+            "-" => "resume" => |env, this| -> u8 { 
                 crate::log_dbg!("FBSession resume called");
                 1 
-            },
-            "-" => "isConnected" => |_env, _self: MutVoidPtr| -> u8 { 0 },
-            "-" => "logout" => |_env, _self: MutVoidPtr| {},
+            }
+            "-" => "isConnected" => |env, this| -> u8 { 0 }
+            "-" => "logout" => |env, this| {}
         }
 
         @implementation FBRequest : NSObject {
-            "-" => "connect" => |_env, _self: MutVoidPtr| {
+            "-" => "connect" => |env, this| {
                 crate::log_dbg!("FBRequest connect called");
-            },
+            }
         }
         
         @implementation FBXMLHandler : NSObject {}
         
         @implementation FBDialog : UIView {
-            "-" => "show" => |_env, _self: MutVoidPtr| {
+            "-" => "show" => |env, this| {
                 crate::log_dbg!("FBDialog show called");
-            },
-            "-" => "dismissWithSuccess:animated:" => |_env, _self: MutVoidPtr, _success: u8, _animated: u8| {
+            }
+            "-" => "dismissWithSuccess:animated:" => |env, this, _success: u8, _animated: u8| {
                 crate::log_dbg!("FBDialog dismiss called");
-            },
+            }
         }
         
         @implementation FBFeedDialog : FBDialog {}
@@ -43,7 +46,7 @@ pub mod fb_classes {
         @implementation FBPermissionDialog : FBDialog {}
         
         @implementation FBLoginButton : UIButton {}
-    ];
+    );
 }
 
 pub const DYLIB: HostDylib = HostDylib {
