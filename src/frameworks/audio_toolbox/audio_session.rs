@@ -17,16 +17,6 @@ type AudioSessionPropertyListener = GuestFunction;
 
 const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 
-#[derive(Default)]
-pub struct State {
-    pub interruption_listener: Option<AudioSessionInterruptionListener>,
-    pub client_data: ConstVoidPtr,
-    pub is_active: bool,
-    pub category: AudioSessionPropertyID,
-    pub preferred_sample_rate: f64,
-    pub preferred_io_buffer_duration: f32,
-}
-
 type AudioSessionPropertyID = u32;
 const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
 const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID = fourcc(b"acat");
@@ -41,28 +31,24 @@ const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID = fourcc(b"rout")
 const kAudioSessionCategory_SoloAmbientSound: u32 = fourcc(b"solo");
 const kAudioSessionProperty_CurrentHardwareIOBufferDuration: u32 = fourcc(b"chbd");
 
-// --- ОБНОВЛЕННЫЙ STATE ---
 pub struct State {
-    audio_session_category: u32,
-    pub current_hardware_sample_rate: f64,
-    pub current_hardware_output_number_channels: u32,
-    current_hardware_output_volume: f32,
-    current_hardware_io_buffer_duration: f32,
-    // Теперь храним данные, а не просто игнорируем их
-    interruption_listener: Option<AudioSessionInterruptionListener>,
-    client_data: MutVoidPtr,
+    pub interruption_listener: Option<AudioSessionInterruptionListener>,
+    pub client_data: ConstVoidPtr, // Исправили тип на ConstVoidPtr, чтобы ушла ошибка E0308
+    pub is_active: bool,
+    pub category: AudioSessionPropertyID,
+    pub preferred_sample_rate: f64,
+    pub preferred_io_buffer_duration: f32,
 }
 
 impl Default for State {
     fn default() -> Self {
-        State {
-            audio_session_category: kAudioSessionCategory_SoloAmbientSound,
-            current_hardware_sample_rate: 44100.0,
-            current_hardware_output_number_channels: 2,
-            current_hardware_output_volume: 1.0,
-            current_hardware_io_buffer_duration: 0.023220,
+        Self {
             interruption_listener: None,
-            client_data: MutVoidPtr::null(),
+            client_data: crate::mem::Ptr::null(),
+            is_active: false,
+            category: 0,
+            preferred_sample_rate: 44100.0,
+            preferred_io_buffer_duration: 0.005,
         }
     }
 }
