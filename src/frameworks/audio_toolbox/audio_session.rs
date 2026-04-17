@@ -216,10 +216,10 @@ pub fn AudioSessionRemovePropertyListener(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
-    export_c_func!(AudioSessionGetProperty(_, _, _, _)),
-    export_c_func!(AudioSessionGetPropertySize(_, _, _)),
-    export_c_func!(AudioSessionSetProperty(_, _, _, _)),
-    export_c_func!(AudioSessionSetActive(_, _)),
-    export_c_func!(AudioSessionAddPropertyListener(_, _, _, _)),
-    export_c_func!(AudioSessionRemovePropertyListener(_, _)),
+    export_c_func!(AudioSessionGetProperty(_, _, _)),
+    export_c_func!(AudioSessionGetPropertySize(_, _)),
+    export_c_func!(AudioSessionSetProperty(_, _, _)),
+    export_c_func!(AudioSessionSetActive(_)),
+    export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
+    export_c_func!(AudioSessionRemovePropertyListener(_)),
 ];
