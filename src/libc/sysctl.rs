@@ -85,16 +85,19 @@ fn sysctl(
         newp,
         newlen
     );
+    
     // MIB arrays with more than 2 components are valid (e.g. used by Mono).
     // We only key on the first two elements; extra elements are ignored.
     if name_len < 2 {
         log!("sysctl(): name_len {} < 2, returning -1", name_len);
         return -1;
     }
+    
     let (name0, name1) = (env.mem.read(name), env.mem.read(name + 1));
 	
     // hw.machine depends on the emulated device family
-    if env.mem.cstr_at_utf8(name.cast::<u8>()).unwrap() == "hw.machine" {
+    // В SYSCTL_VALUES hw.machine соответствует ключу (6, 1)
+    if name0 == 6 && name1 == 1 {
         let machine_bytes: &'static [u8] = env.window().device_family().machine_name().as_bytes();
         // write directly: length + null terminator
         let len = machine_bytes.len() as GuestUSize + 1;
@@ -104,7 +107,7 @@ fn sysctl(
         }
         let oldlen = env.mem.read(oldlenp);
         if oldlen < len {
-            log!("sysctlbyname hw.machine: buffer too small ({oldlen} < {len})");
+            log!("sysctl hw.machine: buffer too small ({oldlen} < {len})");
             return -1;
         }
         let tmp = env.mem.alloc_and_write_cstr(machine_bytes);
@@ -116,14 +119,14 @@ fn sysctl(
 
     sysctl_generic(
         env,
-
-        |env| {
-            let name_str = env.mem.cstr_at_utf8(name.cast::<u8>()).unwrap();
-            let Some((k, val)) = STRING_MAP.get_key_value(name_str) else {
-                unimplemented!("Unknown sysctlbyname parameter {name_str}!")
+        |_env| {
+            // Используем INT_MAP для поиска по числовым идентификаторам (name0, name1)
+            let Some((name_str, val)) = INT_MAP.get(&(name0, name1)) else {
+                // Убираем unimplemented!, чтобы избежать паники, просто логируем и возвращаем ошибку, как в sysctlbyname
+                log!("sysctl(): unknown parameter [{}, {}], returning -1", name0, name1);
+                return None;
             };
-            // return as Option to match expected type
-            Some((*k, val.clone()))
+            Some((*name_str, val.clone()))
         },
         oldp,
         oldlenp,
