@@ -1,15 +1,14 @@
 /*
- * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Этот исходный код подчиняется условиям лицензии Mozilla Public License, v. 2.0.
+ * Если копия MPL не поставлялась с этим файлом, вы можете получить её на https://mozilla.org/MPL/2.0/.
  */
 //! OpenAL.
 //!
-//! This is a thin layer on top of OpenAL Soft, see [crate::audio::openal].
+//! Это тонкая оболочка поверх OpenAL Soft, см. [crate::audio::openal].
 //!
-//! Resources:
-//! - [OpenAL 1.1 specification](https://www.openal.org/documentation/openal-1.1-specification.pdf)
-//! - Apple's [Technical Note TN2199: OpenAL FAQ for iPhone OS](https://web.archive.org/web/20090826202158/http://developer.apple.com/iPhone/library/technotes/tn2008/tn2199.html) (also available [here](https://developer.apple.com/library/archive/technotes/tn2199/_index.html))
+//! Ресурсы:
+//! - [Спецификация OpenAL 1.1](https://www.openal.org/documentation/openal-1.1-specification.pdf)
+//! - Apple [Technical Note TN2199: OpenAL FAQ для iPhone OS](https://web.archive.org/web/20090826202158/http://developer.apple.com/iPhone/library/technotes/tn2008/tn2199.html) (также доступно [здесь](https://developer.apple.com/library/archive/technotes/tn2199/_index.html))
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::*;
@@ -54,12 +53,12 @@ impl State {
     }
 }
 
-/// Opaque type in guest memory standing in for [ALCdevice] in host memory.
+/// Непрозрачный тип в гостевой памяти, представляющий [ALCdevice] из памяти хоста.
 struct GuestALCdevice {
     _filler: u8,
 }
 impl SafeWrite for GuestALCdevice {}
-/// Opaque type in guest memory standing in for [ALCcontext] in host memory.
+/// Непрозрачный тип в гостевой памяти, представляющий [ALCcontext] из памяти хоста.
 struct GuestALCcontext {
     _filler: u8,
 }
@@ -74,10 +73,10 @@ macro_rules! try_get_context {
             .map(|ctx| ctx.make_current(&mut $env.openal_manager))
         else {
             log_dbg!(
-                "Attempted to get context but currently active context {:?} is invalid, skipping!",
+                "Попытка получить контекст, но текущий активный контекст {:?} недействителен, пропускаем!",
                 State::get($env).current_ctx
             );
-            // TODO: set error
+            // TODO: установить ошибку
             return;
         };
     };
@@ -89,10 +88,10 @@ macro_rules! try_get_context {
             .map(|ctx| ctx.make_current(&mut $env.openal_manager))
         else {
             log_dbg!(
-                "Attempted to get context but currently active context {:?} is invalid, skipping!",
+                "Попытка получить контекст, но текущий активный контекст {:?} недействителен, пропускаем!",
                 State::get($env).current_ctx
             );
-            // TODO: set error
+            // TODO: установить ошибку
             return $rval;
         };
     };
@@ -102,14 +101,14 @@ macro_rules! try_get_context {
 
 fn alcOpenDevice(env: &mut Environment, devicename: ConstPtr<u8>) -> MutPtr<GuestALCdevice> {
     if !devicename.is_null() {
-        // If device name name is not null, we check if it's the one which was
-        // obtained from a call to alcGetString(NULL, ALC_DEVICE_SPECIFIER).
-        // And if not, we return NULL.
+        // Если имя устройства не равно null, мы проверяем, соответствует ли оно тому,
+        // которое было получено при вызове alcGetString(NULL, ALC_DEVICE_SPECIFIER).
+        // Если нет, возвращаем NULL.
 
         let d_name = alcGetString(env, Ptr::null(), ALC_DEVICE_SPECIFIER);
         if strcmp(env, d_name, devicename) != 0 {
             log!(
-                "Unsupported device name {:?}, supported is {:?}. Returning NULL",
+                "Неподдерживаемое имя устройства {:?}, поддерживается {:?}. Возвращаем NULL",
                 env.mem.cstr_at_utf8(devicename),
                 env.mem.cstr_at_utf8(d_name)
             );
@@ -121,18 +120,18 @@ fn alcOpenDevice(env: &mut Environment, devicename: ConstPtr<u8>) -> MutPtr<Gues
 
     let res = unsafe { al::alcOpenDevice(std::ptr::null()) };
     if res.is_null() {
-        log_dbg!("alcOpenDevice(NULL) returned NULL");
+        log_dbg!("alcOpenDevice(NULL) вернул NULL");
         return Ptr::null();
     }
 
     let guest_res = env.mem.alloc_and_write(GuestALCdevice { _filler: 0 });
     State::get(env).devices.insert(guest_res, res);
-    log_dbg!("alcOpenDevice(NULL) => {:?} (host: {:?})", guest_res, res,);
+    log_dbg!("alcOpenDevice(NULL) => {:?} (хост: {:?})", guest_res, res,);
     guest_res
 }
 fn alcCloseDevice(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> bool {
     if device.is_null() {
-        log!("alcCloseDevice() is called with NULL device, ignoring");
+        log!("alcCloseDevice() вызван с устройством NULL, игнорируем");
         return false;
     }
     let host_device = State::get(env).devices.remove(&device).unwrap();
@@ -162,7 +161,7 @@ fn alcGetString(
         match State::get(env).devices.get(&device) {
             Some(&dev) => dev,
             None => {
-                log!("Warning: alcGetString called with unknown device {:?}", device);
+                log!("Предупреждение: alcGetString вызван с неизвестным устройством {:?}", device);
                 std::ptr::null_mut()
             }
         }
@@ -173,13 +172,13 @@ fn alcGetString(
     
     // Защита от краша, если OpenAL ничего не вернул
     if res.is_null() {
-        log_dbg!("alcGetString({:?}, {}) returned NULL", device, param);
+        log_dbg!("alcGetString({:?}, {}) вернул NULL", device, param);
         return Ptr::null();
     }
 
     let s = unsafe { CStr::from_ptr(res) };
     log_dbg!("alcGetString({:?}, {}) => {:?}", device, param, s);
-    log!("TODO: alcGetString({}) leaks memory", param);
+    log!("TODO: alcGetString({}) приводит к утечке памяти", param);
     
     // Аллоцируем строку в памяти гостя
     env.mem.alloc_and_write_cstr(s.to_bytes()).cast_const()
@@ -202,11 +201,11 @@ fn alcCreateContext(
         std::ptr::null()
     } else {
         let mut ptr: MutPtr<i32> = attr_list.cast_mut();
-        // attribute list is NULL terminated
+        // список атрибутов завершается нулем (NULL)
         while env.mem.read(ptr) != 0 {
             let attr = env.mem.read(ptr);
             log_dbg!(
-                "alcCreateContext attribute {:#x} => {}",
+                "Атрибут alcCreateContext {:#x} => {}",
                 attr,
                 env.mem.read(ptr + 1)
             );
@@ -230,14 +229,14 @@ fn alcCreateContext(
         )
     };
     let Ok(ctx) = res else {
-        log_dbg!("alcCreateContext({:?}, (...)) returned NULL", device);
+        log_dbg!("alcCreateContext({:?}, (...)) вернул NULL", device);
         return Ptr::null();
     };
 
     let guest_res = env.mem.alloc_and_write(GuestALCcontext { _filler: 0 });
 
     log_dbg!(
-        "alcCreateContext({:?}, NULL) => {:?} (host: {:?})",
+        "alcCreateContext({:?}, NULL) => {:?} (хост: {:?})",
         device,
         guest_res,
         ctx,
@@ -248,7 +247,7 @@ fn alcCreateContext(
 }
 fn alcDestroyContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
     if context.is_null() {
-        log!("alcDestroyContext() is called with NULL context, ignoring");
+        log!("alcDestroyContext() вызван с контекстом NULL, игнорируем");
         return;
     }
     let _host_context = State::get(env).contexts.remove(&context).unwrap();
@@ -258,7 +257,7 @@ fn alcDestroyContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
 
 fn alcProcessContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
     if context.is_null() {
-        log!("alcProcessContext() is called with NULL context, ignoring");
+        log!("alcProcessContext() вызван с контекстом NULL, игнорируем");
         return;
     }
     let host_context = State::get(env).contexts.get_mut(&context).unwrap();
@@ -266,7 +265,7 @@ fn alcProcessContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
 }
 fn alcSuspendContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
     if context.is_null() {
-        log!("alcSuspendContext() is called with NULL context, ignoring");
+        log!("alcSuspendContext() вызван с контекстом NULL, игнорируем");
         return;
     }
     let host_context = State::get(env).contexts.get_mut(&context).unwrap();
@@ -293,7 +292,7 @@ fn alcGetContextsDevice(
     context: MutPtr<GuestALCcontext>,
 ) -> MutPtr<GuestALCdevice> {
     if context.is_null() {
-        log!("alcGetContextsDevice() is called with NULL context, ignoring");
+        log!("alcGetContextsDevice() вызван с контекстом NULL, игнорируем");
         return Ptr::null();
     }
     let host_context = State::get(env).contexts.get(&context).unwrap();
@@ -321,27 +320,26 @@ fn alcGetProcAddress(
         Ptr::from_bits(ptr.addr_with_thumb_bit())
     } else {
         if mangled_func_name == "_alcMacOSMixerOutputRate" {
-            log!("Tolerating nonexistent alcMacOSMixerOutputRate() func in alcGetProcAddress(), returning NULL.");
+            log!("Допускаем несуществующую функцию alcMacOSMixerOutputRate() в alcGetProcAddress(), возвращаем NULL.");
             return Ptr::null();
         }
         panic!(
-            "Request for procedure address for unimplemented OpenAL function {mangled_func_name}"
+            "Запрос адреса процедуры для нереализованной функции OpenAL {mangled_func_name}"
         );
     }
 }
 
-// TODO: more functions
+// TODO: больше функций
 
 // === al.h ===
 
 fn alGetError(env: &mut Environment) -> i32 {
-    // Super Monkey Ball and other apps try to use this function (rather than
-    // alcGetError) to figure out whether opening the device succeeded. This
-    // is not correct and seems to be a bug. Presumably iPhone OS doesn't mind
-    // this, but OpenAL Soft returns an error in this case, and the game skips
-    // the rest of its audio initialization.
-    // Some other apps will try to call this on a context that is deleted
-    // (typically from another thread), so we need to silently be ok with this.
+    // Super Monkey Ball и другие приложения пытаются использовать эту функцию (вместо
+    // alcGetError), чтобы узнать, удалось ли открыть устройство. Это неправильно и похоже на ошибку.
+    // Вероятно, iPhone OS не обращает на это внимания, но OpenAL Soft в этом случае возвращает ошибку,
+    // и игра пропускает оставшуюся часть инициализации звука.
+    // Некоторые другие приложения пытаются вызвать это в удаленном контексте
+    // (обычно из другого потока), поэтому нам нужно просто тихо игнорировать это.
     try_get_context!(env, context, al::AL_NO_ERROR);
     let res = unsafe { context.GetError() };
     log_dbg!("alGetError() => {:#x}", res);
@@ -394,8 +392,8 @@ fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
     let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&param) {
         str
     } else {
-        // Those values are extracted from the iPhone 3GS, iOS 4.0.1
-        // (same values were seen on the iPhone Simulator)
+        // Эти значения извлечены из iPhone 3GS, iOS 4.0.1
+        // (такие же значения были замечены в симуляторе iPhone)
         let s: &[u8] = match param {
             AL_VENDOR => b"Apple Inc.",
             AL_VERSION => b"1.1",
@@ -423,7 +421,7 @@ fn alListenerf(env: &mut Environment, param: ALenum, value: ALfloat) {
     unsafe { context.Listenerf(param, value) };
 }
 fn alListenerfv(env: &mut Environment, param: ALenum, values: ConstPtr<ALfloat>) {
-    // we assume that at least 1 parameter should be passed
+    // мы предполагаем, что должен быть передан хотя бы 1 параметр
     let values = env.mem.ptr_at(values, 1);
     try_get_context!(env, context);
     unsafe { context.Listenerfv(param, values) };
@@ -448,7 +446,7 @@ fn alListener3i(env: &mut Environment, param: ALenum, value1: ALint, value2: ALi
     unsafe { context.Listener3i(param, value1, value2, value3) };
 }
 fn alListeneriv(env: &mut Environment, param: ALenum, values: ConstPtr<ALint>) {
-    let values = env.mem.ptr_at(values, 3); // upper bound
+    let values = env.mem.ptr_at(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.Listeneriv(param, values) };
 }
@@ -474,7 +472,7 @@ fn alGetListener3f(
     env.mem.write(value3, values[2]);
 }
 fn alGetListenerfv(env: &mut Environment, param: ALenum, values: MutPtr<ALfloat>) {
-    let values = env.mem.ptr_at_mut(values, 3); // upper bound
+    let values = env.mem.ptr_at_mut(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.GetListenerfv(param, values) };
 }
@@ -499,19 +497,31 @@ fn alGetListener3i(
     env.mem.write(value3, values[2]);
 }
 fn alGetListeneriv(env: &mut Environment, param: ALenum, values: MutPtr<ALint>) {
-    let values = env.mem.ptr_at_mut(values, 3); // upper bound
+    let values = env.mem.ptr_at_mut(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.GetListeneriv(param, values) };
 }
 
 fn alGenSources(env: &mut Environment, n: ALsizei, sources: MutPtr<ALuint>) {
-    let n_usize: GuestUSize = n.try_into().unwrap();
+    let n_usize: GuestUSize = match n.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alGenSources вызван с отрицательным количеством {}", n);
+            return;
+        }
+    };
     let sources = env.mem.ptr_at_mut(sources, n_usize);
     try_get_context!(env, context);
     unsafe { context.GenSources(n, sources) };
 }
 fn alDeleteSources(env: &mut Environment, n: ALsizei, sources: ConstPtr<ALuint>) {
-    let n_usize: GuestUSize = n.try_into().unwrap();
+    let n_usize: GuestUSize = match n.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alDeleteSources вызван с отрицательным количеством {}", n);
+            return;
+        }
+    };
     let sources = env.mem.ptr_at(sources, n_usize);
     try_get_context!(env, context);
     unsafe { context.DeleteSources(n, sources) };
@@ -522,7 +532,7 @@ fn alSourcef(env: &mut Environment, source: ALuint, param: ALenum, value: ALfloa
     unsafe { context.Sourcef(source, param, value) };
 }
 fn alSourcefv(env: &mut Environment, source: ALuint, param: ALenum, values: ConstPtr<ALfloat>) {
-    // we assume that at least 1 parameter should be passed
+    // мы предполагаем, что должен быть передан хотя бы 1 параметр
     let values = env.mem.ptr_at(values, 1);
     try_get_context!(env, context);
     unsafe { context.Sourcefv(source, param, values) };
@@ -554,7 +564,7 @@ fn alSource3i(
     unsafe { context.Source3i(source, param, value1, value2, value3) };
 }
 fn alSourceiv(env: &mut Environment, source: ALuint, param: ALenum, values: ConstPtr<ALint>) {
-    let values = env.mem.ptr_at(values, 3); // upper bound
+    let values = env.mem.ptr_at(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.Sourceiv(source, param, values) };
 }
@@ -588,7 +598,7 @@ fn alGetSource3f(
     env.mem.write(value3, values[2]);
 }
 fn alGetSourcefv(env: &mut Environment, source: ALuint, param: ALenum, values: MutPtr<ALfloat>) {
-    let values = env.mem.ptr_at_mut(values, 3); // upper bound
+    let values = env.mem.ptr_at_mut(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.GetSourcefv(source, param, values) };
 }
@@ -621,7 +631,7 @@ fn alGetSource3i(
     env.mem.write(value3, values[2]);
 }
 fn alGetSourceiv(env: &mut Environment, source: ALuint, param: ALenum, values: MutPtr<ALint>) {
-    let values = env.mem.ptr_at_mut(values, 3); // upper bound
+    let values = env.mem.ptr_at_mut(values, 3); // верхняя граница
     try_get_context!(env, context);
     unsafe { context.GetSourceiv(source, param, values) };
 }
@@ -649,7 +659,13 @@ fn alSourceQueueBuffers(
     nb: ALsizei,
     buffers: ConstPtr<ALuint>,
 ) {
-    let nb_usize: GuestUSize = nb.try_into().unwrap();
+    let nb_usize: GuestUSize = match nb.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alSourceQueueBuffers вызван с отрицательным количеством {}", nb);
+            return;
+        }
+    };
     let buffers = env.mem.ptr_at(buffers, nb_usize);
     try_get_context!(env, context);
     unsafe { context.SourceQueueBuffers(source, nb, buffers) }
@@ -660,21 +676,21 @@ fn alSourceUnqueueBuffers(
     nb: ALsizei,
     buffers: MutPtr<ALuint>,
 ) {
-    // Apple's sample code for a looping sound effect contains a function called
-    // SoundEngineEffect::ClearSourceBuffers() that has the following pattern:
+    // Пример кода Apple для зацикленного звукового эффекта содержит функцию с названием
+    // SoundEngineEffect::ClearSourceBuffers(), которая имеет следующий шаблон:
     //
     //    alGetSourcei(source, AL_BUFFERS_QUEUED, &n);
     //    alSourceUnqueueBuffers(source, n, &buffers);
     //
-    // Unfortunately, this is incorrect code in some circumstances: unqueueing
-    // buffers while they are playing is not permitted by the OpenAL spec! Maybe
-    // it worked with Apple's OpenAL implementation for some reason, but OpenAL
-    // Soft does not tolerate this, so many apps that used this sample code
-    // (e.g. Super Monkey Ball) run into an unexpected OpenAL error.
+    // К сожалению, при некоторых обстоятельствах этот код некорректен: извлечение буферов из 
+    // очереди во время их воспроизведения не разрешено спецификацией OpenAL! Возможно, это по 
+    // какой-то причине работало с реализацией OpenAL от Apple, но OpenAL Soft этого не допускает, 
+    // поэтому многие приложения, использовавшие этот пример (например, Super Monkey Ball), 
+    // сталкиваются с неожиданной ошибкой OpenAL.
     //
-    // Limiting the number dequeued seems to be an effective workaround for the
-    // apps that have been tested. That sample code isn't interested in actually
-    // using the returned buffer IDs, so it's no problem that we write too few.
+    // Ограничение количества извлекаемых буферов кажется эффективным обходным путем для
+    // протестированных приложений. Этот пример кода на самом деле не использует возвращаемые 
+    // идентификаторы буферов, поэтому нет проблемы в том, что мы запишем их меньше.
     try_get_context!(env, context);
     let buffers_processed = {
         let mut val = 0;
@@ -682,29 +698,47 @@ fn alSourceUnqueueBuffers(
         val
     };
     let nb = if buffers_processed < nb {
-        log_dbg!("Applying workaround for Apple sample code bug: ignoring unqueueing of {}/{} processed buffers from source {}", nb, buffers_processed, source);
+        log_dbg!("Применяем обходной путь для бага в примере кода Apple: игнорируем удаление {}/{} обработанных буферов из очереди для источника {}", nb, buffers_processed, source);
         buffers_processed
     } else {
         nb
     };
 
-    let nb_usize: GuestUSize = nb.try_into().unwrap();
+    let nb_usize: GuestUSize = match nb.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alSourceUnqueueBuffers в итоге получил отрицательное количество {}", nb);
+            return;
+        }
+    };
     let buffers = env.mem.ptr_at_mut(buffers, nb_usize);
     unsafe { context.SourceUnqueueBuffers(source, nb, buffers) }
 }
 
 fn alGenBuffers(env: &mut Environment, n: ALsizei, buffers: MutPtr<ALuint>) {
-    let n_usize: GuestUSize = n.try_into().unwrap();
+    let n_usize: GuestUSize = match n.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alGenBuffers вызван с отрицательным количеством {}", n);
+            return;
+        }
+    };
     let buffers = env.mem.ptr_at_mut(buffers, n_usize);
     try_get_context!(env, context);
     unsafe { context.GenBuffers(n, buffers) };
 }
 fn alDeleteBuffers(env: &mut Environment, n: ALsizei, buffers: ConstPtr<ALuint>) {
-    let n_usize: GuestUSize = n.try_into().unwrap();
+    let n_usize: GuestUSize = match n.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alDeleteBuffers вызван с отрицательным количеством {}", n);
+            return;
+        }
+    };
     let buffers = env.mem.ptr_at(buffers, n_usize);
     let Some(context) = State::try_make_current(env) else {
         log!(
-            "Attempted alDeleteBuffers({}, {:?}) with inactive context {:?}, skipping!",
+            "Попытка вызова alDeleteBuffers({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
             n,
             buffers,
             State::get(env).current_ctx
@@ -722,7 +756,13 @@ fn alBufferData(
     size: ALsizei,
     samplerate: ALsizei,
 ) {
-    let size_usize: GuestUSize = size.try_into().unwrap();
+    let size_usize: GuestUSize = match size.try_into() {
+        Ok(val) => val,
+        Err(_) => {
+            log!("Предупреждение: alBufferData вызван с отрицательным размером {}", size);
+            return;
+        }
+    };
     let data_ptr: *const ALvoid = if data.is_null() {
         std::ptr::null()
     } else {
@@ -733,10 +773,10 @@ fn alBufferData(
     unsafe { context.BufferData(buffer, format, data_ptr, size, samplerate) };
 }
 
-/// This is an Apple extension that treats the data passed as a static buffer
-/// rather than a temporary one, which means it never has to be copied.
-/// OpenAL Soft doesn't support this, so we pass through to `alBufferData`
-/// and hope the guest app doesn't rely on the static-ness (it shouldn't).
+/// Это расширение Apple, которое рассматривает переданные данные как статический буфер,
+/// а не временный, что означает, что его никогда не нужно копировать.
+/// OpenAL Soft это не поддерживает, поэтому мы передаем управление в `alBufferData`
+/// и надеемся, что гостевое приложение не полагается на статичность (не должно).
 fn alBufferDataStatic(
     env: &mut Environment,
     buffer: ALuint,
@@ -748,13 +788,13 @@ fn alBufferDataStatic(
     alBufferData(env, buffer, format, data, size, samplerate);
 }
 
-// Apple-specific extension to OpenAL
+// Специфичное расширение Apple для OpenAL
 fn alcMacOSXMixerOutputRate(_env: &mut Environment, value: ALdouble) {
-    log!("App wants to set mixer output sample rate to {} Hz", value);
+    log!("Приложение хочет установить частоту дискретизации микшера на {} Гц", value);
 }
 fn alcMacOSXGetMixerOutputRate(_env: &mut Environment) -> ALdouble {
-    // Default was checked on iPhone 3GS, iOS 4.0.1
-    log!("App wants to get mixer output sample rate, returning default 0");
+    // Значение по умолчанию было проверено на iPhone 3GS, iOS 4.0.1
+    log!("Приложение хочет получить частоту дискретизации микшера, возвращаем 0 по умолчанию");
     0.0
 }
 
@@ -764,16 +804,16 @@ fn alDopplerFactor(env: &mut Environment, value: ALfloat) {
 }
 
 fn alDopplerVelocity(env: &mut Environment, value: ALfloat) {
-    // Apparently wolf3d sets doppler velocity to zero, but this results in
-    // muting all of the audio with Open AL 1.1 soft implementation!
-    // Check "A note for OpenAL library implementors regarding OpenAL 1.0" from
-    // OpenAL 1.1 specs for more info
+    // По всей видимости, wolf3d устанавливает скорость Доплера в ноль, но это приводит
+    // к приглушению всего звука в программной реализации Open AL 1.1!
+    // Дополнительную информацию см. в разделе "A note for OpenAL library implementors regarding OpenAL 1.0" 
+    // спецификации OpenAL 1.1.
     let bundle_id = env.bundle.bundle_identifier();
     if bundle_id.starts_with("com.zodttd.wolf3d")
         || bundle_id.starts_with("com.idsoftware.wolf3d")
         || bundle_id.starts_with("nu.r3.wolf3d")
     {
-        log_dbg!("Applying game-specific hack for Wolf3D-iOS: ignoring 0.0 doppler velocity.");
+        log_dbg!("Применяем хак для Wolf3D-iOS: игнорируем нулевую скорость Доплера (0.0).");
         assert_eq!(value, 0.0);
         return;
     }
@@ -786,10 +826,10 @@ fn alSpeedOfSound(env: &mut Environment, value: ALfloat) {
     unsafe { context.SpeedOfSound(value) };
 }
 
-// TODO: more functions
+// TODO: больше функций
 
-// Note: For some reasons Wolf3d registers many OpenAl functions, but actually
-// uses only few ones. To workaround this, we just provide stubs.
+// Примечание: По некоторым причинам Wolf3d регистрирует много функций OpenAL,
+// но фактически использует лишь несколько. Чтобы обойти это, мы просто предоставляем заглушки.
 
 fn alcGetEnumValue(
     _env: &mut Environment,
