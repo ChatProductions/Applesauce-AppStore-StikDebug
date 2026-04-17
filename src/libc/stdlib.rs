@@ -625,6 +625,68 @@ fn read_cstr_safe(env: &mut Environment, ptr: ConstPtr<u8>) -> String {
 }
 
 #[allow(non_snake_case)]
+fn _fcvt(
+    env: &mut Environment,
+    value: f64,
+    ndigits: i32,
+    decpt: MutPtr<i32>,
+    sign: MutPtr<i32>,
+) -> MutPtr<u8> {
+    set_errno(env, 0);
+
+    let is_negative = value.is_sign_negative() && value != 0.0;
+    let val_abs = value.abs();
+
+    // Форматируем число с нужным количеством знаков после запятой
+    let ndigits_usize = ndigits.max(0) as usize;
+    let formatted = format!("{:.*}", ndigits_usize, val_abs);
+
+    let mut digits = String::with_capacity(formatted.len());
+    let mut decimal_pos = formatted.len() as i32;
+    let mut dot_found = false;
+
+    // Извлекаем позицию точки и убираем её из самой строки
+    for (i, c) in formatted.chars().enumerate() {
+        if c == '.' {
+            decimal_pos = i as i32;
+            dot_found = true;
+        } else {
+            digits.push(c);
+        }
+    }
+
+    if !dot_found {
+        decimal_pos = digits.len() as i32;
+    }
+
+    // В оригинальном C fcvt строка обычно не содержит ведущего нуля 
+    // для чисел < 1 (например, 0.14 -> "14", decpt=0).
+    // Rust format! добавляет этот нуль ("0.14"). Убираем его для совместимости.
+    if digits.starts_with('0') && decimal_pos == 1 && digits.len() > 1 {
+        digits.remove(0);
+        decimal_pos -= 1;
+    }
+
+    // Записываем позицию точки и знак по указателям (если игра их передала)
+    if !decpt.is_null() {
+        env.mem.write(decpt, decimal_pos);
+    }
+    if !sign.is_null() {
+        env.mem.write(sign, if is_negative { 1 } else { 0 });
+    }
+
+    // В оригинале fcvt использует статический внутренний буфер.
+    // Для эмулятора безопаснее выделить небольшой кусок в памяти гостя.
+    let buf_len = (digits.len() + 1) as GuestUSize;
+    let buf = env.mem.alloc(buf_len);
+    
+    env.mem.bytes_at_mut(buf, digits.len() as GuestUSize).copy_from_slice(digits.as_bytes());
+    env.mem.write(buf + digits.len() as GuestUSize, b'\0');
+
+    buf
+}
+
+#[allow(non_snake_case)]
 fn _gcvt(
     env: &mut Environment,
     value: f64,
@@ -789,6 +851,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__assert_rtn(_, _, _, _)),
     export_c_func!(__assert(_, _, _)),
     export_c_func!(__assert_fail(_, _, _, _)),
+    export_c_func!(_fcvt(_, _, _, _, _)),
     export_c_func!(_gcvt(_, _, _)),
     export_c_func!(system(_)),
     export_c_func!(dladdr(_, _)),
