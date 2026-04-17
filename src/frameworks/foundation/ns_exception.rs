@@ -48,6 +48,18 @@ fn objc_str(env: &mut Environment, s: id, fallback: &str) -> String {
     super::ns_string::to_rust_string(env, s).into_owned()
 }
 
+pub struct State {
+    pub uncaught_exception_handler: MutVoidPtr,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            uncaught_exception_handler: MutVoidPtr::null(),
+        }
+    }
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -274,12 +286,19 @@ pub const CONSTANTS: ConstantExports = &[
 // C function: NSSetUncaughtExceptionHandler
 // ---------------------------------------------------------------------------
 
-/// Registers a last-chance exception handler.  In touchHLE all unhandled
-/// exceptions are already converted to Rust panics, so there is nothing
-/// useful the guest handler can do.  We log the address and move on.
-fn NSSetUncaughtExceptionHandler(_env: &mut Environment, handler: MutVoidPtr) {
+// ---------------------------------------------------------------------------
+// C function: NSSetUncaughtExceptionHandler
+// ---------------------------------------------------------------------------
+
+/// Registers a last-chance exception handler. In touchHLE all unhandled
+/// exceptions are already converted to Rust panics or bypassed, but we 
+/// save the handler address to maintain accurate guest state.
+fn NSSetUncaughtExceptionHandler(env: &mut Environment, handler: MutVoidPtr) {
+    // Сохраняем переданный гостевым приложением обработчик в состояние
+    env.framework_state.foundation.ns_exception.uncaught_exception_handler = handler;
+    
     log!(
-        "TODO: Ignoring uncaught exception handler registered at {:?}",
+        "NSSetUncaughtExceptionHandler: registered handler at {:?}",
         handler
     );
 }
