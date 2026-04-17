@@ -87,7 +87,7 @@ pub struct State {
 }
 
 fn get_state(env: &mut Environment) -> &mut State {
-    &mut env.framework_state.dispatch
+    &mut env.libc_state.dispatch
 }
 
 // MARK: - dispatch_once
@@ -102,10 +102,10 @@ fn dispatch_once(
     block: dispatch_block_t,
 ) {
     let token_addr = predicate.to_bits();
-    if env.framework_state.dispatch.once_tokens.contains(&token_addr) {
+    if env.libc_state.dispatch.once_tokens.contains(&token_addr) {
         return;
     }
-    env.framework_state.dispatch.once_tokens.insert(token_addr);
+    env.libc_state.dispatch.once_tokens.insert(token_addr);
     // Mark the predicate so native code that reads it directly sees "done".
     env.mem.write(predicate, -1i32); // ~0 == done on Apple platforms
 
@@ -233,7 +233,7 @@ fn dispatch_apply(
     if block.is_null() { return; }
     // The block pointer IS the invoke pointer on ARM (first word of block struct).
     let invoke_ptr = env.mem.read(block.cast::<u32>());
-    let invoke = GuestFunction::from_ptr(invoke_ptr);
+    let invoke = GuestFunction::from(invoke_ptr);
     for i in 0..iterations {
         let _: () = invoke.call_from_host(env, (block, i));
     }
@@ -543,7 +543,7 @@ fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
     // The invoke pointer is at offset 12 (word 3) in the block literal.
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
     if invoke_ptr == 0 { return; }
-    let invoke = GuestFunction::from_ptr(invoke_ptr);
+    let invoke = GuestFunction::from(invoke_ptr);
     let _: () = invoke.call_from_host(env, (block,));
 }
 
