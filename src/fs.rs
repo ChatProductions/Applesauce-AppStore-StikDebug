@@ -628,6 +628,10 @@ impl Fs {
                 FsNode::resource_file(format!("{DYLIBS_DIR}/libz.1.2.3.dylib")),
             )
             .with_child(
+                "libiconv.2.dylib",
+                FsNode::resource_file(format!("{}/libiconv.2.dylib", DYLIBS_DIR)),
+            )
+            .with_child(
                 "libc++abi.dylib",
                 FsNode::resource_file(format!("{DYLIBS_DIR}/libc++abi.dylib")),
             );
