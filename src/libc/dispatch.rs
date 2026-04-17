@@ -229,7 +229,7 @@ fn dispatch_apply(
     if block.is_null() { return; }
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
     if invoke_ptr == 0 { return; }
-    let invoke = GuestFunction::from_ptr(invoke_ptr);  // ← fixed
+    let invoke = GuestFunction::from(invoke_ptr);  // ← fixed
     for i in 0..iterations {
         let _: () = invoke.call_from_host(env, (block, i));
     }
