@@ -212,3 +212,6 @@ com.digitalchocolate.iwall: --force-composition
 
 # NFSU
 com.ea.nfsucinc: --force-composition
+
+# BOF
+com.gameloft.BladesOfFury: --force-composition
