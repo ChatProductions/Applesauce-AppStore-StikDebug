@@ -6,46 +6,48 @@
 
 use crate::dyld::HostDylib;
 use crate::mem::MutVoidPtr;
-use crate::objc::{objc_class, ClassExport};
+use crate::objc::{objc_classes, ClassExports};
 
 pub mod fb_classes {
     use super::*;
 
-    pub const CLASSES: &[ClassExport] = &[
+    pub const CLASSES: ClassExports = &objc_classes![
         // Основной класс сессии. Возвращаем 1 (YES) на resume, чтобы игра 
-        // думала, что сессия активна, или хотя бы не крашилась.
-        objc_class!(FBSession, NSObject,
+        // думала, что сессия активна.
+        FBSession : NSObject {
             "-" => "resume" => |_env, _self: MutVoidPtr| -> u8 { 
                 crate::log_dbg!("FBSession resume called");
                 1 
             },
             "-" => "isConnected" => |_env, _self: MutVoidPtr| -> u8 { 0 },
             "-" => "logout" => |_env, _self: MutVoidPtr| {},
-        ),
+        },
         
         // Классы сетевых запросов и парсинга
-        objc_class!(FBRequest, NSObject,
+        FBRequest : NSObject {
             "-" => "connect" => |_env, _self: MutVoidPtr| {
                 crate::log_dbg!("FBRequest connect called and ignored (no network)");
             },
-        ),
-        objc_class!(FBXMLHandler, NSObject),
+        },
+        
+        FBXMLHandler : NSObject {},
         
         // Диалоговые окна наследуются от UIView
-        objc_class!(FBDialog, UIView,
+        FBDialog : UIView {
             "-" => "show" => |_env, _self: MutVoidPtr| {
                 crate::log_dbg!("FBDialog show called");
             },
             "-" => "dismissWithSuccess:animated:" => |_env, _self: MutVoidPtr, _success: u8, _animated: u8| {
                 crate::log_dbg!("FBDialog dismissWithSuccess:animated: called");
             },
-        ),
-        objc_class!(FBFeedDialog, FBDialog),
-        objc_class!(FBLoginDialog, FBDialog),
-        objc_class!(FBPermissionDialog, FBDialog),
+        },
+        
+        FBFeedDialog : FBDialog {},
+        FBLoginDialog : FBDialog {},
+        FBPermissionDialog : FBDialog {},
         
         // Кнопка наследуется от UIButton
-        objc_class!(FBLoginButton, UIButton),
+        FBLoginButton : UIButton {}
     ];
 }
 
