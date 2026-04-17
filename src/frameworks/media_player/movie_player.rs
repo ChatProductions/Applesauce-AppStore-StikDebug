@@ -383,26 +383,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())play {
     log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
     
-    // 1. Сразу ставим плеер в режим остановки ДО отправки уведомления.
-    // Если сделать это после, произойдет краш (Use-After-Free), так как игра
-    // может удалить объект MPMoviePlayerController получив уведомление.
+    // Ставим плеер в режим проигрывания
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
-        .playback_state = MPMoviePlaybackStateStopped;
+        .playback_state = MPMoviePlaybackStatePlaying;
 
-    // 2. Временно удерживаем объект, чтобы он гарантированно не удалился
-    // прямо во время рассылки уведомлений внутри NSNotificationCenter.
-    retain(env, this);
-
-    // 3. СИНХРОННО уведомляем игру, что ролик закончился. 
-    // Это пробивает "глухую" блокировку цикла игр от Electronic Arts.
-    let name = ns_string::get_static_str(env, MPMoviePlayerPlaybackDidFinishNotification);
-    let center: id = msg_class![env; NSNotificationCenter defaultCenter];
-    let _: () = msg![env; center postNotificationName:name object:this];
-
-    // 4. Отпускаем объект. Если игра вызвала release, он удалится именно здесь.
-    // Больше к `this` обращаться в этом методе НЕЛЬЗЯ.
-    release(env, this);
+    // АСИНХРОННО ставим уведомление в очередь (с задержкой 50мс).
+    // Это позволяет методу play безопасно завершиться, а игре – 
+    // войти в RunLoop. Таким образом, даже если игра удалит плеер при 
+    // получении уведомления, это произойдет безопасно в основном цикле.
+    State::get(env).pending_notifications.push_back((
+        MPMoviePlayerPlaybackDidFinishNotification,
+        this,
+        Instant::now() + std::time::Duration::from_millis(50),
+    ));
 }
 
 - (())pause {
@@ -449,6 +443,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
 /// For use by `NSRunLoop` via [super::handle_players]: check movie players'
 /// status, send notifications if necessary.
 pub(super) fn handle_players(env: &mut Environment) {
@@ -464,10 +459,19 @@ pub(super) fn handle_players(env: &mut Environment) {
             i += 1;
         }
     }
+    
     for (name_str, object) in notifs_to_run {
+        // Меняем статус плеера прямо перед отправкой уведомления.
+        // Это гарантирует, что когда игра начнет его проверять, он будет остановлен.
+        if name_str == MPMoviePlayerPlaybackDidFinishNotification {
+            env.objc
+                .borrow_mut::<MPMoviePlayerControllerHostObject>(object)
+                .playback_state = MPMoviePlaybackStateStopped;
+        }
+
         let name = ns_string::get_static_str(env, name_str);
         let center: id = msg_class![env; NSNotificationCenter defaultCenter];
         // TODO: should there be some user info attached?
         let _: () = msg![env; center postNotificationName:name object:object];
     }
-        }
+}
