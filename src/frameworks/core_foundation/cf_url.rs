@@ -904,9 +904,6 @@ fn CFURLCreateStringByReplacingPercentEscapes(
         return nil;
     }
 
-    // ИСПРАВЛЕНИЕ: Методы класса NSString такие как `stringByReplacingPercentEscapesUsingEncoding:` 
-    // могут быть не реализованы в touchHLE, что вызывает краш "Unknown selector" (как видно в логе).
-    // Поэтому вместо вызова Objective-C метода, мы возвращаем копию оригинальной строки в виде заглушки.
     log!("TODO: CFURLCreateStringByReplacingPercentEscapes is stubbed to prevent crash");
     msg![env; original_string copy]
 }
@@ -922,7 +919,6 @@ fn CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
         return nil;
     }
 
-    // For UTF-8, use the simpler version (which is now safely stubbed)
     if encoding == kCFStringEncodingUTF8 {
         return CFURLCreateStringByReplacingPercentEscapes(
             env,
@@ -932,7 +928,6 @@ fn CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
         );
     }
 
-    // TODO: Handle other encodings
     log!("TODO: Percent escape replacement with encoding {:#x}", encoding);
     CFURLCreateStringByReplacingPercentEscapes(
         env,
@@ -958,8 +953,6 @@ fn CFURLCreateStringByAddingPercentEscapes(
         return nil;
     }
 
-    // ИСПРАВЛЕНИЕ: Аналогично декодированию выше, методы кодирования тоже могут быть не реализованы.
-    // Возвращаем простую копию строки.
     log!("TODO: CFURLCreateStringByAddingPercentEscapes is stubbed to prevent crash");
     msg![env; original_string copy]
 }
@@ -1021,10 +1014,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetBytes(_, _, _)),
     export_c_func!(CFURLGetByteRangeForComponent(_, _, _)),
     
-    // Percent Escaping
-    export_c_func!(CFURLCreateStringByReplacingPercentEscapes(_, _, _, _)),
-    export_c_func!(CFURLCreateStringByReplacingPercentEscapesUsingEncoding(_, _, _, _, _)),
-    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _, _)),
+    // Percent Escaping (ИСПРАВЛЕНО КОЛИЧЕСТВО АРГУМЕНТОВ ЗДЕСЬ)
+    export_c_func!(CFURLCreateStringByReplacingPercentEscapes(_, _, _)),
+    export_c_func!(CFURLCreateStringByReplacingPercentEscapesUsingEncoding(_, _, _, _)),
+    export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
     
     // Type Info
     export_c_func!(CFURLGetTypeID()),
