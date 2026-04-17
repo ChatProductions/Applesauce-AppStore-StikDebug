@@ -63,7 +63,7 @@ fn AudioSessionInitialize(
     _in_run_loop: CFRunLoopRef,
     _in_run_loop_mode: CFRunLoopMode,
     in_interruption_listener: AudioSessionInterruptionListener,
-    in_client_data: MutVoidPtr, // Используем MutVoidPtr, как в твоем файле
+    in_client_data: MutVoidPtr,
 ) -> OSStatus {
     let state = &mut env.framework_state.audio_toolbox.audio_session;
     
@@ -171,12 +171,8 @@ fn AudioSessionSetProperty(
 ) -> OSStatus {
     let required_size: GuestUSize = match in_ID {
         kAudioSessionProperty_AudioCategory => guest_size_of::<u32>(),
-        kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
-            guest_size_of::<f32>()
-        }
-        kAudioSessionProperty_PreferredHardwareSampleRate => {
-            guest_size_of::<f64>()
-        }
+        kAudioSessionProperty_PreferredHardwareIOBufferDuration => guest_size_of::<f32>(),
+        kAudioSessionProperty_PreferredHardwareSampleRate => guest_size_of::<f64>(),
         _ => {
             log!(
                 "TODO: AudioSessionSetProperty() unimplemented property: {} (size: {}) -> ignoring",
@@ -188,45 +184,37 @@ fn AudioSessionSetProperty(
     };
 
     if in_data_size != required_size {
-        log!("Warning: AudioSessionSetProperty() failed");
+        log!("Warning: AudioSessionSetProperty() failed: bad size");
         return kAudioSessionBadPropertySizeError;
     }
 
-    if in_ID == kAudioSessionProperty_PreferredHardwareSampleRate {
-        env.framework_state
-            .audio_toolbox
-            .audio_session
-            .current_hardware_sample_rate =
-            env.mem.read(in_data.cast::<f64>());
-        log!(
-            "AudioSessionSetProperty current_hardware_sample_rate {}",
-            env.framework_state
-                .audio_toolbox
-                .audio_session
-                .current_hardware_sample_rate
-        );
+    // ЧЕСТНО СОХРАНЯЕМ СВОЙСТВА В STATE БЕЗ ЗАГЛУШЕК
+    match in_ID {
+        kAudioSessionProperty_AudioCategory => {
+            let category = env.mem.read(in_data.cast::<u32>());
+            env.framework_state.audio_toolbox.audio_session.audio_session_category = category;
+            log!("AudioSessionSetProperty: set audio_session_category to {}", debug_fourcc(category));
+        }
+        kAudioSessionProperty_PreferredHardwareSampleRate => {
+            let rate = env.mem.read(in_data.cast::<f64>());
+            env.framework_state.audio_toolbox.audio_session.current_hardware_sample_rate = rate;
+            log!("AudioSessionSetProperty: set current_hardware_sample_rate to {}", rate);
+        }
+        kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
+            let duration = env.mem.read(in_data.cast::<f32>());
+            env.framework_state.audio_toolbox.audio_session.current_hardware_io_buffer_duration = duration;
+            log!("AudioSessionSetProperty: set current_hardware_io_buffer_duration to {}", duration);
+        }
+        _ => unreachable!(), // Мы отсеяли неизвестные свойства в первом match
     }
 
-    let result = 0; // success
-    log!(
-        "TODO: AudioSessionSetProperty({:?}, {:?}, {:?} ({:?})) -> {:?}",
-        in_ID,
-        in_data_size,
-        in_data,
-        env.mem.bytes_at(in_data.cast(), in_data_size),
-        result
-    );
-    result
+    0 // success
 }
 
-fn AudioSessionSetActive(_env: &mut Environment, active: bool) -> OSStatus {
-    let result = 0; // success
-    log!(
-        "TODO: AudioSessionSetActive({:?}) -> {:?}",
-        active,
-        result
-    );
-    result
+fn AudioSessionSetActive(env: &mut Environment, active: bool) -> OSStatus {
+    env.framework_state.audio_toolbox.audio_session.is_active = active;
+    log!("AudioSessionSetActive: set is_active to {}", active);
+    0 // success
 }
 
 fn AudioSessionAddPropertyListener(
@@ -238,7 +226,7 @@ fn AudioSessionAddPropertyListener(
     let result = 0; // success
     log!(
         "TODO: AudioSessionAddPropertyListener({:?}, {:?}, {:?}) -> {}",
-        inID,
+        debug_fourcc(inID),
         inProc,
         inClientData,
         result
@@ -255,7 +243,7 @@ fn AudioSessionRemovePropertyListenerWithUserData(
     let result = 0; // success
     log!(
         "TODO: AudioSessionRemovePropertyListenerWithUserData({:?}, {:?}, {:?}) -> {}",
-        in_property_id,
+        debug_fourcc(in_property_id),
         in_listener,
         in_client_data,
         result
