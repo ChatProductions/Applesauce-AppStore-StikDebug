@@ -12,19 +12,19 @@ pub mod fb_classes {
     use super::*;
 
     pub const CLASSES: ClassExports = &objc_classes!(
-        (env, this, _cmd); // Заголовок переменных
+        (env, this, _cmd); // Заголовок переменных окружения
 
         @implementation FBSession : NSObject
-            "-" => "resume" => |env, this| -> u8 { 
+            - "resume" => |env, this| -> u8 { 
                 crate::log_dbg!("FBSession resume called");
                 1 
             }
-            "-" => "isConnected" => |env, this| -> u8 { 0 }
-            "-" => "logout" => |env, this| {}
+            - "isConnected" => |env, this| -> u8 { 0 }
+            - "logout" => |env, this| {}
         @end
 
         @implementation FBRequest : NSObject
-            "-" => "connect" => |env, this| {
+            - "connect" => |env, this| {
                 crate::log_dbg!("FBRequest connect called");
             }
         @end
@@ -33,10 +33,10 @@ pub mod fb_classes {
         @end
         
         @implementation FBDialog : UIView
-            "-" => "show" => |env, this| {
+            - "show" => |env, this| {
                 crate::log_dbg!("FBDialog show called");
             }
-            "-" => "dismissWithSuccess:animated:" => |env, this, _success: u8, _animated: u8| {
+            - "dismissWithSuccess:animated:" => |env, this, _success: u8, _animated: u8| {
                 crate::log_dbg!("FBDialog dismiss called");
             }
         @end
