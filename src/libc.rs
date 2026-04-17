@@ -121,6 +121,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 #[derive(Default)]
 pub struct State {
     dirent: dirent::State,
+    dispatch: dispatch::State,
     keymgr: keymgr::State,
     math: math::State,
     netdb: netdb::State,
