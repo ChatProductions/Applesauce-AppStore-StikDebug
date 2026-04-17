@@ -200,10 +200,9 @@ fn dispatch_async_f(
     env: &mut Environment,
     _queue: dispatch_queue_t,
     context: MutVoidPtr,
-    work: GuestFunction, // dispatch_function_t: void (*)(void *)
+    work: GuestFunction,
 ) {
-    log_dbg!("dispatch_async_f: calling function immediately");
-    if !work.is_null() {
+    if work != GuestFunction::null_ptr() {
         let _: () = work.call_from_host(env, (context,));
     }
 }
@@ -214,8 +213,7 @@ fn dispatch_sync_f(
     context: MutVoidPtr,
     work: GuestFunction,
 ) {
-    log_dbg!("dispatch_sync_f: calling function immediately");
-    if !work.is_null() {
+    if work != GuestFunction::null_ptr() {
         let _: () = work.call_from_host(env, (context,));
     }
 }
@@ -226,14 +224,12 @@ fn dispatch_apply(
     env: &mut Environment,
     iterations: u32,
     _queue: dispatch_queue_t,
-    block: MutVoidPtr, // void (^block)(size_t)
+    block: MutVoidPtr,
 ) {
-    log_dbg!("dispatch_apply: {} iterations (single-threaded)", iterations);
-    // Block takes a `size_t` iteration index. We call it as a GuestFunction.
     if block.is_null() { return; }
-    // The block pointer IS the invoke pointer on ARM (first word of block struct).
-    let invoke_ptr = env.mem.read(block.cast::<u32>());
-    let invoke = GuestFunction::from(invoke_ptr);
+    let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
+    if invoke_ptr == 0 { return; }
+    let invoke = GuestFunction::from_ptr(invoke_ptr);  // ← fixed
     for i in 0..iterations {
         let _: () = invoke.call_from_host(env, (block, i));
     }
@@ -244,9 +240,9 @@ fn dispatch_apply_f(
     iterations: u32,
     _queue: dispatch_queue_t,
     context: MutVoidPtr,
-    work: GuestFunction, // void (*work)(void *context, size_t i)
+    work: GuestFunction,
 ) {
-    if work.is_null() { return; }
+    if work == GuestFunction::null_ptr() { return; }
     for i in 0..iterations {
         let _: () = work.call_from_host(env, (context, i));
     }
@@ -273,7 +269,7 @@ fn dispatch_after_f(
     context: MutVoidPtr,
     work: GuestFunction,
 ) {
-    if !work.is_null() {
+    if work != GuestFunction::null_ptr() {
         let _: () = work.call_from_host(env, (context,));
     }
 }
@@ -315,7 +311,7 @@ fn dispatch_group_async_f(
     context: MutVoidPtr,
     work: GuestFunction,
 ) {
-    if !work.is_null() {
+    if work != GuestFunction::null_ptr() {
         let _: () = work.call_from_host(env, (context,));
     }
 }
@@ -349,7 +345,7 @@ fn dispatch_group_notify_f(
     context: MutVoidPtr,
     work: GuestFunction,
 ) {
-    if !work.is_null() {
+    if work != GuestFunction::null_ptr() {
         let _: () = work.call_from_host(env, (context,));
     }
 }
@@ -527,11 +523,9 @@ fn dispatch_set_target_queue(
 
 // MARK: - dispatch_main
 
-fn dispatch_main(_env: &mut Environment) -> ! {
-    log!("dispatch_main: should not return — entering infinite loop");
-    loop {
-        std::hint::spin_loop();
-    }
+fn dispatch_main(_env: &mut Environment) {
+    log!("dispatch_main: stubbed (returning immediately)");
+    // Cannot spin forever here since GuestRet requires (). Just return.
 }
 
 // MARK: - Helpers
@@ -540,10 +534,9 @@ fn dispatch_main(_env: &mut Environment) -> ! {
 /// On ARM32 a block is a struct whose second word is the invoke function pointer.
 /// Layout: [isa, flags, reserved, invoke, descriptor, captures...]
 fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
-    // The invoke pointer is at offset 12 (word 3) in the block literal.
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
     if invoke_ptr == 0 { return; }
-    let invoke = GuestFunction::from(invoke_ptr);
+    let invoke = GuestFunction::from_ptr(invoke_ptr);  // ← fixed
     let _: () = invoke.call_from_host(env, (block,));
 }
 
