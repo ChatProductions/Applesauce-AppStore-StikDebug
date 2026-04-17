@@ -95,7 +95,7 @@ pub fn AudioSessionGetPropertySize(
     
     // Записываем размер ответа для игры, если указатель не нулевой
     if !out_data_size.is_null() {
-        out_data_size.write(&mut env.mem, size);
+        env.mem.write(out_data_size, size);
     }
     
     kAudioSessionNoErr
@@ -116,49 +116,49 @@ pub fn AudioSessionGetProperty(
     let size = get_audio_session_property_size(in_id);
 
     if !io_data_size.is_null() {
-        let provided_size = io_data_size.read(&env.mem);
+        let provided_size = env.mem.read(io_data_size);
         if provided_size < size {
             return kAudioSessionBadPropertySizeError;
         }
         // Записываем реальный размер
-        io_data_size.write(&mut env.mem, size);
+        env.mem.write(io_data_size, size);
     }
 
     // Записываем сами значения свойств в память, чтобы игра не читала "мусор"
     match in_id {
         kAudioSessionProperty_OtherAudioIsPlaying => {
-            out_data.cast::<u32>().write(&mut env.mem, 0); // Фоновая музыка не играет
+            env.mem.write(out_data.cast::<u32>(), 0); // Фоновая музыка не играет
         }
         kAudioSessionProperty_AudioCategory => {
             let cat = env.framework_state.audio_toolbox.audio_session.category;
-            out_data.cast::<u32>().write(&mut env.mem, cat);
+            env.mem.write(out_data.cast::<u32>(), cat);
         }
         kAudioSessionProperty_CurrentHardwareSampleRate => {
             let rate = env.framework_state.audio_toolbox.audio_session.current_hardware_sample_rate;
-            out_data.cast::<f64>().write(&mut env.mem, rate);
+            env.mem.write(out_data.cast::<f64>(), rate);
         }
         kAudioSessionProperty_CurrentHardwareOutputNumberChannels => {
-            out_data.cast::<u32>().write(&mut env.mem, 2); // Стерео
+            env.mem.write(out_data.cast::<u32>(), 2); // Стерео
         }
         kAudioSessionProperty_CurrentHardwareOutputVolume => {
-            out_data.cast::<f32>().write(&mut env.mem, 1.0); // Максимальная громкость
+            env.mem.write(out_data.cast::<f32>(), 1.0); // Максимальная громкость
         }
         kAudioSessionProperty_CurrentHardwareIOBufferDuration |
         kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
-            out_data.cast::<f32>().write(&mut env.mem, 0.05); // Dummy duration
+            env.mem.write(out_data.cast::<f32>(), 0.05); // Dummy duration
         }
         kAudioSessionProperty_AudioInputAvailable => {
-            out_data.cast::<u32>().write(&mut env.mem, 0); // Микрофона нет
+            env.mem.write(out_data.cast::<u32>(), 0); // Микрофона нет
         }
         kAudioSessionProperty_AudioRoute => {
-            out_data.cast::<u32>().write(&mut env.mem, 0);
+            env.mem.write(out_data.cast::<u32>(), 0);
         }
         _ => {
             log!("TODO: AudioSessionGetProperty UNIMPLEMENTED write for {}", debug_fourcc(in_id));
             if size == 4 {
-                out_data.cast::<u32>().write(&mut env.mem, 0);
+                env.mem.write(out_data.cast::<u32>(), 0);
             } else if size == 8 {
-                out_data.cast::<u64>().write(&mut env.mem, 0);
+                env.mem.write(out_data.cast::<u64>(), 0);
             }
         }
     }
@@ -182,7 +182,7 @@ pub fn AudioSessionSetProperty(
         kAudioSessionProperty_AudioCategory => {
             if in_data_size >= 4 {
                 // Читаем категорию, которую нам передает игра, и сохраняем её
-                let category = in_data.cast::<u32>().read(&env.mem);
+                let category = env.mem.read(in_data.cast::<u32>());
                 env.framework_state.audio_toolbox.audio_session.category = category;
             }
         }
@@ -216,10 +216,10 @@ pub fn AudioSessionRemovePropertyListener(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
-    export_c_func!(AudioSessionGetProperty(_, _, _)),
-    export_c_func!(AudioSessionGetPropertySize(_, _)),
-    export_c_func!(AudioSessionSetProperty(_, _, _)),
-    export_c_func!(AudioSessionSetActive(_)),
-    export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
-    export_c_func!(AudioSessionRemovePropertyListener(_)),
+    export_c_func!(AudioSessionGetProperty(_, _, _, _)),
+    export_c_func!(AudioSessionGetPropertySize(_, _, _)),
+    export_c_func!(AudioSessionSetProperty(_, _, _, _)),
+    export_c_func!(AudioSessionSetActive(_, _)),
+    export_c_func!(AudioSessionAddPropertyListener(_, _, _, _)),
+    export_c_func!(AudioSessionRemovePropertyListener(_, _)),
 ];
