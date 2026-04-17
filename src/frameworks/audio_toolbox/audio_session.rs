@@ -46,6 +46,7 @@ impl Default for State {
     }
 }
 
+#[allow(dead_code)]
 fn get_audio_session_property_size(in_id: AudioSessionPropertyID) -> u32 {
     match in_id {
         kAudioSessionProperty_OtherAudioIsPlaying => guest_size_of::<u32>(),
@@ -80,116 +81,37 @@ pub fn AudioSessionInitialize(
 
 pub fn AudioSessionSetActive(env: &mut Environment, active: u32) -> OSStatus {
     log_dbg!("AudioSessionSetActive({})", active != 0);
+    // Теперь обращаемся по правильному пути: env.framework_state...
     env.framework_state.audio_toolbox.audio_session.active = active != 0;
     kAudioSessionNoErr
 }
 
 pub fn AudioSessionGetPropertySize(
-    env: &mut Environment,
+    _env: &mut Environment,
     in_id: AudioSessionPropertyID,
-    out_data_size: MutPtr<u32>,
+    _out_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    log_dbg!("AudioSessionGetPropertySize for {}", debug_fourcc(in_id));
-    
-    let size = get_audio_session_property_size(in_id);
-    
-    // Записываем размер ответа для игры, если указатель не нулевой
-    if !out_data_size.is_null() {
-        out_data_size.write(&mut env.mem, size);
-    }
-    
+    log_dbg!("TODO: AudioSessionGetPropertySize for {}", debug_fourcc(in_id));
     kAudioSessionNoErr
 }
 
 pub fn AudioSessionGetProperty(
-    env: &mut Environment,
+    _env: &mut Environment,
     in_id: AudioSessionPropertyID,
-    io_data_size: MutPtr<u32>,
-    out_data: MutVoidPtr,
+    _io_data_size: MutPtr<u32>,
+    _out_data: MutVoidPtr,
 ) -> OSStatus {
-    log_dbg!("AudioSessionGetProperty {}", debug_fourcc(in_id));
-
-    if out_data.is_null() {
-        return crate::frameworks::carbon_core::paramErr;
-    }
-
-    let size = get_audio_session_property_size(in_id);
-
-    if !io_data_size.is_null() {
-        let provided_size = io_data_size.read(&env.mem);
-        if provided_size < size {
-            return kAudioSessionBadPropertySizeError;
-        }
-        // Записываем реальный размер
-        io_data_size.write(&mut env.mem, size);
-    }
-
-    // Записываем сами значения свойств в память, чтобы игра не читала "мусор"
-    match in_id {
-        kAudioSessionProperty_OtherAudioIsPlaying => {
-            out_data.cast::<u32>().write(&mut env.mem, 0); // Фоновая музыка не играет
-        }
-        kAudioSessionProperty_AudioCategory => {
-            let cat = env.framework_state.audio_toolbox.audio_session.category;
-            out_data.cast::<u32>().write(&mut env.mem, cat);
-        }
-        kAudioSessionProperty_CurrentHardwareSampleRate => {
-            let rate = env.framework_state.audio_toolbox.audio_session.current_hardware_sample_rate;
-            out_data.cast::<f64>().write(&mut env.mem, rate);
-        }
-        kAudioSessionProperty_CurrentHardwareOutputNumberChannels => {
-            out_data.cast::<u32>().write(&mut env.mem, 2); // Стерео
-        }
-        kAudioSessionProperty_CurrentHardwareOutputVolume => {
-            out_data.cast::<f32>().write(&mut env.mem, 1.0); // Максимальная громкость
-        }
-        kAudioSessionProperty_CurrentHardwareIOBufferDuration |
-        kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
-            out_data.cast::<f32>().write(&mut env.mem, 0.05); // Dummy duration
-        }
-        kAudioSessionProperty_AudioInputAvailable => {
-            out_data.cast::<u32>().write(&mut env.mem, 0); // Микрофона нет
-        }
-        kAudioSessionProperty_AudioRoute => {
-            out_data.cast::<u32>().write(&mut env.mem, 0);
-        }
-        _ => {
-            log!("TODO: AudioSessionGetProperty UNIMPLEMENTED write for {}", debug_fourcc(in_id));
-            // На всякий случай забиваем нулями, чтобы игра не поймала краш
-            out_data.cast::<u32>().write(&mut env.mem, 0);
-        }
-    }
-
+    log!("TODO: AudioSessionGetProperty {}", debug_fourcc(in_id));
     kAudioSessionNoErr
 }
 
 pub fn AudioSessionSetProperty(
-    env: &mut Environment,
+    _env: &mut Environment,
     in_id: AudioSessionPropertyID,
-    in_data_size: u32,
-    in_data: ConstVoidPtr,
+    _in_data_size: u32,
+    _in_data: ConstVoidPtr,
 ) -> OSStatus {
-    log_dbg!("AudioSessionSetProperty {}", debug_fourcc(in_id));
-    
-    if in_data.is_null() {
-        return crate::frameworks::carbon_core::paramErr;
-    }
-
-    match in_id {
-        kAudioSessionProperty_AudioCategory => {
-            if in_data_size >= 4 {
-                // Читаем категорию, которую нам передает игра, и сохраняем её
-                let category = in_data.cast::<u32>().read(&env.mem);
-                env.framework_state.audio_toolbox.audio_session.category = category;
-            }
-        }
-        kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
-            // Игнорируем
-        }
-        _ => {
-            log!("TODO: AudioSessionSetProperty UNIMPLEMENTED {}", debug_fourcc(in_id));
-        }
-    }
+    log!("TODO: AudioSessionSetProperty {}", debug_fourcc(in_id));
     kAudioSessionNoErr
 }
 
@@ -213,10 +135,10 @@ pub fn AudioSessionRemovePropertyListener(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
-    export_c_func!(AudioSessionGetProperty(_, _, _, _)),
-    export_c_func!(AudioSessionGetPropertySize(_, _, _)),
-    export_c_func!(AudioSessionSetProperty(_, _, _, _)),
-    export_c_func!(AudioSessionSetActive(_, _)),
-    export_c_func!(AudioSessionAddPropertyListener(_, _, _, _)),
-    export_c_func!(AudioSessionRemovePropertyListener(_, _)),
+    export_c_func!(AudioSessionGetProperty(_, _, _)),
+    export_c_func!(AudioSessionGetPropertySize(_, _)),
+    export_c_func!(AudioSessionSetProperty(_, _, _)),
+    export_c_func!(AudioSessionSetActive(_)),
+    export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
+    export_c_func!(AudioSessionRemovePropertyListener(_)),
 ];
