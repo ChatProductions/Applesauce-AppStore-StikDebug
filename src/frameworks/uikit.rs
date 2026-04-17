@@ -53,6 +53,8 @@ fn ui_background_task_invalid(env: &mut Environment) -> ConstVoidPtr {
 
 pub const CONSTANTS: &[(&str, HostConstant)] = &[
     ("_UIBackgroundTaskInvalid", HostConstant::Custom(ui_background_task_invalid)),
+    ("_UIImagePickerControllerOriginalImage", HostConstant::NSString("UIImagePickerControllerOriginalImage")),
+    ("_UIImagePickerControllerEditedImage", HostConstant::NSString("UIImagePickerControllerEditedImage")),
     ("_UIScreenDidConnectNotification", HostConstant::NSString("UIScreenDidConnectNotification")),
 ];
 
