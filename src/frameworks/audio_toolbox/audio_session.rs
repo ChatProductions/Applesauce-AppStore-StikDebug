@@ -17,6 +17,16 @@ type AudioSessionPropertyListener = GuestFunction;
 
 const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 
+#[derive(Default)]
+pub struct State {
+    pub interruption_listener: Option<AudioSessionInterruptionListener>,
+    pub client_data: ConstVoidPtr,
+    pub is_active: bool,
+    pub category: AudioSessionPropertyID,
+    pub preferred_sample_rate: f64,
+    pub preferred_io_buffer_duration: f32,
+}
+
 type AudioSessionPropertyID = u32;
 const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
 const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID = fourcc(b"acat");
@@ -57,26 +67,27 @@ impl Default for State {
     }
 }
 
-// --- ИСПРАВЛЕННЫЙ INITIALIZE ---
 fn AudioSessionInitialize(
     env: &mut Environment,
-    _in_run_loop: CFRunLoopRef,
-    _in_run_loop_mode: CFRunLoopMode,
-    in_interruption_listener: AudioSessionInterruptionListener,
-    in_client_data: MutVoidPtr,
+    _inRunLoop: CFRunLoopRef,
+    _inRunLoopMode: CFRunLoopMode,
+    inInterruptionListener: AudioSessionInterruptionListener,
+    inClientData: ConstVoidPtr,
 ) -> OSStatus {
+    // Получаем доступ к состоянию нашей сессии
     let state = &mut env.framework_state.audio_toolbox.audio_session;
     
-    // Сохраняем колбэк гостевого приложения
-    state.interruption_listener = Some(in_interruption_listener);
-    state.client_data = in_client_data;
+    // Сохраняем колбэк (даже если data == null, колбэк может быть валидным)
+    state.interruption_listener = Some(inInterruptionListener);
+    state.client_data = inClientData;
 
     log!(
-        "AudioSessionInitialize: registered listener {:?} with data {:?}",
-        in_interruption_listener,
-        in_client_data
+        "AudioSessionInitialize: saved listener {:?} with data {:?}",
+        inInterruptionListener,
+        inClientData
     );
-    0 // kAudioSessionNoError (успех)
+
+    0 // Возвращаем kAudioSessionNoError
 }
 
 fn AudioSessionGetPropertySize(
