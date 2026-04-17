@@ -625,7 +625,6 @@ fn read_cstr_safe(env: &mut Environment, ptr: ConstPtr<u8>) -> String {
 }
 
 #[allow(non_snake_case)]
-#[allow(non_snake_case)]
 fn _fcvt(
     env: &mut Environment,
     value: f64,
