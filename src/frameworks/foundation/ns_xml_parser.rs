@@ -16,6 +16,9 @@ use crate::objc::{
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 
+/// Maximum consecutive errors before giving up on recovery.
+const MAX_CONSECUTIVE_ERRORS: usize = 50;
+
 struct NSXMLParserHostObject {
     data: id,
     delegate: id,
@@ -89,95 +92,141 @@ pub const CLASSES: ClassExports = objc_classes! {
         return false;
     }
 
-    log_dbg!("Parsing XML data...");
+    log_dbg!("Parsing XML data ({} bytes)...", length);
     let bytes: &[u8] = env.mem.bytes_at_mut(bytes.cast().cast_mut(), length);
 
+    // ── Phase 1: Collect events with lenient parsing ──────────────────
     let mut reader = Reader::from_reader(bytes);
-    let mut events = Vec::new();
+
+    // KEY FIX: Disable strict end-tag matching. Many iOS game XML files
+    // have mismatched tags (e.g. <Object> closed with </Resources>).
+    // Apple's NSXMLParser is also lenient about this in practice.
+    reader.config_mut().check_end_names = false;
+    // Trim whitespace in closing tag names for extra robustness.
+    reader.config_mut().trim_markup_names_in_closing_tags = true;
+
+    let mut events: Vec<Event<'_>> = Vec::new();
+    let mut had_error = false;
+    let mut error_position: i32 = 0;
+    let mut error_message: String = String::new();
+    let mut consecutive_errors: usize = 0;
+
     loop {
         match reader.read_event() {
             Ok(Event::Eof) => break,
-            Ok(e) => events.push(e.into_owned()),
+            Ok(e) => {
+                events.push(e.into_owned());
+                consecutive_errors = 0;
+            }
             Err(e) => {
-                let msg = format!("{:?}", e);
                 let pos = reader.error_position();
-                log!("XML Parse Error at position {}: {:?}", pos, e);
-                let error = make_parse_error(env, pos as i32, msg);
-                env.objc.borrow_mut::<NSXMLParserHostObject>(this).error = error;
+                log!(
+                    "XML Parse Error at position {}: {:?} (attempting recovery, event count so far: {})",
+                    pos,
+                    e,
+                    events.len()
+                );
 
-                // Notify delegate of error
-                let delegate = env.objc.borrow::<NSXMLParserHostObject>(this).delegate;
-                let _sel: SEL = env.objc.register_host_selector(
-                    "parser:parseErrorOccurred:".to_string(), &mut env.mem);
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                    let err = env.objc.borrow::<NSXMLParserHostObject>(this).error;
-                    () = msg![env; delegate parser:this parseErrorOccurred:err];
+                // Remember the first error for reporting
+                if !had_error {
+                    had_error = true;
+                    error_position = pos as i32;
+                    error_message = format!("{:?}", e);
                 }
 
-                return false;
+                consecutive_errors += 1;
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    log!(
+                        "XML Parse: {} consecutive errors, stopping recovery at position {}",
+                        consecutive_errors,
+                        pos
+                    );
+                    break;
+                }
+
+                // For MismatchedEndTag and similar structural errors,
+                // quick_xml has already consumed the problematic token,
+                // so continuing is safe. For other errors (e.g. invalid
+                // bytes), the reader may re-try the same position, which
+                // is why we limit consecutive errors above.
+                continue;
             }
         }
     }
 
+    log_dbg!(
+        "XML event collection complete: {} events, had_error={}",
+        events.len(),
+        had_error
+    );
+
+    // ── Phase 2: Deliver events to delegate ───────────────────────────
     let delegate = env.objc.borrow::<NSXMLParserHostObject>(this).delegate;
-    let _sel: SEL = env
-        .objc
-        .register_host_selector("parserDidStartDocument:".to_string(), &mut env.mem);
-    
-    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+
+    let sel_did_start: SEL = env.objc.register_host_selector(
+        "parserDidStartDocument:".to_string(),
+        &mut env.mem,
+    );
+    if delegate != nil && msg![env; delegate respondsToSelector:sel_did_start] {
         () = msg![env; delegate parserDidStartDocument:this];
     }
 
-    for event in events {
+    for event in &events {
         match event {
             Event::Empty(e) => {
-                let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
-                let name: id = from_rust_string(env, name);
-                let name = autorelease(env, name);
-                let _sel: SEL = env.objc.register_host_selector(
-                        "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
-                        &mut env.mem
-                    );
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+                let name = safe_local_name(e);
+                let name_id: id = from_rust_string(env, name);
+                let name_id = autorelease(env, name_id);
+
+                let sel_start: SEL = env.objc.register_host_selector(
+                    "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
+                    &mut env.mem,
+                );
+                if delegate != nil && msg![env; delegate respondsToSelector:sel_start] {
                     let dict = build_attributes_dict(env, e);
                     () = msg![env; delegate parser:this
-                                   didStartElement:name
+                                   didStartElement:name_id
                                       namespaceURI:nil
                                      qualifiedName:nil
                                         attributes:dict];
                 }
-                let _sel: SEL = env.objc.register_host_selector(
-                        "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
-                        &mut env.mem
-                    );
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+
+                let sel_end: SEL = env.objc.register_host_selector(
+                    "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
+                    &mut env.mem,
+                );
+                if delegate != nil && msg![env; delegate respondsToSelector:sel_end] {
                     () = msg![env; delegate parser:this
-                                     didEndElement:name
+                                     didEndElement:name_id
                                       namespaceURI:nil
                                      qualifiedName:nil];
                 }
             }
             Event::Text(e) => {
-                let text = e.decode().unwrap().to_string();
-                if text != "\0" {
-                    let _sel: SEL = env.objc.register_host_selector(
-                        "parser:foundCharacters:".to_string(), &mut env.mem);
-                    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                        let chars = from_rust_string(env, text);
-                        let chars = autorelease(env, chars);
-                        () = msg![env; delegate parser:this foundCharacters:chars];
+                if let Some(text) = safe_decode_text(e) {
+                    if !text.is_empty() && text != "\0" {
+                        let sel_chars: SEL = env.objc.register_host_selector(
+                            "parser:foundCharacters:".to_string(),
+                            &mut env.mem,
+                        );
+                        if delegate != nil && msg![env; delegate respondsToSelector:sel_chars] {
+                            let chars = from_rust_string(env, text);
+                            let chars = autorelease(env, chars);
+                            () = msg![env; delegate parser:this foundCharacters:chars];
+                        }
                     }
                 }
             }
             Event::Start(e) => {
-                let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
-                let _sel: SEL = env.objc.register_host_selector(
-                        "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
-                        &mut env.mem
-                    );
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                    let name_id: id = from_rust_string(env, name);
-                    let name_id = autorelease(env, name_id);
+                let name = safe_local_name(e);
+                let name_id: id = from_rust_string(env, name);
+                let name_id = autorelease(env, name_id);
+
+                let sel_start: SEL = env.objc.register_host_selector(
+                    "parser:didStartElement:namespaceURI:qualifiedName:attributes:".to_string(),
+                    &mut env.mem,
+                );
+                if delegate != nil && msg![env; delegate respondsToSelector:sel_start] {
                     let dict = build_attributes_dict(env, e);
                     () = msg![env; delegate parser:this
                                    didStartElement:name_id
@@ -187,14 +236,15 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
             Event::End(e) => {
-                let name = String::from_utf8(e.local_name().as_ref().to_vec()).unwrap();
-                let _sel: SEL = env.objc.register_host_selector(
-                        "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
-                        &mut env.mem
-                    );
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                    let name_id: id = from_rust_string(env, name);
-                    let name_id = autorelease(env, name_id);
+                let name = safe_local_name(e);
+                let name_id: id = from_rust_string(env, name);
+                let name_id = autorelease(env, name_id);
+
+                let sel_end: SEL = env.objc.register_host_selector(
+                    "parser:didEndElement:namespaceURI:qualifiedName:".to_string(),
+                    &mut env.mem,
+                );
+                if delegate != nil && msg![env; delegate respondsToSelector:sel_end] {
                     () = msg![env; delegate parser:this
                                      didEndElement:name_id
                                       namespaceURI:nil
@@ -202,33 +252,69 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
             Event::CData(e) => {
-                let text = e.decode().unwrap().to_string();
-                let _sel: SEL = env.objc.register_host_selector(
-                    "parser:foundCharacters:".to_string(), &mut env.mem);
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                    let text_id = from_rust_string(env, text);
-                    let text_id = autorelease(env, text_id);
-                    () = msg![env; delegate parser:this foundCharacters:text_id];
+                if let Ok(text) = e.decode() {
+                    let text = text.to_string();
+                    if !text.is_empty() {
+                        let sel_chars: SEL = env.objc.register_host_selector(
+                            "parser:foundCharacters:".to_string(),
+                            &mut env.mem,
+                        );
+                        if delegate != nil && msg![env; delegate respondsToSelector:sel_chars] {
+                            let text_id = from_rust_string(env, text);
+                            let text_id = autorelease(env, text_id);
+                            () = msg![env; delegate parser:this foundCharacters:text_id];
+                        }
+                    }
                 }
             }
             Event::Comment(e) => {
-                let comment = e.decode().unwrap().to_string();
-                let _sel: SEL = env.objc.register_host_selector(
-                    "parser:foundComment:".to_string(), &mut env.mem);
-                if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
-                    let comment_id = from_rust_string(env, comment);
-                    let comment_id = autorelease(env, comment_id);
-                    () = msg![env; delegate parser:this foundComment:comment_id];
+                if let Ok(comment) = e.decode() {
+                    let comment = comment.to_string();
+                    let sel_comment: SEL = env.objc.register_host_selector(
+                        "parser:foundComment:".to_string(),
+                        &mut env.mem,
+                    );
+                    if delegate != nil && msg![env; delegate respondsToSelector:sel_comment] {
+                        let comment_id = from_rust_string(env, comment);
+                        let comment_id = autorelease(env, comment_id);
+                        () = msg![env; delegate parser:this foundComment:comment_id];
+                    }
                 }
             }
-            _ => {} 
+            _ => {}
         }
     }
 
-    let _sel: SEL = env.objc.register_host_selector(
-        "parserDidEndDocument:".to_string(), &mut env.mem);
-    if delegate != nil && msg![env; delegate respondsToSelector:_sel] {
+    // ── Phase 3: Finalize ─────────────────────────────────────────────
+    let sel_did_end: SEL = env.objc.register_host_selector(
+        "parserDidEndDocument:".to_string(),
+        &mut env.mem,
+    );
+    if delegate != nil && msg![env; delegate respondsToSelector:sel_did_end] {
         () = msg![env; delegate parserDidEndDocument:this];
+    }
+
+    // If there was an error, report it to the delegate but still return
+    // true if we managed to collect events. This matches the behaviour
+    // where the game gets its data AND is informed about the problem.
+    if had_error {
+        let error = make_parse_error(env, error_position, error_message);
+        env.objc.borrow_mut::<NSXMLParserHostObject>(this).error = error;
+
+        let sel_err: SEL = env.objc.register_host_selector(
+            "parser:parseErrorOccurred:".to_string(),
+            &mut env.mem,
+        );
+        if delegate != nil && msg![env; delegate respondsToSelector:sel_err] {
+            let err = env.objc.borrow::<NSXMLParserHostObject>(this).error;
+            () = msg![env; delegate parser:this parseErrorOccurred:err];
+        }
+
+        // Return true if we collected events — the game can use partial data.
+        // Return false only if we collected nothing at all.
+        if events.is_empty() {
+            return false;
+        }
     }
 
     true
@@ -245,28 +331,58 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-fn build_attributes_dict(env: &mut Environment, e: BytesStart) -> id {
-    let pairs = e.attributes().map(|a| a.unwrap()).map(|a| {
-        (
-            String::from_utf8(a.key.local_name().as_ref().to_vec()).unwrap(),
-            a.unescape_value().unwrap().to_string(),
-        )
-    });
+// =========================================================================
+// MARK: - Helper functions
+// =========================================================================
+
+/// Safely extract the local name from a BytesStart/BytesEnd event,
+/// using lossy UTF-8 conversion (replaces invalid bytes with '�').
+fn safe_local_name(e: &BytesStart) -> String {
+    let bytes = e.local_name().as_ref();
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Safely decode text from a Text event, returning None on failure.
+fn safe_decode_text(e: &quick_xml::events::BytesText<'_>) -> Option<String> {
+    e.decode()
+        .ok()
+        .map(|cow| cow.to_string())
+}
+
+/// Build an NSDictionary from XML element attributes, gracefully skipping
+/// any attributes that fail to parse (bad UTF-8, unescape errors, etc.).
+fn build_attributes_dict(env: &mut Environment, e: &BytesStart) -> id {
     let dict: id = msg_class![env; NSMutableDictionary new];
-    for (x, y) in pairs {
-        let key = from_rust_string(env, x);
-        let val = from_rust_string(env, y);
+
+    for attr_result in e.attributes() {
+        let attr = match attr_result {
+            Ok(a) => a,
+            Err(_) => {
+                log_dbg!("XML: skipping malformed attribute");
+                continue;
+            }
+        };
+
+        let key_str = String::from_utf8_lossy(attr.key.local_name().as_ref()).into_owned();
+        let val_str = match attr.unescape_value() {
+            Ok(v) => v.to_string(),
+            Err(_) => {
+                // Fallback: use raw bytes with lossy conversion
+                String::from_utf8_lossy(attr.value.as_ref()).into_owned()
+            }
+        };
+
+        let key = from_rust_string(env, key_str);
+        let val = from_rust_string(env, val_str);
         () = msg![env; dict setObject:val forKey:key];
         release(env, key);
         release(env, val);
     }
+
     autorelease(env, dict)
 }
 
 fn make_parse_error(env: &mut Environment, code: i32, message: String) -> id {
-    // NSError *error = [NSError errorWithDomain:NSXMLParserErrorDomain
-    //                                     code:code
-    //                                 userInfo:@{NSLocalizedDescriptionKey: message}]
     let domain = from_rust_string(env, "NSXMLParserErrorDomain".to_string());
     let domain = autorelease(env, domain);
 
@@ -284,5 +400,4 @@ fn make_parse_error(env: &mut Environment, code: i32, message: String) -> id {
                                                     userInfo:user_info];
     retain(env, error);
     error
-}
-
+            }
