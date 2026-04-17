@@ -14,7 +14,7 @@ use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
-use crate::mem::{ConstPtr, MutVoidPtr};
+use crate::mem::{SafeRead, GuestISize, ConstPtr, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil, HostObject};
 use crate::Environment;
 
@@ -24,16 +24,17 @@ pub type CFRunLoopSourceRef = CFTypeRef;
 pub type CFRunLoopObserverRef = CFTypeRef;
 pub type CFRunLoopTimerRef  = CFTypeRef;
 
-// C-структура, в которой игра передаёт информацию о таймере
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct CFRunLoopTimerContext {
-    pub version: isize,
+    pub version: GuestISize, // ИСПОРАВЛЕНО: GuestISize гарантирует 4 байта, как в iOS
     pub info: MutVoidPtr,
     pub retain: GuestFunction,
     pub release: GuestFunction,
     pub copyDescription: GuestFunction,
 }
+
+unsafe impl SafeRead for CFRunLoopTimerContext {}
 
 // Наш внутренний объект для хранения таймера в памяти эмулятора
 pub struct CFRunLoopTimerHostObject {
