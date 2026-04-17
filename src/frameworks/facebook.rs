@@ -12,40 +12,46 @@ pub mod fb_classes {
     use super::*;
 
     pub const CLASSES: ClassExports = &objc_classes!(
-        (env, this, _cmd); // 1. Сначала обязательный заголовок
+        (env, this, _cmd); // Заголовок переменных
 
-        // 2. Затем каждый класс через @implementation
-        @implementation FBSession : NSObject {
+        @implementation FBSession : NSObject
             "-" => "resume" => |env, this| -> u8 { 
                 crate::log_dbg!("FBSession resume called");
                 1 
             }
             "-" => "isConnected" => |env, this| -> u8 { 0 }
             "-" => "logout" => |env, this| {}
-        }
+        @end
 
-        @implementation FBRequest : NSObject {
+        @implementation FBRequest : NSObject
             "-" => "connect" => |env, this| {
                 crate::log_dbg!("FBRequest connect called");
             }
-        }
+        @end
         
-        @implementation FBXMLHandler : NSObject {}
+        @implementation FBXMLHandler : NSObject
+        @end
         
-        @implementation FBDialog : UIView {
+        @implementation FBDialog : UIView
             "-" => "show" => |env, this| {
                 crate::log_dbg!("FBDialog show called");
             }
             "-" => "dismissWithSuccess:animated:" => |env, this, _success: u8, _animated: u8| {
                 crate::log_dbg!("FBDialog dismiss called");
             }
-        }
+        @end
         
-        @implementation FBFeedDialog : FBDialog {}
-        @implementation FBLoginDialog : FBDialog {}
-        @implementation FBPermissionDialog : FBDialog {}
+        @implementation FBFeedDialog : FBDialog
+        @end
+
+        @implementation FBLoginDialog : FBDialog
+        @end
+
+        @implementation FBPermissionDialog : FBDialog
+        @end
         
-        @implementation FBLoginButton : UIButton {}
+        @implementation FBLoginButton : UIButton
+        @end
     );
 }
 
