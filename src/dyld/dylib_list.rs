@@ -41,6 +41,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::core_graphics::DYLIB,
     &frameworks::core_location::DYLIB,
     &frameworks::core_motion::DYLIB,
+    &frameworks::facebook::DYLIB,
     &frameworks::foundation::DYLIB,
     &frameworks::game_kit::DYLIB,
     &frameworks::media_player::DYLIB,
