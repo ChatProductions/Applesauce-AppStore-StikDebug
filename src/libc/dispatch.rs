@@ -229,7 +229,7 @@ fn dispatch_apply(
     if block.is_null() { return; }
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
     if invoke_ptr == 0 { return; }
-    let invoke = GuestFunction::from(invoke_ptr);  // ← fixed
+    let invoke = GuestFunction::from_ptr(invoke_ptr);
     for i in 0..iterations {
         let _: () = invoke.call_from_host(env, (block, i));
     }
@@ -536,7 +536,7 @@ fn dispatch_main(_env: &mut Environment) {
 fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
     if invoke_ptr == 0 { return; }
-    let invoke = GuestFunction::from(invoke_ptr);  // ← fixed
+    let invoke = GuestFunction::from_ptr(invoke_ptr);
     let _: () = invoke.call_from_host(env, (block,));
 }
 
