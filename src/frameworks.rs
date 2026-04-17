@@ -36,6 +36,7 @@ pub mod core_graphics;
 pub mod core_location;
 pub mod core_motion;
 pub mod core_video;
+pub mod facebook;
 pub mod foundation;
 pub mod game_controller;
 pub mod game_kit;
