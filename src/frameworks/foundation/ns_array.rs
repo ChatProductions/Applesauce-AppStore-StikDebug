@@ -726,6 +726,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     build_description(env, this)
 }
 
+- (())addObject:(id)object {
+    retain(env, object);
+    env.objc.borrow_mut::<ArrayHostObject>(this).array.push(object);
+}
+
 - (id)subarrayWithRange:(NSRange)range {
     let mut tmp = Vec::new();
     tmp.extend_from_slice(
