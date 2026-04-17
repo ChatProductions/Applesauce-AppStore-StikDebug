@@ -3,84 +3,142 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! The Audio Toolbox framework.
 
-use crate::audio::openal::{OpenAL, OpenALContext, OpenALManager};
+use crate::abi::GuestFunction;
+use crate::dyld::{export_c_func, FunctionExports};
+use crate::frameworks::carbon_core::OSStatus;
+use crate::frameworks::core_audio_types::{debug_fourcc, fourcc};
+use crate::frameworks::core_foundation::cf_run_loop::{CFRunLoopMode, CFRunLoopRef};
+use crate::mem::{guest_size_of, ConstVoidPtr, MutPtr, MutVoidPtr};
+use crate::Environment;
 
-/// Macro for checking if an argument is null and returning `paramErr` if so.
-/// This seems to be what the real Audio Toolbox does, and some apps rely on it.
-#[macro_export]
-macro_rules! return_if_null {
-    ($param:ident) => {
-        if $param.is_null() {
-            log_dbg!(
-                "Got NULL parameter {}, returning paramErr in {} on line {}",
-                stringify!($param),
-                file!(),
-                line!()
-            );
-            return crate::frameworks::carbon_core::paramErr;
-        }
-    };
-}
+type AudioSessionInterruptionListener = GuestFunction;
+type AudioSessionPropertyListener = GuestFunction;
 
-pub mod audio_components;
-pub mod audio_converter;
-pub mod audio_file;
-pub mod audio_queue;
-pub mod audio_services;
-pub mod audio_session;
-pub mod audio_unit;
-pub mod ext_audio_file;
+const kAudioSessionBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
+const kAudioSessionNoErr: OSStatus = 0;
 
-pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
-    path: "/System/Library/Frameworks/AudioToolbox.framework/AudioToolbox",
-    aliases: &[],
-    class_exports: &[],
-    constant_exports: &[],
-    function_exports: &[
-        audio_components::FUNCTIONS,
-        audio_converter::FUNCTIONS,
-        audio_file::FUNCTIONS,
-        audio_queue::FUNCTIONS,
-        audio_services::FUNCTIONS,
-        audio_session::FUNCTIONS,
-        audio_unit::FUNCTIONS,
-        ext_audio_file::FUNCTIONS,
-    ],
-};
+type AudioSessionPropertyID = u32;
+const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
+const kAudioSessionProperty_AudioCategory: AudioSessionPropertyID = fourcc(b"acat");
+const kAudioSessionProperty_CurrentHardwareSampleRate: AudioSessionPropertyID = fourcc(b"chsr");
+const kAudioSessionProperty_CurrentHardwareOutputNumberChannels: AudioSessionPropertyID = fourcc(b"choc");
+const kAudioSessionProperty_CurrentHardwareOutputVolume: AudioSessionPropertyID = fourcc(b"chov");
+const kAudioSessionProperty_PreferredHardwareIOBufferDuration: AudioSessionPropertyID = fourcc(b"pbuf");
+const kAudioSessionProperty_CurrentHardwareIOBufferDuration: AudioSessionPropertyID = fourcc(b"cbuf");
+const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
+const kAudioSessionProperty_AudioRoute: AudioSessionPropertyID = fourcc(b"rout");
 
-#[derive(Default)]
+// Корректная структура состояния, которая нужна для audio_unit.rs
 pub struct State {
-    pub audio_file: audio_file::State,
-    pub audio_queue: audio_queue::State,
-    pub audio_components: audio_components::State,
-    pub audio_services: audio_services::State,
-    pub audio_session: audio_session::State,
-    pub ext_audio_file: ext_audio_file::State,
-    pub al_context: LazyALContext,
+    pub active: bool,
+    pub category: u32,
+    pub current_hardware_sample_rate: f64,
 }
 
-impl State {
-    pub fn make_al_context_current<'s, 'manager: 's>(
-        &'s mut self,
-        manager: &'manager mut OpenALManager,
-    ) -> OpenAL<'s> {
-        self.al_context.make_al_context_current(manager)
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            active: false,
+            category: fourcc(b"ambi"),
+            current_hardware_sample_rate: 44100.0,
+        }
     }
 }
 
-#[derive(Default)]
-pub struct LazyALContext(Option<OpenALContext>);
-
-impl LazyALContext {
-    pub fn make_al_context_current<'s, 'manager: 's>(
-        &'s mut self,
-        manager: &'manager mut OpenALManager,
-    ) -> OpenAL<'s> {
-        self.get_context(manager).make_current(manager)
-    }
-    pub fn get_context(&mut self, manager: &mut OpenALManager) -> &mut OpenALContext {
-        self.0.get_or_insert_with(|| manager.create_context())
+fn get_audio_session_property_size(in_id: AudioSessionPropertyID) -> u32 {
+    match in_id {
+        kAudioSessionProperty_OtherAudioIsPlaying => guest_size_of::<u32>(),
+        kAudioSessionProperty_AudioCategory => guest_size_of::<u32>(),
+        kAudioSessionProperty_CurrentHardwareSampleRate => guest_size_of::<f64>(),
+        kAudioSessionProperty_CurrentHardwareOutputNumberChannels => guest_size_of::<u32>(),
+        kAudioSessionProperty_CurrentHardwareOutputVolume => guest_size_of::<f32>(),
+        kAudioSessionProperty_CurrentHardwareIOBufferDuration => guest_size_of::<f32>(),
+        kAudioSessionProperty_PreferredHardwareIOBufferDuration => guest_size_of::<f32>(),
+        kAudioSessionProperty_AudioInputAvailable => guest_size_of::<u32>(),
+        kAudioSessionProperty_AudioRoute => guest_size_of::<u32>(),
+        _ => {
+            log!(
+                "TODO: get_audio_session_property_size unknown property: {} -> 4",
+                debug_fourcc(in_id)
+            );
+            guest_size_of::<u32>()
+        }
     }
 }
+
+pub fn AudioSessionInitialize(
+    _env: &mut Environment,
+    _in_run_loop: CFRunLoopRef,
+    _in_run_loop_mode: CFRunLoopMode,
+    _in_interruption_listener: AudioSessionInterruptionListener,
+    _in_client_data: ConstVoidPtr,
+) -> OSStatus {
+    log_dbg!("AudioSessionInitialize");
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionSetActive(env: &mut Environment, active: u32) -> OSStatus {
+    log_dbg!("AudioSessionSetActive({})", active != 0);
+    // Правильный путь к состоянию audio_toolbox в Environment
+    env.audio_toolbox.audio_session.active = active != 0;
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionGetPropertySize(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _out_data_size: MutPtr<u32>,
+) -> OSStatus {
+    log_dbg!("TODO: AudioSessionGetPropertySize for {}", debug_fourcc(in_id));
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionGetProperty(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _io_data_size: MutPtr<u32>,
+    _out_data: MutVoidPtr,
+) -> OSStatus {
+    log!("TODO: AudioSessionGetProperty {}", debug_fourcc(in_id));
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionSetProperty(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _in_data_size: u32,
+    _in_data: ConstVoidPtr,
+) -> OSStatus {
+    log!("TODO: AudioSessionSetProperty {}", debug_fourcc(in_id));
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionAddPropertyListener(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _in_proc: AudioSessionPropertyListener,
+    _in_client_data: ConstVoidPtr,
+) -> OSStatus {
+    log_dbg!("TODO: AudioSessionAddPropertyListener {}", debug_fourcc(in_id));
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionRemovePropertyListener(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+) -> OSStatus {
+    log_dbg!("TODO: AudioSessionRemovePropertyListener {}", debug_fourcc(in_id));
+    kAudioSessionNoErr
+}
+
+// Теперь количество подчеркиваний строго совпадает с параметрами ABI
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(AudioSessionInitialize(_, _, _, _)),
+    export_c_func!(AudioSessionGetProperty(_, _, _)),
+    export_c_func!(AudioSessionGetPropertySize(_, _)),
+    export_c_func!(AudioSessionSetProperty(_, _, _)),
+    export_c_func!(AudioSessionSetActive(_)),
+    export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
+    export_c_func!(AudioSessionRemovePropertyListener(_)),
+];
