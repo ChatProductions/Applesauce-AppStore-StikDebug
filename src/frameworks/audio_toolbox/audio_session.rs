@@ -46,6 +46,7 @@ impl Default for State {
     }
 }
 
+#[allow(dead_code)]
 fn get_audio_session_property_size(in_id: AudioSessionPropertyID) -> u32 {
     match in_id {
         kAudioSessionProperty_OtherAudioIsPlaying => guest_size_of::<u32>(),
@@ -80,8 +81,8 @@ pub fn AudioSessionInitialize(
 
 pub fn AudioSessionSetActive(env: &mut Environment, active: u32) -> OSStatus {
     log_dbg!("AudioSessionSetActive({})", active != 0);
-    // Правильный путь к состоянию audio_toolbox в Environment
-    env.audio_toolbox.audio_session.active = active != 0;
+    // Теперь обращаемся по правильному пути: env.framework_state...
+    env.framework_state.audio_toolbox.audio_session.active = active != 0;
     kAudioSessionNoErr
 }
 
@@ -132,7 +133,6 @@ pub fn AudioSessionRemovePropertyListener(
     kAudioSessionNoErr
 }
 
-// Теперь количество подчеркиваний строго совпадает с параметрами ABI
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
     export_c_func!(AudioSessionGetProperty(_, _, _)),
