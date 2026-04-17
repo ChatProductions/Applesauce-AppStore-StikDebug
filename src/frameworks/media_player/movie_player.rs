@@ -383,21 +383,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())play {
     log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
     
-    // 1. Ставим плеер в режим проигрывания
+    // 1. Сразу ставим плеер в режим остановки ДО отправки уведомления.
+    // Если сделать это после, произойдет краш (Use-After-Free), так как игра
+    // может удалить объект MPMoviePlayerController получив уведомление.
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
-        .playback_state = MPMoviePlaybackStatePlaying;
+        .playback_state = MPMoviePlaybackStateStopped;
 
-    // 2. СИНХРОННО уведомляем игру, что ролик закончился. 
+    // 2. Временно удерживаем объект, чтобы он гарантированно не удалился
+    // прямо во время рассылки уведомлений внутри NSNotificationCenter.
+    retain(env, this);
+
+    // 3. СИНХРОННО уведомляем игру, что ролик закончился. 
     // Это пробивает "глухую" блокировку цикла игр от Electronic Arts.
     let name = ns_string::get_static_str(env, MPMoviePlayerPlaybackDidFinishNotification);
     let center: id = msg_class![env; NSNotificationCenter defaultCenter];
     let _: () = msg![env; center postNotificationName:name object:this];
 
-    // 3. Ставим плеер в режим остановки
-    env.objc
-        .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
-        .playback_state = MPMoviePlaybackStateStopped;
+    // 4. Отпускаем объект. Если игра вызвала release, он удалится именно здесь.
+    // Больше к `this` обращаться в этом методе НЕЛЬЗЯ.
+    release(env, this);
 }
 
 - (())pause {
@@ -465,4 +470,4 @@ pub(super) fn handle_players(env: &mut Environment) {
         // TODO: should there be some user info attached?
         let _: () = msg![env; center postNotificationName:name object:object];
     }
-}
+        }
