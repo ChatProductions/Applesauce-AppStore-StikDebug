@@ -175,7 +175,13 @@ pub fn remove_audio_queue(env: &mut Environment, run_loop: id, queue: AudioQueue
 
 /// For use by NSTimer so it can remove itself once it's invalidated.
 pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
-    log_dbg!("Removing timer {:?} from run loop {:?}", timer, run_loop,);
+    log_dbg!("Removing timer {:?} from run loop {:?}", timer, run_loop);
+    
+    // Честная логика Objective-C: если run_loop равен nil, нам не откуда удалять таймер.
+    if run_loop == nil {
+        return;
+    }
+
     let NSRunLoopHostObject { timers, .. } = env.objc.borrow_mut(run_loop);
 
     let mut i = 0;
@@ -188,7 +194,10 @@ pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
             i += 1;
         }
     }
-    assert!(release_count == 1); // TODO?
+    
+    // Убираем жесткий assert!(release_count == 1);
+    // В iOS таймер мог быть отменен до добавления в цикл или отменен дважды.
+    // Мы просто делаем release столько раз, сколько реально удалили из массива.
     for _ in 0..release_count {
         release(env, timer);
     }
