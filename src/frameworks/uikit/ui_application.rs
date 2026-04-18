@@ -523,7 +523,10 @@ pub(super) fn exit(env: &mut Environment) {
         let _: () = msg![env; pool drain];
     };
 
-    std::process::exit(0);
+    // ХАК: Отключаем принудительное завершение процесса, чтобы игра не крашилась.
+    // Эмулятор просто продолжит крутить цикл (возможны баги со звуком, но игра не вылетит).
+    log!("SUPER HACK: Prevented std::process::exit(0) on exit() call.");
+    // std::process::exit(0); 
 }
 
 const UIApplicationDidFinishLaunchingNotification: &str = "UIApplicationDidFinishLaunchingNotification";
@@ -547,3 +550,5 @@ pub const CONSTANTS: ConstantExports = &[
 ];
 
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
+
+        }
