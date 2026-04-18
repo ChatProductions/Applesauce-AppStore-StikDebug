@@ -839,6 +839,32 @@ pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, name: Co
     nil
 }
 
+pub fn objc_autoreleaseReturnValue(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    if name.is_null() {
+        return nil;
+    }
+    
+    // Читаем C-строку имени класса из памяти гостя и КОПИРУЕМ её в String (.to_string()),
+    // чтобы освободить неизменяемое заимствование (borrow) env.mem.
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s.to_string(),
+        Err(_) => return nil,
+    };
+    // Проверяем, зарегистрирован ли уже этот класс (среди известных)
+    // Обратите внимание на амперсанд & перед name_str
+    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
+        return class;
+    }
+
+    // Если класса еще нет, но у нас есть для него хост-шаблон, линкуем его
+    if ObjC::find_template(&name_str).is_some() {
+        return env.objc.link_class(&name_str, false, &mut env.mem);
+    }
+
+    // Стандартное поведение objc_getClass: если класс не найден, возвращаем nil
+    nil
+}
+
 pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
     if name.is_null() {
         return nil;
