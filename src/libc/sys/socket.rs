@@ -540,12 +540,26 @@ fn select(
     error_fds: MutPtr<fd_set>,
     timeout: MutPtr<timeval>,
 ) -> i32 {
-    // TODO: handle errno properly
+        // TODO: handle errno properly
     set_errno(env, 0);
 
-    assert!(n_fds > 0 && n_fds < 1024);
+    assert!(n_fds >= 0 && n_fds <= 1024);
+
+    // В POSIX вызов select с n_fds = 0 используется для точного сна (микросекунды)
+    if n_fds == 0 {
+        if !timeout.is_null() {
+            let timeval = env.mem.read(timeout);
+            if timeval.tv_sec > 0 || timeval.tv_usec > 0 {
+                let total_sleep = std::time::Duration::from_secs(timeval.tv_sec.try_into().unwrap_or(0))
+                    + std::time::Duration::from_micros(timeval.tv_usec.try_into().unwrap_or(0));
+                env.sleep(total_sleep);
+            }
+        }
+        return 0; // Ни один дескриптор не готов
+    }
 
     let should_block = if !timeout.is_null() {
+
         let timeval = env.mem.read(timeout);
         let tv_sec = timeval.tv_sec;
         let tv_usec = timeval.tv_usec;
@@ -789,11 +803,11 @@ fn process_set<F: Fn(&mut Environment, FileDescriptor, &mut i32, i32) -> bool>(
     process_bit: F,
 ) -> i32 {
     let mut fds_bits = set.fds_bits;
-    let mut count = 0;
+        let mut count = 0;
     'outer: for (i, bits) in fds_bits.iter_mut().enumerate() {
         for bit_index in 0..32i32 {
             let fd: FileDescriptor = (i as i32) * 32 + bit_index;
-            if fd > n_fds {
+            if fd >= n_fds {
                 break 'outer;
             }
             if (*bits & (1 << bit_index)) != 0 && process_bit(env, fd, bits, bit_index) {
