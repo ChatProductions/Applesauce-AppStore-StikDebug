@@ -730,5 +730,3 @@ unsafe fn upload_rgba8_pixels(gles: &mut dyn GLES, pixels: &[u8], dimensions: (u
         gles11::LINEAR as _,
     );
 }
-
-                                        }
