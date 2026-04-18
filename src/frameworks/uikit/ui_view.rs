@@ -59,6 +59,7 @@ pub(super) struct UIViewHostObject {
     delegate: id, // <--- ДОБАВЬ ЭТУ СТРОКУ
     animation_interval: f64,
     is_animating: bool,
+    clips_to_bounds: bool,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -76,6 +77,7 @@ impl Default for UIViewHostObject {
             delegate: nil, // <--- ДОБАВЬ ЭТУ СТРОКУ
             animation_interval: 1.0 / 60.0,
             is_animating: false,
+            clips_to_bounds: false,
         }
     }
 }
@@ -484,14 +486,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)clipsToBounds {
-    // В UIKit clipsToBounds — это masksToBounds у CALayer
-    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    msg![env; layer masksToBounds]
+    env.objc.borrow::<UIViewHostObject>(this).clips_to_bounds
 }
 
 - (())setClipsToBounds:(bool)clips {
-    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    () = msg![env; layer setMasksToBounds:clips]; // <--- Явно указываем тип ()
+    env.objc.borrow_mut::<UIViewHostObject>(this).clips_to_bounds = clips;
 }
 
 // --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
