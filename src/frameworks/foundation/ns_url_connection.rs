@@ -80,15 +80,17 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     // Guard: only call the selector if the delegate responds to it.
     // This prevents a panic when the delegate class does not implement the
     // optional method (common for lightweight network-check callers).
-    // Исправлено: используем register_sel вместо get_sel.
-    let sel: SEL = env.objc.register_sel("connection:didFailWithError:");
+    //
+    // Примечание: Если `sel_registerName` не сработает, проверьте `src/objc/selectors.rs`
+    // возможно метод называется `register_selector` или `get_sel_from_str`.
+    let sel: SEL = env.objc.sel_registerName("connection:didFailWithError:");
     let responds: bool = msg![env; delegate respondsToSelector:sel];
 
     if !responds {
         log_dbg!(
             "NSURLConnection: delegate {:#010x} does not respond to \
              connection:didFailWithError:, skipping",
-            delegate.addr()
+            delegate // Передаем структуру Ptr напрямую
         );
         return;
     }
@@ -97,8 +99,8 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     log_dbg!(
         "NSURLConnection: notifying delegate {:#010x} of failure on \
          connection {:#010x}",
-        delegate.addr(),
-        connection.addr()
+        delegate,   // Передаем структуру Ptr напрямую
+        connection  // Передаем структуру Ptr напрямую
     );
 
     () = msg![env; delegate connection:connection didFailWithError:error];
@@ -134,7 +136,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     log!(
         "NSURLConnection sendSynchronousRequest: stub called (request {:#010x})",
-        request.addr()
+        request // Передаем структуру Ptr напрямую
     );
 
     // When request is nil we still return empty NSData rather than nil,
@@ -200,8 +202,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!(
         "NSURLConnection initWithRequest:{:#010x} delegate:{:#010x} \
          startImmediately:{} (stub — failure via delegate)",
-        request.addr(),
-        delegate.addr(),
+        request,  // Передаем структуру Ptr напрямую
+        delegate, // Передаем структуру Ptr напрямую
         start_immediately,
     );
 
@@ -241,7 +243,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())cancel {
     log_dbg!(
         "[(NSURLConnection*){:#010x} cancel]",
-        this.addr()
+        this // Передаем структуру Ptr напрямую
     );
     // Mark cancelled; do NOT call the delegate (Apple behaviour: cancelled
     // connections do not call connection:didFailWithError:).
@@ -251,7 +253,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Dealloc
 
 - (())dealloc {
-    log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this.addr());
+    log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this); // Передаем структуру Ptr напрямую
     let delegate = env.objc.borrow::<NSURLConnectionHostObject>(this).delegate;
     release(env, delegate);
     env.objc.dealloc_object(this, &mut env.mem);
