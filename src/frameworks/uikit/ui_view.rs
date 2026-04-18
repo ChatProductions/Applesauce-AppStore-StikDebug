@@ -483,8 +483,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setHidden:hidden]
 }
 
+- (bool)clipsToBounds {
+    // В UIKit clipsToBounds — это masksToBounds у CALayer
+    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    msg![env; layer masksToBounds]
+}
+
 - (())setClipsToBounds:(bool)clips {
-    todo_objc_setter!(this, clips);
+    // Получаем слой из HostObject и устанавливаем masksToBounds
+    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    msg![env; layer setMasksToBounds:clips];
 }
 
 // --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
