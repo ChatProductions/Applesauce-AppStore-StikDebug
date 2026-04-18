@@ -589,15 +589,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
-// =========================================================================
-// MARK: - printf_inner additions
-// =========================================================================
-
-// Replace the `_ => unimplemented!(...)` arm at the end of the match in
-// printf_inner with the following complete set of additional specifiers:
-
             b'F' => {
-                // Uppercase %F — same as %f but INF/NAN in uppercase.
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
@@ -606,7 +598,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 res.extend_from_slice(s.as_bytes());
             }
             b'E' => {
-                // Uppercase %E — same as %e but with uppercase E.
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
@@ -615,7 +606,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 res.extend_from_slice(s.as_bytes());
             }
             b'G' => {
-                // Uppercase %G — same as %g but with uppercase E.
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let p: i32 = precision.map(|p| if p == 0 { 1 } else { p as i32 }).unwrap_or(6);
@@ -631,44 +621,34 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 res.extend_from_slice(s.to_uppercase().as_bytes());
             }
             b'a' => {
-                // %a — hexadecimal floating point, lowercase.
                 let float: f64 = args.next(env);
-                let s = format!("{float:#x?}");
-                // Rust doesn't support %a natively; use a simple approximation.
                 let s = format!("{:e}", float).replace('e', "p");
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
                 res.extend_from_slice(s.as_bytes());
             }
             b'A' => {
-                // %A — hexadecimal floating point, uppercase.
                 let float: f64 = args.next(env);
                 let s = format!("{:e}", float).replace('e', "P").to_uppercase();
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
                 res.extend_from_slice(s.as_bytes());
             }
             b'n' => {
-                // %n — write number of bytes written so far into int*.
-                // Potentially dangerous but needed for compatibility.
                 let ptr: MutPtr<i32> = args.next(env);
                 if !ptr.is_null() {
                     env.mem.write(ptr, res.len() as i32);
                 }
             }
-            // Darwin/NSString extensions
             b'D' => {
-                // %D — same as %ld on Darwin (long decimal).
                 let int: i32 = args.next(env);
                 let s = apply_int_pad(int as i64, pad_width as usize, pad_char, left_justified, prepend_sign, precision);
                 res.extend_from_slice(s.as_bytes());
             }
             b'U' => {
-                // %U — same as %lu on Darwin (unsigned long decimal).
                 let uint: u32 = args.next(env);
                 let s = apply_uint_pad(uint as u64, pad_width as usize, pad_char, left_justified, precision);
                 res.extend_from_slice(s.as_bytes());
             }
             b'O' => {
-                // %O — same as %lo on Darwin (unsigned long octal).
                 let uint: u32 = args.next(env);
                 let prefix = if alternative_form && uint != 0 { "0" } else { "" };
                 let s = format!("{}{:o}", prefix, uint);
@@ -676,12 +656,18 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 res.extend_from_slice(s.as_bytes());
             }
             _ => {
-                // Unknown specifier — log and skip rather than panic.
                 log_dbg!(
                     "printf_inner: unhandled specifier '%{}' at index {} — skipping",
                     specifier as char, format_char_idx
                 );
             }
+        } // end match specifier
+    } // end loop
+
+    log_dbg!("=> {:?}", std::str::from_utf8(&res));
+    res
+} // end printf_inner
+
 
     log_dbg!("=> {:?}", std::str::from_utf8(&res));
     res
@@ -724,6 +710,68 @@ fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left
         // TODO
         format!("{full_str:>pad_width$}")
     }
+}
+
+fn apply_pad(s: &str, pad_width: usize, pad_char: char, left_justified: bool) -> String {
+    if pad_width == 0 || s.len() >= pad_width {
+        return s.to_string();
+    }
+    if left_justified {
+        format!("{s:<pad_width$}")
+    } else if pad_char == '0' {
+        format!("{s:0>pad_width$}")
+    } else {
+        format!("{s:>pad_width$}")
+    }
+}
+
+fn apply_int_pad(
+    int: i64,
+    pad_width: usize,
+    pad_char: char,
+    left_justified: bool,
+    prepend_sign: bool,
+    precision: Option<usize>,
+) -> String {
+    let with_prec = if precision.is_some_and(|p| p > 0) {
+        format!("{:01$}", int, precision.unwrap())
+    } else {
+        format!("{int}")
+    };
+    if pad_width == 0 {
+        if prepend_sign && int >= 0 {
+            return format!("+{with_prec}");
+        }
+        return with_prec;
+    }
+    if pad_char == '0' && precision.is_none() && !left_justified {
+        if prepend_sign {
+            let sign = if int >= 0 { '+' } else { '-' };
+            let abs_str = format!("{:0>1$}", int.unsigned_abs(), pad_width.saturating_sub(1));
+            format!("{sign}{abs_str}")
+        } else {
+            format!("{int:0>pad_width$}")
+        }
+    } else if left_justified {
+        format!("{with_prec:<pad_width$}")
+    } else {
+        format!("{with_prec:>pad_width$}")
+    }
+}
+
+fn apply_uint_pad(
+    uint: u64,
+    pad_width: usize,
+    pad_char: char,
+    left_justified: bool,
+    precision: Option<usize>,
+) -> String {
+    let with_prec = if precision.is_some_and(|p| p > 0) {
+        format!("{:01$}", uint, precision.unwrap())
+    } else {
+        format!("{uint}")
+    };
+    apply_pad(&with_prec, pad_width, pad_char, left_justified)
 }
 
 fn snprintf(
@@ -1695,77 +1743,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(wprintf(_, _)),
     export_c_func!(vwprintf(_, _)),
 ];
-
-// =========================================================================
-// MARK: - Padding / formatting helpers
-// =========================================================================
-
-/// Apply width padding to an already-formatted string.
-fn apply_pad(s: &str, pad_width: usize, pad_char: char, left_justified: bool) -> String {
-    if pad_width == 0 || s.len() >= pad_width {
-        return s.to_string();
-    }
-    if left_justified {
-        format!("{s:<pad_width$}")
-    } else if pad_char == '0' {
-        format!("{s:0>pad_width$}")
-    } else {
-        format!("{s:>pad_width$}")
-    }
-}
-
-/// Format a signed integer with full padding / precision / sign support.
-fn apply_int_pad(
-    int: i64,
-    pad_width: usize,
-    pad_char: char,
-    left_justified: bool,
-    prepend_sign: bool,
-    precision: Option<usize>,
-) -> String {
-    let with_prec = if precision.is_some_and(|p| p > 0) {
-        format!("{:01$}", int, precision.unwrap())
-    } else {
-        format!("{int}")
-    };
-
-    if pad_width == 0 {
-        if prepend_sign && int >= 0 {
-            return format!("+{with_prec}");
-        }
-        return with_prec;
-    }
-
-    if pad_char == '0' && precision.is_none() && !left_justified {
-        if prepend_sign {
-            let sign = if int >= 0 { '+' } else { '-' };
-            let abs_str = format!("{:0>1$}", int.unsigned_abs(), pad_width.saturating_sub(1));
-            format!("{sign}{abs_str}")
-        } else {
-            format!("{int:0>pad_width$}")
-        }
-    } else if left_justified {
-        format!("{with_prec:<pad_width$}")
-    } else {
-        format!("{with_prec:>pad_width$}")
-    }
-}
-
-/// Format an unsigned integer with full padding / precision support.
-fn apply_uint_pad(
-    uint: u64,
-    pad_width: usize,
-    pad_char: char,
-    left_justified: bool,
-    precision: Option<usize>,
-) -> String {
-    let with_prec = if precision.is_some_and(|p| p > 0) {
-        format!("{:01$}", uint, precision.unwrap())
-    } else {
-        format!("{uint}")
-    };
-    apply_pad(&with_prec, pad_width, pad_char, left_justified)
-}
 
 // Helper function, not a part of printf family
 // TODO: write proper libc's isspace()
