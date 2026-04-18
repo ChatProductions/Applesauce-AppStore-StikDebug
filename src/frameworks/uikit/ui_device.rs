@@ -9,7 +9,7 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, NSInteger};
-use crate::objc::{id, msg, msg_class, objc_classes, todo_objc_setter, ClassExports, TrivialHostObject};
+use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, TrivialHostObject};
 use crate::window::{get_battery_status, BatteryState, DeviceOrientation};
 
 pub const UIDeviceOrientationDidChangeNotification: &str =
@@ -48,6 +48,9 @@ pub const UIUserInterfaceIdiomPad:   UIUserInterfaceIdiom = 1;
 #[derive(Default)]
 pub struct State {
     current_device: Option<id>,
+    battery_monitoring_enabled: bool,
+    proximity_monitoring_enabled: bool,
+    generates_device_orientation_notifications: bool,
 }
 
 pub const CONSTANTS: ConstantExports = &[
@@ -92,11 +95,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Orientation
 
 - (())beginGeneratingDeviceOrientationNotifications {
-    log!("TODO: beginGeneratingDeviceOrientationNotifications");
+    env.framework_state.uikit.ui_device.generates_device_orientation_notifications = true;
 }
 
 - (())endGeneratingDeviceOrientationNotifications {
-    log!("TODO: endGeneratingDeviceOrientationNotifications");
+    env.framework_state.uikit.ui_device.generates_device_orientation_notifications = false;
 }
 
 - (UIDeviceOrientation)orientation {
@@ -120,7 +123,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isGeneratingDeviceOrientationNotifications {
-    false
+    env.framework_state.uikit.ui_device.generates_device_orientation_notifications
 }
 
 // MARK: - Identity
@@ -157,10 +160,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isProximityMonitoringEnabled {
-    false
+    env.framework_state.uikit.ui_device.proximity_monitoring_enabled
 }
-- (())setProximityMonitoringEnabled:(bool)_enabled {
-    log!("TODO: UIDevice setProximityMonitoringEnabled: (stubbed)");
+
+- (())setProximityMonitoringEnabled:(bool)enabled {
+    env.framework_state.uikit.ui_device.proximity_monitoring_enabled = enabled;
 }
 
 - (bool)proximityState {
@@ -171,11 +175,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Battery
 
 - (bool)isBatteryMonitoringEnabled {
-    true
+    env.framework_state.uikit.ui_device.battery_monitoring_enabled
 }
+
 - (())setBatteryMonitoringEnabled:(bool)enabled {
-    todo_objc_setter!(this, enabled);
-    assert!(enabled);
+    env.framework_state.uikit.ui_device.battery_monitoring_enabled = enabled;
 }
 
 - (f32)batteryLevel {
@@ -222,4 +226,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
