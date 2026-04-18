@@ -56,9 +56,11 @@ fn statvfs(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<statvfs>) -> i
         f_favail: statfs.f_ffree.try_into().unwrap(), // TODO: Is this right?
         // From the manpage: "Not meaningful in this implementation"
         f_fsid: 0,
-        // In the manpage: "There are two flags defined for the f_flag member"
-        // ST_RDONLY and ST_NOSUID
-        f_flag: statfs.f_flags & ST_RDONLY & ST_NOSUID,
+        // ИСПРАВЛЕНИЕ: было `& ST_RDONLY & ST_NOSUID`, что всегда равно 0,
+        // т.к. ST_RDONLY(1) & ST_NOSUID(2) = 0 (нет общих битов).
+        // Нужно OR: маскируем флаги statfs, оставляя только биты ST_RDONLY
+        // и ST_NOSUID, определённые для statvfs.
+        f_flag: statfs.f_flags & (ST_RDONLY | ST_NOSUID),
         f_namemax: 255,
     };
     env.mem.write(buf, statvfs);
