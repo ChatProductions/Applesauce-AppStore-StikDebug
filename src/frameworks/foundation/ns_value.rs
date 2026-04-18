@@ -426,6 +426,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this description]
 }
 
+- (())applyToValue:(id)value forKey:(id)key ofObject:(id)object {
+    if object == nil {
+        log_dbg!("NSNumber applyToValue:forKey:ofObject: — object is nil, ignored");
+        return;
+    }
+    let effective_key: id = if key == nil { this } else { key };
+    let _: () = msg![env; object setValue:value forKey:effective_key];
+}
+
+- (id)mergeWithPrevious:(id)_previous {
+    // Return self — the new (receiver) string replaces the previous one.
+    // This matches NSUndoManager and CoreData's default merge policy where
+    // the incoming object wins.
+    this
+}
+    
 // MARK: - Formatting helpers
 
 - (id)initWithBytes:(ConstVoidPtr)value objCType:(ConstVoidPtr)type_ptr {
