@@ -114,10 +114,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 // Returns empty NSData and sets *error to an NSError.
 // Apps that only check for nil data will continue; apps that inspect the
 // error will also be able to handle the failure path cleanly.
-+ (id)sendSynchronousRequest:(id)_request
++ (id)sendSynchronousRequest:(id)request
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
-    log!("NSURLConnection sendSynchronousRequest: stub — returning empty NSData with error");
+                       
+    // ЛОГИРУЕМ ЗАПРОС ИГРЫ
+    log!("NSURLConnection sendSynchronousRequest: stub called with request: {:?}", request);
 
     // Write nil into *response (no HTTP response to report).
     if !response_ptr.is_null() {
