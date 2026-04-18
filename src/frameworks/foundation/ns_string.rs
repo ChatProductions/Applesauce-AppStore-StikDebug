@@ -110,8 +110,9 @@ impl StringHostObject {
 
         match encoding {
             NSASCIIStringEncoding => {
-                assert!(bytes.iter().all(|byte| byte.is_ascii()));
-                let string = unsafe { String::from_utf8_unchecked(bytes.into_owned()) };
+                // Убираем жесткий assert! 
+                // Вместо паники честно эмулируем поведение iOS: заменяем невалидные ASCII-символы на '?'.
+                let string: String = bytes.iter().map(|&b| if b.is_ascii() { b as char } else { '?' }).collect();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSMacOSRomanStringEncoding => {
