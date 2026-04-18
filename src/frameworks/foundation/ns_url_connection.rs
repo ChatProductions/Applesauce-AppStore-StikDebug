@@ -121,6 +121,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     // ЛОГИРУЕМ ЗАПРОС ИГРЫ
     log!("NSURLConnection sendSynchronousRequest: stub called with request: {:?}", request);
 
+    // ИСПРАВЛЕНИЕ: Если запрос nil, сразу возвращаем nil (поведение Apple)
+    if request == nil {
+        log!("NSURLConnection sendSynchronousRequest: got nil request, returning nil");
+        return nil;
+    }
+
     // Write nil into *response (no HTTP response to report).
     if !response_ptr.is_null() {
         env.mem.write(response_ptr, nil);
