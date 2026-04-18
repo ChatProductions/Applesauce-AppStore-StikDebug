@@ -34,7 +34,8 @@ impl State {
 
 pub enum AudioFileHostObject {
     Real(audio::AudioFile),
-    // Dummy-объект страхует эмулятор от крашей, если Symphonia по какой-то причине не смогла прочитать файл.
+    // 2-секундная заглушка, спасающая эмулятор от OOM (Out Of Memory)
+    // если Symphonia или кастомный парсер не осилили файл.
     Dummy {
         format: AudioStreamBasicDescription,
         byte_count: u64,
@@ -61,7 +62,7 @@ unsafe impl SafeRead for AudioFilePacketTableInfo {}
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
 const kAudioFileNotOpenError: OSStatus = -38;
-const kAudioFileSuccess: OSStatus = 0; // Строго 0 (noErr)
+const kAudioFileSuccess: OSStatus = 0; // ИСПРАВЛЕНО: Apple success code
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 const kAudioFileUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
@@ -80,12 +81,33 @@ pub const kAudioFilePropertyDataFormat: AudioFilePropertyID = fourcc(b"dfmt");
 const kAudioFilePropertyAudioDataByteCount: AudioFilePropertyID = fourcc(b"bcnt");
 const kAudioFilePropertyAudioDataPacketCount: AudioFilePropertyID = fourcc(b"pcnt");
 pub const kAudioFilePropertyPacketSizeUpperBound: AudioFilePropertyID = fourcc(b"pkub");
+pub const kAudioFilePropertyMaximumPacketSize: AudioFilePropertyID = fourcc(b"psze");
 const kAudioFilePropertyMagicCookieData: AudioFilePropertyID = fourcc(b"mgic");
 const kAudioFilePropertyChannelLayout: AudioFilePropertyID = fourcc(b"cmap");
 const kAudioFilePropertyEstimatedDuration: AudioFilePropertyID = fourcc(b"edur");
 const kAudioFilePropertyPacketTableInfo: AudioFilePropertyID = fourcc(b"pnfo");
 const kAudioFilePropertyPacketToFrame: AudioFilePropertyID = fourcc(b"flst");
 pub const kAudioFilePropertyFileFormat: AudioFilePropertyID = fourcc(b"ffmt");
+
+// Генерация короткой (2 сек) тишины. Избегает крашей памяти (malloc fails), 
+// так как весит всего ~350 КБ, что легко помещается в эмулируемую RAM.
+fn create_dummy_audio_file() -> AudioFileHostObject {
+    AudioFileHostObject::Dummy {
+        format: AudioStreamBasicDescription {
+            sample_rate: 44100.0,
+            format_id: kAudioFormatLinearPCM,
+            format_flags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            bytes_per_packet: 4,
+            frames_per_packet: 1,
+            bytes_per_frame: 4,
+            channels_per_frame: 2,
+            bits_per_channel: 16,
+            _reserved: 0,
+        },
+        byte_count: 352800, // 2 секунды
+        packet_count: 88200,
+    }
+}
 
 pub fn AudioFileOpenURL(
     env: &mut Environment,
@@ -109,26 +131,10 @@ pub fn AudioFileOpenURL(
         Ok(audio_file) => AudioFileHostObject::Real(audio_file),
         Err(error) => {
             log!(
-                "Warning: Symphonia / AudioFileOpenURL() for path {:?} failed: {:?}. Substituting Dummy AudioFileHostObject to prevent crash.",
+                "Warning: AudioFileOpenURL() for path {:?} failed: {:?}. Substituting 2-sec Dummy AudioFileHostObject.",
                 path, error
             );
-            
-            // Генерируем фейковый тихий поток на 5 минут чтобы игра не словила EOF и не упала
-            AudioFileHostObject::Dummy {
-                format: AudioStreamBasicDescription {
-                    sample_rate: 44100.0,
-                    format_id: kAudioFormatLinearPCM,
-                    format_flags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
-                    bytes_per_packet: 4,
-                    frames_per_packet: 1,
-                    bytes_per_frame: 4,
-                    channels_per_frame: 2,
-                    bits_per_channel: 16,
-                    _reserved: 0,
-                },
-                byte_count: 52920000,
-                packet_count: 13230000,
-            }
+            create_dummy_audio_file()
         }
     };
 
@@ -187,21 +193,7 @@ pub fn AudioFileOpenWithCallbacks(
         Ok(file) => AudioFileHostObject::Real(file),
         Err(_) => {
             log!("Warning: AudioFileOpenWithCallbacks() failed parse. Substituting Dummy AudioFileHostObject.");
-            AudioFileHostObject::Dummy {
-                format: AudioStreamBasicDescription {
-                    sample_rate: 44100.0,
-                    format_id: kAudioFormatLinearPCM,
-                    format_flags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
-                    bytes_per_packet: 4,
-                    frames_per_packet: 1,
-                    bytes_per_frame: 4,
-                    channels_per_frame: 2,
-                    bits_per_channel: 16,
-                    _reserved: 0,
-                },
-                byte_count: 52920000,
-                packet_count: 13230000,
-            }
+            create_dummy_audio_file()
         }
     };
     
@@ -221,6 +213,7 @@ fn property_size(property_id: AudioFilePropertyID) -> GuestUSize {
         kAudioFilePropertyAudioDataByteCount => guest_size_of::<u64>(),
         kAudioFilePropertyAudioDataPacketCount => guest_size_of::<u64>(),
         kAudioFilePropertyPacketSizeUpperBound => guest_size_of::<u32>(),
+        kAudioFilePropertyMaximumPacketSize => guest_size_of::<u32>(),
         kAudioFilePropertyEstimatedDuration => guest_size_of::<f64>(),
         kAudioFilePropertyPacketTableInfo => guest_size_of::<AudioFilePacketTableInfo>(),
         kAudioFilePropertyPacketToFrame => guest_size_of::<f64>(),
@@ -319,8 +312,7 @@ pub fn AudioFileGetProperty(
                                 channels_per_frame, bits_per_channel, _reserved: 0,
                             }
                         }
-                        // Защита: Если Symphonia парсит новые форматы (MP3, ALAC), и они добавлены 
-                        // в enum, но не описаны выше, этот код не сломает компиляцию
+                        // Защита: Если Symphonia парсит новые форматы (MP3, ALAC), и они не описаны выше
                         _ => {
                             AudioStreamBasicDescription {
                                 sample_rate, format_id: fourcc(b"fmt?"), format_flags: 0,
@@ -333,7 +325,9 @@ pub fn AudioFileGetProperty(
                 }
                 kAudioFilePropertyAudioDataByteCount => env.mem.write(out_property_data.cast(), audio_file.byte_count()),
                 kAudioFilePropertyAudioDataPacketCount => env.mem.write(out_property_data.cast(), audio_file.packet_count()),
-                kAudioFilePropertyPacketSizeUpperBound => env.mem.write(out_property_data.cast(), audio_file.packet_size_upper_bound()),
+                kAudioFilePropertyPacketSizeUpperBound | kAudioFilePropertyMaximumPacketSize => {
+                    env.mem.write(out_property_data.cast(), audio_file.packet_size_upper_bound())
+                },
                 kAudioFilePropertyEstimatedDuration => {
                     let AudioDescription { sample_rate, bytes_per_packet, frames_per_packet, .. } = audio_file.audio_description();
                     let estimated_duration: f64 = audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate);
@@ -354,7 +348,9 @@ pub fn AudioFileGetProperty(
                 kAudioFilePropertyDataFormat => env.mem.write(out_property_data.cast(), *format),
                 kAudioFilePropertyAudioDataByteCount => env.mem.write(out_property_data.cast(), *byte_count),
                 kAudioFilePropertyAudioDataPacketCount => env.mem.write(out_property_data.cast(), *packet_count),
-                kAudioFilePropertyPacketSizeUpperBound => env.mem.write(out_property_data.cast(), format.bytes_per_packet),
+                kAudioFilePropertyPacketSizeUpperBound | kAudioFilePropertyMaximumPacketSize => {
+                    env.mem.write(out_property_data.cast(), format.bytes_per_packet)
+                },
                 kAudioFilePropertyEstimatedDuration => {
                     let duration = (*packet_count as f64) * (format.frames_per_packet as f64) / format.sample_rate;
                     env.mem.write(out_property_data.cast(), duration);
@@ -397,7 +393,6 @@ fn AudioFileReadBytes(
             audio_file.read_bytes(in_starting_byte.try_into().unwrap_or(0), buffer_slice).unwrap_or(0)
         }
         AudioFileHostObject::Dummy { byte_count, .. } => {
-            // Тишина
             for b in buffer_slice.iter_mut() { *b = 0; }
             let max_read = byte_count.saturating_sub(in_starting_byte as u64);
             std::cmp::min(bytes_to_read as u64, max_read) as usize
