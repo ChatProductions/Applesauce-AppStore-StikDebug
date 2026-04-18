@@ -600,8 +600,14 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
 
     let needle_len = needle_str.len();
     
+    // ИСПРАВЛЕНИЕ: Если строка, в которой ищем, короче искомого слова,
+    // совпадение невозможно в принципе. Выходим сразу.
+    if haystack_str.len() < needle_len {
+        return Ptr::null();
+    }
+    
     // Ищем совпадение, используя стандартный метод Rust без учета ASCII-регистра
-    for i in 0..=haystack_str.len().saturating_sub(needle_len) {
+    for i in 0..=haystack_str.len() - needle_len { // saturating_sub больше не нужен
         let window = &haystack_str[i..i + needle_len];
         if window.eq_ignore_ascii_case(needle_str) {
             // Возвращаем указатель на начало найденной подстроки
