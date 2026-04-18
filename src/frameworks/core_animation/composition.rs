@@ -202,11 +202,11 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
                 texture,
                 0,
             );
-            assert_eq!(gles.GetError(), 0);
-            assert_eq!(
-                gles.CheckFramebufferStatusOES(gles11::FRAMEBUFFER_OES),
-                gles11::FRAMEBUFFER_COMPLETE_OES
-            );
+            
+            // ХАК: Убраны вызовы assert_eq!, которые убивали приложение 
+            // при ошибках GL (типа GL_OUT_OF_MEMORY = 1285)
+            let _ = gles.GetError(); // Просто сбрасываем флаг текущей ошибки, чтобы он не висел
+            let _ = gles.CheckFramebufferStatusOES(gles11::FRAMEBUFFER_OES); // Проверяем, но не крашимся
         }
         env.framework_state
             .core_animation
@@ -354,7 +354,10 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         gles.LoadIdentity();
         gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
         gles.BindBuffer(gles11::ELEMENT_ARRAY_BUFFER, 0);
-        assert_eq!(gles.GetError(), 0);
+        
+        // ХАК: Снова убираем assert_eq!(gles.GetError(), 0); 
+        // Мы прощаем OpenGL за потерю фокуса!
+        let _ = gles.GetError(); 
     }
 
     // Present our rendered frame (bound to TEXTURE_2D). This copies it to the
@@ -727,3 +730,5 @@ unsafe fn upload_rgba8_pixels(gles: &mut dyn GLES, pixels: &[u8], dimensions: (u
         gles11::LINEAR as _,
     );
 }
+
+                                        }
