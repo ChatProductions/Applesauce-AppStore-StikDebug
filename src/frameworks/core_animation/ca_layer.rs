@@ -83,13 +83,11 @@ impl CALayerHostObject {
 pub const kCAFilterLinear: &str = "kCAFilterLinear";
 pub const kCAFilterNearest: &str = "kCAFilterNearest";
 pub const kCAFilterTrilinear: &str = "kCAFilterTrilinear";
-
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
     ("_kCAFilterNearest", HostConstant::NSString(kCAFilterNearest)),
     ("_kCAFilterTrilinear", HostConstant::NSString(kCAFilterTrilinear)),
 ];
-
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -129,7 +127,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         name: None,
         mask: nil,
     });
-
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
@@ -148,7 +145,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         ref mut sublayers,
         ..
     } = env.objc.borrow_mut(this);
-
     let sublayers = std::mem::take(sublayers);
 
     if drawable_properties != nil { release(env, drawable_properties); }
@@ -157,7 +153,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(cg_context) = cg_context { CGContextRelease(env, cg_context); }
 
     assert!(superlayer == nil);
-
     for sublayer in sublayers {
         env.objc.borrow_mut::<CALayerHostObject>(sublayer).superlayer = nil;
         release(env, sublayer);
@@ -270,19 +265,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         -frame.size.width * anchor_point.x,
         -frame.size.height * anchor_point.y,
     ).concat(*affine_transform).invert();
-
     let transformed_size = inverse_transform.apply_to_rect(CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: frame.size
     }).size;
-
     let transformed_offset = inverse_transform.apply_to_point(CGPoint { x: 0.0, y: 0.0 });
-
     let new_position = CGPoint {
         x: frame.origin.x + transformed_offset.x,
         y: frame.origin.y + transformed_offset.y,
     };
-
     () = msg![env; this setPosition:new_position];
     let new_bounds = CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
@@ -346,7 +337,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         delegate,
         ..
     } = env.objc.borrow_mut(this);
-
     if !std::mem::take(needs_display) { return; }
     if delegate == nil { return; }
 
@@ -362,12 +352,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         bounds: CGRect { origin, size },
         ..
     } = env.objc.borrow_mut(this);
-
     *gles_texture_is_up_to_date = false;
 
     let int_width = size.width.round() as GuestUSize;
     let int_height = size.height.round() as GuestUSize;
-
     // --- ФИКС КРАША 0x0 ---
     if int_width == 0 || int_height == 0 {
         return;
@@ -377,7 +365,6 @@ pub const CLASSES: ClassExports = objc_classes! {
             CGBitmapContextGetWidth(env, existing) != int_width ||
             CGBitmapContextGetHeight(env, existing) != int_height
     );
-
     let cg_context = if need_new_context {
         if let Some(old_context) = cg_context { CGContextRelease(env, old_context); }
         let color_space = CGColorSpaceCreateDeviceRGB(env);
@@ -391,7 +378,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         cg_context.unwrap()
     };
-
     CGContextTranslateCTM(env, cg_context, -origin.x, -origin.y);
     CGContextClearRect(env, cg_context, CGRect { origin, size });
     () = msg![env; delegate drawLayer:this inContext:cg_context];
@@ -482,10 +468,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 }
 
+// --- ДОБАВЛЕННЫЙ МЕТОД: removeAllAnimations ---
+- (())removeAllAnimations {
+    let host = env.objc.borrow_mut::<CALayerHostObject>(this);
+    
+    // Забираем коллекции, оставляя пустые на их месте
+    let named_animations = std::mem::take(&mut host.animations);
+    let anonymous_animations = std::mem::take(&mut host.anonymous_animations);
+
+    // Освобождаем память (release) для каждой именованной анимации
+    for (_, anim) in named_animations {
+        release(env, anim);
+    }
+    
+    // Освобождаем память (release) для каждой анонимной анимации
+    for anim in anonymous_animations {
+        release(env, anim);
+    }
+}
+
 @end
 
 };
-
 pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: id) {
     let removed = env.objc.borrow_mut::<CALayerHostObject>(layer).anonymous_animations.remove(&animation);
     assert!(removed);
@@ -498,12 +502,10 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
 
     let mut this_map = HashMap::from([(this, CGAffineTransformIdentity)]);
     let mut other_map = HashMap::from([(other, CGAffineTransformIdentity)]);
-
     let mut this_superlayer = this;
     let mut this_transform = CGAffineTransformIdentity;
     let mut other_superlayer = other;
     let mut other_transform = CGAffineTransformIdentity;
-
     let (common_ancestor, this_transform, other_transform) = loop {
         if this_superlayer != nil {
             let this_hostobj: &CALayerHostObject = env.objc.borrow(this_superlayer);
@@ -538,3 +540,4 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
     assert!((common_ancestor == nil) != need_common_ancestor);
     other_transform.concat(this_transform.invert())
 }
+
