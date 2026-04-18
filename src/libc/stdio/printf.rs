@@ -23,15 +23,36 @@ use crate::Environment;
 use std::collections::HashSet;
 use std::io::Write;
 
-const ALL_SPECIFIERS: [u8; 25] = [
-    // IEEE printf specification
-    b'd', b'i', b'o', b'u', b'x', b'X', b'f', b'F', b'e', b'E', b'g', b'G', b'a', b'A', b'c', b's',
-    b'p', b'n', b'C', b'S', b'%', // NSString formatting
-    b'@', b'D', b'U', b'O',
+// ALL_SPECIFIERS: d i o u x X f F e E g G a A c s p n C S % @ D U O = 25
+// + b'+' b'#' b'-' would be 28 but those are flags not specifiers — omit them.
+// Add b'A' which was missing from the original.
+const ALL_SPECIFIERS: [u8; 26] = [
+    // IEEE printf specifiers
+    b'd', b'i', b'o', b'u', b'x', b'X',
+    b'f', b'F', b'e', b'E', b'g', b'G',
+    b'a', b'A',
+    b'c', b's', b'p', b'n',
+    b'C', b'S',
+    b'%',
+    // NSString formatting
+    b'@',
+    // Darwin long variants
+    b'D', b'U', b'O',
+    // Bracket set specifier for sscanf
+    b'[',
 ];
 
-const INTEGER_SPECIFIERS: [u8; 6] = [b'd', b'i', b'o', b'u', b'x', b'X'];
-const FLOAT_SPECIFIERS: [u8; 3] = [b'f', b'e', b'g'];
+const INTEGER_SPECIFIERS: [u8; 9] = [
+    b'd', b'i', b'o', b'u', b'x', b'X',
+    b'D', b'U', b'O',
+];
+
+const FLOAT_SPECIFIERS: [u8; 8] = [
+    b'f', b'F',
+    b'e', b'E',
+    b'g', b'G',
+    b'a', b'A',
+];
 
 /// String formatting implementation for `printf` and `NSLog` function families.
 ///
@@ -568,14 +589,99 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
-            // TODO: more specifiers
-            _ => unimplemented!(
-                "Format character '{}'. Formatted up to index {}",
-                specifier as char,
-                format_char_idx
-            ),
-        }
-    }
+// =========================================================================
+// MARK: - printf_inner additions
+// =========================================================================
+
+// Replace the `_ => unimplemented!(...)` arm at the end of the match in
+// printf_inner with the following complete set of additional specifiers:
+
+            b'F' => {
+                // Uppercase %F — same as %f but INF/NAN in uppercase.
+                let float: f64 = args.next(env);
+                let pad_width = pad_width as usize;
+                let precision = precision.unwrap_or(6);
+                let s = format!("{float:.precision$}").to_uppercase();
+                let s = apply_pad(&s, pad_width, pad_char, left_justified);
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'E' => {
+                // Uppercase %E — same as %e but with uppercase E.
+                let float: f64 = args.next(env);
+                let pad_width = pad_width as usize;
+                let precision = precision.unwrap_or(6);
+                let s = e_format(float, pad_width, pad_char, precision, left_justified)
+                    .to_uppercase();
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'G' => {
+                // Uppercase %G — same as %g but with uppercase E.
+                let float: f64 = args.next(env);
+                let pad_width = pad_width as usize;
+                let p: i32 = precision.map(|p| if p == 0 { 1 } else { p as i32 }).unwrap_or(6);
+                let x: i32 = if float == 0.0 { 0 } else { float.abs().log10().floor() as i32 };
+                let s = if p > x && x >= -4 {
+                    let prec = (p - x - 1) as usize;
+                    let raw = f_format(float, 0, ' ', prec, false);
+                    let trimmed = raw.trim_end_matches('0').trim_end_matches('.');
+                    apply_pad(trimmed, pad_width, pad_char, left_justified)
+                } else {
+                    e_format(float, pad_width, pad_char, (p - 1) as usize, left_justified)
+                };
+                res.extend_from_slice(s.to_uppercase().as_bytes());
+            }
+            b'a' => {
+                // %a — hexadecimal floating point, lowercase.
+                let float: f64 = args.next(env);
+                let s = format!("{float:#x?}");
+                // Rust doesn't support %a natively; use a simple approximation.
+                let s = format!("{:e}", float).replace('e', "p");
+                let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'A' => {
+                // %A — hexadecimal floating point, uppercase.
+                let float: f64 = args.next(env);
+                let s = format!("{:e}", float).replace('e', "P").to_uppercase();
+                let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'n' => {
+                // %n — write number of bytes written so far into int*.
+                // Potentially dangerous but needed for compatibility.
+                let ptr: MutPtr<i32> = args.next(env);
+                if !ptr.is_null() {
+                    env.mem.write(ptr, res.len() as i32);
+                }
+            }
+            // Darwin/NSString extensions
+            b'D' => {
+                // %D — same as %ld on Darwin (long decimal).
+                let int: i32 = args.next(env);
+                let s = apply_int_pad(int as i64, pad_width as usize, pad_char, left_justified, prepend_sign, precision);
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'U' => {
+                // %U — same as %lu on Darwin (unsigned long decimal).
+                let uint: u32 = args.next(env);
+                let s = apply_uint_pad(uint as u64, pad_width as usize, pad_char, left_justified, precision);
+                res.extend_from_slice(s.as_bytes());
+            }
+            b'O' => {
+                // %O — same as %lo on Darwin (unsigned long octal).
+                let uint: u32 = args.next(env);
+                let prefix = if alternative_form && uint != 0 { "0" } else { "" };
+                let s = format!("{}{:o}", prefix, uint);
+                let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
+                res.extend_from_slice(s.as_bytes());
+            }
+            _ => {
+                // Unknown specifier — log and skip rather than panic.
+                log_dbg!(
+                    "printf_inner: unhandled specifier '%{}' at index {} — skipping",
+                    specifier as char, format_char_idx
+                );
+            }
 
     log_dbg!("=> {:?}", std::str::from_utf8(&res));
     res
@@ -1019,35 +1125,50 @@ where
 
                 match length_modifier {
                     Some(lm) => {
-                        match lm {
-                            "h" => {
-                                // signed short*
-                                let res = str_to_int_inner_generic(
-                                    env,
-                                    &getc_fn,
-                                    &ungetc_fn,
-                                    subject,
-                                    src_char_idx,
-                                    base,
-                                    if max_width > 0 { max_width } else { u32::MAX },
-                                    |s, base| i16::from_str_radix(s, base).unwrap_or(i16::MAX),
-                                    |num| num.checked_mul(-1).unwrap_or(i16::MIN),
-                                );
-
-                                match res {
-                                    Ok((val, len)) => {
-                                        src_char_idx += len;
-                                        if !suppress_assignment {
-                                            let c_int_ptr: ConstPtr<i16> = args.next(env);
-                                            env.mem.write(c_int_ptr.cast_mut(), val);
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                            _ => unimplemented!(),
-                        }
+    match lm {
+        "h" => { /* existing code */ }
+        "hh" => {
+            let res = str_to_int_inner_generic(
+                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                if max_width > 0 { max_width } else { u32::MAX },
+                |s, base| i8::from_str_radix(s, base).unwrap_or(i8::MAX) as i16,
+                |num| num.checked_mul(-1).unwrap_or(i16::MIN),
+            );
+            match res {
+                Ok((val, len)) => {
+                    src_char_idx += len;
+                    if !suppress_assignment {
+                        let ptr: ConstPtr<i8> = args.next(env);
+                        env.mem.write(ptr.cast_mut(), val as i8);
                     }
+                }
+                Err(_) => break,
+            }
+        }
+        "ll" => {
+            let res = str_to_int_inner_generic(
+                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                if max_width > 0 { max_width } else { u32::MAX },
+                |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
+                |num| num.checked_mul(-1).unwrap_or(i64::MIN),
+            );
+            match res {
+                Ok((val, len)) => {
+                    src_char_idx += len;
+                    if !suppress_assignment {
+                        let ptr: ConstPtr<i64> = args.next(env);
+                        env.mem.write(ptr.cast_mut(), val);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        _ => {
+            log!("Warning: sscanf %d/%i: unhandled length modifier '{}' — skipping", lm);
+            break;
+        }
+    }
+}
                     _ => {
                         let res = str_to_int_inner_generic(
                             env,
@@ -1114,35 +1235,50 @@ where
 
                 match length_modifier {
                     Some(lm) => {
-                        match lm {
-                            "h" => {
-                                // unsigned short*
-                                let res = str_to_int_inner_generic(
-                                    env,
-                                    &getc_fn,
-                                    &ungetc_fn,
-                                    subject,
-                                    src_char_idx,
-                                    base,
-                                    if max_width > 0 { max_width } else { u32::MAX },
-                                    |s, base| u16::from_str_radix(s, base).unwrap_or(u16::MAX),
-                                    |num| num.wrapping_neg(),
-                                );
-
-                                match res {
-                                    Ok((val, len)) => {
-                                        src_char_idx += len;
-                                        if !suppress_assignment {
-                                            let c_u16_ptr: ConstPtr<u16> = args.next(env);
-                                            env.mem.write(c_u16_ptr.cast_mut(), val);
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                            _ => unimplemented!(),
-                        }
+    match lm {
+        "h" => { /* existing code */ }
+        "hh" => {
+            let res = str_to_int_inner_generic(
+                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                if max_width > 0 { max_width } else { u32::MAX },
+                |s, base| u8::from_str_radix(s, base).unwrap_or(u8::MAX) as u16,
+                |num| num.wrapping_neg(),
+            );
+            match res {
+                Ok((val, len)) => {
+                    src_char_idx += len;
+                    if !suppress_assignment {
+                        let ptr: ConstPtr<u8> = args.next(env);
+                        env.mem.write(ptr.cast_mut(), val as u8);
                     }
+                }
+                Err(_) => break,
+            }
+        }
+        "ll" => {
+            let res = str_to_int_inner_generic(
+                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                if max_width > 0 { max_width } else { u32::MAX },
+                |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
+                |num| num.wrapping_neg(),
+            );
+            match res {
+                Ok((val, len)) => {
+                    src_char_idx += len;
+                    if !suppress_assignment {
+                        let ptr: ConstPtr<u64> = args.next(env);
+                        env.mem.write(ptr.cast_mut(), val);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        _ => {
+            log!("Warning: sscanf %x/%u: unhandled length modifier '{}' — skipping", lm);
+            break;
+        }
+    }
+}
                     None => {
                         let res = str_to_int_inner_generic(
                             env,
@@ -1239,6 +1375,54 @@ where
                     }
                 }
             }
+            b'c' => {
+    // Read a single character into char*.
+    let x = getc_fn(env, subject, src_char_idx);
+    if x.is_err() { break 'outer; }
+    let cc: u8 = x.unwrap().into();
+    src_char_idx += 1;
+    if !suppress_assignment {
+        let ptr: MutPtr<u8> = args.next(env);
+        env.mem.write(ptr, cc);
+    }
+}
+b'p' => {
+    // Read a hex pointer value.
+    let res = str_to_int_inner_generic(
+        env, &getc_fn, &ungetc_fn, subject, src_char_idx, 16,
+        if max_width > 0 { max_width } else { u32::MAX },
+        |s, base| u32::from_str_radix(s, base).unwrap_or(0),
+        |num| num.wrapping_neg(),
+    );
+    match res {
+        Ok((val, len)) => {
+            src_char_idx += len;
+            if !suppress_assignment {
+                let ptr: MutPtr<MutVoidPtr> = args.next(env);
+                env.mem.write(ptr, crate::mem::Ptr::from_bits(val));
+            }
+        }
+        Err(_) => break,
+    }
+}
+b'n' => {
+    // Store the number of characters read so far.
+    if !suppress_assignment {
+        let ptr: MutPtr<i32> = args.next(env);
+        env.mem.write(ptr, src_char_idx as i32);
+    }
+    // %n does NOT increment matched_args.
+    continue;
+}
+b'%' => {
+    // Match a literal '%'.
+    let x = getc_fn(env, subject, src_char_idx);
+    if x.is_err() { break 'outer; }
+    let cc: u8 = x.unwrap().into();
+    if cc != b'%' { return matched_args; }
+    src_char_idx += 1;
+    continue; // Don't increment matched_args.
+}
             b's' => {
                 assert_eq!(max_width, 0);
                 assert!(length_modifier.is_none());
@@ -1279,9 +1463,13 @@ where
                     );
                 }
             }
-            // TODO: more specifiers
-            _ => unimplemented!("Format character '{}'", specifier as char),
-        }
+            _ => {
+    log!(
+        "Warning: sscanf_common_generic: unhandled specifier '%{}' — stopping",
+        specifier as char
+    );
+    break;
+}
 
         if !suppress_assignment {
             matched_args += 1;
@@ -1507,6 +1695,77 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(wprintf(_, _)),
     export_c_func!(vwprintf(_, _)),
 ];
+
+// =========================================================================
+// MARK: - Padding / formatting helpers
+// =========================================================================
+
+/// Apply width padding to an already-formatted string.
+fn apply_pad(s: &str, pad_width: usize, pad_char: char, left_justified: bool) -> String {
+    if pad_width == 0 || s.len() >= pad_width {
+        return s.to_string();
+    }
+    if left_justified {
+        format!("{s:<pad_width$}")
+    } else if pad_char == '0' {
+        format!("{s:0>pad_width$}")
+    } else {
+        format!("{s:>pad_width$}")
+    }
+}
+
+/// Format a signed integer with full padding / precision / sign support.
+fn apply_int_pad(
+    int: i64,
+    pad_width: usize,
+    pad_char: char,
+    left_justified: bool,
+    prepend_sign: bool,
+    precision: Option<usize>,
+) -> String {
+    let with_prec = if precision.is_some_and(|p| p > 0) {
+        format!("{:01$}", int, precision.unwrap())
+    } else {
+        format!("{int}")
+    };
+
+    if pad_width == 0 {
+        if prepend_sign && int >= 0 {
+            return format!("+{with_prec}");
+        }
+        return with_prec;
+    }
+
+    if pad_char == '0' && precision.is_none() && !left_justified {
+        if prepend_sign {
+            let sign = if int >= 0 { '+' } else { '-' };
+            let abs_str = format!("{:0>1$}", int.unsigned_abs(), pad_width.saturating_sub(1));
+            format!("{sign}{abs_str}")
+        } else {
+            format!("{int:0>pad_width$}")
+        }
+    } else if left_justified {
+        format!("{with_prec:<pad_width$}")
+    } else {
+        format!("{with_prec:>pad_width$}")
+    }
+}
+
+/// Format an unsigned integer with full padding / precision support.
+fn apply_uint_pad(
+    uint: u64,
+    pad_width: usize,
+    pad_char: char,
+    left_justified: bool,
+    precision: Option<usize>,
+) -> String {
+    let with_prec = if precision.is_some_and(|p| p > 0) {
+        format!("{:01$}", uint, precision.unwrap())
+    } else {
+        format!("{uint}")
+    };
+    apply_pad(&with_prec, pad_width, pad_char, left_justified)
+}
 
 // Helper function, not a part of printf family
 // TODO: write proper libc's isspace()
