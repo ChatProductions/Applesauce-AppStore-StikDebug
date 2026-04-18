@@ -655,7 +655,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
                 res.extend_from_slice(s.as_bytes());
             }
-            _ => {
+_ => {
                 log_dbg!(
                     "printf_inner: unhandled specifier '%{}' at index {} — skipping",
                     specifier as char, format_char_idx
@@ -666,12 +666,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
 
     log_dbg!("=> {:?}", std::str::from_utf8(&res));
     res
-} // end printf_inner
-
-
-    log_dbg!("=> {:?}", std::str::from_utf8(&res));
-    res
-}
+} // end printf_inner — THIS is the only closing brace needed here
 
 fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left_justified: bool) -> String {
     if left_justified {
