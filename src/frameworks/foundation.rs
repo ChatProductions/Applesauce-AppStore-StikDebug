@@ -23,6 +23,7 @@ use crate::mem::{ConstPtr, MutPtr};
 
 pub mod _nib_archive_decoder;
 pub mod ab_people_picker_navigation_controller;
+pub mod asidentifier_manager;
 pub mod chipmunk_space;
 pub mod ns_array;
 pub mod ns_assertion_handler;
@@ -310,6 +311,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     class_exports: &[
         _nib_archive_decoder::CLASSES,
         ab_people_picker_navigation_controller::CLASSES,
+        asidentifier_manager::CLASSES,
         chipmunk_space::CLASSES,
         ns_array::CLASSES,
         ns_assertion_handler::CLASSES,
