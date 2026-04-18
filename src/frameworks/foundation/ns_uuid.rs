@@ -110,17 +110,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Constructors
 // =========================================================================
 
-/// `+UUID` — convenience constructor returning a new random UUID.
+// ИСПРАВЛЕНИЕ: заменили `///` на `//` внутри макроса, чтобы не генерировался атрибут #[doc...]
+// `+UUID` — convenience constructor returning a new random UUID.
 + (id)UUID {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new init];
     crate::objc::autorelease(env, new)
 }
 
-/// `-init` — designated initialiser; generates a random UUID.
+// `-init` — designated initialiser; generates a random UUID.
 - (id)init {
     {
-        // ИСПРАВЛЕНИЕ: Выносим заимствование в отдельную мутабельную переменную
         let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
         host.bytes = UuidBytes::random();
     }
@@ -128,8 +128,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-/// `-initWithUUIDString:` — parses a UUID from a string.
-/// Returns nil if the string is not a valid UUID.
+// `-initWithUUIDString:` — parses a UUID from a string.
+// Returns nil if the string is not a valid UUID.
 - (id)initWithUUIDString:(id)string { // NSString*
     if string == nil {
         let _: () = msg![env; this release];
@@ -139,7 +139,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     match UuidBytes::from_string(&s) {
         Some(bytes) => {
             {
-                // ИСПРАВЛЕНИЕ: Безопасное изменение поля
                 let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
                 host.bytes = bytes;
             }
@@ -154,7 +153,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// `-initWithUUIDBytes:` — initialises from a 16-byte C array.
+// `-initWithUUIDBytes:` — initialises from a 16-byte C array.
 - (id)initWithUUIDBytes:(crate::mem::ConstPtr<u8>)bytes_ptr {
     if bytes_ptr.is_null() {
         let _: () = msg![env; this release];
@@ -164,7 +163,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let src = env.mem.bytes_at(bytes_ptr, 16);
     bytes.copy_from_slice(src);
     {
-        // ИСПРАВЛЕНИЕ: Безопасное изменение поля
         let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
         host.bytes = UuidBytes(bytes);
     }
@@ -175,14 +173,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Accessors
 // =========================================================================
 
-/// `-UUIDString` — returns the UUID as an uppercase hyphenated NSString*.
+// `-UUIDString` — returns the UUID as an uppercase hyphenated NSString*.
 - (id)UUIDString { // NSString*
     let s = env.objc.borrow::<NSUUIDHostObject>(this).bytes.to_string();
     let ns = ns_string::from_rust_string(env, s);
     crate::objc::autorelease(env, ns)
 }
 
-/// `-getUUIDBytes:` — copies the 16 raw bytes into the caller's buffer.
+// `-getUUIDBytes:` — copies the 16 raw bytes into the caller's buffer.
 - (())getUUIDBytes:(crate::mem::MutPtr<u8>)out_bytes {
     if out_bytes.is_null() { return; }
     let bytes = env.objc.borrow::<NSUUIDHostObject>(this).bytes.0;
@@ -314,7 +312,6 @@ pub fn new_uuid(env: &mut crate::Environment) -> id {
 pub fn uuid_from_string(env: &mut crate::Environment, s: &str) -> id {
     let ns = ns_string::from_rust_string(env, s.to_string());
     let ns = crate::objc::autorelease(env, ns);
-    // ИСПРАВЛЕНИЕ: Удалил лишний дублирующийся макрос аллокации (создавал утечку и ошибку компилятора)
     let alloc: id = msg_class![env; NSUUID alloc];
     msg![env; alloc initWithUUIDString:ns]
-    }
+}
