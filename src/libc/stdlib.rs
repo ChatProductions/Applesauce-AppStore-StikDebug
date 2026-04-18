@@ -806,6 +806,149 @@ fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
     }
 }
 
+fn setxattr(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    name: ConstPtr<u8>,
+    value: ConstVoidPtr,
+    size: GuestUSize,
+    position: u32,
+    options: i32,
+) -> i32 {
+    let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "setxattr({:?}, {:?}, size={}, position={}, options={:#x}) — ignored",
+        path_str, name_str, size, position, options
+    );
+    // Return 0 (success). touchHLE has no extended attribute storage;
+    // returning success prevents apps from treating missing xattr support
+    // as a fatal error.
+    0
+}
+
+fn fsetxattr(
+    env: &mut Environment,
+    fd: crate::libc::posix_io::FileDescriptor,
+    name: ConstPtr<u8>,
+    value: ConstVoidPtr,
+    size: GuestUSize,
+    position: u32,
+    options: i32,
+) -> i32 {
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "fsetxattr(fd={}, {:?}, size={}, position={}, options={:#x}) — ignored",
+        fd, name_str, size, position, options
+    );
+    0
+}
+
+fn getxattr(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    name: ConstPtr<u8>,
+    value: MutVoidPtr,
+    size: GuestUSize,
+    position: u32,
+    options: i32,
+) -> i32 {
+    let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "getxattr({:?}, {:?}, size={}, position={}, options={:#x}) — returning ENOATTR",
+        path_str, name_str, size, position, options
+    );
+    // ENOATTR = 93 on Darwin. Return -1 and set errno.
+    set_errno(env, 93);
+    -1
+}
+
+fn fgetxattr(
+    env: &mut Environment,
+    fd: crate::libc::posix_io::FileDescriptor,
+    name: ConstPtr<u8>,
+    value: MutVoidPtr,
+    size: GuestUSize,
+    position: u32,
+    options: i32,
+) -> i32 {
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "fgetxattr(fd={}, {:?}, size={}, position={}, options={:#x}) — returning ENOATTR",
+        fd, name_str, size, position, options
+    );
+    set_errno(env, 93);
+    -1
+}
+
+fn removexattr(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    name: ConstPtr<u8>,
+    options: i32,
+) -> i32 {
+    let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "removexattr({:?}, {:?}, options={:#x}) — returning ENOATTR",
+        path_str, name_str, options
+    );
+    set_errno(env, 93);
+    -1
+}
+
+fn fremovexattr(
+    env: &mut Environment,
+    fd: crate::libc::posix_io::FileDescriptor,
+    name: ConstPtr<u8>,
+    options: i32,
+) -> i32 {
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
+    log_dbg!(
+        "fremovexattr(fd={}, {:?}, options={:#x}) — returning ENOATTR",
+        fd, name_str, options
+    );
+    set_errno(env, 93);
+    -1
+}
+
+fn listxattr(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    namebuf: MutPtr<u8>,
+    size: GuestUSize,
+    options: i32,
+) -> i32 {
+    let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
+    log_dbg!(
+        "listxattr({:?}, size={}, options={:#x}) — returning 0 (empty list)",
+        path_str, size, options
+    );
+    // Zero-length list means no attributes. Return 0 (success, 0 bytes needed).
+    if !namebuf.is_null() && size > 0 {
+        env.mem.write(namebuf, 0u8);
+    }
+    0
+}
+
+fn flistxattr(
+    env: &mut Environment,
+    fd: crate::libc::posix_io::FileDescriptor,
+    namebuf: MutPtr<u8>,
+    size: GuestUSize,
+    options: i32,
+) -> i32 {
+    log_dbg!(
+        "flistxattr(fd={}, size={}, options={:#x}) — returning 0 (empty list)",
+        fd, size, options
+    );
+    if !namebuf.is_null() && size > 0 {
+        env.mem.write(namebuf, 0u8);
+    }
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(malloc(_)),
     export_c_func!(malloc_size(_)),
@@ -857,6 +1000,14 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
     export_c_func!(putenv(_)),
     export_c_func!(div(_, _)),
+    export_c_func!(setxattr(_, _, _, _, _, _)),
+    export_c_func!(fsetxattr(_, _, _, _, _, _)),
+    export_c_func!(getxattr(_, _, _, _, _, _)),
+    export_c_func!(fgetxattr(_, _, _, _, _, _)),
+    export_c_func!(removexattr(_, _, _)),
+    export_c_func!(fremovexattr(_, _, _)),
+    export_c_func!(listxattr(_, _, _, _)),
+    export_c_func!(flistxattr(_, _, _, _)),
 ];
 
 pub fn atof_inner(
