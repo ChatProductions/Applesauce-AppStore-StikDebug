@@ -733,7 +733,7 @@ fn strftime(
         let specifier = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
 
-        match specifier {
+                match specifier {
             b'm' => {
                 let month = time_val.tm_mon + 1;
 
@@ -764,6 +764,46 @@ fn strftime(
                 let formatted_minute = format!("{:02}", minute);
                 res.extend_from_slice(formatted_minute.as_bytes());
             }
+            // --- ДОБАВЛЕННЫЕ СПЕЦИФИКАТОРЫ ---
+            b'b' | b'h' => { 
+                // Сокращенное название месяца (Jan, Feb...)
+                let month = time_val.tm_mon;
+                assert!((0..12).contains(&month));
+                const MONTH_ABBRS: [&[u8]; 12] = [
+                    b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun",
+                    b"Jul", b"Aug", b"Sep", b"Oct", b"Nov", b"Dec",
+                ];
+                res.extend_from_slice(MONTH_ABBRS[month as usize]);
+            }
+            b'a' => { 
+                // Сокращенное название дня недели (Sun, Mon...)
+                let wday = time_val.tm_wday;
+                assert!((0..7).contains(&wday));
+                const WDAY_ABBRS: [&[u8]; 7] = [
+                    b"Sun", b"Mon", b"Tue", b"Wed", b"Thu", b"Fri", b"Sat",
+                ];
+                res.extend_from_slice(WDAY_ABBRS[wday as usize]);
+            }
+            b'Y' => { 
+                // Год полностью (например, 2026)
+                let year = time_val.tm_year + 1900;
+                let formatted_year = format!("{:04}", year);
+                res.extend_from_slice(formatted_year.as_bytes());
+            }
+            b'y' => { 
+                // Год короткий (00-99)
+                let year = (time_val.tm_year + 1900) % 100;
+                let formatted_year = format!("{:02}", year);
+                res.extend_from_slice(formatted_year.as_bytes());
+            }
+            b'S' => { 
+                // Секунды (00-60, включая високосную секунду)
+                let second = time_val.tm_sec;
+                assert!((0..=60).contains(&second));
+                let formatted_second = format!("{:02}", second);
+                res.extend_from_slice(formatted_second.as_bytes());
+            }
+            // ----------------------------------
             _ => unimplemented!(
                 "Format character '{}'. Formatted up to index {}",
                 specifier as char,
