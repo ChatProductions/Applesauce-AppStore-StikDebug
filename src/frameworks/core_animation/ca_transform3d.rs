@@ -16,7 +16,7 @@ type CGFloat = f32;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C, packed)]
-/// CATransform3D represents a 4x4 matrix for 3D transforms.
+/// CATransform3D представляет собой матрицу 4x4 для 3D-преобразований.
 pub struct CATransform3D {
     pub m11: CGFloat, pub m12: CGFloat, pub m13: CGFloat, pub m14: CGFloat,
     pub m21: CGFloat, pub m22: CGFloat, pub m23: CGFloat, pub m24: CGFloat,
@@ -69,7 +69,7 @@ impl GuestArg for CATransform3D {
     }
 }
 
-// Этот макрос решает проблему "большого" возвращаемого значения (через sret)
+// Этот макрос автоматически реализует возврат структуры через скрытый указатель (sret)
 impl_GuestRet_for_large_struct!(CATransform3D);
 
 impl From<CATransform3D> for Matrix<4> {
@@ -199,5 +199,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CATransform3DMakeTranslation(_, _, _)),
     export_c_func!(CATransform3DMakeScale(_, _, _)),
     export_c_func!(CATransform3DMakeRotation(_, _, _, _)),
-    export_c_func!(CATransform3DScale(_, _, _, _, _)),
+    export_c_func!(CATransform3DScale(_, _, _, _)), // ИСПРАВЛЕНО: 4 аргумента
 ];
+
