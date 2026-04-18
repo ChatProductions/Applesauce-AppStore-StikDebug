@@ -4,7 +4,10 @@ use crate::Environment;
 
 // Структура для хранения состояния анимации
 pub(super) struct CAKeyframeAnimationHostObject {
+    // CAPropertyAnimation properties
     key_path: id,
+    
+    // CAKeyframeAnimation properties
     values: id,
     path: id,
     key_times: id,
@@ -14,17 +17,22 @@ pub(super) struct CAKeyframeAnimationHostObject {
     tension_values: id,
     continuity_values: id,
     bias_values: id,
+    
+    // CAMediaTiming & CAAnimation properties
     duration: f64,
     fill_mode: id,
-    delegate: id,
+    delegate: id, // CAAnimation delegate is strongly retained in CoreAnimation!
     removed_on_completion: bool,
 }
+
 impl HostObject for CAKeyframeAnimationHostObject {}
 
 pub const CLASSES: crate::objc::ClassExports = objc_classes!
 {
     (env, this, _cmd);
 
+    // В оригинальном фреймворке CAKeyframeAnimation наследуется от CAPropertyAnimation,
+    // но если в вашей реализации иерархия плоская, оставляем NSObject.
     @implementation CAKeyframeAnimation : NSObject
 
     + (id)alloc {
@@ -66,16 +74,17 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         let (
             key_path, values, path, key_times, timing_functions,
             calculation_mode, rotation_mode, tension_values,
-            continuity_values, bias_values, fill_mode
+            continuity_values, bias_values, fill_mode, delegate
         ) = {
             let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
             (
                 host.key_path, host.values, host.path, host.key_times, host.timing_functions,
                 host.calculation_mode, host.rotation_mode, host.tension_values,
-                host.continuity_values, host.bias_values, host.fill_mode
+                host.continuity_values, host.bias_values, host.fill_mode, host.delegate
             )
         };
         
+        // Освобождаем все retained объекты (включая delegate)
         if key_path != nil { release(env, key_path); }
         if values != nil { release(env, values); }
         if path != nil { release(env, path); }
@@ -87,6 +96,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if continuity_values != nil { release(env, continuity_values); }
         if bias_values != nil { release(env, bias_values); }
         if fill_mode != nil { release(env, fill_mode); }
+        if delegate != nil { release(env, delegate); }
         
         env.objc.dealloc_object(this, &mut env.mem)
     }
@@ -185,11 +195,17 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     }
 
     - (id)delegate { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate }
-    - (())setDelegate:(id)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val; }
+    - (())setDelegate:(id)val {
+        // Delegate в CoreAnimation является strong property! 
+        // Поэтому здесь обязательно нужно делать retain/release.
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val;
+        if old != nil { release(env, old); }
+    }
 
     - (bool)removedOnCompletion { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).removed_on_completion }
     - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).removed_on_completion = val; }
 
     @end
 };
-
