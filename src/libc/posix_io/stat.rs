@@ -30,7 +30,7 @@ pub type blkcnt_t = u64;
 #[allow(non_camel_case_types)]
 pub type blksize_t = u32;
 
-// enum values sourced from ```man 2 stat```
+// enum values sourced from `man 2 stat`
 pub const S_IFDIR: mode_t = 0o0040000;
 pub const S_IFREG: mode_t = 0o0100000;
 
@@ -71,7 +71,8 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
         }
         Err(err) => {
             log!(
-                "Warning: mkdir({:?} {:?}, {:#x}) failed with {:?}, returning -1",
+                "Warning: mkdir({:?} {:?}, {:#x}) failed with {:?}, \
+                 returning -1",
                 path,
                 path_str,
                 mode,
@@ -89,7 +90,11 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
 }
 
 /// Helper for [stat()] and [fstat()] that fills the data in the stat struct
-fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
+fn fstat_inner(
+    env: &mut Environment,
+    fd: FileDescriptor,
+    buf: MutPtr<stat>,
+) -> i32 {
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         set_errno(env, EBADF);
         return -1;
@@ -121,7 +126,6 @@ fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> 
 
 fn fstat(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
     set_errno(env, 0);
-    // Убираем бесячий варнинг, функция fstat_inner работает нормально
     let result = fstat_inner(env, fd, buf);
     log_dbg!("fstat({:?}, {:?}) -> {}", fd, buf, result);
     result
@@ -134,8 +138,8 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
         return -1;
     }
 
-    // ИСПРАВЛЕНИЕ 1: Делаем путь владеемой строкой (String). 
-    // Это «отвязывает» нас от заимствования env.mem.
+    // Делаем путь владеемой строкой (String), чтобы «отвязать» нас от
+    // заимствования env.mem до вызова env.mem.write() в конце.
     let path_str = match env.mem.cstr_at_utf8(path) {
         Ok(s) => s.to_string(),
         Err(_) => {
@@ -168,38 +172,24 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
 
     if let Ok(mtime) = env.fs.modified(guest_path) {
         let sec = mtime as i32;
-        // ИСПРАВЛЕНИЕ 2: Создаем структуру для каждого поля отдельно.
-        // ВАЖНО: Требует `pub tv_sec` и `pub tv_nsec` в файле time.rs!
         st.st_mtimespec = timespec { tv_sec: sec, tv_nsec: 0 };
         st.st_atimespec = timespec { tv_sec: sec, tv_nsec: 0 };
         st.st_ctimespec = timespec { tv_sec: sec, tv_nsec: 0 };
     }
 
-    // Теперь env.mem свободен для записи, так как path_str — это String, а не ссылка.
+    // env.mem свободен для записи: path_str — это String, а не ссылка.
     env.mem.write(buf, st);
 
-    log_dbg!(
-        "stat({:?} {:?}, {:?}) -> 0",
-        path,
-        path_str,
-        buf
-    );
+    log_dbg!("stat({:?} {:?}, {:?}) -> 0", path, path_str, buf);
     0
 }
 
 fn lstat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     set_errno(env, 0);
-    // Поскольку в touchHLE GuestFS пока не поддерживает реальные симлинки,
-    // lstat должен работать точно так же, как stat, без костылей.
+    // В touchHLE GuestFS пока не поддерживает реальные симлинки,
+    // поэтому lstat работает так же, как stat.
     let result = stat(env, path, buf);
-    
-    log_dbg!(
-        "lstat({:?} {:?}, {:?}) -> {}",
-        path,
-        env.mem.cstr_at_utf8(path),
-        buf,
-        result
-    );
+    log_dbg!("lstat({:?}, {:?}) -> {}", path, buf, result);
     result
 }
 
