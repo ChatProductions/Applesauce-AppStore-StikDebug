@@ -1,7 +1,6 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0.
- * If a copy of the MPL was not distributed with this
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
@@ -80,27 +79,24 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     // Guard: only call the selector if the delegate responds to it.
     // This prevents a panic when the delegate class does not implement the
     // optional method (common for lightweight network-check callers).
-    //
-    // Примечание: Если `sel_registerName` не сработает, проверьте `src/objc/selectors.rs`
-    // возможно метод называется `register_selector` или `get_sel_from_str`.
-    let sel: SEL = env.objc.sel_registerName("connection:didFailWithError:");
+    // Outside objc_classes! so {:?} is safe for id values.
+    let sel: SEL = env.objc.register_selector("connection:didFailWithError:");
     let responds: bool = msg![env; delegate respondsToSelector:sel];
 
     if !responds {
         log_dbg!(
-            "NSURLConnection: delegate {:#010x} does not respond to \
+            "NSURLConnection: delegate {:?} does not respond to \
              connection:didFailWithError:, skipping",
-            delegate // Передаем структуру Ptr напрямую
+            delegate
         );
         return;
     }
 
     let error = make_network_error(env);
     log_dbg!(
-        "NSURLConnection: notifying delegate {:#010x} of failure on \
-         connection {:#010x}",
-        delegate,   // Передаем структуру Ptr напрямую
-        connection  // Передаем структуру Ptr напрямую
+        "NSURLConnection: notifying delegate {:?} of failure on connection {:?}",
+        delegate,
+        connection
     );
 
     () = msg![env; delegate connection:connection didFailWithError:error];
@@ -134,10 +130,8 @@ pub const CLASSES: ClassExports = objc_classes! {
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
 
-    log!(
-        "NSURLConnection sendSynchronousRequest: stub called (request {:#010x})",
-        request // Передаем структуру Ptr напрямую
-    );
+    // No {:?} / {:#x} for id inside objc_classes! — log without pointer.
+    log!("NSURLConnection sendSynchronousRequest: stub called");
 
     // When request is nil we still return empty NSData rather than nil,
     // because many callers do not nil-check the return value and will crash
@@ -157,7 +151,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Build and write an NSError so the caller knows why it got empty data.
     if !error_ptr.is_null() {
         let error = make_network_error(env);
-        // make_network_error already autoreleased;
+        // make_network_error already autoreleased; retain once more so the
+        // caller owns a +1 reference through the out-pointer.
         retain(env, error);
         env.mem.write(error_ptr, error);
     }
@@ -174,7 +169,6 @@ pub const CLASSES: ClassExports = objc_classes! {
                    delegate:(id)delegate {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithRequest:request delegate:delegate];
-    
     autorelease(env, new);
     new
 }
@@ -192,18 +186,15 @@ pub const CLASSES: ClassExports = objc_classes! {
      startImmediately:(bool)start_immediately {
 
     if request == nil {
-        log!(
-            "NSURLConnection initWithRequest: nil request — returning nil"
-        );
+        log!("NSURLConnection initWithRequest: nil request — returning nil");
         release(env, this);
         return nil;
     }
 
+    // No {:?} for id inside objc_classes! — log bool only.
     log!(
-        "NSURLConnection initWithRequest:{:#010x} delegate:{:#010x} \
+        "NSURLConnection initWithRequest:... delegate:... \
          startImmediately:{} (stub — failure via delegate)",
-        request,  // Передаем структуру Ptr напрямую
-        delegate, // Передаем структуру Ptr напрямую
         start_immediately,
     );
 
@@ -227,9 +218,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Instance methods
 
 - (())start {
-    let host      = env.objc.borrow::<NSURLConnectionHostObject>(this);
-    let already   = host.cancelled;
-    let delegate  = host.delegate;
+    let host     = env.objc.borrow::<NSURLConnectionHostObject>(this);
+    let already  = host.cancelled;
+    let delegate = host.delegate;
     drop(host);
 
     if !already {
@@ -241,10 +232,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())cancel {
-    log_dbg!(
-        "[(NSURLConnection*){:#010x} cancel]",
-        this // Передаем структуру Ptr напрямую
-    );
+    // No {:?}/{:#x} for id inside objc_classes!
+    log_dbg!("NSURLConnection cancel");
     // Mark cancelled; do NOT call the delegate (Apple behaviour: cancelled
     // connections do not call connection:didFailWithError:).
     env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
@@ -253,7 +242,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Dealloc
 
 - (())dealloc {
-    log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this); // Передаем структуру Ptr напрямую
+    log_dbg!("NSURLConnection dealloc");
     let delegate = env.objc.borrow::<NSURLConnectionHostObject>(this).delegate;
     release(env, delegate);
     env.objc.dealloc_object(this, &mut env.mem);
@@ -262,4 +251,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
