@@ -81,8 +81,8 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     // optional method (common for lightweight network-check callers).
     // Outside objc_classes! so {:?} is safe for id values.
     
-    // Исправлено: вызываем selector как макрос (добавлен !)
-    let sel: SEL = crate::objc::selector!(env, "connection:didFailWithError:");
+    // Исправлено: вызываем макрос с сырыми токенами селектора, без кавычек и env
+    let sel: SEL = crate::objc::selector!(connection:didFailWithError:);
     let responds: bool = msg![env; delegate respondsToSelector:sel];
 
     if !responds {
@@ -253,4 +253,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
