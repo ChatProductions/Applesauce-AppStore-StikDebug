@@ -67,7 +67,6 @@ fn make_network_error(env: &mut crate::Environment) -> id {
                         code:NS_URL_ERROR_NOT_CONNECTED_TO_INTERNET
                     userInfo:user_info];
     
-    // Исправлено: возвращаем `error` типа `id` после выполнения `autorelease`
     autorelease(env, error);
     error
 }
@@ -85,13 +84,16 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     // Guard: only call the selector if the delegate responds to it.
     // This prevents a panic when the delegate class does not implement the
     // optional method (common for lightweight network-check callers).
-    let sel: SEL = env.objc.register_selector("connection:didFailWithError:");
+    
+    // ВНИМАНИЕ: Замените `get_sel` на правильный метод из вашей кодовой базы, 
+    // если он называется иначе (например, `register_sel` или `sel_registerName`).
+    let sel: SEL = env.objc.get_sel("connection:didFailWithError:");
     let responds: bool = msg![env; delegate respondsToSelector:sel];
     if !responds {
         log_dbg!(
             "NSURLConnection: delegate {:#010x} does not respond to \
              connection:didFailWithError:, skipping",
-            delegate
+            delegate.0
         );
         return;
     }
@@ -100,8 +102,8 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     log_dbg!(
         "NSURLConnection: notifying delegate {:#010x} of failure on \
          connection {:#010x}",
-        delegate,
-        connection
+        delegate.0,
+        connection.0
     );
     () = msg![env; delegate connection:connection didFailWithError:error];
 }
@@ -133,15 +135,15 @@ pub const CLASSES: ClassExports = objc_classes! {
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
 
-    log_info!(
+    log!(
         "NSURLConnection sendSynchronousRequest: stub called (request {:#010x})",
-        request
+        request.0
     );
     // When request is nil we still return empty NSData rather than nil,
     // because many callers do not nil-check the return value and will crash
     // on a null dereference otherwise.
     if request == nil {
-        log_info!(
+        log!(
             "NSURLConnection sendSynchronousRequest: nil request — \
              returning empty NSData to prevent caller crash"
         );
@@ -173,7 +175,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithRequest:request delegate:delegate];
     
-    // Исправлено: возвращаем созданный объект `new` после `autorelease`
     autorelease(env, new);
     new
 }
@@ -191,18 +192,18 @@ pub const CLASSES: ClassExports = objc_classes! {
      startImmediately:(bool)start_immediately {
 
     if request == nil {
-        log_info!(
+        log!(
             "NSURLConnection initWithRequest: nil request — returning nil"
         );
         release(env, this);
         return nil;
     }
 
-    log_info!(
+    log!(
         "NSURLConnection initWithRequest:{:#010x} delegate:{:#010x} \
          startImmediately:{} (stub — failure via delegate)",
-        request,
-        delegate,
+        request.0,
+        delegate.0,
         start_immediately,
     );
     retain(env, delegate);
@@ -241,7 +242,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())cancel {
     log_dbg!(
         "[(NSURLConnection*){:#010x} cancel]",
-        this
+        this.0
     );
     // Mark cancelled; do NOT call the delegate (Apple behaviour: cancelled
     // connections do not call connection:didFailWithError:).
@@ -251,7 +252,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Dealloc
 
 - (())dealloc {
-    log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this);
+    log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this.0);
     let delegate = env.objc.borrow::<NSURLConnectionHostObject>(this).delegate;
     release(env, delegate);
     env.objc.dealloc_object(this, &mut env.mem);
