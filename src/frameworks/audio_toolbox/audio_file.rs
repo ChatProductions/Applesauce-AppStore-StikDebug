@@ -63,6 +63,8 @@ const kAudioFileUnspecifiedError: OSStatus = fourcc(b"wht?") as _;
 
 type AudioFilePermissions = i8;
 pub const kAudioFileReadPermission: AudioFilePermissions = 1;
+pub const kAudioFileWritePermission: AudioFilePermissions = 2;
+pub const kAudioFileReadWritePermission: AudioFilePermissions = 3;
 
 /// Usually a FourCC.
 type AudioFileTypeID = u32;
@@ -89,7 +91,10 @@ pub fn AudioFileOpenURL(
     out_audio_file: MutPtr<AudioFileID>,
 ) -> OSStatus {
     return_if_null!(in_file_ref);
-    assert!(in_permissions == kAudioFileReadPermission); // writing TODO
+    
+    if in_permissions != kAudioFileReadPermission {
+        log!("Warning: AudioFileOpenURL() called with non-read permissions ({}), write is unsupported.", in_permissions);
+    }
 
     // The hint is optional and is supposed to only be used for certain file
     // formats that can't be uniquely identified, which we don't support so far.
@@ -99,21 +104,44 @@ pub fn AudioFileOpenURL(
         kAudioFileCAFType => {
             log!("Ignoring 'caff' file type hint for AudioFileOpenURL()");
         }
-        _ => unimplemented!(),
+        _ => {
+            log!("Ignoring unknown file type hint {} for AudioFileOpenURL()", debug_fourcc(in_file_type_hint));
+        }
     }
 
     let path = to_rust_path(env, in_file_ref);
-    let audio_file = match audio::AudioFile::open_for_reading(path, &env.fs) {
+    let audio_file = match audio::AudioFile::open_for_reading(path.clone(), &env.fs) {
         Ok(audio_file) => audio_file,
         Err(error) => {
             log!(
-                "Warning: AudioFileOpenURL() for path {:?} failed",
-                in_file_ref
+                "Warning: AudioFileOpenURL() for path {:?} ({:?}) failed: {:?}. Substituting dummy audio file to prevent crash.",
+                in_file_ref, path, error
             );
-            return match error {
-                audio::AudioFileOpenError::FileDecodeError => kAudioFileUnsupportedFileTypeError,
-                _ => kAudioFileUnspecifiedError,
-            };
+            
+            // Fallback to a dummy 1-sample WAV file to allow the app to gracefully continue playing "silence"
+            let dummy_wav: &[u8] = &[
+                0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, // RIFF, size 38
+                0x57, 0x41, 0x56, 0x45, // WAVE
+                0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, // fmt , size 16
+                0x01, 0x00, 0x01, 0x00, 0x44, 0xac, 0x00, 0x00, // PCM, 1 chan, 44100 Hz
+                0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00, // 88200 B/s, 2 B/blk, 16 b/samp
+                0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, // data, size 2
+                0x00, 0x00,                                     // 1 sample of silence
+            ];
+            
+            match audio::AudioFile::read_from_vec(dummy_wav.to_vec()) {
+                Ok(dummy_file) => dummy_file,
+                Err(_) => {
+                    // In the highly unlikely event the dummy file fails to decode, strictly zero the pointer
+                    if !out_audio_file.is_null() {
+                        env.mem.write(out_audio_file, MutPtr::null());
+                    }
+                    return match error {
+                        audio::AudioFileOpenError::FileDecodeError => kAudioFileUnsupportedFileTypeError,
+                        _ => kAudioFileUnspecifiedError,
+                    };
+                }
+            }
         }
     };
 
@@ -123,7 +151,10 @@ pub fn AudioFileOpenURL(
     State::get(&mut env.framework_state)
         .audio_files
         .insert(guest_audio_file, host_object);
-    env.mem.write(out_audio_file, guest_audio_file);
+        
+    if !out_audio_file.is_null() {
+        env.mem.write(out_audio_file, guest_audio_file);
+    }
 
     log_dbg!(
         "AudioFileOpenURL() opened path {:?}, new audio file handle: {:?}",
@@ -149,20 +180,26 @@ pub fn AudioFileOpenWithCallbacks(
             _write_callback,
             _setsize_callback);
     }
+    
     // The hint is optional and is supposed to only be used for certain file
     // formats that can't be uniquely identified, which we don't support so far.
     if in_file_type_hint != 0 {
-        log!("Ignoring file type hint for AudioFileOpenWithCallbacks()");
+        log!("Ignoring file type hint {} for AudioFileOpenWithCallbacks()", debug_fourcc(in_file_type_hint));
     }
 
     // TODO: We're just reading in the whole file at once and parsing it here,
     // this should change when streaming parsing is implemented.
     let size: i64 = getsize_callback.call_from_host(env, (client_data,));
-    let size: u32 = size.try_into().unwrap();
-    assert!(
-        size != 0,
-        "0 byte size of file for AudioFileOpenWithCallbacks(), likely bad!"
-    );
+    let size: u32 = size.try_into().unwrap_or(0);
+    
+    if size == 0 {
+        log!("Warning: 0 byte size of file for AudioFileOpenWithCallbacks(), returning error!");
+        if !out_audio_file.is_null() {
+            env.mem.write(out_audio_file, MutPtr::null());
+        }
+        return kAudioFileUnspecifiedError;
+    }
+    
     let data_ptr: MutPtr<u8> = env.mem.alloc(size).cast();
     let bytes_read_ptr: MutPtr<u32> = env.mem.alloc(guest_size_of::<u32>()).cast();
 
@@ -173,33 +210,64 @@ pub fn AudioFileOpenWithCallbacks(
     );
     let status: OSStatus =
         read_callback.call_from_host(env, (client_data, 0_i64, size, data_ptr, bytes_read_ptr));
+        
     if status != 0 {
         log!(
             "AudioFileOpenWithCallbacks() failed read, returning {}",
             fourcc(&status.to_le_bytes())
         );
+        if !out_audio_file.is_null() {
+            env.mem.write(out_audio_file, MutPtr::null());
+        }
         return status;
     }
 
-    assert!(
-        env.mem.read(bytes_read_ptr) == size,
-        "Bytes read != size for AudioFileOpenWithCallbacks(), likely bad!"
-    );
+    let actual_bytes_read = env.mem.read(bytes_read_ptr);
+    if actual_bytes_read != size {
+        log!("Warning: Bytes read ({}) != size ({}) for AudioFileOpenWithCallbacks()", actual_bytes_read, size);
+    }
+    
     let data_vec = env
         .mem
-        .bytes_at(data_ptr, env.mem.read(bytes_read_ptr))
+        .bytes_at(data_ptr, actual_bytes_read)
         .to_vec();
-    let Ok(audio_file) = audio::AudioFile::read_from_vec(data_vec) else {
-        log!("Warning: AudioFileOpenWithCallbacks() failed parse",);
-        return kAudioFileUnsupportedFileTypeError;
+        
+    let audio_file = match audio::AudioFile::read_from_vec(data_vec) {
+        Ok(file) => file,
+        Err(_) => {
+            log!("Warning: AudioFileOpenWithCallbacks() failed parse. Substituting dummy audio file.");
+            let dummy_wav: &[u8] = &[
+                0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, // RIFF, size 38
+                0x57, 0x41, 0x56, 0x45, // WAVE
+                0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, // fmt , size 16
+                0x01, 0x00, 0x01, 0x00, 0x44, 0xac, 0x00, 0x00, // PCM, 1 chan, 44100 Hz
+                0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00, // 88200 B/s, 2 B/blk, 16 b/samp
+                0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, // data, size 2
+                0x00, 0x00,                                     // 1 sample of silence
+            ];
+            
+            match audio::AudioFile::read_from_vec(dummy_wav.to_vec()) {
+                Ok(dummy_file) => dummy_file,
+                Err(_) => {
+                    if !out_audio_file.is_null() {
+                        env.mem.write(out_audio_file, MutPtr::null());
+                    }
+                    return kAudioFileUnsupportedFileTypeError;
+                }
+            }
+        }
     };
+    
     let guest_audio_file = env.mem.alloc_and_write(OpaqueAudioFileID { _filler: 0 });
 
     let host_object = AudioFileHostObject { audio_file };
     State::get(&mut env.framework_state)
         .audio_files
         .insert(guest_audio_file, host_object);
-    env.mem.write(out_audio_file, guest_audio_file);
+        
+    if !out_audio_file.is_null() {
+        env.mem.write(out_audio_file, guest_audio_file);
+    }
 
     log_dbg!(
         "AudioFileOpenWithCallbacks() opened, new audio file handle: {:?}",
@@ -586,4 +654,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
-
