@@ -174,7 +174,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     for event in &events {
         match event {
             Event::Empty(e) => {
-                let name = safe_local_name(e);
+                let name = safe_local_name(e.local_name().as_ref());
                 let name_id: id = from_rust_string(env, name);
                 let name_id = autorelease(env, name_id);
 
@@ -218,7 +218,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
             Event::Start(e) => {
-                let name = safe_local_name(e);
+                let name = safe_local_name(e.local_name().as_ref());
                 let name_id: id = from_rust_string(env, name);
                 let name_id = autorelease(env, name_id);
 
@@ -236,7 +236,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 }
             }
             Event::End(e) => {
-                let name = safe_local_name(e);
+                let name = safe_local_name(e.local_name().as_ref());
                 let name_id: id = from_rust_string(env, name);
                 let name_id = autorelease(env, name_id);
 
@@ -336,11 +336,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 /// Safely extract the local name from a BytesStart/BytesEnd event,
-/// using lossy UTF-8 conversion (replaces invalid bytes with '�').
-fn safe_local_name(e: &BytesStart) -> String {
-   let binding = e.local_name();
-   let bytes = binding.as_ref();
-    String::from_utf8_lossy(bytes).into_owned()
+/// using lossy UTF-8 conversion (replaces invalid bytes with '').
+fn safe_local_name(name_bytes: &[u8]) -> String {
+    String::from_utf8_lossy(name_bytes).into_owned()
 }
 
 /// Safely decode text from a Text event, returning None on failure.
@@ -401,4 +399,4 @@ fn make_parse_error(env: &mut Environment, code: i32, message: String) -> id {
                                                     userInfo:user_info];
     retain(env, error);
     error
-            }
+                }
