@@ -1168,3 +1168,11 @@ pub fn objc_retain(env: &mut crate::Environment, obj: id) -> id {
     }
     obj
 }
+
+pub fn objc_release(env: &mut crate::Environment, obj: id) -> id {
+    if !obj.is_null() {
+        // Честно вызываем внутренний механизм удержания объекта эмулятором
+        crate::objc::release(env, obj);
+    }
+    obj
+}
