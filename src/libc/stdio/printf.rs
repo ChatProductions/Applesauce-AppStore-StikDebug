@@ -41,19 +41,16 @@ const ALL_SPECIFIERS: [u8; 26] = [
     // Bracket set specifier for sscanf
     b'[',
 ];
-
 const INTEGER_SPECIFIERS: [u8; 9] = [
     b'd', b'i', b'o', b'u', b'x', b'X',
     b'D', b'U', b'O',
 ];
-
 const FLOAT_SPECIFIERS: [u8; 8] = [
     b'f', b'F',
     b'e', b'E',
     b'g', b'G',
     b'a', b'A',
 ];
-
 /// String formatting implementation for `printf` and `NSLog` function families.
 ///
 /// `NS_LOG` is [true] for the `NSLog` format string type, or [false] for the
@@ -87,7 +84,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
         } else {
             false
         };
-
         let alternative_form = if get_format_char(&env.mem, format_char_idx) == b'#' {
             // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix for octal
             format_char_idx += 1;
@@ -95,21 +91,18 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
         } else {
             false
         };
-
         let pad_char = if get_format_char(&env.mem, format_char_idx) == b'0' {
             format_char_idx += 1;
             '0'
         } else {
             ' '
         };
-
         let left_justified = if get_format_char(&env.mem, format_char_idx) == b'-' {
             format_char_idx += 1;
             true
         } else {
             false
         };
-
         let pad_width = if get_format_char(&env.mem, format_char_idx) == b'*' {
             let pad_width = args.next::<i32>(env);
             format_char_idx += 1;
@@ -143,7 +136,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
         } else {
             None
         };
-
         let length_modifier = match get_format_char(&env.mem, format_char_idx) {
             b'h' => {
                 format_char_idx += 1;
@@ -169,10 +161,10 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 format_char_idx += 1;
                 Some("ll")
             }
-            b'j' | b'z' | b't' | b'L' => unimplemented!(),
+            b'j' |
+            b'z' | b't' | b'L' => unimplemented!(),
             _ => None,
         };
-
         let specifier = get_format_char(&env.mem, format_char_idx);
         format_char_idx += 1;
 
@@ -274,7 +266,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     res.extend_from_slice("(null)".as_bytes());
                 }
             }
-            b'd' | b'i' | b'u' => {
+            b'd' |
+            b'i' | b'u' => {
                 // Note: on 32-bit system int and long are i32,
                 // so single length_modifier is ignored (but not double one!)
                 let int: i64 = if specifier == b'u' {
@@ -303,13 +296,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let int: i32 = args.next(env);
                     int.into()
                 };
-
                 let int_with_precision = if precision.is_some_and(|value| value > 0) {
                     format!("{:01$}", int, precision.unwrap())
                 } else {
                     format!("{int}")
                 };
-
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
@@ -369,9 +360,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint
                 };
-
                 let prefix = if alternative_form && uint != 0 { "0" } else { "" };
-                
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     let formatted = format!("{}{:o}", prefix, uint);
@@ -415,9 +404,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint
                 };
-
                 let prefix = if alternative_form && uint != 0 { "0x" } else { "" };
-
                 if pad_width > 0 {
                     assert!(precision.is_none());
                     // TODO
@@ -470,9 +457,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint
                 };
-
                 let prefix = if alternative_form && uint != 0 { "0X" } else { "" };
-
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
@@ -540,12 +525,11 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     if precision == 0 {
                         1
                     } else {
-                        precision.try_into().unwrap()
+                         precision.try_into().unwrap()
                     }
                 } else {
                     6
                 };
-
                 let X: i32 = if float == 0.0 {
                     0
                 } else {
@@ -569,19 +553,17 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     } else {
                         &result
                     };
-
                     let trimmed_result = if pad_width > 0 && trimmed_result.len() < pad_width {
                         if left_justified {
                             format!("{trimmed_result:<pad_width$}")
                         } else if pad_char == '0' {
-                            format!("{trimmed_result:0>pad_width$}")
+                             format!("{trimmed_result:0>pad_width$}")
                         } else {
                             format!("{trimmed_result:>pad_width$}")
-                        }
+                         }
                     } else {
                         trimmed_result.to_string()
                     };
-
                     res.extend_from_slice(trimmed_result.as_bytes());
                 } else {
                     let precision: usize = (P - 1).try_into().unwrap();
@@ -655,7 +637,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
                 res.extend_from_slice(s.as_bytes());
             }
-_ => {
+            _ => {
                 log_dbg!(
                     "printf_inner: unhandled specifier '%{}' at index {} — skipping",
                     specifier as char, format_char_idx
@@ -1099,7 +1081,6 @@ where
         } else {
             false
         };
-
         let mut max_width: u32 = 0;
         while let c @ b'0'..=b'9' = env.mem.read(format + format_char_idx) {
             max_width = max_width * 10 + (c - b'0') as u32;
@@ -1134,7 +1115,6 @@ where
 
             _ => None,
         };
-
         let specifier = env.mem.read(format + format_char_idx);
         format_char_idx += 1;
 
@@ -1158,60 +1138,60 @@ where
         }
 
         match specifier {
-            b'd' | b'i' => {
+            b'd' |
+            b'i' => {
                 let base: u32 = if specifier == b'd' {
                     10
                 } else {
                     // automatic base detection in strtol
                     0
                 };
-
                 match length_modifier {
                     Some(lm) => {
-    match lm {
-        "h" => { /* existing code */ }
-        "hh" => {
-            let res = str_to_int_inner_generic(
-                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
-                if max_width > 0 { max_width } else { u32::MAX },
-                |s, base| i8::from_str_radix(s, base).unwrap_or(i8::MAX) as i16,
-                |num| num.checked_mul(-1).unwrap_or(i16::MIN),
-            );
-            match res {
-                Ok((val, len)) => {
-                    src_char_idx += len;
-                    if !suppress_assignment {
-                        let ptr: ConstPtr<i8> = args.next(env);
-                        env.mem.write(ptr.cast_mut(), val as i8);
+                        match lm {
+                            "h" => { /* existing code */ }
+                            "hh" => {
+                                let res = str_to_int_inner_generic(
+                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| i8::from_str_radix(s, base).unwrap_or(i8::MAX) as i16,
+                                    |num| num.checked_mul(-1).unwrap_or(i16::MIN),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<i8> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val as i8);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            "ll" => {
+                                let res = str_to_int_inner_generic(
+                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
+                                    |num| num.checked_mul(-1).unwrap_or(i64::MIN),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<i64> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            _ => {
+                                log!("Warning: sscanf %d/%i: unhandled length modifier '{}' — skipping", lm);
+                                break;
+                            }
+                        }
                     }
-                }
-                Err(_) => break,
-            }
-        }
-        "ll" => {
-            let res = str_to_int_inner_generic(
-                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
-                if max_width > 0 { max_width } else { u32::MAX },
-                |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
-                |num| num.checked_mul(-1).unwrap_or(i64::MIN),
-            );
-            match res {
-                Ok((val, len)) => {
-                    src_char_idx += len;
-                    if !suppress_assignment {
-                        let ptr: ConstPtr<i64> = args.next(env);
-                        env.mem.write(ptr.cast_mut(), val);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-        _ => {
-            log!("Warning: sscanf %d/%i: unhandled length modifier '{}' — skipping", lm);
-            break;
-        }
-    }
-}
                     _ => {
                         let res = str_to_int_inner_generic(
                             env,
@@ -1224,7 +1204,6 @@ where
                             |s, base| i32::from_str_radix(s, base).unwrap_or(i32::MAX),
                             |num| num.checked_mul(-1).unwrap_or(i32::MIN),
                         );
-
                         match res {
                             Ok((val, len)) => {
                                 src_char_idx += len;
@@ -1238,11 +1217,11 @@ where
                     }
                 }
             }
-            b'f' | b'g' => {
+            b'f' |
+            b'g' => {
                 assert_eq!(max_width, 0);
                 // TODO
                 let res = atof_inner_generic(env, &getc_fn, &ungetc_fn, subject, src_char_idx);
-
                 let val = match res {
                     Ok((val, len)) => {
                         src_char_idx += len;
@@ -1250,7 +1229,6 @@ where
                     }
                     Err(_) => break,
                 };
-
                 match length_modifier {
                     None => {
                         if !suppress_assignment {
@@ -1269,59 +1247,60 @@ where
                     }
                 }
             }
-            b'x' | b'X' | b'u' => {
+            b'x' |
+            b'X' | b'u' => {
                 let base: u32 = match specifier {
-                    b'x' | b'X' => 16,
+                    b'x' |
+                    b'X' => 16,
                     b'u' => 10,
                     _ => unreachable!(),
                 };
-
                 match length_modifier {
                     Some(lm) => {
-    match lm {
-        "h" => { /* existing code */ }
-        "hh" => {
-            let res = str_to_int_inner_generic(
-                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
-                if max_width > 0 { max_width } else { u32::MAX },
-                |s, base| u8::from_str_radix(s, base).unwrap_or(u8::MAX) as u16,
-                |num| num.wrapping_neg(),
-            );
-            match res {
-                Ok((val, len)) => {
-                    src_char_idx += len;
-                    if !suppress_assignment {
-                        let ptr: ConstPtr<u8> = args.next(env);
-                        env.mem.write(ptr.cast_mut(), val as u8);
+                        match lm {
+                            "h" => { /* existing code */ }
+                            "hh" => {
+                                let res = str_to_int_inner_generic(
+                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| u8::from_str_radix(s, base).unwrap_or(u8::MAX) as u16,
+                                    |num| num.wrapping_neg(),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<u8> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val as u8);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            "ll" => {
+                                let res = str_to_int_inner_generic(
+                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
+                                    |num| num.wrapping_neg(),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<u64> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            _ => {
+                                log!("Warning: sscanf %x/%u: unhandled length modifier '{}' — skipping", lm);
+                                break;
+                            }
+                        }
                     }
-                }
-                Err(_) => break,
-            }
-        }
-        "ll" => {
-            let res = str_to_int_inner_generic(
-                env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
-                if max_width > 0 { max_width } else { u32::MAX },
-                |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
-                |num| num.wrapping_neg(),
-            );
-            match res {
-                Ok((val, len)) => {
-                    src_char_idx += len;
-                    if !suppress_assignment {
-                        let ptr: ConstPtr<u64> = args.next(env);
-                        env.mem.write(ptr.cast_mut(), val);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-        _ => {
-            log!("Warning: sscanf %x/%u: unhandled length modifier '{}' — skipping", lm);
-            break;
-        }
-    }
-}
                     None => {
                         let res = str_to_int_inner_generic(
                             env,
@@ -1334,7 +1313,6 @@ where
                             |s, base| u32::from_str_radix(s, base).unwrap_or(u32::MAX),
                             |num| num.wrapping_neg(),
                         );
-
                         match res {
                             Ok((val, len)) => {
                                 src_char_idx += len;
@@ -1353,7 +1331,6 @@ where
                 assert!(length_modifier.is_none());
                 // [set] case
                 assert_ne!(env.mem.read(format + format_char_idx), b']');
-
                 let mut c: u8;
                 let inverted = if env.mem.read(format + format_char_idx) == b'^' {
                     format_char_idx += 1;
@@ -1362,10 +1339,8 @@ where
                 } else {
                     false
                 };
-
                 // Build set
                 let mut set: HashSet<u8> = HashSet::new();
-
                 c = env.mem.read(format + format_char_idx);
                 format_char_idx += 1;
                 while c != b']' {
@@ -1388,13 +1363,11 @@ where
                 } else {
                     None
                 };
-
                 let mut matched = false;
                 // Consume `src` while chars are not in the set
                 let mut cc = getc_fn(env, subject, src_char_idx).unwrap().into();
                 // TODO: EOF
                 src_char_idx += 1;
-
                 while set.contains(&cc) ^ inverted && cc != b'\0' {
                     matched = true;
                     if let Some(ptr) = dst_ptr {
@@ -1469,7 +1442,6 @@ where
                 } else {
                     None
                 };
-
                 let orig_dst_ptr = dst_ptr;
                 loop {
                     let x = getc_fn(env, subject, src_char_idx);
@@ -1477,7 +1449,6 @@ where
                         break;
                     }
                     let cc: u8 = x.unwrap().into();
-
                     if !isspace_inner(cc) {
                         if cc == b'\0' {
                             break;
@@ -1502,12 +1473,13 @@ where
                 }
             }
             _ => {
-    log!(
-        "Warning: sscanf_common_generic: unhandled specifier '%{}' — stopping",
-        specifier as char
-    );
-    break;
-}
+                log!(
+                    "Warning: sscanf_common_generic: unhandled specifier '%{}' — stopping",
+                    specifier as char
+                );
+                break;
+            }
+        } // БЫЛА ПРОПУЩЕНА ЭТА ЗАКРЫВАЮЩАЯ СКОБКА
 
         if !suppress_assignment {
             matched_args += 1;
@@ -1664,7 +1636,6 @@ fn vwprintf(
 ) -> i32 {
     // Очищаем errno перед выполнением
     set_errno(env, 0);
-    
     // Используем 'C' локаль для корректной работы с широкими символами, 
     // как это реализовано в vswprintf
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
@@ -1676,10 +1647,8 @@ fn vwprintf(
         format,
         wcstr_format
     );
-    
     let wcstr_format_bytes = wcstr_format.as_bytes();
     let len: GuestUSize = wcstr_format_bytes.len() as GuestUSize;
-    
     // Передаем байты формата в printf_inner
     let res = printf_inner::<false, _>(
         env,
@@ -1692,7 +1661,6 @@ fn vwprintf(
         },
         arg,
     );
-    
     // Пишем результат напрямую в стандартный вывод (stdout)
     let _ = std::io::stdout().write_all(&res);
     res.len().try_into().unwrap()
@@ -1743,6 +1711,6 @@ pub fn isspace(env: &mut Environment, src: ConstPtr<u8>) -> bool {
 
 pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
-    c.is_ascii_whitespace() ||
-    c == b'\x0b'
-                    }
+    c.is_ascii_whitespace() || c == b'\x0b'
+} // ЗДЕСЬ БЫЛА ЛИШНЯЯ СКОБКА
+
