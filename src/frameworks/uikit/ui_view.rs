@@ -657,18 +657,33 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)hitTest:(CGPoint)point withEvent:(id)event {
-    if !msg![env; this pointInside:point withEvent:event] { return nil; }
+    // ХАК: Запоминаем, попал ли тап в саму вьюшку, но НЕ ВЫХОДИМ, если нет!
+    // В портированных играх рамки (bounds) часто кривые, из-за чего клики теряются.
+    let is_inside: bool = msg![env; this pointInside:point withEvent:event];
+
     let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
+    
+    // Сначала принудительно опрашиваем всех детей (кнопки, картинки)
     for subview in subviews.into_iter().rev() {
         let hidden: bool = msg![env; subview isHidden];
         let alpha: CGFloat = msg![env; subview alpha];
         let interactible: bool = msg![env; subview isUserInteractionEnabled];
+        
         if hidden || alpha < 0.01 || !interactible { continue; }
-        let point: CGPoint = msg![env; subview convertPoint:point fromView:this];
-        let subview: id = msg![env; subview hitTest:point withEvent:event];
-        if subview != nil { return subview; }
+        
+        let sub_point: CGPoint = msg![env; subview convertPoint:point fromView:this];
+        let subview_hit: id = msg![env; subview hitTest:sub_point withEvent:event];
+        
+        // Если ребенок поймал клик — отдаем его ему, игнорируя кривые рамки родителя
+        if subview_hit != nil { return subview_hit; }
     }
-    this
+    
+    // Если ни один ребенок не поймал тап, проверяем честный pointInside
+    if is_inside {
+        this
+    } else {
+        nil
+    }
 }
 
 - (bool)endEditing:(bool)force {
