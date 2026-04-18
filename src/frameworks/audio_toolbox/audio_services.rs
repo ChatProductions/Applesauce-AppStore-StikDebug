@@ -8,8 +8,8 @@
 
 use crate::audio;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::carbon_core::OSStatus;
-use crate::frameworks::core_audio_types::fourcc;
+use crate::frameworks::carbon_core::{paramErr, OSStatus};
+use crate::frameworks::core_audio_types::{debug_fourcc, fourcc};
 use crate::frameworks::core_foundation::cf_url::CFURLRef;
 use crate::frameworks::foundation::ns_url::to_rust_path;
 use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr};
@@ -47,12 +47,14 @@ fn AudioServicesGetProperty(
     _io_property_data_size: MutPtr<u32>,
     _out_property_data: MutVoidPtr,
 ) -> OSStatus {
-    if in_property_id == 0xfff {
-        kAudioServicesUnsupportedPropertyError
-    } else {
-        log!("AudioServicesGetProperty: property {} is unimplemented", in_property_id);
-        0
-    }
+    log!(
+        "AudioServicesGetProperty: property {} is unimplemented",
+        debug_fourcc(in_property_id)
+    );
+    // ИСПРАВЛЕНО: Возвращение 0 (Success) для нереализованных свойств 
+    // приводило к тому, что игра ожидала корректные данные в буфере, 
+    // читала неинициализированную память и падала (NULL-PAGE READ).
+    kAudioServicesUnsupportedPropertyError
 }
 
 fn AudioServicesSetProperty(
@@ -63,16 +65,27 @@ fn AudioServicesSetProperty(
     _in_property_data_size: u32,
     _in_property_data: ConstVoidPtr,
 ) -> OSStatus {
-    log!("AudioServicesSetProperty: property {} is unimplemented", in_property_id);
+    log!(
+        "AudioServicesSetProperty: property {} is unimplemented",
+        debug_fourcc(in_property_id)
+    );
+    // Для SetProperty возврат 0 безопаснее (чтобы игры не паниковали при настройке UI Sound и т.д.),
+    // но правильнее было бы Unsupported. Оставляем 0, так как это не ломает память.
     0
 }
 
 fn AudioServicesCreateSystemSoundID(
     env: &mut Environment,
-    in_file_url: CFURLRef, // Changed from `id` to `CFURLRef` to match typical CoreFoundation usage
+    in_file_url: CFURLRef,
     out_system_sound_id: MutPtr<SystemSoundID>,
 ) -> OSStatus {
-    return_if_null!(in_file_url);
+    if in_file_url.is_null() {
+        log!("Warning: AudioServicesCreateSystemSoundID called with NULL in_file_url");
+        if !out_system_sound_id.is_null() {
+            env.mem.write(out_system_sound_id, 0);
+        }
+        return paramErr;
+    }
 
     let path = to_rust_path(env, in_file_url);
     
@@ -80,17 +93,38 @@ fn AudioServicesCreateSystemSoundID(
     let audio_file = match audio::AudioFile::open_for_reading(path.clone(), &env.fs) {
         Ok(file) => file,
         Err(e) => {
-            log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}: {:?}", path, e);
-            // fnfErr (File not found) or unspec error
-            return -43; 
+            log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}: {:?}. Substituting dummy audio file.", path, e);
+            
+            // Dummy 1-sample WAV file (PCM, 1 chan, 44100 Hz, 16 bit) для предотвращения крашей
+            let dummy_wav: &[u8] = &[
+                0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, // RIFF, size 38
+                0x57, 0x41, 0x56, 0x45, // WAVE
+                0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, // fmt , size 16
+                0x01, 0x00, 0x01, 0x00, 0x44, 0xac, 0x00, 0x00, // PCM, 1 chan, 44100 Hz
+                0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00, // 88200 B/s, 2 B/blk, 16 b/samp
+                0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, // data, size 2
+                0x00, 0x00,                                     // 1 sample of silence
+            ];
+            
+            match audio::AudioFile::read_from_vec(dummy_wav.to_vec()) {
+                Ok(dummy_file) => dummy_file,
+                Err(_) => {
+                    // Если даже заглушка дала сбой, страхуем указатель нулём и выходим
+                    if !out_system_sound_id.is_null() {
+                        env.mem.write(out_system_sound_id, 0);
+                    }
+                    return -43; // fnfErr (File not found)
+                }
+            }
         }
     };
 
     let state = State::get(&mut env.framework_state);
     
-    // Start generating IDs from 4096 to avoid colliding with built-in system IDs
-    if state.next_sound_id < 4096 {
-        state.next_sound_id = 4096;
+    // Start generating IDs from >4096 (kSystemSoundID_UserPreferredAlert = 4096).
+    // Старый код стартовал с 4096, что вызывало коллизии с системным ID!
+    if state.next_sound_id <= kSystemSoundID_UserPreferredAlert {
+        state.next_sound_id = kSystemSoundID_UserPreferredAlert + 1;
     }
     
     let id = state.next_sound_id;
@@ -103,7 +137,7 @@ fn AudioServicesCreateSystemSoundID(
     }
     
     log_dbg!("AudioToolbox: AudioServicesCreateSystemSoundID created ID {} for url {:?}", id, in_file_url);
-    0
+    0 // kAudioServicesNoError
 }
 
 fn AudioServicesDisposeSystemSoundID(
@@ -132,14 +166,10 @@ fn AudioServicesPlaySystemSound(env: &mut Environment, in_system_sound_id: Syste
 
     let state = State::get(&mut env.framework_state);
     
-    if let Some(audio_file) = state.system_sounds.get(&in_system_sound_id) {
+    if let Some(_audio_file) = state.system_sounds.get(&in_system_sound_id) {
         log_dbg!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
         
         // TODO: Pass the audio_file data to your specific audio mixing/playback backend!
-        // This usually looks something like this depending on your emulator architecture:
-        // env.audio_mixer.play_buffer(audio_file.clone());
-        // OR
-        // audio::play_system_sound(&mut env.audio_queue, audio_file);
         
     } else {
         log!("AudioToolbox: Attempted to play unknown system sound ID: {}", in_system_sound_id);
