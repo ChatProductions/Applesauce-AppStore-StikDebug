@@ -15,6 +15,7 @@ pub(super) struct CAKeyframeAnimationHostObject {
     continuity_values: id,
     bias_values: id,
     duration: f64,
+    fill_mode: id,
     delegate: id,
     removed_on_completion: bool,
 }
@@ -39,6 +40,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
             continuity_values: nil,
             bias_values: nil,
             duration: 0.0,
+            fill_mode: nil,
             delegate: nil,
             removed_on_completion: true,
         });
@@ -64,13 +66,13 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         let (
             key_path, values, path, key_times, timing_functions,
             calculation_mode, rotation_mode, tension_values,
-            continuity_values, bias_values
+            continuity_values, bias_values, fill_mode
         ) = {
             let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
             (
                 host.key_path, host.values, host.path, host.key_times, host.timing_functions,
                 host.calculation_mode, host.rotation_mode, host.tension_values,
-                host.continuity_values, host.bias_values
+                host.continuity_values, host.bias_values, host.fill_mode
             )
         };
         
@@ -84,6 +86,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if tension_values != nil { release(env, tension_values); }
         if continuity_values != nil { release(env, continuity_values); }
         if bias_values != nil { release(env, bias_values); }
+        if fill_mode != nil { release(env, fill_mode); }
         
         env.objc.dealloc_object(this, &mut env.mem)
     }
@@ -173,6 +176,14 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     - (f64)duration { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).duration }
     - (())setDuration:(f64)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).duration = val; }
 
+    - (id)fillMode { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode }
+    - (())setFillMode:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).fill_mode = val;
+        if old != nil { release(env, old); }
+    }
+
     - (id)delegate { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate }
     - (())setDelegate:(id)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val; }
 
@@ -181,3 +192,4 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
 
     @end
 };
+
