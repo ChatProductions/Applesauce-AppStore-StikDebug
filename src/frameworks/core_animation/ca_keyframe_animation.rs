@@ -2,12 +2,79 @@ use crate::objc_classes;
 use crate::objc::{id, msg, nil, HostObject, retain, release, autorelease};
 use crate::Environment;
 
-// Структура для хранения состояния анимации
-pub(super) struct CAKeyframeAnimationHostObject {
-    // CAPropertyAnimation properties
-    key_path: id,
+// =====================================================================
+// HOST OBJECTS
+// =====================================================================
+
+pub(super) struct CAValueFunctionHostObject {
+    name: id,
+}
+
+pub(super) struct CABasicAnimationHostObject {
+    // CAAnimation & CAMediaTiming
+    duration: f64,
+    fill_mode: id,
+    delegate: id,
+    removed_on_completion: bool,
+    timing_function: id,
     
-    // CAKeyframeAnimation properties
+    // CAPropertyAnimation
+    key_path: id,
+    is_cumulative: bool,
+    is_additive: bool,
+    value_function: id,
+    
+    // CABasicAnimation
+    from_value: id,
+    to_value: id,
+    by_value: id,
+}
+
+pub(super) struct CASpringAnimationHostObject {
+    // CAAnimation & CAMediaTiming
+    duration: f64,
+    fill_mode: id,
+    delegate: id,
+    removed_on_completion: bool,
+    timing_function: id,
+    
+    // CAPropertyAnimation
+    key_path: id,
+    is_cumulative: bool,
+    is_additive: bool,
+    value_function: id,
+    
+    // CABasicAnimation
+    from_value: id,
+    to_value: id,
+    by_value: id,
+
+    // CASpringAnimation
+    damping: f64,
+    initial_velocity: f64,
+    mass: f64,
+    stiffness: f64,
+    allows_overdamping: bool,
+    bounce: f64,
+    perceptual_duration: f64,
+    settling_duration: f64,
+}
+
+pub(super) struct CAKeyframeAnimationHostObject {
+    // CAAnimation & CAMediaTiming
+    duration: f64,
+    fill_mode: id,
+    delegate: id,
+    removed_on_completion: bool,
+    timing_function: id,
+    
+    // CAPropertyAnimation
+    key_path: id,
+    is_cumulative: bool,
+    is_additive: bool,
+    value_function: id,
+    
+    // CAKeyframeAnimation
     values: id,
     path: id,
     key_times: id,
@@ -17,40 +84,82 @@ pub(super) struct CAKeyframeAnimationHostObject {
     tension_values: id,
     continuity_values: id,
     bias_values: id,
-    
-    // CAMediaTiming & CAAnimation properties
-    duration: f64,
-    fill_mode: id,
-    delegate: id, // CAAnimation delegate is strongly retained in CoreAnimation!
-    removed_on_completion: bool,
 }
 
+pub(super) struct CATransitionHostObject {
+    // CAAnimation & CAMediaTiming
+    duration: f64,
+    fill_mode: id,
+    delegate: id,
+    removed_on_completion: bool,
+    timing_function: id,
+    
+    // CATransition
+    type_val: id,
+    subtype: id,
+    start_progress: f32,
+    end_progress: f32,
+    filter: id,
+}
+
+impl HostObject for CAValueFunctionHostObject {}
+impl HostObject for CABasicAnimationHostObject {}
+impl HostObject for CASpringAnimationHostObject {}
 impl HostObject for CAKeyframeAnimationHostObject {}
+impl HostObject for CATransitionHostObject {}
+
+// =====================================================================
+// CLASSES EXPORT
+// =====================================================================
 
 pub const CLASSES: crate::objc::ClassExports = objc_classes!
 {
     (env, this, _cmd);
 
-    // В оригинальном фреймворке CAKeyframeAnimation наследуется от CAPropertyAnimation,
-    // но если в вашей реализации иерархия плоская, оставляем NSObject.
-    @implementation CAKeyframeAnimation : NSObject
-
+    // -----------------------------------------------------------------
+    // CAValueFunction
+    // -----------------------------------------------------------------
+    @implementation CAValueFunction : NSObject
     + (id)alloc {
-        let host_object = Box::new(CAKeyframeAnimationHostObject {
-            key_path: nil,
-            values: nil,
-            path: nil,
-            key_times: nil,
-            timing_functions: nil,
-            calculation_mode: nil,
-            rotation_mode: nil,
-            tension_values: nil,
-            continuity_values: nil,
-            bias_values: nil,
-            duration: 0.0,
-            fill_mode: nil,
-            delegate: nil,
-            removed_on_completion: true,
+        let host_object = Box::new(CAValueFunctionHostObject { name: nil });
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+    }
+
+    + (id)functionWithName:(id)name {
+        let func: id = msg![env; this alloc];
+        let func: id = msg![env; func init];
+        if name != nil {
+            () = msg![env; func setName:name];
+        }
+        autorelease(env, func)
+    }
+
+    - (id)init { this }
+
+    - (())dealloc {
+        let name = env.objc.borrow::<CAValueFunctionHostObject>(this).name;
+        if name != nil { release(env, name); }
+        env.objc.dealloc_object(this, &mut env.mem)
+    }
+
+    - (id)name { env.objc.borrow::<CAValueFunctionHostObject>(this).name }
+    - (())setName:(id)val {
+        let old = env.objc.borrow::<CAValueFunctionHostObject>(this).name;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAValueFunctionHostObject>(this).name = val;
+        if old != nil { release(env, old); }
+    }
+    @end
+
+    // -----------------------------------------------------------------
+    // CABasicAnimation
+    // -----------------------------------------------------------------
+    @implementation CABasicAnimation : NSObject
+    + (id)alloc {
+        let host_object = Box::new(CABasicAnimationHostObject {
+            duration: 0.0, fill_mode: nil, delegate: nil, removed_on_completion: true, timing_function: nil,
+            key_path: nil, is_cumulative: false, is_additive: false, value_function: nil,
+            from_value: nil, to_value: nil, by_value: nil,
         });
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
@@ -58,34 +167,309 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     + (id)animationWithKeyPath:(id)path {
         let anim: id = msg![env; this alloc];
         let anim: id = msg![env; anim init];
-        if path != nil {
-            () = msg![env; anim setKeyPath:path];
-        }
+        if path != nil { () = msg![env; anim setKeyPath:path]; }
         autorelease(env, anim)
     }
 
-    - (id)init {
-        this
-    }
+    - (id)init { this }
 
     - (())dealloc {
-        // Чтобы избежать ошибки borrow checker, сначала извлекаем все 
-        // значения из объекта (освобождая заимствование env), а затем делаем release.
         let (
-            key_path, values, path, key_times, timing_functions,
-            calculation_mode, rotation_mode, tension_values,
-            continuity_values, bias_values, fill_mode, delegate
+            fill_mode, delegate, timing_function, key_path, value_function,
+            from_value, to_value, by_value
         ) = {
-            let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
+            let host = env.objc.borrow::<CABasicAnimationHostObject>(this);
             (
-                host.key_path, host.values, host.path, host.key_times, host.timing_functions,
-                host.calculation_mode, host.rotation_mode, host.tension_values,
-                host.continuity_values, host.bias_values, host.fill_mode, host.delegate
+                host.fill_mode, host.delegate, host.timing_function, host.key_path, host.value_function,
+                host.from_value, host.to_value, host.by_value
             )
         };
         
-        // Освобождаем все retained объекты (включая delegate)
+        if fill_mode != nil { release(env, fill_mode); }
+        if delegate != nil { release(env, delegate); }
+        if timing_function != nil { release(env, timing_function); }
         if key_path != nil { release(env, key_path); }
+        if value_function != nil { release(env, value_function); }
+        if from_value != nil { release(env, from_value); }
+        if to_value != nil { release(env, to_value); }
+        if by_value != nil { release(env, by_value); }
+        
+        env.objc.dealloc_object(this, &mut env.mem)
+    }
+
+    // CAAnimation
+    - (f64)duration { env.objc.borrow::<CABasicAnimationHostObject>(this).duration }
+    - (())setDuration:(f64)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).duration = val; }
+    
+    - (bool)isRemovedOnCompletion { env.objc.borrow::<CABasicAnimationHostObject>(this).removed_on_completion }
+    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).removed_on_completion = val; }
+
+    - (id)fillMode { env.objc.borrow::<CABasicAnimationHostObject>(this).fill_mode }
+    - (())setFillMode:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).fill_mode;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).fill_mode = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)delegate { env.objc.borrow::<CABasicAnimationHostObject>(this).delegate }
+    - (())setDelegate:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).delegate;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).delegate = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)timingFunction { env.objc.borrow::<CABasicAnimationHostObject>(this).timing_function }
+    - (())setTimingFunction:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).timing_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).timing_function = val;
+        if old != nil { release(env, old); }
+    }
+
+    // CAPropertyAnimation
+    - (id)keyPath { env.objc.borrow::<CABasicAnimationHostObject>(this).key_path }
+    - (())setKeyPath:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).key_path;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).key_path = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (bool)isCumulative { env.objc.borrow::<CABasicAnimationHostObject>(this).is_cumulative }
+    - (())setCumulative:(bool)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).is_cumulative = val; }
+
+    - (bool)isAdditive { env.objc.borrow::<CABasicAnimationHostObject>(this).is_additive }
+    - (())setAdditive:(bool)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).is_additive = val; }
+
+    - (id)valueFunction { env.objc.borrow::<CABasicAnimationHostObject>(this).value_function }
+    - (())setValueFunction:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).value_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).value_function = val;
+        if old != nil { release(env, old); }
+    }
+
+    // CABasicAnimation
+    - (id)fromValue { env.objc.borrow::<CABasicAnimationHostObject>(this).from_value }
+    - (())setFromValue:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).from_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).from_value = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)toValue { env.objc.borrow::<CABasicAnimationHostObject>(this).to_value }
+    - (())setToValue:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).to_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).to_value = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)byValue { env.objc.borrow::<CABasicAnimationHostObject>(this).by_value }
+    - (())setByValue:(id)val {
+        let old = env.objc.borrow::<CABasicAnimationHostObject>(this).by_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CABasicAnimationHostObject>(this).by_value = val;
+        if old != nil { release(env, old); }
+    }
+    @end
+
+    // -----------------------------------------------------------------
+    // CASpringAnimation
+    // -----------------------------------------------------------------
+    @implementation CASpringAnimation : NSObject
+    + (id)alloc {
+        let host_object = Box::new(CASpringAnimationHostObject {
+            duration: 0.0, fill_mode: nil, delegate: nil, removed_on_completion: true, timing_function: nil,
+            key_path: nil, is_cumulative: false, is_additive: false, value_function: nil,
+            from_value: nil, to_value: nil, by_value: nil,
+            damping: 10.0, initial_velocity: 0.0, mass: 1.0, stiffness: 100.0,
+            allows_overdamping: false, bounce: 0.0, perceptual_duration: 0.0, settling_duration: 0.0,
+        });
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+    }
+
+    + (id)animationWithKeyPath:(id)path {
+        let anim: id = msg![env; this alloc];
+        let anim: id = msg![env; anim init];
+        if path != nil { () = msg![env; anim setKeyPath:path]; }
+        autorelease(env, anim)
+    }
+
+    - (id)init { this }
+
+    - (())dealloc {
+        let (
+            fill_mode, delegate, timing_function, key_path, value_function,
+            from_value, to_value, by_value
+        ) = {
+            let host = env.objc.borrow::<CASpringAnimationHostObject>(this);
+            (
+                host.fill_mode, host.delegate, host.timing_function, host.key_path, host.value_function,
+                host.from_value, host.to_value, host.by_value
+            )
+        };
+        
+        if fill_mode != nil { release(env, fill_mode); }
+        if delegate != nil { release(env, delegate); }
+        if timing_function != nil { release(env, timing_function); }
+        if key_path != nil { release(env, key_path); }
+        if value_function != nil { release(env, value_function); }
+        if from_value != nil { release(env, from_value); }
+        if to_value != nil { release(env, to_value); }
+        if by_value != nil { release(env, by_value); }
+        
+        env.objc.dealloc_object(this, &mut env.mem)
+    }
+
+    // CAAnimation + CAPropertyAnimation + CABasicAnimation properties
+    // (Повторяем базовые геттеры/сеттеры для CASpringAnimation)
+    - (f64)duration { env.objc.borrow::<CASpringAnimationHostObject>(this).duration }
+    - (())setDuration:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).duration = val; }
+    
+    - (bool)isRemovedOnCompletion { env.objc.borrow::<CASpringAnimationHostObject>(this).removed_on_completion }
+    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).removed_on_completion = val; }
+
+    - (id)fillMode { env.objc.borrow::<CASpringAnimationHostObject>(this).fill_mode }
+    - (())setFillMode:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).fill_mode;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).fill_mode = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)delegate { env.objc.borrow::<CASpringAnimationHostObject>(this).delegate }
+    - (())setDelegate:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).delegate;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).delegate = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)timingFunction { env.objc.borrow::<CASpringAnimationHostObject>(this).timing_function }
+    - (())setTimingFunction:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).timing_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).timing_function = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)keyPath { env.objc.borrow::<CASpringAnimationHostObject>(this).key_path }
+    - (())setKeyPath:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).key_path;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).key_path = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (bool)isCumulative { env.objc.borrow::<CASpringAnimationHostObject>(this).is_cumulative }
+    - (())setCumulative:(bool)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).is_cumulative = val; }
+
+    - (bool)isAdditive { env.objc.borrow::<CASpringAnimationHostObject>(this).is_additive }
+    - (())setAdditive:(bool)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).is_additive = val; }
+
+    - (id)valueFunction { env.objc.borrow::<CASpringAnimationHostObject>(this).value_function }
+    - (())setValueFunction:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).value_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).value_function = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)fromValue { env.objc.borrow::<CASpringAnimationHostObject>(this).from_value }
+    - (())setFromValue:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).from_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).from_value = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)toValue { env.objc.borrow::<CASpringAnimationHostObject>(this).to_value }
+    - (())setToValue:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).to_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).to_value = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)byValue { env.objc.borrow::<CASpringAnimationHostObject>(this).by_value }
+    - (())setByValue:(id)val {
+        let old = env.objc.borrow::<CASpringAnimationHostObject>(this).by_value;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CASpringAnimationHostObject>(this).by_value = val;
+        if old != nil { release(env, old); }
+    }
+
+    // CASpringAnimation properties
+    - (f64)damping { env.objc.borrow::<CASpringAnimationHostObject>(this).damping }
+    - (())setDamping:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).damping = val; }
+
+    - (f64)initialVelocity { env.objc.borrow::<CASpringAnimationHostObject>(this).initial_velocity }
+    - (())setInitialVelocity:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).initial_velocity = val; }
+
+    - (f64)mass { env.objc.borrow::<CASpringAnimationHostObject>(this).mass }
+    - (())setMass:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).mass = val; }
+
+    - (f64)stiffness { env.objc.borrow::<CASpringAnimationHostObject>(this).stiffness }
+    - (())setStiffness:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).stiffness = val; }
+
+    - (bool)allowsOverdamping { env.objc.borrow::<CASpringAnimationHostObject>(this).allows_overdamping }
+    - (())setAllowsOverdamping:(bool)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).allows_overdamping = val; }
+
+    - (f64)bounce { env.objc.borrow::<CASpringAnimationHostObject>(this).bounce }
+    - (())setBounce:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).bounce = val; }
+
+    - (f64)perceptualDuration { env.objc.borrow::<CASpringAnimationHostObject>(this).perceptual_duration }
+    - (())setPerceptualDuration:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).perceptual_duration = val; }
+
+    - (f64)settlingDuration { env.objc.borrow::<CASpringAnimationHostObject>(this).settling_duration }
+    @end
+
+    // -----------------------------------------------------------------
+    // CAKeyframeAnimation (Updated)
+    // -----------------------------------------------------------------
+    @implementation CAKeyframeAnimation : NSObject
+    + (id)alloc {
+        let host_object = Box::new(CAKeyframeAnimationHostObject {
+            duration: 0.0, fill_mode: nil, delegate: nil, removed_on_completion: true, timing_function: nil,
+            key_path: nil, is_cumulative: false, is_additive: false, value_function: nil,
+            values: nil, path: nil, key_times: nil, timing_functions: nil, calculation_mode: nil,
+            rotation_mode: nil, tension_values: nil, continuity_values: nil, bias_values: nil,
+        });
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+    }
+
+    + (id)animationWithKeyPath:(id)path {
+        let anim: id = msg![env; this alloc];
+        let anim: id = msg![env; anim init];
+        if path != nil { () = msg![env; anim setKeyPath:path]; }
+        autorelease(env, anim)
+    }
+
+    - (id)init { this }
+
+    - (())dealloc {
+        let (
+            fill_mode, delegate, timing_function, key_path, value_function,
+            values, path, key_times, timing_functions, calculation_mode,
+            rotation_mode, tension_values, continuity_values, bias_values
+        ) = {
+            let host = env.objc.borrow::<CAKeyframeAnimationHostObject>(this);
+            (
+                host.fill_mode, host.delegate, host.timing_function, host.key_path, host.value_function,
+                host.values, host.path, host.key_times, host.timing_functions, host.calculation_mode,
+                host.rotation_mode, host.tension_values, host.continuity_values, host.bias_values
+            )
+        };
+        
+        if fill_mode != nil { release(env, fill_mode); }
+        if delegate != nil { release(env, delegate); }
+        if timing_function != nil { release(env, timing_function); }
+        if key_path != nil { release(env, key_path); }
+        if value_function != nil { release(env, value_function); }
         if values != nil { release(env, values); }
         if path != nil { release(env, path); }
         if key_times != nil { release(env, key_times); }
@@ -95,13 +479,40 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if tension_values != nil { release(env, tension_values); }
         if continuity_values != nil { release(env, continuity_values); }
         if bias_values != nil { release(env, bias_values); }
-        if fill_mode != nil { release(env, fill_mode); }
-        if delegate != nil { release(env, delegate); }
         
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
-    // --- Геттеры и сеттеры ---
+    // CAAnimation + CAPropertyAnimation
+    - (f64)duration { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).duration }
+    - (())setDuration:(f64)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).duration = val; }
+
+    - (bool)isRemovedOnCompletion { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).removed_on_completion }
+    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).removed_on_completion = val; }
+
+    - (id)fillMode { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode }
+    - (())setFillMode:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).fill_mode = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)delegate { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate }
+    - (())setDelegate:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)timingFunction { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).timing_function }
+    - (())setTimingFunction:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).timing_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).timing_function = val;
+        if old != nil { release(env, old); }
+    }
 
     - (id)keyPath { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).key_path }
     - (())setKeyPath:(id)val {
@@ -111,6 +522,21 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if old != nil { release(env, old); }
     }
 
+    - (bool)isCumulative { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).is_cumulative }
+    - (())setCumulative:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).is_cumulative = val; }
+
+    - (bool)isAdditive { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).is_additive }
+    - (())setAdditive:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).is_additive = val; }
+
+    - (id)valueFunction { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).value_function }
+    - (())setValueFunction:(id)val {
+        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).value_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).value_function = val;
+        if old != nil { release(env, old); }
+    }
+
+    // CAKeyframeAnimation properties
     - (id)values { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).values }
     - (())setValues:(id)val {
         let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).values;
@@ -182,30 +608,104 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).bias_values = val;
         if old != nil { release(env, old); }
     }
+    @end
 
-    - (f64)duration { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).duration }
-    - (())setDuration:(f64)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).duration = val; }
+    // -----------------------------------------------------------------
+    // CATransition
+    // -----------------------------------------------------------------
+    @implementation CATransition : NSObject
+    + (id)alloc {
+        let host_object = Box::new(CATransitionHostObject {
+            duration: 0.0, fill_mode: nil, delegate: nil, removed_on_completion: true, timing_function: nil,
+            type_val: nil, subtype: nil, start_progress: 0.0, end_progress: 1.0, filter: nil,
+        });
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+    }
 
-    - (id)fillMode { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode }
+    - (id)init { this }
+
+    - (())dealloc {
+        let (
+            fill_mode, delegate, timing_function,
+            type_val, subtype, filter
+        ) = {
+            let host = env.objc.borrow::<CATransitionHostObject>(this);
+            (
+                host.fill_mode, host.delegate, host.timing_function,
+                host.type_val, host.subtype, host.filter
+            )
+        };
+        
+        if fill_mode != nil { release(env, fill_mode); }
+        if delegate != nil { release(env, delegate); }
+        if timing_function != nil { release(env, timing_function); }
+        if type_val != nil { release(env, type_val); }
+        if subtype != nil { release(env, subtype); }
+        if filter != nil { release(env, filter); }
+        
+        env.objc.dealloc_object(this, &mut env.mem)
+    }
+
+    // CAAnimation properties
+    - (f64)duration { env.objc.borrow::<CATransitionHostObject>(this).duration }
+    - (())setDuration:(f64)val { env.objc.borrow_mut::<CATransitionHostObject>(this).duration = val; }
+    
+    - (bool)isRemovedOnCompletion { env.objc.borrow::<CATransitionHostObject>(this).removed_on_completion }
+    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CATransitionHostObject>(this).removed_on_completion = val; }
+
+    - (id)fillMode { env.objc.borrow::<CATransitionHostObject>(this).fill_mode }
     - (())setFillMode:(id)val {
-        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).fill_mode;
+        let old = env.objc.borrow::<CATransitionHostObject>(this).fill_mode;
         if val != nil { retain(env, val); }
-        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).fill_mode = val;
+        env.objc.borrow_mut::<CATransitionHostObject>(this).fill_mode = val;
         if old != nil { release(env, old); }
     }
 
-    - (id)delegate { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate }
+    - (id)delegate { env.objc.borrow::<CATransitionHostObject>(this).delegate }
     - (())setDelegate:(id)val {
-        // Delegate в CoreAnimation является strong property! 
-        // Поэтому здесь обязательно нужно делать retain/release.
-        let old = env.objc.borrow::<CAKeyframeAnimationHostObject>(this).delegate;
+        let old = env.objc.borrow::<CATransitionHostObject>(this).delegate;
         if val != nil { retain(env, val); }
-        env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).delegate = val;
+        env.objc.borrow_mut::<CATransitionHostObject>(this).delegate = val;
         if old != nil { release(env, old); }
     }
 
-    - (bool)removedOnCompletion { env.objc.borrow::<CAKeyframeAnimationHostObject>(this).removed_on_completion }
-    - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CAKeyframeAnimationHostObject>(this).removed_on_completion = val; }
+    - (id)timingFunction { env.objc.borrow::<CATransitionHostObject>(this).timing_function }
+    - (())setTimingFunction:(id)val {
+        let old = env.objc.borrow::<CATransitionHostObject>(this).timing_function;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CATransitionHostObject>(this).timing_function = val;
+        if old != nil { release(env, old); }
+    }
 
+    // CATransition properties
+    - (id)type { env.objc.borrow::<CATransitionHostObject>(this).type_val }
+    - (())setType:(id)val {
+        let old = env.objc.borrow::<CATransitionHostObject>(this).type_val;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CATransitionHostObject>(this).type_val = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (id)subtype { env.objc.borrow::<CATransitionHostObject>(this).subtype }
+    - (())setSubtype:(id)val {
+        let old = env.objc.borrow::<CATransitionHostObject>(this).subtype;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CATransitionHostObject>(this).subtype = val;
+        if old != nil { release(env, old); }
+    }
+
+    - (f32)startProgress { env.objc.borrow::<CATransitionHostObject>(this).start_progress }
+    - (())setStartProgress:(f32)val { env.objc.borrow_mut::<CATransitionHostObject>(this).start_progress = val; }
+
+    - (f32)endProgress { env.objc.borrow::<CATransitionHostObject>(this).end_progress }
+    - (())setEndProgress:(f32)val { env.objc.borrow_mut::<CATransitionHostObject>(this).end_progress = val; }
+
+    - (id)filter { env.objc.borrow::<CATransitionHostObject>(this).filter }
+    - (())setFilter:(id)val {
+        let old = env.objc.borrow::<CATransitionHostObject>(this).filter;
+        if val != nil { retain(env, val); }
+        env.objc.borrow_mut::<CATransitionHostObject>(this).filter = val;
+        if old != nil { release(env, old); }
+    }
     @end
 };
