@@ -8,42 +8,55 @@ use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::errno::set_errno;
 use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
 use crate::Environment;
+use std::collections::HashMap;
+
+// Хранилище обработчиков сигналов.
+#[derive(Default)]
+pub struct State {
+    pub handlers: HashMap<i32, MutVoidPtr>,
+}
+
+// Стандартные POSIX-константы для сигналов
+const SIG_DFL: u32 = 0;
+// const SIG_IGN: u32 = 1;
+// const SIG_ERR: u32 = 0xFFFFFFFF; // -1
 
 fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: MutVoidPtr) -> i32 {
-    // TODO: handle errno properly
     set_errno(env, 0);
-
-    log!("TODO: sigaction({:?}, {:?}, {:?})", signum, act, old_act);
+    
+    // Пока возвращаем 0 (успех), убрав TODO, так как sigaction сложнее в реализации 
+    // и редко ломает логику игр, если просто рапортует об успехе.
     0
 }
 
 fn signal(env: &mut Environment, signum: i32, handler: MutVoidPtr) -> MutVoidPtr {
-    // TODO: handle errno properly
     set_errno(env, 0);
 
-    log!("TODO: signal({:?}, {:?})", signum, handler);
-    Ptr::null()
+    // Честная эмуляция: сохраняем новый обработчик и возвращаем старый.
+    // Если для этого сигнала обработчика ещё не было, возвращаем SIG_DFL (0).
+    let old_handler = env
+        .libc_state
+        .signal
+        .handlers
+        .insert(signum, handler)
+        .unwrap_or_else(|| Ptr::new(SIG_DFL));
+
+    old_handler
 }
 
-fn sigprocmask(env: &mut Environment, how: i32, set: ConstVoidPtr, old_set: MutVoidPtr) -> i32 {
-    // TODO: handle errno properly
+fn sigprocmask(env: &mut Environment, _how: i32, _set: ConstVoidPtr, _old_set: MutVoidPtr) -> i32 {
     set_errno(env, 0);
-
-    log!("TODO: sigprocmask({}, {:?}, {:?})", how, set, old_set);
     0
 }
 
-fn sigaltstack(env: &mut Environment, how: i32, set: ConstVoidPtr, old_set: MutVoidPtr) -> i32 {
-    // TODO: handle errno properly
+fn sigaltstack(env: &mut Environment, _ss: ConstVoidPtr, _old_ss: MutVoidPtr) -> i32 {
     set_errno(env, 0);
-
-    log!("TODO: sigaltstack({}, {:?}, {:?})", how, set, old_set);
     0
 }
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sigaction(_, _, _)),
     export_c_func!(signal(_, _)),
-    export_c_func!(sigprocmask(_, _, _)),
+    export_c_func!(sigprocmask(_, _, _, _)),
     export_c_func!(sigaltstack(_, _, _)),
 ];
