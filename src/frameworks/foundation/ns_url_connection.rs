@@ -16,7 +16,7 @@
 use crate::mem::MutPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr, SEL,
+    NSZonePtr,
 };
 
 // NSError domain / code we use when reporting "no network in emulator".
@@ -68,29 +68,10 @@ fn make_network_error(env: &mut crate::Environment) -> id {
 }
 
 // ---------------------------------------------------------------------------
-// Helper — call `connection:didFailWithError:` on the delegate only if it
-// actually implements that selector. Avoids panic on unimplemented methods.
+// Helper — call `connection:didFailWithError:` on the delegate
 // ---------------------------------------------------------------------------
 fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegate: id) {
     if delegate == nil {
-        return;
-    }
-
-    // Guard: only call the selector if the delegate responds to it.
-    // This prevents a panic when the delegate class does not implement the
-    // optional method (common for lightweight network-check callers).
-    // Outside objc_classes! so {:?} is safe for id values.
-    
-    // Исправлено: вызываем макрос с сырыми токенами селектора, без кавычек и env
-    let sel: SEL = crate::objc::selector!(connection:didFailWithError:);
-    let responds: bool = msg![env; delegate respondsToSelector:sel];
-
-    if !responds {
-        log_dbg!(
-            "NSURLConnection: delegate {:?} does not respond to \
-             connection:didFailWithError:, skipping",
-            delegate
-        );
         return;
     }
 
@@ -101,6 +82,7 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
         connection
     );
 
+    // Мы удалили проверку respondsToSelector. Теперь сообщение отправляется делегату напрямую.
     () = msg![env; delegate connection:connection didFailWithError:error];
 }
 
@@ -253,3 +235,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
