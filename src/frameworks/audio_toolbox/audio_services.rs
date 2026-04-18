@@ -82,8 +82,8 @@ fn AudioServicesCreateSystemSoundID(
     let path = to_rust_path(env, in_file_url);
     
     // Пытаемся открыть файл (через Symphonia), но если возвращается ошибка
-    // (например, пустой/битый файл, нехватка памяти или формат, который Symphonia пока не тянет) -
-    // мы просто не сохраняем его в map, выдавая игре валидный ID-пустышку (dummy-ID).
+    // (например, формат, который Symphonia пока не тянет) - мы просто 
+    // не сохраняем его в map, выдавая игре валидный ID-пустышку.
     let audio_file = audio::AudioFile::open_for_reading(path.clone(), &env.fs).ok();
 
     if audio_file.is_none() {
