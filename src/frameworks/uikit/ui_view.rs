@@ -378,6 +378,47 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this_layer insertSublayer:subview_layer below:sibling_layer];
 }
 
+- (())insertSubview:(id)view aboveSubview:(id)sibling {
+    if view == nil { return; }
+    retain(env, view);
+    let _: () = msg![env; view removeFromSuperview];
+
+    let subview_layer = env.objc.borrow::<UIViewHostObject>(view).layer;
+
+    let sibling_idx = env.objc
+        .borrow::<UIViewHostObject>(this)
+        .subviews
+        .iter()
+        .position(|&s| s == sibling);
+
+    let insert_idx = match sibling_idx {
+        Some(idx) => idx + 1, // one above the sibling
+        None => {
+            // Sibling not found — insert at top (same as addSubview).
+            env.objc.borrow::<UIViewHostObject>(this).subviews.len()
+        }
+    };
+
+    env.objc.borrow_mut::<UIViewHostObject>(view).superview = this;
+    env.objc
+        .borrow_mut::<UIViewHostObject>(this)
+        .subviews
+        .insert(insert_idx, view);
+
+    let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    let sibling_layer = if sibling != nil {
+        env.objc.borrow::<UIViewHostObject>(sibling).layer
+    } else {
+        crate::objc::nil
+    };
+
+    if sibling_layer != crate::objc::nil {
+        let _: () = msg![env; this_layer insertSublayer:subview_layer above:sibling_layer];
+    } else {
+        let _: () = msg![env; this_layer addSublayer:subview_layer];
+    }
+}
+
 - (())bringSubviewToFront:(id)subview {
     if subview == nil { return; }
     let &mut UIViewHostObject { ref mut subviews, layer, .. } = env.objc.borrow_mut(this);
