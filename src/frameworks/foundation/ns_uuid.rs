@@ -119,7 +119,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 /// `-init` — designated initialiser; generates a random UUID.
 - (id)init {
-    env.objc.borrow_mut::<NSUUIDHostObject>(this).bytes = UuidBytes::random();
+    {
+        // ИСПРАВЛЕНИЕ: Выносим заимствование в отдельную мутабельную переменную
+        let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+        host.bytes = UuidBytes::random();
+    }
     log_dbg!("NSUUID init => {}", env.objc.borrow::<NSUUIDHostObject>(this).bytes.to_string());
     this
 }
@@ -134,7 +138,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let s = ns_string::to_rust_string(env, string).into_owned();
     match UuidBytes::from_string(&s) {
         Some(bytes) => {
-            env.objc.borrow_mut::<NSUUIDHostObject>(this).bytes = bytes;
+            {
+                // ИСПРАВЛЕНИЕ: Безопасное изменение поля
+                let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+                host.bytes = bytes;
+            }
             log_dbg!("NSUUID initWithUUIDString:{:?} => OK", s);
             this
         }
@@ -155,7 +163,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut bytes = [0u8; 16];
     let src = env.mem.bytes_at(bytes_ptr, 16);
     bytes.copy_from_slice(src);
-    env.objc.borrow_mut::<NSUUIDHostObject>(this).bytes = UuidBytes(bytes);
+    {
+        // ИСПРАВЛЕНИЕ: Безопасное изменение поля
+        let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+        host.bytes = UuidBytes(bytes);
+    }
     this
 }
 
@@ -302,7 +314,7 @@ pub fn new_uuid(env: &mut crate::Environment) -> id {
 pub fn uuid_from_string(env: &mut crate::Environment, s: &str) -> id {
     let ns = ns_string::from_rust_string(env, s.to_string());
     let ns = crate::objc::autorelease(env, ns);
-    msg_class![env; NSUUID alloc];
+    // ИСПРАВЛЕНИЕ: Удалил лишний дублирующийся макрос аллокации (создавал утечку и ошибку компилятора)
     let alloc: id = msg_class![env; NSUUID alloc];
     msg![env; alloc initWithUUIDString:ns]
-}
+    }
