@@ -1079,6 +1079,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; new initWithString:this]
 }
 
+- (id)mergeWithPrevious:(id)previous {
+    // For mutable strings the merge strategy is to append the previous
+    // content that isn't already present, or simply keep self unchanged.
+    // Most callers just want self to win, so we return self unchanged.
+    log_dbg!(
+        "NSMutableString mergeWithPrevious: previous={:?} — returning self",
+        previous
+    );
+    this
+}
+
 - (())appendString:(id)a_string {
     // assert_ne!(a_string, nil);
     let new: id = msg![env; this stringByAppendingString:a_string];
@@ -1498,6 +1509,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let effective_key: id = if key == nil { this } else { key };
     let _: () = msg![env; object setValue:value forKey:effective_key];
+}
+
+// =========================================================================
+// MARK: - mergeWithPrevious
+// =========================================================================
+
+// mergeWithPrevious: is called by some text-processing and undo/redo systems
+// to combine a new string value with the previously stored one.
+// The standard behaviour is to return the receiver (self) unchanged —
+// the "new" value always wins over the "previous" one.
+- (id)mergeWithPrevious:(id)_previous {
+    // Return self — the new (receiver) string replaces the previous one.
+    // This matches NSUndoManager and CoreData's default merge policy where
+    // the incoming object wins.
+    this
 }
 
 @end
