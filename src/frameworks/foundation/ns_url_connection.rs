@@ -1,15 +1,19 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 //! `NSURLConnection`.
 //!
 //! This is a stub implementation that does not perform real networking.
+//!
 //! Synchronous requests return empty NSData with a descriptive NSError.
 //! Asynchronous connections immediately call `connection:didFailWithError:`
+//!
 //! on the delegate (if it implements that method) so the app can handle the
+//!
 //! failure gracefully instead of hanging or crashing.
 
 use crate::mem::MutPtr;
@@ -56,17 +60,22 @@ fn make_network_error(env: &mut crate::Environment) -> id {
     let user_info: id = msg_class![env; NSMutableDictionary new];
     autorelease(env, user_info);
     () = msg![env; user_info setObject:desc_val forKey:desc_key];
-
+    
     let error: id = msg_class![env; NSError alloc];
-    let error: id = msg![env; error initWithDomain:domain
-                                              code:NS_URL_ERROR_NOT_CONNECTED_TO_INTERNET
-                                          userInfo:user_info];
-    autorelease(env, error)
+    let error: id = msg![env;
+        error initWithDomain:domain
+                        code:NS_URL_ERROR_NOT_CONNECTED_TO_INTERNET
+                    userInfo:user_info];
+    
+    // Исправлено: возвращаем `error` типа `id` после выполнения `autorelease`
+    autorelease(env, error);
+    error
 }
 
 // ---------------------------------------------------------------------------
 // Helper — call `connection:didFailWithError:` on the delegate only if it
-// actually implements that selector. Avoids panic on unimplemented methods.
+// actually implements that selector.
+// Avoids panic on unimplemented methods.
 // ---------------------------------------------------------------------------
 fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegate: id) {
     if delegate == nil {
@@ -100,7 +109,6 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
-
 @implementation NSURLConnection: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
@@ -125,16 +133,15 @@ pub const CLASSES: ClassExports = objc_classes! {
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
 
-    log!(
+    log_info!(
         "NSURLConnection sendSynchronousRequest: stub called (request {:#010x})",
         request
     );
-
     // When request is nil we still return empty NSData rather than nil,
     // because many callers do not nil-check the return value and will crash
     // on a null dereference otherwise.
     if request == nil {
-        log!(
+        log_info!(
             "NSURLConnection sendSynchronousRequest: nil request — \
              returning empty NSData to prevent caller crash"
         );
@@ -148,8 +155,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Build and write an NSError so the caller knows why it got empty data.
     if !error_ptr.is_null() {
         let error = make_network_error(env);
-        // make_network_error already autoreleased; retain once more so the
-        // caller owns a +1 reference through the out-pointer.
+        // make_network_error already autoreleased;
         retain(env, error);
         env.mem.write(error_ptr, error);
     }
@@ -166,14 +172,18 @@ pub const CLASSES: ClassExports = objc_classes! {
                    delegate:(id)delegate {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithRequest:request delegate:delegate];
-    autorelease(env, new)
+    
+    // Исправлено: возвращаем созданный объект `new` после `autorelease`
+    autorelease(env, new);
+    new
 }
 
 - (id)initWithRequest:(id)request
              delegate:(id)delegate {
-    msg![env; this initWithRequest:request
-                          delegate:delegate
-                  startImmediately:true]
+    msg![env;
+        this initWithRequest:request
+                    delegate:delegate
+            startImmediately:true]
 }
 
 - (id)initWithRequest:(id)request
@@ -181,21 +191,20 @@ pub const CLASSES: ClassExports = objc_classes! {
      startImmediately:(bool)start_immediately {
 
     if request == nil {
-        log!(
+        log_info!(
             "NSURLConnection initWithRequest: nil request — returning nil"
         );
         release(env, this);
         return nil;
     }
 
-    log!(
+    log_info!(
         "NSURLConnection initWithRequest:{:#010x} delegate:{:#010x} \
          startImmediately:{} (stub — failure via delegate)",
         request,
         delegate,
         start_immediately,
     );
-
     retain(env, delegate);
     {
         let mut host = env.objc.borrow_mut::<NSURLConnectionHostObject>(this);
@@ -220,7 +229,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let already   = host.cancelled;
     let delegate  = host.delegate;
     drop(host);
-
+    
     if !already {
         env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
         retain(env, this);
@@ -245,9 +254,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[(NSURLConnection*){:#010x} dealloc]", this);
     let delegate = env.objc.borrow::<NSURLConnectionHostObject>(this).delegate;
     release(env, delegate);
-    env.objc.dealloc_object(this, &mut env.mem)
+    env.objc.dealloc_object(this, &mut env.mem);
 }
 
 @end
 
 };
+
