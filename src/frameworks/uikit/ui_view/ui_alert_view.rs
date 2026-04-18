@@ -169,12 +169,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())sizeToFit {
-    // Честная эмуляция логики UIView: запрашиваем frame, 
-    // считаем sizeThatFits и устанавливаем новый frame.
+    // 1. Получаем текущий frame
     let frame: CGRect = msg![env; this frame];
-    let new_size: CGSize = msg![env; this sizeThatFits:frame.size];
+    
+    // 2. ВАЖНО: Выносим размер в отдельную переменную. 
+    // Макрос msg! не принимает "frame.size" как аргумент после двоеточия.
+    let current_size = frame.size;
+    
+    // 3. Запрашиваем подходящий размер
+    let new_size: CGSize = msg![env; this sizeThatFits:current_size];
+    
+    // 4. Формируем новый frame и применяем его
     let new_frame = CGRect { origin: frame.origin, size: new_size };
-    () = msg![env; this setFrame:new_frame];
+    let _: () = msg![env; this setFrame:new_frame];
 }
     
 - (())show {
