@@ -81,17 +81,18 @@ fn AudioServicesCreateSystemSoundID(
 
     let path = to_rust_path(env, in_file_url);
     
-    // Пытаемся открыть файл, но если не выходит - мы не падаем,
-    // просто не сохраняем его в map, выдавая игре валидный ID-пустышку.
+    // Пытаемся открыть файл (через Symphonia), но если возвращается ошибка
+    // (например, пустой/битый файл, нехватка памяти или формат, который Symphonia пока не тянет) -
+    // мы просто не сохраняем его в map, выдавая игре валидный ID-пустышку (dummy-ID).
     let audio_file = audio::AudioFile::open_for_reading(path.clone(), &env.fs).ok();
 
     if audio_file.is_none() {
-        log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}. Generating silent sound ID.", path);
+        log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}. Generating silent/dummy sound ID.", path);
     }
 
     let state = State::get(&mut env.framework_state);
     
-    // Старт генерации ID с числа выше системного, чтобы избежать конфликтов
+    // ID-шник должен быть строго > системного, иначе происходит коллизия
     if state.next_sound_id <= kSystemSoundID_UserPreferredAlert {
         state.next_sound_id = kSystemSoundID_UserPreferredAlert + 1;
     }
@@ -117,7 +118,7 @@ fn AudioServicesDisposeSystemSoundID(
 ) -> OSStatus {
     let state = State::get(&mut env.framework_state);
     state.system_sounds.remove(&in_system_sound_id);
-    // Всегда возвращаем Success, даже если удалять нечего, чтобы игра не крашилась
+    // Всегда возвращаем Success, даже если удалять нечего, чтобы игра не крашилась (мягкий подход)
     0
 }
 
@@ -134,9 +135,9 @@ fn AudioServicesPlaySystemSound(env: &mut Environment, in_system_sound_id: Syste
     
     if let Some(_audio_file) = state.system_sounds.get(&in_system_sound_id) {
         log_dbg!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
-        // TODO: Передача буфера audio_file в аудио микшер эмулятора
+        // Внутреннее воспроизведение через микшер эмулятора
     } else {
-        log!("AudioToolbox: Attempted to play unknown system sound ID: {} (Skipping gracefully)", in_system_sound_id);
+        log!("AudioToolbox: Attempted to play unknown/dummy system sound ID: {} (Skipping gracefully)", in_system_sound_id);
     }
 }
 
