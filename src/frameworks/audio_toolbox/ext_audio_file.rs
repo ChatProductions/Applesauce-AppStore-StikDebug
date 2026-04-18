@@ -467,7 +467,7 @@ pub fn ExtAudioFileRead(
     }
 
     let starting_byte = starting_packet as u64 * packet_size as u64;
-    let buffer_slice = env.mem.bytes_at_mut(out_buffer.cast(), bytes_to_read as usize);
+    let buffer_slice = env.mem.bytes_at_mut(out_buffer.cast(), bytes_to_read); // ИСПРАВЛЕНИЕ: Убран 'as usize', так как функция ожидает u32
 
     // Read logic directly without using error-prone map ID transmutes
     let bytes_read = match &mut host.audio_file {
