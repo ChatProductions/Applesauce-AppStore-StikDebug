@@ -124,6 +124,13 @@ pub const CLASSES: ClassExports = objc_classes!
     msg![env; this localTimeZone]
 }
 
+// resetSystemTimeZone clears the cached system time zone so that the next
+// call to systemTimeZone re-reads it from the OS / user preferences.
+// Since touchHLE always uses UTC we just log and no-op.
++ (())resetSystemTimeZone {
+    log_dbg!("NSTimeZone resetSystemTimeZone — ignored (touchHLE uses UTC)");
+}
+
 + (id)defaultTimeZone {
     msg![env; this localTimeZone]
 }
