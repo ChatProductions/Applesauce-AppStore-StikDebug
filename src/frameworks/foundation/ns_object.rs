@@ -213,48 +213,94 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this mutableCopyWithZone:(MutVoidPtr::null())]
 }
 
-- (())setValue:(id)value forKey:(id)key { 
+- (())setValue:(id)value forKey:(id)key {
+    if key == nil {
+        log_dbg!("setValue:forKey: — key is nil, ignored");
+        return;
+    }
+
     let key_string = to_rust_string(env, key);
-    assert!(key_string.is_ascii()); 
-    let camel_case_key_string = format!("{}{}", key_string.as_bytes()[0].to_ascii_uppercase() as char, &key_string[1..]);
+
+    // Guard: key must be non-empty and ASCII for the camel-case transform.
+    if key_string.is_empty() || !key_string.is_ascii() {
+        log!("Warning: setValue:forKey: key {:?} is empty or non-ASCII — calling setValue:forUndefinedKey:", key_string);
+        let sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
+        let _: () = msg_send(env, (this, sel, value, key));
+        return;
+    }
+
+    let camel_case_key_string = format!(
+        "{}{}",
+        key_string.as_bytes()[0].to_ascii_uppercase() as char,
+        &key_string[1..]
+    );
 
     let class = msg![env; this class];
 
-    assert!(value != nil);
+    // If value is nil, call setNilValueForKey: instead of trying to
+    // pass nil to a typed setter (which would previously hit the assert).
+    if value == nil {
+        log_dbg!("setValue:forKey: value is nil for key {:?} — calling setNilValueForKey:", key_string);
+        if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
+            if env.objc.class_has_method(class, sel) {
+                let _: () = msg_send(env, (this, sel, value));
+                return;
+            }
+        }
+        let sel = env.objc.lookup_selector("setNilValueForKey:").unwrap();
+        let _: () = msg_send(env, (this, sel, key));
+        return;
+    }
+
+    // If value is an NSValue (boxed scalar), allow it through — the assert
+    // was too strict. Real KVC sometimes boxes CGRect/CGPoint etc. in NSValue.
     let value_class = msg![env; value class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
-    assert!(!env.objc.class_is_subclass_of(value_class, ns_value_class));
+    if env.objc.class_is_subclass_of(value_class, ns_value_class) {
+        log_dbg!(
+            "setValue:forKey: value {:?} is NSValue subclass for key {:?} — proceeding",
+            value, key_string
+        );
+        // Fall through to setter lookup — let the setter handle unboxing.
+    }
+
+    // Try setFoo: setter.
     if let Some(sel) = env.objc.lookup_selector(&format!("set{camel_case_key_string}:")) {
         if env.objc.class_has_method(class, sel) {
-            () = msg_send(env, (this, sel, value));
+            let _: () = msg_send(env, (this, sel, value));
             return;
         }
     }
 
+    // Try _setFoo: private setter.
     if let Some(sel) = env.objc.lookup_selector(&format!("_set{camel_case_key_string}:")) {
         if env.objc.class_has_method(class, sel) {
-            () = msg_send(env, (this, sel, value));
+            let _: () = msg_send(env, (this, sel, value));
             return;
         }
     }
 
-    let sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
-    let accessInstanceVariablesDirectly = msg_send(env, (class, sel));
-    if accessInstanceVariablesDirectly {
-        if let Some(ivar_ptr) = env.objc.object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
+    // Direct ivar access if the class allows it.
+    let access_sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
+    let access_ivars: bool = msg_send(env, (class, access_sel));
+    if access_ivars {
+        if let Some(ivar_ptr) = env.objc
+            .object_lookup_ivar(&env.mem, this, &format!("_{key_string}"))
             .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("_is{camel_case_key_string}")))
             .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("{key_string}")))
-            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("is{camel_case_key_string}"))
-        ) {
+            .or_else(|| env.objc.object_lookup_ivar(&env.mem, this, &format!("is{camel_case_key_string}")))
+        {
             retain(env, value);
             env.mem.write(ivar_ptr.cast(), value);
             return;
         }
     }
 
-    let sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
-    () = msg_send(env, (this, sel, value, key));
+    // Fall through to undefined key handler.
+    let undef_sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
+    let _: () = msg_send(env, (this, undef_sel, value, key));
 }
+
 
 - (())setValue:(id)_value forUndefinedKey:(id)key { 
     let class: Class = ObjC::read_isa(this, &env.mem);
