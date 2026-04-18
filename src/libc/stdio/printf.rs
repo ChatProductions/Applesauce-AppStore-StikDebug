@@ -1419,53 +1419,48 @@ where
                 }
             }
             b'c' => {
-    // Read a single character into char*.
-    let x = getc_fn(env, subject, src_char_idx);
-    if x.is_err() { break 'outer; }
-    let cc: u8 = x.unwrap().into();
-    src_char_idx += 1;
-    if !suppress_assignment {
-        let ptr: MutPtr<u8> = args.next(env);
-        env.mem.write(ptr, cc);
-    }
-}
-b'p' => {
-    // Read a hex pointer value.
-    let res = str_to_int_inner_generic(
-        env, &getc_fn, &ungetc_fn, subject, src_char_idx, 16,
-        if max_width > 0 { max_width } else { u32::MAX },
-        |s, base| u32::from_str_radix(s, base).unwrap_or(0),
-        |num| num.wrapping_neg(),
-    );
-    match res {
-        Ok((val, len)) => {
-            src_char_idx += len;
-            if !suppress_assignment {
-                let ptr: MutPtr<MutVoidPtr> = args.next(env);
-                env.mem.write(ptr, crate::mem::Ptr::from_bits(val));
+                let x = getc_fn(env, subject, src_char_idx);
+                if x.is_err() { break 'outer; }
+                let cc: u8 = x.unwrap().into();
+                src_char_idx += 1;
+                if !suppress_assignment {
+                    let ptr: MutPtr<u8> = args.next(env);
+                    env.mem.write(ptr, cc);
+                }
             }
-        }
-        Err(_) => break,
-    }
-}
-b'n' => {
-    // Store the number of characters read so far.
-    if !suppress_assignment {
-        let ptr: MutPtr<i32> = args.next(env);
-        env.mem.write(ptr, src_char_idx as i32);
-    }
-    // %n does NOT increment matched_args.
-    continue;
-}
-b'%' => {
-    // Match a literal '%'.
-    let x = getc_fn(env, subject, src_char_idx);
-    if x.is_err() { break 'outer; }
-    let cc: u8 = x.unwrap().into();
-    if cc != b'%' { return matched_args; }
-    src_char_idx += 1;
-    continue; // Don't increment matched_args.
-}
+            b'p' => {
+                let res = str_to_int_inner_generic(
+                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, 16,
+                    if max_width > 0 { max_width } else { u32::MAX },
+                    |s, base| u32::from_str_radix(s, base).unwrap_or(0),
+                    |num| num.wrapping_neg(),
+                );
+                match res {
+                    Ok((val, len)) => {
+                        src_char_idx += len;
+                        if !suppress_assignment {
+                            let ptr: MutPtr<MutVoidPtr> = args.next(env);
+                            env.mem.write(ptr, crate::mem::Ptr::from_bits(val));
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            b'n' => {
+                if !suppress_assignment {
+                    let ptr: MutPtr<i32> = args.next(env);
+                    env.mem.write(ptr, src_char_idx as i32);
+                }
+                continue;
+            }
+            b'%' => {
+                let x = getc_fn(env, subject, src_char_idx);
+                if x.is_err() { break 'outer; }
+                let cc: u8 = x.unwrap().into();
+                if cc != b'%' { return matched_args; }
+                src_char_idx += 1;
+                continue;
+            }
             b's' => {
                 assert_eq!(max_width, 0);
                 assert!(length_modifier.is_none());
