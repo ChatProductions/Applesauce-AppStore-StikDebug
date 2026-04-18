@@ -152,21 +152,85 @@ type thread_t = mach_port_t;
 type thread_policy_flavor_t = natural_t;
 type thread_policy_t = MutPtr<integer_t>;
 
+// Идентификаторы политик планировщика потоков
+const THREAD_EXTENDED_POLICY: thread_policy_flavor_t = 1;
+const THREAD_TIME_CONSTRAINT_POLICY: thread_policy_flavor_t = 2;
+const THREAD_PRECEDENCE_POLICY: thread_policy_flavor_t = 3;
+const THREAD_AFFINITY_POLICY: thread_policy_flavor_t = 4;
+const THREAD_BACKGROUND_POLICY: thread_policy_flavor_t = 5;
+
+#[repr(C, packed)]
+struct thread_extended_policy {
+    timeshare: boolean_t,
+}
+unsafe impl SafeRead for thread_extended_policy {}
+
+#[repr(C, packed)]
+struct thread_time_constraint_policy {
+    period: natural_t,
+    computation: natural_t,
+    constraint: natural_t,
+    preemptible: boolean_t,
+}
+unsafe impl SafeRead for thread_time_constraint_policy {}
+
+#[repr(C, packed)]
+struct thread_precedence_policy {
+    importance: integer_t,
+}
+unsafe impl SafeRead for thread_precedence_policy {}
+
+#[repr(C, packed)]
+struct thread_affinity_policy {
+    affinity_tag: integer_t,
+}
+unsafe impl SafeRead for thread_affinity_policy {}
+
+#[repr(C, packed)]
+struct thread_background_policy {
+    priority: integer_t,
+}
+unsafe impl SafeRead for thread_background_policy {}
+
 // This is actually from the thread policy file.
 fn thread_policy_set(
-    _env: &mut Environment,
+    env: &mut Environment,
     thread: thread_t,
     flavor: thread_policy_flavor_t,
     policy_info: thread_policy_t,
     count: mach_msg_type_number_t,
 ) -> kern_return_t {
-    log!(
-        "TODO: thread_policy_set({}, {}, {:?}, {}) (ignored)",
-        thread,
-        flavor,
-        policy_info,
-        count
-    );
+    // Читаем из памяти переданные приложением параметры политики, 
+    // чтобы эмуляция доступа к памяти была корректной.
+    // Фактически применять приоритеты в touchHLE пока не нужно,
+    // поэтому мы просто поглощаем запрос и рапортуем об успехе.
+    match flavor {
+        THREAD_EXTENDED_POLICY => {
+            let _policy: thread_extended_policy = env.mem.read(policy_info.cast());
+        }
+        THREAD_TIME_CONSTRAINT_POLICY => {
+            let _policy: thread_time_constraint_policy = env.mem.read(policy_info.cast());
+        }
+        THREAD_PRECEDENCE_POLICY => {
+            let _policy: thread_precedence_policy = env.mem.read(policy_info.cast());
+        }
+        THREAD_AFFINITY_POLICY => {
+            let _policy: thread_affinity_policy = env.mem.read(policy_info.cast());
+        }
+        THREAD_BACKGROUND_POLICY => {
+            let _policy: thread_background_policy = env.mem.read(policy_info.cast());
+        }
+        _ => {
+            log!(
+                "TODO: thread_policy_set({}, {}, {:?}, {}) (ignored)",
+                thread,
+                flavor,
+                policy_info,
+                count
+            );
+        }
+    }
+
     KERN_SUCCESS
 }
 
