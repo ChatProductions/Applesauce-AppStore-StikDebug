@@ -161,6 +161,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("UIAlertView setFrame: ignored");
 }
 
+- (CGSize)sizeThatFits:(CGSize)size {
+    // В iOS этот метод возвращает оптимальный размер на основе содержимого.
+    // Так как touchHLE выводит SDL2-диалог, размер контролируется самой ОС,
+    // поэтому мы пробрасываем текущий запрошенный размер дальше.
+    size
+}
+
+- (())sizeToFit {
+    // Честная эмуляция логики UIView: запрашиваем frame, 
+    // считаем sizeThatFits и устанавливаем новый frame.
+    let frame: CGRect = msg![env; this frame];
+    let new_size: CGSize = msg![env; this sizeThatFits:frame.size];
+    let new_frame = CGRect { origin: frame.origin, size: new_size };
+    () = msg![env; this setFrame:new_frame];
+}
+    
 - (())show {
     log!("UIAlertView show (SDL2 dialog)");
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = true;
