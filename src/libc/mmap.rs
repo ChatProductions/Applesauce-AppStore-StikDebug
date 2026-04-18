@@ -36,7 +36,6 @@ fn mmap(
 ) -> MutVoidPtr {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     log_dbg!(
         "mmap({:?}, {}, {}, {}, {}, {})",
         addr,
@@ -47,13 +46,14 @@ fn mmap(
         offset
     );
 
-    assert_eq!(offset, 0);
     // TODO: use vm_allocate() instead
     let ptr = env.mem.calloc(len);
 
     if (flags & MAP_ANON) != 0 {
         assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
         assert_eq!(fd, -1);
+        assert_eq!(offset, 0); // Перенесли сюда: для анонимной памяти смещение должно быть 0
+        
         if !addr.is_null() {
             log!(
                 "Warning: mmap MAP_ANON ignoring hint for address {:?}, actual is {:?}",
@@ -63,12 +63,13 @@ fn mmap(
         }
     } else {
         assert!(addr.is_null());
+        // Смещение файла корректно отрабатывается через lseek
         let new_offset = posix_io::lseek(env, fd, offset, SEEK_SET);
         assert_eq!(new_offset, offset);
 
         let read = posix_io::read(env, fd, ptr, len);
-        assert_eq!(read as u32, len);
-    };
+        assert_eq!(read as u32, len); 
+    }
 
     assert!(!env.libc_state.mmap.allocations.contains_key(&ptr));
     env.libc_state.mmap.allocations.insert(ptr, len);
@@ -79,7 +80,6 @@ fn mmap(
 fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-
     log_dbg!("munmap({:?}, {})", addr, len);
 
     if len == 0 {
@@ -88,6 +88,7 @@ fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
         log!("Warning: munmap({:?}, {}) failed, returning -1", addr, len);
         return -1;
     }
+    
     assert_eq!(*env.libc_state.mmap.allocations.get(&addr).unwrap(), len);
     env.mem.free(addr);
     env.libc_state.mmap.allocations.remove(&addr);
