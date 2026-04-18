@@ -33,13 +33,13 @@ fn signal(env: &mut Environment, signum: i32, handler: MutVoidPtr) -> MutVoidPtr
     set_errno(env, 0);
 
     // Честная эмуляция: сохраняем новый обработчик и возвращаем старый.
-    // Если для этого сигнала обработчика ещё не было, возвращаем SIG_DFL (0).
     let old_handler = env
         .libc_state
         .signal
         .handlers
         .insert(signum, handler)
-        .unwrap_or_else(|| Ptr::new(SIG_DFL));
+        // ИСПОЛЬЗУЕМ from_bits вместо new
+        .unwrap_or_else(|| MutVoidPtr::from_bits(SIG_DFL));
 
     old_handler
 }
@@ -57,6 +57,6 @@ fn sigaltstack(env: &mut Environment, _ss: ConstVoidPtr, _old_ss: MutVoidPtr) ->
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sigaction(_, _, _)),
     export_c_func!(signal(_, _)),
-    export_c_func!(sigprocmask(_, _, _, _)),
-    export_c_func!(sigaltstack(_, _, _)),
+    export_c_func!(sigprocmask(_, _, _)), // Строго 3 аргумента (how, set, old_set)
+    export_c_func!(sigaltstack(_, _)),    // Строго 2 аргумента (ss, old_ss)
 ];
