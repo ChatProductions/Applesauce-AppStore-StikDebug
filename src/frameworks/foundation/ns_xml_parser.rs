@@ -338,7 +338,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// Safely extract the local name from a BytesStart/BytesEnd event,
 /// using lossy UTF-8 conversion (replaces invalid bytes with '�').
 fn safe_local_name(e: &BytesStart) -> String {
-    let bytes = e.local_name().as_ref();
+   let binding = e.local_name();
+   let bytes = binding.as_ref();
     String::from_utf8_lossy(bytes).into_owned()
 }
 
