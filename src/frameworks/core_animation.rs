@@ -17,6 +17,7 @@ pub mod ca_keyframe_animation; // <-- ДОБАВЛЕН НОВЫЙ МОДУЛЬ
 pub mod ca_layer;
 pub mod ca_media_timing_function;
 pub mod ca_transaction;
+pub mod ca_transform3d; // <-- НАШ НОВЫЙ МОДУЛЬ ДЛЯ ТРАНСФОРМАЦИЙ
 
 mod animation;
 mod composition;
@@ -48,8 +49,12 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ca_layer::CONSTANTS,
         ca_media_timing_function::CONSTANTS,
         ca_transaction::CONSTANTS,
+        ca_transform3d::CONSTANTS, // <-- ЭКСПОРТ КОНСТАНТЫ IDENTITY
     ],
-    function_exports: &[FUNCTIONS],
+    function_exports: &[
+        FUNCTIONS,
+        ca_transform3d::FUNCTIONS, // <-- ЭКСПОРТ НОВЫХ ФУНКЦИЙ (MakeRotation и т.д.)
+    ],
 };
 
 #[derive(Default)]
