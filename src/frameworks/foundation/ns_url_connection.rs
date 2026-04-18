@@ -81,8 +81,9 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     // optional method (common for lightweight network-check callers).
     // Outside objc_classes! so {:?} is safe for id values.
     
-    // Исправлено: обращаемся к методу через подсистему selectors
-    let sel: SEL = env.objc.selectors.register_selector("connection:didFailWithError:");
+    // Исправлено: вызываем register_selector как свободную функцию модуля objc.
+    // (Если в вашей ветке функция требует &mut env.objc вместо env, просто замените первый аргумент).
+    let sel: SEL = crate::objc::register_selector(env, "connection:didFailWithError:");
     let responds: bool = msg![env; delegate respondsToSelector:sel];
 
     if !responds {
