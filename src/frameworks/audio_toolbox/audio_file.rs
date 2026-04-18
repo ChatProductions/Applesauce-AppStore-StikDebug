@@ -10,7 +10,7 @@ use crate::abi::{CallFromHost, GuestFunction};
 use crate::audio; // Keep this module namespaced to avoid confusion
 use crate::audio::AudioDescription;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::carbon_core::{eofErr, OSStatus};
+use crate::frameworks::carbon_core::{eofErr, paramErr, OSStatus};
 use crate::frameworks::core_audio_types::{
     debug_fourcc, fourcc, kAudioFormatFlagIsBigEndian, kAudioFormatFlagIsFloat,
     kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
@@ -55,7 +55,7 @@ unsafe impl SafeRead for AudioFilePacketTableInfo {}
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
 const kAudioFileNotOpenError: OSStatus = -38;
-const kAudioFileSuccess: OSStatus = 1;
+const kAudioFileSuccess: OSStatus = 0; // ИСПРАВЛЕНО: noErr в Apple API всегда равен 0, а не 1!
 const kAudioFileBadPropertySizeError: OSStatus = fourcc(b"!siz") as _;
 const kAudioFileUnsupportedPropertyError: OSStatus = fourcc(b"pty?") as _;
 const kAudioFileUnsupportedFileTypeError: OSStatus = fourcc(b"typ?") as _;
@@ -96,9 +96,6 @@ pub fn AudioFileOpenURL(
         log!("Warning: AudioFileOpenURL() called with non-read permissions ({}), write is unsupported.", in_permissions);
     }
 
-    // The hint is optional and is supposed to only be used for certain file
-    // formats that can't be uniquely identified, which we don't support so far.
-    // Hints for well-known types are ignored as well.
     match in_file_type_hint {
         0 => {}
         kAudioFileCAFType => {
@@ -118,7 +115,7 @@ pub fn AudioFileOpenURL(
                 in_file_ref, path, error
             );
             
-            // Fallback to a dummy 1-sample WAV file to allow the app to gracefully continue playing "silence"
+            // Dummy 1-sample WAV file (PCM, 1 chan, 44100 Hz, 16 bit) to allow the app to gracefully continue playing "silence"
             let dummy_wav: &[u8] = &[
                 0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, // RIFF, size 38
                 0x57, 0x41, 0x56, 0x45, // WAVE
@@ -132,7 +129,6 @@ pub fn AudioFileOpenURL(
             match audio::AudioFile::read_from_vec(dummy_wav.to_vec()) {
                 Ok(dummy_file) => dummy_file,
                 Err(_) => {
-                    // In the highly unlikely event the dummy file fails to decode, strictly zero the pointer
                     if !out_audio_file.is_null() {
                         env.mem.write(out_audio_file, MutPtr::null());
                     }
@@ -146,8 +142,8 @@ pub fn AudioFileOpenURL(
     };
 
     let host_object = AudioFileHostObject { audio_file };
-
     let guest_audio_file = env.mem.alloc_and_write(OpaqueAudioFileID { _filler: 0 });
+    
     State::get(&mut env.framework_state)
         .audio_files
         .insert(guest_audio_file, host_object);
@@ -161,7 +157,7 @@ pub fn AudioFileOpenURL(
         in_file_ref,
         guest_audio_file
     );
-    0 // success
+    kAudioFileSuccess
 }
 
 pub fn AudioFileOpenWithCallbacks(
@@ -176,19 +172,13 @@ pub fn AudioFileOpenWithCallbacks(
 ) -> OSStatus {
     if _write_callback.to_ptr().is_null() ||
         _setsize_callback.to_ptr().is_null() {
-        log_dbg!("AudioFileOpenWithCallbacks() called with (unsupported) write({:?})/set_size({:?}) callbacks!",
-            _write_callback,
-            _setsize_callback);
+        log_dbg!("AudioFileOpenWithCallbacks() called with (unsupported) write/set_size callbacks!");
     }
     
-    // The hint is optional and is supposed to only be used for certain file
-    // formats that can't be uniquely identified, which we don't support so far.
     if in_file_type_hint != 0 {
         log!("Ignoring file type hint {} for AudioFileOpenWithCallbacks()", debug_fourcc(in_file_type_hint));
     }
 
-    // TODO: We're just reading in the whole file at once and parsing it here,
-    // this should change when streaming parsing is implemented.
     let size: i64 = getsize_callback.call_from_host(env, (client_data,));
     let size: u32 = size.try_into().unwrap_or(0);
     
@@ -204,10 +194,6 @@ pub fn AudioFileOpenWithCallbacks(
     let bytes_read_ptr: MutPtr<u32> = env.mem.alloc(guest_size_of::<u32>()).cast();
 
     env.mem.write(bytes_read_ptr, 0);
-    log_dbg!(
-        "AudioFileOpenWithCallbacks() calling read: {:?}",
-        (client_data, 0_i64, size, data_ptr, bytes_read_ptr)
-    );
     let status: OSStatus =
         read_callback.call_from_host(env, (client_data, 0_i64, size, data_ptr, bytes_read_ptr));
         
@@ -223,27 +209,20 @@ pub fn AudioFileOpenWithCallbacks(
     }
 
     let actual_bytes_read = env.mem.read(bytes_read_ptr);
-    if actual_bytes_read != size {
-        log!("Warning: Bytes read ({}) != size ({}) for AudioFileOpenWithCallbacks()", actual_bytes_read, size);
-    }
-    
-    let data_vec = env
-        .mem
-        .bytes_at(data_ptr, actual_bytes_read)
-        .to_vec();
+    let data_vec = env.mem.bytes_at(data_ptr, actual_bytes_read).to_vec();
         
     let audio_file = match audio::AudioFile::read_from_vec(data_vec) {
         Ok(file) => file,
         Err(_) => {
             log!("Warning: AudioFileOpenWithCallbacks() failed parse. Substituting dummy audio file.");
             let dummy_wav: &[u8] = &[
-                0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00, // RIFF, size 38
-                0x57, 0x41, 0x56, 0x45, // WAVE
-                0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00, // fmt , size 16
-                0x01, 0x00, 0x01, 0x00, 0x44, 0xac, 0x00, 0x00, // PCM, 1 chan, 44100 Hz
-                0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00, // 88200 B/s, 2 B/blk, 16 b/samp
-                0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00, // data, size 2
-                0x00, 0x00,                                     // 1 sample of silence
+                0x52, 0x49, 0x46, 0x46, 0x26, 0x00, 0x00, 0x00,
+                0x57, 0x41, 0x56, 0x45, 
+                0x66, 0x6d, 0x74, 0x20, 0x10, 0x00, 0x00, 0x00,
+                0x01, 0x00, 0x01, 0x00, 0x44, 0xac, 0x00, 0x00,
+                0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00,
+                0x64, 0x61, 0x74, 0x61, 0x02, 0x00, 0x00, 0x00,
+                0x00, 0x00,                                     
             ];
             
             match audio::AudioFile::read_from_vec(dummy_wav.to_vec()) {
@@ -259,8 +238,8 @@ pub fn AudioFileOpenWithCallbacks(
     };
     
     let guest_audio_file = env.mem.alloc_and_write(OpaqueAudioFileID { _filler: 0 });
-
     let host_object = AudioFileHostObject { audio_file };
+    
     State::get(&mut env.framework_state)
         .audio_files
         .insert(guest_audio_file, host_object);
@@ -269,11 +248,7 @@ pub fn AudioFileOpenWithCallbacks(
         env.mem.write(out_audio_file, guest_audio_file);
     }
 
-    log_dbg!(
-        "AudioFileOpenWithCallbacks() opened, new audio file handle: {:?}",
-        guest_audio_file
-    );
-    0 // success
+    kAudioFileSuccess
 }
 
 fn property_size(property_id: AudioFilePropertyID) -> GuestUSize {
@@ -286,7 +261,7 @@ fn property_size(property_id: AudioFilePropertyID) -> GuestUSize {
         kAudioFilePropertyPacketTableInfo => guest_size_of::<AudioFilePacketTableInfo>(),
         kAudioFilePropertyPacketToFrame => guest_size_of::<f64>(),
         kAudioFilePropertyFileFormat => guest_size_of::<AudioFileTypeID>(),
-        _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
+        _ => 0, // ИСПРАВЛЕНО: возвращаем 0 вместо panic! (unimplemented!)
     }
 }
 
@@ -298,28 +273,30 @@ fn AudioFileGetPropertyInfo(
     is_writable: MutPtr<u32>,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
+    
+    // Игнорируем специфичные свойства, чтобы избежать ошибок.
     if in_property_id == kAudioFilePropertyMagicCookieData
         || in_property_id == kAudioFilePropertyChannelLayout
     {
-        // Our currently supported formats probably don't use these properties.
-        // Not sure if this is correct, but it skips some code we don't want to
-        // run in Touch & Go.
-        if !out_data_size.is_null() {
-            env.mem.write(out_data_size, 0);
-        }
-        if !is_writable.is_null() {
-            env.mem.write(is_writable, 0);
-        }
+        if !out_data_size.is_null() { env.mem.write(out_data_size, 0); }
+        if !is_writable.is_null() { env.mem.write(is_writable, 0); }
         return kAudioFileUnsupportedPropertyError;
     }
+    
+    let req_size = property_size(in_property_id);
+    if req_size == 0 {
+        if !out_data_size.is_null() { env.mem.write(out_data_size, 0); }
+        if !is_writable.is_null() { env.mem.write(is_writable, 0); }
+        return kAudioFileUnsupportedPropertyError;
+    }
+    
     if !out_data_size.is_null() {
-        env.mem.write(out_data_size, property_size(in_property_id));
+        env.mem.write(out_data_size, req_size);
     }
     if !is_writable.is_null() {
         env.mem.write(is_writable, 0);
-        // TODO: probably not always correct
     }
-    0 // success
+    kAudioFileSuccess
 }
 
 pub fn AudioFileGetProperty(
@@ -330,74 +307,69 @@ pub fn AudioFileGetProperty(
     out_property_data: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
+    
+    if io_data_size.is_null() {
+        log!("Warning: AudioFileGetProperty() failed, io_data_size pointer is NULL!");
+        return paramErr;
+    }
+
     let required_size = property_size(in_property_id);
-    if env.mem.read(io_data_size) != required_size {
-        log!("Warning: AudioFileGetProperty() failed");
+    if required_size == 0 {
+        return kAudioFileUnsupportedPropertyError;
+    }
+    
+    let provided_size = env.mem.read(io_data_size);
+    // ИСПРАВЛЕНО: Игры могут передавать буфер БОЛЬШЕГО размера. Мы должны проверять `>=`.
+    if provided_size < required_size {
+        log!("Warning: AudioFileGetProperty() failed: provided size {} is smaller than required size {}", provided_size, required_size);
         return kAudioFileBadPropertySizeError;
     }
 
-    let host_object = State::get(&mut env.framework_state)
-        .audio_files
-        .get_mut(&in_audio_file)
-        .unwrap();
+    // Обновляем io_data_size до фактического записанного размера
+    env.mem.write(io_data_size, required_size);
+    
+    if out_property_data.is_null() {
+        return kAudioFileSuccess;
+    }
+
+    let host_object = match State::get(&mut env.framework_state).audio_files.get_mut(&in_audio_file) {
+        Some(obj) => obj,
+        None => return kAudioFileNotOpenError,
+    };
+
     match in_property_id {
         kAudioFilePropertyDataFormat => {
             let audio::AudioDescription {
-                sample_rate,
-                format,
-                bytes_per_packet,
-                frames_per_packet,
-                channels_per_frame,
-                bits_per_channel,
+                sample_rate, format, bytes_per_packet, frames_per_packet,
+                channels_per_frame, bits_per_channel,
             } = host_object.audio_file.audio_description();
+            
             let desc: AudioStreamBasicDescription = match format {
-                audio::AudioFormat::LinearPcm {
-                    is_float,
-                    is_little_endian,
-                } => {
-                    let is_packed = (bits_per_channel * channels_per_frame * frames_per_packet)
-                        == (bytes_per_packet * 8);
+                audio::AudioFormat::LinearPcm { is_float, is_little_endian } => {
+                    let is_packed = (bits_per_channel * channels_per_frame * frames_per_packet) == (bytes_per_packet * 8);
                     let format_flags = (u32::from(is_float) * kAudioFormatFlagIsFloat)
-                        | (u32::from((!is_float) && matches!(bits_per_channel, 16 | 24))
-                            * kAudioFormatFlagIsSignedInteger)
+                        | (u32::from((!is_float) && matches!(bits_per_channel, 16 | 24)) * kAudioFormatFlagIsSignedInteger)
                         | (u32::from(is_packed) * kAudioFormatFlagIsPacked)
                         | (u32::from(!is_little_endian) * kAudioFormatFlagIsBigEndian);
                     AudioStreamBasicDescription {
-                        sample_rate,
-                        format_id: kAudioFormatLinearPCM,
-                        format_flags,
-                        bytes_per_packet,
-                        frames_per_packet,
+                        sample_rate, format_id: kAudioFormatLinearPCM, format_flags,
+                        bytes_per_packet, frames_per_packet,
                         bytes_per_frame: bytes_per_packet / frames_per_packet,
-                        channels_per_frame,
-                        bits_per_channel,
-                        _reserved: 0,
+                        channels_per_frame, bits_per_channel, _reserved: 0,
                     }
                 }
                 audio::AudioFormat::Mpeg4Aac => {
                     AudioStreamBasicDescription {
-                        sample_rate,
-                        format_id: fourcc(b"aac "),
-                        format_flags: 0,
-                        bytes_per_packet,
-                        frames_per_packet,
-                        bytes_per_frame: 0,
-                        channels_per_frame,
-                        bits_per_channel,
-                        _reserved: 0,
+                        sample_rate, format_id: fourcc(b"aac "), format_flags: 0,
+                        bytes_per_packet, frames_per_packet, bytes_per_frame: 0,
+                        channels_per_frame, bits_per_channel, _reserved: 0,
                     }
                 }
                 audio::AudioFormat::AppleIma4 => {
                     AudioStreamBasicDescription {
-                        sample_rate,
-                        format_id: fourcc(b"ima4"),
-                        format_flags: 0,
-                        bytes_per_packet,
-                        frames_per_packet,
-                        bytes_per_frame: 0,
-                        channels_per_frame,
-                        bits_per_channel,
-                        _reserved: 0,
+                        sample_rate, format_id: fourcc(b"ima4"), format_flags: 0,
+                        bytes_per_packet, frames_per_packet, bytes_per_frame: 0,
+                        channels_per_frame, bits_per_channel, _reserved: 0,
                     }
                 }
             };
@@ -413,44 +385,28 @@ pub fn AudioFileGetProperty(
         }
         kAudioFilePropertyPacketSizeUpperBound => {
             let packet_size_upper_bound: u32 = host_object.audio_file.packet_size_upper_bound();
-            env.mem
-                .write(out_property_data.cast(), packet_size_upper_bound);
+            env.mem.write(out_property_data.cast(), packet_size_upper_bound);
         }
         kAudioFilePropertyEstimatedDuration => {
-            let AudioDescription {
-                sample_rate,
-                bytes_per_packet,
-                frames_per_packet,
-                ..
-            } = host_object.audio_file.audio_description();
-            let estimated_duration: f64 = host_object.audio_file.byte_count() as f64
-                * frames_per_packet as f64
-                / (bytes_per_packet as f64 * sample_rate);
+            let AudioDescription { sample_rate, bytes_per_packet, frames_per_packet, .. } = host_object.audio_file.audio_description();
+            let estimated_duration: f64 = host_object.audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate);
             env.mem.write(out_property_data.cast(), estimated_duration);
         }
         kAudioFilePropertyPacketTableInfo => {
-            log!("TODO: AudioFileGetProperty({:?}, kAudioFilePropertyPacketTableInfo, {:?}, {:?}) -> kAudioFileUnsupportedPropertyError", in_audio_file, io_data_size, out_property_data);
             return kAudioFileUnsupportedPropertyError;
         }
         kAudioFilePropertyPacketToFrame => {
-            let AudioDescription {
-                sample_rate,
-                bytes_per_packet,
-                frames_per_packet,
-                ..
-            } = host_object.audio_file.audio_description();
-            let estimated_duration: f64 = host_object.audio_file.byte_count() as f64
-                * frames_per_packet as f64
-                / (bytes_per_packet as f64 * sample_rate);
+            let AudioDescription { sample_rate, bytes_per_packet, frames_per_packet, .. } = host_object.audio_file.audio_description();
+            let estimated_duration: f64 = host_object.audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate);
             env.mem.write(out_property_data.cast(), estimated_duration);
         }
         kAudioFilePropertyFileFormat => {
             env.mem.write(out_property_data.cast(), kAudioFileCAFType);
         }
-        _ => unreachable!(),
+        _ => return kAudioFileUnsupportedPropertyError,
     }
 
-    0 // success
+    kAudioFileSuccess
 }
 
 fn AudioFileReadBytes(
@@ -462,24 +418,30 @@ fn AudioFileReadBytes(
     out_buffer: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
-    let host_object = State::get(&mut env.framework_state)
-        .audio_files
-        .get_mut(&in_audio_file)
-        .unwrap();
-    let bytes_to_read = env.mem.read(io_num_bytes);
-    let buffer_slice = env.mem.bytes_at_mut(out_buffer.cast(), bytes_to_read);
+    
+    if io_num_bytes.is_null() {
+        return paramErr;
+    }
 
-    let bytes_read = host_object
-        .audio_file
-        .read_bytes(in_starting_byte.try_into().unwrap(), buffer_slice)
-        .unwrap();
-    // TODO: handle seek error?
-    env.mem.write(io_num_bytes, bytes_read.try_into().unwrap());
+    let host_object = match State::get(&mut env.framework_state).audio_files.get_mut(&in_audio_file) {
+        Some(obj) => obj,
+        None => return kAudioFileNotOpenError,
+    };
+        
+    let bytes_to_read = env.mem.read(io_num_bytes);
+    if bytes_to_read == 0 || out_buffer.is_null() {
+        return kAudioFileSuccess;
+    }
+
+    let buffer_slice = env.mem.bytes_at_mut(out_buffer.cast(), bytes_to_read);
+    let bytes_read = host_object.audio_file.read_bytes(in_starting_byte.try_into().unwrap_or(0), buffer_slice).unwrap_or(0);
+    
+    env.mem.write(io_num_bytes, bytes_read.try_into().unwrap_or(0));
 
     if bytes_read < bytes_to_read as usize {
         eofErr
     } else {
-        0 // success
+        kAudioFileSuccess
     }
 }
 
@@ -488,21 +450,14 @@ fn AudioFileReadPacketData(
     in_audio_file: AudioFileID,
     in_use_cache: bool,
     out_num_bytes: MutPtr<u32>,
-    out_packet_descriptions: MutVoidPtr, // unimplemented
+    out_packet_descriptions: MutVoidPtr,
     in_starting_packet: i64,
     io_num_packets: MutPtr<u32>,
     out_buffer: MutVoidPtr,
 ) -> OSStatus {
-    // TODO: real VBR support
     AudioFileReadPackets(
-        env,
-        in_audio_file,
-        in_use_cache,
-        out_num_bytes,
-        out_packet_descriptions,
-        in_starting_packet,
-        io_num_packets,
-        out_buffer,
+        env, in_audio_file, in_use_cache, out_num_bytes,
+        out_packet_descriptions, in_starting_packet, io_num_packets, out_buffer,
     )
 }
 
@@ -517,14 +472,13 @@ pub fn AudioFileReadPackets(
     out_buffer: MutVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
-    if !out_packet_descriptions.is_null() {
-        log_dbg!("AudioFileReadPackets: ignoring non-null out_packet_descriptions");
+    
+    if io_num_packets.is_null() {
+        log!("Warning: AudioFileReadPackets() called with null io_num_packets");
+        return paramErr;
     }
 
-    let host_object = match State::get(&mut env.framework_state)
-        .audio_files
-        .get_mut(&in_audio_file)
-    {
+    let host_object = match State::get(&mut env.framework_state).audio_files.get_mut(&in_audio_file) {
         Some(obj) => obj,
         None => {
             log!("Warning: AudioFileReadPackets: unknown AudioFileID {:?}", in_audio_file);
@@ -534,85 +488,46 @@ pub fn AudioFileReadPackets(
 
     let packet_size = host_object.audio_file.packet_size_fixed();
     let packets_to_read = env.mem.read(io_num_packets);
-    // If packet_size is 0 (VBR file) or packets_to_read is 0, return early.
+    
     if packet_size == 0 || packets_to_read == 0 {
         env.mem.write(io_num_packets, 0);
-        if !out_num_bytes.is_null() {
-            env.mem.write(out_num_bytes, 0);
-        }
+        if !out_num_bytes.is_null() { env.mem.write(out_num_bytes, 0); }
         return kAudioFileSuccess;
     }
 
     let starting_byte = match i64::from(packet_size).checked_mul(in_starting_packet) {
         Some(v) => v,
-        None => {
-            log!(
-                "Warning: AudioFileReadPackets: starting byte overflow \
-                 (packet_size={}, in_starting_packet={})",
-                packet_size, in_starting_packet
-            );
-            return kAudioFileBadPropertySizeError;
-        }
+        None => return kAudioFileBadPropertySizeError,
     };
+    
     let bytes_to_read = match packets_to_read.checked_mul(packet_size) {
         Some(v) => v,
-        None => {
-            log!(
-                "Warning: AudioFileReadPackets: bytes_to_read overflow \
-                 (packets_to_read={}, packet_size={})",
-                packets_to_read, packet_size
-            );
-            return kAudioFileBadPropertySizeError;
-        }
+        None => return kAudioFileBadPropertySizeError,
     };
-    // Write the byte count we intend to read before calling AudioFileReadBytes
-    // so it knows the buffer size.
+
     if !out_num_bytes.is_null() {
         env.mem.write(out_num_bytes, bytes_to_read);
     }
 
     let res = AudioFileReadBytes(
-        env,
-        in_audio_file,
-        in_use_cache,
-        starting_byte,
-        out_num_bytes,
-        out_buffer,
+        env, in_audio_file, in_use_cache, starting_byte, out_num_bytes, out_buffer,
     );
-    // Update io_num_packets to reflect how many packets were actually read.
-    let bytes_read = if !out_num_bytes.is_null() {
-        env.mem.read(out_num_bytes)
-    } else {
-        0
-    };
+    
+    let bytes_read = if !out_num_bytes.is_null() { env.mem.read(out_num_bytes) } else { 0 };
     let packets_read = bytes_read / packet_size;
     env.mem.write(io_num_packets, packets_read);
 
-    log_dbg!(
-        "AudioFileReadPackets: starting_packet={} requested={} read={} bytes={} res={}",
-        in_starting_packet, packets_to_read, packets_read, bytes_read, res
-    );
     res
 }
 
 pub fn AudioFileClose(env: &mut Environment, in_audio_file: AudioFileID) -> OSStatus {
     return_if_null!(in_audio_file);
-    let Some(_host_object) = State::get(&mut env.framework_state)
-        .audio_files
-        .remove(&in_audio_file)
-    else {
-        log!(
-            "Bad AudioFileClose for {:?} (likely double close), ignoring!",
-            in_audio_file
-        );
+    let Some(_host_object) = State::get(&mut env.framework_state).audio_files.remove(&in_audio_file) else {
+        log!("Bad AudioFileClose for {:?} (likely double close), ignoring!", in_audio_file);
         return kAudioFileUnspecifiedError;
     };
     env.mem.free(in_audio_file.cast());
-    log_dbg!(
-        "AudioFileClose() destroyed audio file handle: {:?}",
-        in_audio_file
-    );
-    0 // success
+    kAudioFileSuccess
 }
 
 fn AudioFileStreamOpen(
@@ -634,12 +549,7 @@ pub fn AudioFormatGetPropertyInfo(
     _specifier: crate::mem::ConstPtr<u8>,
     _out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    log!(
-        "Stubbed AudioFormatGetPropertyInfo for property ID: {}",
-        debug_fourcc(property_id)
-    );
-    // Return paramErr (-50) to indicate the property/format info is not available.
-    -50
+    -50 // paramErr
 }
 
 pub const FUNCTIONS: FunctionExports = &[
