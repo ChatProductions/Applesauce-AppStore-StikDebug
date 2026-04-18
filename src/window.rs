@@ -228,7 +228,7 @@ fn surface_from_image(image: &Image) -> Surface<'_> {
 
 pub struct Window {
     _sdl_ctx: sdl2::Sdl,
-    video_ctx: sdl2::VideoSubsystem,
+    video_ctx: sdl2::video::VideoSubsystem,
     window: sdl2::video::Window,
     event_pump: sdl2::EventPump,
     event_queue: VecDeque<Event>,
@@ -442,7 +442,10 @@ impl Window {
     /// Since polling can be quite expensive, this function will skip it if it
     /// was called too recently.
     pub fn poll_for_events(&mut self, options: &Options) {
-        assert!(self.on_main_stack);
+        if !self.on_main_stack {
+            log!("Warning: poll_for_events called off main stack, skipping");
+            return;
+        }
         let now = Instant::now();
         // poll roughly twice per frame to try to avoid missing frames sometimes
         if now.duration_since(self.last_polled) < Duration::from_secs_f64(1.0 / 120.0) {
@@ -1293,7 +1296,10 @@ impl Window {
     /// content appears upright. On a mobile device, this might do something
     /// else, because the user can physically rotate the screen.
     pub fn rotate_device(&mut self, new_orientation: DeviceOrientation) {
-        assert!(self.on_main_stack);
+        if !self.on_main_stack {
+            log!("Warning: rotate_device called off main stack, skipping");
+            return;
+        }
         if new_orientation == self.device_orientation {
             return;
         }
@@ -1429,7 +1435,10 @@ impl Window {
         self.video_ctx.is_screen_saver_enabled()
     }
     pub fn set_screen_saver_enabled(&mut self, enabled: bool) {
-        assert!(self.on_main_stack);
+        if !self.on_main_stack {
+            log!("Warning: set_screen_saver_enabled called off main stack, skipping");
+            return;
+        }
         match enabled {
             true => self.video_ctx.enable_screen_saver(),
             false => self.video_ctx.disable_screen_saver(),
@@ -1437,13 +1446,19 @@ impl Window {
     }
 
     pub fn start_text_input(&self) {
-        assert!(self.on_main_stack);
+        if !self.on_main_stack {
+            log!("Warning: start_text_input called off main stack, skipping");
+            return;
+        }
         unsafe {
             sdl2_sys::SDL_StartTextInput();
         }
     }
     pub fn stop_text_input(&self) {
-        assert!(self.on_main_stack);
+        if !self.on_main_stack {
+            log!("Warning: stop_text_input called off main stack, skipping");
+            return;
+        }
         unsafe {
             sdl2_sys::SDL_StopTextInput();
         }
@@ -1463,7 +1478,10 @@ pub fn open_url(env: &mut Environment, url: &str) -> Result<(), String> {
 /// The window argument allows for passing in the parent window for the
 /// messagebox, which is not required but should be done if possible.
 pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
-    assert!(window.is_none_or(|win| win.on_main_stack));
+    if window.is_some_and(|win| !win.on_main_stack) {
+        log!("Warning: show_error_messagebox called off main stack, skipping");
+        return;
+    }
     use sdl2::messagebox;
     let mbox = [
         messagebox::ButtonData {
@@ -1589,4 +1607,4 @@ pub fn show_alert_dialog(
             _ => 0,
         }
     })
-}
+        }
