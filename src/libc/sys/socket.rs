@@ -559,7 +559,6 @@ fn select(
     }
 
     let should_block = if !timeout.is_null() {
-
         let timeval = env.mem.read(timeout);
         let tv_sec = timeval.tv_sec;
         let tv_usec = timeval.tv_usec;
