@@ -1491,6 +1491,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (())applyToValue:(id)value forKey:(id)key ofObject:(id)object {
+    if object == nil {
+        log_dbg!("NSString applyToValue:forKey:ofObject: — object is nil, ignored");
+        return;
+    }
+    let effective_key: id = if key == nil { this } else { key };
+    let _: () = msg![env; object setValue:value forKey:effective_key];
+}
+
 @end
 
 @implementation _touchHLE_NSString_CFConstantString_UTF16: _touchHLE_NSString_Static
