@@ -12,7 +12,7 @@ use crate::dyld::HostFunction;
 use crate::frameworks::audio_toolbox::audio_file::{
     self, kAudioFilePropertyDataFormat, kAudioFilePropertyPacketSizeUpperBound,
     kAudioFileReadPermission, AudioFileClose, AudioFileGetProperty, AudioFileID, AudioFileOpenURL,
-    AudioFileReadPackets,
+    AudioFileReadPackets, AudioFileHostObject,
 };
 use crate::frameworks::audio_toolbox::audio_queue::{
     kAudioQueueParam_Volume, AudioQueueAllocateBuffer, AudioQueueBufferRef, AudioQueueDispose,
@@ -52,7 +52,6 @@ impl HostObject for AVAudioPlayerHostObject {}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
-// КРИТИЧЕСКИ ВАЖНО: Эта строка должна быть здесь для работы макроса
 (env, this, _cmd);
 @implementation AVAudioPlayer: NSObject
 
@@ -105,11 +104,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// ДОБАВЛЕННЫЙ МЕТОД: Заглушка для инициализации из Data
 - (id)initWithData:(id)data error:(MutPtr<id>)outError {
     log_dbg!("[(AVAudioPlayer*){:?} initWithData:{:?} outError:{:?}] (STUB)", this, data, outError);
-    // Возвращаем nil, чтобы приложение понимало, что плеер не инициализирован, 
-    // и не пыталось вызывать у него методы play/stop
     nil
 }
 
@@ -288,7 +284,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<AVAudioPlayerHostObject>(this);
     host_object.set_current_time = currentTime;
     if let (Some(audio_desc), Some(audio_file_id)) = (host_object.audio_desc, host_object.audio_file_id) {
-        let total_packets = audio_file::State::get(&mut env.framework_state).audio_files.get(&audio_file_id).unwrap().audio_file.packet_count();
+        
+        let target_host_obj = audio_file::State::get(&mut env.framework_state)
+            .audio_files
+            .get(&audio_file_id)
+            .unwrap();
+            
+        let total_packets = match target_host_obj {
+            AudioFileHostObject::Real(af) => af.packet_count(),
+            AudioFileHostObject::Dummy { packet_count, .. } => *packet_count,
+        };
+        
         let total_frames = total_packets * audio_desc.frames_per_packet as u64;
         let new_current_frame = audio_desc.sample_rate * currentTime;
         if new_current_frame < 0.0 || new_current_frame > total_frames as f64 {
@@ -371,7 +377,6 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     env.mem.write(num_packets_ptr, num_packets_to_read);
     let mut audio_queue_buffer = env.mem.read(in_buf);
     
-    // ИСПРАВЛЕНИЕ: Передаем 0 (u32) вместо false (bool) (в оригинальном коде была ошибка типизации)
     let status = AudioFileReadPackets(
         env,
         audio_file_id.unwrap(),
@@ -387,7 +392,6 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     env.mem.free(num_packets_ptr.cast());
     env.mem.free(num_bytes_ptr.cast());
     if num_packets > 0 {
-        // Убрали жесткий assert!(status == 0 || status == eofErr);
         if status != 0 && status != eofErr {
             log!("Warning: AVAudioPlayer read error (status {}), ignoring to prevent crash.", status);
         }
@@ -395,7 +399,6 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
         env.mem.write(in_buf, audio_queue_buffer);
         let enqueue_status = AudioQueueEnqueueBuffer(env, aq, in_buf, 0, Ptr::null());
         
-        // Убрали жесткий assert_eq!(enqueue_status, 0);
         if enqueue_status != 0 {
              log!("Warning: AudioQueueEnqueueBuffer failed with status {}", enqueue_status);
         }
@@ -404,7 +407,6 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
             .current_packet = current_packet + num_packets as i64;
     } else {
-        // Убрали жесткий assert_eq!(status, eofErr);
         if status != eofErr {
              log!("Warning: AVAudioPlayer expected eofErr but got status {}, stopping playback safely.", status);
         }
@@ -414,7 +416,6 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             .num_of_loops;
         if number_of_loops == 0 {
             let stop_status = AudioQueueStop(env, aq, false);
-            // Убрали жесткий assert_eq!(stop_status, 0);
             if stop_status != 0 {
                  log!("Warning: AudioQueueStop failed with status {}", stop_status);
             }
@@ -433,5 +434,4 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             _touchHLE_AVAudioPlayerOutputBufferHelper(env, in_user_data, in_aq, in_buf);
         }
     }
-}
-
+    }
