@@ -36,29 +36,29 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
         }
     };
 
-    // Находим любую аудиодорожку, которую Symphonia способна прочитать,
-    // без жесткого ограничения по CODEC_ID.
+    // Находим любую аудиодорожку, проверяя наличие параметров аудио.
     let track = probed
         .tracks()
         .iter()
         .find(|t| {
             if let Some(codec_params) = &t.codec_params {
-                codec_params.codec != symphonia::core::codecs::CODEC_ID_NULL
+                codec_params.audio().is_some()
             } else {
                 false
             }
         })
         .ok_or_else(|| {
             log!("Symphonia: No supported audio tracks found in file");
-        })
-        .ok()?;
+        })?;
 
     let track_id = track.id;
-    let audio_codec_params = track.codec_params.clone();
+    
+    // Получаем AudioCodecParameters, так как мы уже убедились, что они есть.
+    let audio_codec_params = track.codec_params.as_ref().unwrap().audio().unwrap();
 
     // Создаем декодер
     let mut decoder = match symphonia::default::get_codecs()
-        .make_audio_decoder(&audio_codec_params, &Default::default()) {
+        .make_audio_decoder(audio_codec_params, &Default::default()) {
         Ok(d) => d,
         Err(e) => {
             log!("Symphonia failed to create audio decoder: {:?}", e);
@@ -74,8 +74,8 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
 
         loop {
             let packet = match probed.next_packet() {
-                Ok(packet) => packet,
-                // Конец файла
+                Ok(Some(packet)) => packet, // Успешно получили пакет
+                Ok(None) => break,          // Конец файла (медиа завершилось)
                 Err(symphonia::core::errors::Error::IoError(_)) => break,
                 Err(e) => {
                     log!("Symphonia packet read error: {:?} (Stopping read but keeping decoded audio)", e);
@@ -101,7 +101,7 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
             };
 
             let audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
-            
+
             let tmp_raw_s16_buf = tmp_raw_s16_buf
                 .get_or_insert_with(|| Vec::with_capacity(decoded_packet.capacity()));
 
@@ -114,7 +114,7 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
 
     let audio_spec = audio_spec.ok_or_else(|| {
         log!("Symphonia: File yielded no valid audio data");
-    }).ok()?;
+    })?;
 
     Ok(SymphoniaDecodedToPcm {
         bytes: out_pcm,
