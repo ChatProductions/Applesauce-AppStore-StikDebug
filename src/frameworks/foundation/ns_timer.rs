@@ -80,35 +80,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(NSTimerHostObject {
-        ns_interval: 0.0,
-        rust_interval: Duration::from_secs(0),
-        target: nil,
-        selector: SEL::null(),
-        user_info: nil,
-        repeats: false,
-        due_by: None,
-        is_running_callback: false,
-        run_loop: nil,
-    });
+    // Безопасно зануляем структуру, если Default вдруг не реализован вручную
+    let host_object = Box::new(unsafe { std::mem::zeroed::<NSTimerHostObject>() });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
     
-+ (id)scheduledTimerWithTimeInterval:(double)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
-    // Вызываем нашу реализацию alloc
++ (id)scheduledTimerWithTimeInterval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
     let timer: id = msg_class![env; NSTimer alloc];
-    // Вызываем нашу реализацию init
     let timer: id = msg![env; timer initWithFireDate:nil interval:ti target:t selector:s userInfo:ui repeats:rep];
     
-    // Добавляем таймер в текущий RunLoop, чтобы он начал тикать
     let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
-    let _: () = msg![env; run_loop addTimer:timer forMode:NSDefaultRunLoopMode];
+    
+    // Получаем реальный гостевой NSString из системного пула эмулятора
+    let mode_str = crate::frameworks::foundation::ns_string::get_static_str(env, "NSDefaultRunLoopMode");
+    
+    let _: () = msg![env; run_loop addTimer:timer forMode:mode_str];
     
     timer
 }
 
 - (())dealloc {
-    () = msg![env; this invalidate];
+    let _: () = msg![env; this invalidate];
     
     let host = env.objc.borrow::<NSTimerHostObject>(this);
     let (target, user_info) = (host.target, host.user_info);
@@ -136,9 +128,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())invalidate {
     let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
     host.due_by = None;
-    if host.run_loop != nil {
-        ns_run_loop::remove_timer(env, host.run_loop, this);
-        host.run_loop = nil;
+    if host.run_loop != crate::objc::nil {
+        crate::frameworks::foundation::ns_run_loop::remove_timer(env, host.run_loop, this);
+        host.run_loop = crate::objc::nil;
     }
 }
 
@@ -200,19 +192,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-- (id)initWithFireDate:(id)_date interval:(double)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
-    msg_super![env; this init];
+- (id)initWithFireDate:(id)_date interval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
+    let this: id = crate::objc::msg_super![env; this init];
     
     let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
     host.ns_interval = ti;
-    host.rust_interval = Duration::from_secs_f64(ti);
+    host.rust_interval = std::time::Duration::from_secs_f64(ti);
     host.target = retain(env, t);
     host.selector = s;
     host.user_info = retain(env, ui);
     host.repeats = rep;
     
-    // Устанавливаем время первого срабатывания (сейчас + интервал)
-    host.due_by = Some(Instant::now() + host.rust_interval);
+    host.due_by = Some(std::time::Instant::now() + host.rust_interval);
     
     this
 }
