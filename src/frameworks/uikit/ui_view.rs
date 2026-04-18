@@ -706,26 +706,61 @@ pub const CLASSES: ClassExports = objc_classes! {
     if host_object.view_controller != nil { host_object.view_controller } else { host_object.superview }
 }
 
-- (CGPoint)convertPoint:(CGPoint)point fromView:(id)other {
-    if other == nil {
-        let window: id = msg![env; this window];
-        if window == nil { return point; }
-        return msg![env; this convertPoint:point fromView:window]
-    }
-    let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    let other_layer = env.objc.borrow::<UIViewHostObject>(other).layer;
-    msg![env; this_layer convertPoint:point fromLayer:other_layer]
-}
-
 - (CGPoint)convertPoint:(CGPoint)point toView:(id)other {
     if other == nil {
         let window: id = msg![env; this window];
         if window == nil { return point; }
         return msg![env; this convertPoint:point toView:window]
     }
+    
+    // Честная проверка: является ли other UIView
+    let view_class: id = msg_class![env; UIView class];
+    let is_view: bool = msg![env; other isKindOfClass:view_class];
+    let actual_other = if is_view {
+        other
+    } else {
+        // Если передали не UIView (например, UIViewController), пробуем достать его view
+        let mut found_view = nil;
+        if let Some(sel_view) = env.objc.lookup_selector("view") {
+            let responds: bool = msg![env; other respondsToSelector:sel_view];
+            if responds { found_view = msg![env; other view]; }
+        }
+        found_view
+    };
+    
+    // Если объект абсолютно несовместим (например, UIAlertView), отдаем точку как есть
+    if actual_other == nil { return point; }
+
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    let other_layer = env.objc.borrow::<UIViewHostObject>(other).layer;
+    let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertPoint:point toLayer:other_layer]
+}
+
+- (CGPoint)convertPoint:(CGPoint)point fromView:(id)other {
+    if other == nil {
+        let window: id = msg![env; this window];
+        if window == nil { return point; }
+        return msg![env; this convertPoint:point fromView:window]
+    }
+    
+    let view_class: id = msg_class![env; UIView class];
+    let is_view: bool = msg![env; other isKindOfClass:view_class];
+    let actual_other = if is_view {
+        other
+    } else {
+        let mut found_view = nil;
+        if let Some(sel_view) = env.objc.lookup_selector("view") {
+            let responds: bool = msg![env; other respondsToSelector:sel_view];
+            if responds { found_view = msg![env; other view]; }
+        }
+        found_view
+    };
+    
+    if actual_other == nil { return point; }
+
+    let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
+    msg![env; this_layer convertPoint:point fromLayer:other_layer]
 }
 
 - (CGRect)convertRect:(CGRect)rect fromView:(id)other {
@@ -734,8 +769,24 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return rect; }
         return msg![env; this convertRect:rect fromView:window]
     }
+    
+    let view_class: id = msg_class![env; UIView class];
+    let is_view: bool = msg![env; other isKindOfClass:view_class];
+    let actual_other = if is_view {
+        other
+    } else {
+        let mut found_view = nil;
+        if let Some(sel_view) = env.objc.lookup_selector("view") {
+            let responds: bool = msg![env; other respondsToSelector:sel_view];
+            if responds { found_view = msg![env; other view]; }
+        }
+        found_view
+    };
+    
+    if actual_other == nil { return rect; }
+
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    let other_layer = env.objc.borrow::<UIViewHostObject>(other).layer;
+    let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertRect:rect fromLayer:other_layer]
 }
 
@@ -745,8 +796,24 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return rect; }
         return msg![env; this convertRect:rect toView:window]
     }
+    
+    let view_class: id = msg_class![env; UIView class];
+    let is_view: bool = msg![env; other isKindOfClass:view_class];
+    let actual_other = if is_view {
+        other
+    } else {
+        let mut found_view = nil;
+        if let Some(sel_view) = env.objc.lookup_selector("view") {
+            let responds: bool = msg![env; other respondsToSelector:sel_view];
+            if responds { found_view = msg![env; other view]; }
+        }
+        found_view
+    };
+    
+    if actual_other == nil { return rect; }
+
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    let other_layer = env.objc.borrow::<UIViewHostObject>(other).layer;
+    let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertRect:rect toLayer:other_layer]
 }
 
