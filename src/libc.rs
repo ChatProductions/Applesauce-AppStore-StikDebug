@@ -131,6 +131,7 @@ pub struct State {
     pub socket: sys::socket::State,
     stdlib: stdlib::State,
     string: string::State,
+    signal: signal::State,
     stdio: stdio::State,
     time: time::State,
     errno: errno::State,
