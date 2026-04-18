@@ -228,7 +228,7 @@ fn surface_from_image(image: &Image) -> Surface<'_> {
 
 pub struct Window {
     _sdl_ctx: sdl2::Sdl,
-    video_ctx: sdl2::video::VideoSubsystem,
+    video_ctx: sdl2::VideoSubsystem,
     window: sdl2::video::Window,
     event_pump: sdl2::EventPump,
     event_queue: VecDeque<Event>,
