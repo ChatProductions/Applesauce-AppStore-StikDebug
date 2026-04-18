@@ -490,9 +490,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setClipsToBounds:(bool)clips {
-    // Получаем слой из HostObject и устанавливаем masksToBounds
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    msg![env; layer setMasksToBounds:clips];
+    () = msg![env; layer setMasksToBounds:clips]; // <--- Явно указываем тип ()
 }
 
 // --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
