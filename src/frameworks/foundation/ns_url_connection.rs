@@ -178,7 +178,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Retain the delegate for the lifetime of this connection object.
     retain(env, delegate);
     {
-        let host = env.objc.borrow_mut::<NSURLConnectionHostObject>(this);
+        // ИСПРАВЛЕНИЕ: Добавлено mut, чтобы переменная могла быть изменена
+        let mut host = env.objc.borrow_mut::<NSURLConnectionHostObject>(this);
         host.delegate  = delegate;
         host.cancelled = false;
     }
@@ -188,7 +189,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     if start_immediately {
         // 2. СНАЧАЛА помечаем как отмененный, чтобы не обращаться к this ПОСЛЕ коллбека
         env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
-        
         // 3. Защищаем объект от удаления (dealloc) игрой внутри коллбека
         retain(env, this);
         notify_delegate_failure(env, this, delegate);
@@ -205,11 +205,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let already_done = host.cancelled;
     let delegate     = host.delegate;
     drop(host);
-    
+
     if !already_done {
         // То же самое: сначала меняем состояние, затем защищаем объект
         env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
-        
+
         retain(env, this);
         notify_delegate_failure(env, this, delegate);
         autorelease(env, this);
@@ -235,3 +235,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
