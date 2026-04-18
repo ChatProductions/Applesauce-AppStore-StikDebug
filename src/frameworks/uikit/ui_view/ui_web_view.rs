@@ -226,6 +226,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// =========================================================================
+// MARK: - Subview management
+// =========================================================================
+
+- (())insertSubview:(id)view aboveSubview:(id)sibling {
+    if view == nil { return; }
+
+    // If sibling is nil or not in our view hierarchy, just add at the top.
+    if sibling == nil {
+        let _: () = msg![env; this addSubview:view];
+        return;
+    }
+
+    // Delegate to UIView's insertSubview:aboveSubview: on our own view.
+    let self_view: id = msg![env; this view];
+    if self_view != nil {
+        let _: () = msg![env; self_view insertSubview:view aboveSubview:sibling];
+    } else {
+        // Fallback — just add it.
+        let _: () = msg![env; this addSubview:view];
+    }
+}
+
 - (())reload {
     log_dbg!("UIWebView reload");
     let current = env.objc.borrow::<UIWebViewHostObject>(this).current_url;
