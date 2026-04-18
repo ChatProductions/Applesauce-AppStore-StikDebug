@@ -126,11 +126,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())invalidate {
-    let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
-    host.due_by = None;
-    if host.run_loop != crate::objc::nil {
-        crate::frameworks::foundation::ns_run_loop::remove_timer(env, host.run_loop, this);
+    // РЕШЕНИЕ: Используем блок {}, чтобы ограничить жизнь переменной host
+    let run_loop_to_remove = {
+        let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
+        host.due_by = None;
+        let rl = host.run_loop;
         host.run_loop = crate::objc::nil;
+        rl // возвращаем run_loop из блока
+    }; // Здесь `host` уничтожается, и `env` снова свободен
+    
+    // Теперь безопасно передаем env в функцию
+    if run_loop_to_remove != crate::objc::nil {
+        crate::frameworks::foundation::ns_run_loop::remove_timer(env, run_loop_to_remove, this);
     }
 }
 
@@ -195,12 +202,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithFireDate:(id)_date interval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
     let this: id = crate::objc::msg_super![env; this init];
     
+    // РЕШЕНИЕ: Сначала вызываем retain (используем env), сохраняем в локальные переменные
+    let retained_target = retain(env, t);
+    let retained_user_info = retain(env, ui);
+    
+    // Только теперь берем borrow_mut
     let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
     host.ns_interval = ti;
     host.rust_interval = std::time::Duration::from_secs_f64(ti);
-    host.target = retain(env, t);
+    
+    // Присваиваем уже сохраненные значения
+    host.target = retained_target;
     host.selector = s;
-    host.user_info = retain(env, ui);
+    host.user_info = retained_user_info;
     host.repeats = rep;
     
     host.due_by = Some(std::time::Instant::now() + host.rust_interval);
