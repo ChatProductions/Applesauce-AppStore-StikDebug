@@ -257,14 +257,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let object: id = msg![env; selected_class alloc];
 
-    let mut init_obj: id = if orig == "UICustomObject" {
+    // ИСПРАВЛЕНИЕ: Мы ПЕРЕХВАТЫВАЕМ любые ViewController'ы.
+    // Если мы вызовем initWithCoder:, игра вызовет [super initWithCoder:],
+    // который в touchHLE отсутствует и вернет NULL, что крашнет гостевую память.
+    let mut init_obj: id = if orig == "UICustomObject" || orig == "UIResponder" {
         msg![env; object init]
+    } else if orig.contains("ViewController") {
+        log!("[DEBUG NIB] Bypassing initWithCoder: for {} to prevent guest NULL dereference.", name);
+        msg![env; object initWithNibName:nil bundle:nil]
     } else {
         msg![env; object initWithCoder:coder]
     };
 
     if init_obj == nil {
-        log!("[DEBUG NIB] Warning: initWithCoder: returned nil for {}, safely falling back to init", name);
+        log!("[DEBUG NIB] Warning: initialization returned nil for {}, safely falling back to init", name);
         init_obj = msg![env; object init];
     }
 
@@ -473,4 +479,4 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     }
 
     Ok(unarchiver)
-    }
+}
