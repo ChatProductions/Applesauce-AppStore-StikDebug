@@ -1054,18 +1054,28 @@ where
             break;
         }
         if c != b'%' {
-            let mut cc: u8 = getc_fn(env, subject, src_char_idx).unwrap().into();
-            // TODO: EOF
+            let x = getc_fn(env, subject, src_char_idx);
+            if x.is_err() { break 'outer; }
+            let mut cc: u8 = x.unwrap().into();
+
             if isspace(env, format + format_char_idx - 1) {
                 // "any single whitespace character in the format string
                 // consumes all available consecutive whitespace characters
                 // from the input"
+                let mut eof = false;
                 while isspace_inner(cc) {
                     src_char_idx += 1;
-                    cc = getc_fn(env, subject, src_char_idx).unwrap().into(); // TODO: EOF
+                    let x2 = getc_fn(env, subject, src_char_idx);
+                    if x2.is_err() {
+                        eof = true;
+                        break;
+                    }
+                    cc = x2.unwrap().into();
                 }
-                // backtrack one
-                ungetc_fn(env, subject, cc);
+                if !eof {
+                    // backtrack one
+                    ungetc_fn(env, subject, cc);
+                }
                 continue;
             }
             if c != cc {
@@ -1125,13 +1135,18 @@ where
                 break 'outer;
             }
             let mut cc: u8 = x.unwrap().into();
+            let mut eof = false;
             while isspace_inner(cc) {
                 src_char_idx += 1;
-                let x = getc_fn(env, subject, src_char_idx);
-                if x.is_err() {
-                    break 'outer;
+                let x2 = getc_fn(env, subject, src_char_idx);
+                if x2.is_err() {
+                    eof = true;
+                    break;
                 }
-                cc = x.unwrap().into();
+                cc = x2.unwrap().into();
+            }
+            if eof {
+                break 'outer;
             }
             // backtrack one
             ungetc_fn(env, subject, cc);
@@ -1363,24 +1378,29 @@ where
                 } else {
                     None
                 };
+                
                 let mut matched = false;
-                // Consume `src` while chars are not in the set
-                let mut cc = getc_fn(env, subject, src_char_idx).unwrap().into();
-                // TODO: EOF
-                src_char_idx += 1;
-                while set.contains(&cc) ^ inverted && cc != b'\0' {
+                loop {
+                    let x = getc_fn(env, subject, src_char_idx);
+                    if x.is_err() {
+                        break;
+                    }
+                    let cc: u8 = x.unwrap().into();
+                    src_char_idx += 1;
+                    
+                    if cc == b'\0' || !(set.contains(&cc) ^ inverted) {
+                        ungetc_fn(env, subject, cc);
+                        src_char_idx -= 1;
+                        break;
+                    }
+                    
                     matched = true;
                     if let Some(ptr) = dst_ptr {
                         env.mem.write(ptr, cc);
                         dst_ptr = Some(ptr + 1);
                     }
-                    cc = getc_fn(env, subject, src_char_idx).unwrap().into();
-                    // TODO: EOF
-                    src_char_idx += 1;
                 }
-                // we need to backtrack one position
-                ungetc_fn(env, subject, cc);
-                src_char_idx -= 1;
+                
                 if matched {
                     if let Some(ptr) = dst_ptr {
                         env.mem.write(ptr, b'\0');
@@ -1678,7 +1698,39 @@ fn wprintf(
     // Оборачиваем вызов к vwprintf
     vwprintf(env, format, args.start())
 }
+
+// Added NSLog/NSLogv per your documentation and requests
+fn NSLog(env: &mut Environment, format: id, args: DotDotDot) -> i32 {
+    NSLogv(env, format, args.start())
+}
+
+fn NSLogv(env: &mut Environment, format: id, arg: VaList) -> i32 {
+    if format != nil {
+        let rust_str = ns_string::to_rust_string(env, format);
+        let bytes = rust_str.as_bytes();
+        let len = bytes.len() as GuestUSize;
+        let res = printf_inner::<true, _>(
+            env,
+            |_mem, idx| {
+                if idx < len {
+                    bytes[idx as usize]
+                } else {
+                    b'\0'
+                }
+            },
+            arg,
+        );
         
+        let msg_str = String::from_utf8_lossy(&res);
+        log!("NSLog: {}", msg_str);
+        let _ = std::io::stderr().write_all(format!("NSLog: {}\n", msg_str).as_bytes());
+    } else {
+        log!("NSLog: (null format)");
+        let _ = std::io::stderr().write_all(b"NSLog: (null format)\n");
+    }
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sscanf(_, _, _)),
     export_c_func!(swscanf(_, _, _)),
@@ -1700,6 +1752,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vfprintf(_, _, _)),
     export_c_func!(wprintf(_, _)),
     export_c_func!(vwprintf(_, _)),
+    export_c_func!(NSLog(_, _)),
+    export_c_func!(NSLogv(_, _)),
 ];
 
 // Helper function, not a part of printf family
@@ -1713,4 +1767,3 @@ pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
     c.is_ascii_whitespace() || c == b'\x0b'
 } // ЗДЕСЬ БЫЛА ЛИШНЯЯ СКОБКА
-
