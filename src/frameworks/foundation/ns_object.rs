@@ -260,7 +260,7 @@ let _: () = msg_send(env, (this, sel, key));
 
     // If value is an NSValue (boxed scalar), allow it through — the assert
     // was too strict.
-Real KVC sometimes boxes CGRect/CGPoint etc. in NSValue.
+// Real KVC sometimes boxes CGRect/CGPoint etc. in NSValue.
     let value_class = msg![env; value class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
 if env.objc.class_is_subclass_of(value_class, ns_value_class) {
@@ -555,7 +555,7 @@ this setValue:value forKey:key_path]
 
 // Закомментировано: 'self' является зарезервированным словом в Rust и не может 
 // быть использовано как имя метода в этом макросе.
-Рантайм Objective-C справится с ним сам.
+// Рантайм Objective-C справится с ним сам.
 // - (id)self { ... }
 
 - (NSUInteger)version {
