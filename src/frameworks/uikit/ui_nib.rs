@@ -162,8 +162,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
     
+    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let id = if id_nss != nil {
-        to_rust_string(env, id_nss)
+        to_rust_string(env, id_nss).to_string()
     } else {
         String::new()
     };
@@ -205,16 +206,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let name_key = get_static_str(env, "UIClassName");
     let name_nss: id = msg![env; coder decodeObjectForKey:name_key];
+    
+    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let name = if name_nss != nil {
-        to_rust_string(env, name_nss)
+        to_rust_string(env, name_nss).to_string()
     } else {
         "NSObject".to_string()
     };
 
     let orig_key = get_static_str(env, "UIOriginalClassName");
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
+    
+    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let orig = if orig_nss != nil {
-        to_rust_string(env, orig_nss)
+        to_rust_string(env, orig_nss).to_string()
     } else {
         "NSObject".to_string()
     };
@@ -469,4 +474,4 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     }
 
     Ok(unarchiver)
-        }
+                 }
