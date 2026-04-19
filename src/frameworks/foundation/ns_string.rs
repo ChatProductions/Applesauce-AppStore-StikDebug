@@ -68,6 +68,7 @@ const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSWindowsCP1252StringEncoding,
     NSMacOSRomanStringEncoding,
     NSISOLatin1StringEncoding,
+    NSShiftJISStringEncoding,
     NSUTF32LittleEndianStringEncoding,
     NSNextStepLatinStringEncoding,
     NSUTF32StringEncoding,
@@ -2001,3 +2002,4 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
+
