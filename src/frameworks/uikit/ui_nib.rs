@@ -180,37 +180,31 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("[DEBUG NIB] UIClassSwapper loading class: {} (original: {})", name, orig);
     
     // Блок для определения подменного класса без ворнингов на лишний `mut`
-    let (selected_class, is_fallback) = {
-        let mut cls = env.objc.get_known_class(&name, &mut env.mem);
-        let mut fb = false;
-        
-        if cls == nil {
+    let selected_class = {
+        let mut c = env.objc.get_known_class(&name, &mut env.mem);
+        if c == nil {
             log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
-            cls = env.objc.get_known_class(&orig, &mut env.mem);
-            fb = true;
+            c = env.objc.get_known_class(&orig, &mut env.mem);
         }
         
         let problematic_views = ["FBLoginButton"];
-        if cls == nil || problematic_views.iter().any(|&c| name == c) {
+        if c == nil || problematic_views.iter().any(|&prob| name == prob) {
             log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
-            cls = env.objc.get_known_class("UIView", &mut env.mem);
-            fb = true;
+            c = env.objc.get_known_class("UIView", &mut env.mem);
         }
 
-        if cls == nil {
+        if c == nil {
             log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
-            cls = env.objc.get_known_class("NSObject", &mut env.mem);
-            fb = true;
+            c = env.objc.get_known_class("NSObject", &mut env.mem);
         }
-        
-        (cls, fb)
+        c
     };
 
     let object: id = msg![env; selected_class alloc];
     
-    // ВАЖНО: Если мы используем фолбек (подменный класс), мы обязаны использовать init.
-    // Если вызвать initWithCoder: для несовпадающего класса, произойдет краш при чтении ivars (NULL-PAGE READ at 0x6)
-    let object: id = if orig == "UICustomObject" || is_fallback {
+    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это чисто кастомный плейсхолдер Interface Builder
+    // Инициализация системных UIViewController через 'init' оставляет их сломанными и ведет к NULL-PAGE READ.
+    let object: id = if orig == "UICustomObject" {
         msg![env; object init]
     } else {
         msg![env; object initWithCoder:coder]
@@ -303,6 +297,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
     
     if source != nil && destination != nil && label != nil {
+        let source_class = msg![env; source class];
+        let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
+        
+        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто заглушка NSObject
+        if source_class == ns_object_class {
+            let label_str = to_rust_string(env, label);
+            log!("touchHLE NIB: Skipping outlet '{}' connection because source is an unhandled NSObject", label_str);
+            return;
+        }
+
         () = msg![env; source setValue:destination forKey:label];
     }
 }
@@ -321,7 +325,7 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     };
 
     let len: NSUInteger = msg![env; ns_data length];
-    // Если длина файла достаточна, значит указатель bytes гарантированно валиден
+    // Если длина файла достаточна, значит указатель bytes гарантированно существует
     if len < 10 {
         return Err(());
     }
