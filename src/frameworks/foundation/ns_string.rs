@@ -165,7 +165,7 @@ impl StringHostObject {
             }
             // ИСПРАВЛЕНИЕ: Fallback-фоллбек вместо жесткой паники unimplemented!
             _ => {
-                crate::log::log!("Warning: Unimplemented encoding {:#x}. Using lossy UTF-8 fallback to prevent crash.", encoding);
+                log!("Warning: Unimplemented encoding {:#x}. Using lossy UTF-8 fallback to prevent crash.", encoding);
                 StringHostObject::Utf8(Cow::Owned(String::from_utf8_lossy(&bytes).into_owned()))
             }
         }
@@ -1167,7 +1167,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new_str = if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_string(env, coder)
     } else {
-        crate::log::log!("Warning: _touchHLE_NSString initWithCoder: unsupported coder class, returning empty string");
+        log!("Warning: _touchHLE_NSString initWithCoder: unsupported coder class, returning empty string");
         get_static_str(env, "")
     };
     release(env, this);
@@ -1970,3 +1970,4 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
+
