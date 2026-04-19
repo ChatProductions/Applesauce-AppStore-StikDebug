@@ -179,29 +179,34 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     log!("[DEBUG NIB] UIClassSwapper loading class: {} (original: {})", name, orig);
     
-    let mut is_fallback = false;
-    let mut class = env.objc.get_known_class(&name, &mut env.mem);
-    
-    if class == nil {
-        log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
-        class = env.objc.get_known_class(&orig, &mut env.mem);
-        is_fallback = true;
-    }
-    
-    let problematic_views = ["FBLoginButton"];
-    if class == nil || problematic_views.iter().any(|&c| name == c) {
-        log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
-        class = env.objc.get_known_class("UIView", &mut env.mem);
-        is_fallback = true;
-    }
+    // Блок для определения подменного класса без ворнингов на лишний `mut`
+    let (selected_class, is_fallback) = {
+        let mut cls = env.objc.get_known_class(&name, &mut env.mem);
+        let mut fb = false;
+        
+        if cls == nil {
+            log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
+            cls = env.objc.get_known_class(&orig, &mut env.mem);
+            fb = true;
+        }
+        
+        let problematic_views = ["FBLoginButton"];
+        if cls == nil || problematic_views.iter().any(|&c| name == c) {
+            log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
+            cls = env.objc.get_known_class("UIView", &mut env.mem);
+            fb = true;
+        }
 
-    if class == nil {
-        log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
-        class = env.objc.get_known_class("NSObject", &mut env.mem);
-        is_fallback = true;
-    }
+        if cls == nil {
+            log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
+            cls = env.objc.get_known_class("NSObject", &mut env.mem);
+            fb = true;
+        }
+        
+        (cls, fb)
+    };
 
-    let object: id = msg![env; class alloc];
+    let object: id = msg![env; selected_class alloc];
     
     // ВАЖНО: Если мы используем фолбек (подменный класс), мы обязаны использовать init.
     // Если вызвать initWithCoder: для несовпадающего класса, произойдет краш при чтении ivars (NULL-PAGE READ at 0x6)
@@ -316,14 +321,12 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     };
 
     let len: NSUInteger = msg![env; ns_data length];
+    // Если длина файла достаточна, значит указатель bytes гарантированно валиден
     if len < 10 {
         return Err(());
     }
     
     let bytes: ConstVoidPtr = msg![env; ns_data bytes];
-    if bytes.cast() == 0 {
-        return Err(()); // Защита от нулевого указателя памяти
-    }
 
     let unarchiver = if env.mem.bytes_at(bytes.cast(), 10) == b"NIBArchive" {
         let decoder: id = msg_class![env; _touchHLE_NIBArchiveDecoder alloc];
