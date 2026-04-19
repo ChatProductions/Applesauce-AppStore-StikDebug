@@ -162,7 +162,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
     
-    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let id = if id_nss != nil {
         to_rust_string(env, id_nss).to_string()
     } else {
@@ -183,8 +182,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let dummy: id = msg![env; ns_object_class alloc];
         msg![env; dummy init]
     } else if id == "IBFirstResponder" {
-        log!("touchHLE: Bypassing IBFirstResponder replacement with dummy NSObject");
-        let proxy_class = env.objc.get_known_class("NSObject", &mut env.mem);
+        log!("touchHLE: Replacing IBFirstResponder with dummy UIResponder");
+        let proxy_class = env.objc.get_known_class("UIResponder", &mut env.mem);
         let dummy: id = msg![env; proxy_class alloc];
         let dummy_init: id = msg![env; dummy init];
         release(env, this);
@@ -207,7 +206,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let name_key = get_static_str(env, "UIClassName");
     let name_nss: id = msg![env; coder decodeObjectForKey:name_key];
     
-    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let name = if name_nss != nil {
         to_rust_string(env, name_nss).to_string()
     } else {
@@ -217,7 +215,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let orig_key = get_static_str(env, "UIOriginalClassName");
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
     
-    // ИСПРАВЛЕНИЕ: добавлено .to_string() для совпадения типов (String)
     let orig = if orig_nss != nil {
         to_rust_string(env, orig_nss).to_string()
     } else {
@@ -260,16 +257,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let object: id = msg![env; selected_class alloc];
 
-    // ИСПРАВЛЕНИЕ: Мы удалили костыль `initWithNibName:nil bundle:nil` для UIViewController.
-    // Теперь UIViewController честно инициализируется через `initWithCoder:` в соответствии с документацией Apple.
-    let object: id = if orig == "UICustomObject" {
+    let mut init_obj: id = if orig == "UICustomObject" {
         msg![env; object init]
     } else {
         msg![env; object initWithCoder:coder]
     };
 
+    if init_obj == nil {
+        log!("[DEBUG NIB] Warning: initWithCoder: returned nil for {}, safely falling back to init", name);
+        init_obj = msg![env; object init];
+    }
+
     release(env, this);
-    object
+    init_obj
 }
 
 @end
@@ -378,15 +378,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
 
-    // Skip KVC setValue:forKey: if the source is a bare NSObject placeholder
-    // (IBFirstResponder dummy, etc.) — KVC on NSObject will panic.
     let source_class: Class = msg![env; source class];
     let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
+    let ui_responder_class = env.objc.get_known_class("UIResponder", &mut env.mem);
 
-    if source_class == ns_object_class {
+    if source_class == ns_object_class || source_class == ui_responder_class {
         let label_str = to_rust_string(env, label);
         log!(
-            "touchHLE NIB: Skipping outlet '{}' — source is an unhandled NSObject placeholder",
+            "touchHLE NIB: Skipping outlet '{}' — source is an unhandled placeholder",
             label_str
         );
         return;
@@ -474,4 +473,4 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     }
 
     Ok(unarchiver)
-                 }
+    }
