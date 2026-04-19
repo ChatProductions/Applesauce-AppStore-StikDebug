@@ -64,8 +64,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle
     };
 
-    retain(env, nib_name);
-    retain(env, bundle);
+    if nib_name != nil {
+        retain(env, nib_name);
+    }
+    if bundle != nil {
+        retain(env, bundle);
+    }
     let host_object = Box::new(UINibHostObject {
         nib_name,
         bundle,
@@ -89,8 +93,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         ..
     } = env.objc.borrow(this);
 
-    release(env, nib_name);
-    release(env, bundle);
+    if nib_name != nil {
+        release(env, nib_name);
+    }
+    if bundle != nil {
+        release(env, bundle);
+    }
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -101,12 +109,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
     let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
     let type_: id = get_static_str(env, "nib");
+    
+    if nib_name == nil {
+        log!("Warning: UINib instantiateWithOwner: nib_name is nil!");
+        return nil;
+    }
+
     let path: id = msg![env; bundle pathForResource:nib_name ofType:type_];
 
     if path == nil {
+        let nib_name_str = to_rust_string(env, nib_name);
         log!(
             "Warning: UINib instantiateWithOwner: nib file {:?} not found",
-            to_rust_string(env, nib_name)
+            nib_name_str
         );
         return nil;
     }
@@ -146,7 +161,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
-    let id = to_rust_string(env, id_nss);
+    
+    let id = if id_nss != nil {
+        to_rust_string(env, id_nss)
+    } else {
+        String::new()
+    };
 
     if id == "IBFilesOwner" {
         let delegate: id = msg![env; coder delegate];
@@ -185,11 +205,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let name_key = get_static_str(env, "UIClassName");
     let name_nss: id = msg![env; coder decodeObjectForKey:name_key];
-    let name = to_rust_string(env, name_nss);
+    let name = if name_nss != nil {
+        to_rust_string(env, name_nss)
+    } else {
+        "NSObject".to_string()
+    };
 
     let orig_key = get_static_str(env, "UIOriginalClassName");
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
-    let orig = to_rust_string(env, orig_nss);
+    let orig = if orig_nss != nil {
+        to_rust_string(env, orig_nss)
+    } else {
+        "NSObject".to_string()
+    };
 
     log!(
         "[DEBUG NIB] UIClassSwapper loading class: {} (original: {})",
@@ -227,32 +255,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let object: id = msg![env; selected_class alloc];
 
-    // Determine the correct initializer to use:
-    //
-    // - UICustomObject (IBFilesOwner stand-in, app delegate, etc.): plain -init
-    //
-    // - UIViewController subclasses: use -initWithNibName:bundle:nil
-    //   iOS's UIViewController initWithCoder: is not fully implemented in
-    //   touchHLE and attempting to call it causes a NULL-PAGE READ crash.
-    //   The designated initializer for UIViewController is initWithNibName:bundle:,
-    //   and passing nil/nil is correct here: the VC will lazily load its own nib
-    //   (if any) by class name, or build its view programmatically.
-    //
-    // - Everything else: initWithCoder: (standard NSKeyedUnarchiver path)
-    let ui_vc_class = env.objc.get_known_class("UIViewController", &mut env.mem);
-    let is_view_controller = ui_vc_class != nil
-        && (selected_class == ui_vc_class
-            || env.objc.class_is_subclass_of(selected_class, ui_vc_class));
-
+    // ИСПРАВЛЕНИЕ: Мы удалили костыль `initWithNibName:nil bundle:nil` для UIViewController.
+    // Теперь UIViewController честно инициализируется через `initWithCoder:` в соответствии с документацией Apple.
     let object: id = if orig == "UICustomObject" {
         msg![env; object init]
-    } else if is_view_controller {
-        log!(
-            "[DEBUG NIB] UIClassSwapper: UIViewController subclass {} — \
-             using initWithNibName:bundle: (initWithCoder: is unsupported for UIViewController)",
-            name
-        );
-        msg![env; object initWithNibName:nil bundle:nil]
     } else {
         msg![env; object initWithCoder:coder]
     };
@@ -280,9 +286,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let source_key = get_static_str(env, "UISource");
     let source: id = msg![env; coder decodeObjectForKey: source_key];
 
-    retain(env, destination);
-    retain(env, source);
-    retain(env, label);
+    if destination != nil { retain(env, destination); }
+    if source != nil { retain(env, source); }
+    if label != nil { retain(env, label); }
 
     let host_obj = env.objc.borrow_mut::<UIRuntimeConnectionHostObject>(this);
     host_obj.destination = destination;
@@ -297,9 +303,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         label,
         source,
     } = env.objc.borrow(this);
-    release(env, destination);
-    release(env, label);
-    release(env, source);
+    if destination != nil { release(env, destination); }
+    if label != nil { release(env, label); }
+    if source != nil { release(env, source); }
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -463,5 +469,4 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     }
 
     Ok(unarchiver)
-}
-
+        }
