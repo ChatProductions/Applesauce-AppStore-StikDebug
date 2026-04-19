@@ -69,11 +69,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UIViewControllerHostObject>(this).parent_view_controller
 }
 
-// TODO: this should be a designated initializer
 - (id)initWithNibName:(id)nib_name // NSString *
                bundle:(id)bundle { // NSBundle *
-    retain(env, nib_name);
-    retain(env, bundle);
+    if nib_name != nil {
+        retain(env, nib_name);
+    }
+    if bundle != nil {
+        retain(env, bundle);
+    }
 
     log_dbg!("[(UIViewController*){:?} initWithNibName:{:?} bundle:{:?}]", this, nib_name, bundle);
 
@@ -87,9 +90,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
     () = msg![env; this setView:view];
 
-    // Читаем и сохраняем имя NIB-файла, чтобы контроллер знал, откуда грузить EAGLView
+    // Документация Apple: "When instantiating a view controller from a storyboard/nib, 
+    // iOS initializes the new view controller by calling its initWithCoder: method instead of this method 
+    // and sets the nibName property to a nib file stored inside the storyboard."
     let nib_name_key = get_static_str(env, "UINibName");
-    let nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
+    let mut nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
+    
+    // В старых рантаймах/сторибордах ключ может быть другим
+    if nib_name == nil {
+        let sb_name_key = get_static_str(env, "UIStoryboardName");
+        nib_name = msg![env; coder decodeObjectForKey:sb_name_key];
+    }
+
     if nib_name != nil {
         retain(env, nib_name);
         let host_obj = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
@@ -98,7 +110,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, old_nib_name);
     }
     
-    // Также на всякий случай вытягиваем Bundle
     let bundle_key = get_static_str(env, "UIBundleName");
     let bundle: id = msg![env; coder decodeObjectForKey:bundle_key];
     if bundle != nil {
@@ -114,10 +125,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let &UIViewControllerHostObject { view, nib_name, bundle, title, .. } = env.objc.borrow(this);
-    release(env, view);
-    release(env, nib_name);
-    release(env, bundle);
-    release(env, title); // предотвращаем утечку памяти
+    if view != nil { release(env, view); }
+    if nib_name != nil { release(env, nib_name); }
+    if bundle != nil { release(env, bundle); }
+    if title != nil { release(env, title); }
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -127,36 +138,38 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setNavigationController:(id)nav_controller {
-    // Используем прямое присваивание (weak reference в iOS),
-    // чтобы не создавать циклов сильных ссылок
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_controller = nav_controller;
 }
 
 - (())loadView {
+    // В этот момент msg![env; this nibName] уже резолвит и применяет правила поиска (см. метод nibName ниже)
     let nib_name: id = msg![env; this nibName];
-    let bundle: id = msg![env; this nibBundle];
+    
+    let mut bundle: id = msg![env; this nibBundle];
+    if bundle == nil {
+        bundle = msg_class![env; NSBundle mainBundle];
+    }
     
     if nib_name != nil {
         let nib: id = msg_class![env; UINib nibWithNibName:nib_name bundle:bundle];
         if nib != nil {
-            // instantiateWithOwner: подключит outlet 'view' к нашему контроллеру
             () = msg![env; nib instantiateWithOwner:this options:nil];
             
-            // Проверяем, привязалась ли вьюшка через outlet
+            // Если NIB загружен и outlet view инициализирован:
             if env.objc.borrow::<UIViewControllerHostObject>(this).view != nil {
                 return;
             }
         }
     }
 
-    // Если NIB не найден или в нем нет связи с view — создаем пустую вьюшку (fallback)
+    // "If the view controller does not have an associated nib file, this method creates a plain UIView object instead."
     let screen = msg_class![env; UIScreen mainScreen];
     let bounds: CGRect = msg![env; screen bounds];
     
     let view = msg_class![env; UIView alloc];
     let view: id = msg![env; view initWithFrame:bounds];
     () = msg![env; this setView:view];
-    release(env, view);
+    release(env, view); // setView сделает retain
 }
 
 - (())setView:(id)new_view { // UIView*
@@ -168,8 +181,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     if new_view != nil {
         set_view_controller(env, new_view, this);
     }
-    retain(env, new_view);
-    release(env, old_view);
+    if new_view != nil {
+        retain(env, new_view);
+    }
+    if old_view != nil {
+        release(env, old_view);
+    }
 }
 
 - (id)view {
@@ -213,11 +230,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setTitle:(id)title {
     let old_title = env.objc.borrow::<UIViewControllerHostObject>(this).title;
-    release(env, old_title);
-    // Освобождаем старую строку
-    retain(env, title);      // Удерживаем новую
+    if old_title != nil {
+        release(env, old_title);
+    }
+    if title != nil {
+        retain(env, title); 
+    }
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
 }
+
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
 }
@@ -235,15 +256,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interface_orientation {
-    // ИСПРАВЛЕНИЕ: 3 = LandscapeRight, 4 = LandscapeLeft
     interface_orientation == 3 || interface_orientation == 4
 }
 
-// UIResponder implementation
-// From the Apple UIView docs regarding [UIResponder nextResponder]:
-// "UIViewController similarly implements the method
-// and returns its view's superview."
-// https://developer.apple.com/documentation/uikit/uiresponder/next?language=objc
 - (id)nextResponder {
     let view = msg![env; this view];
     let next_responder = msg![env; view superview];
@@ -271,17 +286,19 @@ pub const CLASSES: ClassExports = objc_classes! {
         return host.nib_name;
     }
 
-    let bundle: id = msg![env; this nibBundle];
-    if bundle == nil { return nil; }
+    // Если bundle равен nil, Apple использует [NSBundle mainBundle] для поиска
+    let mut bundle: id = msg![env; this nibBundle];
+    if bundle == nil {
+        bundle = msg_class![env; NSBundle mainBundle];
+    }
 
-    // ИСПРАВЛЕНО: Разбито на две строки, чтобы избежать E0499 (multiple mutable borrows)
     let class: Class = msg![env; this class];
     let class_name: id = NSStringFromClass(env, class);
     
     let resolved = resolve_nib_name_from_class(env, bundle, class_name);
     release(env, class_name);
+
     if resolved != nil {
-        // Кешируем результат, чтобы не сканировать диск каждый раз
         retain(env, resolved);
         env.objc.borrow_mut::<UIViewControllerHostObject>(this).nib_name = resolved;
     }
@@ -313,7 +330,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)editButtonItem {
-    // Return a stub bar button item.
     msg_class![env; UIBarButtonItem new]
 }
 
@@ -378,7 +394,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)navigationItem {
-    // Return a stub navigation item with the VC's class name as title.
     let class: Class = msg![env; this class];
     let class_name: id = NSStringFromClass(env, class);
     let item: id = msg_class![env; UINavigationItem alloc];
@@ -388,7 +403,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())didReceiveMemoryWarning {
     log_dbg!("[(UIViewController*){:?} didReceiveMemoryWarning]", this);
-    // Release view if it doesn't have a superview.
     let view = env.objc.borrow::<UIViewControllerHostObject>(this).view;
     if view != nil {
         let superview: id = msg![env; view superview];
@@ -409,7 +423,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation {
-    // ИСПРАВЛЕНИЕ: Форсируем ландшафтный режим
     3
 }
 
@@ -451,7 +464,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
-// --- ИСПРАВЛЕНИЕ: Умные заглушки для пропуска видео и камеры ---
+// --- Умные заглушки для пропуска видео и камеры ---
 
 @implementation VideoViewController: UIViewController
 
@@ -459,9 +472,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg_super![env; this viewDidAppear:animated];
     log!("[HACK] VideoViewController auto-closing!");
     
-    // Закрываем модальное окно
     () = msg![env; this dismissModalViewControllerAnimated:false];
-    // На всякий случай удаляем View, если оно было добавлено напрямую
     let view: id = msg![env; this view];
     if view != nil {
         () = msg![env; view removeFromSuperview];
@@ -487,47 +498,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-/// A helper function to resolve suitable NIB name for a `view_controller`
-/// in the `bundle`.
-/// Returns nil if fails.
-///
-/// Note: It's a responsibility of a caller to release the returned name
-/// if not-nil!
-fn get_nib_name(env: &mut Environment, view_controller: id, bundle: id) -> id {
-    let provider_nib_name: id = env
-        .objc
-        .borrow::<UIViewControllerHostObject>(view_controller)
-        .nib_name;
-    if provider_nib_name != nil {
-        let resolved = check_and_resolve_nib(env, bundle, provider_nib_name);
-        if resolved != nil {
-            return resolved;
-        }
-    }
-
-    let class: Class = msg![env; view_controller class];
-    let class_name: id = NSStringFromClass(env, class);
-    let class_name_str = to_rust_string(env, class_name);
-    if let Some(name) = class_name_str.strip_suffix("Controller") {
-        let ns_name: id = from_rust_string(env, name.to_string());
-        let resolved = check_and_resolve_nib(env, bundle, ns_name);
-        if resolved != nil {
-            release(env, class_name);
-            return resolved;
-        }
-    }
-
-    let resolved = check_and_resolve_nib(env, bundle, class_name);
-    if resolved != nil {
-        // FIX: release class_name before returning — previously leaked here
-        release(env, class_name);
-        return resolved;
-    }
-
-    release(env, class_name);
-    nil
-}
-
 fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id {
     if base_name == nil {
         return nil;
@@ -546,8 +516,6 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
             let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
             if path != nil {
                 release(env, path);
-                // Путь нам не нужен, только подтверждение
-                // Возвращаем именно имя (candidate_ns), а не путь!
                 return autorelease(env, candidate_ns); 
             }
             release(env, candidate_ns);
@@ -567,7 +535,7 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
     let class_str = to_rust_string(env, class_name);
     if class_str.ends_with("Controller") {
         let short_name = &class_str[..class_str.len() - "Controller".len()];
-        let short_ns = from_rust_string(env, short_name.to_string()); // ИСПРАВЛЕНО: добавлено .to_string()
+        let short_ns = from_rust_string(env, short_name.to_string());
         let res = check_and_resolve_nib(env, bundle, short_ns);
         release(env, short_ns);
         if res != nil { return res; }
@@ -575,4 +543,3 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
     
     nil
 }
-
