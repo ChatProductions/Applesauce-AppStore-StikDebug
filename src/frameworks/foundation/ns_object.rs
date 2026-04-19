@@ -396,79 +396,57 @@ let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
 - (())performSelectorOnMainThread:(SEL)sel
                        withObject:(id)arg
                     waitUntilDone:(bool)wait {
+    let sel_name = sel.as_str(&env.mem);
+
+    // ОБЩАЯ ЗАГЛУШКА ДЛЯ ВИДЕО: Видео в эмуляторе пока не реализовано
+    // Игнорируем типичные вызовы воспроизведения видео для всех игр
+    if sel_name == "play" || sel_name == "startMovie:" || sel_name == "stopMovie:" || sel_name == "stopMovie" || sel_name == "moviePlayerInit:" || sel_name == "loadMovie:" {
+        log!("Warning: Video playback is not implemented. Stubbing performSelectorOnMainThread:SEL({})", sel_name);
+        return;
+    }
+
     // If we're already on the main thread, execute immediately regardless
     // of wait flag — this is correct and avoids scheduling overhead.
-if env.current_thread == 0 {
-        if sel.as_str(&env.mem).ends_with(':') {
+    if env.current_thread == 0 {
+        if sel_name.ends_with(':') {
             () = msg_send(env, (this, sel, arg));
-} else {
+        } else {
             () = msg_send(env, (this, sel));
-}
+        }
         return;
     }
 
     // ORIGINAL UPSTREAM FIXES (GAMELOFT HACKS):
-    if env.bundle.bundle_identifier().starts_with("com.ea.nfsucinc") && (sel == env.objc.lookup_selector("play").unwrap() || sel == env.objc.lookup_selector("startMovie:").unwrap()) && wait {
-        log!("Applying game-specific hack for NFSU: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-        return;
-    }
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.POP") && (sel == env.objc.lookup_selector("startMovie:").unwrap() || sel == env.objc.lookup_selector("stopMovie").unwrap()) && wait {
-        log!("Applying game-specific hack for PoP: WW: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-return;
-    }
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.Asphalt5") && (sel == env.objc.lookup_selector("startMovie:").unwrap() || sel == env.objc.lookup_selector("stopMovie:").unwrap()) && wait {
-        log!("Applying game-specific hack for Asphalt5: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-return;
-    }
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.SplinterCell") && sel == env.objc.lookup_selector("startMovie:").unwrap() && wait {
-        log!("Applying game-specific hack for SplinterCell: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-return;
-    }
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.AssassinsCreed") && sel == env.objc.lookup_selector("moviePlayerInit:").unwrap() && wait {
-        log!("Applying game-specific hack for AssassinsCreed: ignoring performSelectorOnMainThread:SEL(moviePlayerInit:) waitUntilDone:true");
-return;
-    }
     if env.bundle.bundle_identifier().starts_with("com.gameloft.Ferrari") && wait {
-        if sel == env.objc.lookup_selector("startMovie:").unwrap() {
-            log!("Applying game-specific hack for Ferrari GT: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-return;
-        }
         if sel == env.objc.lookup_selector("initTextInput:").unwrap() ||
-sel == env.objc.lookup_selector("removeTextField:").unwrap() {
-            log!("Applying game-specific hack for Ferrari GT: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel.as_str(&env.mem), env.current_thread);
-() = msg_send(env, (this, sel, arg));
+           sel == env.objc.lookup_selector("removeTextField:").unwrap() {
+            log!("Applying game-specific hack for Ferrari GT: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel_name, env.current_thread);
+            () = msg_send(env, (this, sel, arg));
             return;
         }
     }
+    
     if env.bundle.bundle_identifier().starts_with("com.gameloft.HOS2") && wait {
-        if sel == env.objc.lookup_selector("loadMovie:").unwrap() ||
-sel == env.objc.lookup_selector("sendGameInfo").unwrap() || sel == env.objc.lookup_selector("setStatusBar:").unwrap() {
-            log!("Applying game-specific hack for HOS2: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel.as_str(&env.mem), env.current_thread);
-if sel.as_str(&env.mem).ends_with(':') {
+        if sel == env.objc.lookup_selector("sendGameInfo").unwrap() || sel == env.objc.lookup_selector("setStatusBar:").unwrap() {
+            log!("Applying game-specific hack for HOS2: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel_name, env.current_thread);
+            if sel_name.ends_with(':') {
                 () = msg_send(env, (this, sel, arg));
-} else {
-                // assert!(arg.is_null());
-// В форке мы не делаем strict-проверку для совместимости
+            } else {
                 () = msg_send(env, (this, sel));
-}
+            }
             return;
-}
-        if sel == env.objc.lookup_selector("startMovie:").unwrap() ||
-sel == env.objc.lookup_selector("stopMovie:").unwrap() {
-            log!("Applying game-specific hack for HOS2: ignoring performSelectorOnMainThread:SEL({}) waitUntilDone:true", sel.as_str(&env.mem));
-return;
         }
     }
 
     // Background thread → schedule on main thread via run loop.
-// `wait:YES` from a background thread would require thread
+    // `wait:YES` from a background thread would require thread
     // synchronisation which touchHLE doesn't support;
-// we schedule without waiting and log once at debug level.
-log_dbg!(
+    // we schedule without waiting and log once at debug level.
+    log_dbg!(
         "performSelectorOnMainThread:{} from background thread {} (wait={}) — scheduling",
-        sel.as_str(&env.mem), env.current_thread, wait
+        sel_name, env.current_thread, wait
     );
-msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
+    msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
 - (())_touchHLE_timerFireMethod:(id)which { 
