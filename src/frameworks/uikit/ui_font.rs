@@ -95,17 +95,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation UIFont: NSObject
 
-// ДОБАВЛЕНО: Стандартные размеры системных шрифтов (честные значения iOS)
 + (CGFloat)systemFontSize {
     14.0
 }
 
 + (CGFloat)smallSystemFontSize {
     12.0
-}
-
-+ (CGFloat)familyNames {
-    15.0
 }
 
 + (CGFloat)labelFontSize {
@@ -140,8 +135,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
+
 + (id)fontWithName:(id)fontName // NSString*
             size:(CGFloat)fontSize {
+    // FIX: Guard against nil fontName — на реальном iOS возвращает nil,
+    // но мы возвращаем системный шрифт чтобы не упасть.
+    // Без этой проверки to_rust_string читает по адресу 0x0 → NULL-PAGE READ.
+    if fontName.is_null() {
+        log_dbg!("UIFont fontWithName:size: called with nil fontName, returning system font");
+        let host_object = UIFontHostObject {
+            kind: FontKind::SansRegular,
+            size: fontSize,
+        };
+        let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
+        return autorelease(env, new);
+    }
     let font_name = to_rust_string(env, fontName).to_string();
     let host_object = UIFontHostObject {
         kind: get_equivalent_font(&font_name).unwrap_or_else(|| {
@@ -176,7 +184,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGFloat)lineHeight {
-    // This is calculated based on the documentation:
     // https://developer.apple.com/library/archive/documentation/TextFonts/Conceptual/CocoaTextArchitecture/FontHandling/FontHandling.html
     let ascender: CGFloat = msg![env; this ascender];
     let descender: CGFloat = msg![env; this descender];
@@ -186,16 +193,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)fontWithSize:(CGFloat)size {
-    // Узнаем семейство (kind) текущего шрифта
     let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
-    // Создаем внутреннюю структуру для нового шрифта с нужным размером
-    let host_object = UIFontHostObject {
-        size,
-        kind,
-    };
-    // Получаем указатель на класс UIFont безопасным встроенным методом эмулятора
+    let host_object = UIFontHostObject { size, kind };
     let class_ptr = env.objc.get_known_class("UIFont", &mut env.mem);
-    // Выделяем память под новый объект и отдаем его игре
     let new_font = env.objc.alloc_object(class_ptr, Box::new(host_object), &mut env.mem);
     autorelease(env, new_font)
 }
@@ -428,69 +428,183 @@ pub fn draw_in_rect(
     text_size
 }
 
+/// Maps iOS font PostScript names to the closest available FontKind.
+///
+/// Covers fonts from iOS 2.0 through iOS 4.3.5 (Simulator + device lists).
+/// Returns None only for fonts with no usable Latin substitute (CJK-only, etc.)
+/// — the caller will log a warning and fall back to SansRegular.
+#[rustfmt::skip]
 fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
-    // Maps every font found in every font family in an iOS 2 Simulator
     match system_font {
-        // Font Family: Courier
-        "Courier" => None,
-        "Courier-BoldOblique" => None,
-        "Courier-Oblique" => None,
-        "Courier-Bold" => None,
-        // Font Family: AppleGothic
-        "AppleGothic" => None,
-        // Font Family: Arial
-        "ArialMT" => Some(FontKind::SansRegular),
-        "Arial-BoldMT" => Some(FontKind::SansBold),
-        "Arial-BoldItalicMT" => Some(FontKind::SansBoldItalic),
-        "Arial-ItalicMT" => Some(FontKind::SansItalic),
-        // Font Family: STHeiti TC
-        "STHeitiTC-Light" => None,
-        "STHeitiTC-Medium" => None,
-        // Font Family: Hiragino Kaku Gothic ProN
-        "HiraKakuProN-W6" => None,
-        "HiraKakuProN-W3" => None,
-        // Font Family: Courier New
-        "CourierNewPS-BoldMT" => Some(FontKind::MonoRegular),
-        "CourierNewPS-ItalicMT" => Some(FontKind::MonoBold),
-        "CourierNewPS-BoldItalicMT" => Some(FontKind::MonoBoldItalic),
-        "CourierNewPSMT" => Some(FontKind::MonoItalic),
-        // Font Family: Zapfino
-        "Zapfino" => None,
-        // Font Family: Arial Unicode MS
-        "ArialUnicodeMS" => None,
-        // Font Family: STHeiti SC
-        "STHeitiSC-Medium" => None,
-        "STHeitiSC-Light" => None,
-        // Font Family: American Typewriter
-        "AmericanTypewriter" => Some(FontKind::MonoRegular),
-        "AmericanTypewriter-Bold" => Some(FontKind::MonoBold),
-        // Font Family: Helvetica
-        "Helvetica-Oblique" => None,
-        "Helvetica-BoldOblique" => None,
-        "Helvetica" => None,
-        "Helvetica-Bold" => None,
-        // Font Family: Marker Felt
-        "MarkerFelt-Thin" => None,
-        // Font Family: Helvetica Neue
-        "HelveticaNeue" => None,
-        "HelveticaNeue-Bold" => None,
-        // Font Family: DB LCD Temp
-        "DBLCDTempBlack" => None,
-        // Font Family: Verdana
-        "Verdana-Bold" => None,
-        "Verdana-BoldItalic" => None,
-        "Verdana" => None,
-        "Verdana-Italic" => None,
-        // Font Family: Times New Roman
-        "TimesNewRomanPSMT" => Some(FontKind::SerifRegular),
-        "TimesNewRomanPS-BoldMT" => Some(FontKind::SerifBold),
-        "TimesNewRomanPS-BoldItalicMT" => Some(FontKind::SerifBoldItalic),
-        "TimesNewRomanPS-ItalicMT" => Some(FontKind::SerifItalic),
-        // Font Family: Georgia
-        "Georgia-Bold" => None,
-        "Georgia" => None,
-        "Georgia-BoldItalic" => None,
-        "Georgia-Italic" => None,
+        // ── Courier ────────────────────────────────────────────────────────────
+        "Courier"                          => Some(FontKind::MonoRegular),
+        "Courier-Bold"                     => Some(FontKind::MonoBold),
+        "Courier-Oblique"                  => Some(FontKind::MonoItalic),
+        "Courier-BoldOblique"              => Some(FontKind::MonoBoldItalic),
+
+        // ── Courier New ────────────────────────────────────────────────────────
+        "CourierNewPSMT"                   => Some(FontKind::MonoRegular),
+        "CourierNewPS-BoldMT"              => Some(FontKind::MonoBold),
+        "CourierNewPS-ItalicMT"            => Some(FontKind::MonoItalic),
+        "CourierNewPS-BoldItalicMT"        => Some(FontKind::MonoBoldItalic),
+
+        // ── Arial ──────────────────────────────────────────────────────────────
+        "ArialMT"                          => Some(FontKind::SansRegular),
+        "Arial-BoldMT"                     => Some(FontKind::SansBold),
+        "Arial-ItalicMT"                   => Some(FontKind::SansItalic),
+        "Arial-BoldItalicMT"               => Some(FontKind::SansBoldItalic),
+
+        // ── Arial Rounded MT Bold ──────────────────────────────────────────────
+        // FIX: was missing → caused "No replacement found" warning + potential
+        // NULL-PAGE READ if fontName was nil; now mapped to SansBold.
+        "ArialRoundedMTBold"               => Some(FontKind::SansBold),
+
+        // ── Arial Unicode MS ───────────────────────────────────────────────────
+        // No good single-weight Latin substitute; keep as None so the warning
+        // fires but we fall back gracefully instead of crashing.
+        "ArialUnicodeMS"                   => None,
+
+        // ── Helvetica ──────────────────────────────────────────────────────────
+        "Helvetica"                        => Some(FontKind::SansRegular),
+        "Helvetica-Bold"                   => Some(FontKind::SansBold),
+        "Helvetica-Oblique"                => Some(FontKind::SansItalic),
+        "Helvetica-BoldOblique"            => Some(FontKind::SansBoldItalic),
+        "Helvetica-Light"                  => Some(FontKind::SansRegular),
+        "Helvetica-LightOblique"           => Some(FontKind::SansItalic),
+        "Helvetica-Narrow"                 => Some(FontKind::SansRegular),
+        "Helvetica-Narrow-Bold"            => Some(FontKind::SansBold),
+        "Helvetica-Narrow-Oblique"         => Some(FontKind::SansItalic),
+        "Helvetica-Narrow-BoldOblique"     => Some(FontKind::SansBoldItalic),
+
+        // ── Helvetica Neue (iOS 3+) ────────────────────────────────────────────
+        "HelveticaNeue"                    => Some(FontKind::SansRegular),
+        "HelveticaNeue-Bold"               => Some(FontKind::SansBold),
+        "HelveticaNeue-Italic"             => Some(FontKind::SansItalic),
+        "HelveticaNeue-BoldItalic"         => Some(FontKind::SansBoldItalic),
+        "HelveticaNeue-Light"              => Some(FontKind::SansRegular),
+        "HelveticaNeue-LightItalic"        => Some(FontKind::SansItalic),
+        "HelveticaNeue-Medium"             => Some(FontKind::SansBold),
+        "HelveticaNeue-UltraLight"         => Some(FontKind::SansRegular),
+        "HelveticaNeue-UltraLightItalic"   => Some(FontKind::SansItalic),
+        "HelveticaNeue-CondensedBold"      => Some(FontKind::SansBold),
+        "HelveticaNeue-CondensedBlack"     => Some(FontKind::SansBold),
+        "HelveticaNeue-Thin"               => Some(FontKind::SansRegular),
+        "HelveticaNeue-ThinItalic"         => Some(FontKind::SansItalic),
+
+        // ── Verdana ────────────────────────────────────────────────────────────
+        "Verdana"                          => Some(FontKind::SansRegular),
+        "Verdana-Bold"                     => Some(FontKind::SansBold),
+        "Verdana-Italic"                   => Some(FontKind::SansItalic),
+        "Verdana-BoldItalic"               => Some(FontKind::SansBoldItalic),
+
+        // ── Trebuchet MS (iOS 3+) ─────────────────────────────────────────────
+        "TrebuchetMS"                      => Some(FontKind::SansRegular),
+        "TrebuchetMS-Bold"                 => Some(FontKind::SansBold),
+        "TrebuchetMS-Italic"               => Some(FontKind::SansItalic),
+        "TrebuchetMS-BoldItalic"           => Some(FontKind::SansBoldItalic),
+
+        // ── Futura (iOS 3+) ───────────────────────────────────────────────────
+        "Futura-Medium"                    => Some(FontKind::SansRegular),
+        "Futura-MediumItalic"              => Some(FontKind::SansItalic),
+        "Futura-CondensedMedium"           => Some(FontKind::SansRegular),
+        "Futura-CondensedExtraBold"        => Some(FontKind::SansBold),
+
+        // ── Gill Sans (iOS 3+) ────────────────────────────────────────────────
+        "GillSans"                         => Some(FontKind::SansRegular),
+        "GillSans-Bold"                    => Some(FontKind::SansBold),
+        "GillSans-Italic"                  => Some(FontKind::SansItalic),
+        "GillSans-BoldItalic"              => Some(FontKind::SansBoldItalic),
+        "GillSans-Light"                   => Some(FontKind::SansRegular),
+        "GillSans-LightItalic"             => Some(FontKind::SansItalic),
+
+        // ── Optima (iOS 3+) ───────────────────────────────────────────────────
+        "Optima-Regular"                   => Some(FontKind::SansRegular),
+        "Optima-Bold"                      => Some(FontKind::SansBold),
+        "Optima-Italic"                    => Some(FontKind::SansItalic),
+        "Optima-BoldItalic"                => Some(FontKind::SansBoldItalic),
+        "Optima-ExtraBlack"                => Some(FontKind::SansBold),
+
+        // ── Times New Roman ───────────────────────────────────────────────────
+        "TimesNewRomanPSMT"                => Some(FontKind::SerifRegular),
+        "TimesNewRomanPS-BoldMT"           => Some(FontKind::SerifBold),
+        "TimesNewRomanPS-ItalicMT"         => Some(FontKind::SerifItalic),
+        "TimesNewRomanPS-BoldItalicMT"     => Some(FontKind::SerifBoldItalic),
+
+        // ── Georgia ───────────────────────────────────────────────────────────
+        "Georgia"                          => Some(FontKind::SerifRegular),
+        "Georgia-Bold"                     => Some(FontKind::SerifBold),
+        "Georgia-Italic"                   => Some(FontKind::SerifItalic),
+        "Georgia-BoldItalic"               => Some(FontKind::SerifBoldItalic),
+
+        // ── Palatino (iOS 3+) ─────────────────────────────────────────────────
+        "Palatino-Roman"                   => Some(FontKind::SerifRegular),
+        "Palatino-Bold"                    => Some(FontKind::SerifBold),
+        "Palatino-Italic"                  => Some(FontKind::SerifItalic),
+        "Palatino-BoldItalic"              => Some(FontKind::SerifBoldItalic),
+
+        // ── Baskerville (iOS 4+) ──────────────────────────────────────────────
+        "Baskerville"                      => Some(FontKind::SerifRegular),
+        "Baskerville-Bold"                 => Some(FontKind::SerifBold),
+        "Baskerville-Italic"               => Some(FontKind::SerifItalic),
+        "Baskerville-BoldItalic"           => Some(FontKind::SerifBoldItalic),
+        "Baskerville-SemiBold"             => Some(FontKind::SerifBold),
+        "Baskerville-SemiBoldItalic"       => Some(FontKind::SerifBoldItalic),
+
+        // ── Didot (iOS 4+) ────────────────────────────────────────────────────
+        "Didot"                            => Some(FontKind::SerifRegular),
+        "Didot-Bold"                       => Some(FontKind::SerifBold),
+        "Didot-Italic"                     => Some(FontKind::SerifItalic),
+
+        // ── Cochin (iOS 3+) ───────────────────────────────────────────────────
+        "Cochin"                           => Some(FontKind::SerifRegular),
+        "Cochin-Bold"                      => Some(FontKind::SerifBold),
+        "Cochin-Italic"                    => Some(FontKind::SerifItalic),
+        "Cochin-BoldItalic"                => Some(FontKind::SerifBoldItalic),
+
+        // ── American Typewriter ───────────────────────────────────────────────
+        "AmericanTypewriter"               => Some(FontKind::MonoRegular),
+        "AmericanTypewriter-Bold"          => Some(FontKind::MonoBold),
+        "AmericanTypewriter-Condensed"     => Some(FontKind::MonoRegular),
+        "AmericanTypewriter-CondensedBold" => Some(FontKind::MonoBold),
+        "AmericanTypewriter-CondensedLight"=> Some(FontKind::MonoRegular),
+        "AmericanTypewriter-Light"         => Some(FontKind::MonoRegular),
+
+        // ── Marker Felt ───────────────────────────────────────────────────────
+        "MarkerFelt-Thin"                  => Some(FontKind::SansRegular),
+        "MarkerFelt-Wide"                  => Some(FontKind::SansBold),
+
+        // ── Chalkboard SE (iOS 3+) ────────────────────────────────────────────
+        "ChalkboardSE-Regular"             => Some(FontKind::SansRegular),
+        "ChalkboardSE-Bold"                => Some(FontKind::SansBold),
+        "ChalkboardSE-Light"               => Some(FontKind::SansRegular),
+
+        // ── Chalkduster (iOS 3+) ──────────────────────────────────────────────
+        "Chalkduster"                      => Some(FontKind::SansRegular),
+
+        // ── Bradley Hand ──────────────────────────────────────────────────────
+        "BradleyHandITCTT-Bold"            => Some(FontKind::SansBold),
+
+        // ── Euphemia UCAS (iOS 4+) ────────────────────────────────────────────
+        "EuphemiaUCAS"                     => Some(FontKind::SansRegular),
+        "EuphemiaUCAS-Bold"                => Some(FontKind::SansBold),
+        "EuphemiaUCAS-Italic"              => Some(FontKind::SansItalic),
+
+        // ── DB LCD Temp ───────────────────────────────────────────────────────
+        "DBLCDTempBlack"                   => Some(FontKind::MonoBold),
+
+        // ── CJK / special fonts — no usable Latin substitute ──────────────────
+        "AppleGothic"                      => None, // Korean
+        "STHeitiSC-Light"                  => None, // Simplified Chinese
+        "STHeitiSC-Medium"                 => None,
+        "STHeitiSC-Thin"                   => None,
+        "STHeitiTC-Light"                  => None, // Traditional Chinese
+        "STHeitiTC-Medium"                 => None,
+        "STHeitiTC-Thin"                   => None,
+        "HiraKakuProN-W3"                  => None, // Japanese
+        "HiraKakuProN-W6"                  => None,
+        "Zapfino"                          => None, // decorative, no substitute
+
+        // ── Unknown font ─────────────────────────────────────────────────────
         _ => None,
     }
 }
