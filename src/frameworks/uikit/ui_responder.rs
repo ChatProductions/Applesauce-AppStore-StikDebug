@@ -6,10 +6,11 @@
 //! `UIResponder`.
 
 use crate::objc::{id, msg, nil, objc_classes, ClassExports};
+use crate::Environment;
 
 #[derive(Default)]
 pub struct State {
-    pub(crate) first_responder: id,
+    pub first_responder: id,
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -70,20 +71,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isFirstResponder {
-    false
+    env.framework_state.uikit.ui_responder.first_responder == this
 }
+
 - (bool)canBecomeFirstResponder {
     false
 }
+
 - (bool)becomeFirstResponder {
-    // TODO
-    false
+    env.framework_state.uikit.ui_responder.first_responder = this;
+    true
 }
+
 - (bool)canResignFirstResponder {
     true
 }
+
 - (bool)resignFirstResponder {
-    // TODO
+    if env.framework_state.uikit.ui_responder.first_responder == this {
+        env.framework_state.uikit.ui_responder.first_responder = nil;
+    }
     true
 }
 
