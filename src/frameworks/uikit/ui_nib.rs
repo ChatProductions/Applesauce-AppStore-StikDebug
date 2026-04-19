@@ -297,7 +297,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
     
     if source != nil && destination != nil && label != nil {
-        let source_class = msg![env; source class];
+        // ЯВНО УКАЗЫВАЕМ ТИП Class, чтобы компилятор не ругался
+        let source_class: Class = msg![env; source class];
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
         
         // Предотвращаем краш KVC (Key-Value Coding), если source — это просто заглушка NSObject
