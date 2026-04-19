@@ -13,7 +13,7 @@ use crate::{msg, Environment};
 use std::time::Instant;
 
 use crate::dyld::HostConstant;
-use crate::mem::{MutPtr, ConstVoidPtr};
+use crate::mem::{ConstVoidPtr, MutPtr};
 
 pub mod ui_accelerometer;
 pub mod ui_action_sheet;
@@ -51,11 +51,69 @@ fn ui_background_task_invalid(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+// UIWindowLevel is a CGFloat (= f32 on 32-bit iOS).
+// Standard values from UIWindow.h:
+//   UIWindowLevelNormal    =    0.0
+//   UIWindowLevelStatusBar = 1000.0
+//   UIWindowLevelAlert     = 2000.0
+
+fn ui_window_level_normal(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 0.0f32.to_bits());
+    ptr.cast().cast_const()
+}
+
+fn ui_window_level_status_bar(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 1000.0f32.to_bits());
+    ptr.cast().cast_const()
+}
+
+fn ui_window_level_alert(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 2000.0f32.to_bits());
+    ptr.cast().cast_const()
+}
+
 pub const CONSTANTS: &[(&str, HostConstant)] = &[
-    ("_UIBackgroundTaskInvalid", HostConstant::Custom(ui_background_task_invalid)),
-    ("_UIImagePickerControllerOriginalImage", HostConstant::NSString("UIImagePickerControllerOriginalImage")),
-    ("_UIImagePickerControllerEditedImage", HostConstant::NSString("UIImagePickerControllerEditedImage")),
-    ("_UIScreenDidConnectNotification", HostConstant::NSString("UIScreenDidConnectNotification")),
+    (
+        "_UIBackgroundTaskInvalid",
+        HostConstant::Custom(ui_background_task_invalid),
+    ),
+    (
+        "_UIImagePickerControllerOriginalImage",
+        HostConstant::NSString("UIImagePickerControllerOriginalImage"),
+    ),
+    (
+        "_UIImagePickerControllerEditedImage",
+        HostConstant::NSString("UIImagePickerControllerEditedImage"),
+    ),
+    (
+        "_UIScreenDidConnectNotification",
+        HostConstant::NSString("UIScreenDidConnectNotification"),
+    ),
+    // UIWindowLevel constants (CGFloat / f32 on 32-bit iOS)
+    (
+        "_UIWindowLevelNormal",
+        HostConstant::Custom(ui_window_level_normal),
+    ),
+    (
+        "_UIWindowLevelStatusBar",
+        HostConstant::Custom(ui_window_level_status_bar),
+    ),
+    (
+        "_UIWindowLevelAlert",
+        HostConstant::Custom(ui_window_level_alert),
+    ),
+    // Status-bar orientation change notifications
+    (
+        "_UIApplicationWillChangeStatusBarOrientationNotification",
+        HostConstant::NSString("UIApplicationWillChangeStatusBarOrientationNotification"),
+    ),
+    (
+        "_UIApplicationDidChangeStatusBarOrientationNotification",
+        HostConstant::NSString("UIApplicationDidChangeStatusBarOrientationNotification"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -164,14 +222,12 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
                 ui_touch::handle_event(env, event)
             }
             Event::AppWillResignActive => {
-                // SUPER HACK: Полностью игнорируем сворачивание/потерю фокуса. 
-                // Это предотвратит отправку сигнала в игру и спасет от краша 
-                // в движке анимаций (core_animation/composition.rs).
-                log!("SUPER HACK: Completely ignoring AppWillResignActive to prevent composition panic.");
+                // SUPER HACK: Fully ignore focus loss to prevent crashes in the
+                // animation composition layer (core_animation/composition.rs).
+                log!("SUPER HACK: Ignoring AppWillResignActive to prevent composition panic.");
             }
             Event::AppWillTerminate => {
-                // Аналогично глушим и этот сигнал
-                log!("SUPER HACK: Completely ignoring AppWillTerminate.");
+                log!("SUPER HACK: Ignoring AppWillTerminate.");
             }
             Event::EnterDebugger => {
                 if env.is_debugging_enabled() {
@@ -184,16 +240,22 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
             Event::TextInput(text_event) => {
                 let responder = env.framework_state.uikit.ui_responder.first_responder;
                 let class = msg![env; responder class];
-                let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
+                let ui_text_field_class =
+                    env.objc.get_known_class("UITextField", &mut env.mem);
 
-                if !responder.is_null() && env.objc.class_is_subclass_of(class, ui_text_field_class)
+                if !responder.is_null()
+                    && env.objc.class_is_subclass_of(class, ui_text_field_class)
                 {
                     match text_event {
                         TextInputEvent::Text(text) => {
-                            ui_view::ui_control::ui_text_field::handle_text(env, responder, text)
+                            ui_view::ui_control::ui_text_field::handle_text(
+                                env, responder, text,
+                            )
                         }
                         TextInputEvent::Backspace => {
-                            ui_view::ui_control::ui_text_field::handle_backspace(env, responder)
+                            ui_view::ui_control::ui_text_field::handle_backspace(
+                                env, responder,
+                            )
                         }
                         TextInputEvent::Return => {
                             ui_view::ui_control::ui_text_field::handle_return(env, responder)
@@ -206,3 +268,4 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
 
     ui_accelerometer::handle_accelerometer(env)
 }
+
