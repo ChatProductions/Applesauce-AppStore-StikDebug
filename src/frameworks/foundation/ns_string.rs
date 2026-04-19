@@ -110,8 +110,6 @@ impl StringHostObject {
 
         match encoding {
             NSASCIIStringEncoding => {
-                // Убираем жесткий assert! 
-                // Вместо паники честно эмулируем поведение iOS: заменяем невалидные ASCII-символы на '?'.
                 let string: String = bytes.iter().map(|&b| if b.is_ascii() { b as char } else { '?' }).collect();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
@@ -133,9 +131,9 @@ impl StringHostObject {
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSShiftJISStringEncoding => {
-                let (cow, encoding_used, had_errors) = SHIFT_JIS.decode(&bytes);
-                assert_eq!(encoding_used, SHIFT_JIS);
-                assert!(!had_errors);
+                // ИСПРАВЛЕНИЕ: Убраны жесткие проверки assert!(!had_errors), чтобы игра не вылетала с паникой 
+                // при некорректных байтах в японской кодировке.
+                let (cow, _encoding_used, _had_errors) = SHIFT_JIS.decode(&bytes);
                 log_dbg!("ShiftJIS decoded {:?}", cow);
                 StringHostObject::Utf8(Cow::Owned(cow.to_string()))
             }
@@ -165,7 +163,11 @@ impl StringHostObject {
                         .collect()
                 })
             }
-            _ => panic!("Unimplemented encoding: {encoding:#x}"),
+            // ИСПРАВЛЕНИЕ: Fallback-фоллбек вместо жесткой паники unimplemented!
+            _ => {
+                crate::log::log!("Warning: Unimplemented encoding {:#x}. Using lossy UTF-8 fallback to prevent crash.", encoding);
+                StringHostObject::Utf8(Cow::Owned(String::from_utf8_lossy(&bytes).into_owned()))
+            }
         }
     }
     fn to_utf8(&self) -> Result<Cow<'static, str>, FromUtf16Error> {
@@ -281,6 +283,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     assert!(this == env.objc.get_known_class("NSString", &mut env.mem));
     msg_class![env; _touchHLE_NSString allocWithZone:zone]
 }
+
++ (bool)supportsSecureCoding { true }
 
 + (id)string {
     let str: id = msg![env; this new];
@@ -1069,6 +1073,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; _touchHLE_NSMutableString allocWithZone:zone]
 }
 
++ (bool)supportsSecureCoding { true }
+
 + (id)stringWithCapacity:(NSUInteger)capacity {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithCapacity:capacity];
@@ -1081,9 +1087,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)mergeWithPrevious:(id)previous {
-    // For mutable strings the merge strategy is to append the previous
-    // content that isn't already present, or simply keep self unchanged.
-    // Most callers just want self to win, so we return self unchanged.
     log_dbg!(
         "NSMutableString mergeWithPrevious: previous={:?} — returning self",
         previous
@@ -1092,13 +1095,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())appendString:(id)a_string {
-    // assert_ne!(a_string, nil);
     let new: id = msg![env; this stringByAppendingString:a_string];
     () = msg![env; this setString:new];
 }
 
 - (())insertString:(id)a_string atIndex:(NSUInteger)loc {
-    // assert_ne!(a_string, nil);
     let left: id = msg![env; this substringToIndex:loc];
     let right: id = msg![env; this substringFromIndex:loc];
     let mid: id = msg![env; left stringByAppendingString:a_string];
@@ -1107,7 +1108,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())replaceCharactersInRange:(NSRange)range withString:(id)a_string {
-    // assert_ne!(a_string, nil);
     let loc = range.location;
     let len = range.length;
     let left: id = msg![env; this substringToIndex:loc];
@@ -1134,6 +1134,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setString:res];
 }
 
+- (())setString:(id)a_string {
+    assert_ne!(a_string, nil);
+    let length: NSUInteger = msg![env; this length];
+    let range = NSRange { location: 0, length };
+    () = msg![env; this replaceCharactersInRange:range withString:a_string];
+}
+
+- (())appendFormat:(id)format, ...args {
+    assert_ne!(format, nil);
+    let formatted = with_format(env, format, args.start());
+    let ns = from_rust_string(env, formatted);
+    () = msg![env; this appendString:ns];
+    release(env, ns);
+}
+
 @end
 
 @implementation _touchHLE_NSString: NSString
@@ -1143,13 +1158,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
++ (bool)supportsSecureCoding { true }
+
 - (id)initWithCoder:(id)coder {
     let class: Class = msg![env; coder class];
     let nib_archive_class: Class = msg_class![env; _touchHLE_NIBArchiveDecoder class];
+    // ИСПРАВЛЕНИЕ: Защита от паники на неизвестных кодерах
     let new_str = if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_string(env, coder)
     } else {
-        unimplemented!();
+        crate::log::log!("Warning: _touchHLE_NSString initWithCoder: unsupported coder class, returning empty string");
+        get_static_str(env, "")
     };
     release(env, this);
     new_str
@@ -1410,7 +1429,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let start = range.location as usize;
     let end = start.saturating_add(range.length as usize);
     
-    // Защита от выхода за пределы строки
     if start > orig_string.len() || end > orig_string.len() {
         log!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
         let res = from_u16_vec(env, Vec::new());
@@ -1440,9 +1458,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)mergeWithPrevious:(id)_previous {
-    // Return self — the new (receiver) string replaces the previous one.
-    // This matches NSUndoManager and CoreData's default merge policy where
-    // the incoming object wins.
     this
 }
 
@@ -1532,14 +1547,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - mergeWithPrevious
 // =========================================================================
 
-// mergeWithPrevious: is called by some text-processing and undo/redo systems
-// to combine a new string value with the previously stored one.
-// The standard behaviour is to return the receiver (self) unchanged —
-// the "new" value always wins over the "previous" one.
 - (id)mergeWithPrevious:(id)_previous {
-    // Return self — the new (receiver) string replaces the previous one.
-    // This matches NSUndoManager and CoreData's default merge policy where
-    // the incoming object wins.
     this
 }
 
@@ -1604,7 +1612,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let start = range.location as usize;
     let end = start.saturating_add(range.length as usize);
     
-    // Защита от выхода за пределы строки
     if start > orig_string.len() || end > orig_string.len() {
         log!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
         let res = from_u16_vec(env, Vec::new());
@@ -1848,11 +1855,8 @@ pub fn get_bytes_buffer_inner(
     include_null_terminator: bool,
 ) -> bool {
     let string = to_rust_string(env, str);
-    // 1. Конвертируем строку в нужный набор байтов в зависимости от запрошенной кодировки
     let mut bytes: Vec<u8> = match encoding {
         NSASCIIStringEncoding | NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
-            // Для однобайтовых кодировок пытаемся отфильтровать не-ASCII/не-Latin1 символы.
-            // В идеале нужен полный маппинг, но для игр часто хватает этого.
             if string.chars().any(|c| (c as u32) > 0xFF) { return false; }
             string.as_bytes().to_vec()
         },
@@ -1860,7 +1864,6 @@ pub fn get_bytes_buffer_inner(
             string.as_bytes().to_vec()
         },
         NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
-            // UTF-16 Little Endian (Native для iOS ARM)
             string.encode_utf16().flat_map(u16::to_le_bytes).collect()
         },
         NSUTF16BigEndianStringEncoding => {
@@ -1878,8 +1881,6 @@ pub fn get_bytes_buffer_inner(
         }
     };
 
-    // 2. Добавляем null-терминатор, если требуется.
-    // Размер терминатора зависит от кодировки.
     if include_null_terminator {
         match encoding {
             NSUTF16LittleEndianStringEncoding | NSUTF16BigEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
@@ -1898,13 +1899,11 @@ pub fn get_bytes_buffer_inner(
         }
     }
 
-    // 3. Проверяем, влезает ли результат в буфер, предоставленный игрой
     let bytes_len: NSUInteger = bytes.len().try_into().unwrap();
     if buffer_size < bytes_len {
         return false;
     }
 
-    // 4. Записываем байты в память гостя
     let dest = env.mem.bytes_at_mut(buffer, buffer_size as u32);
     dest[..bytes.len()].copy_from_slice(&bytes);
     
@@ -1971,4 +1970,3 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
-
