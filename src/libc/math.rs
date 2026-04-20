@@ -493,6 +493,9 @@ fn sqlite3_column_decltype(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 
 fn sqlite3_bind_parameter_index(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     arg1.min(arg2)
 }
+fn sqlite3_bind_null(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+    arg1.min(arg2)
+}
 fn _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     arg1.min(arg2)
 }
@@ -687,6 +690,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_column_int64(_, _)),
     export_c_func!(sqlite3_column_decltype(_, _)),
     export_c_func!(sqlite3_bind_parameter_index(_, _)),
+    export_c_func!(sqlite3_bind_null(_, _)),
     export_c_func!(_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_, _)),
