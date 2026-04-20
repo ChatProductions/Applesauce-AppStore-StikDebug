@@ -1321,7 +1321,7 @@ let device_family = match device_family_array.len() {
                 std::mem::drop(curr_host_context);
                 let Some(env) = panic_cell.take() else {
                     log_no_panic!("Did not get env back from coroutine after drop, must abort!");
-                    std::process::exit(-1);
+                    std::process::exit(-1)
                 };
                 self = env;
                 let stack = self.threads[self.current_thread].stack.take().unwrap();
@@ -1756,7 +1756,11 @@ let device_family = match device_family_array.len() {
                                 assert!(!host_cond.timed_out.contains(&thread_id));
                                 host_cond.timed_out.insert(thread_id);
 
-                                assert!(host_cond.waking.is_empty());
+                                // FIX: Если тред уже был в очереди waking (ему отправили
+                                // сигнал, но он ещё не успел захватить мьютекс),
+                                // удаляем его оттуда вместо паники.
+                                host_cond.waking.retain(|&t| t != thread_id);
+
                                 host_cond.waiting.retain(|&t| t != thread_id);
 
                                 assert!(!self.mutex_state.mutex_is_locked(mutex));
