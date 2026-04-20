@@ -54,6 +54,7 @@ use objects::{objc_object, HostObjectEntry};
 use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty};
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
+use crate::objc::classes::___objc_personality_v0;
 
 /// Публичная обёртка над `messages::objc_msgSend` (которая `pub(super)`),
 /// экспортируемая внутри крейта.
@@ -183,5 +184,5 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(method_setImplementation(_, _)),
     export_c_func!(method_getTypeEncoding(_, _)),
     export_c_func!(_Block_object_dispose(_, _)),
-    export_c_func!(___objc_personality_v0(_, _, _, _, _, _)),
+    export_c_func!(___objc_personality_v0(_, _, _, _, _)),
 ];
