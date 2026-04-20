@@ -1064,11 +1064,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())removeObjectAtIndex:(NSUInteger)index {
     let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if index as usize < host_object.array.len() {
-        host_object.array.remove(index as usize);
-    } else {
+    if index as usize >= host_object.array.len() {
         log!("Warning: NSMutableArray_non_retaining removeObjectAtIndex: index out of bounds");
+        return;
     }
+    host_object.array.remove(index as usize);
 }
 
 - (())removeLastObject {
@@ -1167,3 +1167,4 @@ fn mutable_copy_inner(env: &mut Environment, arr: id) -> id {
     env.objc.borrow_mut::<ArrayHostObject>(mut_arr).array = array;
     mut_arr
 }
+
