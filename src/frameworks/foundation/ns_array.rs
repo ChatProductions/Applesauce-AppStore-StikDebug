@@ -716,12 +716,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<ArrayHostObject>(this).array.len().try_into().unwrap()
 }
 - (id)objectAtIndex:(NSUInteger)index {
-    let host_array = &env.objc.borrow::<ArrayHostObject>(this).array;
-    if index as usize >= host_array.len() {
-        log!("Warning: NSArray objectAtIndex: index out of bounds (index {}, len {})", index, host_array.len());
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize >= len {
+        log!("Warning: NSArray objectAtIndex: index out of bounds (index {}, len {})", index, len);
         return nil;
     }
-    host_array[index as usize]
+    env.objc.borrow::<ArrayHostObject>(this).array[index as usize]
 }
 
 - (id)description {
@@ -962,12 +962,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)objectAtIndex:(NSUInteger)index {
-    let host_array = &env.objc.borrow::<ArrayHostObject>(this).array;
-    if index as usize >= host_array.len() {
-        log!("Warning: NSMutableArray objectAtIndex: index out of bounds (index {}, len {})", index, host_array.len());
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize >= len {
+        log!("Warning: NSMutableArray objectAtIndex: index out of bounds (index {}, len {})", index, len);
         return nil;
     }
-    host_array[index as usize]
+    env.objc.borrow::<ArrayHostObject>(this).array[index as usize]
 }
 
 - (id)description {
@@ -978,13 +978,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())insertObject:(id)object
            atIndex:(NSUInteger)index {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if index as usize > host_object.array.len() {
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize > len {
         log!("Warning: NSMutableArray insertObject:atIndex: index out of bounds");
         return;
     }
     retain(env, object);
-    host_object.array.insert(index as usize, object);
+    env.objc.borrow_mut::<ArrayHostObject>(this).array.insert(index as usize, object);
 }
 
 - (())addObject:(id)object {
@@ -1009,29 +1009,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())removeObjectAtIndex:(NSUInteger)index {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if index as usize >= host_object.array.len() {
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize >= len {
         log!("Warning: NSMutableArray removeObjectAtIndex: index out of bounds");
         return;
     }
-    let object = host_object.array.remove(index as usize);
+    let object = env.objc.borrow_mut::<ArrayHostObject>(this).array.remove(index as usize);
     release(env, object)
 }
 
 - (())replaceObjectAtIndex:(NSUInteger)index withObject:(id)obj {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if index as usize >= host_object.array.len() {
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize >= len {
         log!("Warning: NSMutableArray replaceObjectAtIndex:withObject: index out of bounds");
         return;
     }
     retain(env, obj);
-    let object = std::mem::replace(&mut host_object.array[index as usize], obj);
+    let object = std::mem::replace(&mut env.objc.borrow_mut::<ArrayHostObject>(this).array[index as usize], obj);
     release(env, object);
 }
 
 - (())removeLastObject {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if let Some(object) = host_object.array.pop() {
+    let object_opt = env.objc.borrow_mut::<ArrayHostObject>(this).array.pop();
+    if let Some(object) = object_opt {
         release(env, object)
     } else {
         log!("Warning: NSMutableArray removeLastObject: array is empty");
@@ -1063,17 +1063,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())removeObjectAtIndex:(NSUInteger)index {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if index as usize >= host_object.array.len() {
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len();
+    if index as usize >= len {
         log!("Warning: NSMutableArray_non_retaining removeObjectAtIndex: index out of bounds");
         return;
     }
-    host_object.array.remove(index as usize);
+    env.objc.borrow_mut::<ArrayHostObject>(this).array.remove(index as usize);
 }
 
 - (())removeLastObject {
-    let host_object = env.objc.borrow_mut::<ArrayHostObject>(this);
-    if host_object.array.pop().is_none() {
+    let popped = env.objc.borrow_mut::<ArrayHostObject>(this).array.pop();
+    if popped.is_none() {
         log!("Warning: NSMutableArray_non_retaining removeLastObject: array is empty");
     }
 }
