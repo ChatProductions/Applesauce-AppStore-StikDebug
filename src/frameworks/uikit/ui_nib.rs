@@ -64,25 +64,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle
     };
 
-    if nib_name != nil {
-        retain(env, nib_name);
-    }
-    if bundle != nil {
-        retain(env, bundle);
-    }
+    retain(env, nib_name);
+    retain(env, bundle);
     let host_object = Box::new(UINibHostObject {
         nib_name,
         bundle,
-        file_owner: nil,
+        file_owner: nil
     });
+    
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
     autorelease(env, new)
-}
-
-+ (id)nibWithData:(id)data bundle:(id)bundle {
-    // TODO: implement data-based UINib
-    log!("TODO: UINib nibWithData:bundle: — returning nil");
-    nil
 }
 
 - (())dealloc {
@@ -91,60 +82,49 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle,
         ..
     } = env.objc.borrow(this);
-    if nib_name != nil {
-        release(env, nib_name);
-    }
-    if bundle != nil {
-        release(env, bundle);
-    }
+    
+    release(env, nib_name);
+    release(env, bundle);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
 - (id)instantiateWithOwner:(id)owner options:(id)options {
     assert!(owner != nil);
-    assert!(options == nil);
-    // TODO: implement options handling
+    assert!(options == nil); // TODO: implement options handling
 
     let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
     let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
     let type_: id = get_static_str(env, "nib");
-    
-    if nib_name == nil {
-        log!("Warning: UINib instantiateWithOwner: nib_name is nil!");
-        return nil;
-    }
-
     let path: id = msg![env; bundle pathForResource:nib_name ofType:type_];
+
     if path == nil {
-        let nib_name_str = to_rust_string(env, nib_name);
-        log!(
-            "Warning: UINib instantiateWithOwner: nib file {:?} not found",
-            nib_name_str
-        );
+        log!("Warning: UINib instantiateWithOwner: nib file {:?} not found", to_rust_string(env, nib_name));
         return nil;
     }
-
+    
     let nib_path = to_rust_string(env, path).to_string();
     assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
     env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
-    let top_level_objects =
-        if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
-            let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
-            let objects: id = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
-
-            // Retain objects BEFORE releasing the unarchiver so they aren't cleaned up
-            if objects != nil {
-                retain(env, objects);
-            }
-            release(env, unarchiver);
-            if objects != nil {
-                autorelease(env, objects)
-            } else {
-                nil
-            }
+    
+    let top_level_objects = if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
+        let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
+        let objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
+        
+        // Удерживаем объекты ДО удаления анрайхиватора, иначе они могут вычиститься
+        if objects != nil {
+            retain(env, objects);
+        }
+        release(env, unarchiver);
+        
+        if objects != nil {
+            autorelease(env, objects)
         } else {
             nil
-        };
+        }
+    } else {
+        nil
+    };
+    
     env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
     top_level_objects
 }
@@ -156,12 +136,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
+    let id = to_rust_string(env, id_nss);
     
-    let id = if id_nss != nil {
-        to_rust_string(env, id_nss).to_string()
-    } else {
-        String::new()
-    };
     if id == "IBFilesOwner" {
         let delegate: id = msg![env; coder delegate];
         if delegate != nil {
@@ -170,24 +146,20 @@ pub const CLASSES: ClassExports = objc_classes! {
                 return file_owner;
             }
         }
-
-        log!("touchHLE Warning: IBFilesOwner requested but file_owner is nil! Returning dummy NSObject.");
+        
+        log!("touchHLE Warning: IBFilesOwner requested but file_owner is nil! Returning dummy.");
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
         let dummy: id = msg![env; ns_object_class alloc];
         msg![env; dummy init]
     } else if id == "IBFirstResponder" {
-        log!("touchHLE: Replacing IBFirstResponder with dummy UIResponder");
-        let proxy_class = env.objc.get_known_class("UIResponder", &mut env.mem);
+        log!("touchHLE: Bypassing IBFirstResponder replacement with dummy NSObject");
+        let proxy_class = env.objc.get_known_class("NSObject", &mut env.mem);
         let dummy: id = msg![env; proxy_class alloc];
         let dummy_init: id = msg![env; dummy init];
         release(env, this);
         dummy_init
     } else {
-        log!(
-            "TODO: UIProxyObject replacement for {}, instance {:?} left unreplaced",
-            id,
-            this
-        );
+        log!("TODO: UIProxyObject replacement for {}, instance {:?} left unreplaced", id, this);
         this
     }
 }
@@ -199,79 +171,47 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let name_key = get_static_str(env, "UIClassName");
     let name_nss: id = msg![env; coder decodeObjectForKey:name_key];
-    
-    let name = if name_nss != nil {
-        to_rust_string(env, name_nss).to_string()
-    } else {
-        "NSObject".to_string()
-    };
+    let name = to_rust_string(env, name_nss);
+
     let orig_key = get_static_str(env, "UIOriginalClassName");
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
-    let orig = if orig_nss != nil {
-        to_rust_string(env, orig_nss).to_string()
-    } else {
-        "NSObject".to_string()
-    };
-    log!(
-        "[DEBUG NIB] UIClassSwapper loading class: {} (original: {})",
-        name,
-        orig
-    );
-    // Determine which class to actually instantiate
+    let orig = to_rust_string(env, orig_nss);
+
+    log!("[DEBUG NIB] UIClassSwapper loading class: {} (original: {})", name, orig);
+    
+    // Блок для определения подменного класса без ворнингов на лишний `mut`
     let selected_class = {
         let mut c = env.objc.get_known_class(&name, &mut env.mem);
         if c == nil {
-            log!(
-                "[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}",
-                name,
-                orig
-            );
+            log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
             c = env.objc.get_known_class(&orig, &mut env.mem);
         }
-
+        
         let problematic_views = ["FBLoginButton"];
         if c == nil || problematic_views.iter().any(|&prob| name == prob) {
-            log!(
-                "[DEBUG NIB] Warning: Substituting {} with generic UIView",
-                name
-            );
+            log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
             c = env.objc.get_known_class("UIView", &mut env.mem);
         }
 
         if c == nil {
-            log!("[DEBUG NIB] CRITICAL: Fallback class not found! Using NSObject.");
+            log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
             c = env.objc.get_known_class("NSObject", &mut env.mem);
         }
         c
     };
-    let object: id = msg![env; selected_class alloc];
 
-    // UICustomObject and UIResponder are placeholder types used by IB that have
-    // no meaningful initWithCoder: — use plain init for those only.
-    //
-    // NOTE: ViewControllers (orig == "UIViewController" or subclasses) must go
-    // through initWithCoder: so that:
-    //   1. The guest's own initWithCoder: runs and sets up guest-side state.
-    //   2. The AppDelegate outlet (setViewController:) properly retains the VC.
-    //   3. startAnimation is called on a live, non-freed object.
-    // The host UIViewController::initWithCoder: now returns `this` safely, so
-    // the old bypass that used plain `init` is no longer needed and was itself
-    // the cause of the use-after-free (nil isa) crash / white screen.
-    let mut init_obj: id = if orig == "UICustomObject" || orig == "UIResponder" {
+    let object: id = msg![env; selected_class alloc];
+    
+    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это чисто кастомный плейсхолдер Interface Builder
+    // Инициализация системных UIViewController через 'init' оставляет их сломанными и ведет к NULL-PAGE READ.
+    let object: id = if orig == "UICustomObject" {
         msg![env; object init]
     } else {
         msg![env; object initWithCoder:coder]
     };
-
-    if init_obj == nil {
-        log!("[DEBUG NIB] Warning: initialization returned nil for {}, safely falling back to new alloc/init", name);
-        // Безопасный фоллбэк: если init вернул nil, старый object уже освобожден (Use-After-Free риск). Выделяем новый!
-        let fallback_obj: id = msg![env; selected_class alloc];
-        init_obj = msg![env; fallback_obj init];
-    }
-
+    
     release(env, this);
-    init_obj
+    object
 }
 
 @end
@@ -289,13 +229,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let label_key = get_static_str(env, "UILabel");
     let label: id = msg![env; coder decodeObjectForKey: label_key];
+
     let source_key = get_static_str(env, "UISource");
     let source: id = msg![env; coder decodeObjectForKey: source_key];
 
-    if destination != nil { retain(env, destination); }
-    if source != nil { retain(env, source); }
-    if label != nil { retain(env, label); }
-
+    retain(env, destination);
+    retain(env, source);
+    retain(env, label);
+    
     let host_obj = env.objc.borrow_mut::<UIRuntimeConnectionHostObject>(this);
     host_obj.destination = destination;
     host_obj.label = label;
@@ -304,14 +245,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UIRuntimeConnectionHostObject {
-        destination,
-        label,
-        source,
-    } = env.objc.borrow(this);
-    if destination != nil { release(env, destination); }
-    if label != nil { release(env, label); }
-    if source != nil { release(env, source); }
+    let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
+    release(env, destination);
+    release(env, label);
+    release(env, source);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -325,27 +262,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())connect {
-    let &UIRuntimeConnectionHostObject {
-        destination,
-        label,
-        source,
-    } = env.objc.borrow(this);
-    let &UIRuntimeEventConnectionHostObject {
-        superclass: _,
-        event_mask,
-    } = env.objc.borrow(this);
-    if source == nil || destination == nil || label == nil {
-        return;
-    }
-
-    let selector = to_rust_string(env, label);
-    if let Some(action) = env.objc.lookup_selector(&selector) {
-        () = msg![env; source addTarget:destination action:action forControlEvents:event_mask];
-    } else {
-        log!(
-            "touchHLE Warning: UIRuntimeEventConnection missing selector '{}', skipping.",
-            selector
-        );
+    let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
+    let &UIRuntimeEventConnectionHostObject { superclass: _, event_mask } = env.objc.borrow(this);
+    
+    if source != nil && destination != nil && label != nil {
+        let selector = to_rust_string(env, label);
+        if let Some(action) = env.objc.lookup_selector(&selector) {
+            () = msg![env; source addTarget:destination action:action forControlEvents:event_mask];
+        } else {
+            log!("touchHLE Warning: UIRuntimeEventConnection missing selector '{}', skipping.", selector);
+        }
     }
 }
 
@@ -368,29 +294,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIRuntimeOutletConnection: UIRuntimeConnection
 
 - (())connect {
-    let &UIRuntimeConnectionHostObject {
-        destination,
-        label,
-        source,
-    } = env.objc.borrow(this);
-    if source == nil || destination == nil || label == nil {
-        return;
+    let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
+    
+    if source != nil && destination != nil && label != nil {
+        // ЯВНО УКАЗЫВАЕМ ТИП Class, чтобы компилятор не ругался
+        let source_class: Class = msg![env; source class];
+        let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
+        
+        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто заглушка NSObject
+        if source_class == ns_object_class {
+            let label_str = to_rust_string(env, label);
+            log!("touchHLE NIB: Skipping outlet '{}' connection because source is an unhandled NSObject", label_str);
+            return;
+        }
+
+        () = msg![env; source setValue:destination forKey:label];
     }
-
-    let source_class: Class = msg![env; source class];
-    let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
-    let ui_responder_class = env.objc.get_known_class("UIResponder", &mut env.mem);
-
-    if source_class == ns_object_class || source_class == ui_responder_class {
-        let label_str = to_rust_string(env, label);
-        log!(
-            "touchHLE NIB: Skipping outlet '{}' — source is an unhandled placeholder",
-            label_str
-        );
-        return;
-    }
-
-    () = msg![env; source setValue:destination forKey:label];
 }
 
 @end
@@ -400,18 +319,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Result<id, ()> {
     let path_str = ns_string::from_rust_string(env, path.as_str().to_string());
     let ns_data: id = msg_class![env; NSData dataWithContentsOfFile:path_str];
-
+    
     if ns_data == nil {
         log!("Warning: couldn't load nib file {:?}", path);
         return Err(());
     };
 
     let len: NSUInteger = msg![env; ns_data length];
+    // Если длина файла достаточна, значит указатель bytes гарантированно существует
     if len < 10 {
         return Err(());
     }
-
+    
     let bytes: ConstVoidPtr = msg![env; ns_data bytes];
+
     let unarchiver = if env.mem.bytes_at(bytes.cast(), 10) == b"NIBArchive" {
         let decoder: id = msg_class![env; _touchHLE_NIBArchiveDecoder alloc];
         msg![env; decoder _touchHLE_initForReadingWithData:ns_data]
@@ -420,16 +341,15 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
         msg![env; unarchiver initForReadingWithData:ns_data]
     };
 
-    // The UINib object is the delegate; UIProxyObject/UIClassSwapper use it
-    // to retrieve the file owner during initWithCoder:.
     () = msg![env; unarchiver setDelegate:ui_nib];
+
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
+    
     if objects != nil {
-        retain(env, objects);
-        // keep alive while we wire up connections
+        retain(env, objects); // Защита от преждевременного удаления
     }
-
+    
     let conns_key = get_static_str(env, "UINibConnectionsKey");
     let conns: id = msg![env; unarchiver decodeObjectForKey:conns_key];
     if conns != nil {
@@ -442,7 +362,6 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
         }
     }
 
-    // Send awakeFromNib to every top-level object
     if objects != nil {
         let enumerator: id = msg![env; objects objectEnumerator];
         if enumerator != nil {
@@ -454,8 +373,6 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
                 () = msg![env; next awakeFromNib];
             }
         }
-        release(env, objects);
-        // balance the retain above
     }
 
     let visibles_key = get_static_str(env, "UINibVisibleWindowsKey");
