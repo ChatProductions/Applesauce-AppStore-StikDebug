@@ -111,7 +111,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     if bg_color == nil {
-        () = msg![env; this setBackgroundColor:(msg_class![env; UIColor clearColor])];
+        let clear_color: id = msg_class![env; UIColor clearColor];
+        () = msg![env; this setBackgroundColor:clear_color];
     } else {
         () = msg![env; this setBackgroundColor:bg_color];
     }
@@ -236,13 +237,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let single_line = number_of_lines == 1;
 
-    let calculated_size: CGSize = if single_line {
-        msg![env; text sizeWithFont:font]
+    let calculated_size: CGSize;
+    if single_line {
+        calculated_size = msg![env; text sizeWithFont:font];
     } else {
-        msg![env; text sizeWithFont:font
+        calculated_size = msg![env; text sizeWithFont:font
                   constrainedToSize:(bounds.size)
-                      lineBreakMode:line_break_mode]
-    };
+                      lineBreakMode:line_break_mode];
+    }
 
     let rect = CGRect {
         origin: CGPoint {
@@ -263,13 +265,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             x: rect.origin.x + x_offset * (bounds.size.width - calculated_size.width),
             y: rect.origin.y
         };
-        msg![env; text drawAtPoint:point withFont:font]
+        let _size: CGSize = msg![env; text drawAtPoint:point withFont:font];
     } else {
-        msg![env; text drawInRect:rect
+        let _size: CGSize = msg![env; text drawInRect:rect
                          withFont:font
                     lineBreakMode:line_break_mode
-                        alignment:text_alignment]
-    };
+                        alignment:text_alignment];
+    }
 }
 
 @end
