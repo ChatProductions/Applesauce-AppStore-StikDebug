@@ -9,7 +9,7 @@ use super::ui_graphics::UIGraphicsGetCurrentContext;
 use crate::font::{Font, TextAlignment, WrapMode};
 use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::to_rust_string;
+use crate::frameworks::foundation::ns_string::{to_rust_string, get_static_str};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{autorelease, id, msg, objc_classes, ClassExports, HostObject, nil};
 use crate::Environment;
@@ -45,9 +45,18 @@ impl State {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum FontKind {
-    MonoRegular, MonoBold, MonoBoldItalic, MonoItalic,
-    SansRegular, SansBold, SansBoldItalic, SansItalic,
-    SerifRegular, SerifBold, SerifBoldItalic, SerifItalic,
+    MonoRegular,
+    MonoBold,
+    MonoBoldItalic,
+    MonoItalic,
+    SansRegular,
+    SansBold,
+    SansBoldItalic,
+    SansItalic,
+    SerifRegular,
+    SerifBold,
+    SerifBoldItalic,
+    SerifItalic,
 }
 
 struct UIFontHostObject {
@@ -59,9 +68,12 @@ impl HostObject for UIFontHostObject {}
 pub type UILineBreakMode = NSInteger;
 pub const UILineBreakModeWordWrap: UILineBreakMode = 0;
 pub const UILineBreakModeCharacterWrap: UILineBreakMode = 1;
+#[allow(dead_code)]
 pub const UILineBreakModeClip: UILineBreakMode = 2;
+#[allow(dead_code)]
 pub const UILineBreakModeHeadTruncation: UILineBreakMode = 3;
 pub const UILineBreakModeTailTruncation: UILineBreakMode = 4;
+#[allow(dead_code)]
 pub const UILineBreakModeMiddleTruncation: UILineBreakMode = 5;
 
 pub type UITextAlignment = NSInteger;
@@ -75,43 +87,105 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation UIFont: NSObject
 
-+ (CGFloat)systemFontSize { 14.0 }
-+ (CGFloat)smallSystemFontSize { 12.0 }
-+ (CGFloat)labelFontSize { 17.0 }
-+ (CGFloat)buttonFontSize { 18.0 }
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = UIFontHostObject {
+        size: 17.0,
+        kind: FontKind::SansRegular,
+    };
+    env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
+}
+
+- (id)initWithCoder:(id)coder {
+    let key_name = get_static_str(env, "UIFontName");
+    let mut font_name: id = nil;
+    if msg![env; coder containsValueForKey:key_name] {
+        font_name = msg![env; coder decodeObjectForKey:key_name];
+    }
+
+    let key_size = get_static_str(env, "UIFontPointSize");
+    let mut font_size: f32 = 17.0;
+    if msg![env; coder containsValueForKey:key_size] {
+        font_size = msg![env; coder decodeFloatForKey:key_size];
+    }
+
+    let kind = if font_name != nil {
+        let name_str = to_rust_string(env, font_name).to_string();
+        get_equivalent_font(&name_str).unwrap_or(FontKind::SansRegular)
+    } else {
+        FontKind::SansRegular
+    };
+
+    env.objc.borrow_mut::<UIFontHostObject>(this).size = font_size as CGFloat;
+    env.objc.borrow_mut::<UIFontHostObject>(this).kind = kind;
+
+    this
+}
+
++ (CGFloat)systemFontSize {
+    14.0
+}
+
++ (CGFloat)smallSystemFontSize {
+    12.0
+}
+
++ (CGFloat)labelFontSize {
+    17.0
+}
+
++ (CGFloat)buttonFontSize {
+    18.0
+}
 
 + (id)systemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject { size, kind: FontKind::SansRegular };
+    let host_object = UIFontHostObject {
+        size,
+        kind: FontKind::SansRegular,
+    };
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
 + (id)boldSystemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject { size, kind: FontKind::SansBold };
+    let host_object = UIFontHostObject {
+        size,
+        kind: FontKind::SansBold,
+    };
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
 + (id)italicSystemFontOfSize:(CGFloat)size {
-    let host_object = UIFontHostObject { size, kind: FontKind::SansItalic };
+    let host_object = UIFontHostObject {
+        size,
+        kind: FontKind::SansItalic,
+    };
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
 
 + (id)fontWithName:(id)fontName size:(CGFloat)fontSize {
     if fontName == nil {
-        let host_object = UIFontHostObject { kind: FontKind::SansRegular, size: fontSize };
+        let host_object = UIFontHostObject {
+            kind: FontKind::SansRegular,
+            size: fontSize,
+        };
         let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
         return autorelease(env, new);
     }
     let font_name = to_rust_string(env, fontName).to_string();
     let host_object = UIFontHostObject {
-        kind: get_equivalent_font(&font_name).unwrap_or_else(|| FontKind::SansRegular),
+        kind: get_equivalent_font(&font_name).unwrap_or_else(|| {
+            FontKind::SansRegular
+        }),
         size: fontSize,
     };
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
 
-- (CGFloat)pointSize { env.objc.borrow::<UIFontHostObject>(this).size }
+- (CGFloat)pointSize {
+    let host_object = env.objc.borrow::<UIFontHostObject>(this);
+    host_object.size
+}
 
 - (CGFloat)ascender {
     let host_object = env.objc.borrow::<UIFontHostObject>(this);
@@ -157,6 +231,7 @@ fn convert_line_break_mode(ui_mode: UILineBreakMode) -> WrapMode {
     }
 }
 
+#[rustfmt::skip]
 fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
     for c in text.chars() {
         let c = c as u32;
@@ -164,16 +239,21 @@ fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
            (0x4e00..=0x9FA0).contains(&c) || (0x3400..=0x4DBF).contains(&c) {
             match kind {
                 FontKind::MonoRegular | FontKind::MonoItalic | FontKind::SansRegular | FontKind::SansItalic | FontKind::SerifRegular | FontKind::SerifItalic => {
-                    if state.sans_regular_ja.is_none() { state.sans_regular_ja = Some(Font::sans_regular_ja()); }
+                    if state.sans_regular_ja.is_none() {
+                        state.sans_regular_ja = Some(Font::sans_regular_ja());
+                    }
                     return state.sans_regular_ja.as_ref().unwrap();
                 },
                 FontKind::MonoBold | FontKind::MonoBoldItalic | FontKind::SansBold | FontKind::SansBoldItalic | FontKind::SerifBold | FontKind::SerifBoldItalic => {
-                    if state.sans_bold_ja.is_none() { state.sans_bold_ja = Some(Font::sans_bold_ja()); }
+                    if state.sans_bold_ja.is_none() {
+                        state.sans_bold_ja = Some(Font::sans_bold_ja());
+                    }
                     return state.sans_bold_ja.as_ref().unwrap();
                 },
             }
         }
     }
+
     state.get_font_by_kind(kind)
 }
 
@@ -183,13 +263,15 @@ pub fn size_with_font(
     text: &str,
     constrained: Option<(CGSize, UILineBreakMode)>,
 ) -> CGSize {
-    if font == nil { return CGSize { width: 0.0, height: 0.0 }; }
-    
     let host_object = env.objc.borrow::<UIFontHostObject>(font);
-    let font_obj = get_font(&mut env.framework_state.uikit.ui_font, host_object.kind, text);
+    let font = get_font(
+        &mut env.framework_state.uikit.ui_font,
+        host_object.kind,
+        text,
+    );
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
-    let (width, height) = font_obj.calculate_text_size(host_object.size, text, wrap);
+    let (width, height) = font.calculate_text_size(host_object.size, text, wrap);
     CGSize { width, height }
 }
 
@@ -199,13 +281,15 @@ pub fn break_lines_with_font<'a>(
     text: &'a str,
     constrained: Option<(CGSize, UILineBreakMode)>,
 ) -> Vec<(f32, &'a str)> {
-    if font == nil { return vec![]; }
-    
     let host_object = env.objc.borrow::<UIFontHostObject>(font);
-    let font_obj = get_font(&mut env.framework_state.uikit.ui_font, host_object.kind, text);
+    let font = get_font(
+        &mut env.framework_state.uikit.ui_font,
+        host_object.kind,
+        text,
+    );
     let wrap = constrained.map(|(size, ui_mode)| (size.width, convert_line_break_mode(ui_mode)));
 
-    font_obj.break_lines(host_object.size, text, wrap)
+    font.break_lines(host_object.size, text, wrap)
 }
 
 #[inline(always)]
@@ -221,7 +305,10 @@ fn draw_font_glyph(
         let (width, height) = raster_glyph.dimensions();
         CGRect {
             origin: CGPoint { x, y },
-            size: CGSize { width: width as f32, height: height as f32 },
+            size: CGSize {
+                width: width as f32,
+                height: height as f32,
+            },
         }
     };
     if let Some(clip_x) = clip_x {
@@ -255,21 +342,26 @@ pub fn draw_at_point(
     point: CGPoint,
     width_and_line_break_mode: Option<(CGFloat, UILineBreakMode)>,
 ) -> CGSize {
-    if font == nil { return CGSize { width: 0.0, height: 0.0 }; }
-    
     let context = UIGraphicsGetCurrentContext(env);
     let host_object = env.objc.borrow::<UIFontHostObject>(font);
-    let font_obj = get_font(&mut env.framework_state.uikit.ui_font, host_object.kind, text);
-    
-    let width_and_line_break_mode = width_and_line_break_mode.map(|(width, ui_mode)| (width, convert_line_break_mode(ui_mode)));
+
+    let font = get_font(
+        &mut env.framework_state.uikit.ui_font,
+        host_object.kind,
+        text,
+    );
+    let width_and_line_break_mode =
+        width_and_line_break_mode.map(|(width, ui_mode)| (width, convert_line_break_mode(ui_mode)));
     let clip_x = width_and_line_break_mode.map(|(width, _)| point.x..(point.x + width));
-    let (width, height) = font_obj.calculate_text_size(host_object.size, text, width_and_line_break_mode);
-    
+    let (width, height) = font.calculate_text_size(host_object.size, text, width_and_line_break_mode);
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();
-    
-    font_obj.draw(
-        host_object.size, text, (point.x, point.y), width_and_line_break_mode, TextAlignment::Left,
+    font.draw(
+        host_object.size,
+        text,
+        (point.x, point.y),
+        width_and_line_break_mode,
+        TextAlignment::Left,
         |raster_glyph| {
             draw_font_glyph(&mut drawer, raster_glyph, fill_color, clip_x.clone(), None)
         },
@@ -285,29 +377,34 @@ pub fn draw_in_rect(
     line_break_mode: UILineBreakMode,
     alignment: UITextAlignment,
 ) -> CGSize {
-    if font == nil { return CGSize { width: 0.0, height: 0.0 }; }
-    
     let context = UIGraphicsGetCurrentContext(env);
     let text_size = size_with_font(env, font, text, Some((rect.size, line_break_mode)));
 
     let host_object = env.objc.borrow::<UIFontHostObject>(font);
-    let font_obj = get_font(&mut env.framework_state.uikit.ui_font, host_object.kind, text);
+    let font = get_font(
+        &mut env.framework_state.uikit.ui_font,
+        host_object.kind,
+        text,
+    );
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();
-    
-    let (origin_x_offset, text_alignment) = match alignment {
+    let (origin_x_offset, alignment) = match alignment {
         UITextAlignmentLeft => (0.0, TextAlignment::Left),
         UITextAlignmentCenter => (rect.size.width / 2.0, TextAlignment::Center),
         UITextAlignmentRight => (rect.size.width, TextAlignment::Right),
         _ => (0.0, TextAlignment::Left),
     };
-    
-    font_obj.draw(
-        host_object.size, text, (rect.origin.x + origin_x_offset, rect.origin.y),
-        Some((rect.size.width, convert_line_break_mode(line_break_mode))), text_alignment,
+    font.draw(
+        host_object.size,
+        text,
+        (rect.origin.x + origin_x_offset, rect.origin.y),
+        Some((rect.size.width, convert_line_break_mode(line_break_mode))),
+        alignment,
         |raster_glyph| {
             draw_font_glyph(
-                &mut drawer, raster_glyph, fill_color,
+                &mut drawer,
+                raster_glyph,
+                fill_color,
                 Some(rect.origin.x..(rect.origin.x + rect.size.width)),
                 Some(rect.origin.y..(rect.origin.y + rect.size.height)),
             )
@@ -316,20 +413,111 @@ pub fn draw_in_rect(
     text_size
 }
 
+#[rustfmt::skip]
 fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
     match system_font {
-        "Courier" | "CourierNewPSMT" | "AmericanTypewriter" | "AmericanTypewriter-Condensed" | "AmericanTypewriter-CondensedLight" | "AmericanTypewriter-Light" => Some(FontKind::MonoRegular),
-        "Courier-Bold" | "CourierNewPS-BoldMT" | "AmericanTypewriter-Bold" | "AmericanTypewriter-CondensedBold" | "DBLCDTempBlack" => Some(FontKind::MonoBold),
-        "Courier-Oblique" | "CourierNewPS-ItalicMT" => Some(FontKind::MonoItalic),
-        "Courier-BoldOblique" | "CourierNewPS-BoldItalicMT" => Some(FontKind::MonoBoldItalic),
-        "ArialMT" | "Helvetica" | "Helvetica-Light" | "Helvetica-Narrow" | "HelveticaNeue" | "HelveticaNeue-Light" | "HelveticaNeue-UltraLight" | "HelveticaNeue-Thin" | "Verdana" | "TrebuchetMS" | "Futura-Medium" | "Futura-CondensedMedium" | "GillSans" | "GillSans-Light" | "Optima-Regular" | "MarkerFelt-Thin" | "ChalkboardSE-Regular" | "ChalkboardSE-Light" | "Chalkduster" | "EuphemiaUCAS" => Some(FontKind::SansRegular),
-        "Arial-BoldMT" | "ArialRoundedMTBold" | "Helvetica-Bold" | "Helvetica-Narrow-Bold" | "HelveticaNeue-Bold" | "HelveticaNeue-Medium" | "HelveticaNeue-CondensedBold" | "HelveticaNeue-CondensedBlack" | "Verdana-Bold" | "TrebuchetMS-Bold" | "Futura-CondensedExtraBold" | "GillSans-Bold" | "Optima-Bold" | "Optima-ExtraBlack" | "MarkerFelt-Wide" | "ChalkboardSE-Bold" | "BradleyHandITCTT-Bold" | "EuphemiaUCAS-Bold" => Some(FontKind::SansBold),
-        "Arial-ItalicMT" | "Helvetica-Oblique" | "Helvetica-LightOblique" | "Helvetica-Narrow-Oblique" | "HelveticaNeue-Italic" | "HelveticaNeue-LightItalic" | "HelveticaNeue-UltraLightItalic" | "HelveticaNeue-ThinItalic" | "Verdana-Italic" | "TrebuchetMS-Italic" | "Futura-MediumItalic" | "GillSans-Italic" | "GillSans-LightItalic" | "Optima-Italic" | "EuphemiaUCAS-Italic" => Some(FontKind::SansItalic),
-        "Arial-BoldItalicMT" | "Helvetica-BoldOblique" | "Helvetica-Narrow-BoldOblique" | "HelveticaNeue-BoldItalic" | "Verdana-BoldItalic" | "TrebuchetMS-BoldItalic" | "GillSans-BoldItalic" | "Optima-BoldItalic" => Some(FontKind::SansBoldItalic),
-        "TimesNewRomanPSMT" | "Georgia" | "Palatino-Roman" | "Baskerville" | "Didot" | "Cochin" => Some(FontKind::SerifRegular),
-        "TimesNewRomanPS-BoldMT" | "Georgia-Bold" | "Palatino-Bold" | "Baskerville-Bold" | "Baskerville-SemiBold" | "Didot-Bold" | "Cochin-Bold" => Some(FontKind::SerifBold),
-        "TimesNewRomanPS-ItalicMT" | "Georgia-Italic" | "Palatino-Italic" | "Baskerville-Italic" | "Didot-Italic" | "Cochin-Italic" => Some(FontKind::SerifItalic),
-        "TimesNewRomanPS-BoldItalicMT" | "Georgia-BoldItalic" | "Palatino-BoldItalic" | "Baskerville-BoldItalic" | "Baskerville-SemiBoldItalic" | "Cochin-BoldItalic" => Some(FontKind::SerifBoldItalic),
+        "Courier"                          => Some(FontKind::MonoRegular),
+        "Courier-Bold"                     => Some(FontKind::MonoBold),
+        "Courier-Oblique"                  => Some(FontKind::MonoItalic),
+        "Courier-BoldOblique"              => Some(FontKind::MonoBoldItalic),
+        "CourierNewPSMT"                   => Some(FontKind::MonoRegular),
+        "CourierNewPS-BoldMT"              => Some(FontKind::MonoBold),
+        "CourierNewPS-ItalicMT"            => Some(FontKind::MonoItalic),
+        "CourierNewPS-BoldItalicMT"        => Some(FontKind::MonoBoldItalic),
+        "ArialMT"                          => Some(FontKind::SansRegular),
+        "Arial-BoldMT"                     => Some(FontKind::SansBold),
+        "Arial-ItalicMT"                   => Some(FontKind::SansItalic),
+        "Arial-BoldItalicMT"               => Some(FontKind::SansBoldItalic),
+        "ArialRoundedMTBold"               => Some(FontKind::SansBold),
+        "ArialUnicodeMS"                   => None,
+        "Helvetica"                        => Some(FontKind::SansRegular),
+        "Helvetica-Bold"                   => Some(FontKind::SansBold),
+        "Helvetica-Oblique"                => Some(FontKind::SansItalic),
+        "Helvetica-BoldOblique"            => Some(FontKind::SansBoldItalic),
+        "Helvetica-Light"                  => Some(FontKind::SansRegular),
+        "Helvetica-LightOblique"           => Some(FontKind::SansItalic),
+        "Helvetica-Narrow"                 => Some(FontKind::SansRegular),
+        "Helvetica-Narrow-Bold"            => Some(FontKind::SansBold),
+        "Helvetica-Narrow-Oblique"         => Some(FontKind::SansItalic),
+        "Helvetica-Narrow-BoldOblique"     => Some(FontKind::SansBoldItalic),
+        "HelveticaNeue"                    => Some(FontKind::SansRegular),
+        "HelveticaNeue-Bold"               => Some(FontKind::SansBold),
+        "HelveticaNeue-Italic"             => Some(FontKind::SansItalic),
+        "HelveticaNeue-BoldItalic"         => Some(FontKind::SansBoldItalic),
+        "HelveticaNeue-Light"              => Some(FontKind::SansRegular),
+        "HelveticaNeue-LightItalic"        => Some(FontKind::SansItalic),
+        "HelveticaNeue-Medium"             => Some(FontKind::SansBold),
+        "HelveticaNeue-UltraLight"         => Some(FontKind::SansRegular),
+        "HelveticaNeue-UltraLightItalic"   => Some(FontKind::SansItalic),
+        "HelveticaNeue-CondensedBold"      => Some(FontKind::SansBold),
+        "HelveticaNeue-CondensedBlack"     => Some(FontKind::SansBold),
+        "HelveticaNeue-Thin"               => Some(FontKind::SansRegular),
+        "HelveticaNeue-ThinItalic"         => Some(FontKind::SansItalic),
+        "Verdana"                          => Some(FontKind::SansRegular),
+        "Verdana-Bold"                     => Some(FontKind::SansBold),
+        "Verdana-Italic"                   => Some(FontKind::SansItalic),
+        "Verdana-BoldItalic"               => Some(FontKind::SansBoldItalic),
+        "TrebuchetMS"                      => Some(FontKind::SansRegular),
+        "TrebuchetMS-Bold"                 => Some(FontKind::SansBold),
+        "TrebuchetMS-Italic"               => Some(FontKind::SansItalic),
+        "TrebuchetMS-BoldItalic"           => Some(FontKind::SansBoldItalic),
+        "Futura-Medium"                    => Some(FontKind::SansRegular),
+        "Futura-MediumItalic"              => Some(FontKind::SansItalic),
+        "Futura-CondensedMedium"           => Some(FontKind::SansRegular),
+        "Futura-CondensedExtraBold"        => Some(FontKind::SansBold),
+        "GillSans"                         => Some(FontKind::SansRegular),
+        "GillSans-Bold"                    => Some(FontKind::SansBold),
+        "GillSans-Italic"                  => Some(FontKind::SansItalic),
+        "GillSans-BoldItalic"              => Some(FontKind::SansBoldItalic),
+        "GillSans-Light"                   => Some(FontKind::SansRegular),
+        "GillSans-LightItalic"             => Some(FontKind::SansItalic),
+        "Optima-Regular"                   => Some(FontKind::SansRegular),
+        "Optima-Bold"                      => Some(FontKind::SansBold),
+        "Optima-Italic"                    => Some(FontKind::SansItalic),
+        "Optima-BoldItalic"                => Some(FontKind::SansBoldItalic),
+        "Optima-ExtraBlack"                => Some(FontKind::SansBold),
+        "TimesNewRomanPSMT"                => Some(FontKind::SerifRegular),
+        "TimesNewRomanPS-BoldMT"           => Some(FontKind::SerifBold),
+        "TimesNewRomanPS-ItalicMT"         => Some(FontKind::SerifItalic),
+        "TimesNewRomanPS-BoldItalicMT"     => Some(FontKind::SerifBoldItalic),
+        "Georgia"                          => Some(FontKind::SerifRegular),
+        "Georgia-Bold"                     => Some(FontKind::SerifBold),
+        "Georgia-Italic"                   => Some(FontKind::SerifItalic),
+        "Georgia-BoldItalic"               => Some(FontKind::SerifBoldItalic),
+        "Palatino-Roman"                   => Some(FontKind::SerifRegular),
+        "Palatino-Bold"                    => Some(FontKind::SerifBold),
+        "Palatino-Italic"                  => Some(FontKind::SerifItalic),
+        "Palatino-BoldItalic"              => Some(FontKind::SerifBoldItalic),
+        "Baskerville"                      => Some(FontKind::SerifRegular),
+        "Baskerville-Bold"                 => Some(FontKind::SerifBold),
+        "Baskerville-Italic"               => Some(FontKind::SerifItalic),
+        "Baskerville-BoldItalic"           => Some(FontKind::SerifBoldItalic),
+        "Baskerville-SemiBold"             => Some(FontKind::SerifBold),
+        "Baskerville-SemiBoldItalic"       => Some(FontKind::SerifBoldItalic),
+        "Didot"                            => Some(FontKind::SerifRegular),
+        "Didot-Bold"                       => Some(FontKind::SerifBold),
+        "Didot-Italic"                     => Some(FontKind::SerifItalic),
+        "Cochin"                           => Some(FontKind::SerifRegular),
+        "Cochin-Bold"                      => Some(FontKind::SerifBold),
+        "Cochin-Italic"                    => Some(FontKind::SerifItalic),
+        "Cochin-BoldItalic"                => Some(FontKind::SerifBoldItalic),
+        "AmericanTypewriter"               => Some(FontKind::MonoRegular),
+        "AmericanTypewriter-Bold"          => Some(FontKind::MonoBold),
+        "AmericanTypewriter-Condensed"     => Some(FontKind::MonoRegular),
+        "AmericanTypewriter-CondensedBold" => Some(FontKind::MonoBold),
+        "AmericanTypewriter-CondensedLight"=> Some(FontKind::MonoRegular),
+        "AmericanTypewriter-Light"         => Some(FontKind::MonoRegular),
+        "MarkerFelt-Thin"                  => Some(FontKind::SansRegular),
+        "MarkerFelt-Wide"                  => Some(FontKind::SansBold),
+        "ChalkboardSE-Regular"             => Some(FontKind::SansRegular),
+        "ChalkboardSE-Bold"                => Some(FontKind::SansBold),
+        "ChalkboardSE-Light"               => Some(FontKind::SansRegular),
+        "Chalkduster"                      => Some(FontKind::SansRegular),
+        "BradleyHandITCTT-Bold"            => Some(FontKind::SansBold),
+        "EuphemiaUCAS"                     => Some(FontKind::SansRegular),
+        "EuphemiaUCAS-Bold"                => Some(FontKind::SansBold),
+        "EuphemiaUCAS-Italic"              => Some(FontKind::SansItalic),
+        "DBLCDTempBlack"                   => Some(FontKind::MonoBold),
         _ => None,
     }
     }
