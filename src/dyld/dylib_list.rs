@@ -28,6 +28,15 @@ pub const CF_NETWORK: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::cf_network::FUNCTIONS],
 };
 
+// Где-нибудь перед DYLIB_LIST добавь:
+pub const LIB_BZ2: super::HostDylib = super::HostDylib {
+    path: "/usr/lib/libbz2.1.0.dylib", // Это стандартный путь iOS/macOS для неё
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::libbz2::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -53,6 +62,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::libicucore::DYLIB,
     &frameworks::libsqlite3::DYLIB,
     &frameworks::libxml2::DYLIB,
+    &frameworks::libbz2::DYLIB,
     &frameworks::common_crypto::DYLIB,
     &frameworks::core_video::DYLIB,
     &frameworks::address_book::DYLIB,
