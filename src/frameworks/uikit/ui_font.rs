@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UIFont`.
@@ -84,7 +85,6 @@ pub const UITextAlignmentRight: UITextAlignment = 2;
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
-
 @implementation UIFont: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
@@ -93,32 +93,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         kind: FontKind::SansRegular,
     };
     env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
-}
-
-- (id)initWithCoder:(id)coder {
-    let key_name = get_static_str(env, "UIFontName");
-    let mut font_name: id = nil;
-    if msg![env; coder containsValueForKey:key_name] {
-        font_name = msg![env; coder decodeObjectForKey:key_name];
-    }
-
-    let key_size = get_static_str(env, "UIFontPointSize");
-    let mut font_size: f32 = 17.0;
-    if msg![env; coder containsValueForKey:key_size] {
-        font_size = msg![env; coder decodeFloatForKey:key_size];
-    }
-
-    let kind = if font_name != nil {
-        let name_str = to_rust_string(env, font_name).to_string();
-        get_equivalent_font(&name_str).unwrap_or(FontKind::SansRegular)
-    } else {
-        FontKind::SansRegular
-    };
-
-    env.objc.borrow_mut::<UIFontHostObject>(this).size = font_size as CGFloat;
-    env.objc.borrow_mut::<UIFontHostObject>(this).kind = kind;
-
-    this
 }
 
 + (CGFloat)systemFontSize {
@@ -145,6 +119,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
+
 + (id)boldSystemFontOfSize:(CGFloat)size {
     let host_object = UIFontHostObject {
         size,
@@ -153,6 +128,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
+
 + (id)italicSystemFontOfSize:(CGFloat)size {
     let host_object = UIFontHostObject {
         size,
@@ -182,6 +158,31 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+- (id)initWithCoder:(id)coder {
+    let key_name = get_static_str(env, "UIFontName");
+    let mut font_name: id = nil;
+    if msg![env; coder containsValueForKey:key_name] {
+        font_name = msg![env; coder decodeObjectForKey:key_name];
+    }
+
+    let key_size = get_static_str(env, "UIFontPointSize");
+    let mut font_size: f32 = 17.0;
+    if msg![env; coder containsValueForKey:key_size] {
+        font_size = msg![env; coder decodeFloatForKey:key_size];
+    }
+
+    let kind = if font_name != nil {
+        let name_str = to_rust_string(env, font_name).to_string();
+        get_equivalent_font(&name_str).unwrap_or(FontKind::SansRegular)
+    } else {
+        FontKind::SansRegular
+    };
+    env.objc.borrow_mut::<UIFontHostObject>(this).size = font_size as CGFloat;
+    env.objc.borrow_mut::<UIFontHostObject>(this).kind = kind;
+
+    this
+}
+
 - (CGFloat)pointSize {
     let host_object = env.objc.borrow::<UIFontHostObject>(this);
     host_object.size
@@ -192,11 +193,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let font = env.framework_state.uikit.ui_font.get_font_by_kind(host_object.kind);
     font.ascent(host_object.size)
 }
+
 - (CGFloat)descender {
     let host_object = env.objc.borrow::<UIFontHostObject>(this);
     let font = env.framework_state.uikit.ui_font.get_font_by_kind(host_object.kind);
     font.descent(host_object.size)
 }
+
 - (CGFloat)leading {
     let host_object = env.objc.borrow::<UIFontHostObject>(this);
     let font = env.framework_state.uikit.ui_font.get_font_by_kind(host_object.kind);
@@ -238,13 +241,15 @@ fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
         if (0x3000..=0x30FF).contains(&c) || (0xFF00..=0xFFEF).contains(&c) ||
            (0x4e00..=0x9FA0).contains(&c) || (0x3400..=0x4DBF).contains(&c) {
             match kind {
-                FontKind::MonoRegular | FontKind::MonoItalic | FontKind::SansRegular | FontKind::SansItalic | FontKind::SerifRegular | FontKind::SerifItalic => {
+                FontKind::MonoRegular |
+                FontKind::MonoItalic | FontKind::SansRegular | FontKind::SansItalic | FontKind::SerifRegular | FontKind::SerifItalic => {
                     if state.sans_regular_ja.is_none() {
                         state.sans_regular_ja = Some(Font::sans_regular_ja());
                     }
                     return state.sans_regular_ja.as_ref().unwrap();
                 },
-                FontKind::MonoBold | FontKind::MonoBoldItalic | FontKind::SansBold | FontKind::SansBoldItalic | FontKind::SerifBold | FontKind::SerifBoldItalic => {
+                FontKind::MonoBold | FontKind::MonoBoldItalic |
+                FontKind::SansBold | FontKind::SansBoldItalic | FontKind::SerifBold | FontKind::SerifBoldItalic => {
                     if state.sans_bold_ja.is_none() {
                         state.sans_bold_ja = Some(Font::sans_bold_ja());
                     }
@@ -520,4 +525,5 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
         "DBLCDTempBlack"                   => Some(FontKind::MonoBold),
         _ => None,
     }
-    }
+}
+
