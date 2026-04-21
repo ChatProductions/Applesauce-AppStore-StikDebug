@@ -24,6 +24,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
     export_c_func!(xmlNewDoc(_)),
+    export_c_func!(xmlNewNode(_, _)),
+    export_c_func!(xmlDocSetRootElement(_, _)),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
     export_c_func!(xmlReadFile(_, _, _)),
     export_c_func!(xmlReadMemory(_, _, _, _, _)),
@@ -1219,3 +1221,51 @@ fn xmlNewDoc(env: &mut Environment, version_ptr: u32) -> u32 {
     })
 }
 
+#[allow(non_snake_case)]
+fn xmlNewNode(env: &mut Environment, _ns: u32, name: u32) -> u32 {
+    // Читаем имя создаваемого тега из памяти гостя
+    let name_bytes = read_cstr(env, name);
+    log!("xmlNewNode(name: {:?})", String::from_utf8_lossy(&name_bytes));
+
+    with_xml(|s| {
+        let node_h = s.alloc();
+        s.nodes.insert(
+            node_h,
+            XmlNodeData {
+                name: name_bytes,
+                content: Vec::new(),
+                attrs: Vec::new(),
+                parent: 0,
+                first_child: 0,
+                last_child: 0,
+                next_sib: 0,
+                prev_sib: 0,
+                doc_handle: 0, // Пока нода не привязана к документу
+            },
+        );
+        node_h
+    })
+}
+
+#[allow(non_snake_case)]
+fn xmlDocSetRootElement(_env: &mut Environment, doc: u32, root: u32) -> u32 {
+    with_xml(|s| {
+        let mut old_root = 0;
+        
+        // Привязываем корень к документу
+        if let Some(d) = s.docs.get_mut(&doc) {
+            old_root = d.root;
+            d.root = root;
+        }
+        
+        // Обновляем ссылку на документ внутри самой ноды
+        if root != 0 {
+            if let Some(n) = s.nodes.get_mut(&root) {
+                n.doc_handle = doc;
+            }
+        }
+        
+        // По стандарту libxml2 возвращается старый корень (или 0)
+        old_root 
+    })
+}
