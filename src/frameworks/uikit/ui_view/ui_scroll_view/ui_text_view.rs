@@ -8,7 +8,7 @@
 use crate::frameworks::core_graphics::cg_context::CGContextSetRGBFillColor;
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::to_rust_string;
+use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
 use crate::frameworks::foundation::{NSInteger, NSRange, NSUInteger};
 use crate::frameworks::uikit::ui_color;
 use crate::frameworks::uikit::ui_font::{
@@ -32,15 +32,13 @@ type UITextAutocorrectionType = NSInteger;
 pub struct UITextViewHostObject {
     superclass: super::UIScrollViewHostObject,
     editable: bool,
-    /// `NSString*`
     text: id,
-    /// `UIFont*`
     font: id,
-    /// `UIColor*`
     text_color: id,
     text_alignment: UITextAlignment,
 }
 impl_HostObject_with_superclass!(UITextViewHostObject);
+
 impl Default for UITextViewHostObject {
     fn default() -> Self {
         UITextViewHostObject {
@@ -54,19 +52,16 @@ impl Default for UITextViewHostObject {
     }
 }
 
-// Update contentOffset and contentSize when anything that potentially affects
-// contentSize like font and text change.
 fn update_scroll(env: &mut Environment, this: id) {
     let bounds: CGRect = msg![env; this bounds];
     let bound_size = bounds.size;
     let font: id = msg![env; this font];
     let text: id = msg![env; this text];
-    // Calculate our new contentSize
+    if text == nil || font == nil { return; }
+    
     let calculated_size: CGSize = msg![env; text sizeWithFont:font constrainedToSize:bound_size];
     () = msg![env; this setContentSize:calculated_size];
 
-    // Reset contentOffset if we have now gone out of bounds of contentSize,
-    // otherwise ignore.
     let current_content_offset: CGPoint = msg![env; this contentOffset];
     if current_content_offset.x > calculated_size.width - bounds.size.width
         || current_content_offset.y > calculated_size.height - bounds.size.height
@@ -74,6 +69,7 @@ fn update_scroll(env: &mut Environment, this: id) {
         () = msg![env; this setContentOffset:(CGPoint { x: 0.0, y: 0.0 })];
     }
 }
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -86,8 +82,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithFrame:(CGRect)frame {
     let this: id = msg_super![env; this initWithFrame:frame];
-    // TODO: refactor to a common init with `initWithCoder:`
-    // These aren't redundant, the setters fetch the real defaults.
     () = msg![env; this setFont:nil];
     () = msg![env; this setTextColor:nil];
     this
@@ -95,48 +89,57 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
-    // These aren't redundant, the setters fetch the real defaults.
-    () = msg![env; this setFont:nil];
-    () = msg![env; this setTextColor:nil];
+    
+    let key_text = get_static_str(env, "UIText");
+    let text: id = msg![env; coder decodeObjectForKey:key_text];
+    () = msg![env; this setText:text];
+
+    let key_font = get_static_str(env, "UIFont");
+    let font: id = msg![env; coder decodeObjectForKey:key_font];
+    if font != nil {
+        () = msg![env; this setFont:font];
+    } else {
+        () = msg![env; this setFont:nil]; // Set default
+    }
+
+    let key_color = get_static_str(env, "UITextColor");
+    let text_color: id = msg![env; coder decodeObjectForKey:key_color];
+    if text_color != nil {
+        () = msg![env; this setTextColor:text_color];
+    } else {
+        () = msg![env; this setTextColor:nil]; // Set default
+    }
+
+    let key_align = get_static_str(env, "UITextAlignment");
+    let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
+    () = msg![env; this setTextAlignment:align];
+
     this
 }
 
 - (())dealloc {
-    let UITextViewHostObject {
-        superclass: _,
-        editable: _,
-        font,
-        text,
-        text_color,
-        text_alignment: _
-    } = std::mem::take(env.objc.borrow_mut(this));
+    let UITextViewHostObject { font, text, text_color, .. } = std::mem::take(env.objc.borrow_mut(this));
     release(env, font);
     release(env, text_color);
     release(env, text);
     msg_super![env; this dealloc]
 }
 
-- (id)text {
-    env.objc.borrow::<UITextViewHostObject>(this).text
-}
-- (())setText:(id)new_text { // NSString*
+- (id)text { env.objc.borrow::<UITextViewHostObject>(this).text }
+- (())setText:(id)new_text {
+    let new_text: id = if new_text != nil { msg![env; new_text copy] } else { nil };
     let hostobj  = env.objc.borrow_mut::<UITextViewHostObject>(this);
     let old_text = std::mem::replace(&mut hostobj.text, new_text);
-    retain(env, new_text);
     release(env, old_text);
     update_scroll(env,this);
     () = msg![env; this setNeedsDisplay];
 }
 
-- (id)textColor {
-    env.objc.borrow::<UITextViewHostObject>(this).text_color
-}
-- (())setTextColor:(id)new_text_color { // UIColor*
+- (id)textColor { env.objc.borrow::<UITextViewHostObject>(this).text_color }
+- (())setTextColor:(id)new_text_color {
     let new_text_color: id = if new_text_color == nil {
         msg_class![env; UIColor blackColor]
-    } else {
-        new_text_color
-    };
+    } else { new_text_color };
     let hostobj  = env.objc.borrow_mut::<UITextViewHostObject>(this);
     let old_text_color = std::mem::replace(&mut hostobj.text_color, new_text_color);
     retain(env, new_text_color);
@@ -144,25 +147,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setNeedsDisplay];
 }
 
-- (UITextAlignment)textAlignment {
-    env.objc.borrow::<UITextViewHostObject>(this).text_alignment
-}
+- (UITextAlignment)textAlignment { env.objc.borrow::<UITextViewHostObject>(this).text_alignment }
 - (())setTextAlignment:(UITextAlignment)new_text_alignment {
     env.objc.borrow_mut::<UITextViewHostObject>(this).text_alignment = new_text_alignment;
     () = msg![env; this setNeedsDisplay];
 }
 
-- (id)font {
-    env.objc.borrow::<UITextViewHostObject>(this).font
-}
-- (())setFont:(id)new_font { // UIFont*
+- (id)font { env.objc.borrow::<UITextViewHostObject>(this).font }
+- (())setFont:(id)new_font {
     let new_font: id = if new_font == nil {
-        // reset to default
         let size: CGFloat = 17.0;
         msg_class![env; UIFont systemFontOfSize:size]
-    } else {
-        new_font
-    };
+    } else { new_font };
     let hostobj  = env.objc.borrow_mut::<UITextViewHostObject>(this);
     let old_font = std::mem::replace(&mut hostobj.font, new_font);
     retain(env, new_font);
@@ -171,118 +167,77 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setNeedsDisplay];
 }
 
-- (())flashScrollIndicators {
-    // TODO
-}
+- (())flashScrollIndicators { }
 
-// TODO: Make editable actually do something
-- (bool)isEditable {
-    env.objc.borrow::<UITextViewHostObject>(this).editable
-}
-- (())setEditable:(bool)editable {
-    env.objc.borrow_mut::<UITextViewHostObject>(this).editable = editable;
-}
+- (bool)isEditable { env.objc.borrow::<UITextViewHostObject>(this).editable }
+- (())setEditable:(bool)editable { env.objc.borrow_mut::<UITextViewHostObject>(this).editable = editable; }
 
 - (())scrollRangeToVisible:(NSRange)range {
-    let &mut UITextViewHostObject {
-        font,
-        text,
-        ..
-    } = env.objc.borrow_mut(this);
-    if range.location > msg![env; text length] {
-        return;
-    }
+    let &mut UITextViewHostObject { font, text, .. } = env.objc.borrow_mut(this);
+    if text == nil || font == nil || range.location > msg![env; text length] { return; }
 
     let bounds: CGRect = msg![env; this bounds];
     let bound_size = bounds.size;
 
-    let text = to_rust_string(env, text);
-    let lines = break_lines_with_font(env, font, &text, Some((bound_size, UILineBreakModeWordWrap)));
+    let text_str = to_rust_string(env, text);
+    let lines = break_lines_with_font(env, font, &text_str, Some((bound_size, UILineBreakModeWordWrap)));
 
     let mut line_count = 0;
     let mut current_position = 0;
     for (_, line) in lines {
         current_position += line.len();
-        if let Some(offset) = text[current_position..].find(|c: char| !c.is_whitespace()) {
+        if let Some(offset) = text_str[current_position..].find(|c: char| !c.is_whitespace()) {
             current_position += offset;
         } else {
-            current_position = text.len();
+            current_position = text_str.len();
         }
 
-        if range.location <= current_position as u32 {
-            break;
-        }
-
+        if range.location <= current_position as u32 { break; }
         line_count += 1;
     }
 
     let line_height: CGFloat = msg![env; font lineHeight];
     let leading: CGFloat = msg![env; font leading];
-
     let height_to_range_start = (line_count + 1) as f32 * line_height - leading;
     let content_offset: CGPoint = msg![env; this contentOffset];
 
     if height_to_range_start - line_height < content_offset.y {
         let new_scroll_y = CGPoint {x: 0.0, y: line_count as f32 * line_height};
         () = msg![env; this setContentOffset:new_scroll_y];
-    }
-    else if height_to_range_start > content_offset.y + bound_size.height {
+    } else if height_to_range_start > content_offset.y + bound_size.height {
         let new_scroll_y = CGPoint {x: 0.0, y: height_to_range_start- bound_size.height};
         () = msg![env; this setContentOffset:new_scroll_y];
     }
-
     update_scroll(env, this);
 }
 
-- (())setReturnKeyType:(UIReturnKeyType)type_ {
-    todo_objc_setter!(this, type_);
-}
-
-- (())setKeyboardType:(UIKeyboardType)type_ {
-    todo_objc_setter!(this, type_);
-}
-
-- (())setKeyboardAppearance:(UIKeyboardAppearance)appearance {
-    todo_objc_setter!(this, appearance);
-}
-
-- (())setAutocapitalizationType:(UITextAutocapitalizationType)type_ {
-    todo_objc_setter!(this, type_);
-}
-
-- (())setAutocorrectionType:(UITextAutocorrectionType)type_ {
-    todo_objc_setter!(this, type_);
-}
-
-- (())setDataDetectorTypes:(UIDataDetectorTypes)types {
-    todo_objc_setter!(this, types);
-}
+- (())setReturnKeyType:(UIReturnKeyType)type_ { todo_objc_setter!(this, type_); }
+- (())setKeyboardType:(UIKeyboardType)type_ { todo_objc_setter!(this, type_); }
+- (())setKeyboardAppearance:(UIKeyboardAppearance)appearance { todo_objc_setter!(this, appearance); }
+- (())setAutocapitalizationType:(UITextAutocapitalizationType)type_ { todo_objc_setter!(this, type_); }
+- (())setAutocorrectionType:(UITextAutocorrectionType)type_ { todo_objc_setter!(this, type_); }
+- (())setDataDetectorTypes:(UIDataDetectorTypes)types { todo_objc_setter!(this, types); }
 
 - (())drawRect:(CGRect)_rect {
     let bounds: CGRect = msg![env; this bounds];
     let context = UIGraphicsGetCurrentContext(env);
-    let &mut UITextViewHostObject {
-        superclass: _,
-        editable: _,
-        font,
-        text,
-        text_color,
-        text_alignment
-    } = env.objc.borrow_mut(this);
+    let &mut UITextViewHostObject { font, text, text_color, text_alignment, .. } = env.objc.borrow_mut(this);
+    
+    if text == nil || font == nil || text_color == nil { return; }
+    let len: NSUInteger = msg![env; text length];
+    if len == 0 { return; }
+
     let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
     CGContextSetRGBFillColor(env, context, r, g, b, a);
 
     let content_offset: CGPoint = msg![env; this contentOffset];
     let rect = CGRect {
         origin: CGPointZero,
-        // If size is not expanded by the offset,
-        // the text is rendered truncated.
         size: CGSize {
             width: bounds.size.width + content_offset.x,
             height: bounds.size.height + content_offset.y,
         }
     };
-    log_dbg!("UItextView text rendering in rect {:?}", rect);
     let _size: CGSize = msg![env; text drawInRect:rect
                                          withFont:font
                                     lineBreakMode:UILineBreakModeTailTruncation
@@ -292,4 +247,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
