@@ -199,7 +199,7 @@ impl Environment {
         Ok(1)
     }
 
-    /// Unlocks a mutex and returns the lock count or an error (as errno).
+        /// Unlocks a mutex and returns the lock count or an error (as errno).
     /// Similar to `pthread_mutex_unlock`, but for host code.
     pub fn unlock_mutex(&mut self, mutex_id: MutexId) -> Result<u32, i32> {
         let current_thread = self.current_thread;
@@ -208,10 +208,12 @@ impl Environment {
         let Some((locking_thread, lock_count)) = mutex.locked else {
             match mutex.type_ {
                 MutexType::PTHREAD_MUTEX_NORMAL => {
-                    // This case is undefined, we may as well panic.
-                    panic!(
-                        "Attempted to unlock non-error-checking mutex #{mutex_id} for thread {current_thread}, already unlocked!",
+                    // Убираем panic!, так как реальные iOS-игры часто пытаются 
+                    // разблокировать уже разблокированные мьютексы.
+                    log!(
+                        "Warning: Attempted to unlock non-error-checking mutex #{mutex_id} for thread {current_thread}, already unlocked! Ignoring and returning EPERM.",
                     );
+                    return Err(EPERM);
                 }
                 MutexType::PTHREAD_MUTEX_ERRORCHECK | MutexType::PTHREAD_MUTEX_RECURSIVE => {
                     log_dbg!(
@@ -265,4 +267,3 @@ impl Environment {
             Ok(lock_count.get() - 1)
         }
     }
-}
