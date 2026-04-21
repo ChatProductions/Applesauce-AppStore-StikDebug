@@ -84,7 +84,7 @@ pub fn BZ2_bzDecompress(env: &mut Environment, strm_ptr: u32) -> i32 {
 }
 
 #[allow(non_snake_case)]
-pub fn BZ2_bzDecompressEnd(_env: &mut environment, strm_ptr: u32) -> i32 {
+pub fn BZ2_bzDecompressEnd(_env: &mut Environment, strm_ptr: u32) -> i32 {
     let mut map = DECOMPRESSORS.lock().unwrap();
     if map.remove(&strm_ptr).is_some() {
         BZ_OK
