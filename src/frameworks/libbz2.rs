@@ -46,14 +46,17 @@ pub fn BZ2_bzDecompress(env: &mut Environment, strm_ptr: u32) -> i32 {
     let next_out_ptr: u32 = env.mem.read(ConstPtr::<u32>::from_bits(strm_ptr + 16));
     let avail_out: u32 = env.mem.read(ConstPtr::<u32>::from_bits(strm_ptr + 20));
 
-    // Убрали `as usize`, передаем `u32` (GuestUSize) напрямую!
-    let in_buf = env.mem.bytes_at(ConstPtr::<u8>::from_bits(next_in_ptr), avail_in);
+        // Копируем входные данные в вектор, чтобы сразу отпустить `env.mem`
+    let in_buf = env.mem.bytes_at(ConstPtr::<u8>::from_bits(next_in_ptr), avail_in).to_vec();
+    
+    // Теперь мы можем свободно взять `out_buf` как изменяемый
     let out_buf = env.mem.bytes_at_mut(MutPtr::<u8>::from_bits(next_out_ptr), avail_out);
 
     let before_in = decompressor.total_in();
     let before_out = decompressor.total_out();
 
-    let status = match decompressor.decompress(in_buf, out_buf) {
+    // Передаем ссылку на наш вектор &in_buf
+    let status = match decompressor.decompress(&in_buf, out_buf) {
         Ok(bzip2::Status::Ok) => BZ_OK,
         Ok(bzip2::Status::RunOk) => BZ_RUN_OK,
         Ok(bzip2::Status::FlushOk) => BZ_FLUSH_OK,
@@ -81,7 +84,7 @@ pub fn BZ2_bzDecompress(env: &mut Environment, strm_ptr: u32) -> i32 {
 }
 
 #[allow(non_snake_case)]
-pub fn BZ2_bzDecompressEnd(_env: &mut Environment, strm_ptr: u32) -> i32 {
+pub fn BZ2_bzDecompressEnd(_env: &mut environment, strm_ptr: u32) -> i32 {
     let mut map = DECOMPRESSORS.lock().unwrap();
     if map.remove(&strm_ptr).is_some() {
         BZ_OK
@@ -102,12 +105,13 @@ pub fn BZ2_bzBuffToBuffDecompress(
 ) -> i32 {
     let dest_len: u32 = env.mem.read(ConstPtr::<u32>::from_bits(dest_len_ptr));
     
-    // Убрали `as usize`
-    let in_buf = env.mem.bytes_at(ConstPtr::<u8>::from_bits(source), source_len);
+    // Добавляем .to_vec()
+    let in_buf = env.mem.bytes_at(ConstPtr::<u8>::from_bits(source), source_len).to_vec();
     let out_buf = env.mem.bytes_at_mut(MutPtr::<u8>::from_bits(dest), dest_len);
 
     let mut decompressor = Decompress::new(small != 0);
-    match decompressor.decompress(in_buf, out_buf) {
+    // Передаем ссылку &in_buf
+    match decompressor.decompress(&in_buf, out_buf) {
         Ok(bzip2::Status::StreamEnd) | Ok(bzip2::Status::Ok) => {
             let produced = decompressor.total_out() as u32;
             env.mem.write(MutPtr::<u32>::from_bits(dest_len_ptr), produced);
@@ -115,7 +119,6 @@ pub fn BZ2_bzBuffToBuffDecompress(
         },
         _ => BZ_DATA_ERROR
     }
-}
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(BZ2_bzDecompressInit(_, _, _)),
