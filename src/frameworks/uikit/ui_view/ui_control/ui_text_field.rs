@@ -140,7 +140,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setBackgroundColor:bg_color];
 
     let text_label: id = msg_class![env; UILabel new];
-    let _: () = msg![env; text_label setBackgroundColor:(msg_class![env; UIColor clearColor])];
+    
+    // ВЫНЕСЕННАЯ ПЕРЕМЕННАЯ ДЛЯ ИЗБЕЖАНИЯ ОШИБОК КОМПИЛЯЦИИ E0283
+    let clear_color: id = msg_class![env; UIColor clearColor];
+    let _: () = msg![env; text_label setBackgroundColor:clear_color];
+    
     let _: () = msg![env; text_label setTextAlignment:UITextAlignmentLeft];
     let text_color: id = msg_class![env; UIColor blackColor];
     let _: () = msg![env; text_label setTextColor:text_color];
@@ -155,7 +159,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let this: id = msg_super![env; this initWithCoder:coder];
     
     let text_label: id = msg_class![env; UILabel new];
-    let _: () = msg![env; text_label setBackgroundColor:(msg_class![env; UIColor clearColor])];
+    
+    // ВЫНЕСЕННАЯ ПЕРЕМЕННАЯ ДЛЯ ИЗБЕЖАНИЯ ОШИБОК КОМПИЛЯЦИИ E0283
+    let clear_color: id = msg_class![env; UIColor clearColor];
+    let _: () = msg![env; text_label setBackgroundColor:clear_color];
     
     env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label = text_label;
     let _: () = msg![env; this addSubview:text_label];
