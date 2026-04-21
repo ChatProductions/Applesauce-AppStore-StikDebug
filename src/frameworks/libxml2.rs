@@ -23,6 +23,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlNewParserCtxt()),
     export_c_func!(xmlClearParserCtxt()),
+    export_c_func!(xmlNewDoc(_)),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
     export_c_func!(xmlReadFile(_, _, _)),
     export_c_func!(xmlReadMemory(_, _, _, _, _)),
@@ -1199,5 +1200,22 @@ fn xmlTextReaderPrefix(env: &mut Environment, reader: u32) -> u32 {
 #[allow(non_snake_case)]
 fn xmlTextReaderNamespaceUri(env: &mut Environment, _reader: u32) -> u32 {
     write_empty_str(env)
+}
+
+#[allow(non_snake_case)]
+fn xmlNewDoc(env: &mut Environment, version_ptr: u32) -> u32 {
+    // Читаем версию (обычно "1.0"), но для нашей внутренней структуры 
+    // она пока не требуется. Просто логируем для отладки.
+    let version = read_cstr_str(env, version_ptr);
+    log!("xmlNewDoc(version: {:?})", version);
+
+    with_xml(|s| {
+        // Выделяем новый безопасный хэндл
+        let doc_h = s.alloc();
+        // Создаем пустой документ без корневого элемента (root: 0)
+        s.docs.insert(doc_h, XmlDocData { root: 0 });
+        
+        doc_h
+    })
 }
 
