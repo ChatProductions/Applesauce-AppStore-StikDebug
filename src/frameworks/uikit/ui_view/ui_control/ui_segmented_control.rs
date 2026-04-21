@@ -4,10 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `UISegmentedControl`.
-//!
-//! Useful resources:
-//! - Apple's UISegmentedControl documentation:
-//!   https://developer.apple.com/documentation/uikit/uisegmentedcontrol
 
 use crate::environment::Environment;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
@@ -36,7 +32,7 @@ const CORNER_RADIUS: f32 = 8.0;
 const DIVIDER_WIDTH: f32 = 1.0;
 const FONT_SIZE: f32 = 13.0;
 
-// MARK: - UISegment host object (must be outside objc_classes! macro)
+// MARK: - UISegment host object
 
 struct UISegmentHostObject {
     title: id,
@@ -48,20 +44,14 @@ impl HostObject for UISegmentHostObject {}
 
 pub struct UISegmentedControlHostObject {
     pub(super) superclass: super::UIControlHostObject,
-    /// `NSMutableArray*` of `NSString*`
     segments: id,
     selected_index: NSInteger,
     momentary: bool,
     style: UISegmentedControlStyle,
-    /// `NSMutableArray*` of `UILabel*`
     labels: id,
-    /// `NSMutableArray*` of `UIView*` dividers
     dividers: id,
-    /// `UIView*` — синий фон выделенного сегмента
     selection_view: id,
-    /// `UIView*` — прямоугольная "заплатка" цвета фона, перекрывает лишнее скругление
     corner_filler: id,
-    /// Защита от двойной инициализации subviews
     visuals_initialized: bool,
 }
 impl_HostObject_with_superclass!(UISegmentedControlHostObject);
@@ -110,7 +100,7 @@ fn layout(env: &mut Environment, this: id) {
         let sel_x = if selected_index >= 0 && (selected_index as u32) < count {
             bounds.origin.x + selected_index as f32 * seg_w
         } else {
-            -seg_w // скрываем за пределами
+            -seg_w 
         };
         let sel_rect = CGRect {
             origin: CGPoint { x: sel_x, y: bounds.origin.y },
@@ -118,42 +108,28 @@ fn layout(env: &mut Environment, this: id) {
         };
         () = msg![env; selection_view setFrame:sel_rect];
 
-        // cornerRadius: первый и последний — скруглены, средние — прямоугольные
         let is_first = selected_index == 0;
         let is_last  = selected_index == (count as NSInteger - 1);
         let layer: id = msg![env; selection_view layer];
         let r: CGFloat = if is_first || is_last { CORNER_RADIUS as CGFloat } else { 0.0 };
         () = msg![env; layer setCornerRadius:r];
 
-        // corner_filler — прямоугольный view цвета фона, перекрывает
-        // "неправильные" скругления со стороны соседнего сегмента.
-        // Первый сегмент: скруглён слева, заплатка справа (закрывает правые углы)
-        // Последний:      скруглён справа, заплатка слева (закрывает левые углы)
-        // Средние:        заплатка на всю ширину (закрывает оба скругления)
-        // corner_filler перекрывает только тонкую полоску скругления,
-        // строго по краю — НЕ перекрывает текст лейблов
         if corner_filler != nil {
-            let is_first = selected_index == 0;
-            let is_last  = selected_index == (count as NSInteger - 1);
             let hidden = selected_index < 0 || (selected_index as u32) >= count;
             () = msg![env; corner_filler setHidden:hidden];
 
             if !hidden {
                 let filler_rect = if is_first {
-                    // Закрываем только правый край (CORNER_RADIUS шириной)
                     CGRect {
                         origin: CGPoint { x: sel_x + seg_w - CORNER_RADIUS, y: bounds.origin.y },
                         size: CGSize { width: CORNER_RADIUS, height: h },
                     }
                 } else if is_last {
-                    // Закрываем только левый край
                     CGRect {
                         origin: CGPoint { x: sel_x, y: bounds.origin.y },
                         size: CGSize { width: CORNER_RADIUS, height: h },
                     }
                 } else {
-                    // Средний — скрываем заплатку, cornerRadius у selection_view
-                    // не виден т.к. перекрыт соседними сегментами фона
                     () = msg![env; corner_filler setHidden:true];
                     CGRect {
                         origin: CGPoint { x: 0.0, y: 0.0 },
@@ -165,30 +141,37 @@ fn layout(env: &mut Environment, this: id) {
         }
     }
 
-    // Labels
+    // Content Views (Labels/Images)
     let label_count: u32 = msg![env; labels count];
+    let label_class = env.objc.get_known_class("UILabel", &mut env.mem);
+    
     for i in 0..label_count {
-        let label: id = msg![env; labels objectAtIndex:i];
-        let label_rect = CGRect {
-            origin: CGPoint {
-                x: bounds.origin.x + i as f32 * seg_w,
-                y: bounds.origin.y,
-            },
+        let content_view: id = msg![env; labels objectAtIndex:i];
+        let content_rect = CGRect {
+            origin: CGPoint { x: bounds.origin.x + i as f32 * seg_w, y: bounds.origin.y },
             size: CGSize { width: seg_w, height: h },
         };
-        () = msg![env; label setFrame:label_rect];
+        () = msg![env; content_view setFrame:content_rect];
 
-        // Цвет текста
-        let is_selected = i as NSInteger == selected_index;
-        let color: id = if is_selected {
-            msg_class![env; UIColor whiteColor]
-        } else {
-            msg_class![env; UIColor colorWithRed:(0.2f32)
-                                          green:(0.2f32)
-                                           blue:(0.2f32)
-                                          alpha:1.0f32]
-        };
-        () = msg![env; label setTextColor:color];
+        let subviews: id = msg![env; content_view subviews];
+        let sub_c: u32 = if subviews != nil { msg![env; subviews count] } else { 0 };
+        
+        for j in 0..sub_c {
+            let sub: id = msg![env; subviews objectAtIndex:j];
+            let sub_rect = CGRect { origin: CGPoint { x: 0.0, y: 0.0 }, size: content_rect.size };
+            () = msg![env; sub setFrame:sub_rect];
+            
+            let is_label: bool = msg![env; sub isKindOfClass:label_class];
+            if is_label {
+                let is_selected = i as NSInteger == selected_index;
+                let color: id = if is_selected {
+                    msg_class![env; UIColor whiteColor]
+                } else {
+                    msg_class![env; UIColor colorWithRed:(0.2f32) green:(0.2f32) blue:(0.2f32) alpha:1.0f32]
+                };
+                () = msg![env; sub setTextColor:color];
+            }
+        }
     }
 
     // Dividers
@@ -219,37 +202,23 @@ fn init_visuals(env: &mut Environment, this: id) {
     let font_size: CGFloat = FONT_SIZE as CGFloat;
     let font: id = msg_class![env; UIFont boldSystemFontOfSize:font_size];
 
-    // Фон контрола — светло-серый как на iOS Plain style
-    let bg_color: id = msg_class![env; UIColor colorWithRed:(0.90f32)
-                                                       green:(0.90f32)
-                                                        blue:(0.90f32)
-                                                       alpha:1.0f32];
+    let bg_color: id = msg_class![env; UIColor colorWithRed:(0.90f32) green:(0.90f32) blue:(0.90f32) alpha:1.0f32];
     () = msg![env; this setBackgroundColor:bg_color];
     {
         let layer: id = msg![env; this layer];
         let r: CGFloat = CORNER_RADIUS as CGFloat;
         () = msg![env; layer setCornerRadius:r];
-        // Тонкая тёмная рамка как на iOS
-        let border_color: id = msg_class![env; UIColor colorWithRed:(0.4f32)
-                                                              green:(0.4f32)
-                                                               blue:(0.4f32)
-                                                              alpha:(0.5f32)];
+        let border_color: id = msg_class![env; UIColor colorWithRed:(0.4f32) green:(0.4f32) blue:(0.4f32) alpha:(0.5f32)];
         let cg: id = msg![env; border_color CGColor];
         () = msg![env; layer setBorderColor:cg];
         let bw: CGFloat = 0.5;
         () = msg![env; layer setBorderWidth:bw];
     }
 
-    // Selection view — iOS синий
-    let sel_color: id = msg_class![env; UIColor colorWithRed:(0.0f32)
-                                                        green:(0.478f32)
-                                                         blue:(1.0f32)
-                                                        alpha:1.0f32];
+    let sel_color: id = msg_class![env; UIColor colorWithRed:(0.0f32) green:(0.478f32) blue:(1.0f32) alpha:1.0f32];
     let selection_view: id = msg_class![env; UIView new];
     () = msg![env; selection_view setBackgroundColor:sel_color];
 
-    // corner_filler — прямоугольник того же синего цвета что и selection_view,
-    // перекрывает лишние скругления с нужной стороны
     let corner_filler: id = msg_class![env; UIView new];
     () = msg![env; corner_filler setBackgroundColor:sel_color];
 
@@ -259,28 +228,70 @@ fn init_visuals(env: &mut Environment, this: id) {
     let labels:   id = msg_class![env; NSMutableArray new];
     let dividers: id = msg_class![env; NSMutableArray new];
 
-    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32)
-                                                  green:(0.2f32)
-                                                   blue:(0.2f32)
-                                                  alpha:1.0f32];
+    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32) green:(0.2f32) blue:(0.2f32) alpha:1.0f32];
     let clear: id = msg_class![env; UIColor clearColor];
 
+    let string_class = env.objc.get_known_class("NSString", &mut env.mem);
+    let image_class = env.objc.get_known_class("UIImage", &mut env.mem);
+    let segment_class = env.objc.get_known_class("UISegment", &mut env.mem);
+
+    // Универсальная система извлечения данных из NIB-массивов
     for i in 0..count {
-        let title: id = msg![env; segments objectAtIndex:i];
+        let item: id = msg![env; segments objectAtIndex:i];
+        let mut actual_text: id = nil;
+        let mut actual_image: id = nil;
+
+        if item != nil {
+            if msg![env; item isKindOfClass:string_class] {
+                actual_text = item;
+            } else if msg![env; item isKindOfClass:image_class] {
+                actual_image = item;
+            } else if msg![env; item isKindOfClass:segment_class] {
+                let sel_title = env.objc.lookup_selector("title").unwrap();
+                if msg![env; item respondsToSelector:sel_title] {
+                    actual_text = msg![env; item title];
+                }
+                let sel_image = env.objc.lookup_selector("image").unwrap();
+                if msg![env; item respondsToSelector:sel_image] {
+                    actual_image = msg![env; item image];
+                }
+            } else {
+                let sel_t = env.objc.lookup_selector("title").unwrap();
+                if msg![env; item respondsToSelector:sel_t] {
+                    actual_text = msg![env; item title];
+                }
+            }
+        }
+
+        let content_view: id = msg_class![env; UIView new];
+        () = msg![env; content_view setBackgroundColor:clear];
+
+        if actual_image != nil {
+            let img_view: id = msg_class![env; UIImageView new];
+            () = msg![env; img_view setImage:actual_image];
+            let content_mode: NSInteger = 4; // UIViewContentModeCenter
+            () = msg![env; img_view setContentMode:content_mode];
+            () = msg![env; img_view setBackgroundColor:clear];
+            () = msg![env; content_view addSubview:img_view];
+            release(env, img_view);
+        }
+
+        // Создаем UILabel в любом случае, чтобы layout не ломался
+        let final_text = if actual_text != nil { actual_text } else { get_static_str(env, "") };
         let label: id = msg_class![env; UILabel new];
         () = msg![env; label setBackgroundColor:clear];
         () = msg![env; label setTextAlignment:UITextAlignmentCenter];
         () = msg![env; label setTextColor:blue];
         () = msg![env; label setFont:font];
-        () = msg![env; label setText:title];
-        () = msg![env; labels addObject:label];
+        () = msg![env; label setText:final_text];
+        () = msg![env; content_view addSubview:label];
         release(env, label);
+
+        () = msg![env; labels addObject:content_view];
+        release(env, content_view);
     }
 
-    let div_color: id = msg_class![env; UIColor colorWithRed:(0.4f32)
-                                                        green:(0.4f32)
-                                                         blue:(0.4f32)
-                                                        alpha:0.6f32];
+    let div_color: id = msg_class![env; UIColor colorWithRed:(0.4f32) green:(0.4f32) blue:(0.4f32) alpha:0.6f32];
     for _ in 0..count.saturating_sub(1) {
         let div: id = msg_class![env; UIView new];
         () = msg![env; div setBackgroundColor:div_color];
@@ -296,8 +307,6 @@ fn init_visuals(env: &mut Environment, this: id) {
         host.dividers = dividers;
     }
 
-    // z-order: selection_view снизу, потом corner_filler (перекрывает скругления),
-    // потом dividers, потом labels сверху
     () = msg![env; this addSubview:selection_view];
     () = msg![env; this addSubview:corner_filler];
     let div_count: u32 = msg![env; dividers count];
@@ -312,7 +321,6 @@ fn init_visuals(env: &mut Environment, this: id) {
     }
 
     layout(env, this);
-    log_dbg!("UISegmentedControl: init_visuals done, {} segments", count);
 }
 
 // MARK: - Classes
@@ -328,20 +336,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// MARK: - init
-
-- (id)initWithItems:(id)items { // NSArray* of NSString* or UIImage*
-    log_dbg!("UISegmentedControl initWithItems:");
+- (id)initWithItems:(id)items { 
     let zero = CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size:   CGSize  { width: 0.0, height: 0.0 },
     };
-    // Вызываем super initWithFrame: чтобы UIView/UIControl инициализировались
     let this: id = msg_super![env; this initWithFrame:zero];
 
-    // Создаём segments массив
     let segments: id = msg_class![env; NSMutableArray new];
-    let count: u32 = msg![env; items count];
+    let count: u32 = if items != nil { msg![env; items count] } else { 0 };
     for i in 0..count {
         let item: id = msg![env; items objectAtIndex:i];
         retain(env, item);
@@ -354,10 +357,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithFrame:(CGRect)frame {
-    log_dbg!("UISegmentedControl initWithFrame:");
     let this: id = msg_super![env; this initWithFrame:frame];
-    // segments уже мог быть заполнен через initWithItems:
-    // init_visuals сам проверит visuals_initialized
     let segments: id = env.objc.borrow::<UISegmentedControlHostObject>(this).segments;
     if segments == nil {
         let segs: id = msg_class![env; NSMutableArray new];
@@ -373,33 +373,36 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithCoder:(id)coder {
-    log_dbg!("UISegmentedControl initWithCoder:");
     let this: id = msg_super![env; this initWithCoder:coder];
 
     let segments: id = msg_class![env; NSMutableArray new];
     env.objc.borrow_mut::<UISegmentedControlHostObject>(this).segments = segments;
 
     let key = get_static_str(env, "UISegments");
-    let seg_array: id = msg![env; coder decodeObjectForKey:key];
-    if seg_array != nil {
-        let count: u32 = msg![env; seg_array count];
-        for i in 0..count {
-            let item: id = msg![env; seg_array objectAtIndex:i];
-            // UISegment — internal class, у него есть selector title
-            let title: id = msg![env; item title];
-            let actual: id = if title != nil { title } else { get_static_str(env, "") };
-            retain(env, actual);
-            () = msg![env; segments addObject:actual];
+    if msg![env; coder containsValueForKey:key] {
+        let seg_array: id = msg![env; coder decodeObjectForKey:key];
+        if seg_array != nil {
+            let count: u32 = msg![env; seg_array count];
+            for i in 0..count {
+                let item: id = msg![env; seg_array objectAtIndex:i];
+                retain(env, item);
+                // Сохраняем "сырой" объект, init_visuals сам разберется, строка это или UISegment
+                () = msg![env; segments addObject:item]; 
+            }
         }
     }
 
-    let key = get_static_str(env, "UISelectedSegmentIndex");
-    let idx: i32 = msg![env; coder decodeIntForKey:key];
-    env.objc.borrow_mut::<UISegmentedControlHostObject>(this).selected_index = idx as NSInteger;
+    let key_index = get_static_str(env, "UISelectedSegmentIndex");
+    if msg![env; coder containsValueForKey:key_index] {
+        let idx: i32 = msg![env; coder decodeIntForKey:key_index];
+        env.objc.borrow_mut::<UISegmentedControlHostObject>(this).selected_index = idx as NSInteger;
+    }
 
-    let key = get_static_str(env, "UISegmentedControlStyle");
-    let style: i32 = msg![env; coder decodeIntForKey:key];
-    env.objc.borrow_mut::<UISegmentedControlHostObject>(this).style = style as NSInteger;
+    let key_style = get_static_str(env, "UISegmentedControlStyle");
+    if msg![env; coder containsValueForKey:key_style] {
+        let style: i32 = msg![env; coder decodeIntForKey:key_style];
+        env.objc.borrow_mut::<UISegmentedControlHostObject>(this).style = style as NSInteger;
+    }
 
     init_visuals(env, this);
     this
@@ -417,13 +420,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this dealloc]
 }
 
-// MARK: - Layout
-
 - (())layoutSubviews {
     layout(env, this);
 }
-
-// MARK: - Segments
 
 - (NSInteger)numberOfSegments {
     let segments = env.objc.borrow::<UISegmentedControlHostObject>(this).segments;
@@ -432,15 +431,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     count as NSInteger
 }
 
-- (())insertSegmentWithTitle:(id)title
-                    atIndex:(NSInteger)index
-                   animated:(bool)_animated {
+- (())insertSegmentWithTitle:(id)title atIndex:(NSInteger)index animated:(bool)_animated {
     let font_size: CGFloat = FONT_SIZE as CGFloat;
     let font: id = msg_class![env; UIFont boldSystemFontOfSize:font_size];
-    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32)
-                                                  green:(0.2f32)
-                                                   blue:(0.2f32)
-                                                  alpha:1.0f32];
+    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32) green:(0.2f32) blue:(0.2f32) alpha:1.0f32];
     let clear: id = msg_class![env; UIColor clearColor];
 
     let (segments, labels, dividers) = {
@@ -453,22 +447,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, title);
     () = msg![env; segments insertObject:title atIndex:idx];
 
+    let content_view: id = msg_class![env; UIView new];
+    () = msg![env; content_view setBackgroundColor:clear];
+
     let label: id = msg_class![env; UILabel new];
     () = msg![env; label setBackgroundColor:clear];
     () = msg![env; label setTextAlignment:UITextAlignmentCenter];
     () = msg![env; label setTextColor:blue];
     () = msg![env; label setFont:font];
-    () = msg![env; label setText:title];
-    () = msg![env; labels addObject:label];
-    () = msg![env; this addSubview:label];
+    let actual_title = if title != nil { title } else { get_static_str(env, "") };
+    () = msg![env; label setText:actual_title];
+    () = msg![env; content_view addSubview:label];
     release(env, label);
+
+    () = msg![env; labels insertObject:content_view atIndex:idx];
+    () = msg![env; this addSubview:content_view];
+    release(env, content_view);
 
     let new_count: u32 = msg![env; segments count];
     if new_count > 1 {
-        let div_color: id = msg_class![env; UIColor colorWithRed:(0.55f32)
-                                                            green:(0.60f32)
-                                                             blue:(0.70f32)
-                                                            alpha:1.0f32];
+        let div_color: id = msg_class![env; UIColor colorWithRed:(0.55f32) green:(0.60f32) blue:(0.70f32) alpha:1.0f32];
         let div: id = msg_class![env; UIView new];
         () = msg![env; div setBackgroundColor:div_color];
         () = msg![env; dividers addObject:div];
@@ -478,16 +476,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     layout(env, this);
 }
 
-- (())insertSegmentWithImage:(id)image
-                    atIndex:(NSInteger)index
-                   animated:(bool)_animated {
+- (())insertSegmentWithImage:(id)image atIndex:(NSInteger)index animated:(bool)_animated {
     let font_size: CGFloat = FONT_SIZE as CGFloat;
     let font: id = msg_class![env; UIFont boldSystemFontOfSize:font_size];
     let clear: id = msg_class![env; UIColor clearColor];
-    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32)
-                                                  green:(0.2f32)
-                                                   blue:(0.2f32)
-                                                  alpha:1.0f32];
+    let blue: id = msg_class![env; UIColor colorWithRed:(0.2f32) green:(0.2f32) blue:(0.2f32) alpha:1.0f32];
 
     let (segments, labels, dividers) = {
         let h = env.objc.borrow::<UISegmentedControlHostObject>(this);
@@ -499,6 +492,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, image);
     () = msg![env; segments insertObject:image atIndex:idx];
 
+    let content_view: id = msg_class![env; UIView new];
+    () = msg![env; content_view setBackgroundColor:clear];
+
+    let img_view: id = msg_class![env; UIImageView new];
+    () = msg![env; img_view setImage:image];
+    let content_mode: NSInteger = 4; 
+    () = msg![env; img_view setContentMode:content_mode];
+    () = msg![env; img_view setBackgroundColor:clear];
+    () = msg![env; content_view addSubview:img_view];
+    release(env, img_view);
+
     let empty = get_static_str(env, "");
     let label: id = msg_class![env; UILabel new];
     () = msg![env; label setBackgroundColor:clear];
@@ -506,16 +510,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; label setTextColor:blue];
     () = msg![env; label setFont:font];
     () = msg![env; label setText:empty];
-    () = msg![env; labels addObject:label];
-    () = msg![env; this addSubview:label];
+    () = msg![env; content_view addSubview:label];
     release(env, label);
+
+    () = msg![env; labels insertObject:content_view atIndex:idx];
+    () = msg![env; this addSubview:content_view];
+    release(env, content_view);
 
     let new_count: u32 = msg![env; segments count];
     if new_count > 1 {
-        let div_color: id = msg_class![env; UIColor colorWithRed:(0.55f32)
-                                                            green:(0.60f32)
-                                                             blue:(0.70f32)
-                                                            alpha:1.0f32];
+        let div_color: id = msg_class![env; UIColor colorWithRed:(0.55f32) green:(0.60f32) blue:(0.70f32) alpha:1.0f32];
         let div: id = msg_class![env; UIView new];
         () = msg![env; div setBackgroundColor:div_color];
         () = msg![env; dividers addObject:div];
@@ -534,8 +538,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let count: u32 = msg![env; segments count];
     if index < 0 || index as u32 >= count { return; }
     () = msg![env; segments removeObjectAtIndex:(index as u32)];
-    let label: id = msg![env; labels objectAtIndex:(index as u32)];
-    () = msg![env; label removeFromSuperview];
+    let view: id = msg![env; labels objectAtIndex:(index as u32)];
+    () = msg![env; view removeFromSuperview];
     () = msg![env; labels removeObjectAtIndex:(index as u32)];
     let div_count: u32 = msg![env; dividers count];
     if div_count > 0 {
@@ -554,11 +558,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     if segments == nil { return; }
     let lc: u32 = msg![env; labels   count];
     let dc: u32 = msg![env; dividers count];
-    for i in 0..lc { let v: id = msg![env; labels   objectAtIndex:i]; () = msg![env; v removeFromSuperview]; }
+    for i in 0..lc { let v: id = msg![env; labels objectAtIndex:i]; () = msg![env; v removeFromSuperview]; }
     for i in 0..dc { let v: id = msg![env; dividers objectAtIndex:i]; () = msg![env; v removeFromSuperview]; }
-    () = msg![env; segments  removeAllObjects];
-    () = msg![env; labels    removeAllObjects];
-    () = msg![env; dividers  removeAllObjects];
+    () = msg![env; segments removeAllObjects];
+    () = msg![env; labels removeAllObjects];
+    () = msg![env; dividers removeAllObjects];
     layout(env, this);
 }
 
@@ -572,8 +576,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     if index < 0 || index as u32 >= count { return; }
     retain(env, title);
     () = msg![env; segments replaceObjectAtIndex:(index as u32) withObject:title];
-    let label: id = msg![env; labels objectAtIndex:(index as u32)];
-    () = msg![env; label setText:title];
+    
+    let content_view: id = msg![env; labels objectAtIndex:(index as u32)];
+    let subviews: id = msg![env; content_view subviews];
+    let sub_c: u32 = if subviews != nil { msg![env; subviews count] } else { 0 };
+    let label_class = env.objc.get_known_class("UILabel", &mut env.mem);
+    
+    for j in 0..sub_c {
+        let sub: id = msg![env; subviews objectAtIndex:j];
+        if msg![env; sub isKindOfClass:label_class] {
+            () = msg![env; sub setText:title];
+        }
+    }
 }
 
 - (id)titleForSegmentAtIndex:(NSInteger)index {
@@ -703,12 +717,34 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
-    let key = get_static_str(env, "UILabel");
-    let title: id = msg![env; coder decodeObjectForKey:key];
+    
+    let key_title = get_static_str(env, "UITitle");
+    let key_label = get_static_str(env, "UILabel");
+    
+    let mut title: id = nil;
+    if msg![env; coder containsValueForKey:key_title] {
+        title = msg![env; coder decodeObjectForKey:key_title];
+    } else if msg![env; coder containsValueForKey:key_label] {
+        title = msg![env; coder decodeObjectForKey:key_label];
+    }
+
+    if title != nil {
+        let label_class = env.objc.get_known_class("UILabel", &mut env.mem);
+        let is_label: bool = msg![env; title isKindOfClass:label_class];
+        if is_label {
+            title = msg![env; title text];
+        }
+    }
     retain(env, title);
-    let key = get_static_str(env, "UIImage");
-    let image: id = msg![env; coder decodeObjectForKey:key];
+    
+    let key_img = get_static_str(env, "UIImage");
+    let image: id = if msg![env; coder containsValueForKey:key_img] {
+        msg![env; coder decodeObjectForKey:key_img]
+    } else {
+        nil
+    };
     retain(env, image);
+    
     let host = env.objc.borrow_mut::<UISegmentHostObject>(this);
     host.title = title;
     host.image = image;
