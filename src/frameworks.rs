@@ -42,6 +42,7 @@ pub mod game_kit;
 pub mod libicucore;
 pub mod libsqlite3;
 pub mod libxml2;
+pub mod libbz2;
 pub mod media_player;
 pub mod openal;
 pub mod opengles;
