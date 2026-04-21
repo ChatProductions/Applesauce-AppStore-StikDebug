@@ -119,6 +119,7 @@ pub fn BZ2_bzBuffToBuffDecompress(
         },
         _ => BZ_DATA_ERROR
     }
+}
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(BZ2_bzDecompressInit(_, _, _)),
