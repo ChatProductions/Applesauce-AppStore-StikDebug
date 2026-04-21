@@ -1366,15 +1366,18 @@ fn xmlSaveFile(env: &mut Environment, filename_ptr: u32, doc: u32) -> i32 {
     match env.fs.write(GuestPath::new(&filename), &out) {
         Ok(_) => out.len() as i32,
         Err(e) => {
-            log!("xmlSaveFile: failed to write using env.fs.write: {}", e);
-            // Фолбэк для Android, если ФС touchHLE не поддерживает запись напрямую в эту директорию
+            // ИСПРАВЛЕНО: используем {:?} для вывода (), если запись не удалась
+            log!("xmlSaveFile: failed to write using env.fs.write: {:?}", e);
+            
+            // Фолбэк для Android
             let safe_name = filename.replace("/", "_");
-            let fallback_path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}", safe_name);
+            let fallback_path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/{}", safe_name);
             log!("xmlSaveFile: trying fallback path: {}", fallback_path);
+            
             match std::fs::write(&fallback_path, &out) {
                 Ok(_) => out.len() as i32,
                 Err(e2) => {
-                    log!("xmlSaveFile: fallback also failed: {}", e2);
+                    log!("xmlSaveFile: fallback also failed: {:?}", e2);
                     -1
                 }
             }
