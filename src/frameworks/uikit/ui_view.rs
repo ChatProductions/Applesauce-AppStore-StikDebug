@@ -38,20 +38,14 @@ use crate::Environment;
 
 #[derive(Default)]
 pub struct State {
-    /// List of views for internal purposes. Non-retaining!
     pub(super) views: Vec<id>,
     pub ui_window: ui_window::State,
 }
 
 pub(super) struct UIViewHostObject {
-    /// CALayer or subclass.
     layer: id,
-    /// Subviews in back-to-front order. These are strong references.
     subviews: Vec<id>,
-    /// The superview. This is a weak reference.
     superview: id,
-    /// The view controller that controls this view.
-    /// This is a weak reference
     view_controller: id,
     tag: NSInteger,
     clears_context_before_drawing: bool,
@@ -98,6 +92,7 @@ fn init_common(env: &mut Environment, this: id) -> id {
 
     env.objc.borrow_mut::<UIViewHostObject>(this).layer = layer;
     env.framework_state.uikit.ui_view.views.push(this);
+
     this
 }
 
@@ -111,61 +106,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (Class)layerClass {
-    env.objc.get_known_class("CALayer", &mut env.mem)
-}
++ (Class)layerClass { env.objc.get_known_class("CALayer", &mut env.mem) }
 
-+ (())beginAnimations:(id)animationID context:(MutPtr<()>)context {
-    log!("TODO: [UIView beginAnimations:{:?} context:{:?}]", animationID, context);
-}
-
-+ (())commitAnimations {
-    log!("TODO: [UIView commitAnimations]");
-}
-
-+ (())setAnimationDuration:(f64)duration {
-    log!("TODO: [UIView setAnimationDuration:{}]", duration);
-}
-
-+ (())setAnimationCurve:(NSInteger)curve {
-    log!("TODO: [UIView setAnimationCurve:{}]", curve);
-}
-
-+ (())setAnimationDelegate:(id)delegate {
-    log!("TODO: [UIView setAnimationDelegate:{:?}]", delegate);
-}
-
-+ (())setAnimationDidStopSelector:(SEL)selector {
-    log!("TODO: [UIView setAnimationDidStopSelector:{:?}]", selector);
-}
-
-+ (())setAnimationWillStartSelector:(SEL)selector {
-    log!("TODO: [UIView setAnimationWillStartSelector:{:?}]", selector);
-}
-
-+ (())setAnimationBeginsFromCurrentState:(bool)from {
-    log!("TODO: [UIView setAnimationBeginsFromCurrentState:{}]", from);
-}
-
-+ (())setAnimationRepeatAutoreverses:(bool)repeatAutoreverses {
-    log!("TODO: [UIView setAnimationRepeatAutoreverses:{}]", repeatAutoreverses);
-}
-
-+ (())setAnimationRepeatCount:(f32)repeatCount {
-    log!("TODO: [UIView setAnimationRepeatCount:{}]", repeatCount);
-}
-
-+ (())setAnimationDelay:(f32)delay {
-    log!("TODO: [UIView setAnimationDelay:{}]", delay);
-}
-
-+ (())setAnimationsEnabled:(f32)enabled {
-    log!("TODO: [UIView setAnimationsEnabled:{}]", enabled);
-}
-
-+ (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache {
-    log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
-}
++ (())beginAnimations:(id)animationID context:(MutPtr<()>)context { }
++ (())commitAnimations { }
++ (())setAnimationDuration:(f64)duration { }
++ (())setAnimationCurve:(NSInteger)curve { }
++ (())setAnimationDelegate:(id)delegate { }
++ (())setAnimationDidStopSelector:(SEL)selector { }
++ (())setAnimationWillStartSelector:(SEL)selector { }
++ (())setAnimationBeginsFromCurrentState:(bool)from { }
++ (())setAnimationRepeatAutoreverses:(bool)repeatAutoreverses { }
++ (())setAnimationRepeatCount:(f32)repeatCount { }
++ (())setAnimationDelay:(f32)delay { }
++ (())setAnimationsEnabled:(f32)enabled { }
++ (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache { }
 
 - (id)init {
     msg![env; this initWithFrame:(<CGRect as Default>::default())]
@@ -173,7 +128,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithFrame:(CGRect)frame {
     let this = init_common(env, this);
-
     () = msg![env; this setFrame:frame];
     this
 }
@@ -185,40 +139,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_center = get_static_str(env, "UICenter");
     let key_frame = get_static_str(env, "UIFrame");
 
-    let mut bounds: CGRect = msg![env; coder decodeCGRectForKey:key_bounds];
-    let mut center: CGPoint = msg![env; coder decodeCGPointForKey:key_center];
-    let frame: CGRect = msg![env; coder decodeCGRectForKey:key_frame];
+    let has_bounds = msg![env; coder containsValueForKey:key_bounds];
+    let has_center = msg![env; coder containsValueForKey:key_center];
+    let has_frame = msg![env; coder containsValueForKey:key_frame];
 
-    // FIX FOR iOS 2/3 NIBs: Fallback to UIFrame if UIBounds is missing (zero width/height)
-    if bounds.size.width == 0.0 && bounds.size.height == 0.0 && (frame.size.width != 0.0 || frame.size.height != 0.0) {
-        bounds = CGRect { origin: CGPoint::default(), size: frame.size };
-        center = CGPoint {
-            x: frame.origin.x + frame.size.width / 2.0,
-            y: frame.origin.y + frame.size.height / 2.0,
-        };
+    let mut bounds: CGRect = if has_bounds { msg![env; coder decodeCGRectForKey:key_bounds] } else { CGRect::default() };
+    let mut center: CGPoint = if has_center { msg![env; coder decodeCGPointForKey:key_center] } else { CGPoint::default() };
+
+    if has_frame {
+        let frame: CGRect = msg![env; coder decodeCGRectForKey:key_frame];
+        if !has_bounds {
+            bounds = CGRect { origin: CGPoint::default(), size: frame.size };
+        }
+        if !has_center {
+            center = CGPoint {
+                x: frame.origin.x + frame.size.width / 2.0,
+                y: frame.origin.y + frame.size.height / 2.0,
+            };
+        }
     }
 
     let key_hidden = get_static_str(env, "UIHidden");
-    let hidden: bool = msg![env; coder decodeBoolForKey:key_hidden];
+    let hidden: bool = if msg![env; coder containsValueForKey:key_hidden] { msg![env; coder decodeBoolForKey:key_hidden] } else { false };
 
     let key_opaque = get_static_str(env, "UIOpaque");
-    let opaque: bool = msg![env; coder decodeBoolForKey:key_opaque];
+    let opaque: bool = if msg![env; coder containsValueForKey:key_opaque] { msg![env; coder decodeBoolForKey:key_opaque] } else { false };
 
     let key_bg = get_static_str(env, "UIBackgroundColor");
-    let bg_color: id = msg![env; coder decodeObjectForKey:key_bg];
+    let bg_color: id = if msg![env; coder containsValueForKey:key_bg] { msg![env; coder decodeObjectForKey:key_bg] } else { nil };
 
     let key_tag = get_static_str(env, "UITag");
-    let tag: NSInteger = msg![env; coder decodeIntegerForKey:key_tag];
+    let tag: NSInteger = if msg![env; coder containsValueForKey:key_tag] { msg![env; coder decodeIntegerForKey:key_tag] } else { 0 };
 
     let key_multi_touch = get_static_str(env, "UIMultipleTouchEnabled");
-    let multi_touch_enabled: bool = msg![env; coder decodeBoolForKey:key_multi_touch];
+    let multi_touch_enabled: bool = if msg![env; coder containsValueForKey:key_multi_touch] { msg![env; coder decodeBoolForKey:key_multi_touch] } else { false };
 
     let key_subviews = get_static_str(env, "UISubviews");
-    let subviews: id = msg![env; coder decodeObjectForKey:key_subviews];
+    let subviews: id = if msg![env; coder containsValueForKey:key_subviews] { msg![env; coder decodeObjectForKey:key_subviews] } else { nil };
     let subview_count: NSUInteger = if subviews != nil { msg![env; subviews count] } else { 0 };
 
-    // MINECRAFT HACK: Only stretch to screen if BOTH frame and bounds are absolutely zero.
-    if bounds.size.width == 0.0 && bounds.size.height == 0.0 && frame.size.width == 0.0 {
+    if !has_bounds && !has_frame {
         let screen: id = msg_class![env; UIScreen mainScreen];
         let screen_bounds: CGRect = msg![env; screen bounds];
         () = msg![env; this setBounds:screen_bounds];
@@ -235,7 +195,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     () = msg![env; this setHidden:hidden];
     () = msg![env; this setOpaque:opaque];
-    () = msg![env; this setBackgroundColor:bg_color];
+    if bg_color != nil { () = msg![env; this setBackgroundColor:bg_color]; }
     () = msg![env; this setTag:tag];
     () = msg![env; this setMultipleTouchEnabled:multi_touch_enabled];
 
@@ -260,9 +220,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UIViewHostObject { ref subviews, tag: view_tag, .. } = env.objc.borrow(this);
     if view_tag == tag { return this; }
     for view in subviews {
-        if env.objc.borrow::<UIViewHostObject>(*view).tag == tag {
-            return *view;
-        }
+        if env.objc.borrow::<UIViewHostObject>(*view).tag == tag { return *view; }
     }
     nil
 }
@@ -348,12 +306,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
+
     let sibling_layer = env.objc.borrow_mut::<UIViewHostObject>(sibling).layer;
 
     let &mut UIViewHostObject { ref mut subviews, layer: this_layer, .. } = env.objc.borrow_mut(this);
-
     let idx = subviews.iter().position(|&subview2| subview2 == sibling).unwrap();
     subviews.insert(idx, view);
+
     () = msg![env; this_layer insertSublayer:subview_layer below:sibling_layer];
 }
 
@@ -386,7 +345,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())bringSubviewToFront:(id)subview {
     if subview == nil { return; }
     let &mut UIViewHostObject { ref mut subviews, layer, .. } = env.objc.borrow_mut(this);
-
     let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else { return; };
     let subview2 = subviews.remove(idx);
     assert!(subview2 == subview);
@@ -400,7 +358,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())sendSubviewToBack:(id)subview {
     if subview == nil { return; }
     let &mut UIViewHostObject { ref mut subviews, layer, .. } = env.objc.borrow_mut(this);
-
     let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else { return; };
     let subview2 = subviews.remove(idx);
     assert!(subview2 == subview);
@@ -422,6 +379,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     if let Some(idx) = subviews.iter().position(|&subview| subview == this) {
         let subview = subviews.remove(idx);
+        assert!(subview == this);
         release(env, this);
     }
 }
@@ -439,6 +397,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(pos) = state.iter().position(|&v| v == this) {
         state.swap_remove(pos);
     }
+
     env.objc.dealloc_object(this, &mut env.mem);
 }
 
@@ -459,7 +418,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setStyle:(u32)_style { }
 - (id)context { nil }
 - (())setContext:(id)_context { }
-
 - (())resume {
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
     host.is_animating = true;
@@ -508,6 +466,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setNeedsDisplay {
     let this_class = ObjC::read_isa(this, &env.mem);
     let ui_view_class = env.objc.get_known_class("UIView", &mut env.mem);
+
     let draw_layer_sel = env.objc.lookup_selector("drawLayer:inContext:").unwrap();
     let draw_rect_sel = env.objc.lookup_selector("drawRect:").unwrap();
 
