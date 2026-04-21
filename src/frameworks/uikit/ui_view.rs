@@ -66,8 +66,6 @@ pub(super) struct UIViewHostObject {
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
     fn default() -> UIViewHostObject {
-        // The Default trait is implemented so subclasses will get the same
-        // defaults.
         UIViewHostObject {
             layer: nil,
             subviews: Vec::new(),
@@ -91,24 +89,15 @@ pub fn set_view_controller(env: &mut Environment, view: id, controller: id) {
     host_obj.view_controller = controller;
 }
 
-/// Shared parts of `initWithCoder:` and `initWithFrame:`.
-/// These can't call
-/// `init`: the subclass may have overridden `init` and will not expect to be
-/// called here.
-///
-/// Do not call this in subclasses of `UIView`.
 fn init_common(env: &mut Environment, this: id) -> id {
     let view_class: Class = msg![env; this class];
     let layer_class: Class = msg![env; view_class layerClass];
     let layer: id = msg![env; layer_class layer];
-    // CALayer is not opaque by default, but UIView is
     () = msg![env; layer setDelegate:this];
     () = msg![env; layer setOpaque:true];
 
     env.objc.borrow_mut::<UIViewHostObject>(this).layer = layer;
-
     env.framework_state.uikit.ui_view.views.push(this);
-
     this
 }
 
@@ -125,8 +114,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (Class)layerClass {
     env.objc.get_known_class("CALayer", &mut env.mem)
 }
-
-// --- Animation Methods ---
 
 + (())beginAnimations:(id)animationID context:(MutPtr<()>)context {
     log!("TODO: [UIView beginAnimations:{:?} context:{:?}]", animationID, context);
@@ -180,12 +167,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: [UIView setAnimationTransition:{} forView:{:?} cache:{}]", transition, view, cache);
 }
 
-// -------------------------
-
-// initWithCoder: and initWithFrame: are basically UIView's designated
-// initializers. init is not, it's a shortcut for the latter.
-// Subclasses need to override both.
-
 - (id)init {
     msg![env; this initWithFrame:(<CGRect as Default>::default())]
 }
@@ -194,62 +175,50 @@ pub const CLASSES: ClassExports = objc_classes! {
     let this = init_common(env, this);
 
     () = msg![env; this setFrame:frame];
-    log_dbg!(
-        "[(UIView*){:?} initWithFrame:{:?}] => bounds {:?}, center {:?}",
-        this,
-        frame,
-        { let bounds: CGRect = msg![env; this bounds]; bounds },
-        { let center: CGPoint = msg![env; this center]; center },
-    );
     this
 }
 
-// NSCoding implementation
 - (id)initWithCoder:(id)coder {
     let this = init_common(env, this);
-    // TODO: decode the various other UIView properties
 
-    let key_ns_string = get_static_str(env, "UIBounds");
-    let bounds: CGRect = msg![env; coder decodeCGRectForKey:key_ns_string];
+    let key_bounds = get_static_str(env, "UIBounds");
+    let key_center = get_static_str(env, "UICenter");
+    let key_frame = get_static_str(env, "UIFrame");
 
-    let key_ns_string = get_static_str(env, "UICenter");
-    let center: CGPoint = msg![env; coder decodeCGPointForKey:key_ns_string];
+    let mut bounds: CGRect = msg![env; coder decodeCGRectForKey:key_bounds];
+    let mut center: CGPoint = msg![env; coder decodeCGPointForKey:key_center];
+    let frame: CGRect = msg![env; coder decodeCGRectForKey:key_frame];
 
-    let key_ns_string = get_static_str(env, "UIHidden");
-    let hidden: bool = msg![env; coder decodeBoolForKey:key_ns_string];
+    // FIX FOR iOS 2/3 NIBs: Fallback to UIFrame if UIBounds is missing (zero width/height)
+    if bounds.size.width == 0.0 && bounds.size.height == 0.0 && (frame.size.width != 0.0 || frame.size.height != 0.0) {
+        bounds = CGRect { origin: CGPoint::default(), size: frame.size };
+        center = CGPoint {
+            x: frame.origin.x + frame.size.width / 2.0,
+            y: frame.origin.y + frame.size.height / 2.0,
+        };
+    }
 
-    let key_ns_string = get_static_str(env, "UIOpaque");
-    let opaque: bool = msg![env; coder decodeBoolForKey:key_ns_string];
+    let key_hidden = get_static_str(env, "UIHidden");
+    let hidden: bool = msg![env; coder decodeBoolForKey:key_hidden];
 
-    let key_ns_string = get_static_str(env, "UIBackgroundColor");
-    let bg_color: id = msg![env; coder decodeObjectForKey:key_ns_string];
+    let key_opaque = get_static_str(env, "UIOpaque");
+    let opaque: bool = msg![env; coder decodeBoolForKey:key_opaque];
 
-    let key_ns_string = get_static_str(env, "UITag");
-    let tag: NSInteger = msg![env; coder decodeIntegerForKey:key_ns_string];
+    let key_bg = get_static_str(env, "UIBackgroundColor");
+    let bg_color: id = msg![env; coder decodeObjectForKey:key_bg];
 
-    let key_ns_string = get_static_str(env, "UIMultipleTouchEnabled");
-    let multi_touch_enabled: bool = msg![env; coder decodeBoolForKey:key_ns_string];
+    let key_tag = get_static_str(env, "UITag");
+    let tag: NSInteger = msg![env; coder decodeIntegerForKey:key_tag];
 
-    let key_ns_string = get_static_str(env, "UISubviews");
-    let subviews: id = msg![env; coder decodeObjectForKey:key_ns_string];
-    let subview_count: NSUInteger = msg![env; subviews count];
+    let key_multi_touch = get_static_str(env, "UIMultipleTouchEnabled");
+    let multi_touch_enabled: bool = msg![env; coder decodeBoolForKey:key_multi_touch];
 
-    log_dbg!(
-        "[(UIView*){:?} initWithCoder:{:?}] => bounds {}, center {}, hidden {}, bg color {:?}, tag {}, opaque {}, multi touch enabled {}, {} subviews",
-        this,
-        coder,
-        bounds,
-        center,
-        hidden,
-        bg_color,
-        tag,
-        opaque,
-        multi_touch_enabled,
-        subview_count,
-    );
+    let key_subviews = get_static_str(env, "UISubviews");
+    let subviews: id = msg![env; coder decodeObjectForKey:key_subviews];
+    let subview_count: NSUInteger = if subviews != nil { msg![env; subviews count] } else { 0 };
 
-    // ФИКС ДЛЯ MINECRAFT: Если фрейм нулевой, берем экран
-    if bounds.size.width == 0.0 || bounds.size.height == 0.0 {
+    // MINECRAFT HACK: Only stretch to screen if BOTH frame and bounds are absolutely zero.
+    if bounds.size.width == 0.0 && bounds.size.height == 0.0 && frame.size.width == 0.0 {
         let screen: id = msg_class![env; UIScreen mainScreen];
         let screen_bounds: CGRect = msg![env; screen bounds];
         () = msg![env; this setBounds:screen_bounds];
@@ -278,38 +247,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (NSInteger)tag {
-    env.objc.borrow::<UIViewHostObject>(this).tag
-}
-- (())setTag:(NSInteger)tag {
-    env.objc.borrow_mut::<UIViewHostObject>(this).tag = tag;
-}
+- (NSInteger)tag { env.objc.borrow::<UIViewHostObject>(this).tag }
+- (())setTag:(NSInteger)tag { env.objc.borrow_mut::<UIViewHostObject>(this).tag = tag; }
 
-- (f64)animationInterval {
-    env.objc.borrow::<UIViewHostObject>(this).animation_interval
-}
-
-- (())setAnimationInterval:(f64)interval {
-    env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval;
-}
+- (f64)animationInterval { env.objc.borrow::<UIViewHostObject>(this).animation_interval }
+- (())setAnimationInterval:(f64)interval { env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval; }
     
-- (id)delegate {
-    env.objc.borrow::<UIViewHostObject>(this).delegate
-}
-- (())setDelegate:(id)delegate {
-    env.objc.borrow_mut::<UIViewHostObject>(this).delegate = delegate;
-}
+- (id)delegate { env.objc.borrow::<UIViewHostObject>(this).delegate }
+- (())setDelegate:(id)delegate { env.objc.borrow_mut::<UIViewHostObject>(this).delegate = delegate; }
 
 - (id)viewWithTag:(NSInteger)tag {
-    let &UIViewHostObject {
-        ref subviews,
-        tag: view_tag,
-        ..
-    } = env.objc.borrow(this);
-
-    if view_tag == tag {
-        return this;
-    }
+    let &UIViewHostObject { ref subviews, tag: view_tag, .. } = env.objc.borrow(this);
+    if view_tag == tag { return this; }
     for view in subviews {
         if env.objc.borrow::<UIViewHostObject>(*view).tag == tag {
             return *view;
@@ -318,71 +267,35 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (bool)isUserInteractionEnabled {
-    env.objc.borrow::<UIViewHostObject>(this).user_interaction_enabled
-}
-- (())setUserInteractionEnabled:(bool)enabled {
-    env.objc.borrow_mut::<UIViewHostObject>(this).user_interaction_enabled = enabled;
-}
+- (bool)isUserInteractionEnabled { env.objc.borrow::<UIViewHostObject>(this).user_interaction_enabled }
+- (())setUserInteractionEnabled:(bool)enabled { env.objc.borrow_mut::<UIViewHostObject>(this).user_interaction_enabled = enabled; }
 
-- (bool)isAnimating {
-    env.objc.borrow::<UIViewHostObject>(this).is_animating
-}
-
+- (bool)isAnimating { env.objc.borrow::<UIViewHostObject>(this).is_animating }
 - (())startAnimation {
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
-
-    if !host.is_animating {
-        host.is_animating = true;
-        // Примечание: В оригинальном коде iOS здесь создается NSTimer, который 
-        // дергает метод drawView. В эмуляторе цикл рендеринга OpenGL часто 
-        // работает на уровне самого эмулятора, поэтому честного переключения 
-        // внутреннего state (is_animating) достаточно для корректной работы логики игры.
-    }
+    if !host.is_animating { host.is_animating = true; }
 }
-
 - (())stopAnimation {
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
-
-    if host.is_animating {
-        host.is_animating = false;
-    }
+    if host.is_animating { host.is_animating = false; }
 }
 
-- (bool)isMultipleTouchEnabled {
-    env.objc.borrow::<UIViewHostObject>(this).multiple_touch_enabled
-}
-- (())setMultipleTouchEnabled:(bool)enabled {
-    env.objc.borrow_mut::<UIViewHostObject>(this).multiple_touch_enabled = enabled;
-}
+- (bool)isMultipleTouchEnabled { env.objc.borrow::<UIViewHostObject>(this).multiple_touch_enabled }
+- (())setMultipleTouchEnabled:(bool)enabled { env.objc.borrow_mut::<UIViewHostObject>(this).multiple_touch_enabled = enabled; }
 
-- (bool)isExclusiveTouch {
-    env.objc.borrow::<UIViewHostObject>(this).exclusive_touch
-}
+- (bool)isExclusiveTouch { env.objc.borrow::<UIViewHostObject>(this).exclusive_touch }
+- (())setExclusiveTouch:(bool)exclusive { env.objc.borrow_mut::<UIViewHostObject>(this).exclusive_touch = exclusive; }
 
-- (())setExclusiveTouch:(bool)exclusive {
-    env.objc.borrow_mut::<UIViewHostObject>(this).exclusive_touch = exclusive;
-}
+- (())layoutSubviews { }
 
-- (())layoutSubviews {
-    // On iOS 5.1 and earlier, the default implementation of this method does
-    // nothing.
-}
-
-- (id)superview {
-    env.objc.borrow::<UIViewHostObject>(this).superview
-}
+- (id)superview { env.objc.borrow::<UIViewHostObject>(this).superview }
 
 - (id)window {
-    // Looks up window in the superview hierarchy
     let mut window: id = env.objc.borrow::<UIViewHostObject>(this).superview;
-
     let window_class = env.objc.get_known_class("UIWindow", &mut env.mem);
     while window != nil {
         let current_class: Class = msg![env; window class];
-        if env.objc.class_is_subclass_of(current_class, window_class) {
-            break;
-        }
+        if env.objc.class_is_subclass_of(current_class, window_class) { break; }
         window = env.objc.borrow::<UIViewHostObject>(window).superview;
     }
     window
@@ -390,19 +303,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)subviews {
     let views = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
-    for view in &views {
-        retain(env, *view);
-    }
+    for view in &views { retain(env, *view); }
     let subs = ns_array::from_vec(env, views);
     autorelease(env, subs)
 }
 
 - (())addSubview:(id)view {
-    if view == nil {
-        log_dbg!("Tolerating [(UIView*){:?} addSubview:nil]", this);
-        return;
-    }
-
+    if view == nil { return; }
     if env.objc.borrow::<UIViewHostObject>(view).superview == this {
         () = msg![env; this bringSubviewToFront:view];
     } else {
@@ -427,12 +334,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
-    let &mut UIViewHostObject {
-        ref mut subviews,
-        layer: this_layer,
-        ..
-    } = env.objc.borrow_mut(this);
-
+    let &mut UIViewHostObject { ref mut subviews, layer: this_layer, .. } = env.objc.borrow_mut(this);
     subviews.insert(index as usize, view);
 
     assert!(index >= 0);
@@ -446,18 +348,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
-
     let sibling_layer = env.objc.borrow_mut::<UIViewHostObject>(sibling).layer;
 
-    let &mut UIViewHostObject {
-        ref mut subviews,
-        layer: this_layer,
-        ..
-    } = env.objc.borrow_mut(this);
+    let &mut UIViewHostObject { ref mut subviews, layer: this_layer, .. } = env.objc.borrow_mut(this);
 
     let idx = subviews.iter().position(|&subview2| subview2 == sibling).unwrap();
     subviews.insert(idx, view);
-
     () = msg![env; this_layer insertSublayer:subview_layer below:sibling_layer];
 }
 
@@ -467,34 +363,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; view removeFromSuperview];
 
     let subview_layer = env.objc.borrow::<UIViewHostObject>(view).layer;
-
-    let sibling_idx = env.objc
-        .borrow::<UIViewHostObject>(this)
-        .subviews
-        .iter()
-        .position(|&s| s == sibling);
+    let sibling_idx = env.objc.borrow::<UIViewHostObject>(this).subviews.iter().position(|&s| s == sibling);
 
     let insert_idx = match sibling_idx {
-        Some(idx) => idx + 1, // one above the sibling
-        None => {
-            // Sibling not found — insert at top (same as addSubview).
-            env.objc.borrow::<UIViewHostObject>(this).subviews.len()
-        }
+        Some(idx) => idx + 1,
+        None => env.objc.borrow::<UIViewHostObject>(this).subviews.len()
     };
 
     env.objc.borrow_mut::<UIViewHostObject>(view).superview = this;
-
-    env.objc
-        .borrow_mut::<UIViewHostObject>(this)
-        .subviews
-        .insert(insert_idx, view);
+    env.objc.borrow_mut::<UIViewHostObject>(this).subviews.insert(insert_idx, view);
 
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    let sibling_layer = if sibling != nil {
-        env.objc.borrow::<UIViewHostObject>(sibling).layer
-    } else {
-        crate::objc::nil
-    };
+    let sibling_layer = if sibling != nil { env.objc.borrow::<UIViewHostObject>(sibling).layer } else { crate::objc::nil };
 
     if sibling_layer != crate::objc::nil {
         let _: () = msg![env; this_layer insertSublayer:subview_layer above:sibling_layer];
@@ -504,23 +384,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())bringSubviewToFront:(id)subview {
-    if subview == nil {
-        // This happens in Touch & Go LITE. It's probably due to the ad classes
-        // being replaced with fakes.
-        log_dbg!("Tolerating [{:?} bringSubviewToFront:nil]", this);
-        return;
-    }
+    if subview == nil { return; }
+    let &mut UIViewHostObject { ref mut subviews, layer, .. } = env.objc.borrow_mut(this);
 
-    let &mut UIViewHostObject {
-        ref mut subviews,
-        layer,
-        ..
-    } = env.objc.borrow_mut(this);
-
-    let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else {
-        log_dbg!("Warning: Unable to find the subview {:?} in subviews of {:?}", subview, this);
-        return;
-    };
+    let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else { return; };
     let subview2 = subviews.remove(idx);
     assert!(subview2 == subview);
     subviews.push(subview);
@@ -531,21 +398,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())sendSubviewToBack:(id)subview {
-    if subview == nil {
-        log_dbg!("Tolerating [{:?} sendSubviewToBack:nil]", this);
-        return;
-    }
+    if subview == nil { return; }
+    let &mut UIViewHostObject { ref mut subviews, layer, .. } = env.objc.borrow_mut(this);
 
-    let &mut UIViewHostObject {
-        ref mut subviews,
-        layer,
-        ..
-    } = env.objc.borrow_mut(this);
-
-    let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else {
-        log_dbg!("Warning: Unable to find the subview {:?} in subviews of {:?}", subview, this);
-        return;
-    };
+    let Some(idx) = subviews.iter().position(|&subview2| subview2 == subview) else { return; };
     let subview2 = subviews.remove(idx);
     assert!(subview2 == subview);
     subviews.insert(0, subview);
@@ -556,16 +412,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())removeFromSuperview {
-    let &mut UIViewHostObject {
-        ref mut superview,
-        layer: this_layer,
-        ..
-    } = env.objc.borrow_mut(this);
-
+    let &mut UIViewHostObject { ref mut superview, layer: this_layer, .. } = env.objc.borrow_mut(this);
     let superview = std::mem::take(superview);
-    if superview == nil {
-        return;
-    }
+    if superview == nil { return; }
     let _: () = msg![env; this_layer removeFromSuperlayer];
 
     let mut superview_obj = env.objc.borrow_mut::<UIViewHostObject>(superview);
@@ -573,29 +422,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     if let Some(idx) = subviews.iter().position(|&subview| subview == this) {
         let subview = subviews.remove(idx);
-        assert!(subview == this);
         release(env, this);
-    } else {
-        log_dbg!(
-            "Warning: [UIView removeFromSuperview] {:?} not found in superview's subviews — already removed?",
-            this
-        );
     }
 }
 
 - (())dealloc {
-    // ВНИМАНИЕ: Исправление паники "assertion failed: view_controller == nil"
-    let UIViewHostObject {
-        layer,
-        superview: _,
-        subviews,
-        view_controller: _, // Мы игнорируем контроллер вместо того чтобы вызывать панику
-        ..
-    } = std::mem::take(env.objc.borrow_mut(this));
-
+    let UIViewHostObject { layer, subviews, .. } = std::mem::take(env.objc.borrow_mut(this));
     release(env, layer);
-    
-    // assert!(view_controller == nil); // <-- ЭТА СТРОКА УДАЛЕНА ИЛИ ЗАКОММЕНТИРОВАНА
 
     for subview in subviews {
         env.objc.borrow_mut::<UIViewHostObject>(subview).superview = nil;
@@ -603,16 +436,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let state = &mut env.framework_state.uikit.ui_view.views;
-    state.swap_remove(
-        state.iter().position(|&v| v == this).unwrap()
-    );
-
+    if let Some(pos) = state.iter().position(|&v| v == this) {
+        state.swap_remove(pos);
+    }
     env.objc.dealloc_object(this, &mut env.mem);
 }
 
-- (id)layer {
-    env.objc.borrow_mut::<UIViewHostObject>(this).layer
-}
+- (id)layer { env.objc.borrow_mut::<UIViewHostObject>(this).layer }
 
 - (bool)isHidden {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -623,63 +453,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setHidden:hidden]
 }
 
-- (bool)clipsToBounds {
-    env.objc.borrow::<UIViewHostObject>(this).clips_to_bounds
-}
-- (())setClipsToBounds:(bool)clips {
-    env.objc.borrow_mut::<UIViewHostObject>(this).clips_to_bounds = clips;
-}
+- (bool)clipsToBounds { env.objc.borrow::<UIViewHostObject>(this).clips_to_bounds }
+- (())setClipsToBounds:(bool)clips { env.objc.borrow_mut::<UIViewHostObject>(this).clips_to_bounds = clips; }
 
-// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ FBLoginButton ---
-- (())setStyle:(u32)_style {
-    // Заглушка, чтобы эмулятор не падал при настройке фейковых элементов (например, FBLoginButton)
-}
-// -----------------------------------------
-
-// --- ДОБАВЛЕННЫЙ ХАК ДЛЯ EAGLView ---
-- (id)context {
-    nil // Возвращаем пустоту, так как настоящего контекста у обычного UIView нет
-}
-
-- (())setContext:(id)_context {
-    // Ничего не делаем, просто игнорируем попытку игры передать нам контекст
-}
-// ------------------------------------
-
-// =========================================================================
-// MARK: - OpenGL ES / EAGLView lifecycle stubs
-// These are called by apps that subclass UIView as an EAGLView.
-// =========================================================================
+- (())setStyle:(u32)_style { }
+- (id)context { nil }
+- (())setContext:(id)_context { }
 
 - (())resume {
-    log_dbg!("UIView resume {:?}", this);
     let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
     host.is_animating = true;
 }
 
 - (())flushBuffer {
-    // Called by some EAGLView implementations after rendering a frame to
-    // present the renderbuffer. The actual present is handled by EAGLContext
-    // presentRenderBuffer: — this is just a hook some apps call before that.
-    log_dbg!("UIView flushBuffer {:?}", this);
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    // Forward to the layer's display if it has content to present.
     let _: () = msg![env; layer display];
 }
 
-- (())setupView {
-    // Called by EAGLView subclasses to set up the OpenGL ES state
-    // (viewport, projection matrix, etc.) before rendering begins.
-    // The actual GL setup is done by the app's own override;
-    // the base UIView implementation is a no-op.
-    log_dbg!("UIView setupView {:?}", this);
-}
-
-- (())endDrawing {
-    // Called by some EAGLView implementations at the end of a render pass.
-    // No-op at the UIView level — the app's override does the real work.
-    log_dbg!("UIView endDrawing {:?}", this);
-}
+- (())setupView { }
+- (())endDrawing { }
 
 - (bool)isOpaque {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -699,59 +491,34 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setOpacity:alpha]
 }
 
-- (CGFloat)contentScaleFactor {
-    1.0
-}
-
-- (())setContentScaleFactor:(CGFloat)_scale {
-    // Заглушка, чтобы не крашилось
-}
+- (CGFloat)contentScaleFactor { 1.0 }
+- (())setContentScaleFactor:(CGFloat)_scale { }
 
 - (id)backgroundColor {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     let cg_color: CGColorRef = msg![env; layer backgroundColor];
     msg_class![env; UIColor colorWithCGColor:cg_color]
 }
-- (())setBackgroundColor:(id)color { // UIColor*
-    let color: CGColorRef = msg![env; color CGColor];
+- (())setBackgroundColor:(id)color {
+    let color: CGColorRef = if color != nil { msg![env; color CGColor] } else { crate::objc::nil };
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer setBackgroundColor:color]
 }
 
-// TODO: support setNeedsDisplayInRect:
 - (())setNeedsDisplay {
-    // UIView has a method called drawRect: that subclasses override if they
-    // need custom drawing. TouchHLE's UIView (a CALayerDelegate) provides
-    // an implementation of drawLayer:inContext: that calls drawRect:.
-    // This maintains a clean separation of UIView and CALayer.
-    //
-    // To avoid wasting space and time on unnecessary bitmaps and drawing,
-    // let's optimize here by only marking the layer as needing display if
-    // the UIView's subclass overrides drawRect: or drawLayer:inContext:.
-
     let this_class = ObjC::read_isa(this, &env.mem);
-
     let ui_view_class = env.objc.get_known_class("UIView", &mut env.mem);
-
     let draw_layer_sel = env.objc.lookup_selector("drawLayer:inContext:").unwrap();
     let draw_rect_sel = env.objc.lookup_selector("drawRect:").unwrap();
 
-    if env
-        .objc
-        .class_overrides_method_of_superclass(this_class, draw_rect_sel, ui_view_class)
-        ||
-        env
-            .objc
-            .class_overrides_method_of_superclass(this_class, draw_layer_sel, ui_view_class)
-    {
+    if env.objc.class_overrides_method_of_superclass(this_class, draw_rect_sel, ui_view_class) ||
+       env.objc.class_overrides_method_of_superclass(this_class, draw_layer_sel, ui_view_class) {
         let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
         msg![env; layer setNeedsDisplay]
     }
 }
 
-- (())setNeedsLayout {
-
-}
+- (())setNeedsLayout { }
 
 - (CGRect)bounds {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
@@ -762,7 +529,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setBounds:bounds]
 }
 - (CGPoint)center {
-    // FIXME: what happens if [layer anchorPoint] isn't (0.5, 0.5)?
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer position]
 }
@@ -787,29 +553,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setAffineTransform:transform]
 }
 
-- (())setContentMode:(NSInteger)content_mode { // should be UIViewContentMode
-    todo_objc_setter!(this, content_mode);
-}
+- (())setContentMode:(NSInteger)content_mode { todo_objc_setter!(this, content_mode); }
 
-- (bool)clearsContextBeforeDrawing {
-    env.objc.borrow::<UIViewHostObject>(this).clears_context_before_drawing
-}
-- (())setClearsContextBeforeDrawing:(bool)v {
-    env.objc.borrow_mut::<UIViewHostObject>(this).clears_context_before_drawing = v;
-}
+- (bool)clearsContextBeforeDrawing { env.objc.borrow::<UIViewHostObject>(this).clears_context_before_drawing }
+- (())setClearsContextBeforeDrawing:(bool)v { env.objc.borrow_mut::<UIViewHostObject>(this).clears_context_before_drawing = v; }
 
-// Drawing stuff that views should override
-- (())drawRect:(CGRect)_rect {
-    // default implementation does nothing
-}
+- (())drawRect:(CGRect)_rect { }
 
-// CALayerDelegate implementation
-- (())drawLayer:(id)layer // CALayer*
-      inContext:(CGContextRef)context {
+- (())drawLayer:(id)layer inContext:(CGContextRef)context {
     let mut bounds: CGRect = msg![env; layer bounds];
     bounds.origin = CGPoint { x: 0.0, y: 0.0 };
 
-    // FIXME: not tested
     if env.objc.borrow::<UIViewHostObject>(this).clears_context_before_drawing {
         CGContextClearRect(env, context, bounds);
     }
@@ -818,50 +572,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     UIGraphicsPopContext(env);
 }
 
-// Event handling
-
-- (bool)pointInside:(CGPoint)point
-          withEvent:(id)_event { // UIEvent* (possibly nil)
+- (bool)pointInside:(CGPoint)point withEvent:(id)_event {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer containsPoint:point]
 }
 
-- (id)hitTest:(CGPoint)point
-    withEvent:(id)event { // UIEvent* (possibly nil)
-    
-    // ХАК: Запоминаем, попал ли тап в саму вьюшку, но НЕ ВЫХОДИМ, если нет!
-    // В портированных играх рамки (bounds) часто кривые, из-за чего клики теряются.
+- (id)hitTest:(CGPoint)point withEvent:(id)event {
     let is_inside: bool = msg![env; this pointInside:point withEvent:event];
-
-    // TODO: avoid copy somehow?
     let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
     
-    // Сначала принудительно опрашиваем всех детей (кнопки, картинки)
-    for subview in subviews.into_iter().rev() { // later views are on top
+    for subview in subviews.into_iter().rev() {
         let hidden: bool = msg![env; subview isHidden];
         let alpha: CGFloat = msg![env; subview alpha];
         let interactible: bool = msg![env; subview isUserInteractionEnabled];
-        if hidden || alpha < 0.01 || !interactible {
-           continue;
-        }
+        if hidden || alpha < 0.01 || !interactible { continue; }
+        
         let sub_point: CGPoint = msg![env; subview convertPoint:point fromView:this];
         let subview_hit: id = msg![env; subview hitTest:sub_point withEvent:event];
-        
-        // Если ребенок поймал клик — отдаем его ему, игнорируя кривые рамки родителя
-        if subview_hit != nil {
-            return subview_hit;
-        }
+        if subview_hit != nil { return subview_hit; }
     }
     
-    // Если ни один ребенок не поймал тап, проверяем честный pointInside
-    if is_inside {
-        this
-    } else {
-        nil
-    }
+    if is_inside { this } else { nil }
 }
-
-// Ending a view-editing session
 
 - (bool)endEditing:(bool)force {
     assert!(force);
@@ -870,36 +602,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
 
     if responder != nil && env.objc.class_is_subclass_of(class, ui_text_field_class) {
-        // we need to check if text field is in the current view hierarchy
         let mut to_find = responder;
         while to_find != nil {
-            if to_find == this {
-                return msg![env; responder resignFirstResponder];
-            }
+            if to_find == this { return msg![env; responder resignFirstResponder]; }
             to_find = msg![env; to_find superview];
         }
     }
     false
 }
 
-// UIResponder implementation
-// From the Apple UIView docs regarding [UIResponder nextResponder]:
-// "UIView implements this method and returns the UIViewController object that
-//  manages it (if it has one) or its superview (if it doesn’t)."
 - (id)nextResponder {
     let host_object = env.objc.borrow::<UIViewHostObject>(this);
-
-    if host_object.view_controller != nil {
-        host_object.view_controller
-    } else {
-        host_object.superview
-    }
+    if host_object.view_controller != nil { host_object.view_controller } else { host_object.superview }
 }
 
-// Co-ordinate space conversion
-
-- (CGPoint)convertPoint:(CGPoint)point
-               fromView:(id)other { // UIView*
+- (CGPoint)convertPoint:(CGPoint)point fromView:(id)other {
     if other == nil {
         let window: id = msg![env; this window];
         if window == nil { return point; }
@@ -908,9 +625,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
-    let actual_other = if is_view {
-        other
-    } else {
+    let actual_other = if is_view { other } else {
         let mut found_view = nil;
         if let Some(sel_view) = env.objc.lookup_selector("view") {
             let responds: bool = msg![env; other respondsToSelector:sel_view];
@@ -925,21 +640,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertPoint:point fromLayer:other_layer]
 }
-- (CGPoint)convertPoint:(CGPoint)point
-                 toView:(id)other { // UIView*
+
+- (CGPoint)convertPoint:(CGPoint)point toView:(id)other {
     if other == nil {
         let window: id = msg![env; this window];
         if window == nil { return point; }
         return msg![env; this convertPoint:point toView:window]
     }
     
-    // Честная проверка: является ли other UIView
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
-    let actual_other = if is_view {
-        other
-    } else {
-        // Если передали не UIView (например, UIViewController), пробуем достать его view
+    let actual_other = if is_view { other } else {
         let mut found_view = nil;
         if let Some(sel_view) = env.objc.lookup_selector("view") {
             let responds: bool = msg![env; other respondsToSelector:sel_view];
@@ -948,15 +659,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         found_view
     };
 
-    // Если объект абсолютно несовместим (например, UIAlertView), отдаем точку как есть
     if actual_other == nil { return point; }
 
     let this_layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertPoint:point toLayer:other_layer]
 }
-- (CGRect)convertRect:(CGRect)rect
-             fromView:(id)other { // UIView*
+
+- (CGRect)convertRect:(CGRect)rect fromView:(id)other {
     if other == nil {
         let window: id = msg![env; this window];
         if window == nil { return rect; }
@@ -965,9 +675,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
-    let actual_other = if is_view {
-        other
-    } else {
+    let actual_other = if is_view { other } else {
         let mut found_view = nil;
         if let Some(sel_view) = env.objc.lookup_selector("view") {
             let responds: bool = msg![env; other respondsToSelector:sel_view];
@@ -982,8 +690,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let other_layer = env.objc.borrow::<UIViewHostObject>(actual_other).layer;
     msg![env; this_layer convertRect:rect fromLayer:other_layer]
 }
-- (CGRect)convertRect:(CGRect)rect
-               toView:(id)other { // UIView*
+
+- (CGRect)convertRect:(CGRect)rect toView:(id)other {
     if other == nil {
         let window: id = msg![env; this window];
         if window == nil { return rect; }
@@ -992,9 +700,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
-    let actual_other = if is_view {
-        other
-    } else {
+    let actual_other = if is_view { other } else {
         let mut found_view = nil;
         if let Some(sel_view) = env.objc.lookup_selector("view") {
             let responds: bool = msg![env; other respondsToSelector:sel_view];
@@ -1010,17 +716,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this_layer convertRect:rect toLayer:other_layer]
 }
 
-- (())setAutoresizingMask:(NSUInteger)mask {
-    todo_objc_setter!(this, mask);
-}
-- (())setAutoresizesSubviews:(bool)enabled {
-    todo_objc_setter!(this, enabled);
-}
+- (())setAutoresizingMask:(NSUInteger)mask { todo_objc_setter!(this, mask); }
+- (())setAutoresizesSubviews:(bool)enabled { todo_objc_setter!(this, enabled); }
+- (CGSize)sizeThatFits:(CGSize)size { size }
 
-- (CGSize)sizeThatFits:(CGSize)size {
-    // default implementation, subclasses can override
-    size
-}
 - (())sizeToFit {
     let bounds: CGRect = msg![env; this bounds];
     let size: CGSize = bounds.size;
@@ -1031,4 +730,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
