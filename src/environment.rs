@@ -1772,12 +1772,20 @@ let device_family = match device_family_array.len() {
                                         thread_id,
                                         cond
                                     );
-                                    self.threads[thread_id].blocked_by = ThreadBlock::Mutex(mutex);
+                                    self.threads[thread_id].blocked_by =
+                                        ThreadBlock::Mutex(mutex);
+                                    // Thread is still blocked on the mutex -
+                                    // do NOT return it. The Mutex branch will
+                                    // schedule it once the mutex is released.
                                 } else {
-                                    self.threads[thread_id].blocked_by = ThreadBlock::NotBlocked;
-                                    self.relock_unblocked_mutex_for_thread(thread_id, mutex);
+                                    self.threads[thread_id].blocked_by =
+                                        ThreadBlock::NotBlocked;
+                                    self.relock_unblocked_mutex_for_thread(
+                                        thread_id,
+                                        mutex,
+                                    );
+                                    return thread_id;
                                 }
-                                return thread_id;
                             }
                         }
                     }
@@ -2088,4 +2096,5 @@ mod dylib_sorting_tests {
         );
     }
 }
+
 
