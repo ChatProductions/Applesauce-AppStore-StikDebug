@@ -1756,16 +1756,27 @@ let device_family = match device_family_array.len() {
                                 assert!(!host_cond.timed_out.contains(&thread_id));
                                 host_cond.timed_out.insert(thread_id);
 
-                                // FIX: Если тред уже был в очереди waking (ему отправили
+                                // FIX 1: Если тред уже был в очереди waking (ему отправили
                                 // сигнал, но он ещё не успел захватить мьютекс),
                                 // удаляем его оттуда вместо паники.
                                 host_cond.waking.retain(|&t| t != thread_id);
 
                                 host_cond.waiting.retain(|&t| t != thread_id);
 
-                                assert!(!self.mutex_state.mutex_is_locked(mutex));
-                                self.threads[thread_id].blocked_by = ThreadBlock::NotBlocked;
-                                self.relock_unblocked_mutex_for_thread(thread_id, mutex);
+                                // FIX 2: Если мьютекс всё ещё занят другим тредом при
+                                // таймауте, не паникуем, а переводим тред в ожидание
+                                // мьютекса (как в настоящем pthread_cond_timedwait).
+                                if self.mutex_state.mutex_is_locked(mutex) {
+                                    log_dbg!(
+                                        "Thread {} timed out on cond var {:?} but mutex is locked, blocking on mutex.",
+                                        thread_id,
+                                        cond
+                                    );
+                                    self.threads[thread_id].blocked_by = ThreadBlock::Mutex(mutex);
+                                } else {
+                                    self.threads[thread_id].blocked_by = ThreadBlock::NotBlocked;
+                                    self.relock_unblocked_mutex_for_thread(thread_id, mutex);
+                                }
                                 return thread_id;
                             }
                         }
