@@ -64,47 +64,57 @@ pub const CLASSES: ClassExports = objc_classes! {
     let this: id = msg_super![env; this initWithCoder:coder];
 
     let key_text = get_static_str(env, "UIText");
-    let text: id = msg![env; coder decodeObjectForKey:key_text];
-    () = msg![env; this setText:text];
+    if msg![env; coder containsValueForKey:key_text] {
+        let text: id = msg![env; coder decodeObjectForKey:key_text];
+        () = msg![env; this setText:text];
+    }
 
     let key_font = get_static_str(env, "UIFont");
-    let font: id = msg![env; coder decodeObjectForKey:key_font];
-    if font != nil {
+    if msg![env; coder containsValueForKey:key_font] {
+        let font: id = msg![env; coder decodeObjectForKey:key_font];
         () = msg![env; this setFont:font];
     } else {
-        () = msg![env; this setFont:nil]; // Set default 17pt font
+        () = msg![env; this setFont:nil];
     }
 
     let key_color = get_static_str(env, "UITextColor");
-    let text_color: id = msg![env; coder decodeObjectForKey:key_color];
-    if text_color != nil {
+    if msg![env; coder containsValueForKey:key_color] {
+        let text_color: id = msg![env; coder decodeObjectForKey:key_color];
         () = msg![env; this setTextColor:text_color];
     } else {
-        () = msg![env; this setTextColor:nil]; // Set default black color
+        () = msg![env; this setTextColor:nil];
     }
 
     let key_align = get_static_str(env, "UITextAlignment");
-    let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
-    () = msg![env; this setTextAlignment:align]; // 0 is Left, which is correct default
+    if msg![env; coder containsValueForKey:key_align] {
+        let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
+        () = msg![env; this setTextAlignment:align];
+    }
 
     let key_lines = get_static_str(env, "UINumberOfLines");
-    let lines: NSInteger = msg![env; coder decodeIntegerForKey:key_lines];
-    if lines != 0 {
+    if msg![env; coder containsValueForKey:key_lines] {
+        let lines: NSInteger = msg![env; coder decodeIntegerForKey:key_lines];
         () = msg![env; this setNumberOfLines:lines];
     }
 
     let key_break = get_static_str(env, "UILineBreakMode");
-    let break_mode: UILineBreakMode = msg![env; coder decodeIntegerForKey:key_break];
-    () = msg![env; this setLineBreakMode:break_mode];
+    if msg![env; coder containsValueForKey:key_break] {
+        let break_mode: UILineBreakMode = msg![env; coder decodeIntegerForKey:key_break];
+        () = msg![env; this setLineBreakMode:break_mode];
+    }
 
     let key_bg = get_static_str(env, "UIBackgroundColor");
-    let bg_color: id = msg![env; coder decodeObjectForKey:key_bg];
-    let bg_color = if bg_color == nil {
-        msg_class![env; UIColor clearColor]
+    let bg_color = if msg![env; coder containsValueForKey:key_bg] {
+        msg![env; coder decodeObjectForKey:key_bg]
     } else {
-        bg_color
+        nil
     };
-    () = msg![env; this setBackgroundColor:bg_color];
+
+    if bg_color == nil {
+        () = msg![env; this setBackgroundColor:(msg_class![env; UIColor clearColor])];
+    } else {
+        () = msg![env; this setBackgroundColor:bg_color];
+    }
 
     () = msg_super![env; this setOpaque:false];
     this
@@ -120,9 +130,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UILabelHostObject {
-        text, font, text_color, highlighted_text_color, ..
-    } = env.objc.borrow(this);
+    let &UILabelHostObject { text, font, text_color, highlighted_text_color, .. } = env.objc.borrow(this);
     release(env, text);
     release(env, font);
     release(env, text_color);
@@ -218,7 +226,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         text, font, text_color, text_alignment, line_break_mode, number_of_lines, ..
     } = env.objc.borrow_mut(this);
 
-    // Добавлена защита от рисования nil
     if text == nil || font == nil || text_color == nil { return; }
     
     let len: NSUInteger = msg![env; text length];
@@ -228,6 +235,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     CGContextSetRGBFillColor(env, context, r, g, b, a);
 
     let single_line = number_of_lines == 1;
+
     let calculated_size: CGSize = if single_line {
         msg![env; text sizeWithFont:font]
     } else {
