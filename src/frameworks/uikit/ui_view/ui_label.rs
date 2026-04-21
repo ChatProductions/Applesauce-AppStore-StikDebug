@@ -8,7 +8,7 @@
 use crate::frameworks::core_graphics::cg_context::CGContextSetRGBFillColor;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::get_static_str;
-use crate::frameworks::foundation::NSInteger;
+use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::frameworks::uikit::ui_color;
 use crate::frameworks::uikit::ui_font::{
     UILineBreakMode, UILineBreakModeTailTruncation, UITextAlignment, UITextAlignmentCenter,
@@ -22,21 +22,17 @@ use crate::objc::{
 
 pub struct UILabelHostObject {
     superclass: super::UIViewHostObject,
-    /// `NSString*`
     text: id,
-    /// `UIFont*`
     font: id,
-    /// `UIColor*`
     text_color: id,
-    /// `UIColor*`
     highlighted_text_color: id,
     text_alignment: UITextAlignment,
     line_break_mode: UILineBreakMode,
     number_of_lines: NSInteger,
     enabled: bool,
-    
 }
 impl_HostObject_with_superclass!(UILabelHostObject);
+
 impl Default for UILabelHostObject {
     fn default() -> Self {
         UILabelHostObject {
@@ -67,56 +63,65 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
 
-    // TODO: Decode other property values from the coder
-    () = msg![env; this setFont:nil];
-
-    let key_ns_string = get_static_str(env, "UIText");
-    let text: id = msg![env; coder decodeObjectForKey:key_ns_string];
+    let key_text = get_static_str(env, "UIText");
+    let text: id = msg![env; coder decodeObjectForKey:key_text];
     () = msg![env; this setText:text];
 
-    let key_ns_string = get_static_str(env, "UITextColor");
-    let text_color: id = msg![env; coder decodeObjectForKey:key_ns_string];
-    () = msg![env; this setTextColor:text_color];
+    let key_font = get_static_str(env, "UIFont");
+    let font: id = msg![env; coder decodeObjectForKey:key_font];
+    if font != nil {
+        () = msg![env; this setFont:font];
+    } else {
+        () = msg![env; this setFont:nil]; // Set default 17pt font
+    }
 
-    let key_ns_string = get_static_str(env, "UIBackgroundColor");
-    let bg_color: id = msg![env; coder decodeObjectForKey:key_ns_string];
+    let key_color = get_static_str(env, "UITextColor");
+    let text_color: id = msg![env; coder decodeObjectForKey:key_color];
+    if text_color != nil {
+        () = msg![env; this setTextColor:text_color];
+    } else {
+        () = msg![env; this setTextColor:nil]; // Set default black color
+    }
+
+    let key_align = get_static_str(env, "UITextAlignment");
+    let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
+    () = msg![env; this setTextAlignment:align]; // 0 is Left, which is correct default
+
+    let key_lines = get_static_str(env, "UINumberOfLines");
+    let lines: NSInteger = msg![env; coder decodeIntegerForKey:key_lines];
+    if lines != 0 {
+        () = msg![env; this setNumberOfLines:lines];
+    }
+
+    let key_break = get_static_str(env, "UILineBreakMode");
+    let break_mode: UILineBreakMode = msg![env; coder decodeIntegerForKey:key_break];
+    () = msg![env; this setLineBreakMode:break_mode];
+
+    let key_bg = get_static_str(env, "UIBackgroundColor");
+    let bg_color: id = msg![env; coder decodeObjectForKey:key_bg];
     let bg_color = if bg_color == nil {
-        // Setting nil to the background color will fall back
-        // to a white color, but testing with BoD screens,
-        // it seems to use the transparent one
         msg_class![env; UIColor clearColor]
     } else {
         bg_color
     };
     () = msg![env; this setBackgroundColor:bg_color];
 
-    // Built-in views don't have user-controlled opaqueness.
     () = msg_super![env; this setOpaque:false];
     this
 }
 
 - (id)initWithFrame:(CGRect)frame {
     let this: id = msg_super![env; this initWithFrame:frame];
-    // These aren't redundant, the setters fetch the real defaults.
     () = msg![env; this setFont:nil];
     () = msg![env; this setTextColor:nil];
     () = msg![env; this setBackgroundColor:nil];
-    // Built-in views don't have user-controlled opaqueness.
     () = msg_super![env; this setOpaque:false];
     this
 }
 
 - (())dealloc {
     let &UILabelHostObject {
-        superclass: _,
-        text,
-        font,
-        text_color,
-        highlighted_text_color,
-        text_alignment: _,
-        line_break_mode: _,
-        number_of_lines: _,
-        enabled: _,
+        text, font, text_color, highlighted_text_color, ..
     } = env.objc.borrow(this);
     release(env, text);
     release(env, font);
@@ -125,154 +130,83 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this dealloc]
 }
 
-- (id)shadowOffset {
-    nil
-}
+- (id)shadowOffset { nil }
 
-// TODO: initWithCoder:
-
-- (id)text {
-    env.objc.borrow::<UILabelHostObject>(this).text
-}
-- (())setText:(id)new_text { // NSString*
-    let new_text: id = msg![env; new_text copy];
-    let old_text = std::mem::replace(
-        &mut env.objc.borrow_mut::<UILabelHostObject>(this).text,
-        new_text
-    );
+- (id)text { env.objc.borrow::<UILabelHostObject>(this).text }
+- (())setText:(id)new_text {
+    let new_text: id = if new_text != nil { msg![env; new_text copy] } else { nil };
+    let old_text = std::mem::replace(&mut env.objc.borrow_mut::<UILabelHostObject>(this).text, new_text);
     release(env, old_text);
-
     () = msg![env; this setNeedsDisplay];
 }
 
-- (id)font {
-    env.objc.borrow::<UILabelHostObject>(this).font
-}
-- (())setFont:(id)new_font { // UIFont*
+- (id)font { env.objc.borrow::<UILabelHostObject>(this).font }
+- (())setFont:(id)new_font {
     let new_font: id = if new_font == nil {
-        // reset to default
         let size: CGFloat = 17.0;
         msg_class![env; UIFont systemFontOfSize:size]
-    } else {
-        new_font
-    };
+    } else { new_font };
 
-    let old_font = std::mem::replace(
-        &mut env.objc.borrow_mut::<UILabelHostObject>(this).font,
-        new_font
-    );
+    let old_font = std::mem::replace(&mut env.objc.borrow_mut::<UILabelHostObject>(this).font, new_font);
     retain(env, new_font);
     release(env, old_font);
-
     () = msg![env; this setNeedsDisplay];
 }
 
-- (bool)adjustsFontSizeToFitWidth {
-    false // default value
-}
-- (())setAdjustsFontSizeToFitWidth:(bool)adjusts {
-    // assert!(!adjusts); // TODO
-}
+- (bool)adjustsFontSizeToFitWidth { false }
+- (())setAdjustsFontSizeToFitWidth:(bool)_adjusts { }
 
-- (bool)isEnabled {
-    env.objc.borrow::<UILabelHostObject>(this).enabled
-}
-
+- (bool)isEnabled { env.objc.borrow::<UILabelHostObject>(this).enabled }
 - (())setEnabled:(bool)enabled {
     env.objc.borrow_mut::<UILabelHostObject>(this).enabled = enabled;
-    // При изменении состояния (включен/выключен) UIKit требует перерисовки элемента,
-    // поэтому отправляем сигнал setNeedsDisplay.
     () = msg![env; this setNeedsDisplay];
 }
 
-- (id)textColor {
-    env.objc.borrow::<UILabelHostObject>(this).text_color
-}
-- (())setTextColor:(id)new_text_color { // UIColor*
+- (id)textColor { env.objc.borrow::<UILabelHostObject>(this).text_color }
+- (())setTextColor:(id)new_text_color {
     let new_text_color: id = if new_text_color == nil {
         msg_class![env; UIColor blackColor]
-    } else {
-        new_text_color
-    };
+    } else { new_text_color };
 
-    let old_text_color = std::mem::replace(
-        &mut env.objc.borrow_mut::<UILabelHostObject>(this).text_color,
-        new_text_color
-    );
+    let old_text_color = std::mem::replace(&mut env.objc.borrow_mut::<UILabelHostObject>(this).text_color, new_text_color);
     retain(env, new_text_color);
     release(env, old_text_color);
-
     () = msg![env; this setNeedsDisplay];
 }
 
-- (id)highlightedTextColor {
-    env.objc.borrow::<UILabelHostObject>(this).highlighted_text_color
-}
-- (())setHighlightedTextColor:(id)new_color { // UIColor*
-    let old_color = std::mem::replace(
-        &mut env.objc.borrow_mut::<UILabelHostObject>(this).highlighted_text_color,
-        new_color
-    );
+- (id)highlightedTextColor { env.objc.borrow::<UILabelHostObject>(this).highlighted_text_color }
+- (())setHighlightedTextColor:(id)new_color {
+    let old_color = std::mem::replace(&mut env.objc.borrow_mut::<UILabelHostObject>(this).highlighted_text_color, new_color);
     retain(env, new_color);
     release(env, old_color);
-
     () = msg![env; this setNeedsDisplay];
 }
 
-- (())setBackgroundColor:(id)color { // UIColor*
-    // This overrides the standard setBackgroundColor: accessor on UIView.
-    // UILabel seems to default to white, and setting the background color to
-    // nil also just gives white, rather than the normal transparency. I don't
-    // know how or why it does that, but overriding this setter seems like a
-    // reasonable way to match that behavior.
-    let color: id = if color == nil {
-        msg_class![env; UIColor whiteColor]
-    } else {
-        color
-    };
+- (())setBackgroundColor:(id)color {
+    let color: id = if color == nil { msg_class![env; UIColor whiteColor] } else { color };
     msg_super![env; this setBackgroundColor:color]
 }
 
-- (())setShadowColor:(id)color { // UIColor*
-    todo_objc_setter!(this, color);
-}
+- (())setShadowColor:(id)color { todo_objc_setter!(this, color); }
+- (())setBaselineAdjustment:(id)adj { todo_objc_setter!(this, adj); }
+- (())setShadowOffset:(CGSize)value { todo_objc_setter!(this, value); }
+- (())setOpaque:(bool)_opaque { }
 
-- (())setBaselineAdjustment:(id)adj {
-    todo_objc_setter!(this, adj);
-}
-    
-- (())setShadowOffset:(CGSize)value {
-    todo_objc_setter!(this, value);
-}
-
-- (())setOpaque:(bool)_opaque {
-    // Built-in views don't have user-controlled opaqueness.
-}
-
-- (UITextAlignment)textAlignment {
-    env.objc.borrow::<UILabelHostObject>(this).text_alignment
-}
-- (())setTextAlignment:(UITextAlignment)text_alignment { // UIFont*
+- (UITextAlignment)textAlignment { env.objc.borrow::<UILabelHostObject>(this).text_alignment }
+- (())setTextAlignment:(UITextAlignment)text_alignment {
     env.objc.borrow_mut::<UILabelHostObject>(this).text_alignment = text_alignment;
     () = msg![env; this setNeedsDisplay];
 }
 
-- (UILineBreakMode)lineBreakMode {
-    env.objc.borrow::<UILabelHostObject>(this).line_break_mode
-}
-- (())setLineBreakMode:(UILineBreakMode)line_break_mode { // UIFont*
+- (UILineBreakMode)lineBreakMode { env.objc.borrow::<UILabelHostObject>(this).line_break_mode }
+- (())setLineBreakMode:(UILineBreakMode)line_break_mode {
     env.objc.borrow_mut::<UILabelHostObject>(this).line_break_mode = line_break_mode;
     () = msg![env; this setNeedsDisplay];
 }
 
-- (NSInteger)numberOfLines {
-    env.objc.borrow::<UILabelHostObject>(this).number_of_lines
-}
+- (NSInteger)numberOfLines { env.objc.borrow::<UILabelHostObject>(this).number_of_lines }
 - (())setNumberOfLines:(NSInteger)number {
     env.objc.borrow_mut::<UILabelHostObject>(this).number_of_lines = number;
-    if number != 0 && number != 1 {
-        log!("TODO: UILabel numberOfLines > 1 (label {:?})", this);
-    }
     () = msg![env; this setNeedsDisplay];
 }
 
@@ -281,24 +215,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     let context = UIGraphicsGetCurrentContext(env);
 
     let &mut UILabelHostObject {
-        superclass: _,
-        text,
-        font,
-        text_color,
-        highlighted_text_color: _,
-        text_alignment,
-        line_break_mode,
-        number_of_lines,
-        enabled: _,
+        text, font, text_color, text_alignment, line_break_mode, number_of_lines, ..
     } = env.objc.borrow_mut(this);
+
+    // Добавлена защита от рисования nil
+    if text == nil || font == nil || text_color == nil { return; }
+    
+    let len: NSUInteger = msg![env; text length];
+    if len == 0 { return; }
 
     let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
     CGContextSetRGBFillColor(env, context, r, g, b, a);
 
-    // TODO: handle line counts other than 0 and 1 properly. 0 = unlimited
-    // (note the log message in setNumberOfLines:)
     let single_line = number_of_lines == 1;
-
     let calculated_size: CGSize = if single_line {
         msg![env; text sizeWithFont:font]
     } else {
@@ -307,35 +236,26 @@ pub const CLASSES: ClassExports = objc_classes! {
                       lineBreakMode:line_break_mode]
     };
 
-    // UILabel always vertically centers text
-    // (TODO: check whether this is actually a UILabel thing, or a property of
-    // UIStringDrawing?)
     let rect = CGRect {
         origin: CGPoint {
             x: bounds.origin.x,
             y: bounds.origin.y + (bounds.size.height - calculated_size.height) / 2.0,
         },
-        size: CGSize {
-            width: bounds.size.width,
-            // This is necessary for when the calculated size is actually larger
-            // than the bounds.
-            height: calculated_size.height,
-        },
+        size: CGSize { width: bounds.size.width, height: calculated_size.height },
     };
 
-    let _size: CGSize = if single_line {
+    if single_line {
         let x_offset = match text_alignment {
             UITextAlignmentLeft => 0.0,
             UITextAlignmentCenter => 0.5,
             UITextAlignmentRight => 1.0,
-            _ => unimplemented!(),
+            _ => 0.0,
         };
         let point = CGPoint {
             x: rect.origin.x + x_offset * (bounds.size.width - calculated_size.width),
             y: rect.origin.y
         };
-        msg![env; text drawAtPoint:point
-                          withFont:font]
+        msg![env; text drawAtPoint:point withFont:font]
     } else {
         msg![env; text drawInRect:rect
                          withFont:font
