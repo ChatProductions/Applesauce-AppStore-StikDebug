@@ -26,6 +26,13 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlNewDoc(_)),
     export_c_func!(xmlNewNode(_, _)),
     export_c_func!(xmlDocSetRootElement(_, _)),
+    export_c_func!(xmlSaveFile(_, _)),
+    export_c_func!(xmlAddChild(_, _)),
+    export_c_func!(xmlNewProp(_, _, _)),
+    export_c_func!(xmlSetProp(_, _, _)),
+    export_c_func!(xmlNewText(_)),
+    export_c_func!(xmlNewChild(_, _, _, _)),
+    export_c_func!(xmlNodeSetContent(_, _)),
     export_c_func!(xmlCtxtReadMemory(_, _, _, _, _, _)),
     export_c_func!(xmlReadFile(_, _, _)),
     export_c_func!(xmlReadMemory(_, _, _, _, _)),
@@ -1268,4 +1275,215 @@ fn xmlDocSetRootElement(_env: &mut Environment, doc: u32, root: u32) -> u32 {
         // По стандарту libxml2 возвращается старый корень (или 0)
         old_root 
     })
+}
+
+// ============================================================
+// XML Serialization & Writing
+// ============================================================
+
+fn escape_xml(text: &[u8], is_attr: bool) -> Vec<u8> {
+    let mut out = Vec::new();
+    for &b in text {
+        match b {
+            b'<' => out.extend_from_slice(b"&lt;"),
+            b'>' => out.extend_from_slice(b"&gt;"),
+            b'&' => out.extend_from_slice(b"&amp;"),
+            b'"' if is_attr => out.extend_from_slice(b"&quot;"),
+            b'\'' if is_attr => out.extend_from_slice(b"&apos;"),
+            _ => out.push(b),
+        }
+    }
+    out
+}
+
+fn serialize_node(state: &XmlState, node_h: u32, out: &mut Vec<u8>) {
+    if node_h == 0 {
+        return;
+    }
+    let node = if let Some(n) = state.nodes.get(&node_h) {
+        n.clone()
+    } else {
+        return;
+    };
+
+    if node.name.is_empty() || node.name == b"#text" {
+        out.extend_from_slice(&escape_xml(&node.content, false));
+    } else {
+        out.push(b'<');
+        out.extend_from_slice(&node.name);
+
+        for attr in &node.attrs {
+            out.push(b' ');
+            out.extend_from_slice(&attr.name);
+            out.extend_from_slice(b"=\"");
+            out.extend_from_slice(&escape_xml(&attr.value, true));
+            out.push(b'"');
+        }
+
+        if node.first_child == 0 && node.content.is_empty() {
+            out.extend_from_slice(b"/>\n");
+        } else {
+            out.extend_from_slice(b">\n");
+            if !node.content.is_empty() {
+                out.extend_from_slice(&escape_xml(&node.content, false));
+            }
+
+            let mut curr_child = node.first_child;
+            while curr_child != 0 {
+                serialize_node(state, curr_child, out);
+                curr_child = state.nodes.get(&curr_child).map(|n| n.next_sib).unwrap_or(0);
+            }
+
+            out.extend_from_slice(b"</");
+            out.extend_from_slice(&node.name);
+            out.extend_from_slice(b">\n");
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+fn xmlSaveFile(env: &mut Environment, filename_ptr: u32, doc: u32) -> i32 {
+    let filename = read_cstr_str(env, filename_ptr);
+    log!("xmlSaveFile(filename: {:?}, doc: {})", filename, doc);
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+
+    let success = with_xml(|s| {
+        if let Some(d) = s.docs.get(&doc) {
+            serialize_node(s, d.root, &mut out);
+            true
+        } else {
+            false
+        }
+    });
+
+    if !success {
+        return -1;
+    }
+
+    // Пробуем сохранить файл через встроенную ФС
+    match env.fs.write(GuestPath::new(&filename), &out) {
+        Ok(_) => out.len() as i32,
+        Err(e) => {
+            log!("xmlSaveFile: failed to write using env.fs.write: {}", e);
+            // Фолбэк для Android, если ФС touchHLE не поддерживает запись напрямую в эту директорию
+            let safe_name = filename.replace("/", "_");
+            let fallback_path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}", safe_name);
+            log!("xmlSaveFile: trying fallback path: {}", fallback_path);
+            match std::fs::write(&fallback_path, &out) {
+                Ok(_) => out.len() as i32,
+                Err(e2) => {
+                    log!("xmlSaveFile: fallback also failed: {}", e2);
+                    -1
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// DOM Modification Helpers
+// ============================================================
+
+#[allow(non_snake_case)]
+fn xmlAddChild(_env: &mut Environment, parent: u32, cur: u32) -> u32 {
+    with_xml(|s| {
+        if !s.is_handle(parent) || !s.is_handle(cur) {
+            return 0;
+        }
+        if let Some(p) = s.nodes.get_mut(&parent) {
+            let last = p.last_child;
+            p.last_child = cur;
+            if p.first_child == 0 {
+                p.first_child = cur;
+            }
+            let doc_h = p.doc_handle;
+            
+            if let Some(c) = s.nodes.get_mut(&cur) {
+                c.parent = parent;
+                c.prev_sib = last;
+                c.next_sib = 0;
+                c.doc_handle = doc_h;
+            }
+            
+            if last != 0 {
+                if let Some(l) = s.nodes.get_mut(&last) {
+                    l.next_sib = cur;
+                }
+            }
+        }
+        cur
+    })
+}
+
+#[allow(non_snake_case)]
+fn xmlNewProp(env: &mut Environment, node: u32, name: u32, value: u32) -> u32 {
+    let name_bytes = read_cstr(env, name);
+    let value_bytes = read_cstr(env, value);
+    
+    with_xml(|s| {
+        if let Some(n) = s.nodes.get_mut(&node) {
+            n.attrs.push(XmlAttr {
+                name: name_bytes,
+                value: value_bytes,
+            });
+        }
+        node // возвращаем фейковый указатель, чтобы игра не упала с NULL check
+    })
+}
+
+#[allow(non_snake_case)]
+fn xmlSetProp(env: &mut Environment, node: u32, name: u32, value: u32) -> u32 {
+    xmlNewProp(env, node, name, value)
+}
+
+#[allow(non_snake_case)]
+fn xmlNewText(env: &mut Environment, content: u32) -> u32 {
+    let content_bytes = read_cstr(env, content);
+    with_xml(|s| {
+        let node_h = s.alloc();
+        s.nodes.insert(
+            node_h,
+            XmlNodeData {
+                name: b"#text".to_vec(),
+                content: content_bytes,
+                attrs: Vec::new(),
+                parent: 0,
+                first_child: 0,
+                last_child: 0,
+                next_sib: 0,
+                prev_sib: 0,
+                doc_handle: 0,
+            },
+        );
+        node_h
+    })
+}
+
+#[allow(non_snake_case)]
+fn xmlNewChild(env: &mut Environment, parent: u32, ns: u32, name: u32, content: u32) -> u32 {
+    let node_h = xmlNewNode(env, ns, name);
+    if content != 0 {
+        let content_bytes = read_cstr(env, content);
+        with_xml(|s| {
+            if let Some(n) = s.nodes.get_mut(&node_h) {
+                n.content = content_bytes;
+            }
+        });
+    }
+    if parent != 0 {
+        xmlAddChild(env, parent, node_h);
+    }
+    node_h
+}
+
+#[allow(non_snake_case)]
+fn xmlNodeSetContent(env: &mut Environment, node: u32, content: u32) {
+    let content_bytes = read_cstr(env, content);
+    with_xml(|s| {
+        if let Some(n) = s.nodes.get_mut(&node) {
+            n.content = content_bytes;
+        }
+    });
 }
