@@ -285,14 +285,14 @@ fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
     // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
     // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
-    echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
-    // std::process::exit(exit_code);
+    // echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
+    std::process::exit(exit_code);
 }
 
 fn abort(_env: &mut Environment) {
     // ИСПРАВЛЕНИЕ ДЛЯ BOX2D: Отключаем краш эмулятора при вызове abort()
-    echo!("App called abort()! The guest application encountered a fatal error. Ignoring to bypass Box2D crash!");
-    // std::process::exit(1); 
+    // echo!("App called abort()! The guest application encountered a fatal error. Ignoring to bypass Box2D crash!");
+    std::process::exit(1); 
 }
 
 fn bsearch(
