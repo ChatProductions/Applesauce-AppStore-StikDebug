@@ -91,28 +91,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     let this: id = msg_super![env; this initWithCoder:coder];
     
     let key_text = get_static_str(env, "UIText");
-    let text: id = msg![env; coder decodeObjectForKey:key_text];
-    () = msg![env; this setText:text];
+    if msg![env; coder containsValueForKey:key_text] {
+        let text: id = msg![env; coder decodeObjectForKey:key_text];
+        () = msg![env; this setText:text];
+    }
 
     let key_font = get_static_str(env, "UIFont");
-    let font: id = msg![env; coder decodeObjectForKey:key_font];
-    if font != nil {
+    if msg![env; coder containsValueForKey:key_font] {
+        let font: id = msg![env; coder decodeObjectForKey:key_font];
         () = msg![env; this setFont:font];
     } else {
-        () = msg![env; this setFont:nil]; // Set default
+        () = msg![env; this setFont:nil];
     }
 
     let key_color = get_static_str(env, "UITextColor");
-    let text_color: id = msg![env; coder decodeObjectForKey:key_color];
-    if text_color != nil {
+    if msg![env; coder containsValueForKey:key_color] {
+        let text_color: id = msg![env; coder decodeObjectForKey:key_color];
         () = msg![env; this setTextColor:text_color];
     } else {
-        () = msg![env; this setTextColor:nil]; // Set default
+        () = msg![env; this setTextColor:nil];
     }
 
     let key_align = get_static_str(env, "UITextAlignment");
-    let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
-    () = msg![env; this setTextAlignment:align];
+    if msg![env; coder containsValueForKey:key_align] {
+        let align: UITextAlignment = msg![env; coder decodeIntegerForKey:key_align];
+        () = msg![env; this setTextAlignment:align];
+    }
 
     this
 }
