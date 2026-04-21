@@ -267,3 +267,4 @@ impl Environment {
             Ok(lock_count.get() - 1)
         }
     }
+}
