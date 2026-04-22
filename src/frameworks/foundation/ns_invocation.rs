@@ -81,12 +81,13 @@ fn parse_objc_types(s: &str) -> Vec<String> {
     res
 }
 
-/// Выделение памяти под правильную C-строку с нуль-терминатором для гостя
-fn alloc_c_string(env: &mut crate::env::Env, s: &str) -> MutPtr<u8> {
-    let c_str = std::ffi::CString::new(s).unwrap();
-    let bytes = c_str.as_bytes_with_nul();
-    // Использование alloc_bytes безопасно, так как мы точно добавили \0
-    env.mem.alloc_bytes(bytes).cast()
+/// Макрос для выделения памяти под C-строку в памяти гостя
+macro_rules! alloc_c_string {
+    ($env:expr, $s:expr) => {{
+        let c_str = std::ffi::CString::new($s).unwrap();
+        let bytes = c_str.as_bytes_with_nul();
+        $env.mem.alloc_bytes(bytes).cast()
+    }};
 }
 
 // =========================================================================
@@ -162,11 +163,10 @@ pub const CLASSES: ClassExports = objc_classes! {
                 host.argument_types.clear();
             }
             
-            // Выделяем память честно
-            host.return_type_ptr = Some(alloc_c_string(env, &host.return_type));
+            host.return_type_ptr = Some(alloc_c_string!(env, host.return_type.as_str()));
             
             for arg in &host.argument_types {
-                let arg_ptr = alloc_c_string(env, arg);
+                let arg_ptr = alloc_c_string!(env, arg.as_str());
                 host.argument_type_ptrs.push(arg_ptr);
             }
         }
@@ -186,7 +186,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     while host.argument_types.len() < count as usize {
         host.argument_types.push("@".to_string());
-        let arg_ptr = alloc_c_string(env, "@");
+        let arg_ptr = alloc_c_string!(env, "@");
         host.argument_type_ptrs.push(arg_ptr);
     }
 }
@@ -557,8 +557,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // Возвращаем стек в исходное состояние и сохраняем возвращаемое значение (R0/R1)
     let regs = env.cpu.regs_mut();
-    let r0 = regs[Cpu::R0];
-    let r1 = regs[Cpu::R1];
+    // В ARM R0 - это регистр с индексом 0, R1 - с индексом 1
+    let r0 = regs[0];
+    let r1 = regs[1];
     regs[Cpu::SP] = old_sp;
     
     let mut host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
