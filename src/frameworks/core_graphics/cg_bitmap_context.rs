@@ -103,6 +103,7 @@ pub fn CGBitmapContextCreate(
         miter_limit:      10.0,
         flatness:         0.0,
         blend_mode:       0,   // kCGBlendModeNormal
+        interpolation_quality: 2, // kCGInterpolationDefault (или 0)
         state_stack:      Vec::new(),
         path_points:      Vec::new(),
     };
