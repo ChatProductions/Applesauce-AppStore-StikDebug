@@ -25,6 +25,7 @@ pub struct State {
     rand: u32,
     random: u32,
     arc4random: u32,
+    pub atexit_handlers: Vec<GuestFunction>,
 }
 
 fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
@@ -115,9 +116,11 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
     env.mem.free(ptr);
 }
 
-fn atexit(_env: &mut Environment, func: GuestFunction) -> i32 {
-    log!("TODO: atexit({:?}) (unimplemented)", func);
-    0
+fn atexit(env: &mut Environment, func: GuestFunction) -> i32 {
+    set_errno(env, 0);
+    // Регистрируем функцию в стейте эмулятора
+    env.libc_state.stdlib.atexit_handlers.push(func);
+    0 // 0 означает успешную регистрацию
 }
 
 #[allow(rustdoc::broken_intra_doc_links)]
@@ -283,6 +286,18 @@ fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
 
 fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
+    
+    // Забираем список функций через mem::take, чтобы избежать проблем с borrow checker,
+    // так как вызов call_from_host требует мутабельного доступа к env.
+    let handlers = std::mem::take(&mut env.libc_state.stdlib.atexit_handlers);
+    
+    // По стандарту atexit вызывает функции в обратном порядке (LIFO), поэтому делаем .rev()
+    for func in handlers.into_iter().rev() {
+        log_dbg!("Executing atexit handler: {:?}", func);
+        // Вызываем гостевую функцию (она не принимает аргументов и ничего не возвращает)
+        let _: () = func.call_from_host(env, ());
+    }
+
     // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
     // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
     // echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
