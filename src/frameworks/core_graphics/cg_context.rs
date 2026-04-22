@@ -54,6 +54,7 @@ pub(super) struct CGContextHostObject {
     pub(super) miter_limit:      CGFloat,
     pub(super) flatness:         CGFloat,
     pub(super) blend_mode:       i32,
+    pub(super) interpolation_quality: CGInterpolationQuality,
     pub(super) transform: CGAffineTransform,
     /// (fill, stroke, alpha, line_width, line_cap, line_join, miter_limit,
     ///  flatness, blend_mode, transform)
@@ -74,6 +75,7 @@ pub(super) struct CGContextState {
     pub miter_limit:  CGFloat,
     pub flatness:     CGFloat,
     pub blend_mode:   i32,
+    pub interpolation_quality: CGInterpolationQuality,
     pub transform:    CGAffineTransform,
 }
 
@@ -636,6 +638,7 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         miter_limit:  h.miter_limit,
         flatness:     h.flatness,
         blend_mode:   h.blend_mode,
+        interpolation_quality: h.interpolation_quality,
         transform:    h.transform,
     };
     env.objc.borrow_mut::<CGContextHostObject>(context).state_stack.push(state);
@@ -654,6 +657,7 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
         host.miter_limit      = state.miter_limit;
         host.flatness         = state.flatness;
         host.blend_mode       = state.blend_mode;
+        host.interpolation_quality = state.interpolation_quality;
         host.transform        = state.transform;
     } else {
         log!("Warning: CGContextRestoreGState: stack underflow");
@@ -662,15 +666,14 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
 
 
 fn CGContextSetInterpolationQuality(
-    _env: &mut Environment,
+    env: &mut Environment,
     context: CGContextRef,
     quality: CGInterpolationQuality,
 ) {
-    log!(
-        "TODO: CGContextSetInterpolationQuality({:?}, {:?})",
-        context,
-        quality
-    );
+    if context.is_null() { return; }
+    
+    // Честно записываем качество в структуру контекста
+    env.objc.borrow_mut::<CGContextHostObject>(context).interpolation_quality = quality;
 }
 
 fn CGContextGetTextPosition(
