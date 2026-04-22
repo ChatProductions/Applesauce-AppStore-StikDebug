@@ -61,17 +61,18 @@ fn parse_objc_types(s: &str) -> Vec<String> {
     res
 }
 
-/// ИСПРАВЛЕННЫЙ МАКРОС: использует .alloc() и .write() вместо несуществующего .alloc_bytes()
+/// ИСПРАВЛЕННЫЙ МАКРОС: используем оператор `+` для смещения кастомного указателя Ptr
 macro_rules! alloc_c_string {
     ($env:expr, $s:expr) => {{
         let s_str = $s;
         let c_str = std::ffi::CString::new(s_str).unwrap();
         let bytes = c_str.as_bytes_with_nul();
-        // Выделяем память в гостевой системе
+        // Выделяем память в гостевой системе (alloc принимает размер в байтах)
         let ptr = $env.mem.alloc(bytes.len() as u32).cast::<u8>();
         // Побайтово записываем строку
         for (i, &byte) in bytes.iter().enumerate() {
-            $env.mem.write(ptr.offset(i as isize), byte);
+            // В touchHLE структура Ptr реализует трейт Add<u32>, поэтому мы просто прибавляем смещение
+            $env.mem.write(ptr + (i as u32), byte);
         }
         ptr
     }};
