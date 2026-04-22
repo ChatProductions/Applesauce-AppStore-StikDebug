@@ -246,38 +246,46 @@ pub fn AudioQueueNewOutput(
         && format.channels_per_frame > 0
         && format.bits_per_channel > 0
     {
-        let expected_bytes_per_frame =
-            format.channels_per_frame * (format.bits_per_channel / 8);
-        if expected_bytes_per_frame > 0
-            && format.bytes_per_frame != expected_bytes_per_frame
-        {
+        // AudioStreamBasicDescription помечен `#[repr(C, packed)]`, поэтому
+        // ссылаться на его поля напрямую (в том числе внутри `log!` / макроса
+        // `format_args!`) нельзя — это UB. Копируем значения в обычные
+        // локальные переменные, а затем пишем результат обратно в `format`.
+        let channels_per_frame = format.channels_per_frame;
+        let bits_per_channel = format.bits_per_channel;
+        let mut frames_per_packet = format.frames_per_packet;
+        let mut bytes_per_frame = format.bytes_per_frame;
+        let mut bytes_per_packet = format.bytes_per_packet;
+
+        let expected_bytes_per_frame = channels_per_frame * (bits_per_channel / 8);
+        if expected_bytes_per_frame > 0 && bytes_per_frame != expected_bytes_per_frame {
             log!(
                 "Applying generic LPCM hack: fixing bytes_per_frame {} -> {} (channels={}, bits={})",
-                format.bytes_per_frame,
+                bytes_per_frame,
                 expected_bytes_per_frame,
-                format.channels_per_frame,
-                format.bits_per_channel
+                channels_per_frame,
+                bits_per_channel
             );
-            format.bytes_per_frame = expected_bytes_per_frame;
+            bytes_per_frame = expected_bytes_per_frame;
         }
 
         // frames_per_packet должен быть >= 1 для LPCM.
-        if format.frames_per_packet == 0 {
-            format.frames_per_packet = 1;
+        if frames_per_packet == 0 {
+            frames_per_packet = 1;
         }
 
-        let expected_bytes_per_packet =
-            format.bytes_per_frame * format.frames_per_packet;
-        if expected_bytes_per_packet > 0
-            && format.bytes_per_packet != expected_bytes_per_packet
-        {
+        let expected_bytes_per_packet = bytes_per_frame * frames_per_packet;
+        if expected_bytes_per_packet > 0 && bytes_per_packet != expected_bytes_per_packet {
             log!(
                 "Applying generic LPCM hack: fixing bytes_per_packet {} -> {}",
-                format.bytes_per_packet,
+                bytes_per_packet,
                 expected_bytes_per_packet
             );
-            format.bytes_per_packet = expected_bytes_per_packet;
+            bytes_per_packet = expected_bytes_per_packet;
         }
+
+        format.bytes_per_frame = bytes_per_frame;
+        format.frames_per_packet = frames_per_packet;
+        format.bytes_per_packet = bytes_per_packet;
     }
 
     let host_object = AudioQueueHostObject {
