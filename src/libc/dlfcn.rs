@@ -19,8 +19,8 @@ const RTLD_DEFAULT: MutVoidPtr = Ptr::from_bits(-2 as _);
 /// Проверяет, является ли запрашиваемая библиотека известной эмулятору (присутствует в статическом списке DYLIB_LIST).
 fn is_known_library(path: &str) -> bool {
     crate::dyld::DYLIB_LIST
-      .iter()
-      .any(|dylib| dylib.path == path |
+       .iter()
+       .any(|dylib| dylib.path == path |
 
 | dylib.aliases.contains(&path))
 }
@@ -142,3 +142,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dlsym(_, _)),
     export_c_func!(dlclose(_)),
 ];
+
