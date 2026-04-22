@@ -908,7 +908,41 @@ impl Dyld {
             }
         }
 
-        panic!("Call to unimplemented function {symbol}");
+        // Fallback: the symbol isn't implemented by any host dylib and isn't
+        // exported by any loaded guest dylib. Instead of panicking (which kills
+        // the app), install a stub that logs a warning and returns 0. This
+        // lets the emulator keep running for relatively harmless symbols like
+        // `_getuid`, `_geteuid`, `_getpid`, etc.
+        log!(
+            "Warning: call to unimplemented function {} at {:#x}; installing return-0 stub",
+            symbol,
+            svc_pc
+        );
+        // `linked_host_functions` requires a `&'static str`, so leak the name.
+        let leaked_symbol: &'static str =
+            Box::leak(symbol.to_string().into_boxed_str());
+        let f: HostFunction =
+            &(unimplemented_function_stub as fn(&mut Environment) -> i32);
+
+        // Allocate an SVC ID for this stub (same pattern as the host-dylib
+        // branch above).
+        let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
+        let mut svc = idx + Self::SVC_LINKED_FUNCTIONS_BASE;
+        if info.entry_size == 4 {
+            assert!(svc < Self::SVC_LAZY_LINK_RET_FLAG);
+            svc |= Self::SVC_LAZY_LINK_RET_FLAG;
+        }
+        self.linked_host_functions.push((leaked_symbol, f));
+
+        // Rewrite the stub function to trap into our SVC handler.
+        let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
+        mem.write(stub_function_ptr, encode_a32_svc(svc));
+        if info.entry_size != 4 {
+            assert!(mem.read(stub_function_ptr + 1) == encode_a32_ret());
+        }
+        cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
+
+        Some(f)
     }
 
     /// Creates a guest function that will call a host function with the name
@@ -993,3 +1027,14 @@ pub fn register_gles2_stubs() {
 fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
     panic!("dyld_stub_binder was called! Under HLE, all lazy symbols are bound eagerly, making this unreachable.");
 }
+
+/// Generic fallback stub for functions referenced by the guest binary but
+/// not implemented by any host dylib. Returns 0 so that calls to things like
+/// `getuid`, `geteuid`, `getpid`, etc. don't panic the emulator.
+///
+/// On ARM32 the return value is placed in `r0`, which matches the C ABI for
+/// `int`/`uid_t`/`pid_t`/pointer return types.
+fn unimplemented_function_stub(_env: &mut Environment) -> i32 {
+    0
+}
+
