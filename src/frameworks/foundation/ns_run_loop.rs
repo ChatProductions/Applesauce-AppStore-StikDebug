@@ -9,6 +9,7 @@
 //! - Apple's [Threading Programming Guide](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/Introduction/Introduction.html)
 
 use super::{ns_string, ns_timer, NSTimeInterval};
+use crate::abi::CallFromHost;
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::environment::ThreadId;
 use crate::frameworks::audio_toolbox::audio_queue::{handle_audio_queue, AudioQueueRef};
@@ -53,6 +54,7 @@ struct NSRunLoopHostObject {
     /// Strong references to `NSTimer*` in no particular order. Timers are owned
     /// by the run loop. The timer must remove itself when invalidated.
     timers: Vec<id>,
+    sources: Vec<id>,
 }
 impl HostObject for NSRunLoopHostObject {}
 
@@ -203,6 +205,18 @@ pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
     }
 }
 
+/// For use by CFRunLoop
+pub(super) fn add_source(env: &mut Environment, run_loop: id, source: id) {
+    if run_loop == nil || source == nil {
+        return;
+    }
+    let mut host = env.objc.borrow_mut::<NSRunLoopHostObject>(run_loop);
+    if !host.sources.contains(&source) {
+        retain(env, source);
+        host.sources.push(source);
+    }
+}
+
 /// Run the run loop for just a single iteration. This is a special mode just
 /// for the app picker, since we don't have `runMode:beforeDate:` yet.
 /// (TODO: implement those to replace this.)
@@ -235,6 +249,7 @@ pub fn run_run_loop(
     let mut timers_tmp = Vec::new();
     let mut audio_queues_tmp = Vec::new();
     let mut audio_units_tmp = Vec::new();
+    let mut sources_tmp = Vec::new();
 
     fn limit_sleep_time(current: &mut Option<Instant>, new: Option<Instant>) {
         if let Some(new) = new {
@@ -263,6 +278,30 @@ pub fn run_run_loop(
             limit_sleep_time(&mut sleep_until, next_due);
         }
 
+                // --- ОБРАБОТКА CFRunLoopSource ---
+        assert!(sources_tmp.is_empty());
+        sources_tmp.extend_from_slice(&env.objc.borrow::<NSRunLoopHostObject>(run_loop).sources);
+        
+        for source in sources_tmp.drain(..) {
+            retain(env, source); // Защищаем от освобождения во время коллбэка
+
+            let (perform_fn, info, signaled) = {
+                let mut host = env.objc.borrow_mut::<crate::frameworks::core_foundation::cf_run_loop::CFRunLoopSourceHostObject>(source);
+                let s = host.signaled;
+                host.signaled = false; // Сбрасываем сигнал
+                (host.context.perform, host.context.info, s)
+            };
+
+            // Если источник подал сигнал и функция perform существует — вызываем её
+            if signaled && !perform_fn.is_null() {
+                log_dbg!("Firing CFRunLoopSource {:?}", source);
+                <crate::abi::GuestFunction as CallFromHost<(), (crate::mem::MutVoidPtr,)>>::call_from_host(&perform_fn, env, (info,));
+            }
+
+            release(env, source);
+        }
+        // --- КОНЕЦ ОБРАБОТКИ CFRunLoopSource ---
+        
         assert!(timers_tmp.is_empty());
         timers_tmp.extend_from_slice(&env.objc.borrow::<NSRunLoopHostObject>(run_loop).timers);
         // Retain the timers in case a timer cancels another timer
@@ -356,6 +395,7 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
             audio_units: Vec::new(),
             audio_queues: Vec::new(),
             timers: Vec::new(),
+            sources: Vec::new(),
         });
         // TODO: is it OK to allocate static object for all threads,
         // not only main one?
