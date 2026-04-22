@@ -127,10 +127,17 @@ fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
             EDEADLK => "Resource deadlock avoided",
             ENOSYS => "Function not implemented",
             EACCES => "Permission denied",
+            EISCONN => "Socket is already connected",
+            ESOCKTNOSUPPORT => "Socket type not supported",
             EBUSY => "Resource busy",
             EEXIST => "File exists",
+            EADDRINUSE => "Address already in use",
+            EADDRNOTAVAIL => "Can't assign requested address",
+            ECONNREFUSED => "Connection refused",
             EISDIR => "Is a directory",
             EINVAL => "Invalid argument",
+            ENOTCONN => "Socket is not connected",
+            EAGAIN => "Resource temporarily unavailable",
             ESPIPE => "Illegal seek",
             EROFS => "Read-only file system",
             EPROTONOSUPPORT => "Protocol not supported",
@@ -157,3 +164,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(perror(_)),
     export_c_func!(strerror(_)),
 ];
+
