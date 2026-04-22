@@ -813,10 +813,15 @@ fn alDopplerVelocity(env: &mut Environment, value: ALfloat) {
         || bundle_id.starts_with("com.idsoftware.wolf3d")
         || bundle_id.starts_with("nu.r3.wolf3d")
     {
-        log_dbg!("Применяем хак для Wolf3D-iOS: игнорируем нулевую скорость Доплера (0.0).");
-        assert_eq!(value, 0.0);
-        return;
+        // ИСПРАВЛЕНИЕ: Блокируем вызов только если игра реально передает 0.0,
+        // чтобы не сломать звук. Жесткий assert убран.
+        if value == 0.0 {
+            log_dbg!("Применяем хак для Wolf3D-iOS: игнорируем нулевую скорость Доплера (0.0).");
+            return;
+        }
     }
+    
+    // Если передано нормальное значение (например, 1.0) или это другая игра — честно отдаем в OpenAL
     try_get_context!(env, context);
     unsafe { context.DopplerVelocity(value) };
 }
