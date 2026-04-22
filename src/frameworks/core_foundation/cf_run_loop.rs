@@ -26,29 +26,6 @@ pub type CFRunLoopTimerRef  = CFTypeRef;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct CFRunLoopSourceContext {
-    pub version: GuestISize,
-    pub info: MutVoidPtr,
-    pub retain: GuestFunction,
-    pub release: GuestFunction,
-    pub copyDescription: GuestFunction,
-    pub equal: GuestFunction,
-    pub hash: GuestFunction,
-    pub schedule: GuestFunction,
-    pub cancel: GuestFunction,
-    pub perform: GuestFunction,
-}
-unsafe impl SafeRead for CFRunLoopSourceContext {}
-
-pub struct CFRunLoopSourceHostObject {
-    pub context: CFRunLoopSourceContext,
-    pub order: i32,
-    pub signaled: bool,
-}
-impl HostObject for CFRunLoopSourceHostObject {}
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
 pub struct CFRunLoopTimerContext {
     pub version: GuestISize, // ИСПОРАВЛЕНО: GuestISize гарантирует 4 байта, как в iOS
     pub info: MutVoidPtr,
@@ -207,14 +184,12 @@ fn CFRunLoopWakeUp(_env: &mut Environment, _rl: CFRunLoopRef) {
 // MARK: - Sources
 
 fn CFRunLoopAddSource(
-    env: &mut Environment,
-    rl: CFRunLoopRef,
-    source: CFRunLoopSourceRef,
+    _env: &mut Environment,
+    _rl: CFRunLoopRef,
+    _source: CFRunLoopSourceRef,
     _mode: CFRunLoopMode,
 ) {
-    if rl.is_null() || source.is_null() { return; }
-    // Пробрасываем добавление в NSRunLoop
-    crate::frameworks::foundation::ns_run_loop::add_source(env, rl, source);
+    log!("CFRunLoopAddSource: stubbed");
 }
 
 fn CFRunLoopRemoveSource(
@@ -227,25 +202,13 @@ fn CFRunLoopRemoveSource(
 }
 
 fn CFRunLoopSourceCreate(
-    env: &mut Environment,
+    _env: &mut Environment,
     _allocator: CFTypeRef,
-    order: i32,
-    context_ptr: ConstPtr<CFRunLoopSourceContext>,
+    _order: i32,
+    _context: MutVoidPtr, // CFRunLoopSourceContext*
 ) -> CFRunLoopSourceRef {
-    let context = if !context_ptr.is_null() {
-        env.mem.read(context_ptr)
-    } else {
-        unsafe { std::mem::zeroed() }
-    };
-
-    let host_object = CFRunLoopSourceHostObject {
-        context,
-        order,
-        signaled: false,
-    };
-
-    let class = env.objc.get_known_class("NSObject", &mut env.mem);
-    env.objc.alloc_object(class, Box::new(host_object), &mut env.mem)
+    log!("CFRunLoopSourceCreate: stubbed, returning null");
+    nil
 }
 
 fn CFRunLoopSourceRetain(env: &mut Environment, source: CFRunLoopSourceRef) -> CFRunLoopSourceRef {
@@ -256,10 +219,8 @@ fn CFRunLoopSourceRelease(env: &mut Environment, source: CFRunLoopSourceRef) {
     if !source.is_null() { CFRelease(env, source); }
 }
 
-fn CFRunLoopSourceSignal(env: &mut Environment, source: CFRunLoopSourceRef) {
-    if source.is_null() { return; }
-    let mut host = env.objc.borrow_mut::<CFRunLoopSourceHostObject>(source);
-    host.signaled = true;
+fn CFRunLoopSourceSignal(_env: &mut Environment, _source: CFRunLoopSourceRef) {
+    log_dbg!("CFRunLoopSourceSignal: stubbed");
 }
 
 fn CFRunLoopSourceIsValid(_env: &mut Environment, source: CFRunLoopSourceRef) -> bool {
