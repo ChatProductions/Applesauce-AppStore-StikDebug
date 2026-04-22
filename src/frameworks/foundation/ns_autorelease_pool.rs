@@ -81,6 +81,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     panic!("NSAutoreleasePool can't be autoreleased!");
 }
 
+- (i32)intValue {
+    // Workaround: Некоторые старые игры имеют баги с висячими указателями (dangling pointers).
+    // Они обращаются к пулу автоосвобождения, думая, что это NSNumber.
+    // Мы возвращаем 0, чтобы игра корректно продолжила работу без спама в логах.
+    0
+}
+    
 - (())drain {
     msg![env; this release]
 }
