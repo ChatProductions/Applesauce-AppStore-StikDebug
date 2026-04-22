@@ -100,6 +100,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (i32)intValue {
+        let count: NSUInteger = msg![env; this count];
+        count as i32
+}
+    
 @end
 
 // NSMutableSet is an abstract class. A subclass must provide everything
