@@ -24,6 +24,13 @@ pub type CFRunLoopSourceRef = CFTypeRef;
 pub type CFRunLoopObserverRef = CFTypeRef;
 pub type CFRunLoopTimerRef  = CFTypeRef;
 
+pub struct CFRunLoopSourceHostObject {
+    pub context: CFRunLoopSourceContext,
+    pub order: GuestISize,
+    pub signaled: bool,
+}
+impl HostObject for CFRunLoopSourceHostObject {}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct CFRunLoopTimerContext {
@@ -184,12 +191,16 @@ fn CFRunLoopWakeUp(_env: &mut Environment, _rl: CFRunLoopRef) {
 // MARK: - Sources
 
 fn CFRunLoopAddSource(
-    _env: &mut Environment,
-    _rl: CFRunLoopRef,
-    _source: CFRunLoopSourceRef,
+    env: &mut Environment,
+    rl: CFRunLoopRef,
+    source: CFRunLoopSourceRef,
     _mode: CFRunLoopMode,
 ) {
-    log!("CFRunLoopAddSource: stubbed");
+    // В touchHLE CFRunLoop и NSRunLoop это одно и то же.
+    // Нам нужно зарегистрировать этот источник в системном RunLoop.
+    
+    // Вызываем вспомогательную функцию в ns_run_loop (которую мы сейчас дополним)
+    crate::frameworks::foundation::ns_run_loop::add_source(env, rl, source);
 }
 
 fn CFRunLoopRemoveSource(
@@ -202,13 +213,25 @@ fn CFRunLoopRemoveSource(
 }
 
 fn CFRunLoopSourceCreate(
-    _env: &mut Environment,
+    env: &mut Environment,
     _allocator: CFTypeRef,
-    _order: i32,
-    _context: MutVoidPtr, // CFRunLoopSourceContext*
+    order: GuestISize,
+    context_ptr: ConstPtr<CFRunLoopSourceContext>,
 ) -> CFRunLoopSourceRef {
-    log!("CFRunLoopSourceCreate: stubbed, returning null");
-    nil
+    let context = env.mem.read(context_ptr);
+    
+    if context.version != 0 {
+        log_dbg!("CFRunLoopSourceCreate: only version 0 is supported, got {}", context.version);
+    }
+
+    let host_object = CFRunLoopSourceHostObject {
+        context,
+        order,
+        signaled: false,
+    };
+
+    // Создаем объект в куче эмулятора
+    env.objc.alloc_object_no_class(host_object)
 }
 
 fn CFRunLoopSourceRetain(env: &mut Environment, source: CFRunLoopSourceRef) -> CFRunLoopSourceRef {
@@ -219,8 +242,9 @@ fn CFRunLoopSourceRelease(env: &mut Environment, source: CFRunLoopSourceRef) {
     if !source.is_null() { CFRelease(env, source); }
 }
 
-fn CFRunLoopSourceSignal(_env: &mut Environment, _source: CFRunLoopSourceRef) {
-    log_dbg!("CFRunLoopSourceSignal: stubbed");
+fn CFRunLoopSourceSignal(env: &mut Environment, source: CFRunLoopSourceRef) {
+    let mut host = env.objc.borrow_mut::<CFRunLoopSourceHostObject>(source);
+    host.signaled = true;
 }
 
 fn CFRunLoopSourceIsValid(_env: &mut Environment, source: CFRunLoopSourceRef) -> bool {
