@@ -187,7 +187,23 @@ pub fn AudioQueueNewOutput(
     };
 
     let mut format = env.mem.read(in_format);
-    
+
+    // Диагностический breadcrumb: если этой строки нет в логе — значит
+    // в собранный билд попала старая (не пропатченная) версия файла.
+    {
+        let fid = format.format_id;
+        let sr = format.sample_rate;
+        let ch = format.channels_per_frame;
+        let bits = format.bits_per_channel;
+        let bpf = format.bytes_per_frame;
+        let bpp = format.bytes_per_packet;
+        let fpp = format.frames_per_packet;
+        log!(
+            "AudioQueueNewOutput: incoming format fourcc={} sample_rate={} channels={} bits={} bytes_per_frame={} bytes_per_packet={} frames_per_packet={}",
+            debug_fourcc(fid), sr, ch, bits, bpf, bpp, fpp
+        );
+    }
+
     // ХАК ДЛЯ C&C Red Alert
     if env.bundle.bundle_identifier().starts_with("com.ea.candcra")
         && format.format_id == fourcc(b".mp3")
