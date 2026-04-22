@@ -173,7 +173,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithFrame:(CGRect)frame {
     let mut frame = frame;
     // Games sometimes pass height 0; snap to the correct height.
-    let corrected: CGSize = msg![env; this sizeThatFits:frame.size];
+    // Note: cannot use frame.size directly inside msg![] — extract first.
+    let current_size = frame.size;
+    let corrected: CGSize = msg![env; this sizeThatFits:current_size];
     frame.size = corrected;
 
     let this: id = msg_super![env; this initWithFrame:frame];
