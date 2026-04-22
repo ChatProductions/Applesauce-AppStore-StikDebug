@@ -19,32 +19,20 @@ use crate::objc::{
 // MARK: - Helpers (Parsing ObjC Types)
 // =========================================================================
 
-/// Честный парсинг строки типов Objective-C с игнорированием стековых смещений
+/// Честный парсинг строки типов Objective-C
 fn parse_objc_types(s: &str) -> Vec<String> {
     let mut res = Vec::new();
     let mut chars = s.chars().peekable();
     while chars.peek().is_some() {
         let mut ty = String::new();
-        
-        // Читаем модификаторы (in, out, oneway и т.д.)
         while let Some(&c) = chars.peek() {
-            if "rnNoORV".contains(c) {
-                ty.push(chars.next().unwrap());
-            } else {
-                break;
-            }
+            if "rnNoORV".contains(c) { ty.push(chars.next().unwrap()); } 
+            else { break; }
         }
-        
-        // Читаем указатели
         while let Some(&c) = chars.peek() {
-            if c == '^' {
-                ty.push(chars.next().unwrap());
-            } else {
-                break;
-            }
+            if c == '^' { ty.push(chars.next().unwrap()); } 
+            else { break; }
         }
-        
-        // Читаем базовый тип или структуру/массив
         if let Some(&c) = chars.peek() {
             ty.push(chars.next().unwrap());
             match c {
@@ -64,29 +52,28 @@ fn parse_objc_types(s: &str) -> Vec<String> {
                 _ => {}
             }
         }
-        
-        // Пропускаем числа (размеры и смещения на стеке)
         while let Some(&c) = chars.peek() {
-            if c.is_ascii_digit() {
-                chars.next();
-            } else {
-                break;
-            }
+            if c.is_ascii_digit() { chars.next(); } 
+            else { break; }
         }
-        
-        if !ty.is_empty() {
-            res.push(ty);
-        }
+        if !ty.is_empty() { res.push(ty); }
     }
     res
 }
 
-/// Макрос для выделения памяти под C-строку в памяти гостя
+/// ИСПРАВЛЕННЫЙ МАКРОС: использует .alloc() и .write() вместо несуществующего .alloc_bytes()
 macro_rules! alloc_c_string {
     ($env:expr, $s:expr) => {{
-        let c_str = std::ffi::CString::new($s).unwrap();
+        let s_str = $s;
+        let c_str = std::ffi::CString::new(s_str).unwrap();
         let bytes = c_str.as_bytes_with_nul();
-        $env.mem.alloc_bytes(bytes).cast()
+        // Выделяем память в гостевой системе
+        let ptr = $env.mem.alloc(bytes.len() as u32).cast::<u8>();
+        // Побайтово записываем строку
+        for (i, &byte) in bytes.iter().enumerate() {
+            $env.mem.write(ptr.offset(i as isize), byte);
+        }
+        ptr
     }};
 }
 
@@ -186,6 +173,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     while host.argument_types.len() < count as usize {
         host.argument_types.push("@".to_string());
+        // Используем исправленный макрос
         let arg_ptr = alloc_c_string!(env, "@");
         host.argument_type_ptrs.push(arg_ptr);
     }
@@ -551,15 +539,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // actual invocation
+    // Вызов
     let &NSInvocationHostObject { target, selector, .. } = env.objc.borrow::<NSInvocationHostObject>(this);
     objc_msgSend(env, target, selector.unwrap());
 
-    // Возвращаем стек в исходное состояние и сохраняем возвращаемое значение (R0/R1)
+    // Сохраняем результат из R0 и R1 (в ARM это индексы 0 и 1)
     let regs = env.cpu.regs_mut();
-    // В ARM R0 - это регистр с индексом 0, R1 - с индексом 1
     let r0 = regs[0];
     let r1 = regs[1];
+    
+    // Восстанавливаем указатель стека
     regs[Cpu::SP] = old_sp;
     
     let mut host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
