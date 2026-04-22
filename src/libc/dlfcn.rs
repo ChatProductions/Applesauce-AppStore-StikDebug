@@ -19,10 +19,8 @@ const RTLD_DEFAULT: MutVoidPtr = Ptr::from_bits(-2 as _);
 /// Проверяет, является ли запрашиваемая библиотека известной эмулятору (присутствует в статическом списке DYLIB_LIST).
 fn is_known_library(path: &str) -> bool {
     crate::dyld::DYLIB_LIST
-       .iter()
-       .any(|dylib| dylib.path == path |
-
-| dylib.aliases.contains(&path))
+        .iter()
+        .any(|dylib| dylib.path == path || dylib.aliases.contains(&path))
 }
 
 /// Реализация функции `dlopen` стандарта POSIX.
@@ -49,7 +47,7 @@ fn dlopen(env: &mut Environment, path: ConstPtr<u8>, _mode: i32) -> MutVoidPtr {
     // Если библиотека не известна системе эмуляции (например, кросс-платформенный фреймворк пытается
     // загрузить специфичный для другой платформы плагин), мы мягко отклоняем запрос, возвращая NULL.
     // Данное поведение ожидается гостевым приложением для "мягкой деградации" (graceful degradation).
-    if!is_known_library(path_str) {
+    if !is_known_library(path_str) {
         log!("Warning: dlopen() returning NULL for requested but unknown library: {}", path_str);
         return Ptr::null();
     }
@@ -65,7 +63,7 @@ fn dlopen(env: &mut Environment, path: ConstPtr<u8>, _mode: i32) -> MutVoidPtr {
 fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> MutVoidPtr {
     // БЕЗОПАСНОСТЬ: Валидация переданного дескриптора.
     // Если дескриптор не является RTLD_DEFAULT, мы пытаемся разыменовать его как суррогатный указатель на строку пути.
-    if handle!= RTLD_DEFAULT {
+    if handle != RTLD_DEFAULT {
         let handle_path_ptr: ConstPtr<u8> = handle.cast().cast_const();
         let handle_str = match env.mem.cstr_at_utf8(handle_path_ptr) {
             Ok(s) => s,
@@ -76,7 +74,7 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
         };
 
         // Если дескриптор указывает на строку, не являющуюся известной библиотекой, запрос отклоняется.
-        if!is_known_library(handle_str) {
+        if !is_known_library(handle_str) {
             log!("Warning: dlsym() returning NULL due to an unknown library handle: {}", handle_str);
             return Ptr::null();
         }
@@ -123,7 +121,7 @@ fn dlclose(env: &mut Environment, handle: MutVoidPtr) -> i32 {
     // БЕЗОПАСНОСТЬ: Проверяем валидность переданного дескриптора перед возвратом кода статуса.
     match env.mem.cstr_at_utf8(handle_path_ptr) {
         Ok(handle_str) => {
-            if!is_known_library(handle_str) {
+            if !is_known_library(handle_str) {
                 log!("Warning: dlclose() called on unknown or already freed library handle: {}", handle_str);
                 return -1; // -1 стандартный код ошибки POSIX для dlclose
             }
@@ -142,4 +140,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dlsym(_, _)),
     export_c_func!(dlclose(_)),
 ];
-
