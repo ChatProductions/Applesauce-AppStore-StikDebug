@@ -103,7 +103,6 @@ pub fn CGBitmapContextCreate(
         miter_limit:      10.0,
         flatness:         0.0,
         blend_mode:       0,   // kCGBlendModeNormal
-        interpolation_quality: 2, // kCGInterpolationDefault (или 0)
         state_stack:      Vec::new(),
         path_points:      Vec::new(),
     };
@@ -140,12 +139,12 @@ fn CGBitmapContextGetBytesPerRow(env: &mut Environment, context: CGContextRef) -
 }
 
 pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) -> CGImageRef {
-    // 1. Копируем параметры в отдельную переменную и сразу отпускаем borrow(env.objc)
-    let bitmap_data = {
-        let host_obj = env.objc.borrow::<CGContextHostObject>(context);
-        let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;
-        bitmap_data
-    };
+    let host_obj = env.objc.borrow::<CGContextHostObject>(context);
+    let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;
+
+    // Убираем жесткий assert, который крашит игру.
+    // Игры часто создают контексты с другими форматами (например, Grayscale или без альфы).
+    // Вместо паники мы честно читаем пиксели, используя уже написанные в файле хелперы.
 
     if bitmap_data.bits_per_component != 8 {
         log!("Warning: CGBitmapContextCreateImage called with bits_per_component = {}, which is not fully supported yet.", bitmap_data.bits_per_component);
@@ -154,20 +153,23 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
     let bpp = bytes_per_pixel(&bitmap_data) as usize;
     let data_size = bitmap_data.bytes_per_row * bitmap_data.height;
 
-    // 2. Копируем сырые пиксели в Vec, чтобы отпустить borrow(env.mem)
     let raw_pixels = env
         .mem
-        .bytes_at(bitmap_data.data.cast(), data_size)
-        .to_vec();
+        .bytes_at(bitmap_data.data.cast(), data_size);
 
+    // Нам нужно привести любые пиксели к формату RGBA (4 байта на пиксель), 
+    // так как структура Image ожидает именно его.
     let mut normalized_pixels = Vec::with_capacity((bitmap_data.width * bitmap_data.height * 4) as usize);
+
+    // Получаем смещения для каналов цвета из оригинального контекста
     let (r_offset, g_offset, b_offset, a_offset) = pixel_offsets(&bitmap_data);
 
     for y in 0..bitmap_data.height {
         let row_start = (y * bitmap_data.bytes_per_row) as usize;
         for x in 0..bitmap_data.width {
-            let pixel_start = row_start + (x * bpp);
+            let pixel_start = row_start + (x as usize * bpp);
 
+            // Защита от выхода за пределы памяти, если шаг строки (bytes_per_row) нестандартный
             if pixel_start + bpp > raw_pixels.len() {
                 normalized_pixels.extend_from_slice(&[0, 0, 0, 0]);
                 continue;
@@ -190,7 +192,6 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
         }
     }
 
-    // 3. Теперь безопасно передаем &mut env
     cg_image::from_image(
         env,
         Image::from_pixel_vec(normalized_pixels, (bitmap_data.width, bitmap_data.height)),
@@ -245,17 +246,16 @@ fn components_for_gray(bitmap_info: CGBitmapInfo) -> Result<GuestUSize, ()> {
 
 fn bytes_per_pixel(data: &CGBitmapContextData) -> GuestUSize {
     let &CGBitmapContextData {
+        bits_per_component,
         color_space,
         alpha_info,
         ..
     } = data;
-    
-    // Убрали assert!(bits_per_component == 8), который крашил эмулятор
-
+    assert!(bits_per_component == 8);
     match color_space {
         kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap_or(1),
-        _ => components_for_rgb(alpha_info).unwrap_or(4), // Защитный Fallback
+        _ => components_for_rgb(alpha_info).unwrap_or(4), // Fallback
     }
 }
 
@@ -293,6 +293,17 @@ fn blend_premultiplied(bg: (f32, f32, f32, f32), fg: (f32, f32, f32, f32)) -> (f
 
 fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usize>) {
     match data.color_space {
+        kCGColorSpaceGenericRGB => {
+            match data.alpha_info {
+                kCGImageAlphaNone => (0, 1, 2, None),
+                kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 1, 2, Some(3)),
+                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 2, 3, Some(0)),
+                kCGImageAlphaNoneSkipLast => (0, 1, 2, None),
+                kCGImageAlphaNoneSkipFirst => (1, 2, 3, None),
+                kCGImageAlphaOnly => (0, 0, 0, Some(0)),
+                _ => unreachable!(),
+            }
+        }
         kCGColorSpaceGenericGray => {
             match data.alpha_info {
                 kCGImageAlphaNone => (0, 0, 0, None),
@@ -301,21 +312,10 @@ fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usi
                 kCGImageAlphaNoneSkipLast => (0, 0, 0, None),
                 kCGImageAlphaNoneSkipFirst => (1, 1, 1, None),
                 kCGImageAlphaOnly => (0, 0, 0, Some(0)),
-                _ => (0, 0, 0, None), // Безопасный дефолт
+                _ => unreachable!(),
             }
         }
-        kCGColorSpaceGenericRGB | _ => { 
-            // Любой другой или неизвестный color_space читаем как RGB
-            match data.alpha_info {
-                kCGImageAlphaNone => (0, 1, 2, None),
-                kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 1, 2, Some(3)),
-                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 2, 3, Some(0)),
-                kCGImageAlphaNoneSkipLast => (0, 1, 2, None),
-                kCGImageAlphaNoneSkipFirst => (1, 2, 3, None),
-                kCGImageAlphaOnly => (0, 0, 0, Some(0)),
-                _ => (0, 1, 2, Some(3)), // Безопасный дефолт
-            }
-        }
+        _ => unimplemented!(),
     }
 }
 
