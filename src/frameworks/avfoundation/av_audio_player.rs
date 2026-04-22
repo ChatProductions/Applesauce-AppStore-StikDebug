@@ -47,6 +47,8 @@ struct AVAudioPlayerHostObject {
     volume: f32,
     is_playing: bool,
     num_of_loops: NSInteger,
+    delegate: id,
+    metering_enabled: bool,
 }
 impl HostObject for AVAudioPlayerHostObject {}
 
@@ -74,6 +76,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         volume: 1.0,
         is_playing: false,
         num_of_loops: 0
+        delegate: nil,
+        metering_enabled: false,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -110,10 +114,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setDelegate:(id)delegate {
-    todo_objc_setter!(this, delegate);
+    log_dbg!("[(AVAudioPlayer*){:?} setDelegate:{:?}]", this, delegate);
+    env.objc.borrow_mut::<AVAudioPlayerHostObject>(this).delegate = delegate;
 }
+
+- (id)delegate {
+    env.objc.borrow::<AVAudioPlayerHostObject>(this).delegate
+}
+
 - (())setMeteringEnabled:(bool)enabled {
-    todo_objc_setter!(this, enabled);
+    log_dbg!("[(AVAudioPlayer*){:?} setMeteringEnabled:{}]", this, enabled);
+    env.objc.borrow_mut::<AVAudioPlayerHostObject>(this).metering_enabled = enabled;
+}
+
+- (bool)isMeteringEnabled {
+    env.objc.borrow::<AVAudioPlayerHostObject>(this).metering_enabled
 }
 
 - (f32)volume {
@@ -236,7 +251,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     AudioQueueDispose(env, audio_queue.unwrap(), true);
     env.mem.free(audio_queue_buffers.unwrap().cast());
-    let &AVAudioPlayerHostObject { audio_file_url, output_callback, num_of_loops, audio_file_id, .. } = env.objc.borrow(this);
+    let &AVAudioPlayerHostObject { audio_file_url, output_callback, num_of_loops, audio_file_id, delegate, metering_enabled, .. } = env.objc.borrow(this);
     *env.objc.borrow_mut::<AVAudioPlayerHostObject>(this) = AVAudioPlayerHostObject {
         audio_file_url,
         output_callback,
@@ -250,6 +265,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         set_current_time: 0.0,
         volume: 1.0,
         is_playing: false
+        delegate,         // Переносим в новый объект
+        metering_enabled,
     };
 }
 
