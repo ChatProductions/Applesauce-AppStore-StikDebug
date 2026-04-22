@@ -27,7 +27,8 @@ struct TWTweetComposeViewControllerHostObject {
 }
 impl HostObject for TWTweetComposeViewControllerHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes! {
+pub const CLASSES: ClassExports = objc_classes!
+{
 
 (env, this, _cmd);
 
@@ -56,14 +57,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     release(env, text);
     release(env, handler);
-    
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
+// ВНИМАНИЕ: Метод + (bool)canSendTweet закомментирован.
+// Макрос objc_classes! в текущей версии эмулятора не поддерживает 
+// классовые методы без аргументов (выдает ошибку "no rules expected +").
+/*
 // Указываем игре, что устройство "может" отправлять твиты
 + (bool)canSendTweet {
     true
 }
+*/
 
 // MARK: Настройка контента
 
@@ -101,11 +106,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setCompletionHandler:(id)handler {
     // В Objective-C блоки всегда должны копироваться (copy), а не просто удерживаться (retain)
     let copied_handler: id = if handler != nil {
-        msg![env; handler copy]
+        msg![env;
+        handler copy]
     } else {
         nil
     };
-    
     let old = env.objc.borrow::<TWTweetComposeViewControllerHostObject>(this).completion_handler;
     release(env, old);
     env.objc.borrow_mut::<TWTweetComposeViewControllerHostObject>(this).completion_handler = copied_handler;
@@ -123,8 +128,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let handler = env.objc.borrow::<TWTweetComposeViewControllerHostObject>(this).completion_handler;
     if handler != nil {
         // Примечание: Для честного вызова Objective-C блока (вместо делегата) из Rust нужно использовать 
-        // внутреннее FFI эмулятора (вызов указателя функции). Чтобы избежать паник компилятора из-за
-        // разницы в версиях touchHLE, мы оставляем логирование. Игра не зависнет, так как 
+        // внутреннее FFI эмулятора (вызов указателя функции).
+        // Чтобы избежать паник компилятора из-за
+        // разницы в версиях touchHLE, мы оставляем логирование.
+        // Игра не зависнет, так как 
         // окно будет считаться "закрытым" через базовый UIViewController.
         log!("TWTweetComposeViewController: Completion handler is present. Simulating result 'Done'.");
     }
@@ -145,3 +152,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
