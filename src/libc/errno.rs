@@ -121,6 +121,7 @@ fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
             EIO => "Input/output error",
             ENXIO => "No such device or address",
             E2BIG => "Argument list too long",
+            ENETUNREACH => "Network is unreachable",
             EBADF => "Bad file descriptor",
             ECHILD => "No child processes",
             EDEADLK => "Resource deadlock avoided",
@@ -156,4 +157,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(perror(_)),
     export_c_func!(strerror(_)),
 ];
-
