@@ -335,25 +335,38 @@ fn derive_buffer_size(
     let mut out_buffer_size;
     const max_buffer_size: u32 = 0x50000;
     const min_buffer_size: u32 = 0x4000;
+
+    // ЧЕСТНЫЙ ФИКС: Защита от деления на ноль.
+    // Если upper bound размера пакета = 0, пытаемся взять размер из дескриптора формата.
+    // Если и там пусто, ставим безопасный дефолт, как это делает настоящий CoreAudio.
+    let actual_max_packet_size = if max_packet_size > 0 {
+        max_packet_size
+    } else if audio_desc.bytes_per_packet > 0 {
+        audio_desc.bytes_per_packet
+    } else {
+        1024 
+    };
+
     if audio_desc.frames_per_packet != 0 {
         let num_packets_to_time =
             audio_desc.sample_rate / audio_desc.frames_per_packet as f64 * seconds;
-        out_buffer_size = num_packets_to_time as u32 * max_packet_size;
+        out_buffer_size = num_packets_to_time as u32 * actual_max_packet_size;
     } else {
-        out_buffer_size = if max_buffer_size > max_packet_size {
+        out_buffer_size = if max_buffer_size > actual_max_packet_size {
             max_buffer_size
         } else {
-            max_packet_size
+            actual_max_packet_size
         }
     }
 
-    if out_buffer_size > max_buffer_size && out_buffer_size > max_packet_size {
+    if out_buffer_size > max_buffer_size && out_buffer_size > actual_max_packet_size {
         out_buffer_size = max_buffer_size
     } else if out_buffer_size < min_buffer_size {
         out_buffer_size = min_buffer_size
     }
 
-    let out_num_packets_to_read = out_buffer_size / max_packet_size;
+    // Деление теперь абсолютно безопасно
+    let out_num_packets_to_read = out_buffer_size / actual_max_packet_size;
     (out_buffer_size, out_num_packets_to_read)
 }
 
