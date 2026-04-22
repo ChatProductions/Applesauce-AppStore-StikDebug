@@ -523,8 +523,10 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
         "EuphemiaUCAS-Bold"                => Some(FontKind::SansBold),
         "EuphemiaUCAS-Italic"              => Some(FontKind::SansItalic),
         "DBLCDTempBlack"                   => Some(FontKind::MonoBold),
+        "Thonburi"                         => Some(FontKind::SansRegular),
+        "Thonburi-Bold"                    => Some(FontKind::SansBold),
+        "soopafre.ttf"                     => Some(FontKind::SansRegular),
+        
         _ => None,
     }
 }
-
-
