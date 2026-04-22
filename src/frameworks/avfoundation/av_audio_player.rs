@@ -75,7 +75,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         set_current_time: 0.0,
         volume: 1.0,
         is_playing: false,
-        num_of_loops: 0
+        num_of_loops: 0,
         delegate: nil,
         metering_enabled: false,
     });
@@ -264,7 +264,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         current_packet: 0,
         set_current_time: 0.0,
         volume: 1.0,
-        is_playing: false
+        is_playing: false,
         delegate,         // Переносим в новый объект
         metering_enabled,
     };
