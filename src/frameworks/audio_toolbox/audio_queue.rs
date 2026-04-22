@@ -226,36 +226,56 @@ pub fn AudioQueueNewOutput(
     }
 
     // --- УНИВЕРСАЛЬНЫЙ ФИКС НЕСОСТЫКОВОК LPCM ---
-    // Лечит ошибку: "Stream format has non-sensical values" когда биты не сходятся с размером фрейма
-    if format.format_id == kAudioFormatLinearPCM && (format.format_flags & kAudioFormatFlagIsPacked) != 0 {
-        let expected_bytes_per_frame = format.channels_per_frame * (format.bits_per_channel / 8);
-        // Если фрейм и биты противоречат друг другу
-        if expected_bytes_per_frame > 0 && format.bytes_per_frame > 0 && expected_bytes_per_frame != format.bytes_per_frame {
-            let true_bytes_per_channel = format.bytes_per_frame / format.channels_per_frame;
-            let true_bits_per_channel = true_bytes_per_channel * 8;
-            
-            // Если bytes_per_frame дает стандартный битрейт (8, 16, 24, 32), верим ему
-            if true_bits_per_channel == 8 || true_bits_per_channel == 16 || true_bits_per_channel == 24 || true_bits_per_channel == 32 {
-                let old_bits = format.bits_per_channel;
-                let current_bytes_per_frame = format.bytes_per_frame;
-                
-                log!("Applying generic hack: Fixing inconsistent bits_per_channel from {} to {} based on actual bytes_per_frame ({})", 
-                     old_bits, true_bits_per_channel, current_bytes_per_frame);
-                format.bits_per_channel = true_bits_per_channel;
-            } else {
-                let old_bytes_per_frame = format.bytes_per_frame;
-                log!("Applying generic hack: Fixing inconsistent bytes_per_frame from {} to {}", 
-                     old_bytes_per_frame, expected_bytes_per_frame);
-                format.bytes_per_frame = expected_bytes_per_frame;
-            }
+    // Лечит предупреждение "Stream format has non-sensical values" и тихий/
+    // искажённый звук в играх, которые неправильно заполняют
+    // AudioStreamBasicDescription (например, RE VS. / biovsus: 2 канала,
+    // 16 бит, но bytes_per_frame = 2 вместо 4).
+    //
+    // Для packed LPCM инвариант жёсткий:
+    //   bytes_per_frame  = channels_per_frame * (bits_per_channel / 8)
+    //   bytes_per_packet = bytes_per_frame   * frames_per_packet
+    //
+    // channels_per_frame и bits_per_channel — это поля, которые игры
+    // заполняют осознанно (в соответствии с реальным форматом сэмплов).
+    // bytes_per_frame / bytes_per_packet — производные, их часто либо
+    // оставляют нулями, либо забывают умножить на число каналов.
+    // Поэтому авторитетными считаем bits_per_channel + channels_per_frame
+    // и всегда пересчитываем из них производные поля.
+    if format.format_id == kAudioFormatLinearPCM
+        && (format.format_flags & kAudioFormatFlagIsPacked) != 0
+        && format.channels_per_frame > 0
+        && format.bits_per_channel > 0
+    {
+        let expected_bytes_per_frame =
+            format.channels_per_frame * (format.bits_per_channel / 8);
+        if expected_bytes_per_frame > 0
+            && format.bytes_per_frame != expected_bytes_per_frame
+        {
+            log!(
+                "Applying generic LPCM hack: fixing bytes_per_frame {} -> {} (channels={}, bits={})",
+                format.bytes_per_frame,
+                expected_bytes_per_frame,
+                format.channels_per_frame,
+                format.bits_per_channel
+            );
+            format.bytes_per_frame = expected_bytes_per_frame;
         }
 
-        // Также исправляем bytes_per_packet, если он сломан
-        let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
-        if format.bytes_per_packet > 0 && format.bytes_per_packet != expected_bytes_per_packet {
-            let old_bytes_per_packet = format.bytes_per_packet;
-            log!("Applying generic hack: Fixing inconsistent bytes_per_packet from {} to {}", 
-                 old_bytes_per_packet, expected_bytes_per_packet);
+        // frames_per_packet должен быть >= 1 для LPCM.
+        if format.frames_per_packet == 0 {
+            format.frames_per_packet = 1;
+        }
+
+        let expected_bytes_per_packet =
+            format.bytes_per_frame * format.frames_per_packet;
+        if expected_bytes_per_packet > 0
+            && format.bytes_per_packet != expected_bytes_per_packet
+        {
+            log!(
+                "Applying generic LPCM hack: fixing bytes_per_packet {} -> {}",
+                format.bytes_per_packet,
+                expected_bytes_per_packet
+            );
             format.bytes_per_packet = expected_bytes_per_packet;
         }
     }
@@ -1427,3 +1447,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDeviceGetCurrentTime(_, _)),
     export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)), // Экспортируем новую функцию здесь!
 ];
+
