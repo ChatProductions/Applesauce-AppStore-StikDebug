@@ -16,77 +16,12 @@ use crate::objc::{
 };
 
 // =========================================================================
-// MARK: - Helpers (Parsing ObjC Types)
-// =========================================================================
-
-/// Честный парсинг строки типов Objective-C
-fn parse_objc_types(s: &str) -> Vec<String> {
-    let mut res = Vec::new();
-    let mut chars = s.chars().peekable();
-    while chars.peek().is_some() {
-        let mut ty = String::new();
-        while let Some(&c) = chars.peek() {
-            if "rnNoORV".contains(c) { ty.push(chars.next().unwrap()); } 
-            else { break; }
-        }
-        while let Some(&c) = chars.peek() {
-            if c == '^' { ty.push(chars.next().unwrap()); } 
-            else { break; }
-        }
-        if let Some(&c) = chars.peek() {
-            ty.push(chars.next().unwrap());
-            match c {
-                '{' | '(' | '[' => {
-                    let open = c;
-                    let close = match c { '{' => '}', '(' => ')', '[' => ']', _ => unreachable!() };
-                    let mut depth = 1;
-                    while let Some(&sc) = chars.peek() {
-                        ty.push(chars.next().unwrap());
-                        if sc == open { depth += 1; }
-                        else if sc == close {
-                            depth -= 1;
-                            if depth == 0 { break; }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        while let Some(&c) = chars.peek() {
-            if c.is_ascii_digit() { chars.next(); } 
-            else { break; }
-        }
-        if !ty.is_empty() { res.push(ty); }
-    }
-    res
-}
-
-/// ИСПРАВЛЕННЫЙ МАКРОС: используем оператор `+` для смещения кастомного указателя Ptr
-macro_rules! alloc_c_string {
-    ($env:expr, $s:expr) => {{
-        let s_str = $s;
-        let c_str = std::ffi::CString::new(s_str).unwrap();
-        let bytes = c_str.as_bytes_with_nul();
-        // Выделяем память в гостевой системе (alloc принимает размер в байтах)
-        let ptr = $env.mem.alloc(bytes.len() as u32).cast::<u8>();
-        // Побайтово записываем строку
-        for (i, &byte) in bytes.iter().enumerate() {
-            // В touchHLE структура Ptr реализует трейт Add<u32>, поэтому мы просто прибавляем смещение
-            $env.mem.write(ptr + (i as u32), byte);
-        }
-        ptr
-    }};
-}
-
-// =========================================================================
 // MARK: - NSMethodSignature Host Object
 // =========================================================================
 
 struct NSMethodSignatureHostObject {
-    return_type: String,
-    argument_types: Vec<String>,
-    return_type_ptr: Option<MutPtr<u8>>,
-    argument_type_ptrs: Vec<MutPtr<u8>>,
+    // ИСПРАВЛЕНИЕ 1: Добавили поле в структуру
+    number_of_arguments: NSUInteger,
 }
 impl HostObject for NSMethodSignatureHostObject {}
 
@@ -102,14 +37,13 @@ struct NSInvocationHostObject {
     target: id,
     selector: Option<SEL>,
     /// Выделенный буфер для каждого аргумента.
+    /// Option указывает, был ли аргумент задан через `setArgument:atIndex:`
     arguments: Vec<Option<MutVoidPtr>>,
     arguments_retained: bool,
     /// Объекты, удержанные через `retainArguments`
     retained_objects: Vec<id>,
     /// Копии C-строк, созданные через `retainArguments`
     copied_strings: Vec<MutPtr<u8>>,
-    /// Буфер возвращаемого значения (до 8 байт для примитивов в R0/R1)
-    return_value: [u32; 2],
 }
 impl HostObject for NSInvocationHostObject {}
 
@@ -125,10 +59,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(NSMethodSignatureHostObject {
-        return_type: "v".to_string(),
-        argument_types: vec!["@".to_string(), ":".to_string()],
-        return_type_ptr: None,
-        argument_type_ptrs: Vec::new(),
+        number_of_arguments: 2, // По умолчанию 2 аргумента (self, _cmd)
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -136,29 +67,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)signatureWithObjCTypes:(MutVoidPtr)_types {
     let sig: id = msg_class![env; NSMethodSignature alloc];
     let sig: id = msg![env; sig init];
-    
-    if !_types.is_null() {
-        let types_str = env.mem.cstr_at_utf8(_types.cast()).unwrap_or("");
-        let parsed = parse_objc_types(types_str);
-        
-        if !parsed.is_empty() {
-            let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(sig);
-            host.return_type = parsed[0].clone();
-            
-            if parsed.len() > 1 {
-                host.argument_types = parsed[1..].to_vec();
-            } else {
-                host.argument_types.clear();
-            }
-            
-            host.return_type_ptr = Some(alloc_c_string!(env, host.return_type.as_str()));
-            
-            for arg in &host.argument_types {
-                let arg_ptr = alloc_c_string!(env, arg.as_str());
-                host.argument_type_ptrs.push(arg_ptr);
-            }
-        }
-    }
     autorelease(env, sig)
 }
 
@@ -167,35 +75,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)numberOfArguments {
-    env.objc.borrow::<NSMethodSignatureHostObject>(this).argument_types.len() as NSUInteger
+    env.objc.borrow::<NSMethodSignatureHostObject>(this).number_of_arguments
 }
 
+// Внутренний метод для touchHLE, чтобы мы могли задать количество аргументов 
+// при создании сигнатуры из ns_object.rs
 - (())_touchHLE_setNumberOfArguments:(NSUInteger)count {
-    let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
-    while host.argument_types.len() < count as usize {
-        host.argument_types.push("@".to_string());
-        // Используем исправленный макрос
-        let arg_ptr = alloc_c_string!(env, "@");
-        host.argument_type_ptrs.push(arg_ptr);
-    }
+    env.objc.borrow_mut::<NSMethodSignatureHostObject>(this).number_of_arguments = count;
 }
     
+// ИСПРАВЛЕНИЕ 2: Вернули правильное выделение памяти без alloc_bytes
 - (crate::mem::ConstPtr<std::ffi::c_char>)methodReturnType {
-    let host = env.objc.borrow::<NSMethodSignatureHostObject>(this);
-    if let Some(ptr) = host.return_type_ptr {
-        ptr.cast_const().cast()
-    } else {
-        crate::mem::ConstPtr::null()
-    }
+    log!("Warning: stubbed NSMethodSignature methodReturnType — returning 'v' (void)");
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x0076);
+    ptr.cast_const().cast()
 }
 
-- (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)index {
-    let host = env.objc.borrow::<NSMethodSignatureHostObject>(this);
-    if index < host.argument_type_ptrs.len() as NSUInteger {
-        host.argument_type_ptrs[index as usize].cast_const().cast()
-    } else {
-        crate::mem::ConstPtr::null()
-    }
+// ИСПРАВЛЕНИЕ 2: Вернули правильное выделение памяти без alloc_bytes
+- (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)_index {
+    log!("Warning: stubbed NSMethodSignature getArgumentTypeAtIndex: — returning '@' (id)");
+    let ptr: crate::mem::MutPtr<u16> = env.mem.alloc(2).cast();
+    env.mem.write(ptr, 0x0040);
+    ptr.cast_const().cast()
 }
 
 - (NSUInteger)methodReturnLength {
@@ -204,32 +106,35 @@ pub const CLASSES: ClassExports = objc_classes! {
         return 0;
     }
     
+    // Читаем строку типа из памяти и приводим указатель к нужному типу
     let ret_type_str = env.mem.cstr_at_utf8(ret_type_ptr.cast()).unwrap_or("");
+    
+    // Пропускаем спецификаторы Objective-C (in, out, inout, const, oneway и т.д.)
     let core_type = ret_type_str.trim_start_matches(|c| "rnNoORV".contains(c));
     
+    // Честная калькуляция размера типа (в байтах) для 32-битного ARM
     match core_type.chars().next() {
-        Some('v') => 0, 
-        Some('c') | Some('C') | Some('B') => 1,
-        Some('s') | Some('S') => 2, 
-        Some('i') | Some('I') | Some('l') | Some('L') | Some('f') => 4, 
-        Some('q') | Some('Q') | Some('d') => 8, 
-        Some('@') | Some('#') | Some('*') | Some('^') | Some(':') | Some('?') => 4, 
+        Some('v') => 0, // void
+        Some('c') | Some('C') | Some('B') => 1, // char, unsigned char, bool
+        Some('s') | Some('S') => 2, // short, unsigned short
+        Some('i') | Some('I') | Some('l') | Some('L') | Some('f') => 4, // int, long, float
+        Some('q') | Some('Q') | Some('d') => 8, // long long, unsigned long long, double
+        Some('@') | Some('#') | Some('*') | Some('^') | Some(':') | Some('?') => 4, // объекты, классы, указатели, SEL
         Some('{') => {
-            log!("Warning: methodReturnLength for struct {} is stubbed, returning 0", core_type);
+            // Для структур нужен парсинг вложенных типов, пока возвращаем 0, чтобы не упало
+            log!("Warning: methodReturnLength for struct {} is not fully calculated, returning 0", core_type);
             0
         }
-        _ => 4
+        _ => {
+            log!("Warning: methodReturnLength unknown type '{}', returning default 4", core_type);
+            4
+        }
     }
 }
     
+// -----------------------------------------------------------------------
+
 - (())dealloc {
-    let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
-    if let Some(ptr) = host.return_type_ptr {
-        env.mem.free(ptr.cast());
-    }
-    for ptr in host.argument_type_ptrs.drain(..) {
-        env.mem.free(ptr.cast());
-    }
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -251,22 +156,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         arguments_retained: false,
         retained_objects: Vec::new(),
         copied_strings: Vec::new(),
-        return_value: [0; 2],
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (id)invocationWithMethodSignature:(id)sig {
++ (id)invocationWithMethodSignature:(id)sig { // NSMethodSignature *
     retain(env, sig);
     let num_of_args: NSUInteger = msg![env; sig numberOfArguments];
     let mut argument_types: Vec<String> = Vec::with_capacity(num_of_args as usize);
     for i in 0..num_of_args {
         let type_ptr: ConstPtr<u8> = msg![env; sig getArgumentTypeAtIndex:i];
-        if !type_ptr.is_null() {
-            argument_types.push(env.mem.cstr_at_utf8(type_ptr).unwrap_or("@").to_string());
-        } else {
-            argument_types.push("@".to_string());
-        }
+        argument_types.push(env.mem.cstr_at_utf8(type_ptr).unwrap().to_string());
     }
     let host_object = Box::new(NSInvocationHostObject {
         sig,
@@ -277,7 +177,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         arguments_retained: false,
         retained_objects: Vec::new(),
         copied_strings: Vec::new(),
-        return_value: [0; 2],
     });
     let res = env.objc.alloc_object(this, host_object, &mut env.mem);
     autorelease(env, res)
@@ -310,6 +209,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setSelector:(SEL)selector {
+    assert!(env.objc.borrow_mut::<NSInvocationHostObject>(this).selector.is_none()); // TODO
     env.objc.borrow_mut::<NSInvocationHostObject>(this).selector = Some(selector);
 }
 
@@ -318,12 +218,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())retainArguments {
+    // TODO: handle return val
+    // TODO: copy blocks
+    assert!(!env.objc.borrow::<NSInvocationHostObject>(this).arguments_retained); // TODO
+
     let target = env.objc.borrow::<NSInvocationHostObject>(this).target;
     retain(env, target);
 
     let mut retained_objects: Vec<id> = Vec::new();
     let mut copied_strings: Vec<MutPtr<u8>> = Vec::new();
 
+    // Skip index 0 (self) and 1 (SEL): handled via target/selector fields.
     let num_of_args = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.len();
     for i in 2..num_of_args {
         let host = env.objc.borrow::<NSInvocationHostObject>(this);
@@ -344,7 +249,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    let mut host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
+    let host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
     host.retained_objects = retained_objects;
     host.copied_strings = copied_strings;
     host.arguments_retained = true;
@@ -372,6 +277,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 env.mem.write(buffer.cast(), val);
             }
             _ => {
+                // Fallback for primitive types, assuming 32-bit register packing
                 let val: u32 = env.mem.read(arg_loc.cast().cast_const());
                 env.mem.write(buffer.cast(), val);
             }
@@ -382,9 +288,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setArgument:(MutVoidPtr)arg_loc atIndex:(NSInteger)idx {
     let &NSInvocationHostObject {
         ref arguments,
+        arguments_retained,
         ..
     } = env.objc.borrow::<NSInvocationHostObject>(this);
 
+    // 0 and 1 are reserved for `self` and `_cmd`
+    // TODO: can they be set too?
     assert!(1 < idx && idx < arguments.len() as NSInteger);
 
     if let Some(prev_arg) = arguments[idx as usize] {
@@ -400,21 +309,25 @@ pub const CLASSES: ClassExports = objc_classes! {
             env.mem.alloc_and_write(arg).cast()
         }
         "@" => {
+            assert!(!arguments_retained); // TODO
             let arg_loc: MutPtr<id> = arg_loc.cast();
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
         }
         "*" => {
+            assert!(!arguments_retained); // TODO
             let arg_loc: MutPtr<MutPtr<u8>> = arg_loc.cast();
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
         }
+        // pointer cases
         _ if arg_type.starts_with('^') => {
             let arg_loc: MutPtr<MutVoidPtr> = arg_loc.cast();
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
         }
         _ => {
+            // Fallback для примитивов или неопознанных типов из форка (записываем как 32-битное число)
             let arg_loc: MutPtr<u32> = arg_loc.cast();
             let arg = env.mem.read(arg_loc);
             env.mem.alloc_and_write(arg).cast()
@@ -424,73 +337,64 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSInvocationHostObject>(this).arguments[idx as usize] = Some(new);
 }
 
-- (())getReturnValue:(MutVoidPtr)buffer {
-    let host = env.objc.borrow::<NSInvocationHostObject>(this);
-    let sig = host.sig;
-    let ret_len: NSUInteger = msg![env; sig methodReturnLength];
-    
-    if ret_len > 0 && ret_len <= 4 {
-        env.mem.write(buffer.cast::<u32>(), host.return_value[0]);
-    } else if ret_len > 4 && ret_len <= 8 {
-        let val64 = ((host.return_value[1] as u64) << 32) | (host.return_value[0] as u64);
-        env.mem.write(buffer.cast::<u64>(), val64);
-    }
-}
-
-- (())setReturnValue:(MutVoidPtr)buffer {
-    let mut host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
-    let sig = host.sig;
-    let ret_len: NSUInteger = msg![env; sig methodReturnLength];
-    
-    if ret_len > 0 && ret_len <= 4 {
-        host.return_value[0] = env.mem.read(buffer.cast::<u32>().cast_const());
-    } else if ret_len > 4 && ret_len <= 8 {
-        let val64: u64 = env.mem.read(buffer.cast::<u64>().cast_const());
-        host.return_value[0] = (val64 & 0xFFFFFFFF) as u32;
-        host.return_value[1] = (val64 >> 32) as u32;
-    }
-}
-
 - (())invokeWithTarget:(id)target {
     () = msg![env; this setTarget:target];
     () = msg![env; this invoke];
 }
 
 - (())invoke {
+    // Safeguard: all arguments must be set (except first two)
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
     let set_count = arguments.iter().flatten().count();
     let all_count = arguments.len();
     
-    if set_count + 2 != all_count && all_count > 2 {
+    // В форке сигнатура может быть частично заполнена, поэтому мы смягчаем assert из оригинала,
+    // но оставляем логику честного вызова FFI, если типы известны.
+    if set_count + 2 != all_count {
         log!("Warning: NSInvocation invoked without all arguments set");
     }
 
+    let sig = env.objc.borrow::<NSInvocationHostObject>(this).sig;
+    let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
+    assert!(env.mem.read(ret_type) == b'v'); // TODO
+
+    // `call_from_host` re-use
+    // TODO: retval_ptr
+    // TODO: cross check against frame length from NSMethodSignature
     let mut reg_count = 0;
     let argument_types: &Vec<String> = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.as_ref();
     for arg_type in argument_types.iter() {
+        // TODO: refactor and simplify
         reg_count += match arg_type.as_str() {
             "@" => <id as GuestArg>::REG_COUNT,
             ":" => <SEL as GuestArg>::REG_COUNT,
             "f" => <f32 as GuestArg>::REG_COUNT,
             "c" => <u8 as GuestArg>::REG_COUNT,
             "*" => <MutPtr<u8> as GuestArg>::REG_COUNT,
+            // pointer cases
             _ if arg_type.starts_with('^') => <MutVoidPtr as GuestArg>::REG_COUNT,
-            _ => <u32 as GuestArg>::REG_COUNT
+            _ => <u32 as GuestArg>::REG_COUNT // Fallback for stubbed types
         }
     }
     let regs = env.cpu.regs_mut();
-    let old_sp = extend_stack_for_args(reg_count, regs);
+    let old_sp = extend_stack_for_args(
+        reg_count,
+        regs,
+    );
 
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
     let mut reg_offset = 0;
     for i in 0..arguments.len() {
+        // TODO: do not handle target and sel as special cases
         if i == 0 {
+            // target
             let target = env.objc.borrow::<NSInvocationHostObject>(this).target;
             let regs = env.cpu.regs_mut();
             write_next_arg::<id>(&mut reg_offset, regs, &mut env.mem, target);
             continue;
         }
         if i == 1 {
+            // selector
             let selector = env.objc.borrow::<NSInvocationHostObject>(this).selector.unwrap();
             let regs = env.cpu.regs_mut();
             write_next_arg::<SEL>(&mut reg_offset, regs, &mut env.mem, selector);
@@ -499,6 +403,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         
         if let Some(arg_slot) = arguments[i] {
             let arg_type = argument_types[i].as_str();
+            // TODO: refactor and simplify
             match arg_type {
                 "@" => {
                     let arg: ConstPtr<id> = arg_slot.cast().cast_const();
@@ -524,6 +429,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     let regs = env.cpu.regs_mut();
                     write_next_arg::<MutPtr<u8>>(&mut reg_offset, regs, &mut env.mem, arg_val);
                 }
+                // pointer cases
                 _ if arg_type.starts_with('^') => {
                     let arg: ConstPtr<MutVoidPtr> = arg_slot.cast().cast_const();
                     let arg_val = env.mem.read(arg);
@@ -531,6 +437,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     write_next_arg::<MutVoidPtr>(&mut reg_offset, regs, &mut env.mem, arg_val);
                 }
                 _ => {
+                    // Fallback
                     let arg: ConstPtr<u32> = arg_slot.cast().cast_const();
                     let arg_val = env.mem.read(arg);
                     let regs = env.cpu.regs_mut();
@@ -540,21 +447,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // Вызов
+    // actual invocation
     let &NSInvocationHostObject { target, selector, .. } = env.objc.borrow::<NSInvocationHostObject>(this);
     objc_msgSend(env, target, selector.unwrap());
 
-    // Сохраняем результат из R0 и R1 (в ARM это индексы 0 и 1)
-    let regs = env.cpu.regs_mut();
-    let r0 = regs[0];
-    let r1 = regs[1];
-    
-    // Восстанавливаем указатель стека
+    let regs = env.cpu.regs_mut(); // re-borrow
     regs[Cpu::SP] = old_sp;
-    
-    let mut host = env.objc.borrow_mut::<NSInvocationHostObject>(this);
-    host.return_value[0] = r0;
-    host.return_value[1] = r1;
+    // TODO: non-void return
 }
 
 - (())dealloc {
@@ -574,6 +473,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         for s in copied_strings {
             env.mem.free(s.cast());
         }
+    } else {
+        assert!(env.objc.borrow::<NSInvocationHostObject>(this).retained_objects.is_empty());
+        assert!(env.objc.borrow::<NSInvocationHostObject>(this).copied_strings.is_empty());
     }
     for ptr in env.objc.borrow::<NSInvocationHostObject>(this).arguments.iter().flatten() {
         env.mem.free(ptr.cast());
