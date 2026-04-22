@@ -1222,13 +1222,20 @@ m.modified())
         Ok(())
     }
 
-    /// Like [std::fs::create_dir_all] but for the guest filesystem.
+        /// Like [std::fs::create_dir_all] but for the guest filesystem.
     pub fn create_dir_all<P: AsRef<GuestPath>>(&mut self, path: P) -> Result<(), FsError> {
         let path = path.as_ref();
-        assert!(path.as_str().starts_with('/'));
-        // TODO: use GuestPathBuf push() once implemented
+        
+        // 1. УБИРАЕМ ЖЕСТКИЙ ASSERT, так как пути могут быть относительными!
+        // assert!(path.as_str().starts_with('/')); 
+
         let mut tmp_vec = vec![""];
-        let components = resolve_path(path, None);
+        
+        // 2. ИСПРАВЛЯЕМ resolve_path: 
+        // Вместо None честно передаем Some(&self.working_directory).
+        // Это заставит эмулятор корректно склеить относительный путь с текущей папкой приложения.
+        let components = resolve_path(path, Some(&self.working_directory));
+        
         for component in components {
             tmp_vec.push(component);
             let res = self.create_dir(GuestPathBuf::from(tmp_vec.join("/")));
