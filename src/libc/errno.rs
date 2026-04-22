@@ -19,6 +19,7 @@ pub const ESRCH: i32 = 3;
 pub const EINTR: i32 = 4;
 pub const EIO: i32 = 5;
 pub const ENXIO: i32 = 6;
+pub const E2BIG: i32 = 7;
 pub const ENETUNREACH: i32 = 8;
 pub const EBADF: i32 = 9;
 pub const ECHILD: i32 = 10;
@@ -38,6 +39,7 @@ pub const ENOTCONN: i32 = 23;
 pub const EAGAIN: i32 = 24;
 pub const ESPIPE: i32 = 29;
 pub const EROFS: i32 = 30;
+
 #[allow(dead_code)]
 pub const EPROTONOSUPPORT: i32 = 43;
 pub const ENOTSUP: i32 = 45;
@@ -92,6 +94,7 @@ fn perror(env: &mut Environment, s: ConstPtr<u8>) {
     let errno_ptr = __error(env);
     let str_error = strerror(env, env.mem.read(errno_ptr));
     let errno_msg = format!("{}\n", env.mem.cstr_at_utf8(str_error).unwrap());
+
     let msg = if !s.is_null() {
         if let Ok(str) = env.mem.cstr_at_utf8(s) {
             format!("{str}: {errno_msg}")
@@ -101,6 +104,7 @@ fn perror(env: &mut Environment, s: ConstPtr<u8>) {
     } else {
         errno_msg.to_string()
     };
+
     let _ = std::io::stderr().write_all(msg.as_bytes());
 }
 
@@ -116,6 +120,7 @@ fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
             EINTR => "Interrupted system call",
             EIO => "Input/output error",
             ENXIO => "No such device or address",
+            E2BIG => "Argument list too long",
             EBADF => "Bad file descriptor",
             ECHILD => "No child processes",
             EDEADLK => "Resource deadlock avoided",
@@ -135,11 +140,13 @@ fn strerror(env: &mut Environment, err_num: i32) -> ConstPtr<u8> {
             EOPNOTSUPP => "Operation not supported on socket",
             _ => unimplemented!("strerror({})", err_num),
         };
+
         let new_c_str = env.mem.alloc_and_write_cstr(str.as_bytes()).cast_const();
         env.libc_state
             .errno
             .strings_cache
             .insert(err_num, new_c_str);
+
         new_c_str
     }
 }
@@ -149,3 +156,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(perror(_)),
     export_c_func!(strerror(_)),
 ];
+
