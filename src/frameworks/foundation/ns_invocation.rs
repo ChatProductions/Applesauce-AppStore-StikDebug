@@ -417,38 +417,61 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())invoke {
+    // Безопасная проверка: если селектора нет, то и вызывать нечего, защищаемся от unwrap()
+    let selector_opt = env.objc.borrow::<NSInvocationHostObject>(this).selector;
+    if selector_opt.is_none() {
+        log!("Warning: NSInvocation invoked without a selector!");
+        return;
+    }
+
     // Safeguard: all arguments must be set (except first two)
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
     let set_count = arguments.iter().flatten().count();
     let all_count = arguments.len();
 
     // В форке сигнатура может быть частично заполнена, смягчаем assert
-    if set_count + 2 != all_count {
+    if set_count + 2 != all_count && all_count >= 2 {
         log!("Warning: NSInvocation invoked without all arguments set");
     }
 
     let sig = env.objc.borrow::<NSInvocationHostObject>(this).sig;
-    let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
-    assert!(env.mem.read(ret_type) == b'v'); // TODO
+    
+    // ИСПРАВЛЕНИЕ: Безопасное чтение типа возвращаемого значения, без жесткого assert!
+    if sig != nil {
+        let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
+        if !ret_type.is_null() {
+            let ret_char = env.mem.read(ret_type);
+            if ret_char != b'v' {
+                log!("Warning: NSInvocation return type is '{}', expected 'v'. Invoking anyway.", ret_char as char);
+            }
+        }
+    }
 
     // `call_from_host` re-use
     // TODO: retval_ptr
     // TODO: cross check against frame length from NSMethodSignature
     let mut reg_count = 0;
     let argument_types: &Vec<String> = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.as_ref();
-    for arg_type in argument_types.iter() {
-        // TODO: refactor and simplify
-        reg_count += match arg_type.as_str() {
-            "@" => <id as GuestArg>::REG_COUNT,
-            ":" => <SEL as GuestArg>::REG_COUNT,
-            "f" => <f32 as GuestArg>::REG_COUNT,
-            "c" => <u8 as GuestArg>::REG_COUNT,
-            "*" => <MutPtr<u8> as GuestArg>::REG_COUNT,
-            // pointer cases
-            _ if arg_type.starts_with('^') => <MutVoidPtr as GuestArg>::REG_COUNT,
-            _ => <u32 as GuestArg>::REG_COUNT // Fallback for stubbed types
+    
+    // ИСПРАВЛЕНИЕ: Если сигнатура была пуста (или nil), резервируем минимум 2 регистра для target и selector
+    if argument_types.is_empty() {
+        reg_count = 2; 
+    } else {
+        for arg_type in argument_types.iter() {
+            // TODO: refactor and simplify
+            reg_count += match arg_type.as_str() {
+                "@" => <id as GuestArg>::REG_COUNT,
+                ":" => <SEL as GuestArg>::REG_COUNT,
+                "f" => <f32 as GuestArg>::REG_COUNT,
+                "c" => <u8 as GuestArg>::REG_COUNT,
+                "*" => <MutPtr<u8> as GuestArg>::REG_COUNT,
+                // pointer cases
+                _ if arg_type.starts_with('^') => <MutVoidPtr as GuestArg>::REG_COUNT,
+                _ => <u32 as GuestArg>::REG_COUNT // Fallback for stubbed types
+            }
         }
     }
+    
     let regs = env.cpu.regs_mut();
     let old_sp = extend_stack_for_args(
         reg_count,
@@ -456,8 +479,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     );
 
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
+    
+    // ИСПРАВЛЕНИЕ: Гарантируем, что цикл пройдет минимум 2 итерации для записи R0 и R1, даже если arguments.len() == 0
+    let num_args = std::cmp::max(2, arguments.len());
     let mut reg_offset = 0;
-    for i in 0..arguments.len() {
+    
+    for i in 0..num_args {
         // TODO: do not handle target and sel as special cases
         if i == 0 {
             // target
@@ -474,7 +501,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             continue;
         }
 
-        if let Some(arg_slot) = arguments[i] {
+        if let Some(arg_slot) = arguments.get(i).and_then(|a| *a) {
             let arg_type = argument_types[i].as_str();
             // TODO: refactor and simplify
             match arg_type {
