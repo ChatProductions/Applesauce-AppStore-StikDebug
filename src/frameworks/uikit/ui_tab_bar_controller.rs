@@ -101,31 +101,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UITabBarHostObject>(this).selected_item
 }
 
-- (())setSelectedItem:(id)item { // UITabBarItem*
-    // Verify the item is actually in our items array (or nil to deselect).
-    if item != nil {
-        let items = env.objc.borrow::<UITabBarHostObject>(this).items;
+- (())setSelectedItem:(id)item {
+    let (items, old_selected) = {
+        let host = env.objc.borrow::<UITabBarHostObject>(this);
+        (host.items, host.selected_item)
+    };
+
+    if item == old_selected { return; }
+
+    // Проверяем, действительно ли item находится в массиве панели
+    let mut found = false;
+    if items != nil {
         let count: NSUInteger = msg![env; items count];
-        let mut found = false;
-        let mut i: NSUInteger = 0;
-        while i < count {
-            let candidate: id = msg![env; items objectAtIndex:i];
-            if candidate == item {
+        for i in 0..count {
+            let obj: id = msg![env; items objectAtIndex:i];
+            if obj == item {
                 found = true;
                 break;
             }
-            i += 1;
-        }
-        if !found {
-            log!("Warning: [UITabBar setSelectedItem:] item not in items array");
-            return;
         }
     }
-    env.objc.borrow_mut::<UITabBarHostObject>(this).selected_item = item;
 
-    let delegate = env.objc.borrow::<UITabBarHostObject>(this).delegate;
-    if delegate != nil {
-        let _: () = msg![env; delegate tabBar:this didSelectItem:item];
+    // В iOS можно передать nil, чтобы сбросить выделение
+    if found || item == nil {
+        env.objc.borrow_mut::<UITabBarHostObject>(this).selected_item = item;
+        
+        // Обязательно уведомляем делегата (контроллер), иначе логика игры не поймет, что вкладка сменилась
+        let delegate = env.objc.borrow::<UITabBarHostObject>(this).delegate;
+        if delegate != nil {
+            let _: () = msg![env; delegate tabBar:this didSelectItem:item];
+        }
+    } else {
+        log!("Warning: [UITabBar setSelectedItem:] item {:?} not found in items array. Syncing error between Controller and Bar.", item);
     }
 }
 
@@ -286,40 +293,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers
 }
 
-- (())setViewControllers:(id)view_controllers { // NSArray*
-    let old = env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers;
-    release(env, old);
-    retain(env, view_controllers);
-    env.objc.borrow_mut::<UITabBarControllerHostObject>(this).view_controllers = view_controllers;
+- ((())setViewControllers:(id)vcs animated:(bool)animated {
+    // 1. Сохраняем массив контроллеров
+    let old_vcs = env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers;
+    release(env, old_vcs);
+    retain(env, vcs);
+    env.objc.borrow_mut::<UITabBarControllerHostObject>(this).view_controllers = vcs;
 
-    // Sync tab bar items from each view controller's tabBarItem.
-    let count: NSUInteger = msg![env; view_controllers count];
-
-    // Build an NSMutableArray of tab bar items.
-    let items: id = msg_class![env; NSMutableArray new];
-    let mut i: NSUInteger = 0;
-    while i < count {
-        let vc: id = msg![env; view_controllers objectAtIndex:i];
-        let item: id = msg![env; vc tabBarItem];
-        let _: () = msg![env; items addObject:item];
-        i += 1;
-    }
+    // 2. СИНХРОНИЗАЦИЯ: Извлекаем tabBarItem из каждого контроллера и отдаем их таббару
     let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
-    let _: () = msg![env; tab_bar setItems:items];
-    release(env, items);
-
-    // Reset / clamp selected index.
-    let idx = env.objc.borrow::<UITabBarControllerHostObject>(this).selected_index;
-    if count == 0 {
-        env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = 0;
-        let _: () = msg![env; tab_bar setSelectedItem:nil];
-    } else {
-        let clamped = if idx >= count { 0 } else { idx };
-        env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = clamped;
-        let vc: id = msg![env; view_controllers objectAtIndex:clamped];
-        let item: id = msg![env; vc tabBarItem];
-        let _: () = msg![env; tab_bar setSelectedItem:item];
+    if tab_bar != nil && vcs != nil {
+        let items_array: id = msg_class![env; NSMutableArray array];
+        let count: NSUInteger = msg![env; vcs count];
+        
+        for i in 0..count {
+            let vc: id = msg![env; vcs objectAtIndex:i];
+            let item: id = msg![env; vc tabBarItem]; // Берем итем контроллера
+            if item != nil {
+                let _: () = msg![env; items_array addObject:item];
+            }
+        }
+        
+        // Теперь у UITabBar будет актуальный список элементов
+        let _: () = msg![env; tab_bar setItems:items_array animated:animated];
     }
+    
+    // 3. Выбираем первую вкладку по умолчанию
+    let _: () = msg![env; this setSelectedIndex:0];
 }
 
 - (())setViewControllers:(id)view_controllers animated:(bool)_animated {
@@ -332,27 +332,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UITabBarControllerHostObject>(this).selected_index
 }
 
-- (())setSelectedIndex:(NSUInteger)index {
-    let vcs = env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers;
+- ((())setSelectedIndex:(NSUInteger)index {
+    let (vcs, tab_bar) = {
+        let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
+        (host.view_controllers, host.tab_bar)
+    };
+    
+    if vcs == nil { return; }
     let count: NSUInteger = msg![env; vcs count];
-    if index >= count {
-        log!(
-            "Warning: [UITabBarController setSelectedIndex:{}] out of bounds (count {})",
-            index, count
-        );
-        return;
-    }
+    if index >= count { return; }
+
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).selected_index = index;
 
-    // Keep tab bar in sync — write directly to avoid double-firing delegate.
-    let vc: id = msg![env; vcs objectAtIndex:index];
-    let item: id = msg![env; vc tabBarItem];
-    let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
-    env.objc.borrow_mut::<UITabBarHostObject>(tab_bar).selected_item = item;
-
-    let delegate = env.objc.borrow::<UITabBarControllerHostObject>(this).delegate;
-    if delegate != nil {
-        let _: () = msg![env; delegate tabBarController:this didSelectViewController:vc];
+    // Синхронизируем визуальное состояние таббара
+    if tab_bar != nil {
+        let vc: id = msg![env; vcs objectAtIndex:index];
+        let item: id = msg![env; vc tabBarItem];
+        // Теперь это не вызовет варнинг, так как мы наполнили массив в setViewControllers
+        let _: () = msg![env; tab_bar setSelectedItem:item];
     }
 }
 
