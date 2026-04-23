@@ -124,6 +124,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSTimerHostObject>(this).user_info
 }
 
+- (id)target {
+    env.objc.borrow::<NSTimerHostObject>(this).target
+}
+    
 - (bool)isValid {
     env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some()
 }
