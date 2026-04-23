@@ -15,6 +15,9 @@ use crate::window::{GLContext, GLVersion, Window};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 
+// Буфер, заполненный нулями, для защиты от крашей Mali GPU при передаче null-указателей
+static DUMMY_BUFFER: [u8; 65536] = [0; 65536];
+
 pub struct GLES1NativeContext {
     gl_ctx: GLContext,
     is_loaded: bool,
@@ -179,41 +182,45 @@ impl GLES for GLES1Native<'_> {
     unsafe fn Normal3f(&mut self, nx: GLfloat, ny: GLfloat, nz: GLfloat) { gles11::Normal3f(nx, ny, nz) }
     unsafe fn Normal3x(&mut self, nx: GLfixed, ny: GLfixed, nz: GLfixed) { gles11::Normal3x(nx, ny, nz) }
 
-    // Pointers - MALI PROTECTION (ИСПРАВЛЕНО: просто игнорируем null без сброса стейта)
+    // Pointers - MALI PROTECTION (Правильная реализация с Dummy Buffer)
     unsafe fn ColorPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+        let mut safe_ptr = pointer;
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 { return; } // <- Без DisableClientState!
+            if bound_buffer == 0 { safe_ptr = DUMMY_BUFFER.as_ptr() as *const GLvoid; }
         }
-        gles11::ColorPointer(size, type_, stride, pointer)
+        gles11::ColorPointer(size, type_, stride, safe_ptr)
     }
     
     unsafe fn NormalPointer(&mut self, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+        let mut safe_ptr = pointer;
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 { return; }
+            if bound_buffer == 0 { safe_ptr = DUMMY_BUFFER.as_ptr() as *const GLvoid; }
         }
-        gles11::NormalPointer(type_, stride, pointer)
+        gles11::NormalPointer(type_, stride, safe_ptr)
     }
     
     unsafe fn TexCoordPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+        let mut safe_ptr = pointer;
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 { return; }
+            if bound_buffer == 0 { safe_ptr = DUMMY_BUFFER.as_ptr() as *const GLvoid; }
         }
-        gles11::TexCoordPointer(size, type_, stride, pointer)
+        gles11::TexCoordPointer(size, type_, stride, safe_ptr)
     }
     
     unsafe fn VertexPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+        let mut safe_ptr = pointer;
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 { return; }
+            if bound_buffer == 0 { safe_ptr = DUMMY_BUFFER.as_ptr() as *const GLvoid; }
         }
-        gles11::VertexPointer(size, type_, stride, pointer)
+        gles11::VertexPointer(size, type_, stride, safe_ptr)
     }
 
     // Drawing
@@ -345,4 +352,4 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetBufferParameteriv(target, pname, params) }
     unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid { gles11::MapBufferOES(target, access) }
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean { gles11::UnmapBufferOES(target) }
-                                                                     }
+    }
