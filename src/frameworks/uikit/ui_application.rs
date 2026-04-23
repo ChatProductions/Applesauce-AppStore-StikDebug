@@ -46,7 +46,6 @@ pub const UIInterfaceOrientationLandscapeLeft: UIInterfaceOrientation =
     UIDeviceOrientationLandscapeRight;
 pub const UIInterfaceOrientationLandscapeRight: UIInterfaceOrientation =
     UIDeviceOrientationLandscapeLeft;
-
 type UIRemoteNotificationType = NSUInteger;
 type UIStatusBarAnimation = NSInteger;
 type UIStatusBarStyle = NSInteger;
@@ -59,7 +58,6 @@ pub const UIApplicationStateBackground: UIApplicationState = 2;
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
-
 @implementation UIApplication: UIResponder
 
 // This should only be called by UIApplicationMain
@@ -152,13 +150,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setStatusBarOrientation:(UIInterfaceOrientation)orientation {
-    env.on_parent_stack_in_coroutine(|window, _| {window.rotate_device(match orientation {
-        UIDeviceOrientationPortrait => DeviceOrientation::Portrait,
-        UIDeviceOrientationLandscapeLeft => DeviceOrientation::LandscapeLeft,
-        UIDeviceOrientationLandscapeRight => DeviceOrientation::LandscapeRight,
-        _ => unimplemented!("Orientation {} not handled yet", orientation),
-    })});
+    match orientation {
+        UIDeviceOrientationPortrait => {
+            env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::Portrait));
+        }
+        UIDeviceOrientationLandscapeLeft => {
+            env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::LandscapeLeft));
+        }
+        UIDeviceOrientationLandscapeRight => {
+            env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::LandscapeRight));
+        }
+        _ => {
+            log!("Warning: Orientation {} not handled yet (ignoring to prevent panic)", orientation);
+        }
+    }
 }
+
 - (())setStatusBarOrientation:(UIInterfaceOrientation)orientation
                      animated:(bool)_animated {
     // TODO: animation
@@ -398,7 +405,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
 /// `UIApplicationMain`, the entry point of the application.
 pub(super) fn UIApplicationMain(
     env: &mut Environment,
@@ -419,7 +425,6 @@ pub(super) fn UIApplicationMain(
         let ui_application: id = msg![env; principal_class new];
 
         let device_family = env.options.device_family;
-
         if let Some(main_nib_filename) = env
             .bundle
             .main_nib_filename(device_family)
@@ -521,7 +526,6 @@ pub(super) fn exit(env: &mut Environment) {
         () = msg![env; center postNotificationName:notif_name object:ui_application userInfo:nil];
         let _: () = msg![env; pool drain];
     };
-
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
@@ -544,7 +548,6 @@ const UIApplicationWillResignActiveNotification: &str = "UIApplicationWillResign
 const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminateNotification";
 const UIApplicationLaunchOptionsRemoteNotificationKey: &str = "UIApplicationLaunchOptionsRemoteNotificationKey";
 const UIApplicationDidReceiveMemoryWarningNotification: &str = "UIApplicationDidReceiveMemoryWarningNotification";
-
 pub const CONSTANTS: ConstantExports = &[
     ("_UIApplicationDidFinishLaunchingNotification", HostConstant::NSString(UIApplicationDidFinishLaunchingNotification)),
     ("_UIApplicationDidBecomeActiveNotification", HostConstant::NSString(UIApplicationDidBecomeActiveNotification)),
@@ -555,5 +558,5 @@ pub const CONSTANTS: ConstantExports = &[
     ("_UIApplicationDidReceiveMemoryWarningNotification", HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification)),
     ("_UIApplicationLaunchOptionsRemoteNotificationKey", HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey)),
 ];
-
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
+
