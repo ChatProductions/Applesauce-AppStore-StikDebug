@@ -179,15 +179,12 @@ impl GLES for GLES1Native<'_> {
     unsafe fn Normal3f(&mut self, nx: GLfloat, ny: GLfloat, nz: GLfloat) { gles11::Normal3f(nx, ny, nz) }
     unsafe fn Normal3x(&mut self, nx: GLfixed, ny: GLfixed, nz: GLfixed) { gles11::Normal3x(nx, ny, nz) }
 
-    // Pointers - MALI PROTECTION (Правильное отключение массива вместо возврата)
+    // Pointers - MALI PROTECTION (ИСПРАВЛЕНО: просто игнорируем null без сброса стейта)
     unsafe fn ColorPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 {
-                gles11::DisableClientState(gles11::COLOR_ARRAY);
-                return;
-            }
+            if bound_buffer == 0 { return; } // <- Без DisableClientState!
         }
         gles11::ColorPointer(size, type_, stride, pointer)
     }
@@ -196,10 +193,7 @@ impl GLES for GLES1Native<'_> {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 {
-                gles11::DisableClientState(gles11::NORMAL_ARRAY);
-                return;
-            }
+            if bound_buffer == 0 { return; }
         }
         gles11::NormalPointer(type_, stride, pointer)
     }
@@ -208,10 +202,7 @@ impl GLES for GLES1Native<'_> {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 {
-                gles11::DisableClientState(gles11::TEXTURE_COORD_ARRAY);
-                return;
-            }
+            if bound_buffer == 0 { return; }
         }
         gles11::TexCoordPointer(size, type_, stride, pointer)
     }
@@ -220,27 +211,13 @@ impl GLES for GLES1Native<'_> {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 {
-                gles11::DisableClientState(gles11::VERTEX_ARRAY);
-                return;
-            }
+            if bound_buffer == 0 { return; }
         }
         gles11::VertexPointer(size, type_, stride, pointer)
     }
 
     // Drawing
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
-        const GL_MATRIX_PALETTE_OES: GLenum = 0x8840;
-
-        // Фикс для драйверов Mali: отключаем матричную палитру, чтобы модель нарисовалась
-        if gles11::IsEnabled(GL_MATRIX_PALETTE_OES) == 1 {
-            println!("[MALI FIX] Перехвачен DrawArrays с включенным GL_MATRIX_PALETTE_OES!");
-            gles11::Disable(GL_MATRIX_PALETTE_OES);
-            gles11::DrawArrays(mode, first, count);
-            gles11::Enable(GL_MATRIX_PALETTE_OES);
-            return;
-        }
-
         gles11::DrawArrays(mode, first, count)
     }
     
@@ -250,18 +227,6 @@ impl GLES for GLES1Native<'_> {
             gles11::GetIntegerv(gles11::ELEMENT_ARRAY_BUFFER_BINDING, &mut bound_buffer);
             if bound_buffer == 0 { return; }
         }
-
-        const GL_MATRIX_PALETTE_OES: GLenum = 0x8840;
-
-        // Фикс для драйверов Mali: отключаем матричную палитру, чтобы модель нарисовалась
-        if gles11::IsEnabled(GL_MATRIX_PALETTE_OES) == 1 {
-            println!("[MALI FIX] Перехвачен DrawElements с включенным GL_MATRIX_PALETTE_OES!");
-            gles11::Disable(GL_MATRIX_PALETTE_OES);
-            gles11::DrawElements(mode, count, type_, indices);
-            gles11::Enable(GL_MATRIX_PALETTE_OES);
-            return;
-        }
-
         gles11::DrawElements(mode, count, type_, indices)
     }
 
@@ -380,4 +345,4 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetBufferParameteriv(target, pname, params) }
     unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid { gles11::MapBufferOES(target, access) }
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean { gles11::UnmapBufferOES(target) }
-        }
+                                                                     }
