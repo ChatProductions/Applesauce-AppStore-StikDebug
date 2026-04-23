@@ -75,7 +75,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         selector.as_str(&env.mem),
         user_info,
     );
-
     autorelease(env, new)
 }
 
@@ -93,10 +92,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     // Получаем реальный гостевой NSString из системного пула эмулятора
     let mode_str = crate::frameworks::foundation::ns_string::get_static_str(env, "NSDefaultRunLoopMode");
-    
     let _: () = msg![env; run_loop addTimer:timer forMode:mode_str];
     
-    timer
+    // ИСПРАВЛЕНИЕ: Обязательно возвращаем объект в пуле autorelease, иначе будет утечка или краш
+    autorelease(env, timer)
 }
 
 - (())dealloc {
@@ -106,7 +105,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let (target, user_info) = (host.target, host.user_info);
     release(env, target);
     release(env, user_info);
-    
     env.objc.dealloc_object(this, &mut env.mem)
 }
     
@@ -118,24 +116,25 @@ pub const CLASSES: ClassExports = objc_classes! {
         0.0 // this is the documented behaviour!
     }
 }
+
 - (id)userInfo {
     env.objc.borrow::<NSTimerHostObject>(this).user_info
 }
+
 - (bool)isValid {
     env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some()
 }
 
 - (())invalidate {
-    // РЕШЕНИЕ: Используем блок {}, чтобы ограничить жизнь переменной host
+    // Использован блок {}, чтобы ограничить жизнь переменной host
     let run_loop_to_remove = {
         let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
         host.due_by = None;
         let rl = host.run_loop;
-        host.run_loop = crate::objc::nil;
-        rl // возвращаем run_loop из блока
-    }; // Здесь `host` уничтожается, и `env` снова свободен
+        host.run_loop = crate::objc::nil; // Гарантируем очистку
+        rl
+    };
     
-    // Теперь безопасно передаем env в функцию
     if run_loop_to_remove != crate::objc::nil {
         crate::frameworks::foundation::ns_run_loop::remove_timer(env, run_loop_to_remove, this);
     }
@@ -148,14 +147,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         repeats,
         ..
     } = env.objc.borrow(this);
-
     let pool: id = msg_class![env; NSAutoreleasePool new];
 
     // Signature should be `- (void)timerDidFire:(NSTimer *)which`.
     let _: () = msg_send(env, (target, selector, this));
 
     release(env, pool);
-
     if !repeats {
         () = msg![env; this invalidate];
     }
@@ -164,20 +161,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Fire Date
 
 - (())setFireDate:(id)date {
-    // Запрашиваем интервал времени у NSDate ДО заимствования таймера,
-    // чтобы избежать потенциальной паники RefCell при вложенных вызовах.
     let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceNow];
         
     let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
-        
-    // Согласно документации Apple, если таймер уже остановлен (invalidated),
-    // изменение fireDate игнорируется.
+    // Согласно документации Apple, если таймер уже остановлен (invalidated), изменение fireDate игнорируется.
     if timer.due_by.is_some() {
         if time_interval.is_nan() || time_interval <= 0.0 {
             timer.due_by = Some(Instant::now());
         } else {
-            // Ограничиваем ~100 годами для защиты от паники Instant::checked_add, 
-            // когда передают что-то вроде [NSDate distantFuture].
+            // Ограничиваем ~100 годами для защиты от паники
             let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
             timer.due_by = Some(Instant::now() + Duration::from_secs_f64(safe_interval));
         }
@@ -202,23 +194,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithFireDate:(id)_date interval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
     let this: id = crate::objc::msg_super![env; this init];
     
-    // РЕШЕНИЕ: Сначала вызываем retain (используем env), сохраняем в локальные переменные
     let retained_target = retain(env, t);
     let retained_user_info = retain(env, ui);
     
-    // Только теперь берем borrow_mut
     let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
-    host.ns_interval = ti;
-    host.rust_interval = std::time::Duration::from_secs_f64(ti);
     
-    // Присваиваем уже сохраненные значения
+    // ИСПРАВЛЕНИЕ: Защита от <= 0 для предотвращения паники в Rust Duration
+    let safe_ti = ti.max(0.0001);
+    host.ns_interval = safe_ti;
+    host.rust_interval = std::time::Duration::from_secs_f64(safe_ti);
+    
     host.target = retained_target;
     host.selector = s;
     host.user_info = retained_user_info;
     host.repeats = rep;
     
-    host.due_by = Some(std::time::Instant::now() + host.rust_interval);
+    // ИСПРАВЛЕНИЕ: Обрабатываем реальную передачу _date
+    let fire_time = if _date != crate::objc::nil {
+        let time_interval: NSTimeInterval = msg![env; _date timeIntervalSinceNow];
+        if time_interval.is_nan() || time_interval <= 0.0 {
+            std::time::Instant::now()
+        } else {
+            let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
+            std::time::Instant::now() + std::time::Duration::from_secs_f64(safe_interval)
+        }
+    } else {
+        std::time::Instant::now() + host.rust_interval
+    };
     
+    host.due_by = Some(fire_time);
     this
 }
 
@@ -243,9 +247,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
 }
-    
-// TODO: more constructors
-// TODO: more accessors
 
 @end
 
@@ -254,20 +255,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// For use by `CADisplayLink`
 pub fn set_time_interval(env: &mut Environment, timer: id, interval: NSTimeInterval) {
     let host_object = env.objc.borrow_mut::<NSTimerHostObject>(timer);
-    host_object.ns_interval = interval;
-    host_object.rust_interval = Duration::from_secs_f64(interval);
+    // ИСПРАВЛЕНИЕ: Защита от паники
+    let safe_interval = interval.max(0.0001);
+    host_object.ns_interval = safe_interval;
+    host_object.rust_interval = Duration::from_secs_f64(safe_interval);
 }
 
 /// For use by `NSRunLoop`
 pub(super) fn set_run_loop(env: &mut Environment, timer: id, run_loop: id) {
     let host_object = env.objc.borrow_mut::<NSTimerHostObject>(timer);
-    // assert!(host_object.run_loop == nil); // TODO: what do we do here?
     host_object.run_loop = run_loop;
 }
 
-/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if
-/// necessary.
-///
+/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if necessary.
 /// Returns the next firing time, if any.
 pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> {
     let &NSTimerHostObject {
@@ -278,21 +278,14 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
         repeats,
         due_by,
         is_running_callback,
-        run_loop,
         ..
     } = env.objc.borrow(timer);
 
-    // If a timer is already running its callback, we don't want to re-enter it
-    // and cause an infinite loop.
     if is_running_callback {
         return None;
     }
 
-    // Invalidated timers should be removed from the run loop, but if a timer
-    // is invalidated from another timer earlier in the current tick of the
-    // run loop it might still be run.
     let due_by = due_by?;
-
     let now = Instant::now();
 
     if due_by > now {
@@ -301,42 +294,18 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
 
     let overdue_by = now.duration_since(due_by);
 
-    // Timer may be released when it's invalidated, so we need to retain it so
-    // it's still around to pass to the timer target.
+    // Retain гарантирует, что объект выживет во время исполнения callback'а
     retain(env, timer);
 
-    // Advancing the timer before sending its message seems like a good idea
-    // considering this function is potentially re-entrant.
-    let new_due_by = if repeats {
-        // When rescheduling a repeating timer, the next firing should be based
-        // on when the timer should have fired, not when it actually fired, so
-        // that there is no drift over time.
-        //
-        // For example, if a timer has an interval of 60s and starts at 00:00,
-        // the first firing would be scheduled for 01:00, and the second firing
-        // should be scheduled for 02:00, even if the first firing was at 01:01.
-        //
-        // However: if the timer handling is delayed past a whole interval, it
-        // should not try to catch up. For example, if the first firing is
-        // scheduled for 01:00 but happens at 02:30, then the next firing should
-        // be scheduled for 03:00.
-        // TODO: Use `.div_duration_f64()` once that is stabilized.
-        let advance_by = (overdue_by.as_secs_f64() / ns_interval).max(1.0).ceil();
-        assert!(advance_by == (advance_by as u32) as f64);
-        let advance_by = advance_by as u32;
-        if advance_by > 1 {
-            log_dbg!("Warning: Timer {:?} is lagging. It is overdue by {}s and has missed {} interval(s)!", timer, overdue_by.as_secs_f64(), advance_by - 1);
-        }
-        let advance_by = rust_interval.checked_mul(advance_by).unwrap();
-        Some(due_by.checked_add(advance_by).unwrap())
-    } else {
-        ns_run_loop::remove_timer(env, run_loop, timer);
-        None
-    };
-    env.objc.borrow_mut::<NSTimerHostObject>(timer).due_by = new_due_by;
-    env.objc
-        .borrow_mut::<NSTimerHostObject>(timer)
-        .is_running_callback = true;
+    // Если таймер повторяющийся — пересчитываем следующее время срабатывания
+    if repeats {
+        let advance_by = (overdue_by.as_secs_f64() / ns_interval).max(1.0).ceil() as u32;
+        let advance_by_dur = rust_interval.checked_mul(advance_by).unwrap();
+        let next_time = due_by.checked_add(advance_by_dur).unwrap();
+        env.objc.borrow_mut::<NSTimerHostObject>(timer).due_by = Some(next_time);
+    }
+
+    env.objc.borrow_mut::<NSTimerHostObject>(timer).is_running_callback = true;
 
     log_dbg!(
         "Timer {:?} fired, sending {:?} message to {:?}",
@@ -347,16 +316,25 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
 
     let pool: id = msg_class![env; NSAutoreleasePool new];
 
-    // Signature should be `- (void)timerDidFire:(NSTimer *)which`.
+    // Вызываем коллбэк игры/приложения
     let _: () = msg_send(env, (target, selector, timer));
 
-    env.objc
-        .borrow_mut::<NSTimerHostObject>(timer)
-        .is_running_callback = false;
-
-    release(env, timer);
     release(env, pool);
 
-    new_due_by
+    env.objc.borrow_mut::<NSTimerHostObject>(timer).is_running_callback = false;
+
+    // ИСПРАВЛЕНИЕ: Инвалидируем нецикличный таймер только ПОСЛЕ коллбэка,
+    // точно так, как указывает официальная документация Apple.
+    // Метод invalidate корректно очистит связи и вызовет ns_run_loop::remove_timer.
+    if !repeats {
+        let _: () = msg![env; timer invalidate];
+    }
+
+    // Заново считываем due_by, так как игра могла вызвать [timer invalidate] внутри коллбэка
+    let final_due_by = env.objc.borrow::<NSTimerHostObject>(timer).due_by;
+    
+    release(env, timer);
+
+    final_due_by
 }
 
