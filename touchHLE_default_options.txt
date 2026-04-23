@@ -218,3 +218,7 @@ com.gameloft.BladesOfFury: --force-composition
 
 # MCPE LITE
 com.mojang.minecraftpe-demo: --force-composition
+
+# Bruce Lee
+com.indiagames.brucelee:  --force-composition --ignore-gl-errors
+
