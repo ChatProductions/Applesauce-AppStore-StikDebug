@@ -25,6 +25,7 @@ pub struct State {
     pub(super) status_bar_hidden: bool,
     /// Whether shake to edit is enabled
     pub(super) application_supports_shake_to_edit: bool,
+    pub(super) ignoring_interaction_events_count: u32,
 }
 
 struct UIApplicationHostObject {
@@ -189,14 +190,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
--(())beginIgnoringInteractionEvents {
-    log!("TODO: ignoring beginIgnoringInteractionEvents");
+- (())beginIgnoringInteractionEvents {
+    env.framework_state.uikit.ui_application.ignoring_interaction_events_count += 1;
 }
+
 - (bool)isIgnoringInteractionEvents {
-    false
+    env.framework_state.uikit.ui_application.ignoring_interaction_events_count > 0
 }
--(())endIgnoringInteractionEvents {
-    log!("TODO: ignoring endIgnoringInteractionEvents");
+
+- (())endIgnoringInteractionEvents {
+    let count = &mut env.framework_state.uikit.ui_application.ignoring_interaction_events_count;
+    if *count > 0 {
+        *count -= 1;
+    } else {
+        // В реальной iOS здесь выбрасывается исключение NSInternalInconsistencyException,
+        // но для стабильности эмулятора мы просто залогируем предупреждение, если игра ошиблась со счетчиком.
+        log!("Warning: endIgnoringInteractionEvents called without matching beginIgnoringInteractionEvents");
+    }
 }
 
 - (())sendEvent:(id)event { // UIEvent*
