@@ -115,6 +115,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_timer::set_run_loop(env, timer, this);
 }
 
+- (())cancelPerformSelectorsWithTarget:(id)target {
+        if target == nil {
+            return;
+        }
+
+        log_dbg!("NSRunLoop: cancelPerformSelectorsWithTarget: {:?}", target);
+
+        // Клонируем список таймеров, так как вызов invalidate приведет к 
+        // удалению таймера из списка (через remove_timer), что изменит массив.
+        let timers = env.objc.borrow::<NSRunLoopHostObject>(this).timers.clone();
+
+        // Делаем локальный retain всех таймеров, чтобы избежать use-after-free,
+        // аналогично тому, как это сделано ниже в функции `run_run_loop`.
+        for &timer in &timers {
+            retain(env, timer);
+        }
+
+        for &timer in &timers {
+            // Запрашиваем целевой объект у таймера напрямую через сообщение.
+            let timer_target: id = msg![env; timer target];
+            
+            // Если цель совпадает, инвалидируем таймер (он сам удалится из run loop)
+            if timer_target == target {
+                log_dbg!("NSRunLoop: invalidating timer {:?} for target {:?}", timer, target);
+                msg![env; timer invalidate];
+            }
+            
+            // Отпускаем локальный retain
+            release(env, timer);
+        }
+}
+    
 - (())run {
     run_run_loop(env, this, /* single_iteration: */ false, None);
 }
