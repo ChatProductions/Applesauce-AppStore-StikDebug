@@ -178,11 +178,11 @@ pub fn AudioQueueNewOutput(
     if env.bundle.bundle_identifier().starts_with("jp.co.capcom.biovsus")
         && format.format_id == kAudioFormatLinearPCM
         && format.channels_per_frame == 2
-        && format.bytes_per_frame == 2 
+        && format.bytes_per_frame == 2
         && format.bits_per_channel == 16
     {
         log!("Applying game-specific hack for RE VS: Fixing broken channels_per_frame in header to prevent incorrect big-endian swap.");
-        // Заставляем эмулятор думать, что это обычное моно, чтобы он не запускал деструктивный хак от RE4.
+        // Force mono so the RE4 destructive hack doesn't fire.
         format.channels_per_frame = 1;
     }
 
@@ -214,7 +214,7 @@ pub fn AudioQueueNewOutput(
     log_if_broken_audio_format(&format);
 
     if !is_supported_audio_format(&format) {
-        log_dbg!("Warning: Audio queue {:?} will be ignored because its format is not yet supported: {:#?}", aq_ref, format);
+        log_dbg!("Warning: Audio queue will be ignored (unsupported format).");
     }
 
     log_dbg!(
@@ -295,6 +295,10 @@ fn AudioQueueAllocateBufferWithPacketDescriptions(
     AudioQueueAllocateBuffer(env, in_aq, in_buffer_byte_size, out_buffer)
 }
 
+/// Maximum audio queue buffer size we are willing to allocate.
+/// Requests above this threshold indicate a corrupt/unsupported format.
+const MAX_AUDIO_QUEUE_BUFFER_BYTES: GuestUSize = 0x1000000; // 16 MiB
+
 pub fn AudioQueueAllocateBuffer(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -302,6 +306,15 @@ pub fn AudioQueueAllocateBuffer(
     out_buffer: MutPtr<AudioQueueBufferRef>,
 ) -> OSStatus {
     return_if_null!(in_aq);
+
+    if in_buffer_byte_size > MAX_AUDIO_QUEUE_BUFFER_BYTES {
+        log!(
+            "Error: AudioQueueAllocateBuffer requested ridiculously \
+             large buffer: {:#x} bytes",
+            in_buffer_byte_size
+        );
+        return kAudioQueueErr_InvalidBuffer;
+    }
 
     let host_object = State::get(&mut env.framework_state)
         .audio_queues
@@ -616,8 +629,9 @@ pub fn decode_buffer(
 
                 for frame in data_slice.chunks(actual_bytes_per_frame as usize) {
                     // Fetch only frame bytes
-                    let frame_bytes = &frame[frame.len() - format.bytes_per_frame as usize..];
-                    
+                    let frame_bytes =
+                        &frame[frame.len() - format.bytes_per_frame as usize..];
+
                     // Change from big to little endian
                     // It's been observed in Resident Evil 4 that, although the
                     // audio format doesn't say anything about it being in big
@@ -654,7 +668,7 @@ pub fn decode_buffer(
                 (2, 32) => {
                     assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
                     assert!(processed_data.len().is_multiple_of(4));
-                    let new_size = (processed_data.len() / 4) * 2; // size from 32-bit to 16-bit
+                    let new_size = (processed_data.len() / 4) * 2; // 32-bit to 16-bit
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
                     for chunk in processed_data.chunks(4) {
@@ -793,8 +807,8 @@ fn unqueue_buffers<F: FnMut(ALuint)>(al_source: ALuint, context: &OpenAL<'_>, mu
     }
 }
 
-/// For use by `NSRunLoop`: check the status of an audio queue, recycle buffers,
-/// call callbacks, push new buffers etc.
+/// For use by `NSRunLoop`: check the status of an audio queue, recycle
+/// buffers, call callbacks, push new buffers etc.
 pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     // Collect used buffers and call the user callback so the app can provide
     // new buffers.
@@ -834,7 +848,8 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     for buffer_ref in buffers_to_reuse.drain(..) {
         log_dbg!(
-            "Recyling buffer {:?} for queue {:?}. Calling callback {:?} with user data {:?}.",
+            "Recyling buffer {:?} for queue {:?}. Calling callback {:?} \
+             with user data {:?}.",
             buffer_ref,
             in_aq,
             callback_proc,
@@ -880,7 +895,7 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         // data, and therefore it's time to complete the "asynchronous stop".
         if al_source_state == al::AL_STOPPED {
             log_dbg!(
-                "OpenAL source stopped for queue {:?}, completing asynchronous stop.",
+                "OpenAL source stopped for queue {:?}, completing async stop.",
                 in_aq
             );
             finish_stopping_audio_queue(env, in_aq);
@@ -990,7 +1005,11 @@ fn finish_stopping_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     notify_aq_is_running(env, in_aq);
 }
 
-pub fn AudioQueueStop(env: &mut Environment, in_aq: AudioQueueRef, in_immediate: bool) -> OSStatus {
+pub fn AudioQueueStop(
+    env: &mut Environment,
+    in_aq: AudioQueueRef,
+    in_immediate: bool,
+) -> OSStatus {
     return_if_null!(in_aq);
 
     if in_immediate {
