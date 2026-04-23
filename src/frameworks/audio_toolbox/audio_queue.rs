@@ -186,6 +186,24 @@ pub fn AudioQueueNewOutput(
         format.channels_per_frame = 1;
     }
 
+    // Общий фикс для Action Buggy и других игр со сломанным заголовком LPCM 
+    if format.format_id == kAudioFormatLinearPCM && format.channels_per_frame > 0 {
+        let expected_bytes_per_frame = format.channels_per_frame * (format.bits_per_channel / 8);
+        if expected_bytes_per_frame != format.bytes_per_frame {
+            let actual_bytes_per_channel = format.bytes_per_frame / format.channels_per_frame;
+            let actual_bits_per_channel = actual_bytes_per_channel * 8;
+            if actual_bits_per_channel == 8 || actual_bits_per_channel == 16 {
+                log!(
+                    "Fixing broken LPCM header: bits_per_channel was {}, but frame size implies {}. Correcting to {}.",
+                    format.bits_per_channel,
+                    actual_bits_per_channel,
+                    actual_bits_per_channel
+                );
+                format.bits_per_channel = actual_bits_per_channel;
+            }
+        }
+    }
+
     let host_object = AudioQueueHostObject {
         format,
         callback_proc: in_callback_proc,
@@ -665,6 +683,25 @@ pub fn decode_buffer(
                 (1, 16) => al::AL_FORMAT_MONO16,
                 (2, 8) => al::AL_FORMAT_STEREO8,
                 (2, 16) => al::AL_FORMAT_STEREO16,
+
+                (1, 32) => {
+                    assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
+                    assert!(processed_data.len().is_multiple_of(4));
+                    let new_size = (processed_data.len() / 4) * 2; // конвертация 32-bit в 16-bit
+                    let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
+
+                    for chunk in processed_data.chunks(4) {
+                        let val: i32 = i32::from_le_bytes(chunk.try_into().unwrap());
+                        let new_val: i16 = (val >> 16) as i16;
+                        new_processed_data.extend(new_val.to_le_bytes());
+                    }
+                    return (
+                        al::AL_FORMAT_MONO16,
+                        format.sample_rate as ALsizei,
+                        new_processed_data,
+                    );
+                }
+                
                 (2, 32) => {
                     assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
                     assert!(processed_data.len().is_multiple_of(4));
