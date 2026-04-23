@@ -505,7 +505,7 @@ impl Dyld {
                 mem.write(val_ptr, 1u32);
                 log_dbg!("Stubbed ___mb_cur_max at {:?}", val_ptr);
                 val_ptr.cast().cast_const()
-            } else if name == "dyld_stub_binder" {
+            } else if name == "dyld_stub_binder" || name == "_dyld_stub_binder" {
                 // In iOS, dyld_stub_binder handles lazy symbol binding.
                 // However, touchHLE resolves lazy symbols entirely via SVC traps,
                 // bypassing the need for a guest-side binder.
@@ -603,6 +603,17 @@ impl Dyld {
                     mem.write(ptr_ptr, Ptr::from_bits(addr));
                     continue 'ptr_loop;
                 }
+            }
+
+            if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
+                // Используем наш паникующий хэндлер, который вы зарегистрировали в create_proc_address_no_inval
+                let trampoline_ptr = self
+                    .create_proc_address_no_inval(mem, symbol)
+                    .unwrap()
+                    .to_ptr();
+                mem.write(ptr_ptr, trampoline_ptr);
+                log_dbg!("Linked non-lazy host function {} at {:?}", symbol, trampoline_ptr);
+                continue;
             }
 
             if let Some((symbol, _)) = search_host_dylibs(|dylib| dylib.function_exports, symbol) {
@@ -923,7 +934,6 @@ impl Dyld {
             Box::leak(symbol.to_string().into_boxed_str());
         let f: HostFunction =
             &(unimplemented_function_stub as fn(&mut Environment) -> i32);
-
         // Allocate an SVC ID for this stub (same pattern as the host-dylib
         // branch above).
         let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
@@ -933,7 +943,6 @@ impl Dyld {
             svc |= Self::SVC_LAZY_LINK_RET_FLAG;
         }
         self.linked_host_functions.push((leaked_symbol, f));
-
         // Rewrite the stub function to trap into our SVC handler.
         let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
         mem.write(stub_function_ptr, encode_a32_svc(svc));
@@ -941,7 +950,6 @@ impl Dyld {
             assert!(mem.read(stub_function_ptr + 1) == encode_a32_ret());
         }
         cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
-
         Some(f)
     }
 
@@ -971,11 +979,10 @@ impl Dyld {
         mem: &mut Mem,
         symbol: &str,
     ) -> Result<GuestFunction, ()> {
-                // Нативно обрабатываем рудимент ленивой загрузки Apple:
+        // Нативно обрабатываем рудимент ленивой загрузки Apple:
         if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
             // Используем "dyld_stub_binder" (это &'static str), а не переменную symbol
-            let symbol_name = "dyld_stub_binder"; 
-            
+            let symbol_name = "dyld_stub_binder";
             if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol_name) {
                 return Ok(cached_fn);
             }
