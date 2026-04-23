@@ -26,15 +26,12 @@ pub mod printf;
 const EOF: i32 = -1;
 
 struct FILEHostObject {
-    /// `ungetc()` implementation
-    pushbacks: Vec<u8>,
-    /// `ferror()` implementation
-    error: bool,
-
-    // Новые поля для честной поддержки setbuf / setvbuf
-    buf_ptr: MutPtr<u8>,
-    buf_mode: i32,
-    buf_size: u32,
+    pushbacks: Vec::new(),
+    error: false,
+                    // Добавьте эти 3 строки в обе ошибки:
+    buf_ptr: MutPtr::null(),
+    buf_mode: 2, // 2 = _IONBF
+    buf_size: 0,
 }
 
 // Режимы буферизации из C standard library
@@ -667,7 +664,7 @@ fn setvbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: MutPtr<u8>, mode: i
 
     // Получаем хост-объект, связанный с этим FILE.
     // Если его нет в HashMap, создаем с дефолтными значениями (по умолчанию _IONBF).
-    let host_obj = env.state.stdio.file_host_objects.entry(stream.to_bits()).or_insert_with(|| FILEHostObject {
+    let host_obj = env.libc_state.stdio.file_host_objects.entry(stream.to_bits()).or_insert_with(|| FILEHostObject {
         pushbacks: Vec::new(),
         error: false,
         buf_ptr: MutPtr::null(),
