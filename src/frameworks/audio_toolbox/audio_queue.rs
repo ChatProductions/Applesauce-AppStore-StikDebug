@@ -186,16 +186,20 @@ pub fn AudioQueueNewOutput(
         format.channels_per_frame = 1;
     }
 
-    // Общий фикс для Action Buggy и других игр со сломанным заголовком LPCM 
+        // Общий фикс для Action Buggy и других игр со сломанным заголовком LPCM 
     if format.format_id == kAudioFormatLinearPCM && format.channels_per_frame > 0 {
         let expected_bytes_per_frame = format.channels_per_frame * (format.bits_per_channel / 8);
         if expected_bytes_per_frame != format.bytes_per_frame {
             let actual_bytes_per_channel = format.bytes_per_frame / format.channels_per_frame;
             let actual_bits_per_channel = actual_bytes_per_channel * 8;
             if actual_bits_per_channel == 8 || actual_bits_per_channel == 16 {
+                
+                // ИСПРАВЛЕНИЕ: Копируем значение в локальную переменную перед логом
+                let old_bits_per_channel = format.bits_per_channel;
+                
                 log!(
                     "Fixing broken LPCM header: bits_per_channel was {}, but frame size implies {}. Correcting to {}.",
-                    format.bits_per_channel,
+                    old_bits_per_channel, // <-- Используем скопированную переменную
                     actual_bits_per_channel,
                     actual_bits_per_channel
                 );
