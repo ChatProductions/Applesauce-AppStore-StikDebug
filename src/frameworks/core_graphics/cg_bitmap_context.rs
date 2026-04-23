@@ -46,9 +46,6 @@ pub fn CGBitmapContextCreate(
     color_space: CGColorSpaceRef,
     bitmap_info: u32,
 ) -> CGContextRef {
-    // assert!(bits_per_component == 8); // TODO: support other bit depths
-
-        // Честная обработка NULL color_space: по умолчанию используем RGB.
     let color_space_name = if color_space.is_null() {
         kCGColorSpaceGenericRGB
     } else {
@@ -56,7 +53,7 @@ pub fn CGBitmapContextCreate(
     };
 
     let component_count = match color_space_name {
-        kCGColorSpaceGenericRGB => components_for_rgb(bitmap_info).unwrap_or(4), // Fallback на 4 компонента
+        kCGColorSpaceGenericRGB => components_for_rgb(bitmap_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(bitmap_info).unwrap_or(1),
         _ => {
             log!("Warning: unknown color space '{}' in CGBitmapContextCreate, falling back to RGB", color_space_name);
@@ -64,7 +61,6 @@ pub fn CGBitmapContextCreate(
         }
     };
     
-    // Перезаписываем имя для сохранения в структуре
     let color_space = color_space_name;
 
     let (data, data_is_owned, bytes_per_row) = if data.is_null() {
@@ -77,7 +73,6 @@ pub fn CGBitmapContextCreate(
         let data = env.mem.alloc(total_size);
         (data, true, bytes_per_row)
     } else {
-        // assert!(bytes_per_row != 0);
         (data, false, bytes_per_row)
     };
 
@@ -92,18 +87,17 @@ pub fn CGBitmapContextCreate(
             color_space,
             alpha_info: bitmap_info & kCGBitmapAlphaInfoMask,
         }),
-        transform: CGAffineTransformIdentity, // <--- ИСПРАВЛЕНИЕ: Использована константа вместо Default::default()
-        // When creating a CGBitmapContext, initialise:
+        transform: CGAffineTransformIdentity,
         rgb_fill_color:   (0.0, 0.0, 0.0, 1.0),
         rgb_stroke_color: (0.0, 0.0, 0.0, 1.0),
         alpha:            1.0,
         line_width:       1.0,
-        line_cap:         0,   // kCGLineCapButt
-        line_join:        0,   // kCGLineJoinMiter
+        line_cap:         0,
+        line_join:        0,
         miter_limit:      10.0,
         flatness:         0.0,
-        blend_mode:       0,   // kCGBlendModeNormal
-        interpolation_quality: 2, // kCGInterpolationDefault (или 0)
+        blend_mode:       0,
+        interpolation_quality: 2,
         state_stack:      Vec::new(),
         path_points:      Vec::new(),
     };
@@ -143,10 +137,6 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
     let host_obj = env.objc.borrow::<CGContextHostObject>(context);
     let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;
 
-    // Убираем жесткий assert, который крашит игру.
-    // Игры часто создают контексты с другими форматами (например, Grayscale или без альфы).
-    // Вместо паники мы честно читаем пиксели, используя уже написанные в файле хелперы.
-
     if bitmap_data.bits_per_component != 8 {
         log!("Warning: CGBitmapContextCreateImage called with bits_per_component = {}, which is not fully supported yet.", bitmap_data.bits_per_component);
     }
@@ -158,11 +148,8 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
         .mem
         .bytes_at(bitmap_data.data.cast(), data_size);
 
-    // Нам нужно привести любые пиксели к формату RGBA (4 байта на пиксель), 
-    // так как структура Image ожидает именно его.
     let mut normalized_pixels = Vec::with_capacity((bitmap_data.width * bitmap_data.height * 4) as usize);
 
-    // Получаем смещения для каналов цвета из оригинального контекста
     let (r_offset, g_offset, b_offset, a_offset) = pixel_offsets(&bitmap_data);
 
     for y in 0..bitmap_data.height {
@@ -170,7 +157,6 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
         for x in 0..bitmap_data.width {
             let pixel_start = row_start + (x as usize * bpp);
 
-            // Защита от выхода за пределы памяти, если шаг строки (bytes_per_row) нестандартный
             if pixel_start + bpp > raw_pixels.len() {
                 normalized_pixels.extend_from_slice(&[0, 0, 0, 0]);
                 continue;
@@ -210,15 +196,15 @@ fn components_for_rgb(bitmap_info: CGBitmapInfo) -> Result<GuestUSize, ()> {
         return Err(());
     }
     match alpha_info & kCGBitmapAlphaInfoMask {
-        kCGImageAlphaNone => Ok(3), // RGB
+        kCGImageAlphaNone => Ok(3), 
         kCGImageAlphaPremultipliedLast
         | kCGImageAlphaPremultipliedFirst
         | kCGImageAlphaLast
         | kCGImageAlphaFirst
         | kCGImageAlphaNoneSkipLast
-        | kCGImageAlphaNoneSkipFirst => Ok(4), // RGBA/ARGB/RGBX/XRGB
-        kCGImageAlphaOnly => Ok(1), // A
-        _ => Err(()),               // unknown values
+        | kCGImageAlphaNoneSkipFirst => Ok(4), 
+        kCGImageAlphaOnly => Ok(1), 
+        _ => Err(()),               
     }
 }
 
@@ -233,15 +219,15 @@ fn components_for_gray(bitmap_info: CGBitmapInfo) -> Result<GuestUSize, ()> {
         return Err(());
     }
     match alpha_info & kCGBitmapAlphaInfoMask {
-        kCGImageAlphaNone => Ok(1), // gray
+        kCGImageAlphaNone => Ok(1), 
         kCGImageAlphaPremultipliedLast
         | kCGImageAlphaPremultipliedFirst
         | kCGImageAlphaLast
         | kCGImageAlphaFirst
         | kCGImageAlphaNoneSkipLast
-        | kCGImageAlphaNoneSkipFirst => Ok(2), // gray + alpha
-        kCGImageAlphaOnly => Ok(1), // A
-        _ => Err(()),               // unknown values
+        | kCGImageAlphaNoneSkipFirst => Ok(2), 
+        kCGImageAlphaOnly => Ok(1), 
+        _ => Err(()),               
     }
 }
 
@@ -256,7 +242,7 @@ fn bytes_per_pixel(data: &CGBitmapContextData) -> GuestUSize {
     match color_space {
         kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap_or(1),
-        _ => components_for_rgb(alpha_info).unwrap_or(4), // Fallback
+        _ => components_for_rgb(alpha_info).unwrap_or(4), 
     }
 }
 
@@ -292,31 +278,30 @@ fn blend_premultiplied(bg: (f32, f32, f32, f32), fg: (f32, f32, f32, f32)) -> (f
     )
 }
 
+// ИСПРАВЛЕНИЕ: Убраны все `unreachable!()` и `unimplemented!()`
+// Теперь, если игра передает нестандартный формат, мы безопасно откатываемся на RGBA
 fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usize>) {
-    match data.color_space {
-        kCGColorSpaceGenericRGB => {
-            match data.alpha_info {
-                kCGImageAlphaNone => (0, 1, 2, None),
-                kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 1, 2, Some(3)),
-                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 2, 3, Some(0)),
-                kCGImageAlphaNoneSkipLast => (0, 1, 2, None),
-                kCGImageAlphaNoneSkipFirst => (1, 2, 3, None),
-                kCGImageAlphaOnly => (0, 0, 0, Some(0)),
-                _ => unreachable!(),
-            }
+    if data.color_space == kCGColorSpaceGenericGray {
+        match data.alpha_info {
+            kCGImageAlphaNone => (0, 0, 0, None),
+            kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 0, 0, Some(1)),
+            kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 1, 1, Some(0)),
+            kCGImageAlphaNoneSkipLast => (0, 0, 0, None),
+            kCGImageAlphaNoneSkipFirst => (1, 1, 1, None),
+            kCGImageAlphaOnly => (0, 0, 0, Some(0)),
+            _ => (0, 0, 0, None), // Безопасный фоллбэк для Gray
         }
-        kCGColorSpaceGenericGray => {
-            match data.alpha_info {
-                kCGImageAlphaNone => (0, 0, 0, None),
-                kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 0, 0, Some(1)),
-                kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 1, 1, Some(0)),
-                kCGImageAlphaNoneSkipLast => (0, 0, 0, None),
-                kCGImageAlphaNoneSkipFirst => (1, 1, 1, None),
-                kCGImageAlphaOnly => (0, 0, 0, Some(0)),
-                _ => unreachable!(),
-            }
+    } else {
+        // Для kCGColorSpaceGenericRGB и вообще любых неизвестных Color Space
+        match data.alpha_info {
+            kCGImageAlphaNone => (0, 1, 2, None),
+            kCGImageAlphaPremultipliedLast | kCGImageAlphaLast => (0, 1, 2, Some(3)),
+            kCGImageAlphaPremultipliedFirst | kCGImageAlphaFirst => (1, 2, 3, Some(0)),
+            kCGImageAlphaNoneSkipLast => (0, 1, 2, None),
+            kCGImageAlphaNoneSkipFirst => (1, 2, 3, None),
+            kCGImageAlphaOnly => (0, 0, 0, Some(0)),
+            _ => (0, 1, 2, Some(3)), // Безопасный фоллбэк для RGBA
         }
-        _ => unimplemented!(),
     }
 }
 
@@ -439,7 +424,7 @@ impl CGBitmapContextDrawer<'_> {
             gamma_decode(self.rgb_fill_color.0 * multiply_by),
             gamma_decode(self.rgb_fill_color.1 * multiply_by),
             gamma_decode(self.rgb_fill_color.2 * multiply_by),
-            self.rgb_fill_color.3, // alpha is always linear
+            self.rgb_fill_color.3, 
         )
     }
     pub fn put_pixel(
@@ -494,7 +479,7 @@ pub(super) fn fill_rect(env: &mut Environment, context: CGContextRef, rect: CGRe
         drawer.rgb_fill_color()
     };
     for ((x, y), _) in drawer.iter_transformed_pixels(rect) {
-        drawer.put_pixel((x, y), color, /* blend: */ !clear)
+        drawer.put_pixel((x, y), color, !clear)
     }
 }
 
@@ -512,12 +497,12 @@ pub(super) fn draw_image(
         let texel_x = (image_width as f32 * texel_x) as i32;
         let texel_y = (image_height as f32 * (1.0 - texel_y)) as i32;
         if let Some(color) = image.get_pixel((texel_x, texel_y)) {
-            drawer.put_pixel((x, y), color, /* blend: */ true)
+            drawer.put_pixel((x, y), color, true)
         }
     }
 }
 
-#[allow(rustdoc::broken_intra_doc_links)] // https://github.com/rust-lang/rust/issues/83049
+#[allow(rustdoc::broken_intra_doc_links)] 
 pub fn get_data(objc: &ObjC, context: CGContextRef) -> (GuestUSize, GuestUSize, MutVoidPtr) {
     let host_obj = objc.borrow::<CGContextHostObject>(context);
     let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;
@@ -532,4 +517,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGBitmapContextGetHeight(_)),
     export_c_func!(CGBitmapContextGetBytesPerRow(_)),
 ];
-
