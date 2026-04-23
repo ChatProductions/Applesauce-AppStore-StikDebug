@@ -95,6 +95,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this dealloc]
 }
 
+- (())layoutIfNeeded {
+    log_dbg!("[(UIWindow*){:?} layoutIfNeeded]", this);
+    // Честная реализация: немедленно форсируем пересчет layout'а, 
+    // отправляя сообщение layoutSubviews самому себе (наследуется от UIView)
+    () = msg![env; this layoutSubviews];
+}
+    
 - (())setHidden:(bool)is_hidden {
     () = msg_super![env; this setHidden:is_hidden];
 
