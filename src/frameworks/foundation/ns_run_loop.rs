@@ -139,7 +139,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             // Если цель совпадает, инвалидируем таймер (он сам удалится из run loop)
             if timer_target == target {
                 log_dbg!("NSRunLoop: invalidating timer {:?} for target {:?}", timer, target);
-                msg![env; timer invalidate];
+                let _: () = msg![env; timer invalidate];
             }
             
             // Отпускаем локальный retain
