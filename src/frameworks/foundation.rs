@@ -89,7 +89,6 @@ pub fn NSGetSizeAndAlignment(
     align_out: MutPtr<NSUInteger>,
 ) -> ConstPtr<u8> {
     let (next_ptr, size, align) = parse_objc_type(env, type_ptr);
-
     if !size_out.is_null() {
         env.mem.write(size_out, size as NSUInteger);
     }
@@ -104,7 +103,6 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
     // Пропускаем модификаторы типа (const, in, out, inout, bycopy, byref, oneway)
     loop {
         let c = env.mem.read(ptr) as char;
-
         match c {
             'r' | 'n' | 'N' |
             'o' | 'O' | 'R' | 'V' => {
@@ -115,7 +113,6 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
     }
 
     let c = env.mem.read(ptr) as char;
-
     ptr = ptr + 1;
 
     match c {
@@ -137,27 +134,22 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип, на который он указывает
         '^' => {
             let (next_ptr, _, _) = parse_objc_type(env, ptr);
-
             (next_ptr, 4, 4)
         }
         
         // Массивы: [len+type]
         '[' => {
             let mut len = 0;
-
             loop {
                 let c = env.mem.read(ptr) as char;
-
                 if c.is_ascii_digit() {
                     len = len * 10 + c.to_digit(10).unwrap();
-
                     ptr = ptr + 1;
                 } else {
                     break;
                 }
             }
             let (mut next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
-
             if env.mem.read(next_ptr) as char == ']' {
                 next_ptr = next_ptr + 1;
             }
@@ -168,7 +160,6 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         '{' => {
             loop {
                 let c = env.mem.read(ptr) as char;
-
                 ptr = ptr + 1;
                 if c == '=' ||
                 c == '}' {
@@ -178,14 +169,11 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 }
             }
             let mut total_size = 0;
-
             let mut max_align = 1;
             loop {
                 let c = env.mem.read(ptr) as char;
-
                 if c == '}' {
                     ptr = ptr + 1;
-
                     break;
                 }
                 if c == '\0' { break;
@@ -198,17 +186,16 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                     loop {
                         let nc = env.mem.read(ptr) as char;
                         ptr = ptr + 1;
+                      
                         if nc == '"' { break;
                         }
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
-
                     ptr = next_ptr;
                     
                     if elem_align > 0 {
                         let rem = total_size % elem_align;
-
                         if rem != 0 {
                             total_size += elem_align - rem;
                         }
@@ -221,7 +208,6 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             }
             if max_align > 0 {
                 let rem = total_size % max_align;
-
                 if rem != 0 {
                     total_size += max_align - rem;
                 }
@@ -242,14 +228,11 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 }
             }
             let mut max_size = 0;
-
             let mut max_align = 1;
             loop {
                 let c = env.mem.read(ptr) as char;
-
                 if c == ')' {
                     ptr = ptr + 1;
-
                     break;
                 }
                 if c == '\0' { break;
@@ -266,7 +249,6 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
-
                     ptr = next_ptr;
                     if elem_size > max_size { max_size = elem_size;
                     }
@@ -280,20 +262,16 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         // Битовые поля: bNUM
         'b' => {
             let mut bits = 0;
-
             loop {
                 let c = env.mem.read(ptr) as char;
-
                 if c.is_ascii_digit() {
                     bits = bits * 10 + c.to_digit(10).unwrap();
-
                     ptr = ptr + 1;
                 } else {
                     break;
                 }
             }
             let bytes = (bits + 7) / 8;
-
             (ptr, bytes, 1)
         }
         
@@ -304,6 +282,8 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 pub const STUB_CONSTANTS: ConstantExports = &[
     ("_NSLocalizedFailureReasonErrorKey", HostConstant::NSString("NSLocalizedFailureReasonErrorKey")),
     ("_NSURLErrorDomain", HostConstant::NSString("NSURLErrorDomain")),
+    ("_NSKeyValueChangeNewKey", HostConstant::NSString("new")), // ДОБАВЛЕН КЛЮЧ KVO
+    ("_OBJC_IVAR_$_NSObject.isa", HostConstant::U32(0)), // ДОБАВЛЕНА ЗАГЛУШКА NSObject
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -408,7 +388,6 @@ pub struct State {
 }
 
 pub type NSInteger = i32;
-
 pub type NSUInteger = u32;
 
 // this should be equal to NSIntegerMax
@@ -425,7 +404,6 @@ crate::abi::impl_GuestRet_for_large_struct!(NSRange);
 
 impl crate::abi::GuestArg for NSRange {
     const REG_COUNT: usize = 2;
-
     fn from_regs(regs: &[u32]) -> Self {
         NSRange {
             location: crate::abi::GuestArg::from_regs(&regs[0..1]),
@@ -434,21 +412,18 @@ impl crate::abi::GuestArg for NSRange {
     }
     fn to_regs(self, regs: &mut [u32]) {
         self.location.to_regs(&mut regs[0..1]);
-
         self.length.to_regs(&mut regs[1..2]);
     }
 }
 
 fn NSStringFromRange(env: &mut Environment, range: NSRange) -> id {
     let loc = range.location;
-
     let len = range.length;
     let string = format!("{{{loc}, {len}}}");
     ns_string::from_rust_string(env, string)
 }
 
 pub type NSComparisonResult = NSInteger;
-
 pub const NSOrderedAscending: NSComparisonResult = -1;
 pub const NSOrderedSame: NSComparisonResult = 0;
 pub const NSOrderedDescending: NSComparisonResult = 1;
@@ -464,7 +439,6 @@ pub type unichar = u16;
 /// in Foundation have to do.
 fn hash_helper<T: std::hash::Hash>(hashable: &T) -> NSUInteger {
     use std::hash::Hasher;
-
     // Rust documentation says DefaultHasher::new() should always return the
     // same instance, so this should give consistent hashes.
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -479,3 +453,4 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSGetSizeAndAlignment(_, _, _)),
     export_c_func!(CFStringGetCharactersPtr(_)),
 ];
+
