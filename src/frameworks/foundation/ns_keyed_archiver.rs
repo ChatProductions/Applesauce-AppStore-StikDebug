@@ -79,8 +79,28 @@ pub const CLASSES: ClassExports = objc_classes!
     msg![env; data writeToFile:file atomically:true]
 }
 
-- (id)initForWritingWithMutableData:(id)_data {
-    log!("Warning: stubbed NSKeyedArchiver initForWritingWithMutableData:");
+- (id)initForWritingWithMutableData:(id)data {
+    let this = msg_super![env; this init];
+    if this == nil { return nil; }
+
+    let mut plist = Dictionary::new();
+    // Стандартный заголовок для NSKeyedArchiver
+    plist.insert("$version".into(), Value::Integer(100000.into()));
+    plist.insert("$archiver".into(), Value::String("NSKeyedArchiver".into()));
+    
+    // Инициализируем массив объектов. Первый элемент (индекс 0) всегда строка "$null"
+    let mut objects = Vec::new();
+    objects.push(Value::String("$null".into()));
+    plist.insert("$objects".into(), Value::Array(objects));
+
+    let host_object = NSKeyedArchiverHostObject {
+        plist,
+        encoded_data: retain(env, data), // Сохраняем ссылку на буфер
+        current_key: None,
+        already_archived: HashMap::new(),
+    };
+
+    env.objc.set_host_object(this, host_object);
     this
 }
 
@@ -153,17 +173,25 @@ pub const CLASSES: ClassExports = objc_classes!
 }
 
 - (())finishEncoding {
-    let plist = &env.objc.borrow::<NSKeyedArchiverHostObject>(this).plist;
-    let mut buffer = Vec::new();
-    let cursor = Cursor::new(&mut buffer);
-    to_writer_binary(cursor, plist).unwrap();
-    let len = buffer.len() as GuestUSize;
-    let guest_buffer = env.mem.alloc(len);
-    env.mem.bytes_at_mut(guest_buffer.cast(), len).copy_from_slice(&buffer[..]);
-    let encoded_data: id = msg_class![env;
-    NSData dataWithBytesNoCopy:guest_buffer length:len];
-    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = encoded_data;
-    retain(env, encoded_data);
+    let (plist, encoded_data) = {
+        let host_obj = env.objc.borrow::<NSKeyedArchiverHostObject>(this);
+        (host_obj.plist.clone(), host_obj.encoded_data)
+    };
+
+    if encoded_data != nil {
+        // Сериализуем Dictionary в формат Binary Plist
+        let mut buf = Vec::new();
+        if let Ok(_) = to_writer_binary(Cursor::new(&mut buf), &Value::Dictionary(plist)) {
+            // Записываем результат в NSMutableData через сообщение appendBytes:length: или setData:
+            // В touchHLE обычно используется прямой доступ к памяти или вызов метода
+            let bytes_ptr = buf.as_ptr();
+            let len = buf.len() as NSUInteger;
+            
+            // Очищаем старые данные и ставим новые
+            () = msg![env; encoded_data setData:nil]; 
+            () = msg![env; encoded_data appendBytes:bytes_ptr length:len];
+        }
+    }
 }
 
 - (id)encodedData {
@@ -175,9 +203,9 @@ pub const CLASSES: ClassExports = objc_classes!
 }
 
 - (())dealloc {
-    let NSKeyedArchiverHostObject { encoded_data, .. } = *env.objc.borrow::<NSKeyedArchiverHostObject>(this);
-    release(env, encoded_data);
-    env.objc.dealloc_object(this, &mut env.mem);
+    let host_obj = env.objc.borrow::<NSKeyedArchiverHostObject>(this);
+    release(env, host_obj.encoded_data);
+    msg_super![env; this dealloc]
 }
 
 @end
