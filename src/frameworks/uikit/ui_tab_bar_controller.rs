@@ -293,8 +293,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers
 }
 
-- ((())setViewControllers:(id)vcs animated:(bool)animated {
-    // 1. Сохраняем массив контроллеров
+- (())setViewControllers:(id)vcs animated:(bool)animated {
     let old_vcs = env.objc.borrow::<UITabBarControllerHostObject>(this).view_controllers;
     release(env, old_vcs);
     retain(env, vcs);
@@ -332,7 +331,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<UITabBarControllerHostObject>(this).selected_index
 }
 
-- ((())setSelectedIndex:(NSUInteger)index {
+- (())setSelectedIndex:(NSUInteger)index {
     let (vcs, tab_bar) = {
         let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
         (host.view_controllers, host.tab_bar)
