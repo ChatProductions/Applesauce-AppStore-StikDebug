@@ -160,6 +160,7 @@ fn NSSearchPathForDirectoriesInDomains(
             env.fs.home_directory().to_owned()
         }
     };
+
     let dir = ns_string::from_rust_string(env, String::from(dir));
     let dir_list = ns_array::from_vec(env, vec![dir]);
     autorelease(env, dir_list)
@@ -237,8 +238,7 @@ struct NSDirectoryEnumeratorHostObject {
 }
 impl HostObject for NSDirectoryEnumeratorHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
@@ -273,9 +273,33 @@ pub const CLASSES: ClassExports = objc_classes!
     }
 }
 
-- (id)fileSystemRepresentationWithPath:(id)path {
-    let error: MutPtr<id> = Ptr::null();
-    msg![env; this subpathsOfDirectoryAtPath:path error:error]
+- (ConstPtr<u8>)fileSystemRepresentationWithPath:(id)path {
+    if path.is_null() {
+        return Ptr::null();
+    }
+    // Возвращаем указатель на C-строку (UTF-8), которую хранит NSString
+    msg![env; path UTF8String]
+}
+
+- (id)stringWithFileSystemRepresentation:(ConstPtr<u8>)str length:(NSUInteger)len {
+    if str.is_null() {
+        return nil;
+    }
+    
+    if len == 0 {
+        let empty = ns_string::from_rust_string(env, String::new());
+        return autorelease(env, empty);
+    }
+    
+    let mut bytes = Vec::with_capacity(len as usize);
+    for i in 0..len {
+        let byte: u8 = env.mem.read(str + i);
+        bytes.push(byte);
+    }
+    
+    let s = String::from_utf8_lossy(&bytes).into_owned();
+    let ns_str = ns_string::from_rust_string(env, s);
+    autorelease(env, ns_str)
 }
 
 // MARK: - Discovering Directory Contents
@@ -301,14 +325,17 @@ pub const CLASSES: ClassExports = objc_classes!
     let Ok(paths) = env.fs.enumerate(GuestPath::new(&path)) else {
         return nil;
     };
+
     let paths: Vec<GuestPathBuf> = paths
         .map(|path| GuestPathBuf::from(GuestPath::new(path)))
         .collect();
+
     log_dbg!("directoryContentsAtPath {}: {:?}", path, paths);
     let path_strings = paths
         .iter()
         .map(|name| ns_string::from_rust_string(env, name.as_str().to_string()))
         .collect();
+
     let res = ns_array::from_vec(env, path_strings);
     autorelease(env, res)
 }
@@ -320,15 +347,19 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
+
     let Ok(paths) = env.fs.enumerate_recursive(guest_path) else {
         return nil;
     };
+
     let host_object = Box::new(NSDirectoryEnumeratorHostObject {
         iterator: paths.into_iter(),
         base_path: GuestPathBuf::from(guest_path),
     });
+
     let class = env.objc.get_known_class("NSDirectoryEnumerator", &mut env.mem);
     let enumerator = env.objc.alloc_object(class, host_object, &mut env.mem);
+
     autorelease(env, enumerator)
 }
 
@@ -346,6 +377,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
+
     let Ok(paths) = env.fs.enumerate_recursive(guest_path) else {
         if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -355,10 +387,12 @@ pub const CLASSES: ClassExports = objc_classes!
         }
         return nil;
     };
+
     let path_strings: Vec<id> = paths
         .iter()
         .map(|p| ns_string::from_rust_string(env, p.as_str().to_string()))
         .collect();
+
     let res = ns_array::from_vec(env, path_strings);
     autorelease(env, res)
 }
@@ -377,8 +411,7 @@ pub const CLASSES: ClassExports = objc_classes!
         return false;
     }
     
-    let _ = attributes;
-    // Ignore for now
+    let _ = attributes; // Ignore for now
     
     if data.is_null() {
         let empty: id = msg_class![env; NSData new];
@@ -414,11 +447,13 @@ pub const CLASSES: ClassExports = objc_classes!
     }
     
     let path_str = ns_string::to_rust_string(env, path);
+
     let res = if with_intermediates {
         env.fs.create_dir_all(GuestPath::new(&path_str))
     } else {
         env.fs.create_dir(GuestPath::new(&path_str))
     };
+
     match res {
         Ok(()) => {
             log_dbg!("createDirectoryAtPath {} => true", path_str);
@@ -469,6 +504,7 @@ pub const CLASSES: ClassExports = objc_classes!
     }
     
     let path_str = ns_string::to_rust_string(env, path);
+
     match env.fs.remove(GuestPath::new(&path_str)) {
         Ok(()) => true,
         Err(err) => {
@@ -510,6 +546,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let src_str = ns_string::to_rust_string(env, src);
     let dst_str = ns_string::to_rust_string(env, dst);
+
     let data = match env.fs.read(GuestPath::new(src_str.as_ref())) {
         Ok(d) => d,
         Err(_) => {
@@ -522,6 +559,7 @@ pub const CLASSES: ClassExports = objc_classes!
             return false;
         }
     };
+
     if env.fs.write(GuestPath::new(dst_str.as_ref()), &data).is_err() {
         if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -550,6 +588,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let path_str = ns_string::to_rust_string(env, path);
     let to_path_str = ns_string::to_rust_string(env, toPath);
+
     match env.fs.rename(GuestPath::new(&path_str), GuestPath::new(&to_path_str)) {
         Ok(()) => true,
         Err(()) => {
@@ -618,6 +657,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
+
     if env.fs.exists(guest_path) {
         if !is_dir_ptr.is_null() {
             let is_dir = env.fs.is_dir(guest_path);
@@ -681,6 +721,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
+
     if !env.fs.exists(guest_path) {
         if !error.is_null() {
             let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -695,6 +736,7 @@ pub const CLASSES: ClassExports = objc_classes!
     let file_size = if is_dir { 0 } else { env.fs.read(guest_path).map(|d| d.len()).unwrap_or(0) };
     
     let dict: id = msg_class![env; NSMutableDictionary dictionary];
+
     let type_val = if is_dir { NSFileTypeDirectory } else { NSFileTypeRegular };
     let type_str = get_static_str(env, type_val);
     let type_key = get_static_str(env, NSFileType);
@@ -703,6 +745,7 @@ pub const CLASSES: ClassExports = objc_classes!
     let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(file_size as u64)];
     let size_key = get_static_str(env, NSFileSize);
     () = msg![env; dict setObject:size_num forKey:size_key];
+
     let perms = if is_dir { 0o755 } else { 0o644 };
     let perms_num: id = msg_class![env; NSNumber numberWithUnsignedInt:perms];
     let perms_key = get_static_str(env, NSFilePosixPermissions);
@@ -736,10 +779,13 @@ pub const CLASSES: ClassExports = objc_classes!
     // Return dummy file system attributes
     let dict: id = msg_class![env; NSMutableDictionary dictionary];
     
-    let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(1024 * 1024 * 1024 * 16_u64)]; // 16GB
+    let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(1024 * 1024 * 1024 * 16_u64)];
+    // 16GB
     let size_key = get_static_str(env, NSFileSystemSize);
     () = msg![env; dict setObject:size_num forKey:size_key];
-    let free_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(1024 * 1024 * 1024 * 8_u64)]; // 8GB
+
+    let free_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(1024 * 1024 * 1024 * 8_u64)];
+    // 8GB
     let free_key = get_static_str(env, NSFileSystemFreeSize);
     () = msg![env; dict setObject:free_num forKey:free_key];
     
@@ -787,6 +833,7 @@ pub const CLASSES: ClassExports = objc_classes!
     
     let p1 = ns_string::to_rust_string(env, path1);
     let p2 = ns_string::to_rust_string(env, path2);
+
     if p1 == p2 {
         return true;
     }
@@ -817,7 +864,7 @@ pub const CLASSES: ClassExports = objc_classes!
 // Главный метод: игра вызывает его в цикле, пока он не вернет nil
 - (id)nextObject {
     let mut host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
-    
+
     if let Some(path) = host.iterator.next() {
         let path_str = path.as_str();
         let base_str = host.base_path.as_str();
@@ -833,7 +880,7 @@ pub const CLASSES: ClassExports = objc_classes!
         } else {
             path_str
         };
-        
+
         let ns_str = ns_string::from_rust_string(env, rel_path.to_string());
         autorelease(env, ns_str)
     } else {
@@ -869,13 +916,16 @@ pub fn is_directory(env: &mut Environment, path: id) -> bool {
         return false;
     }
     let manager: id = msg_class![env; NSFileManager defaultManager];
+
     // Allocate a boolean in guest memory
     let is_dir_ptr: MutPtr<bool> = env.mem.alloc(1).cast();
     env.mem.write(is_dir_ptr, false);
+
     let exists: bool = msg![env; manager fileExistsAtPath:path isDirectory:is_dir_ptr];
     
     let is_dir = env.mem.read(is_dir_ptr);
     env.mem.free(is_dir_ptr.cast());
+
     exists && is_dir
 }
 
@@ -902,6 +952,7 @@ pub fn remove_item(env: &mut Environment, path: id) -> bool {
     
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
+
     msg![env; manager removeItemAtPath:path error:error]
 }
 
@@ -912,6 +963,7 @@ pub fn copy_item(env: &mut Environment, src: id, dst: id) -> bool {
     
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
+
     msg![env; manager copyItemAtPath:src toPath:dst error:error]
 }
 
@@ -922,7 +974,7 @@ pub fn move_item(env: &mut Environment, src: id, dst: id) -> bool {
     
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
+
     msg![env; manager moveItemAtPath:src toPath:dst error:error]
 }
-
 
