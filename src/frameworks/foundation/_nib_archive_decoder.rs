@@ -122,14 +122,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (f32)decodeFloatForKey:(id)key { // NSString *
-    // TODO: Check bounds, raise NSRangeException if it doesn't fit
     get_value_to_decode_for_key(env, this, key).map_or(
         0.0,
         |value| {
-            let &ValueVariant::Float(f) = value.value() else {
-                unreachable!()
-            };
-            f
+            match value.value() {
+                ValueVariant::Float(f) => *f,
+                ValueVariant::Double(d) => *d as f32,
+                ValueVariant::Int8(i) => *i as f32,
+                ValueVariant::Int16(i) => *i as f32,
+                ValueVariant::Int32(i) => *i as f32,
+                ValueVariant::Int64(i) => *i as f32,
+                _ => {
+                    log!("Warning: decodeFloatForKey expected a number, got unexpected variant");
+                    0.0
+                }
+            }
         }
     )
 }
