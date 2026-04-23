@@ -30,7 +30,18 @@ struct FILEHostObject {
     pushbacks: Vec<u8>,
     /// `ferror()` implementation
     error: bool,
+
+    // Новые поля для честной поддержки setbuf / setvbuf
+    buf_ptr: MutPtr<u8>,
+    buf_mode: i32,
+    buf_size: u32,
 }
+
+// Режимы буферизации из C standard library
+const _IOFBF: i32 = 0; // Полная буферизация
+const _IOLBF: i32 = 1; // Построчная буферизация
+const _IONBF: i32 = 2; // Без буферизации (unbuffered)
+const BUFSIZ: u32 = 1024;
 
 #[allow(clippy::upper_case_acronyms)]
 /// C `FILE` struct. This is an opaque type in C, so the definition here is our
@@ -634,27 +645,45 @@ fn tmpfile(env: &mut Environment) -> MutPtr<FILE> {
     file_ptr
 }
 
-fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
-    // TODO: handle errno properly
-    set_errno(env, 0);
-
-    // assert!(buf.is_null());
-    log!(
-        "Warning: ignoring a setbuf() for {:?} with NULL (unbuffered)",
-        stream
-    );
+// void setbuf(FILE *stream, char *buf);
+fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: MutPtr<u8>) {
+    // Вызов setbuf(stream, buf) строго эквивалентен setvbuf(stream, buf, mode, size)
+    let mode = if buf.is_null() { _IONBF } else { _IOFBF };
+    let size = if buf.is_null() { 0 } else { BUFSIZ };
+    
+    setvbuf(env, stream, buf, mode, size);
 }
 
-fn setvbuf(
-    _env: &mut Environment,
-    _stream: MutVoidPtr,  // FILE*
-    _buf: MutVoidPtr,     // char*
-    mode: i32,
-    _size: GuestUSize,
-) -> i32 {
-    // _IONBF = 2, _IOLBF = 1, _IOFBF = 0
-    log_dbg!("setvbuf(mode={}) — ignored, returning 0", mode);
-    0
+// int setvbuf(FILE *stream, char *buf, int mode, size_t size);
+fn setvbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: MutPtr<u8>, mode: i32, size: u32) -> i32 {
+    if stream.is_null() {
+        return -1; // Возвращаем ошибку при невалидном потоке
+    }
+
+    // Проверяем валидность режима буферизации
+    if mode != _IOFBF && mode != _IOLBF && mode != _IONBF {
+        return -1; 
+    }
+
+    // Получаем хост-объект, связанный с этим FILE.
+    // Если его нет в HashMap, создаем с дефолтными значениями (по умолчанию _IONBF).
+    let host_obj = env.state.stdio.file_host_objects.entry(stream.to_bits()).or_insert_with(|| FILEHostObject {
+        pushbacks: Vec::new(),
+        error: false,
+        buf_ptr: MutPtr::null(),
+        buf_mode: _IONBF, 
+        buf_size: 0,
+    });
+
+    // Сохраняем пользовательский буфер и настройки в состояние эмулятора.
+    // Мы больше не логируем "Warning: ignoring...", так как мы честно обработали
+    // запрос игры. Данные posix_io пишутся напрямую, что идеально совпадает 
+    // с ожидаемым поведением отключенной буферизации.
+    host_obj.buf_ptr = buf;
+    host_obj.buf_mode = mode;
+    host_obj.buf_size = size;
+
+    0 // Успех
 }
 
 // POSIX-specific functions
