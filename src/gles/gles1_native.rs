@@ -230,6 +230,17 @@ impl GLES for GLES1Native<'_> {
 
     // Drawing
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
+        const GL_MATRIX_PALETTE_OES: GLenum = 0x8840;
+
+        // Фикс для драйверов Mali: отключаем матричную палитру, чтобы модель нарисовалась
+        if gles11::IsEnabled(GL_MATRIX_PALETTE_OES) == 1 {
+            println!("[MALI FIX] Перехвачен DrawArrays с включенным GL_MATRIX_PALETTE_OES!");
+            gles11::Disable(GL_MATRIX_PALETTE_OES);
+            gles11::DrawArrays(mode, first, count);
+            gles11::Enable(GL_MATRIX_PALETTE_OES);
+            return;
+        }
+
         gles11::DrawArrays(mode, first, count)
     }
     
@@ -239,6 +250,18 @@ impl GLES for GLES1Native<'_> {
             gles11::GetIntegerv(gles11::ELEMENT_ARRAY_BUFFER_BINDING, &mut bound_buffer);
             if bound_buffer == 0 { return; }
         }
+
+        const GL_MATRIX_PALETTE_OES: GLenum = 0x8840;
+
+        // Фикс для драйверов Mali: отключаем матричную палитру, чтобы модель нарисовалась
+        if gles11::IsEnabled(GL_MATRIX_PALETTE_OES) == 1 {
+            println!("[MALI FIX] Перехвачен DrawElements с включенным GL_MATRIX_PALETTE_OES!");
+            gles11::Disable(GL_MATRIX_PALETTE_OES);
+            gles11::DrawElements(mode, count, type_, indices);
+            gles11::Enable(GL_MATRIX_PALETTE_OES);
+            return;
+        }
+
         gles11::DrawElements(mode, count, type_, indices)
     }
 
@@ -357,5 +380,4 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetBufferParameteriv(target, pname, params) }
     unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid { gles11::MapBufferOES(target, access) }
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean { gles11::UnmapBufferOES(target) }
-}
-
+        }
