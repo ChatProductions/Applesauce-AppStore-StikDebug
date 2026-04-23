@@ -1481,11 +1481,17 @@ let device_family = match device_family_array.len() {
         self.current_thread = new_thread;
     }
 
-    #[cold]
+        #[cold]
     /// Let the debugger handle a CPU error, or panic if there's no debugger
     /// connected. Returns [true] if the CPU should step and then resume
     /// debugging, or [false] if it should resume normal execution.
     fn debug_cpu_error(&mut self, error: cpu::CpuError) {
+        let instruction_len = if (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
+            2
+        } else {
+            4
+        };
+
         if matches!(error, cpu::CpuError::UndefinedInstruction)
             || matches!(error, cpu::CpuError::Breakpoint)
         {
@@ -1493,15 +1499,24 @@ let device_family = match device_family_array.len() {
             // occurred, rather than the next instruction. This is necessary for
             // GDB to detect its software breakpoints. For some reason this
             // isn't correct for memory errors however.
-            let instruction_len = if (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
-                2
-            } else {
-                4
-            };
             self.cpu.regs_mut()[cpu::Cpu::PC] -= instruction_len;
         }
 
         if self.gdb_server.is_none() {
+            // ИСПРАВЛЕНИЕ: Обход крашей без написания заглушек для фреймворков.
+            // Игры часто вызывают abort() / __builtin_trap() (UndefinedInstruction)
+            // если им не нравится, что API (например OpenFeint) вернуло nil.
+            // Вместо паники мы просто перепрыгиваем эту инструкцию и заставляем игру жить дальше!
+            if matches!(error, cpu::CpuError::UndefinedInstruction) {
+                log_no_panic!(
+                    "Warning: Ignored UndefinedInstruction at {:#x}, advancing PC by {} and continuing execution! (Bypassed abort/trap)",
+                    self.cpu.regs()[cpu::Cpu::PC],
+                    instruction_len
+                );
+                self.cpu.regs_mut()[cpu::Cpu::PC] += instruction_len;
+                return;
+            }
+
             panic!("Error during CPU execution: {error:?}");
         }
 
