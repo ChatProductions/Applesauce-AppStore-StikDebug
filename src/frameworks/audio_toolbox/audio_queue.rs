@@ -119,6 +119,7 @@ type AudioQueueParameterValue = f32;
 pub type AudioQueuePropertyID = u32;
 
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
+pub const kAudioQueueProperty_SampleRate: AudioQueuePropertyID = fourcc(b"aqsr");
 
 /// (*void)(void *in_user_data, AudioQueueRef in_aq, AudioQueuePropertyID in_id)
 type AudioQueuePropertyListenerProc = GuestFunction;
@@ -491,6 +492,7 @@ fn AudioQueueRemovePropertyListener(
 fn property_size(property_id: AudioQueuePropertyID) -> GuestUSize {
     match property_id {
         kAudioQueueProperty_IsRunning => guest_size_of::<u32>(),
+        kAudioQueueProperty_SampleRate => guest_size_of::<f64>(),
         _ => unimplemented!("Unimplemented property ID: {}", debug_fourcc(property_id)),
     }
 }
@@ -536,6 +538,12 @@ fn AudioQueueGetProperty(
             };
 
             env.mem.write(out_property_data.cast(), is_running);
+        }
+        kAudioQueueProperty_SampleRate => {
+            // Берем sample_rate из AudioStreamBasicDescription текущей очереди
+            let sample_rate: f64 = host_object.format.sample_rate;
+            // Записываем 64-битный float в память гостя
+            env.mem.write(out_property_data.cast(), sample_rate);
         }
         _ => unreachable!(),
     }
