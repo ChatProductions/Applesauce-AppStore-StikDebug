@@ -181,7 +181,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let content_mode: NSInteger = if msg![env; coder containsValueForKey:key_content_mode] { msg![env; coder decodeIntegerForKey:key_content_mode] } else { 0 };
 
     let key_autoresizing_mask = get_static_str(env, "UIAutoresizingMask");
-    let autoresizing_mask: NSUInteger = if msg![env; coder containsValueForKey:key_autoresizing_mask] { msg![env; coder decodeIntegerForKey:key_autoresizing_mask] as NSUInteger } else { 0 };
+    let autoresizing_mask: NSUInteger = if msg![env; coder containsValueForKey:key_autoresizing_mask] { 
+        let mask: NSInteger = msg![env; coder decodeIntegerForKey:key_autoresizing_mask];
+        mask as NSUInteger 
+    } else { 
+        0 
+    };
 
     let key_autoresizes_subviews = get_static_str(env, "UIAutoresizesSubviews");
     let autoresizes_subviews: bool = if msg![env; coder containsValueForKey:key_autoresizes_subviews] { msg![env; coder decodeBoolForKey:key_autoresizes_subviews] } else { true };
