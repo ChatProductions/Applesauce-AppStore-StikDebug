@@ -66,6 +66,19 @@ const EXC_MASK_BAD_ACCESS: MachExceptionMaskType = 1 << EXC_BAD_ACCESS;
 type MachExceptionBehaviourType = i32;
 const EXCEPTION_DEFAULT: MachExceptionBehaviourType = 1;
 
+const ARM_THREAD_STATE: u32 = 1;
+
+#[repr(C)]
+#[derive(Default, Debug)]
+struct arm_thread_state_t {
+    r: [u32; 13], // r0-r12
+    sp: u32,      // r13
+    lr: u32,      // r14
+    pc: u32,      // r15
+    cpsr: u32,
+}
+unsafe impl crate::mem::SafeRead for arm_thread_state_t {}
+
 fn task_set_exception_ports(
     _env: &mut Environment,
     task: task_t,
@@ -104,18 +117,59 @@ fn thread_resume(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
     KERN_SUCCESS
 }
 
-// --- НАША НОВАЯ ЗАГЛУШКА ---
 fn thread_get_state(
-    _env: &mut Environment,
-    _target_act: thread_act_t,
-    _flavor: thread_state_flavor_t,
-    _old_state: MutPtr<u32>,
-    _old_state_cnt: MutPtr<mach_msg_type_number_t>,
+    env: &mut Environment,
+    thread: thread_act_t,
+    flavor: thread_state_flavor_t,
+    old_state: MutPtr<u32>,
+    old_state_cnt: MutPtr<mach_msg_type_number_t>,
 ) -> kern_return_t {
-    log!("Warning: thread_get_state called (stubbed, faking success!)");
+    // В Mach портах thread_t обычно представлен как (index + 1)
+    let thread_id = (thread - 1) as usize;
     
-    // Возвращаем KERN_SUCCESS (0), чтобы обмануть сборщик мусора Mono.
-    // Пусть думает, что он успешно прочитал пустые регистры.
+    if flavor != ARM_THREAD_STATE {
+        log_dbg!("thread_get_state: unsupported flavor {}, returning KERN_INVALID_ARGUMENT", flavor);
+        return 2; // KERN_INVALID_ARGUMENT
+    }
+
+    // Проверяем размер буфера, который нам дала игра
+    let count = env.mem.read(old_state_cnt);
+    let expected_count = (std::mem::size_of::<arm_thread_state_t>() / 4) as u32;
+    
+    if count < expected_count {
+        log_dbg!("thread_get_state: count too small ({} < {})", count, expected_count);
+        return 3; // KERN_INVALID_ADDRESS или подходящая ошибка размера
+    }
+
+    // Получаем CPU нужного потока (или текущего, если это текущий поток)
+    let cpu = if thread_id == env.current_thread_id() {
+        &env.cpu
+    } else {
+        // Если запрашивают другой поток, берем его состояние из сохраненных
+        let Some(thread_obj) = env.threads.get(thread_id) else {
+            return 1; // KERN_FAILURE
+        };
+        &thread_obj.cpu
+    };
+
+    let regs = cpu.regs();
+    let mut state = arm_thread_state_t::default();
+    
+    // Копируем регистры r0-r12
+    for i in 0..13 {
+        state.r[i] = regs[i];
+    }
+    // Копируем специальные регистры
+    state.sp = regs[crate::cpu::Cpu::SP];
+    state.lr = regs[crate::cpu::Cpu::LR];
+    state.pc = regs[crate::cpu::Cpu::PC];
+    state.cpsr = cpu.cpsr();
+
+    // Записываем данные в память эмулируемого приложения
+    env.mem.write(old_state.cast::<arm_thread_state_t>(), state);
+    env.mem.write(old_state_cnt, expected_count);
+
+    log_dbg!("thread_get_state(thread: {}, flavor: ARM_THREAD_STATE) -> success", thread);
     KERN_SUCCESS
 }
 
