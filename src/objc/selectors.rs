@@ -5,11 +5,11 @@
  */
 //! Handling of Objective-C selectors.
 //!
-//! These are the names used to look up method implementations in Objective-C.
-//! In Apple's implementation, they are always null-terminated C strings, but
-//! they are meant to be treated as opaque values. Selector strings should be
-//! (TODO) interned so pointer comparison can be used instead of string
-//! comparison.
+//! These are the names used to look up method implementations in
+//! Objective-C. In Apple's implementation, they are always
+//! null-terminated C strings, but they are meant to be treated as
+//! opaque values. Selector strings should be (TODO) interned so
+//! pointer comparison can be used instead of string comparison.
 //!
 //! Resources:
 //! - Apple's [The Objective-C Programming Language](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjectiveC/Chapters/ocSelectors.html)
@@ -22,8 +22,9 @@ use crate::mach_o::MachO;
 use crate::mem::{ConstPtr, Mem, MutPtr, Ptr, SafeRead};
 use crate::Environment;
 
-/// Create a string literal for a selector from Objective-C message syntax
-/// components. Useful for [super::objc_classes] and for [super::msg].
+/// Create a string literal for a selector from Objective-C message
+/// syntax components. Useful for [super::objc_classes] and for
+/// [super::msg].
 #[macro_export]
 macro_rules! selector {
     // "foo"
@@ -61,8 +62,15 @@ impl GuestRet for SEL {
 
 impl SEL {
     pub fn as_str(self, mem: &Mem) -> &str {
-        // selectors are probably always UTF-8 but this hasn't been verified
-        mem.cstr_at_utf8(self.0).unwrap()
+        // Selectors are expected to be UTF-8, but if a corrupt or
+        // misinterpreted pointer is passed (e.g. a class pointer used
+        // as SEL), the bytes may not be valid UTF-8. Return a safe
+        // fallback instead of panicking so that callers can log the
+        // issue and continue execution.
+        match mem.cstr_at_utf8(self.0) {
+            Ok(s) => s,
+            Err(_) => "<invalid-selector-utf8>",
+        }
     }
     pub fn is_null(self) -> bool {
         self.0.is_null()
@@ -76,11 +84,16 @@ impl ObjC {
         self.selectors.get(name).copied()
     }
 
-    /// Register a selector using a Rust [String]. Despite the name there is no
-    /// inherent "host" quality of the resulting selector, but because this
-    /// function will allocate a new C string, this function is not the most
-    /// efficient route if there's already a constant string in the app binary.
-    pub fn register_host_selector(&mut self, name: String, mem: &mut Mem) -> SEL {
+    /// Register a selector using a Rust [String]. Despite the name
+    /// there is no inherent "host" quality of the resulting selector,
+    /// but because this function will allocate a new C string, this
+    /// function is not the most efficient route if there's already a
+    /// constant string in the app binary.
+    pub fn register_host_selector(
+        &mut self,
+        name: String,
+        mem: &mut Mem,
+    ) -> SEL {
         if let Some(existing) = self.lookup_selector(&name) {
             return existing;
         }
@@ -93,8 +106,9 @@ impl ObjC {
     /// Register and deduplicate all the selectors of host classes.
     ///
     /// To avoid wasting guest memory, call this after calling
-    /// [ObjC::register_bin_selectors], so that selector strings in the app
-    /// binary can be re-used. [crate::dyld] calls both of these.
+    /// [ObjC::register_bin_selectors], so that selector strings in
+    /// the app binary can be re-used. [crate::dyld] calls both of
+    /// these.
     pub fn register_host_selectors(&mut self, mem: &mut Mem) {
         for (_name, template) in crate::dyld::DYLIB_LIST
             .iter()
@@ -102,12 +116,17 @@ impl ObjC {
             .copied()
             .flatten()
         {
-            for method_list in [template.class_methods, template.instance_methods] {
+            for method_list in
+                [template.class_methods, template.instance_methods]
+            {
                 for &(name, _imp) in method_list {
                     if self.selectors.contains_key(name) {
                         continue;
                     }
-                    let sel = SEL(mem.alloc_and_write_cstr(name.as_bytes()).cast_const());
+                    let sel = SEL(
+                        mem.alloc_and_write_cstr(name.as_bytes())
+                            .cast_const(),
+                    );
                     self.selectors.insert(name.to_string(), sel);
                 }
             }
@@ -116,20 +135,37 @@ impl ObjC {
 
     /// Register a selector from the application binary. Must be a
     /// static-lifetime constant string.
-    pub(super) fn register_bin_selector(&mut self, sel_cstr: ConstPtr<u8>, mem: &Mem) -> SEL {
-        let sel_str = mem.cstr_at_utf8(sel_cstr).unwrap();
+    pub(super) fn register_bin_selector(
+        &mut self,
+        sel_cstr: ConstPtr<u8>,
+        mem: &Mem,
+    ) -> Option<SEL> {
+        // If the bytes at the selector pointer are not valid UTF-8
+        // (e.g. a corrupted or misaligned binary section), skip the
+        // entry rather than panicking.
+        let sel_str = match mem.cstr_at_utf8(sel_cstr) {
+            Ok(s) => s,
+            Err(_) => {
+                log!(
+                    "Warning: skipping bin selector at {:?}: \
+                     not valid UTF-8",
+                    sel_cstr
+                );
+                return None;
+            }
+        };
 
         if let Some(existing_sel) = self.lookup_selector(sel_str) {
-            existing_sel
+            Some(existing_sel)
         } else {
             let sel = SEL(sel_cstr);
             self.selectors.insert(sel_str.to_string(), sel);
-            sel
+            Some(sel)
         }
     }
 
-    /// For use by [crate::dyld]: register and deduplicate all the selectors
-    /// referenced in the application binary.
+    /// For use by [crate::dyld]: register and deduplicate all the
+    /// selectors referenced in the application binary.
     pub fn register_bin_selectors(&mut self, bin: &MachO, mem: &mut Mem) {
         let Some(selrefs) = bin.get_section("__objc_selrefs") else {
             return;
@@ -141,8 +177,9 @@ impl ObjC {
             let selref = base + i;
             let sel_cstr = mem.read(selref);
 
-            let sel = self.register_bin_selector(sel_cstr, mem);
-            mem.write(selref, sel.0);
+            if let Some(sel) = self.register_bin_selector(sel_cstr, mem) {
+                mem.write(selref, sel.0);
+            }
         }
     }
 
@@ -155,8 +192,10 @@ impl ObjC {
     ///     "selectors": [
     ///         {
     ///             "selector": ((name of selector)),
-    ///             "instance_implementations": [ ((names of classes)) ] | null,
-    ///             "class_implementations": [ ((names of classes)) ] | null,
+    ///             "instance_implementations": [ ((names of classes)) ]
+    ///                 | null,
+    ///             "class_implementations": [ ((names of classes)) ]
+    ///                 | null,
     ///         },
     ///         ...
     ///     ],
@@ -170,22 +209,27 @@ impl ObjC {
     ) -> Result<(), std::io::Error> {
         use std::io::Write;
         let Some(selrefs) = bin.get_section("__objc_selrefs") else {
-            writeln!(file, "{{ \"object\": \"selectors\", \"selectors\": [] }}")?;
+            writeln!(
+                file,
+                "{{ \"object\": \"selectors\", \"selectors\": [] }}"
+            )?;
             log!("No selectors in binary!");
             return Ok(());
         };
         assert!(selrefs.size % 4 == 0);
-        // We manually gather selectors from the binary since it represents
-        // the selectors actually used, whereas using self.selectors
-        // would include all host selectors.
+        // We manually gather selectors from the binary since it
+        // represents the selectors actually used, whereas using
+        // self.selectors would include all host selectors.
         let base: ConstPtr<SEL> = Ptr::from_bits(selrefs.addr);
         let bin_sels: Vec<SEL> = (0..(selrefs.size / 4))
             .map(|i| mem.read(base + i))
             .collect();
 
-        // Gather all selectors in all linked classes. The first vector is for
-        // instance methods, the second is for class methods.
-        let mut impl_selectors: HashMap<SEL, (Vec<&str>, Vec<&str>)> = HashMap::new();
+        // Gather all selectors in all linked classes. The first
+        // vector is for instance methods, the second for class
+        // methods.
+        let mut impl_selectors: HashMap<SEL, (Vec<&str>, Vec<&str>)> =
+            HashMap::new();
         for class in self.classes.values() {
             let class_host_object = self.get_host_object(*class).unwrap();
             let Some(super::ClassHostObject { name, methods, .. }) =
@@ -199,7 +243,8 @@ impl ObjC {
             }
             let metaclass = Self::read_isa(*class, mem);
             // Also get class methods:
-            let metaclass_host_object = self.get_host_object(metaclass).unwrap();
+            let metaclass_host_object =
+                self.get_host_object(metaclass).unwrap();
             let super::ClassHostObject { methods, .. } =
                 metaclass_host_object.as_any().downcast_ref().unwrap();
             for sel in methods.keys() {
@@ -208,8 +253,9 @@ impl ObjC {
             }
         }
 
-        // Also check unlinked host classes: just because the binary doesn't
-        // link them in directly doesn't mean that it won't use it!
+        // Also check unlinked host classes: just because the binary
+        // doesn't link them in directly doesn't mean it won't use
+        // them.
         for (class_name, template) in crate::dyld::DYLIB_LIST
             .iter()
             .flat_map(|dylib| dylib.class_exports)
@@ -235,17 +281,24 @@ impl ObjC {
 
         write!(
             file,
-            "{{\n    \"object\": \"selectors\",\n    \"selectors\": [ "
+            "{{\n    \"object\": \"selectors\",\n    \
+             \"selectors\": [ "
         )?;
         for (i, sel) in bin_sels.iter().enumerate() {
             // Why doesn't json allow trailing commas...
-            let comma = if i == bin_sels.len() - 1 { "" } else { "," };
+            let comma =
+                if i == bin_sels.len() - 1 { "" } else { "," };
 
             let name = sel.as_str(mem);
             write!(file, "        {{ \"selector\": \"{name}\"")?;
-            if let Some((instance_impls, class_impls)) = impl_selectors.get(sel) {
+            if let Some((instance_impls, class_impls)) =
+                impl_selectors.get(sel)
+            {
                 if !instance_impls.is_empty() {
-                    write!(file, ", \"instance_implementations\": [ ")?;
+                    write!(
+                        file,
+                        ", \"instance_implementations\": [ "
+                    )?;
                     for (j, class) in instance_impls.iter().enumerate() {
                         let comma = if j == instance_impls.len() - 1 {
                             ""
@@ -257,9 +310,13 @@ impl ObjC {
                     write!(file, "]")?;
                 }
                 if !class_impls.is_empty() {
-                    write!(file, ", \"class_implementations\": [ ")?;
+                    write!(
+                        file,
+                        ", \"class_implementations\": [ "
+                    )?;
                     for (j, class) in class_impls.iter().enumerate() {
-                        let comma = if j == class_impls.len() - 1 { "" } else { "," };
+                        let comma =
+                            if j == class_impls.len() - 1 { "" } else { "," };
                         write!(file, "\"{class}\"{comma} ")?;
                     }
                     write!(file, "]")?;
@@ -272,13 +329,34 @@ impl ObjC {
 }
 
 /// Standard Objective-C runtime function for selector registration.
-pub(super) fn sel_registerName(env: &mut Environment, name: ConstPtr<u8>) -> SEL {
-    let name = env.mem.cstr_at_utf8(name).unwrap();
+pub(super) fn sel_registerName(
+    env: &mut Environment,
+    name: ConstPtr<u8>,
+) -> SEL {
+    // Guard against a null or invalid pointer being passed as the
+    // selector name; return a null SEL rather than panicking.
+    if name.is_null() {
+        log!("Warning: sel_registerName called with null pointer");
+        return SEL(Ptr::null());
+    }
 
-    if let Some(existing) = env.objc.lookup_selector(name) {
+    let name_str = match env.mem.cstr_at_utf8(name) {
+        Ok(s) => s,
+        Err(_) => {
+            log!(
+                "Warning: sel_registerName: name at {:?} is not \
+                 valid UTF-8; returning null SEL",
+                name
+            );
+            return SEL(Ptr::null());
+        }
+    };
+
+    if let Some(existing) = env.objc.lookup_selector(name_str) {
         return existing;
     }
 
-    let name = name.to_string();
-    env.objc.register_host_selector(name, &mut env.mem)
+    let name_str = name_str.to_string();
+    env.objc.register_host_selector(name_str, &mut env.mem)
 }
+
