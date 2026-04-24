@@ -9,8 +9,8 @@ use crate::environment::Environment;
 use crate::export_c_func;
 use crate::libc::errno::{set_errno, EINVAL, ENOTSUP};
 use crate::libc::posix_io;
-use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET};
-use crate::mem::{GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
+use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET, open};
+use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
 use std::collections::HashMap;
 
 #[allow(dead_code)]
@@ -101,10 +101,17 @@ fn madvise(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, advice: i32
     -1
 }
 
-// --- НАША НОВАЯ ЗАГЛУШКА ---
-fn shm_open(_env: &mut Environment, _name: u32, _oflag: i32, _mode: u32) -> i32 {
-    log!("Warning: _shm_open called (stubbed)");
-    -1
+fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, mode: u32) -> i32 {
+    set_errno(env, 0);
+
+    // Читаем имя из памяти гостя для логирования (аналогично тому, как это делается в sysctl)
+    let name_str = env.mem.cstr_at_utf8(name).unwrap_or("<invalid>");
+    log_dbg!("shm_open({:?}, {:#x}, {:#x})", name_str, oflag, mode);
+
+    // Перенаправляем создание/открытие shm-объекта в VFS эмулятора.
+    // open() вернет валидный файловый дескриптор, который затем
+    // твой mmap() сможет обработать через lseek() и read().
+    open(env, name, oflag, mode)
 }
 
 pub const FUNCTIONS: FunctionExports = &[
