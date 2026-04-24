@@ -11,7 +11,6 @@
 use std::io::Cursor;
 use symphonia::core::audio::AudioSpec;
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::probe::Hint;
 
 /// PCM data decoded from an miscellaneous format file.
 pub struct SymphoniaDecodedToPcm {
@@ -24,93 +23,93 @@ pub struct SymphoniaDecodedToPcm {
     pub channels: u32,
 }
 
-pub fn decode_symphonia_to_pcm(mut file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, ()> {
-    // 1. ИСПРАВЛЕНИЕ: Жестко сбрасываем позицию курсора на начало.
-    // Без этого MediaSourceStream может прочитать 0 байт и умереть с "no suitable format reader".
-    file.set_position(0);
-
-    // Читаем magic bytes (первые 4 байта), чтобы точно знать в логах, что мы пытаемся парсить
-    let mut magic = [0u8; 4];
-    if std::io::Read::read_exact(&mut file, &mut magic).is_ok() {
-        let magic_str = std::str::from_utf8(&magic).unwrap_or("unknown");
-        log!("Symphonia incoming file magic: {}", magic_str);
-        if &magic == b"caff" {
-            log!("WARNING: This is an Apple CAF file! Symphonia does not natively support CAF containers. This will fail unless handled by a custom CAF decoder.");
-        }
-    }
-    // Возвращаем курсор в начало после чтения magic bytes
-    file.set_position(0);
-
+pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, ()> {
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
-    // 2. ИСПРАВЛЕНИЕ: Используем правильный Hint вместо Default
-    let hint = Hint::new();
-
-    // Пробуем определить формат
+    // Пробуем определить формат. Если не вышло - логируем реальную причину.
     let mut probed = match symphonia::default::get_probe()
-        .probe(&hint, mss, Default::default(), Default::default()) {
+        .probe(&Default::default(), mss, Default::default(), Default::default()) {
         Ok(p) => p,
         Err(e) => {
-            log!("Symphonia fatal probe error: {:?}", e);
-            log!("FIX: Ensure Cargo.toml has features enabled: symphonia = {{ version = \"...\", features = [\"all\"] }}");
+            log!("Symphonia probe failed: {:?}", e);
             return Err(());
         }
     };
 
-    // Настраиваем декодер
+    // Находим любую аудиодорожку, проверяя наличие параметров аудио.
+    let track = probed
+        .tracks()
+        .iter()
+        .find(|t| {
+            if let Some(codec_params) = &t.codec_params {
+                codec_params.audio().is_some()
+            } else {
+                false
+            }
+        })
+        .ok_or_else(|| {
+            log!("Symphonia: No supported audio tracks found in file");
+        })?;
+
+    let track_id = track.id;
+    
+    // Получаем AudioCodecParameters, так как мы уже убедились, что они есть.
+    let audio_codec_params = track.codec_params.as_ref().unwrap().audio().unwrap();
+
+    // Создаем декодер
     let mut decoder = match symphonia::default::get_codecs()
-        .make(&probed.format.default_track().unwrap().codec_params, &Default::default()) {
+        .make_audio_decoder(audio_codec_params, &Default::default()) {
         Ok(d) => d,
         Err(e) => {
-            log!("Symphonia codec creation error: {:?}", e);
+            log!("Symphonia failed to create audio decoder: {:?}", e);
             return Err(());
         }
     };
 
-    let track_id = probed.format.default_track().unwrap().id;
-    let mut out_pcm = Vec::new();
+    let mut out_pcm = Vec::<u8>::new();
     let mut audio_spec: Option<AudioSpec> = None;
-    let mut tmp_raw_s16_buf = None;
 
-    // Основной цикл чтения и декодирования фреймов
-    loop {
-        let packet = match probed.format.next_packet() {
-            Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                break; // Нормальный конец файла
-            }
-            Err(e) => {
-                log!("Symphonia packet read error: {:?} (Stopping read but keeping decoded audio)", e);
-                break;
-            }
-        };
+    {
+        let mut tmp_raw_s16_buf: Option<Vec<u8>> = None;
 
-        if packet.track_id() != track_id {
-            continue;
-        }
+        loop {
+            let packet = match probed.next_packet() {
+                Ok(Some(packet)) => packet, // Успешно получили пакет
+                Ok(None) => break,          // Конец файла (медиа завершилось)
+                Err(symphonia::core::errors::Error::IoError(_)) => break,
+                Err(e) => {
+                    log!("Symphonia packet read error: {:?} (Stopping read but keeping decoded audio)", e);
+                    break;
+                }
+            };
 
-        let decoded_packet = match decoder.decode(&packet) {
-            Ok(p) => p,
-            Err(symphonia::core::errors::Error::DecodeError(e)) => {
-                // Ошибки декодирования (битый фрейм MP3/AAC) можно игнорировать и идти дальше
-                log!("Symphonia decode error (recoverable): {:?}", e);
+            if packet.track_id() != track_id {
                 continue;
             }
-            Err(e) => {
-                log!("Symphonia fatal decode error: {:?}", e);
-                break;
-            }
-        };
 
-        let audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
+            let decoded_packet = match decoder.decode(&packet) {
+                Ok(p) => p,
+                Err(symphonia::core::errors::Error::DecodeError(e)) => {
+                    // Ошибки декодирования (битый фрейм MP3/AAC) можно игнорировать и идти дальше
+                    log!("Symphonia decode error (recoverable): {:?}", e);
+                    continue;
+                }
+                Err(e) => {
+                    log!("Symphonia fatal decode error: {:?}", e);
+                    break;
+                }
+            };
 
-        let tmp_raw_s16_buf = tmp_raw_s16_buf
-            .get_or_insert_with(|| Vec::with_capacity(decoded_packet.capacity()));
+            let audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
 
-        tmp_raw_s16_buf.clear();
-        decoded_packet.copy_bytes_to_vec_interleaved_as::<i16>(tmp_raw_s16_buf);
+            let tmp_raw_s16_buf = tmp_raw_s16_buf
+                .get_or_insert_with(|| Vec::with_capacity(decoded_packet.capacity()));
 
-        out_pcm.extend_from_slice(tmp_raw_s16_buf);
+            tmp_raw_s16_buf.clear();
+            decoded_packet.copy_bytes_to_vec_interleaved_as::<i16>(tmp_raw_s16_buf);
+
+            out_pcm.extend_from_slice(tmp_raw_s16_buf);
+        }
     }
 
     let audio_spec = audio_spec.ok_or_else(|| {
@@ -119,7 +118,7 @@ pub fn decode_symphonia_to_pcm(mut file: Cursor<Vec<u8>>) -> Result<SymphoniaDec
 
     Ok(SymphoniaDecodedToPcm {
         bytes: out_pcm,
-        sample_rate: audio_spec.rate,
-        channels: audio_spec.channels.count() as u32,
+        sample_rate: audio_spec.rate(),
+        channels: audio_spec.channels().count().try_into().unwrap(),
     })
 }
