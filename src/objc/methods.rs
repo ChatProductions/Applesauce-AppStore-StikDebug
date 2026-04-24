@@ -9,9 +9,12 @@
 //! - [Apple's documentation of `class_addMethod`](https://developer.apple.com/documentation/objectivec/1418901-class_addmethod?language=objc)
 
 use super::{
-    id, nil, objc_super, Class, ClassHostObject, MsgSendSignature, MsgSendSuperSignature, ObjC, SEL,
+    id, nil, objc_super, Class, ClassHostObject, MsgSendSignature,
+    MsgSendSuperSignature, ObjC, SEL,
 };
-use crate::abi::{CallFromGuest, DotDotDot, GuestArg, GuestFunction, GuestRet};
+use crate::abi::{
+    CallFromGuest, DotDotDot, GuestArg, GuestFunction, GuestRet,
+};
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, Mem, Ptr, SafeRead};
 use crate::Environment;
 use std::any::TypeId;
@@ -20,9 +23,10 @@ use std::any::TypeId;
 ///
 /// The name is standard Objective-C.
 ///
-/// In our implementation, we have both "host methods" (Rust functions) and
-/// "guest methods" (functions in the guest app). Either way, the function needs
-/// to conform to the same ABI: [id] and [SEL] must be its first two parameters.
+/// In our implementation, we have both "host methods" (Rust functions)
+/// and "guest methods" (functions in the guest app). Either way, the
+/// function needs to conform to the same ABI: [id] and [SEL] must be
+/// its first two parameters.
 #[allow(clippy::upper_case_acronyms)]
 pub enum IMP {
     Host(&'static dyn HostIMP),
@@ -37,7 +41,8 @@ pub trait HostIMP: CallFromGuest {
 
 macro_rules! impl_HostIMP {
     ( $($P:ident),* ) => {
-        impl<R, $($P,)*> HostIMP for fn(&mut Environment, id, SEL, $($P,)*) -> R
+        impl<R, $($P,)*> HostIMP
+            for fn(&mut Environment, id, SEL, $($P,)*) -> R
         where
             R: GuestRet + 'static,
             $($P: GuestArg + 'static,)*
@@ -46,7 +51,8 @@ macro_rules! impl_HostIMP {
                 <(R, (id, SEL, $($P,)*)) as MsgSendSignature>::type_info()
             }
         }
-        impl<R, $($P,)*> HostIMP for fn(&mut Environment, id, SEL, $($P,)* DotDotDot) -> R
+        impl<R, $($P,)*> HostIMP
+            for fn(&mut Environment, id, SEL, $($P,)* DotDotDot) -> R
         where
             R: GuestRet + 'static,
             $($P: GuestArg + 'static,)*
@@ -56,9 +62,10 @@ macro_rules! impl_HostIMP {
             }
         }
 
-        // Currently there is a one-to-one mapping between valid host IMP
-        // parameters and valid host message send arguments, so the traits for
-        // the latter are also implemented here for convenience.
+        // Currently there is a one-to-one mapping between valid host
+        // IMP parameters and valid host message send arguments, so the
+        // traits for the latter are also implemented here for
+        // convenience.
 
         impl<R, $($P,)*> MsgSendSignature for (R, (id, SEL, $($P,)*))
         where
@@ -66,7 +73,8 @@ macro_rules! impl_HostIMP {
             $($P: GuestArg + 'static,)*
         {
         }
-        impl<R, $($P,)*> MsgSendSuperSignature for (R, (ConstPtr<objc_super>, SEL, $($P,)*))
+        impl<R, $($P,)*> MsgSendSuperSignature
+            for (R, (ConstPtr<objc_super>, SEL, $($P,)*))
         where
             R: GuestRet + 'static,
             $($P: GuestArg + 'static,)*
@@ -89,7 +97,8 @@ pub type GuestIMP = GuestFunction;
 
 /// The layout of a method list in an app binary.
 ///
-/// The name, field names and field layout are based on what Ghidra outputs.
+/// The name, field names and field layout are based on what Ghidra
+/// outputs.
 #[repr(C, packed)]
 pub(super) struct method_list_t {
     entsize: GuestUSize,
@@ -100,7 +109,8 @@ unsafe impl SafeRead for method_list_t {}
 
 /// The layout of a method in an app binary.
 ///
-/// The name, field names and field layout are based on what Ghidra outputs.
+/// The name, field names and field layout are based on what Ghidra
+/// outputs.
 #[repr(C, packed)]
 struct method_t {
     name: ConstPtr<u8>,
@@ -121,21 +131,23 @@ impl ClassHostObject {
         let method_list_t { entsize, count } = mem.read(method_list_ptr);
         assert!(entsize >= guest_size_of::<method_t>());
 
-        let methods_base_ptr: ConstPtr<method_t> = (method_list_ptr + 1).cast();
+        let methods_base_ptr: ConstPtr<method_t> =
+            (method_list_ptr + 1).cast();
 
         for i in 0..count {
             let method_ptr: ConstPtr<method_t> =
                 Ptr::from_bits(methods_base_ptr.to_bits() + i * entsize);
 
-            let method_t {
-                name,
-                types,
-                imp,
-            } = mem.read(method_ptr);
+            let method_t { name, types, imp } = mem.read(method_ptr);
 
             // There is no guarantee this string is unique or known.
             // We must deduplicate it like any other.
-            let sel = objc.register_bin_selector(name, mem);
+            // register_bin_selector returns None if the selector name
+            // is not valid UTF-8 (e.g. corrupt binary section); in
+            // that case we skip the method entry entirely.
+            let Some(sel) = objc.register_bin_selector(name, mem) else {
+                continue;
+            };
             self.methods.insert(sel, IMP::Guest(imp));
             // TODO: avoid storing duplicated signatures globally
             self.guest_method_signatures.insert(sel, types);
@@ -144,8 +156,9 @@ impl ClassHostObject {
 }
 
 impl ObjC {
-    /// Checks if the provided class has a method in its class chain (that is
-    /// to say, objects of the given class respond to a selector).
+    /// Checks if the provided class has a method in its class chain
+    /// (that is to say, objects of the given class respond to a
+    /// selector).
     pub fn class_has_method(&self, class: Class, sel: SEL) -> bool {
         let mut class = class;
         loop {
@@ -164,7 +177,11 @@ impl ObjC {
         }
     }
 
-    pub fn class_get_method_signature(&self, class: Class, sel: SEL) -> Option<&ConstPtr<u8>> {
+    pub fn class_get_method_signature(
+        &self,
+        class: Class,
+        sel: SEL,
+    ) -> Option<&ConstPtr<u8>> {
         // TODO: support `host` method signatures
         let mut class = class;
         loop {
@@ -184,10 +201,14 @@ impl ObjC {
         }
     }
 
-    /// Same as [Self::class_has_method], but using a named selector (rather
-    /// than a pointer).
+    /// Same as [Self::class_has_method], but using a named selector
+    /// (rather than a pointer).
     #[allow(dead_code)]
-    pub fn class_has_method_named(&self, class: Class, sel_name: &str) -> bool {
+    pub fn class_has_method_named(
+        &self,
+        class: Class,
+        sel_name: &str,
+    ) -> bool {
         if let Some(sel) = self.lookup_selector(sel_name) {
             self.class_has_method(class, sel)
         } else {
@@ -196,7 +217,12 @@ impl ObjC {
     }
 
     /// Checks if a given object has a method (responds to a selector).
-    pub fn object_has_method(&self, mem: &Mem, obj: id, sel: SEL) -> bool {
+    pub fn object_has_method(
+        &self,
+        mem: &Mem,
+        obj: id,
+        sel: SEL,
+    ) -> bool {
         self.class_has_method(ObjC::read_isa(obj, mem), sel)
     }
 
@@ -210,9 +236,14 @@ impl ObjC {
         self.class_get_method_signature(ObjC::read_isa(obj, mem), sel)
     }
 
-    /// Same as [Self::object_has_method], but using a named selector (rather
-    /// than a pointer).
-    pub fn object_has_method_named(&self, mem: &Mem, obj: id, sel_name: &str) -> bool {
+    /// Same as [Self::object_has_method], but using a named selector
+    /// (rather than a pointer).
+    pub fn object_has_method_named(
+        &self,
+        mem: &Mem,
+        obj: id,
+        sel_name: &str,
+    ) -> bool {
         if let Some(sel) = self.lookup_selector(sel_name) {
             self.object_has_method(mem, obj, sel)
         } else {
@@ -220,11 +251,13 @@ impl ObjC {
         }
     }
 
-    /// Checks if a class overrides a method provided by its superclass.
+    /// Checks if a class overrides a method provided by its
+    /// superclass.
     ///
-    /// This looks through a superclass chain looking for the selector, stopping
-    /// when the superclass is hit (and panicking if it never is). It does not
-    /// check whether the selector is actually a method on the superclass.
+    /// This looks through a superclass chain looking for the selector,
+    /// stopping when the superclass is hit (and panicking if it never
+    /// is). It does not check whether the selector is actually a
+    /// method on the superclass.
     pub fn class_overrides_method_of_superclass(
         &self,
         class: Class,
@@ -252,7 +285,11 @@ impl ObjC {
         }
     }
 
-    pub fn debug_all_class_selectors_as_strings(&self, mem: &Mem, class: Class) -> Vec<String> {
+    pub fn debug_all_class_selectors_as_strings(
+        &self,
+        mem: &Mem,
+        class: Class,
+    ) -> Vec<String> {
         let mut class = class;
         let mut selector_strings = Vec::new();
         loop {
@@ -275,3 +312,4 @@ impl ObjC {
         selector_strings
     }
 }
+
