@@ -470,6 +470,9 @@ impl MachO {
                             // apparently used within libstdc++ for linking to
                             // itself, e.g. to "__Znwm". might be a PIC thing
                             Some(Symbol::Defined { name: Some(n), .. }) => Some(String::from(n)),
+                            // Корректно обрабатываем Debug-символы: они могут тут попадаться, 
+                            // но они не требуют внешней динамической линковки, поэтому None.
+                            Some(Symbol::Debug { .. }) => None,
                             None => None,
                             _ => panic!("Unexpected symbol kind {sym:?}"),
                         })
