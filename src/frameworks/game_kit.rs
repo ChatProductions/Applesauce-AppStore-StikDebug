@@ -1,6 +1,7 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! GameKit framework.
@@ -8,9 +9,11 @@
 //! Some features of this framework are only in iOS 4.1+, but some games (like
 //! "Cut the Rope") may use it to check for game center availability with
 //! a `respondsToSelector:` call to some objects of this framework.
+//!
 //! Thus, we need to provide some stubs in order to not crash on that call.
 
 pub mod ad_banner_view;
+pub mod fb_session; // <--- ДОБАВЬ ЭТУ СТРОКУ СЮДА
 pub mod gk_leaderboard_view_controller;
 pub mod gk_local_player;
 mod gk_score;
@@ -27,6 +30,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     aliases: &[],
     class_exports: &[
         ad_banner_view::CLASSES,
+        fb_session::CLASSES, // <--- И ДОБАВЬ ЭТУ СТРОКУ СЮДА
         gk_leaderboard_view_controller::CLASSES,
         gk_local_player::CLASSES,
         gk_score::CLASSES,
