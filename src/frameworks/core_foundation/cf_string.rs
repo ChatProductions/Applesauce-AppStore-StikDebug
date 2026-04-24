@@ -1359,7 +1359,7 @@ fn CFStringGetTypeID(_env: &mut Environment) -> u32 {
 
 // MARK: - Exports
 
-fn _CFStringCreateExternalRepresentation(
+fn CFStringCreateExternalRepresentation(
     env: &mut Environment,
     _alloc: CFAllocatorRef,
     the_string: CFStringRef,
@@ -1486,7 +1486,6 @@ pub const FUNCTIONS: FunctionExports = &[
   
     // Type info
     export_c_func!(CFStringGetTypeID()),
-    export_c_func!(_CFStringCreateExternalRepresentation(_, _, _, _)),
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
 
