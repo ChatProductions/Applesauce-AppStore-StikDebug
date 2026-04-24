@@ -60,29 +60,52 @@ pub struct stat {
 unsafe impl SafeRead for stat {}
 
 fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
-    // TODO: handle errno properly
     set_errno(env, 0);
-    let path_str = env.mem.cstr_at_utf8(path).unwrap();
-    // TODO: respect the mode
+    
+    // Безопасное чтение пути, чтобы избежать panic через unwrap()
+    let path_str = match env.mem.cstr_at_utf8(path) {
+        Ok(s) => s.to_string(), // Отвязываем от заимствования env.mem (как в функции stat ниже)
+        Err(_) => {
+            set_errno(env, ENOENT);
+            return -1;
+        }
+    };
+
+    // Защита от пустой строки (POSIX требует ENOENT)
+    if path_str.is_empty() {
+        log_dbg!("mkdir(empty string) -> ENOENT");
+        set_errno(env, ENOENT);
+        return -1;
+    }
+
     match env.fs.create_dir(GuestPath::new(&path_str)) {
         Ok(()) => {
             log_dbg!("mkdir({:?} {:?}, {:#x}) => 0", path, path_str, mode);
             0
         }
         Err(err) => {
-            log!(
-                "Warning: mkdir({:?} {:?}, {:#x}) failed with {:?}, \
-                 returning -1",
-                path,
-                path_str,
-                mode,
-                err
-            );
+            // ИСПРАВЛЕНИЕ: Убираем спам в консоль через log! (превращаем в log_dbg!),
+            // так как приложения в iOS часто вызывают mkdir на уже существующих
+            // папках просто для гарантии их наличия (ожидая поведение EEXIST).
             match err {
-                FsError::AlreadyExist => set_errno(env, EEXIST),
-                FsError::NonexistentParentDir => set_errno(env, ENOENT),
-                FsError::ReadonlyParentDir => set_errno(env, EACCES),
-                _ => unimplemented!(),
+                FsError::AlreadyExist => {
+                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with AlreadyExist, returning -1 (EEXIST)", path, path_str, mode);
+                    set_errno(env, EEXIST);
+                }
+                FsError::NonexistentParentDir => {
+                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with NonexistentParentDir, returning -1 (ENOENT)", path, path_str, mode);
+                    set_errno(env, ENOENT);
+                }
+                FsError::ReadonlyParentDir => {
+                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with ReadonlyParentDir, returning -1 (EACCES)", path, path_str, mode);
+                    set_errno(env, EACCES);
+                }
+                _ => {
+                    // ИСПРАВЛЕНИЕ: Убрана заглушка unimplemented!(), которая могла вызвать краш.
+                    // Если произошла другая системная ошибка файловой системы, возвращаем ENOENT.
+                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with {:?}, returning -1 (ENOENT)", path, path_str, mode, err);
+                    set_errno(env, ENOENT);
+                }
             }
             -1
         }
