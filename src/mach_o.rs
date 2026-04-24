@@ -463,15 +463,12 @@ impl MachO {
                             &mut cursor,
                         );
                         indirect_undef_symbols.push(match sym {
-                            // apparently used in apps?
-                            Some(Symbol::Undefined { name: Some(n), .. }) => Some(String::from(n)),
-                            // apparently used in libraries?
-                            Some(Symbol::Prebound { name: Some(n), .. }) => Some(String::from(n)),
-                            // apparently used within libstdc++ for linking to
-                            // itself, e.g. to "__Znwm". might be a PIC thing
-                            Some(Symbol::Defined { name: Some(n), .. }) => Some(String::from(n)),
-                            // Корректно обрабатываем Debug-символы: они могут тут попадаться, 
-                            // но они не требуют внешней динамической линковки, поэтому None.
+                            // Если имя есть (Some), оно превратится в Some(String). 
+                            // Если имени нет (None), вернется None, и мы избежим паники.
+                            Some(Symbol::Undefined { name, .. }) => name.map(String::from),
+                            Some(Symbol::Prebound { name, .. }) => name.map(String::from),
+                            Some(Symbol::Defined { name, .. }) => name.map(String::from),
+                            // Debug-символы по-прежнему игнорируем
                             Some(Symbol::Debug { .. }) => None,
                             None => None,
                             _ => panic!("Unexpected symbol kind {sym:?}"),
