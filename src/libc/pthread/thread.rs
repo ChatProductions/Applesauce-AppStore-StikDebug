@@ -326,11 +326,16 @@ fn pthread_detach(env: &mut Environment, thread: pthread_t) -> i32 {
         log_dbg!("pthread_detach: thread doesn't exist, returning ESRCH");
         return ESRCH;
     };
+    
     if host_obj.attr.detachstate == PTHREAD_CREATE_DETACHED {
         log_dbg!("pthread_detach: thread already detached, returning EINVAL");
         return EINVAL;
     }
-    log!("TODO: pthread_detach({:?})", thread);
+    
+    // ИСПРАВЛЕНИЕ: Реально меняем состояние потока на отсоединённое
+    host_obj.attr.detachstate = PTHREAD_CREATE_DETACHED;
+    
+    log_dbg!("pthread_detach({:?}) -> success", thread);
     0
 }
 
