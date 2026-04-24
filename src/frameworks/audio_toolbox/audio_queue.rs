@@ -187,8 +187,23 @@ pub fn AudioQueueNewOutput(
         format.channels_per_frame = 1;
     }
 
-            // Общий фикс для Action Buggy, Fruit Ninja и других игр со сломанным заголовком LPCM 
+                // Общий фикс для Action Buggy, Fruit Ninja и других игр со сломанным заголовком LPCM 
     if format.format_id == kAudioFormatLinearPCM && format.channels_per_frame > 0 {
+        
+        // НОВЫЙ ФИКС: Если игра (как Metal Slug) прислала абсолютные нули для битов и байтов
+        if format.bits_per_channel == 0 && format.bytes_per_frame == 0 {
+            log!("Fixing totally broken LPCM header (0 bits, 0 bytes). Forcing 16-bit PCM.");
+            format.bits_per_channel = 16;
+            format.bytes_per_frame = format.channels_per_frame * 2;
+            
+            // Если LPCM присылает мусор в frames_per_packet (например, 1024 вместо 1), чиним и это
+            if format.frames_per_packet > 1 {
+                format.frames_per_packet = 1;
+            }
+            
+            format.format_flags |= kAudioFormatFlagIsSignedInteger;
+        }
+
         // 1. Проверяем и чиним bytes_per_packet
         let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
         if format.bytes_per_packet != expected_bytes_per_packet {
