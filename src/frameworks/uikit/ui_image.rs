@@ -191,8 +191,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)stretchableImageWithLeftCapWidth:(NSInteger)leftCapWidth topCapHeight:(NSInteger)topCapHeight {
     let cg_image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
     
-    // Создаем новый объект UIImage на основе того же CGImage
-    let new_img: id = msg![env; UIImage alloc];
+    // Создаем новый объект UIImage на основе того же CGImage.
+    // ИСПОЛЬЗУЕМ msg_class! для отправки сообщения alloc классу
+    let new_img: id = msg_class![env; UIImage alloc];
     let new_img: id = msg![env; new_img initWithCGImage:cg_image];
     
     // Но прописываем ему параметры растяжения
