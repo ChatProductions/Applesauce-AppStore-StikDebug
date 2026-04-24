@@ -204,7 +204,8 @@ macro_rules! objc_classes {
             $( + ($cm_type:ty) $cm_name:ident $(:($cm_type1:ty) $cm_arg1:ident $($($cm_namen:ident)?:($cm_typen:ty) $cm_argn:ident)*)?
                               $(, ...$cm_va_arg:ident)?
                  $cm_block:block )*
-            $( - ($im_type:ty) $im_name:ident $(:($im_type1:ty) $im_arg1:ident $($($im_namen:ident)?:($im_typen:ty) $im_argn:ident)*)?
+            $( - ($im_type:ty) $im_name:ident $(:($im_type1:ty) 
+$im_arg1:ident $($($im_namen:ident)?:($im_typen:ty) $im_argn:ident)*)?
                               $(, ...$im_va_arg:ident)?
                  $im_block:block )*
             @end
@@ -263,7 +264,8 @@ macro_rules! objc_classes {
         ]
     }
 }
-pub use crate::objc_classes; // #[macro_export] is weird...
+pub use crate::objc_classes;
+// #[macro_export] is weird...
 
 impl ClassHostObject {
     fn from_template(
@@ -314,7 +316,6 @@ impl ClassHostObject {
             ivars,
             ..
         } = mem.read(data);
-
         let name = mem.cstr_at_utf8(name).unwrap().to_string();
 
         let mut host_object = ClassHostObject {
@@ -327,7 +328,6 @@ impl ClassHostObject {
             instance_size,
             ivars: HashMap::new(),
         };
-
         if !base_methods.is_null() {
             host_object.add_methods_from_bin(base_methods, mem, objc);
         }
@@ -352,7 +352,6 @@ fn substitute_classes(
     let class_t { data, .. } = mem.read(class.cast());
     let class_rw_t { name, .. } = mem.read(data);
     let name = mem.cstr_at_utf8(name).unwrap();
-    
     // Substitute classes that seem to be from various third-party advertising 
     // or social network SDKs.
     if !(name.starts_with("AdMob")
@@ -363,7 +362,8 @@ fn substitute_classes(
         || name.starts_with("OpenFeint")
         || name.starts_with("Tapjoy")
         || name.starts_with("UA")
-        || name.starts_with("GAD")) 
+        || name.starts_with("GAD")
+        || name.starts_with("iSimulate")) // <-- ДОБАВЛЕНО ЗДЕСЬ
     {
         return None;
     }
@@ -382,7 +382,6 @@ fn substitute_classes(
         "Note: substituting fake class for {} to improve compatibility",
         name
     );
-
     let class_host_object = Box::new(FakeClass {
         name: name.to_string(),
         is_metaclass: false,
@@ -433,7 +432,6 @@ impl ObjC {
         // together, so even though this function only returns one pointer, it
         // must create both. The function must not care whether the metaclass
         // is requested first, or if the class is requested first.
-
         if let Some(class) = self.get_class(name, is_metaclass, mem) {
             return class;
         };
@@ -442,7 +440,6 @@ impl ObjC {
         let metaclass_host_object: Box<dyn AnyHostObject>;
         if let Some(template) = Self::find_template(name) {
             // We have a template (host implementation) for this class, use it.
-
             if let Some(superclass_name) = template.superclass {
                 // Make sure we actually have a template for the superclass
                 // before we try to link it, else we might get an unimplemented
@@ -473,7 +470,7 @@ impl ObjC {
                     })
                     .unwrap_or(nil),
                 self,
-            ));
+             ));
         } else {
             // ЗДЕСЬ ДОБАВЛЕНА ЛОГИКА ДЛЯ ДИНАМИЧЕСКИХ КЛАССОВ (GAD и др.)
             let is_fake = name.starts_with("AdMob")
@@ -484,8 +481,9 @@ impl ObjC {
                 || name.starts_with("OpenFeint")
                 || name.starts_with("Tapjoy")
                 || name.starts_with("UA")
-                || name.starts_with("GAD");
-
+                || name.starts_with("GAD")
+                || name.starts_with("iSimulate"); // <-- ДОБАВЛЕНО ЗДЕСЬ
+                
             if !use_placeholder && !is_fake {
                 panic!("Missing implementation for class {name}!");
             }
@@ -527,14 +525,12 @@ impl ObjC {
         };
 
         let class = self.alloc_static_object(metaclass, class_host_object, mem);
-
         if name == "NSObject" {
             // NSObject's metaclass has its class as the superclass.
             self.borrow_mut::<ClassHostObject>(metaclass).superclass = class;
         }
 
         self.classes.insert(name.to_string(), class);
-
         if is_metaclass {
             metaclass
         } else {
@@ -557,7 +553,6 @@ impl ObjC {
 
             let name = if let Some(fakes) = substitute_classes(mem, class, metaclass) {
                 let (class_host_object, metaclass_host_object) = fakes;
-
                 assert!(class_host_object.name == metaclass_host_object.name);
                 let name = class_host_object.name.clone();
 
@@ -571,7 +566,6 @@ impl ObjC {
                 let metaclass_host_object = Box::new(ClassHostObject::from_bin(
                     metaclass, /* is_metaclass: */ true, mem, self,
                 ));
-
                 assert!(class_host_object.name == metaclass_host_object.name);
                 let name = class_host_object.name.clone();
 
@@ -615,7 +609,6 @@ impl ObjC {
         }
         // At least NSObject should be found as a root object
         assert!(found_ns_object);
-
         // Third pass to ensure no superclass has "grown into" any of its
         // subclasses.
         // (https://alwaysprocessing.blog/2023/03/12/objc-ivar-abi)
@@ -637,7 +630,6 @@ impl ObjC {
                     name,
                     &self.borrow::<ClassHostObject>(*superclass).name
                 );
-
                 let ClassHostObject {
                     ref mut instance_start,
                     ref mut instance_size,
@@ -692,7 +684,6 @@ impl ObjC {
             instance_start,
             instance_size
         );
-
         if *superclass == nil {
             return (false, 0);
         }
@@ -742,7 +733,6 @@ impl ObjC {
         for (i, (_, o)) in self.classes.iter().enumerate() {
             // Why doesn't json allow trailing commas...
             let comma = if i == self.classes.len() - 1 { "" } else { "," };
-
             let host_obj = self.get_host_object(*o).unwrap();
 
             if let Some(ClassHostObject {
@@ -760,7 +750,7 @@ impl ObjC {
                     writeln!(
                         file,
                         "        {{ \"name\": \"{}\", \"super\": \"{}\", \"class_type\": \"normal\" }}{}",
-                        name, self.get_class_name(*sup), comma
+                         name, self.get_class_name(*sup), comma
                     )?;
                 }
             } else if let Some(UnimplementedClass { name, .. }) = host_obj.as_any().downcast_ref() {
@@ -796,7 +786,6 @@ impl ObjC {
             let name = mem.cstr_at_utf8(data.name).unwrap();
             let class = data.class;
             let metaclass = Self::read_isa(class, mem);
-
             for (class, methods) in [
                 (class, data.instance_methods),
                 (metaclass, data.class_methods),
@@ -887,7 +876,7 @@ impl ObjC {
         } else if let Some(FakeClass { name, .. }) = host_object.as_any().downcast_ref() {
             Some(name)
         } else {
-            None
+             None
         }
     }
 }
@@ -901,7 +890,6 @@ pub fn objc_getClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class 
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -922,7 +910,6 @@ pub fn objc_begin_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Cla
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -943,7 +930,6 @@ pub fn objc_end_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -964,7 +950,6 @@ pub fn objc_exception_throw(env: &mut crate::Environment, name: ConstPtr<u8>) ->
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1003,7 +988,6 @@ pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, name: Co
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1024,7 +1008,6 @@ pub fn objc_autoreleaseReturnValue(env: &mut crate::Environment, name: ConstPtr<
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1045,7 +1028,6 @@ pub fn objc_retainAutoreleaseReturnValue(env: &mut crate::Environment, name: Con
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1066,7 +1048,6 @@ pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1087,7 +1068,6 @@ pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u
         Ok(s) => s.to_string(),
         Err(_) => return nil,
     };
-
     if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
         return class;
     }
@@ -1294,7 +1274,7 @@ pub fn ___objc_personality_v0(
         version: {}, actions: {}, class: {:x}, object: {:?}, context: {:?}",
         version, actions, exception_class, exception_object, context
     );
-    
     // _URC_FATAL_PHASE1_ERROR
     3
 }
+
