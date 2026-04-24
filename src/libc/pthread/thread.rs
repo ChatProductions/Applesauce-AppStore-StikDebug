@@ -34,7 +34,11 @@ pub struct pthread_attr_t {
     magic: u32,
     detachstate: i32,
     stacksize: GuestUSize,
-    _unused: [u32; 7],
+    // ИСПРАВЛЕНИЕ: Добавляем реальные поля для политики и параметров
+    sched_policy: i32,
+    sched_param: sched_param,
+    // Уменьшаем _unused с 7 до 5, так как добавили два 4-байтовых поля (чтобы сохранить общий размер в 40 байт)
+    _unused: [u32; 5],
 }
 unsafe impl SafeRead for pthread_attr_t {}
 
@@ -49,7 +53,9 @@ const DEFAULT_ATTR: pthread_attr_t = pthread_attr_t {
     magic: MAGIC_ATTR,
     detachstate: PTHREAD_CREATE_JOINABLE,
     stacksize: mem::Mem::SECONDARY_THREAD_DEFAULT_STACK_SIZE,
-    _unused: [0; 7],
+    sched_policy: 1, // SCHED_OTHER (дефолтная политика планирования в POSIX)
+    sched_param: sched_param { sched_priority: 0 },
+    _unused: [0; 5],
 };
 
 /// Apple's implementation is a 4-byte magic number followed by a massive
@@ -194,7 +200,12 @@ fn pthread_attr_setschedpolicy(
     policy: i32,
 ) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    log!("TODO: pthread_attr_setschedpolicy({:?}, {}) (ignored)", attr, policy);
+    // ИСПРАВЛЕНИЕ: Реально сохраняем политику в структуру атрибутов
+    let mut attr_copy = env.mem.read(attr);
+    attr_copy.sched_policy = policy;
+    env.mem.write(attr, attr_copy);
+    
+    log_dbg!("pthread_attr_setschedpolicy({:?}, {})", attr, policy);
     0
 }
 
@@ -204,8 +215,14 @@ fn pthread_attr_setschedparam(
     param: ConstPtr<sched_param>,
 ) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    let sched_param = env.mem.read(param);
-    log!("TODO: pthread_attr_setschedparam({:?}, {:?}) (ignored)", attr, sched_param);
+    // ИСПРАВЛЕНИЕ: Реально читаем параметры из гостевой памяти и сохраняем в структуру
+    let new_param = env.mem.read(param);
+    
+    let mut attr_copy = env.mem.read(attr);
+    attr_copy.sched_param = new_param;
+    env.mem.write(attr, attr_copy);
+    
+    log_dbg!("pthread_attr_setschedparam({:?}, {:?})", attr, new_param);
     0
 }
 
@@ -215,6 +232,8 @@ fn pthread_attr_destroy(env: &mut Environment, attr: MutPtr<pthread_attr_t>) -> 
         magic: 0,
         detachstate: 0,
         stacksize: 0,
+        sched_policy: 0,
+        sched_param: sched_param { sched_priority: 0 },
         _unused: Default::default(),
     });
     0
