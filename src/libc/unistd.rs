@@ -255,22 +255,14 @@ fn getpagesize(_env: &mut Environment) -> i32 {
 }
 
 fn readlink(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<u8>, bufsize: GuestUSize) -> GuestISize {
-    // Читаем путь для дебаг-логов (используем log_dbg!, чтобы не спамить в обычный лог)
     let path_str = env.mem.cstr_at_utf8(path).unwrap_or("<invalid>");
-    log_dbg!("readlink({:?}, {:#x}, {})", path_str, buf.addr(), bufsize);
+    // Используем .0 для получения адреса из обертки Ptr
+    log_dbg!("readlink({:?}, {:#x}, {})", path_str, buf.0, bufsize);
 
-    // 1. Проверяем, существует ли файл/директория по этому пути.
-    // Используем готовую функцию access, передаем F_OK (константа 0, проверка существования).
-    // Если пути нет в VFS, access вернет -1 и сама заботливо выставит errno в ENOENT.
     if access(env, path, F_OK) == -1 {
         return -1;
     }
 
-    // 2. Если мы здесь, значит путь существует. 
-    // Так как в гостевой VFS touchHLE всё мапится напрямую в хост-пути,
-    // любой существующий гостевой путь является обычной папкой или файлом.
-    // По строгому стандарту POSIX: вызов readlink для сущности, не являющейся
-    // симлинком, ОБЯЗАН вернуть -1 и установить errno в EINVAL.
     set_errno(env, EINVAL);
     -1
 }
