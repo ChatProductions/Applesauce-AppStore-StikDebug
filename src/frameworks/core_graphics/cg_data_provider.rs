@@ -43,11 +43,6 @@ enum CGDataProviderHostObject {
     // need a special variant for this.
     CGImage(CGImageRef),
     CFData(CFDataRef),
-    Sequential {
-        data: Vec<u8>,
-        info: MutVoidPtr,
-        release_info: GuestFunction,
-    },
 }
 impl HostObject for CGDataProviderHostObject {}
 
@@ -81,13 +76,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         },
         CGDataProviderHostObject::CGImage(cg_image) => CGImageRelease(env, cg_image),
         CGDataProviderHostObject::CFData(cf_data) => CFRelease(env, cf_data),
-
-        CGDataProviderHostObject::Sequential { info, release_info, ref data } => {
-            if !release_info.to_ptr().is_null() {
-                // Сообщаем игре, что источник данных можно закрывать/освобождать
-                let _: () = release_info.call_from_host(env, (info,));
-            }
-        },
     }
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -159,7 +147,6 @@ pub(super) fn borrow_bytes(env: &mut Environment, provider: CGDataProviderRef) -
             let size = CFDataGetLength(env, cf_data);
             env.mem.bytes_at(data, size.try_into().unwrap())
         }
-        CGDataProviderHostObject::Sequential { ref data, .. } => data.as_slice(),
     }
 }
 
@@ -189,14 +176,6 @@ fn CGDataProviderCopyData(env: &mut Environment, provider: CGDataProviderRef) ->
             let data = CFDataGetBytePtr(env, cf_data);
             let size = CFDataGetLength(env, cf_data);
             CFDataCreate(env, kCFAllocatorDefault, data.cast(), size)
-        }
-        CGDataProviderHostObject::Sequential { ref data, .. } => {
-            let len: NSUInteger = data.len().try_into().unwrap();
-            let alloc = env.mem.alloc(len);
-            env.mem.bytes_at_mut(alloc.cast(), len).copy_from_slice(data);
-            
-            let ns_data: id = msg_class![env; NSData alloc];
-            msg![env; ns_data initWithBytesNoCopy:alloc length:len]
         }
     }
 }
@@ -268,68 +247,16 @@ fn CGDataProviderGetSize(
         CGDataProviderHostObject::CFData(cf_data) => {
             CFDataGetLength(env, cf_data) as u64
         }
-        CGDataProviderHostObject::Sequential { ref data, .. } => data.len() as u64,
     }
 }
 
 fn CGDataProviderCreateSequential(
-    env: &mut Environment,
-    info: MutVoidPtr,
-    callbacks: ConstVoidPtr,
+    _env: &mut Environment,
+    _info: MutVoidPtr,
+    _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
-    if callbacks.is_null() {
-        return nil;
-    }
-
-    // В iOS структура CGDataProviderSequentialCallbacks выглядит так:
-    // uint32 version; (должна быть 0)
-    // void* getBytes;
-    // void* skipForward;
-    // void* rewind;
-    // void* releaseInfo;
-    
-    let version: u32 = env.mem.read(callbacks.cast::<u32>());
-    if version != 0 {
-        log!("Warning: CGDataProviderCreateSequential unsupported version {}", version);
-        return nil;
-    }
-
-    // Читаем указатели на функции из гостевой памяти
-    let ptr_get_bytes: MutVoidPtr = env.mem.read(callbacks.cast::<MutVoidPtr>() + 1);
-    let ptr_release_info: MutVoidPtr = env.mem.read(callbacks.cast::<MutVoidPtr>() + 4);
-
-    let get_bytes = GuestFunction::from_ptr(ptr_get_bytes);
-    let release_info = GuestFunction::from_ptr(ptr_release_info);
-
-    // Вытягиваем данные напрямую в вектор хоста
-    let mut data = Vec::new();
-    if !get_bytes.to_ptr().is_null() {
-        let chunk_size: u32 = 4096; // Читаем по 4 КБ
-        let buf = env.mem.alloc(chunk_size);
-        loop {
-            // Вызываем гостевую функцию getBytes(info, buffer, count)
-            let bytes_read: u32 = get_bytes.call_from_host(env, (info, buf, chunk_size));
-            if bytes_read == 0 {
-                break; // Конец потока
-            }
-            data.extend_from_slice(env.mem.bytes_at(buf.cast(), bytes_read));
-        }
-        env.mem.free(buf);
-    }
-
-    // Упаковываем результат в наш новый вариант
-    let class = env
-        .objc
-        .get_known_class("_touchHLE_CGDataProvider", &mut env.mem);
-    env.objc.alloc_object(
-        class,
-        Box::new(CGDataProviderHostObject::Sequential {
-            data,
-            info,
-            release_info,
-        }),
-        &mut env.mem,
-    )
+    log!("Warning: CGDataProviderCreateSequential is not supported, returning null");
+    nil // <- was std::ptr::null()
 }
 
 fn CGDataProviderCreateDirect(
