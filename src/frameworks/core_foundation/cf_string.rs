@@ -1359,6 +1359,49 @@ fn CFStringGetTypeID(_env: &mut Environment) -> u32 {
 
 // MARK: - Exports
 
+fn _CFStringCreateExternalRepresentation(
+    env: &mut Environment,
+    _alloc: CFAllocatorRef,
+    the_string: CFStringRef,
+    encoding: CFStringEncoding,
+    loss_byte: u8,
+) -> CFTypeRef {
+    if the_string == nil {
+        return nil;
+    }
+
+    // Маппинг CFStringEncoding в NSStringEncoding
+    let ns_encoding: NSUInteger = match encoding {
+        0 => 30,                  // kCFStringEncodingMacRoman -> NSMacOSRomanStringEncoding
+        0x0600 => 1,              // kCFStringEncodingASCII -> NSASCIIStringEncoding
+        0x0201 => 5,              // kCFStringEncodingISOLatin1 -> NSISOLatin1StringEncoding
+        0x08000100 => 4,          // kCFStringEncodingUTF8 -> NSUTF8StringEncoding
+        0x0100 => 10,             // kCFStringEncodingUTF16 -> NSUTF16StringEncoding
+        0x10000100 => 0x90000100, // kCFStringEncodingUTF16BE -> NSUTF16BigEndianStringEncoding
+        0x14000100 => 0x94000100, // kCFStringEncodingUTF16LE -> NSUTF16LittleEndianStringEncoding
+        0x0c000100 => 0x8c000100, // kCFStringEncodingUTF32 -> NSUTF32StringEncoding
+        0x18000100 => 0x98000100, // kCFStringEncodingUTF32BE -> NSUTF32BigEndianStringEncoding
+        0x1c000100 => 0x9c000100, // kCFStringEncodingUTF32LE -> NSUTF32LittleEndianStringEncoding
+        _ => {
+            log!("Warning: _CFStringCreateExternalRepresentation unknown encoding 0x{:X}, defaulting to UTF8", encoding);
+            4 // По умолчанию UTF-8
+        }
+    };
+
+    let lossy = loss_byte != 0;
+
+    // Вызываем метод -[NSString dataUsingEncoding:allowLossyConversion:]
+    let data: id = msg![env; the_string dataUsingEncoding:ns_encoding allowLossyConversion:lossy];
+
+    // Core Foundation функции со словом "Create" обязаны возвращать объект с +1 retain count.
+    // Так как метод dataUsingEncoding возвращает autoreleased объект, его нужно вручную удержать.
+    if data != nil {
+        let _: () = msg![env; data retain];
+    }
+
+    data
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     // Lifecycle
     export_c_func!(CFStringRetain(_)),
@@ -1443,5 +1486,7 @@ pub const FUNCTIONS: FunctionExports = &[
   
     // Type info
     export_c_func!(CFStringGetTypeID()),
+    export_c_func!(_CFStringCreateExternalRepresentation(_, _, _, _)),
+    export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
 
