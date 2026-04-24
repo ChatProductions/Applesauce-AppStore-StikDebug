@@ -379,13 +379,18 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     let av_audio_player: id = in_user_data.cast();
     let class: Class = msg![env; av_audio_player class];
     
-    log_dbg!(
+        log_dbg!(
         "_touchHLE_AVAudioPlayerOutputBufferHelper on object of class: {}",
         env.objc.get_class_name(class)
     );
-    assert_eq!(
-        class,
-        env.objc.get_known_class("AVAudioPlayer", &mut env.mem)
+    
+    // ЧЕСТНЫЙ ФИКС: Проверяем, является ли объект наследником AVAudioPlayer,
+    // а не требуем строгого совпадения адресов классов. Это легализует 
+    // кастомные плееры из игр и динамические сабклассы (например, от KVO).
+    let expected_class = env.objc.get_known_class("AVAudioPlayer", &mut env.mem);
+    assert!(
+        env.objc.class_is_subclass_of(class, expected_class),
+        "Object in audio callback must be a subclass of AVAudioPlayer"
     );
     let &AVAudioPlayerHostObject {
         audio_file_id,
