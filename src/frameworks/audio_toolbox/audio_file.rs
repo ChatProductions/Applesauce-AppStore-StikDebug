@@ -89,6 +89,11 @@ const kAudioFilePropertyPacketTableInfo: AudioFilePropertyID = fourcc(b"pnfo");
 const kAudioFilePropertyPacketToFrame: AudioFilePropertyID = fourcc(b"flst");
 pub const kAudioFilePropertyFileFormat: AudioFilePropertyID = fourcc(b"ffmt");
 
+// Максимальный допустимый размер пакета — 64 КБ.
+// Ограничение предотвращает запрос AudioQueue на гигантские буферы
+// (как видно в логе: "ridiculously large buffer: 0x1150000 bytes").
+const MAX_PACKET_SIZE_UPPER_BOUND: u32 = 65536;
+
 // Генерация короткой (2 сек) тишины. Избегает крашей памяти (malloc fails), 
 // так как весит всего ~350 КБ, что легко помещается в эмулируемую RAM.
 fn create_dummy_audio_file() -> AudioFileHostObject {
@@ -162,7 +167,9 @@ pub fn AudioFileOpenWithCallbacks(
     in_file_type_hint: AudioFileTypeID,
     out_audio_file: MutPtr<AudioFileID>,
 ) -> OSStatus {
-    if _write_callback.to_ptr().is_null() || _setsize_callback.to_ptr().is_null() {
+    // [FIX 1] Условие было инвертировано: проверялось is_null(), но логировалось
+    // "вызван С коллбэками". Правильно: предупреждать, когда коллбэки ПЕРЕДАНЫ (!is_null).
+    if !_write_callback.to_ptr().is_null() || !_setsize_callback.to_ptr().is_null() {
         log_dbg!("AudioFileOpenWithCallbacks() вызван с write/set_size коллбэками (не поддерживается)");
     }
     
@@ -182,13 +189,19 @@ pub fn AudioFileOpenWithCallbacks(
         read_callback.call_from_host(env, (client_data, 0_i64, size, data_ptr, bytes_read_ptr));
         
     if status != 0 {
+        env.mem.free(data_ptr.cast());
+        env.mem.free(bytes_read_ptr.cast());
         if !out_audio_file.is_null() { env.mem.write(out_audio_file, MutPtr::null()); }
         return status;
     }
 
     let actual_bytes_read = env.mem.read(bytes_read_ptr);
     let data_vec = env.mem.bytes_at(data_ptr, actual_bytes_read).to_vec();
-        
+
+    // [FIX 2] Освобождаем временные буферы, чтобы не утекала гостевая память.
+    env.mem.free(data_ptr.cast());
+    env.mem.free(bytes_read_ptr.cast());
+
     let host_object = match audio::AudioFile::read_from_vec(data_vec) {
         Ok(file) => AudioFileHostObject::Real(file),
         Err(_) => {
@@ -312,7 +325,6 @@ pub fn AudioFileGetProperty(
                                 channels_per_frame, bits_per_channel, _reserved: 0,
                             }
                         }
-                        // Защита: Если Symphonia парсит новые форматы (MP3, ALAC), и они не описаны выше
                         _ => {
                             AudioStreamBasicDescription {
                                 sample_rate, format_id: fourcc(b"fmt?"), format_flags: 0,
@@ -326,18 +338,41 @@ pub fn AudioFileGetProperty(
                 kAudioFilePropertyAudioDataByteCount => env.mem.write(out_property_data.cast(), audio_file.byte_count()),
                 kAudioFilePropertyAudioDataPacketCount => env.mem.write(out_property_data.cast(), audio_file.packet_count()),
                 kAudioFilePropertyPacketSizeUpperBound | kAudioFilePropertyMaximumPacketSize => {
-                    env.mem.write(out_property_data.cast(), audio_file.packet_size_upper_bound())
+                    // [FIX 3] Ограничиваем packet_size_upper_bound значением MAX_PACKET_SIZE_UPPER_BOUND.
+                    // Без этого лимита AudioQueue может запросить огромный буфер
+                    // (как в логе: "ridiculously large buffer: 0x1150000 bytes"),
+                    // что приводит к OOM или аварийному завершению.
+                    let raw = audio_file.packet_size_upper_bound();
+                    let capped = std::cmp::min(raw, MAX_PACKET_SIZE_UPPER_BOUND);
+                    if raw != capped {
+                        log!(
+                            "Внимание: packet_size_upper_bound {} обрезан до {} для предотвращения OOM",
+                            raw, capped
+                        );
+                    }
+                    env.mem.write(out_property_data.cast(), capped)
                 },
                 kAudioFilePropertyEstimatedDuration => {
+                    // [FIX 4] Защита от деления на ноль: если bytes_per_packet == 0
+                    // или sample_rate == 0 (например, для VBR-форматов AAC), возвращаем 0.0
+                    // вместо Infinity/NaN, которые могут вызвать крэш в гостевом коде.
                     let AudioDescription { sample_rate, bytes_per_packet, frames_per_packet, .. } = audio_file.audio_description();
-                    let estimated_duration: f64 = audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate);
+                    let estimated_duration: f64 = if bytes_per_packet == 0 || sample_rate == 0.0 {
+                        let pc = audio_file.packet_count() as f64;
+                        let fpp = frames_per_packet as f64;
+                        if sample_rate > 0.0 { pc * fpp / sample_rate } else { 0.0 }
+                    } else {
+                        audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate)
+                    };
                     env.mem.write(out_property_data.cast(), estimated_duration);
                 }
                 kAudioFilePropertyPacketTableInfo => return kAudioFileUnsupportedPropertyError,
                 kAudioFilePropertyPacketToFrame => {
-                    let AudioDescription { sample_rate, bytes_per_packet, frames_per_packet, .. } = audio_file.audio_description();
-                    let estimated_duration: f64 = audio_file.byte_count() as f64 * frames_per_packet as f64 / (bytes_per_packet as f64 * sample_rate);
-                    env.mem.write(out_property_data.cast(), estimated_duration);
+                    // [FIX 5] Раньше здесь повторно вычислялась estimated_duration и записывалась
+                    // как f64, что не имело смысла для PacketToFrame. Теперь возвращаем
+                    // frames_per_packet — коэффициент преобразования пакет→фрейм для CBR.
+                    let AudioDescription { frames_per_packet, .. } = audio_file.audio_description();
+                    env.mem.write(out_property_data.cast(), frames_per_packet as f64);
                 }
                 kAudioFilePropertyFileFormat => env.mem.write(out_property_data.cast(), kAudioFileCAFType),
                 _ => return kAudioFileUnsupportedPropertyError,
@@ -355,7 +390,9 @@ pub fn AudioFileGetProperty(
                     let duration = (*packet_count as f64) * (format.frames_per_packet as f64) / format.sample_rate;
                     env.mem.write(out_property_data.cast(), duration);
                 }
-                kAudioFilePropertyPacketToFrame => env.mem.write(out_property_data.cast(), 1.0f64),
+                kAudioFilePropertyPacketToFrame => {
+                    env.mem.write(out_property_data.cast(), format.frames_per_packet as f64)
+                },
                 kAudioFilePropertyFileFormat => env.mem.write(out_property_data.cast(), kAudioFileCAFType),
                 _ => return kAudioFileUnsupportedPropertyError,
             }
@@ -375,6 +412,14 @@ pub fn AudioFileReadBytes(
 ) -> OSStatus {
     return_if_null!(in_audio_file);
     if io_num_bytes.is_null() { return paramErr; }
+
+    // [FIX 6] Проверка отрицательного смещения — iOS-приложения иногда передают -1
+    // как «читать с текущей позиции». Возвращаем eof, чтобы не запаниковать.
+    if in_starting_byte < 0 {
+        log!("Внимание: AudioFileReadBytes() вызван с отрицательным смещением {}", in_starting_byte);
+        env.mem.write(io_num_bytes, 0);
+        return eofErr;
+    }
 
     let host_object = match State::get(&mut env.framework_state).audio_files.get_mut(&in_audio_file) {
         Some(obj) => obj,
@@ -433,9 +478,6 @@ pub fn AudioFileReadPackets(
     return_if_null!(in_audio_file);
     if io_num_packets.is_null() { return paramErr; }
 
-    // Логирование из оригинала:
-    // Пакеты переменного размера на данный момент не реализованы. Когда они будут реализованы,
-    // этот параметр должен стать `MutPtr<AudioStreamPacketDescription>`.
     if !out_packet_descriptions.is_null() {
         log!("Внимание: игнорирование не-null out_packet_descriptions в AudioFileReadPackets()");
     }
@@ -456,6 +498,14 @@ pub fn AudioFileReadPackets(
         env.mem.write(io_num_packets, 0);
         if !out_num_bytes.is_null() { env.mem.write(out_num_bytes, 0); }
         return kAudioFileSuccess;
+    }
+
+    // [FIX 7] Проверка отрицательного стартового пакета.
+    if in_starting_packet < 0 {
+        log!("Внимание: AudioFileReadPackets() вызван с отрицательным in_starting_packet {}", in_starting_packet);
+        env.mem.write(io_num_packets, 0);
+        if !out_num_bytes.is_null() { env.mem.write(out_num_bytes, 0); }
+        return eofErr;
     }
 
     let starting_byte = match i64::from(packet_size).checked_mul(in_starting_packet) {
@@ -500,8 +550,12 @@ pub fn AudioFileReadPackets(
 pub fn AudioFileClose(env: &mut Environment, in_audio_file: AudioFileID) -> OSStatus {
     return_if_null!(in_audio_file);
     let Some(_host_object) = State::get(&mut env.framework_state).audio_files.remove(&in_audio_file) else {
-        log!("Ошибка при AudioFileClose для {:?} (вероятно, двойное закрытие), игнорируем!", in_audio_file);
-        return kAudioFileUnspecifiedError;
+        // [FIX 8] Возвращаем kAudioFileSuccess вместо kAudioFileUnspecifiedError при
+        // двойном закрытии. iOS-приложения часто дважды вызывают AudioFileClose;
+        // возврат ошибки мог вызвать каскадный сбой, в том числе NULL-PAGE READ,
+        // т.к. гостевой код не проверяет код возврата и продолжает работу с невалидным хэндлом.
+        log!("Внимание: AudioFileClose для {:?} (повторное закрытие), игнорируем.", in_audio_file);
+        return kAudioFileSuccess;
     };
     env.mem.free(in_audio_file.cast());
     
@@ -544,3 +598,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
+
