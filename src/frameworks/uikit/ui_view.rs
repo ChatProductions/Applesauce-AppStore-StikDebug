@@ -31,7 +31,7 @@ use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::{ns_array, NSInteger, NSUInteger};
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, Class,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class,
     ClassExports, HostObject, NSZonePtr, ObjC, SEL,
 };
 use crate::Environment;
@@ -48,6 +48,9 @@ pub(super) struct UIViewHostObject {
     superview: id,
     view_controller: id,
     tag: NSInteger,
+    content_mode: NSInteger,
+    autoresizing_mask: NSUInteger,
+    autoresizes_subviews: bool,
     clears_context_before_drawing: bool,
     user_interaction_enabled: bool,
     multiple_touch_enabled: bool,
@@ -66,6 +69,9 @@ impl Default for UIViewHostObject {
             superview: nil,
             view_controller: nil,
             tag: 0,
+            content_mode: 0, // UIViewContentModeScaleToFill
+            autoresizing_mask: 0, // UIViewAutoresizingNone
+            autoresizes_subviews: true,
             clears_context_before_drawing: true,
             user_interaction_enabled: true,
             multiple_touch_enabled: false,
@@ -171,6 +177,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_tag = get_static_str(env, "UITag");
     let tag: NSInteger = if msg![env; coder containsValueForKey:key_tag] { msg![env; coder decodeIntegerForKey:key_tag] } else { 0 };
 
+    let key_content_mode = get_static_str(env, "UIContentMode");
+    let content_mode: NSInteger = if msg![env; coder containsValueForKey:key_content_mode] { msg![env; coder decodeIntegerForKey:key_content_mode] } else { 0 };
+
+    let key_autoresizing_mask = get_static_str(env, "UIAutoresizingMask");
+    let autoresizing_mask: NSUInteger = if msg![env; coder containsValueForKey:key_autoresizing_mask] { msg![env; coder decodeIntegerForKey:key_autoresizing_mask] as NSUInteger } else { 0 };
+
+    let key_autoresizes_subviews = get_static_str(env, "UIAutoresizesSubviews");
+    let autoresizes_subviews: bool = if msg![env; coder containsValueForKey:key_autoresizes_subviews] { msg![env; coder decodeBoolForKey:key_autoresizes_subviews] } else { true };
+
     let key_multi_touch = get_static_str(env, "UIMultipleTouchEnabled");
     let multi_touch_enabled: bool = if msg![env; coder containsValueForKey:key_multi_touch] { msg![env; coder decodeBoolForKey:key_multi_touch] } else { false };
 
@@ -196,7 +211,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setHidden:hidden];
     () = msg![env; this setOpaque:opaque];
     if bg_color != nil { () = msg![env; this setBackgroundColor:bg_color]; }
+    
     () = msg![env; this setTag:tag];
+    () = msg![env; this setContentMode:content_mode];
+    () = msg![env; this setAutoresizingMask:autoresizing_mask];
+    () = msg![env; this setAutoresizesSubviews:autoresizes_subviews];
     () = msg![env; this setMultipleTouchEnabled:multi_touch_enabled];
 
     for i in 0..subview_count {
@@ -209,6 +228,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (NSInteger)tag { env.objc.borrow::<UIViewHostObject>(this).tag }
 - (())setTag:(NSInteger)tag { env.objc.borrow_mut::<UIViewHostObject>(this).tag = tag; }
+
+- (NSInteger)contentMode { env.objc.borrow::<UIViewHostObject>(this).content_mode }
+- (())setContentMode:(NSInteger)content_mode { env.objc.borrow_mut::<UIViewHostObject>(this).content_mode = content_mode; }
+
+- (NSUInteger)autoresizingMask { env.objc.borrow::<UIViewHostObject>(this).autoresizing_mask }
+- (())setAutoresizingMask:(NSUInteger)mask { env.objc.borrow_mut::<UIViewHostObject>(this).autoresizing_mask = mask; }
+
+- (bool)autoresizesSubviews { env.objc.borrow::<UIViewHostObject>(this).autoresizes_subviews }
+- (())setAutoresizesSubviews:(bool)enabled { env.objc.borrow_mut::<UIViewHostObject>(this).autoresizes_subviews = enabled; }
 
 - (f64)animationInterval { env.objc.borrow::<UIViewHostObject>(this).animation_interval }
 - (())setAnimationInterval:(f64)interval { env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval; }
@@ -512,8 +540,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setAffineTransform:transform]
 }
 
-- (())setContentMode:(NSInteger)content_mode { todo_objc_setter!(this, content_mode); }
-
 - (bool)clearsContextBeforeDrawing { env.objc.borrow::<UIViewHostObject>(this).clears_context_before_drawing }
 - (())setClearsContextBeforeDrawing:(bool)v { env.objc.borrow_mut::<UIViewHostObject>(this).clears_context_before_drawing = v; }
 
@@ -675,8 +701,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this_layer convertRect:rect toLayer:other_layer]
 }
 
-- (())setAutoresizingMask:(NSUInteger)mask { todo_objc_setter!(this, mask); }
-- (())setAutoresizesSubviews:(bool)enabled { todo_objc_setter!(this, enabled); }
 - (CGSize)sizeThatFits:(CGSize)size { size }
 
 - (())sizeToFit {
