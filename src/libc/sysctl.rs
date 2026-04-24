@@ -14,7 +14,7 @@ use crate::libc::sysctl::SysInfoType::String;
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
 use crate::Environment;
 
-static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
+static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 17] = [
     // Generic CPU, I/O
     ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
     ((6,2), "hw.model" , String(b"M68AP")),
@@ -22,7 +22,8 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 16] = [
     ((0,0), "hw.cputype" , SysInfoType::Int32(12)),
     ((0,0), "hw.cpusubtype" , SysInfoType::Int32(6)),
     ((6,15), "hw.cpufrequency" , SysInfoType::Int64(412000000)),
-    ((6,14), "hw.busfrequency" , SysInfoType::Int64(103000000)),
+    ((6,14), "hw.busfrequency" , SysInfoType::Int64(103000000)), // Пример значения, если он там есть
+    ((1, 14), "kern.osversion", String(b"5A347")),
     ((6,5), "hw.physmem" , SysInfoType::Int32(121634816)), // not sure about this type
     ((6,6), "hw.usermem" , SysInfoType::Int32(93564928)), // not sure about this type
     ((6,24), "hw.memsize" , SysInfoType::Int32(121634816)),
