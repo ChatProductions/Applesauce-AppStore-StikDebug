@@ -647,11 +647,33 @@ impl Fs {
             }
         }
 
-        let library_node = match &host_path_directories[1] {
+                let library_node = match &host_path_directories[1] {
             Some(host_path) => FsNode::from_host_dir(host_path, true),
             None => FsNode::dir(),
         };
-        let root = FsNode::dir()
+
+        // Создаем физическую папку для корня ФС (чтобы shm_open мог создавать файлы вроде /mono.1)
+        let root_host_path = paths::user_data_base_path()
+            .join(paths::SANDBOX_DIR)
+            .join(bundle_id)
+            .join("root");
+
+        if !read_only_mode {
+            // Очищаем временные файлы корня при каждом запуске (аналогично tmp)
+            let _ = std::fs::remove_dir_all(&root_host_path);
+            if let Err(e) = std::fs::create_dir_all(&root_host_path) {
+                panic!("Could not create root directory for app at {root_host_path:?}: {e:?}");
+            }
+        }
+
+        // Если режим не read_only, монтируем физическую папку как корень с правами на запись
+        let root_node = if read_only_mode {
+            FsNode::dir()
+        } else {
+            FsNode::from_host_dir(&root_host_path, true)
+        };
+
+        let root = root_node
             .with_child(
                 "var",
                 FsNode::dir().with_child(
