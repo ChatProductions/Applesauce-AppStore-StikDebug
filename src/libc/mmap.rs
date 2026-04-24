@@ -9,7 +9,7 @@ use crate::environment::Environment;
 use crate::export_c_func;
 use crate::libc::errno::{set_errno, EINVAL, ENOTSUP};
 use crate::libc::posix_io;
-use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET, open};
+use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET, open_direct};
 use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
 use std::collections::HashMap;
 
@@ -104,14 +104,12 @@ fn madvise(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, advice: i32
 fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, mode: u32) -> i32 {
     set_errno(env, 0);
 
-    // Читаем имя из памяти гостя для логирования (аналогично тому, как это делается в sysctl)
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or("<invalid>");
     log_dbg!("shm_open({:?}, {:#x}, {:#x})", name_str, oflag, mode);
 
-    // Перенаправляем создание/открытие shm-объекта в VFS эмулятора.
-    // open() вернет валидный файловый дескриптор, который затем
-    // твой mmap() сможет обработать через lseek() и read().
-    open(env, name, oflag, mode)
+    // Используем open_direct! Параметр mode для эмулятора здесь не нужен, 
+    // поэтому просто передаем env, name и oflag.
+    open_direct(env, name, oflag)
 }
 
 pub const FUNCTIONS: FunctionExports = &[
