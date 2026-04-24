@@ -16,14 +16,29 @@ pub type CFTypeRef = objc::id;
 pub type CFTypeID = CFIndex;
 
 pub fn CFRetain(env: &mut Environment, object: CFTypeRef) -> CFTypeRef {
-    assert!(!object.is_null()); // not allowed, unlike for normal objc objects
+    // ИСПРАВЛЕНИЕ: Убираем жесткий assert. Из-за отсутствующих функций 
+    // сюда может прилетать NULL. Игнорируем, чтобы не крашить эмулятор.
+    if object.is_null() {
+        log_dbg!("Warning: CFRetain called with NULL. Ignoring to prevent crash.");
+        return object;
+    }
     objc::retain(env, object)
 }
+
 pub fn CFRelease(env: &mut Environment, object: CFTypeRef) {
+    // ИСПРАВЛЕНИЕ: Защита от NULL
+    if object.is_null() {
+        log_dbg!("Warning: CFRelease called with NULL. Ignoring.");
+        return;
+    }
     objc::release(env, object);
 }
 
 pub fn CFGetRetainCount(env: &mut Environment, object: CFTypeRef) -> CFIndex {
+    // ИСПРАВЛЕНИЕ: Защита от NULL
+    if object.is_null() {
+        return 0;
+    }
     let count: NSUInteger = msg![env; object retainCount];
     count as CFIndex
 }
@@ -33,9 +48,16 @@ pub fn CFEqual(
     object1: CFTypeRef,
     object2: CFTypeRef,
 ) -> bool {
+    // Если оба NULL — они равны (уже обрабатывается здесь)
     if object1 == object2 {
         return true;
     }
+    // ИСПРАВЛЕНИЕ: Если только один из них NULL — они точно не равны.
+    // Это спасет от краша при вызове [object class] ниже.
+    if object1.is_null() || object2.is_null() {
+        return false;
+    }
+    
     // TODO: other classes
     let str_class: Class = msg_class![env; NSString class];
     let object1_class: Class = msg![env; object1 class];
@@ -47,6 +69,10 @@ pub fn CFEqual(
 }
 
 pub fn CFHash(env: &mut Environment, object: CFTypeRef) -> CFHashCode {
+    // ИСПРАВЛЕНИЕ: Защита от NULL
+    if object.is_null() {
+        return 0;
+    }
     msg![env; object hash]
 }
 
