@@ -272,9 +272,9 @@ fn CGDataProviderCreateSequential(
     let rewind_raw:    u32 = env.mem.read(crate::mem::Ptr::from_bits(base.to_bits() + 12));
     let release_raw:   u32 = env.mem.read(crate::mem::Ptr::from_bits(base.to_bits() + 16));
 
-    let get_bytes_fn = GuestFunction::from_ptr(crate::mem::Ptr::from_bits(get_bytes_raw));
-    let rewind_fn    = GuestFunction::from_ptr(crate::mem::Ptr::from_bits(rewind_raw));
-    let release_fn   = GuestFunction::from_ptr(crate::mem::Ptr::from_bits(release_raw));
+    let get_bytes_fn = GuestFunction::from_addr_with_thumb_bit(get_bytes_raw);
+    let rewind_fn    = GuestFunction::from_addr_with_thumb_bit(rewind_raw);
+    let release_fn   = GuestFunction::from_addr_with_thumb_bit(release_raw);
 
     // Call rewind if available so we start from the beginning
     if !rewind_fn.to_ptr().is_null() {
