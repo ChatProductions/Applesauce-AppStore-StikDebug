@@ -684,55 +684,37 @@ pub fn lseek(
 }
 
 pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
-    set_errno(env, 0);
-    if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
-        log_dbg!("close({:?}) => 0", fd);
-        return 0;
-    }
+    // Приводим к знаковому типу на случай, если FileDescriptor это u32
+    let signed_fd = fd as i32;
 
-    if fd < 0
-        || env
-            .libc_state
-            .posix_io
-            .files
-            .get(fd_to_file_idx(fd))
-            .is_none()
-    {
+    // ИСПРАВЛЕНИЕ: Игры часто вызывают close(-1), если файл не открылся.
+    // Это штатная ситуация, POSIX требует вернуть ошибку EBADF без паники и спама.
+    if signed_fd < 0 {
+        log_dbg!("close({}) failed: invalid fd (negative), returning -1 (EBADF)", signed_fd);
         set_errno(env, EBADF);
-        log!("Warning: close({:?}) failed, returning -1", fd);
         return -1;
     }
 
-    let result =
-        match env.libc_state.posix_io.files[fd_to_file_idx(fd)].take() {
-            Some(file) => match file.file {
-                GuestFile::Directory => 0,
-                GuestFile::Socket => {
-                    close_socket(env, fd);
-                    0
-                }
-                _ => {
-                    if !file.needs_flush {
-                        0
-                    } else {
-                        match file.file.sync_all() {
-                            Ok(()) => 0,
-                            Err(_) => -1,
-                        }
-                    }
-                }
-            },
-            None => {
-                set_errno(env, EBADF);
-                -1
-            }
-        };
-    if result == 0 {
-        log_dbg!("close({:?}) => 0", fd);
-    } else {
-        log!("Warning: close({:?}) failed, returning -1", fd);
+    if fd < NORMAL_FILENO_BASE {
+        // Игнорируем попытки закрыть стандартные потоки (stdin=0, stdout=1, stderr=2)
+        log_dbg!("close({}): ignored standard stream", fd);
+        return 0;
     }
-    result
+
+    if let Some(file_obj) = env.libc_state.posix_io.files.get_mut(fd_to_file_idx(fd)) {
+        if file_obj.is_some() {
+            // Закрываем файл/сокет, заменяя его на None (Rust автоматически вызовет Drop)
+            *file_obj = None;
+            log_dbg!("close({}) -> success", fd);
+            return 0;
+        }
+    }
+
+    // ИСПРАВЛЕНИЕ: Меняем жесткий log! на log_dbg!. 
+    // Попытка закрыть уже закрытый или несуществующий fd — не повод спамить в релизный лог.
+    log_dbg!("close({}) failed: fd not open or doesn't exist, returning -1 (EBADF)", fd);
+    set_errno(env, EBADF);
+    -1
 }
 
 fn rename(env: &mut Environment, old: ConstPtr<u8>, new: ConstPtr<u8>) -> i32 {
