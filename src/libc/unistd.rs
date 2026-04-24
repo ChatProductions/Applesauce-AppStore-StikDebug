@@ -254,15 +254,21 @@ fn getpagesize(_env: &mut Environment) -> i32 {
     PAGE_SIZE.try_into().unwrap()
 }
 
-fn readlink(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<u8>, bufsize: GuestUSize) -> GuestISize {
-    let path_str = env.mem.cstr_at_utf8(path).unwrap_or("<invalid>");
-    // Используем .0 для получения адреса из обертки Ptr
-    log_dbg!("readlink({:?}, {:#x}, {})", path_str, buf.0, bufsize);
-
-    if access(env, path, F_OK) == -1 {
-        return -1;
-    }
-
+fn readlink(
+    env: &mut Environment,
+    path: ConstPtr<u8>,
+    buf: MutPtr<u8>,
+    buf_size: GuestISize,
+) -> GuestISize {
+    log!(
+        "TODO: readlink({:?} '{}', {:?}, {}) -> -1",
+        path,
+        env.mem.cstr_at_utf8(path).unwrap(),
+        buf,
+        buf_size,
+    );
+    // Current implementation of guest's file system doesn't
+    // support symbolic links, so the call should unconditionally fail.
     set_errno(env, EINVAL);
     -1
 }
