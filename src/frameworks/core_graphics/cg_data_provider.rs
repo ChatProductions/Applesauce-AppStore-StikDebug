@@ -251,78 +251,12 @@ fn CGDataProviderGetSize(
 }
 
 fn CGDataProviderCreateSequential(
-    env: &mut Environment,
-    info: MutVoidPtr,
-    callbacks: ConstVoidPtr,
+    _env: &mut Environment,
+    _info: MutVoidPtr,
+    _callbacks: ConstVoidPtr,
 ) -> CGDataProviderRef {
-    if callbacks.is_null() {
-        log!("Warning: CGDataProviderCreateSequential: null callbacks");
-        return nil;
-    }
-
-    // CGDataProviderSequentialCallbacks layout (ARM 32-bit):
-    // offset 0: version (u32)
-    // offset 4: getBytes (GuestFunction) — size_t(*)(void *info, void *buffer, size_t count)
-    // offset 8: skipForward (GuestFunction)
-    // offset 12: rewind (GuestFunction)
-    // offset 16: releaseInfo (GuestFunction)
-    let base = callbacks.cast::<u32>();
-    let _version = env.mem.read(base);
-    let get_bytes_raw: u32 = env.mem.read(crate::mem::Ptr::from_bits(base.to_bits() + 4));
-    let rewind_raw:    u32 = env.mem.read(crate::mem::Ptr::from_bits(base.to_bits() + 12));
-    let release_raw:   u32 = env.mem.read(crate::mem::Ptr::from_bits(base.to_bits() + 16));
-
-    let get_bytes_fn = GuestFunction::from_addr_with_thumb_bit(get_bytes_raw);
-    let rewind_fn    = GuestFunction::from_addr_with_thumb_bit(rewind_raw);
-    let release_fn   = GuestFunction::from_addr_with_thumb_bit(release_raw);
-
-    // Call rewind if available so we start from the beginning
-    if !rewind_fn.to_ptr().is_null() {
-        let _: () = rewind_fn.call_from_host(env, (info,));
-    }
-
-    // Drain all data by calling getBytes in chunks
-    const CHUNK_SIZE: GuestUSize = 4096;
-    let chunk_buf = env.mem.alloc(CHUNK_SIZE);
-    let mut all_bytes: Vec<u8> = Vec::new();
-
-    if !get_bytes_fn.to_ptr().is_null() {
-        loop {
-            let read: GuestUSize = get_bytes_fn.call_from_host(
-                env,
-                (info, chunk_buf.cast_void(), CHUNK_SIZE),
-            );
-            if read == 0 {
-                break;
-            }
-            let slice = env.mem.bytes_at(chunk_buf.cast(), read).to_vec();
-            all_bytes.extend_from_slice(&slice);
-        }
-    }
-
-    env.mem.free(chunk_buf);
-
-    log_dbg!("CGDataProviderCreateSequential: read {} bytes", all_bytes.len());
-
-    // Copy data into permanent guest memory
-    let total: GuestUSize = all_bytes.len().try_into().unwrap();
-    let data_buf = env.mem.alloc(total.max(1));
-    if total > 0 {
-        env.mem.bytes_at_mut(data_buf.cast(), total).copy_from_slice(&all_bytes);
-    }
-
-    // Create a DataWithSize provider; release_info is called on dealloc via release_callback
-    let class = env.objc.get_known_class("_touchHLE_CGDataProvider", &mut env.mem);
-    env.objc.alloc_object(
-        class,
-        Box::new(CGDataProviderHostObject::DataWithSize {
-            info,
-            data: data_buf.cast_const().cast(),
-            size: total,
-            release_callback: release_fn,
-        }),
-        &mut env.mem,
-    )
+    log!("Warning: CGDataProviderCreateSequential is not supported, returning null");
+    nil // <- was std::ptr::null()
 }
 
 fn CGDataProviderCreateDirect(
