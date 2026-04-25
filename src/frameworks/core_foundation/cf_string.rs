@@ -20,7 +20,7 @@ use super::{kCFNotFound, CFComparisonResult, CFIndex, CFOptionFlags, CFRange, CF
 use crate::abi::{DotDotDot, VaList};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::{ns_string, unichar, NSNotFound, NSRange, NSUInteger};
-use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
@@ -689,11 +689,14 @@ fn CFStringGetBytes(
     max_buf_len: CFIndex,
     used_buf_len: MutPtr<CFIndex>,
 ) -> CFIndex {
-    if the_string.is_null() ||
-    max_buf_len < 0 {
+    // is_external_representation is not supported by the underlying
+    // NSString / NSData implementation in touchHLE; log and ignore.
+    let _ = is_external_representation;
+
+    if the_string.is_null() || max_buf_len < 0 {
         return 0;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return 0,
@@ -702,60 +705,71 @@ fn CFStringGetBytes(
     if range.location + range.length > length {
         return 0;
     }
-    
+
     let encoding_ns = CFStringConvertEncodingToNSStringEncoding(env, encoding);
-    
     let range_length = ns_range.length;
 
-    // For simplicity, create a substring and get its bytes
+    // Extract the requested range as a new NSString, then convert it to NSData
+    // using -[NSString dataUsingEncoding:allowLossyConversion:]. This is the
+    // only encoding-conversion selector implemented by touchHLE's NSString,
+    // so we avoid the unimplemented
+    // -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:
+    // selector that caused the "Unknown selector" panic previously.
     let substring: id = msg![env; the_string substringWithRange:ns_range];
-    let mut options: NSUInteger = 0;
-    if is_external_representation {
-        options |= 1;
-        // NSStringEncodingConversionExternalRepresentation
+    let lossy = loss_byte != 0;
+    let data: id = msg![env;
+        substring dataUsingEncoding:encoding_ns allowLossyConversion:lossy];
+    if data == nil {
+        if !used_buf_len.is_null() {
+            env.mem.write(used_buf_len, 0);
+        }
+        return 0;
     }
-    if loss_byte != 0 {
-        options |= 2;
-        // NSStringEncodingConversionAllowLossy
-    }
-    
+
+    let data_len: NSUInteger = msg![env; data length];
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
-    // Allocate a temporary guest pointer to hold the used length output
-    let temp_used_len_ptr: MutPtr<NSUInteger> = env.mem.alloc(4).cast();
-    env.mem.write(temp_used_len_ptr, 0);
 
-    let null_ptr: MutPtr<NSRange> = MutPtr::null();
-    let success: bool = if buffer.is_null() {
-        // Just compute required length
-        msg![env;
-             substring getBytes:buffer 
-             maxLength:max_len_u 
-             usedLength:temp_used_len_ptr 
-             encoding:encoding_ns 
-             options:options 
-             range:(NSRange { location: 0, length: range_length }) 
-             remainingRange:null_ptr]
-    } else {
-          msg![env; substring getBytes:buffer 
-             maxLength:max_len_u 
-             usedLength:temp_used_len_ptr 
-             encoding:encoding_ns 
-             options:options 
-             range:(NSRange { location: 0, length: range_length }) 
-             remainingRange:null_ptr]
-    };
-    
-    let used_len = env.mem.read(temp_used_len_ptr);
-    env.mem.free(temp_used_len_ptr.cast());
-
-    if !used_buf_len.is_null() {
-        env.mem.write(used_buf_len, used_len.try_into().unwrap_or(0));
-    }
-    
-    if success {
-        used_len.try_into().unwrap_or(0)
-    } else {
+    // Decide how many bytes we actually write to `buffer`.
+    // If `buffer` is null, the caller just wants to know how many bytes
+    // the conversion would need.
+    let bytes_to_write: NSUInteger = if buffer.is_null() {
         0
+    } else if max_len_u == 0 {
+        0
+    } else {
+        data_len.min(max_len_u)
+    };
+
+    if bytes_to_write > 0 {
+        let src_void: ConstVoidPtr = msg![env; data bytes];
+        let src: ConstPtr<u8> = src_void.cast();
+        // We need to copy from guest memory to guest memory; do it via an
+        // owned Vec to satisfy the borrow checker on env.mem.
+        let src_vec: Vec<u8> = env.mem.bytes_at(src, bytes_to_write).to_vec();
+        env.mem
+            .bytes_at_mut(buffer, bytes_to_write)
+            .copy_from_slice(&src_vec);
+    }
+
+    // `usedBufLen` is the total number of bytes the encoding would need
+    // for the requested range, regardless of whether it fit in `buffer`.
+    let used_total: NSUInteger = if buffer.is_null() { data_len } else { bytes_to_write };
+    if !used_buf_len.is_null() {
+        env.mem
+            .write(used_buf_len, used_total.try_into().unwrap_or(0));
+    }
+
+    // Return value is the number of *characters* from `range` that were
+    // successfully converted. If everything fit (or the caller only asked
+    // for the size), all characters were converted. Otherwise we
+    // approximate proportionally by (written_bytes / total_bytes).
+    if buffer.is_null() || bytes_to_write == data_len {
+        range_length.try_into().unwrap_or(0)
+    } else if data_len == 0 {
+        0
+    } else {
+        let approx = (bytes_to_write as u64 * range_length as u64) / data_len as u64;
+        approx.try_into().unwrap_or(0)
     }
 }
 
@@ -1488,4 +1502,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringGetTypeID()),
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
+
 
