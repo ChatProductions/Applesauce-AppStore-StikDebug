@@ -89,56 +89,44 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)instantiateWithOwner:(id)owner options:(id)options {
-        let UINibHostObject { nib_name, bundle, .. } = *env.objc.borrow(this);
-        // Если bundle не указан, по правилам iOS используется mainBundle
-        let target_bundle = if bundle != nil { bundle } else { msg_class![env; NSBundle mainBundle] };
-        
-        let ext = get_static_str(env, "nib");
-        
-        // 1. Ищем стандартный путь через NSBundle (с расширением "nib")
-        let mut path: id = msg![env; target_bundle pathForResource:nib_name ofType:ext];
-        
-        // 2. Если не нашли, вдруг игра передала имя уже с расширением (ofType: nil)
-        if path == nil {
-            path = msg![env; target_bundle pathForResource:nib_name ofType:nil];
-        }
-        
-        if path == nil {
-            let name_str = to_rust_string(env, nib_name);
-            log!("touchHLE::frameworks::uikit::ui_nib: Warning: UINib instantiateWithOwner: nib file {:?} not found", name_str);
-            // Возвращаем пустой массив вместо nil, чтобы не уронить игру, если она делает итерацию
-            return msg_class![env; NSArray array]; 
-        }
+    assert!(owner != nil);
+    assert!(options == nil); // TODO: implement options handling
 
-        // 3. Пытаемся прочитать данные честным путем.
-        let mut data: id = msg_class![env; NSData dataWithContentsOfFile:path];
-        
-        // Если data == nil, скорее всего путь указывает на директорию.
-        // Заглядываем внутрь и ищем keyedobjects.nib (современный формат)
-        if data == nil {
-            let keyed = get_static_str(env, "keyedobjects.nib");
-            let path_keyed: id = msg![env; path stringByAppendingPathComponent:keyed];
-            data = msg_class![env; NSData dataWithContentsOfFile:path_keyed];
-        }
+    let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
+    let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
+    let type_: id = get_static_str(env, "nib");
+    
+    let mut path: id = msg![env; bundle pathForResource:nib_name ofType:type_];
 
-        // Запасной вариант для очень старых версий формата XIB/NIB
-        if data == nil {
-            let designable = get_static_str(env, "designable.nib");
-            let path_des: id = msg![env; path stringByAppendingPathComponent:designable];
-            data = msg_class![env; NSData dataWithContentsOfFile:path_des];
-        }
+    // Фолбэк 1: Имя уже может содержать расширение, ищем без указания типа
+    if path == nil {
+        path = msg![env; bundle pathForResource:nib_name ofType:nil];
+    }
 
-        if data == nil {
-            log!("touchHLE::frameworks::uikit::ui_nib: Warning: Could not read data from nib at path {:?}", to_rust_string(env, path));
-            return msg_class![env; NSArray array];
-        }
+    // Фолбэк 2: Автоматический суффикс ~iphone (Universal Apps)
+    if path == nil {
+        let rust_nib_name = to_rust_string(env, nib_name);
+        let iphone_name = format!("{}~iphone", rust_nib_name);
+        let iphone_nss = ns_string::from_rust_string(env, iphone_name);
+        path = msg![env; bundle pathForResource:iphone_nss ofType:type_];
+    }
 
-        // 4. Инициализируем unarchiver успешно найденными данными
-        let unarchiver: id = msg_class![env; NSKeyedUnarchiver alloc];
-        let unarchiver: id = msg![env; unarchiver initForReadingWithData:data];
-        
-        // ... Дальше оставляй свой текущий код без изменений! ...
-        // (начиная с let objects_key = get_static_str(env, "UINibObjectsKey"); и так далее)
+    // Фолбэк 3: Автоматический суффикс ~ipad
+    if path == nil {
+        let rust_nib_name = to_rust_string(env, nib_name);
+        let ipad_name = format!("{}~ipad", rust_nib_name);
+        let ipad_nss = ns_string::from_rust_string(env, ipad_name);
+        path = msg![env; bundle pathForResource:ipad_nss ofType:type_];
+    }
+
+    if path == nil {
+        log!("Warning: UINib instantiateWithOwner: nib file {:?} not found", to_rust_string(env, nib_name));
+        return nil;
+    }
+    
+    let nib_path = to_rust_string(env, path).to_string();
+    assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
+    env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
     
     let top_level_objects = if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
         let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
@@ -352,8 +340,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Result<id, ()> {
     let path_str = ns_string::from_rust_string(env, path.as_str().to_string());
-    let ns_data: id = msg_class![env; NSData dataWithContentsOfFile:path_str];
+    let mut ns_data: id = msg_class![env; NSData dataWithContentsOfFile:path_str];
     
+    // Если NSData вернул nil (скорее всего путь указывает на директорию), 
+    // ищем внутри скомпилированный файл keyedobjects.nib
+    if ns_data == nil {
+        let keyed_path = format!("{}/keyedobjects.nib", path.as_str());
+        let keyed_path_str = ns_string::from_rust_string(env, keyed_path);
+        ns_data = msg_class![env; NSData dataWithContentsOfFile:keyed_path_str];
+    }
+    
+    // Запасной старый формат - objects.nib
+    if ns_data == nil {
+        let objects_path = format!("{}/objects.nib", path.as_str());
+        let objects_path_str = ns_string::from_rust_string(env, objects_path);
+        ns_data = msg_class![env; NSData dataWithContentsOfFile:objects_path_str];
+    }
+
     if ns_data == nil {
         log!("Warning: couldn't load nib file {:?}", path);
         return Err(());
@@ -366,6 +369,8 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     }
     
     let bytes: ConstVoidPtr = msg![env; ns_data bytes];
+
+    // ... дальше без изменений, начиная с let unarchiver = ...
 
     let unarchiver = if env.mem.bytes_at(bytes.cast(), 10) == b"NIBArchive" {
         let decoder: id = msg_class![env; _touchHLE_NIBArchiveDecoder alloc];
