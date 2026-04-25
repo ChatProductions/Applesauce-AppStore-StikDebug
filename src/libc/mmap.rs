@@ -50,7 +50,6 @@ fn mmap(
     let ptr = env.mem.calloc(len);
 
     if (flags & MAP_ANON) != 0 {
-        if (flags & MAP_ANON) != 0 {
         assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
         
         // Убираем жесткие assert_eq!(fd, -1) и assert_eq!(offset, 0).
