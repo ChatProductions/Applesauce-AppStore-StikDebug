@@ -684,11 +684,8 @@ pub fn lseek(
 }
 
 pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
-    // Приводим к знаковому типу на случай, если FileDescriptor это u32
     let signed_fd = fd as i32;
 
-    // ИСПРАВЛЕНИЕ: Игры часто вызывают close(-1), если файл не открылся.
-    // Это штатная ситуация, POSIX требует вернуть ошибку EBADF без паники и спама.
     if signed_fd < 0 {
         log_dbg!("close({}) failed: invalid fd (negative), returning -1 (EBADF)", signed_fd);
         set_errno(env, EBADF);
@@ -701,17 +698,25 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
         return 0;
     }
 
-    if let Some(file_obj) = env.libc_state.posix_io.files.get_mut(fd_to_file_idx(fd)) {
-        if file_obj.is_some() {
-            // Закрываем файл/сокет, заменяя его на None (Rust автоматически вызовет Drop)
-            *file_obj = None;
+    // Берем слот по индексу FD
+    if let Some(file_obj_slot) = env.libc_state.posix_io.files.get_mut(fd_to_file_idx(fd)) {
+        // Честно извлекаем объект (take заменяет его на None в массиве, освобождая FD)
+        if let Some(file_obj) = file_obj_slot.take() {
+            
+            // Если это был сокет, ОБЯЗАТЕЛЬНО удаляем его из таблицы в socket.rs
+            if matches!(file_obj.file, GuestFile::Socket) {
+                close_socket(env, fd);
+            } 
+            // Если это обычный файл с правами на запись, честно сбрасываем буфер
+            else if file_obj.needs_flush {
+                let _ = file_obj.file.sync_all();
+            }
+
             log_dbg!("close({}) -> success", fd);
             return 0;
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Меняем жесткий log! на log_dbg!. 
-    // Попытка закрыть уже закрытый или несуществующий fd — не повод спамить в релизный лог.
     log_dbg!("close({}) failed: fd not open or doesn't exist, returning -1 (EBADF)", fd);
     set_errno(env, EBADF);
     -1
