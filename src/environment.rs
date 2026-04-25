@@ -1606,8 +1606,25 @@ let device_family = match device_family_array.len() {
                             ThreadNextAction::Continue
                         }
                     }
-                    dyld::Dyld::SVC_THREAD_EXIT => {
-                        unimplemented!("TODO: implement exit routines for threads!")
+                                        dyld::Dyld::SVC_THREAD_EXIT => {
+                        if self.current_thread == 0 {
+                            log_no_panic!("Main thread exited normally (or crashed early). Returning to host.");
+                            return ThreadNextAction::ReturnToHost;
+                        } else {
+                            log_dbg!("Thread {} has completed execution.", self.current_thread);
+                            self.threads[self.current_thread].active = false;
+                            
+                            // Мы должны сменить поток, так как текущий завершился
+                            let next_thread = self.schedule_next_thread();
+                            if next_thread == self.current_thread {
+                                log_no_panic!("All threads exited. Returning to host.");
+                                return ThreadNextAction::ReturnToHost;
+                            }
+                            
+                            // Возвращаемся в цикл (run_inner вызовет yield_thread, 
+                            // а потом run переключит поток)
+                            return ThreadNextAction::Continue;
+                        }
                     }
                 }
             }
