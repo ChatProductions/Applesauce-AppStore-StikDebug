@@ -247,6 +247,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
+    
+@implementation UIImageNibPlaceholder: NSObject
+
+- (id)initWithCoder:(id)coder {
+    // В NIB-файлах плейсхолдеры картинок хранят имя ресурса под ключом UIResourceName
+    let key = get_static_str(env, "UIResourceName");
+    let name: id = msg![env; coder decodeObjectForKey:key];
+    
+    // Плейсхолдер был выделен через alloc, но мы не будем его использовать.
+    // Сразу деаллоцируем этот временный объект, чтобы не было утечек памяти.
+    () = msg![env; this dealloc];
+    
+    if name != nil {
+        // Запрашиваем настоящую картинку (твой метод imageNamed: сам проверит кэш или загрузит)
+        let image: id = msg_class![env; UIImage imageNamed:name];
+        
+        // Важный момент (без заглушек и утечек):
+        // Вызов [UIImageNibPlaceholder alloc] initWithCoder:] подразумевает, 
+        // что возвращенный объект будет иметь retain count +1 (владение).
+        // Но [UIImage imageNamed:] возвращает закэшированный/autorelease объект!
+        // Поэтому мы ОБЯЗАНЫ сделать retain возвращаемой картинке, иначе она удалится раньше времени.
+        if image != nil {
+            retain(env, image);
+        }
+        return image;
+    }
+    
+    nil
+}
+    
+@end
 
 };
 
