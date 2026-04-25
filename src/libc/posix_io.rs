@@ -259,15 +259,17 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
 
         for part in parts {
             let parent_to_search = if current_path.is_empty() {
-                "."
+                ".".to_string()
             } else {
-                current_path.as_str()
+                current_path.clone()
             };
             let target_lower = part.to_lowercase();
-            let mut entries = env.fs.enumerate(GuestPath::new(parent_to_search)).ok()?;
-            let found = entries
-                .find(|entry| entry.to_lowercase() == target_lower)
-                .map(str::to_string)?;
+            let found = {
+                let mut entries = env.fs.enumerate(GuestPath::new(&parent_to_search)).ok()?;
+                entries
+                    .find(|entry| entry.to_lowercase() == target_lower)
+                    .map(str::to_string)?
+            };
 
             if !current_path.is_empty() && !current_path.ends_with('/') {
                 current_path.push('/');
