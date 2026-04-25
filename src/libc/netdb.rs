@@ -225,40 +225,41 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
 // MARK: - gethostbyname / gethostbyaddr
 
-fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
-    env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
-    let hostname = if name.is_null() {
-        "localhost".to_string()
-    } else {
-        env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned()
-    };
-    log_dbg!("gethostbyname(\"{}\")", hostname);
+fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<hostent> {
+    let name_bytes = env.mem.read_cstr(name);
+    let name_str = String::from_utf8_lossy(&name_bytes);
 
-    // Resolve: try dotted-decimal first, then well-known names.
-    let ip_octets: [u8; 4] = if let Some(octets) = parse_ipv4(&hostname) {
-        octets
+    // --- НАЧАЛО ИСПРАВЛЕННОГО БЛОКА ---
+    let mut ipv4_addrs: Vec<std::net::Ipv4Addr> = Vec::new();
+
+    // 1. Обрабатываем обращение эмулятора к самому себе без DNS
+    if name_str == "touchHLE" || name_str == "localhost" {
+        ipv4_addrs.push(std::net::Ipv4Addr::new(127, 0, 0, 1));
     } else {
-        match hostname.as_str() {
-            "localhost" | "loopback" => [127, 0, 0, 1],
-            "broadcasthost"          => [255, 255, 255, 255],
-            _ => {
-                if !env.options.network_access {
-                    log!(
-                        "gethostbyname(\"{}\"): network disabled -> HOST_NOT_FOUND",
-                        hostname
-                    );
-                    env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
-                    return MutPtr::null();
+        // 2. Реальный резолв внешних адресов через стандартную библиотеку (без заглушек)
+        use std::net::ToSocketAddrs;
+        // ToSocketAddrs требует порт, поэтому приклеиваем :0
+        match format!("{}:0", name_str).to_socket_addrs() {
+            Ok(iter) => {
+                for addr in iter {
+                    // Старые iOS-игры обычно не умеют работать с IPv6, фильтруем только v4
+                    if let std::net::IpAddr::V4(ipv4) = addr.ip() {
+                        ipv4_addrs.push(ipv4);
+                    }
                 }
-                // No real DNS — return failure for unknown names.
-                log!(
-                    "gethostbyname(\"{}\"): cannot resolve (no DNS) -> HOST_NOT_FOUND",
-                    hostname
-                );
-                env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
-                return MutPtr::null();
+            }
+            Err(e) => {
+                log!("gethostbyname({}): real DNS resolution failed -> {}", name_str, e);
             }
         }
+    }
+
+    if ipv4_addrs.is_empty() {
+        log!("TouchHLE::libc::netdb: gethostbyname(\"{}\"): cannot resolve -> HOST_NOT_FOUND", name_str);
+        env.libc_state.netdb.h_errno = 1; // HOST_NOT_FOUND
+        return MutPtr::null();
+    }
+    // --- КОНЕЦ ИСПРАВЛЕННОГО БЛОКА ---
     };
     // Free previous hostent if any.
     if env.libc_state.netdb.dummy_hostent_ptr != 0 {
