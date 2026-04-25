@@ -1282,7 +1282,7 @@ pub fn AudioQueueGetCurrentTime(
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueNewOutput(_, _, _, _, _, _, _)),
-    export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _, _)),
+    export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
     export_c_func!(AudioQueueGetParameter(_, _, _)),
     export_c_func!(AudioQueueSetParameter(_, _, _)),
     export_c_func!(AudioQueueAllocateBufferWithPacketDescriptions(_, _, _, _)),
