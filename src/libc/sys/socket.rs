@@ -190,7 +190,6 @@ fn socket(env: &mut Environment, domain: i32, type_: i32, protocol: i32) -> File
 
 fn ioctl(env: &mut Environment, fd: i32, request: u32, _args: DotDotDot) -> i32 {
     set_errno(env, 0);
-    // Убираем жесткий assert!(is_socket(env, fd));
     // Честно обрабатываем неверные дескрипторы по стандарту POSIX:
     if !is_socket(env, fd) {
         log!("ioctl: fd={} is not a valid socket, returning EBADF", fd);
@@ -1381,7 +1380,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(recv(_, _, _, _)),
     export_c_func!(recvfrom(_, _, _, _, _, _)),
     export_c_func!(send(_, _, _, _)),
-    export_c_func!(sendto(_, _, _, _, _, _, _)),
+    export_c_func!(sendto(_, _, _, _, _, _)), // ИСПРАВЛЕНИЕ: здесь 6 подчеркиваний вместо 7
     export_c_func!(shutdown(_, _)),
     export_c_func!(getsockname(_, _, _)),
     export_c_func!(getpeername(_, _, _)),
