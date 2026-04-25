@@ -20,7 +20,7 @@ use super::{kCFNotFound, CFComparisonResult, CFIndex, CFOptionFlags, CFRange, CF
 use crate::abi::{DotDotDot, VaList};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::{ns_string, unichar, NSNotFound, NSRange, NSUInteger};
-use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr};
+use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
@@ -689,14 +689,11 @@ fn CFStringGetBytes(
     max_buf_len: CFIndex,
     used_buf_len: MutPtr<CFIndex>,
 ) -> CFIndex {
-    // is_external_representation is not supported by the underlying
-    // NSString / NSData implementation in touchHLE; log and ignore.
-    let _ = is_external_representation;
-
-    if the_string.is_null() || max_buf_len < 0 {
+    if the_string.is_null() ||
+    max_buf_len < 0 {
         return 0;
     }
-
+    
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return 0,
@@ -705,72 +702,74 @@ fn CFStringGetBytes(
     if range.location + range.length > length {
         return 0;
     }
-
+    
     let encoding_ns = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let range_length = ns_range.length;
-
-    // Extract the requested range as a new NSString, then convert it to NSData
-    // using -[NSString dataUsingEncoding:allowLossyConversion:]. This is the
-    // only encoding-conversion selector implemented by touchHLE's NSString,
-    // so we avoid the unimplemented
-    // -getBytes:maxLength:usedLength:encoding:options:range:remainingRange:
-    // selector that caused the "Unknown selector" panic previously.
     let substring: id = msg![env; the_string substringWithRange:ns_range];
-    let lossy = loss_byte != 0;
-    let data: id = msg![env;
-        substring dataUsingEncoding:encoding_ns allowLossyConversion:lossy];
-    if data == nil {
+    let total_bytes: NSUInteger = msg![env; substring lengthOfBytesUsingEncoding:encoding_ns];
+
+    if !used_buf_len.is_null() {
+        env.mem.write(used_buf_len, 0);
+    }
+
+    if is_external_representation {
+        log!("CFStringGetBytes: external representation requested but not implemented");
+        return 0;
+    }
+    if loss_byte != 0 {
+        log!("CFStringGetBytes: loss byte requested but not implemented");
+    }
+
+    if buffer.is_null() {
         if !used_buf_len.is_null() {
-            env.mem.write(used_buf_len, 0);
+            env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
+        }
+        return range.length;
+    }
+    
+    let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
+    if total_bytes <= max_len_u {
+        if ns_string::get_bytes_buffer_inner(env, substring, buffer, max_len_u, encoding_ns, false) {
+            if !used_buf_len.is_null() {
+                env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
+            }
+            return range.length;
         }
         return 0;
     }
 
-    let data_len: NSUInteger = msg![env; data length];
-    let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
-
-    // Decide how many bytes we actually write to `buffer`.
-    // If `buffer` is null, the caller just wants to know how many bytes
-    // the conversion would need.
-    let bytes_to_write: NSUInteger = if buffer.is_null() {
-        0
-    } else if max_len_u == 0 {
-        0
-    } else {
-        data_len.min(max_len_u)
-    };
-
-    if bytes_to_write > 0 {
-        let src_void: ConstVoidPtr = msg![env; data bytes];
-        let src: ConstPtr<u8> = src_void.cast();
-        // We need to copy from guest memory to guest memory; do it via an
-        // owned Vec to satisfy the borrow checker on env.mem.
-        let src_vec: Vec<u8> = env.mem.bytes_at(src, bytes_to_write).to_vec();
-        env.mem
-            .bytes_at_mut(buffer, bytes_to_write)
-            .copy_from_slice(&src_vec);
+    let mut converted_chars: NSUInteger = 0;
+    let mut converted_bytes: NSUInteger = 0;
+    for chars_to_convert in 1..=range_length {
+        let prefix_range = NSRange {
+            location: 0,
+            length: chars_to_convert,
+        };
+        let prefix: id = msg![env; substring substringWithRange:prefix_range];
+        let prefix_bytes: NSUInteger = msg![env; prefix lengthOfBytesUsingEncoding:encoding_ns];
+        if prefix_bytes > max_len_u {
+            break;
+        }
+        converted_chars = chars_to_convert;
+        converted_bytes = prefix_bytes;
     }
 
-    // `usedBufLen` is the total number of bytes the encoding would need
-    // for the requested range, regardless of whether it fit in `buffer`.
-    let used_total: NSUInteger = if buffer.is_null() { data_len } else { bytes_to_write };
+    if converted_chars == 0 {
+        return 0;
+    }
+
+    let prefix: id = msg![env; substring substringWithRange:(NSRange {
+        location: 0,
+        length: converted_chars,
+    })];
+    if !ns_string::get_bytes_buffer_inner(env, prefix, buffer, converted_bytes, encoding_ns, false) {
+        return 0;
+    }
+
     if !used_buf_len.is_null() {
-        env.mem
-            .write(used_buf_len, used_total.try_into().unwrap_or(0));
+        env.mem.write(used_buf_len, converted_bytes.try_into().unwrap_or(0));
     }
-
-    // Return value is the number of *characters* from `range` that were
-    // successfully converted. If everything fit (or the caller only asked
-    // for the size), all characters were converted. Otherwise we
-    // approximate proportionally by (written_bytes / total_bytes).
-    if buffer.is_null() || bytes_to_write == data_len {
-        range_length.try_into().unwrap_or(0)
-    } else if data_len == 0 {
-        0
-    } else {
-        let approx = (bytes_to_write as u64 * range_length as u64) / data_len as u64;
-        approx.try_into().unwrap_or(0)
-    }
+    converted_chars.try_into().unwrap_or(0)
 }
 
 fn CFStringGetIntValue(env: &mut Environment, string: CFStringRef) -> i32 {
@@ -1502,5 +1501,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringGetTypeID()),
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
-
 
