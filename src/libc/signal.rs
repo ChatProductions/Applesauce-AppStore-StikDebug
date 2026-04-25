@@ -1,12 +1,13 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::errno::set_errno;
-use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstVoidPtr, MutVoidPtr}; // Убран неиспользуемый `Ptr`
 use crate::Environment;
 use std::collections::HashMap;
 
@@ -23,7 +24,6 @@ const SIG_DFL: u32 = 0;
 
 fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: MutVoidPtr) -> i32 {
     set_errno(env, 0);
-    
     // Пока возвращаем 0 (успех), убрав TODO, так как sigaction сложнее в реализации 
     // и редко ломает логику игр, если просто рапортует об успехе.
     0
@@ -31,7 +31,6 @@ fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: Mut
 
 fn signal(env: &mut Environment, signum: i32, handler: MutVoidPtr) -> MutVoidPtr {
     set_errno(env, 0);
-
     // Честная эмуляция: сохраняем новый обработчик и возвращаем старый.
     let old_handler = env
         .libc_state
@@ -40,7 +39,6 @@ fn signal(env: &mut Environment, signum: i32, handler: MutVoidPtr) -> MutVoidPtr
         .insert(signum, handler)
         // ИСПОЛЬЗУЕМ from_bits вместо new
         .unwrap_or_else(|| MutVoidPtr::from_bits(SIG_DFL));
-
     old_handler
 }
 
