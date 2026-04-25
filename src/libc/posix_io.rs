@@ -244,73 +244,58 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
         log!("Ignoring O_NOFOLLOW when opening {:?}", path_string);
     }
 
-    // --- RETINA DEEP CASE-INSENSITIVE FALLBACK ---
-    let mut actual_path_string = path_string.clone();
-    if !env.fs.exists(GuestPath::new(&actual_path_string)) {
-        let is_absolute = actual_path_string.starts_with('/');
-        let parts: Vec<&str> = actual_path_string
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .collect();
+    fn case_insensitive_path(env: &Environment, path: &str) -> Option<String> {
+        if env.fs.exists(GuestPath::new(path)) {
+            return Some(path.to_string());
+        }
+
+        let is_absolute = path.starts_with('/');
+        let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
         let mut current_path = if is_absolute {
             String::from("/")
         } else {
             String::new()
         };
-        for (i, part) in parts.iter().enumerate() {
-            let mut test_path = current_path.clone();
-            if !test_path.is_empty() && !test_path.ends_with('/') {
-                test_path.push('/');
-            }
-            test_path.push_str(part);
-            // Если текущий кусок пути существует, идем дальше
-            if env.fs.exists(GuestPath::new(&test_path)) {
-                current_path = test_path;
-            } else {
-                // Если не существует, ищем его без учета регистра
-                let parent_to_search = if current_path.is_empty() {
-                    "."
-                } else {
-                    &current_path
-                };
-                let target_lower = part.to_lowercase();
-                let mut found_match = None;
-                if let Ok(entries) = env.fs.enumerate(GuestPath::new(parent_to_search)) {
-                    for entry in entries {
-                        let entry_path = std::path::Path::new(&entry);
-                        if let Some(file_name) = entry_path.file_name() {
-                            if file_name.to_str().unwrap_or("").to_lowercase()
-                                == target_lower
-                            {
-                                found_match =
-                                    Some(file_name.to_str().unwrap_or("").to_string());
-                                break;
-                            }
-                        }
-                    }
-                }
 
-                if let Some(m) = found_match {
-                    if !current_path.is_empty() && !current_path.ends_with('/') {
-                        current_path.push('/');
-                    }
-                    current_path.push_str(&m);
-                } else {
-                    // Если совсем ничего не нашли, восстанавливаем остаток пути
-                    current_path = test_path;
-                    for remaining_part in parts.iter().skip(i + 1) {
-                        if !current_path.ends_with('/') {
-                            current_path.push('/');
-                        }
-                        current_path.push_str(remaining_part);
-                    }
-                    break;
-                }
+        for part in parts {
+            let parent_to_search = if current_path.is_empty() {
+                "."
+            } else {
+                current_path.as_str()
+            };
+            let target_lower = part.to_lowercase();
+            let mut entries = env.fs.enumerate(GuestPath::new(parent_to_search)).ok()?;
+            let found = entries
+                .find(|entry| entry.to_lowercase() == target_lower)
+                .map(str::to_string)?;
+
+            if !current_path.is_empty() && !current_path.ends_with('/') {
+                current_path.push('/');
             }
+            current_path.push_str(&found);
         }
-        actual_path_string = current_path;
+
+        if env.fs.exists(GuestPath::new(&current_path)) {
+            Some(current_path)
+        } else {
+            None
+        }
     }
-    // --- КОНЕЦ ПАТЧА ---
+
+    let actual_path_string = case_insensitive_path(env, &path_string)
+        .or_else(|| {
+            if path_string.starts_with('/') || (flags & O_CREAT) != 0 {
+                return None;
+            }
+
+            let bundle_relative_path = format!(
+                "{}/{}",
+                env.bundle.bundle_path().as_str().trim_end_matches('/'),
+                path_string.trim_start_matches("./")
+            );
+            case_insensitive_path(env, &bundle_relative_path)
+        })
+        .unwrap_or_else(|| path_string.clone());
 
     // ИСПРАВЛЕНИЕ 2: корректная реализация O_EXCL.
     // O_CREAT|O_EXCL означает «создать файл, но вернуть ошибку, если он уже есть».
@@ -353,7 +338,7 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
     log_dbg!(
         "open({:?} {:?}, {:#x}) => {:?}",
         path,
-        path_string,
+        actual_path_string,
         flags,
         res
     );
@@ -1260,3 +1245,4 @@ fn validate_lock(
 
     Ok(())
 }
+
