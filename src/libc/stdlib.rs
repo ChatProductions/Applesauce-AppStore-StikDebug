@@ -234,7 +234,15 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
     let Some(&value) = env.env_vars.get(name_cstr) else {
-        if name_str != "LUA_PATH" && name_str != "LUA_CPATH" {
+        // Игнорируем предупреждения для известных переменных, отсутствие которых — норма.
+        // MMGC_HEAP_LIMIT и MMGC_HEAP_SOFT_LIMIT ищет Adobe AIR / Flash (Macromedia GC).
+        // Возвращать NULL для них — это правильное и честное поведение,
+        // так как движок сам подставит нужные дефолтные лимиты для iOS.
+        if name_str != "LUA_PATH" 
+            && name_str != "LUA_CPATH"
+            && name_str != "MMGC_HEAP_LIMIT"
+            && name_str != "MMGC_HEAP_SOFT_LIMIT"
+        {
             log!(
                 "Warning: getenv() for {:?} ({:?}) unhandled",
                 name,
