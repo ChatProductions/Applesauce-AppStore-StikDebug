@@ -706,7 +706,15 @@ fn CFStringGetBytes(
     let encoding_ns = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let range_length = ns_range.length;
     let substring: id = msg![env; the_string substringWithRange:ns_range];
-    let total_bytes: NSUInteger = msg![env; substring lengthOfBytesUsingEncoding:encoding_ns];
+    let lossy = loss_byte != 0;
+    let mut bytes = cf_string_bytes_for_encoding(env, substring, encoding_ns, lossy, loss_byte);
+    if bytes.is_none() && !lossy {
+        return 0;
+    }
+    let bytes = bytes
+        .take()
+        .unwrap_or_else(|| cf_string_bytes_for_encoding(env, substring, encoding_ns, true, b'?').unwrap());
+    let total_bytes: NSUInteger = bytes.len().try_into().unwrap_or(0);
 
     if !used_buf_len.is_null() {
         env.mem.write(used_buf_len, 0);
@@ -715,9 +723,6 @@ fn CFStringGetBytes(
     if is_external_representation {
         log!("CFStringGetBytes: external representation requested but not implemented");
         return 0;
-    }
-    if loss_byte != 0 {
-        log!("CFStringGetBytes: loss byte requested but not implemented");
     }
 
     if buffer.is_null() {
@@ -729,13 +734,12 @@ fn CFStringGetBytes(
     
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
     if total_bytes <= max_len_u {
-        if ns_string::get_bytes_buffer_inner(env, substring, buffer, max_len_u, encoding_ns, false) {
-            if !used_buf_len.is_null() {
-                env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
-            }
-            return range.length;
+        let dest = env.mem.bytes_at_mut(buffer, total_bytes.try_into().unwrap_or(0));
+        dest.copy_from_slice(&bytes);
+        if !used_buf_len.is_null() {
+            env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
         }
-        return 0;
+        return range.length;
     }
 
     let mut converted_chars: NSUInteger = 0;
@@ -746,7 +750,12 @@ fn CFStringGetBytes(
             length: chars_to_convert,
         };
         let prefix: id = msg![env; substring substringWithRange:prefix_range];
-        let prefix_bytes: NSUInteger = msg![env; prefix lengthOfBytesUsingEncoding:encoding_ns];
+        let Some(prefix_bytes_vec) =
+            cf_string_bytes_for_encoding(env, prefix, encoding_ns, lossy, loss_byte)
+        else {
+            break;
+        };
+        let prefix_bytes = prefix_bytes_vec.len().try_into().unwrap_or(NSUInteger::MAX);
         if prefix_bytes > max_len_u {
             break;
         }
@@ -762,14 +771,75 @@ fn CFStringGetBytes(
         location: 0,
         length: converted_chars,
     })];
-    if !ns_string::get_bytes_buffer_inner(env, prefix, buffer, converted_bytes, encoding_ns, false) {
+    let Some(prefix_bytes) = cf_string_bytes_for_encoding(env, prefix, encoding_ns, lossy, loss_byte)
+    else {
         return 0;
-    }
+    };
+    let dest = env.mem.bytes_at_mut(buffer, converted_bytes.try_into().unwrap_or(0));
+    dest.copy_from_slice(&prefix_bytes);
 
     if !used_buf_len.is_null() {
         env.mem.write(used_buf_len, converted_bytes.try_into().unwrap_or(0));
     }
     converted_chars.try_into().unwrap_or(0)
+}
+
+fn cf_string_bytes_for_encoding(
+    env: &mut Environment,
+    string: id,
+    encoding: ns_string::NSStringEncoding,
+    lossy: bool,
+    loss_byte: u8,
+) -> Option<Vec<u8>> {
+    let rust_string = ns_string::to_rust_string(env, string);
+    let bytes = match encoding {
+        ns_string::NSASCIIStringEncoding
+        | ns_string::NSISOLatin1StringEncoding
+        | ns_string::NSMacOSRomanStringEncoding
+        | ns_string::NSNextStepLatinStringEncoding => {
+            if lossy {
+                rust_string
+                    .chars()
+                    .map(|c| {
+                        if (c as u32) <= 0xff {
+                            c as u8
+                        } else {
+                            loss_byte
+                        }
+                    })
+                    .collect()
+            } else if rust_string.chars().any(|c| (c as u32) > 0xff) {
+                return None;
+            } else {
+                rust_string.chars().map(|c| c as u8).collect()
+            }
+        }
+        ns_string::NSUTF8StringEncoding | ns_string::NSWindowsCP1252StringEncoding => {
+            rust_string.as_bytes().to_vec()
+        }
+        ns_string::NSUTF16LittleEndianStringEncoding
+        | ns_string::NSUTF16StringEncoding
+        | ns_string::NSUnicodeStringEncoding => {
+            rust_string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        }
+        ns_string::NSUTF16BigEndianStringEncoding => {
+            rust_string.encode_utf16().flat_map(u16::to_be_bytes).collect()
+        }
+        ns_string::NSUTF32LittleEndianStringEncoding => rust_string
+            .chars()
+            .flat_map(|c| (c as u32).to_le_bytes())
+            .collect(),
+        ns_string::NSUTF32BigEndianStringEncoding | ns_string::NSUTF32StringEncoding => rust_string
+            .chars()
+            .flat_map(|c| (c as u32).to_be_bytes())
+            .collect(),
+        ns_string::NSShiftJISStringEncoding => {
+            let (cow, _, _) = encoding_rs::SHIFT_JIS.encode(&rust_string);
+            cow.into_owned()
+        }
+        _ => rust_string.as_bytes().to_vec(),
+    };
+    Some(bytes)
 }
 
 fn CFStringGetIntValue(env: &mut Environment, string: CFStringRef) -> i32 {
