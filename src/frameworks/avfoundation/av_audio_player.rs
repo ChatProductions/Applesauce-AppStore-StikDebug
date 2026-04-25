@@ -34,6 +34,14 @@ use crate::Environment;
 
 const kNumberBuffers: usize = 3;
 
+struct AVAudioRecorderHostObject {
+    url: id,
+    is_recording: bool,
+    metering_enabled: bool,
+    delegate: id,
+}
+impl HostObject for AVAudioRecorderHostObject {}
+
 struct AVAudioPlayerHostObject {
     audio_file_url: id,
     output_callback: AudioQueueOutputCallback,
@@ -323,6 +331,220 @@ pub const CLASSES: ClassExports = objc_classes! {
     log_dbg!("[(AVAudioPlayer *) {:?} setCurrentTime: {}]", this, currentTime);
 }
 
+- (NSTimeInterval)duration {
+    let host_object = env.objc.borrow::<AVAudioPlayerHostObject>(this);
+    let (audio_desc, audio_file_id) = (
+        host_object.audio_desc,
+        host_object.audio_file_id,
+    );
+    if let (Some(audio_desc), Some(audio_file_id)) = (audio_desc, audio_file_id) {
+        let target_host_obj = audio_file::State::get(&mut env.framework_state)
+            .audio_files
+            .get(&audio_file_id)
+            .unwrap();
+        let total_packets = match target_host_obj {
+            AudioFileHostObject::Real(af) => af.packet_count(),
+            AudioFileHostObject::Dummy { packet_count, .. } => *packet_count,
+        };
+        if audio_desc.sample_rate > 0.0 && audio_desc.frames_per_packet > 0 {
+            let total_frames =
+                total_packets * audio_desc.frames_per_packet as u64;
+            return total_frames as f64 / audio_desc.sample_rate;
+        }
+    }
+    0.0
+}
+
+- (NSInteger)numberOfLoops {
+    env.objc.borrow::<AVAudioPlayerHostObject>(this).num_of_loops
+}
+
+- (id)url {
+    env.objc.borrow::<AVAudioPlayerHostObject>(this).audio_file_url
+}
+
+- (NSInteger)numberOfChannels {
+    let host_object = env.objc.borrow::<AVAudioPlayerHostObject>(this);
+    if let Some(audio_desc) = host_object.audio_desc {
+        return audio_desc.channels_per_frame as NSInteger;
+    }
+    // Return a safe default when the queue is not yet prepared.
+    1
+}
+
+- (bool)playAtTime:(NSTimeInterval)time {
+    () = msg![env; this setCurrentTime:time];
+    msg![env; this play]
+}
+
+- (())updateMeters {
+    log_dbg!(
+        "[(AVAudioPlayer *){:?} updateMeters] — stub",
+        this
+    );
+}
+
+- (f32)averagePowerForChannel:(NSInteger)channel_number {
+    log_dbg!(
+        "[(AVAudioPlayer *){:?} averagePowerForChannel:{}] — stub",
+        this,
+        channel_number
+    );
+    -160.0
+}
+
+- (f32)peakPowerForChannel:(NSInteger)channel_number {
+    log_dbg!(
+        "[(AVAudioPlayer *){:?} peakPowerForChannel:{}] — stub",
+        this,
+        channel_number
+    );
+    -160.0
+}
+
+@end
+
+@implementation AVAudioRecorder: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(AVAudioRecorderHostObject {
+        url: nil,
+        is_recording: false,
+        metering_enabled: false,
+        delegate: nil,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)initWithURL:(id)url
+         settings:(id)_settings
+            error:(MutPtr<id>)out_error {
+    if url == nil {
+        if !out_error.is_null() {
+            env.mem.write(out_error, nil);
+        }
+        return nil;
+    }
+    retain(env, url);
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .url = url;
+    if !out_error.is_null() {
+        env.mem.write(out_error, nil);
+    }
+    this
+}
+
+- (bool)record {
+    log!(
+        "[(AVAudioRecorder *){:?} record] — stub, recording not \
+         supported",
+        this
+    );
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .is_recording = true;
+    true
+}
+
+- (bool)recordForDuration:(NSTimeInterval)_duration {
+    msg![env; this record]
+}
+
+- (bool)prepareToRecord {
+    log_dbg!(
+        "[(AVAudioRecorder *){:?} prepareToRecord] — stub",
+        this
+    );
+    true
+}
+
+- (())pause {
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .is_recording = false;
+}
+
+- (())stop {
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .is_recording = false;
+}
+
+- (bool)isRecording {
+    env.objc
+        .borrow::<AVAudioRecorderHostObject>(this)
+        .is_recording
+}
+
+- (bool)deleteRecording {
+    log_dbg!(
+        "[(AVAudioRecorder *){:?} deleteRecording] — stub",
+        this
+    );
+    true
+}
+
+- (id)url {
+    env.objc.borrow::<AVAudioRecorderHostObject>(this).url
+}
+
+- (NSTimeInterval)currentTime {
+    0.0
+}
+
+- (NSTimeInterval)deviceCurrentTime {
+    0.0
+}
+
+- (())setMeteringEnabled:(bool)enabled {
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .metering_enabled = enabled;
+}
+
+- (bool)isMeteringEnabled {
+    env.objc
+        .borrow::<AVAudioRecorderHostObject>(this)
+        .metering_enabled
+}
+
+- (())updateMeters {
+    log_dbg!(
+        "[(AVAudioRecorder *){:?} updateMeters] — stub",
+        this
+    );
+}
+
+- (f32)averagePowerForChannel:(NSInteger)_channel {
+    -160.0
+}
+
+- (f32)peakPowerForChannel:(NSInteger)_channel {
+    -160.0
+}
+
+- (id)delegate {
+    env.objc.borrow::<AVAudioRecorderHostObject>(this).delegate
+}
+
+- (())setDelegate:(id)delegate {
+    env.objc
+        .borrow_mut::<AVAudioRecorderHostObject>(this)
+        .delegate = delegate;
+}
+
+- (())dealloc {
+    let url = env
+        .objc
+        .borrow::<AVAudioRecorderHostObject>(this)
+        .url;
+    if url != nil {
+        release(env, url);
+    }
+    env.objc.dealloc_object(this, &mut env.mem)
+}
+
 @end
 
 };
@@ -442,8 +664,16 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
             .current_packet = current_packet + num_packets as i64;
     } else {
-        if status != eofErr {
-             log!("Warning: AVAudioPlayer expected eofErr but got status {}, stopping playback safely.", status);
+        // num_packets == 0: end of audio data.
+        // Both eofErr and noErr (0) are valid EOF indicators —
+        // some platforms return noErr instead of eofErr at end of
+        // stream, so we treat them identically.
+        if status != 0 && status != eofErr {
+            log!(
+                "Warning: AVAudioPlayer unexpected read status {}, \
+                 treating as EOF.",
+                status
+            );
         }
         let number_of_loops = env
             .objc
@@ -452,11 +682,27 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
         if number_of_loops == 0 {
             let stop_status = AudioQueueStop(env, aq, false);
             if stop_status != 0 {
-                 log!("Warning: AudioQueueStop failed with status {}", stop_status);
+                log!(
+                    "Warning: AudioQueueStop failed with status {}",
+                    stop_status
+                );
             }
             env.objc
                 .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
                 .is_playing = false;
+            let delegate = env
+                .objc
+                .borrow::<AVAudioPlayerHostObject>(av_audio_player)
+                .delegate;
+            if delegate != nil {
+                let successfully: bool = true;
+                () = msg![
+                    env;
+                    delegate
+                    audioPlayerDidFinishPlaying:av_audio_player
+                    successfully:successfully
+                ];
+            }
         } else {
             if number_of_loops > 0 {
                 env.objc
@@ -466,7 +712,21 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             env.objc
                 .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
                 .current_packet = 0;
-            _touchHLE_AVAudioPlayerOutputBufferHelper(env, in_user_data, in_aq, in_buf);
+            // Only recurse if we can actually read data from the
+            // start; avoids infinite recursion on broken files.
+            let num_packets_to_read = env
+                .objc
+                .borrow::<AVAudioPlayerHostObject>(av_audio_player)
+                .num_packets_to_read;
+            if num_packets_to_read > 0 {
+                _touchHLE_AVAudioPlayerOutputBufferHelper(
+                    env,
+                    in_user_data,
+                    in_aq,
+                    in_buf,
+                );
+            }
         }
     }
-    }
+}
+
