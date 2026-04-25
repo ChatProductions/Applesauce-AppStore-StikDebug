@@ -74,7 +74,14 @@ pub fn pthread_cond_init(
     };
     env.mem.write(cond, opaque);
 
-    assert!(!State::get(env).condition_variables.contains_key(&cond));
+    // ЧЕСТНЫЙ ФИКС: Убираем жесткий assert!(!State::get(env).condition_variables.contains_key(&cond));
+    // Если игра (например, Minecraft PE) переиспользует память без вызова pthread_cond_destroy,
+    // мы не крашим эмулятор, а просто логируем предупреждение и штатно заменяем объект, 
+    // как это сделала бы настоящая iOS.
+    if State::get(env).condition_variables.contains_key(&cond) {
+        log_dbg!("Warning: pthread_cond_init called on already initialized condition variable {:?}", cond);
+    }
+    
     State::get_mut(env).condition_variables.insert(
         cond,
         CondHostObject {
