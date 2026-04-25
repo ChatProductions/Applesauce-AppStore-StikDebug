@@ -50,9 +50,15 @@ fn mmap(
     let ptr = env.mem.calloc(len);
 
     if (flags & MAP_ANON) != 0 {
+        if (flags & MAP_ANON) != 0 {
         assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
-        assert_eq!(fd, -1);
-        assert_eq!(offset, 0); // Перенесли сюда: для анонимной памяти смещение должно быть 0
+        
+        // Убираем жесткие assert_eq!(fd, -1) и assert_eq!(offset, 0).
+        // В реальной iOS/Darwin при наличии флага MAP_ANON аргументы fd и offset 
+        // просто игнорируются ОС. Движки вроде Adobe AIR передают сюда мусор.
+        if fd != -1 || offset != 0 {
+            log_dbg!("Warning: mmap MAP_ANON called with fd={} and offset={}. Ignoring them as per OS behavior.", fd, offset);
+        }
         
         if !addr.is_null() {
             log!(
