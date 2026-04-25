@@ -1775,7 +1775,6 @@ let device_family = match device_family_array.len() {
                                 // сигнал, но он ещё не успел захватить мьютекс),
                                 // удаляем его оттуда вместо паники.
                                 host_cond.waking.retain(|&t| t != thread_id);
-
                                 host_cond.waiting.retain(|&t| t != thread_id);
 
                                 // FIX 2: Если мьютекс всё ещё занят другим тредом при
@@ -1789,9 +1788,6 @@ let device_family = match device_family_array.len() {
                                     );
                                     self.threads[thread_id].blocked_by =
                                         ThreadBlock::Mutex(mutex);
-                                    // Thread is still blocked on the mutex -
-                                    // do NOT return it. The Mutex branch will
-                                    // schedule it once the mutex is released.
                                 } else {
                                     self.threads[thread_id].blocked_by =
                                         ThreadBlock::NotBlocked;
@@ -1801,6 +1797,18 @@ let device_family = match device_family_array.len() {
                                     );
                                     return thread_id;
                                 }
+                            } else {
+                                // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЕДЛОКА ---
+                                // Если таймаут еще не вышел, вычисляем остаток времени
+                                // и добавляем его в next_awakening планировщика!
+                                // Теперь эмулятор не упадет, а честно уснет до этого момента.
+                                let remaining = deadline - time;
+                                let awakening = Instant::now() + remaining;
+                                next_awakening = match next_awakening {
+                                    None => Some(awakening),
+                                    Some(other) => Some(other.min(awakening)),
+                                };
+                                // ------------------------------------
                             }
                         }
                     }
