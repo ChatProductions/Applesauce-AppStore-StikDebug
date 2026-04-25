@@ -67,6 +67,7 @@ impl HostObject for NSBundleHostObject {}
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
+
 @implementation NSBundle: NSObject
 
 // =========================================================================
@@ -95,9 +96,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)bundleForClass:(id)_aClass {
-    // Return the main bundle. For single-bundle iPhone apps this is always
-    // correct. A full implementation would look up which bundle contains the
-    // given class.
+    // Return the main bundle. For single-bundle iPhone apps this is always correct.
+    // A full implementation would look up which bundle contains the given class.
     msg_class![env; NSBundle mainBundle]
 }
 
@@ -128,8 +128,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     let target_str = ns_string::to_rust_string(env, identifier);
+    
+    // ПРАВКА: Собираем бандлы в вектор, чтобы отпустить immutable borrow env.
+    let cached_bundles: Vec<id> = env.framework_state.foundation.ns_bundle.bundle_cache.values().copied().collect();
+    
     // Check cached sub-bundles (like Scoreloop)
-    for (&_, &cached_bundle) in env.framework_state.foundation.ns_bundle.bundle_cache.iter() {
+    for cached_bundle in cached_bundles {
         let cached_id: id = msg![env; cached_bundle bundleIdentifier];
         if cached_id != nil {
             let cached_id_str = ns_string::to_rust_string(env, cached_id);
@@ -195,6 +199,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let langs: id = msg_class![env; NSLocale preferredLanguages];
     let lang_count: NSUInteger = msg![env; langs count];
     let mut unknown_codes = HashSet::new();
+    
     for i in 0..lang_count {
         let lang_code: id = msg![env; langs objectAtIndex:i];
         let lang_code_str = ns_string::to_rust_string(env, lang_code);
@@ -238,8 +243,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let main: id = msg_class![env; NSBundle mainBundle];
     let _: () = msg![env; arr addObject:main];
+    
+    // ПРАВКА: Собираем бандлы в вектор, чтобы отпустить immutable borrow env.
+    let cached_bundles: Vec<id> = env.framework_state.foundation.ns_bundle.bundle_cache.values().copied().collect();
+    
     // Include dynamically created sub-bundles (plugins/frameworks)
-    for (&_, &cached_bundle) in env.framework_state.foundation.ns_bundle.bundle_cache.iter() {
+    for cached_bundle in cached_bundles {
         let _: () = msg![env; arr addObject:cached_bundle];
     }
     
@@ -279,6 +288,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let path_str = ns_string::to_rust_string(env, path).into_owned();
+    
     // 1. CACHE CHECK
     if let Some(&cached) = env.framework_state.foundation.ns_bundle.bundle_cache.get(&path_str) {
         release(env, this);
@@ -291,12 +301,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     
     let mut dict: id = nil;
     let mut bundle_identifier: id = nil;
+    
     if env.fs.read(plist_guest).is_ok() {
         // Normal Path: Info.plist exists
         let plist_path_ns = ns_string::from_rust_string(env, plist_file_path);
         dict = msg_class![env; NSDictionary alloc];
         dict = msg![env; dict initWithContentsOfFile:plist_path_ns];
         release(env, plist_path_ns);
+        
         if dict != nil {
             let id_key = ns_string::get_static_str(env, "CFBundleIdentifier");
             let val: id = msg![env; dict objectForKey:id_key];
@@ -307,6 +319,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let bundle_path_ns = ns_string::from_rust_string(env, path_str.clone());
+    
     // 3. STUB FALLBACK
     // Provide a smart default bundle identifier if Info.plist parsing failed
     if bundle_identifier == nil {
@@ -326,12 +339,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle_url: None,
         info_dictionary: if dict != nil { Some(dict) } else { None },
     };
+    
     // 5. CACHE INSERTION
     env.framework_state
         .foundation
         .ns_bundle
         .bundle_cache
         .insert(path_str, this);
+        
     this
 }
 
@@ -363,6 +378,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if bundle_identifier != nil { release(env, bundle_identifier); }
     if let Some(url)  = bundle_url       { release(env, url); }
     if let Some(dict) = info_dictionary  { release(env, dict); }
+    
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -523,19 +539,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         None
     };
+    
     let subpath_str = if subpath != nil {
         ns_string::to_rust_string(env, subpath)
     } else {
         std::borrow::Cow::Borrowed("")
     };
+    
     let bundle_path: id = msg![env; this bundlePath];
     let base_path = ns_string::to_rust_string(env, bundle_path);
     let mut search_dir_str = base_path.into_owned();
+    
     if !subpath_str.is_empty() {
         search_dir_str.push('/');
         search_dir_str.push_str(&subpath_str);
     }
     let search_dir = crate::fs::GuestPath::new(&search_dir_str);
+    
     // Collect matching filenames into plain Rust Strings BEFORE calling any
     // env-mutating functions (from_rust_string).
     let matched_names: Vec<String> = match env.fs.enumerate(search_dir) {
@@ -554,6 +574,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             Vec::new()
         }
     };
+    
     // Iterator and its fs borrow are now fully dropped — safe to call env mutators.
     let mut result_paths: Vec<id> = Vec::with_capacity(matched_names.len());
     for full_path in matched_names {
@@ -585,6 +606,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let paths: id = msg![env; this pathsForResourcesOfType:ext inDirectory:subpath];
     let count: NSUInteger = msg![env; paths count];
     let result: id = msg_class![env; NSMutableArray new];
+    
     let mut i: NSUInteger = 0;
     while i < count {
         let path: id = msg![env; paths objectAtIndex:i];
@@ -608,6 +630,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let langs: id = msg_class![env; NSLocale preferredLanguages];
     let lang_count: NSUInteger = msg![env; langs count];
     let mut unknown_codes = HashSet::new();
+    
     for i in 0..lang_count {
         let lang_code: id = msg![env; langs objectAtIndex:i];
         let lang_code_str = ns_string::to_rust_string(env, lang_code);
@@ -717,6 +740,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let plist_comp = ns_string::get_static_str(env, "Info.plist");
     let plist_path: id = msg![env; bundle_path stringByAppendingPathComponent:plist_comp];
+    
     let dict: id = msg_class![env; NSDictionary alloc];
     let dict: id = msg![env; dict initWithContentsOfFile:plist_path];
     env.objc.borrow_mut::<NSBundleHostObject>(this).info_dictionary = Some(dict);
@@ -746,6 +770,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if key == nil { "nil".into() } else { ns_string::to_rust_string(env, key) },
         if tableName == nil { "Localizable".into() } else { ns_string::to_rust_string(env, tableName) }
     );
+    
     let empty_str: id = ns_string::get_static_str(env, "");
 
     // 2. Early exit for nil keys
@@ -759,12 +784,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         tableName
     };
-
+    
     // 4. Bundle Check
     // We should allow table lookup on ANY bundle that has a path.
     let host = env.objc.borrow::<NSBundleHostObject>(this);
     let is_valid_bundle = host.bundle_path != nil;
     drop(host);
+    
     if !is_valid_bundle {
         return if value != nil && value != empty_str { value } else { key };
     }
@@ -807,6 +833,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             .ns_bundle
             .localization_tables
             .insert(name, dict);
+            
         dict
     };
 
@@ -881,6 +908,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bundle_path = ns_string::from_rust_string(env, bundle_path);
     let bundle_identifier = env.bundle.bundle_identifier().to_string();
     let bundle_identifier = ns_string::from_rust_string(env, bundle_identifier);
+    
     let host_object = NSBundleHostObject {
         bundle: None,
         bundle_path,
