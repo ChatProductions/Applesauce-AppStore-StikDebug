@@ -1485,6 +1485,23 @@ let device_family = match device_family_array.len() {
     /// Let the debugger handle a CPU error, or panic if there's no debugger
     /// connected. Returns [true] if the CPU should step and then resume
     /// debugging, or [false] if it should resume normal execution.
+   fn debug_cpu_error(&mut self, error: cpu::CpuError) {
+        let instruction_len = if (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
+            2
+        } else {
+            4
+        };
+
+        if matches!(error, cpu::CpuError::UndefinedInstruction)
+            || matches!(error, cpu::CpuError::Breakpoint)
+        {
+            // Rewind the PC so that it's at the instruction where the error
+            // occurred, rather than the next instruction. This is necessary for
+            // GDB to detect its software breakpoints. For some reason this
+            // isn't correct for memory errors however.
+            self.cpu.regs_mut()[cpu::Cpu::PC] -= instruction_len;
+		}
+	   
             if self.gdb_server.is_none() {
             // ИСПРАВЛЕНИЕ: Обход крашей без написания заглушек для фреймворков.
             // Игры часто вызывают abort() / __builtin_trap() (UndefinedInstruction)
