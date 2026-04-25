@@ -286,12 +286,23 @@ fn setsockopt(
             // В Rust попытка записи в закрытый сокет и так возвращает ErrorKind::BrokenPipe вместо убийства процесса.
             0
         }
-        (SOL_SOCKET, SO_LINGER) => {
-            assert_eq!(option_len, guest_size_of::<linger>());
-            let linger_val: linger = env.mem.read(option_value.cast());
+                (SOL_SOCKET, SO_LINGER) => {
+            // Некоторые приложения (например, Minecraft PE) передают 4 байта (размер обычного int)
+            // вместо положенных 8 байт (struct linger). Обрабатываем оба варианта легально:
+            let (l_onoff, l_linger) = if option_len == guest_size_of::<linger>() {
+                let linger_val: linger = env.mem.read(option_value.cast());
+                (linger_val.l_onoff, linger_val.l_linger)
+            } else if option_len == guest_size_of::<i32>() {
+                let val: i32 = env.mem.read(option_value.cast());
+                (val, 0)
+            } else {
+                log!("setsockopt: SO_LINGER with invalid option_len {}, returning EINVAL", option_len);
+                set_errno(env, EINVAL);
+                return -1;
+            };
             
-            let duration = if linger_val.l_onoff != 0 {
-                Some(std::time::Duration::from_secs(linger_val.l_linger.max(0) as u64))
+            let duration = if l_onoff != 0 {
+                Some(std::time::Duration::from_secs(l_linger.max(0) as u64))
             } else {
                 None
             };
