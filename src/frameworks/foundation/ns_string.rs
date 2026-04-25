@@ -409,6 +409,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)length {
+    if this == nil { return 0; }
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (utf16, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { println!("[{:?} length]: converted string to UTF-16", this); }
@@ -1749,10 +1750,14 @@ pub fn from_u16_vec(env: &mut Environment, from: Vec<u16>) -> id {
 }
 
 pub fn to_rust_string(env: &mut Environment, string: id) -> Cow<'static, str> {
+    if string == nil {
+        return Cow::Borrowed("");
+    }
     env.objc.borrow_mut::<StringHostObject>(string).to_utf8().unwrap()
 }
 
 pub fn for_each_code_unit<F>(env: &mut Environment, string: id, mut f: F) where F: FnMut(NSUInteger, u16), {
+    if string == nil { return; }
     let mut idx: NSUInteger = 0;
     env.objc.borrow::<StringHostObject>(string).iter_code_units().for_each(|c| { f(idx, c); idx += 1; });
 }
@@ -1942,6 +1947,11 @@ pub fn get_bytes_buffer_inner(
 fn string_by_replacing_occurrences_inner(
     env: &mut Environment, source: id, target: id, replacement: id, options: NSStringCompareOptions,
 ) -> id {
+    if source == nil { return nil; }
+    if target == nil || replacement == nil {
+        let res = msg![env; source copy];
+        return autorelease(env, res);
+    }
     let mut main_iter = env.objc.borrow::<StringHostObject>(source).iter_code_units();
     let target_iter = env.objc.borrow::<StringHostObject>(target).iter_code_units();
     let replacement_iter = env.objc.borrow::<StringHostObject>(replacement).iter_code_units();
@@ -2002,4 +2012,5 @@ pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstP
         cfstr.bytes.cast()
     } else { Ptr::null() }
 }
+
 
