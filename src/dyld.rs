@@ -450,7 +450,7 @@ impl Dyld {
                         stubs.addr + i * entry_size,
                         j,
                         instr,
-                        mem.read::<u32>(ptr + j.try_into().unwrap())
+                        mem.read::<u32, true>(ptr + j.try_into().unwrap())
                     );
                     mismatch = true;
                     break;
