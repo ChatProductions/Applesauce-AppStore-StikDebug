@@ -47,6 +47,19 @@ const SO_REUSEADDR: i32 = 0x4;
 const SO_BROADCAST: i32 = 0x20;
 const SO_ERROR: i32 = 0x1007;
 
+const SO_LINGER: i32 = 0x80;
+const SO_SNDBUF: i32 = 0x1001;
+const SO_RCVBUF: i32 = 0x1002;
+const SO_NOSIGPIPE: i32 = 0x1022;
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C, packed)]
+pub struct linger {
+    pub l_onoff: i32,
+    pub l_linger: i32,
+}
+unsafe impl SafeRead for linger {}
+
 #[allow(non_camel_case_types)]
 pub type sa_family_t = u8;
 
@@ -243,14 +256,14 @@ fn setsockopt(
     };
     let type_ = sock.type_;
 
-    match (level, option_name) {
+        match (level, option_name) {
         (SOL_SOCKET, SO_DEBUG) => {
             // Silently ignore SO_DEBUG — requires elevated privileges on most
             // platforms; apps set this speculatively and don't check the result.
             log_dbg!("setsockopt: ignoring SO_DEBUG on socket {}", socket);
             0
         }
-        (SOL_SOCKET, SO_REUSEADDR) | (SOL_SOCKET, SO_BROADCAST) => {
+        (SOL_SOCKET, SO_REUSEADDR) | (SOL_SOCKET, SO_BROADCAST) | (SOL_SOCKET, SO_NOSIGPIPE) => {
             assert_eq!(option_len, guest_size_of::<i32>());
             let val: i32 = env.mem.read(option_value.cast());
             if val != 0 {
@@ -274,6 +287,44 @@ fn setsockopt(
                     }
                 }
             }
+            // SO_NOSIGPIPE просто сохраняется в options. В Rust попытка записи 
+            // в закрытый сокет и так возвращает ErrorKind::BrokenPipe вместо убийства процесса.
+            0
+        }
+        (SOL_SOCKET, SO_LINGER) => {
+            assert_eq!(option_len, guest_size_of::<linger>());
+            let linger_val: linger = env.mem.read(option_value.cast());
+            
+            let duration = if linger_val.l_onoff != 0 {
+                Some(std::time::Duration::from_secs(linger_val.l_linger.max(0) as u64))
+            } else {
+                None
+            };
+
+            if type_ == SOCK_STREAM {
+                if let Some(stream) = State::get(env).sockets.get(&socket).unwrap().tcp_stream.as_ref() {
+                    // Реально применяем Linger к хост-сокету
+                    if let Err(e) = stream.set_linger(duration) {
+                        log!("setsockopt SO_LINGER failed: {}", e);
+                        set_errno(env, EIO);
+                        return -1;
+                    }
+                }
+            }
+            0
+        }
+        (SOL_SOCKET, SO_SNDBUF) | (SOL_SOCKET, SO_RCVBUF) => {
+            assert_eq!(option_len, guest_size_of::<i32>());
+            let buf_size: i32 = env.mem.read(option_value.cast());
+            
+            // Rust std::net не экспортирует управление размером буфера (set_recv_buffer_size).
+            // Но современные ОС сами отлично балансируют TCP-окно (auto-tuning), что работает 
+            // намного лучше фиксированных лимитов из старых iOS-приложений. Честно валидируем 
+            // чтение памяти гостя и подтверждаем успех.
+            log_dbg!(
+                "setsockopt: evaluated buffer size {:#x} to {} bytes",
+                option_name, buf_size
+            );
             0
         }
         (level, option_name) if level == IPPROTO_TCP as i32 => {
