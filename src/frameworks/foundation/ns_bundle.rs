@@ -1,9 +1,12 @@
 /*
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * License, v. 2.0.
+ * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//!
 //! `NSBundle`.
+
 use super::{ns_string, NSUInteger};
 use crate::bundle::Bundle;
 use crate::frameworks::core_foundation::cf_bundle::{
@@ -71,6 +74,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Class methods / constructors
 // =========================================================================
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = NSBundleHostObject {
+        bundle: None,
+        bundle_path: nil,
+        bundle_identifier: nil,
+        bundle_url: None,
+        info_dictionary: None,
+    };
+    env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
+}
+
+- (id)init {
+    this
+}
+
 + (id)mainBundle {
     if let Some(bundle) = env.framework_state.foundation.ns_bundle.main_bundle {
         bundle
@@ -113,7 +131,21 @@ pub const CLASSES: ClassExports = objc_classes! {
             return main;
         }
     }
-    log!("TODO: [NSBundle bundleWithIdentifier:] non-main bundle — returning nil");
+    
+    let target_str = ns_string::to_rust_string(env, identifier);
+
+    // Check cached sub-bundles (like Scoreloop)
+    for (&_, &cached_bundle) in env.framework_state.foundation.ns_bundle.bundle_cache.iter() {
+        let cached_id: id = msg![env; cached_bundle bundleIdentifier];
+        if cached_id != nil {
+            let cached_id_str = ns_string::to_rust_string(env, cached_id);
+            if cached_id_str == target_str {
+                return cached_bundle;
+            }
+        }
+    }
+
+    log!("Warning: [NSBundle bundleWithIdentifier:{}] not found", target_str);
     nil
 }
 
@@ -160,8 +192,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)pathForResource:(id)name          // NSString*
                ofType:(id)extension     // NSString*
           inDirectory:(id)directory {   // NSString*
-    // assert!(name != nil);
-
     let path = path_for_resource_helper(env, this, name, nil, directory, extension);
     if path != nil {
         return path;
@@ -171,6 +201,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let langs: id = msg_class![env; NSLocale preferredLanguages];
     let lang_count: NSUInteger = msg![env; langs count];
     let mut unknown_codes = HashSet::new();
+
     for i in 0..lang_count {
         let lang_code: id = msg![env; langs objectAtIndex:i];
         let lang_code_str = ns_string::to_rust_string(env, lang_code);
@@ -210,10 +241,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)allBundles {
-    // Return an array containing only the main bundle.
-    let main: id = msg_class![env; NSBundle mainBundle];
     let arr: id = msg_class![env; NSMutableArray new];
+    
+    let main: id = msg_class![env; NSBundle mainBundle];
     let _: () = msg![env; arr addObject:main];
+
+    // Include dynamically created sub-bundles (plugins/frameworks)
+    for (&_, &cached_bundle) in env.framework_state.foundation.ns_bundle.bundle_cache.iter() {
+        let _: () = msg![env; arr addObject:cached_bundle];
+    }
+    
     autorelease(env, arr)
 }
 
@@ -249,7 +286,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return retain(env, cached);
     }
 
-    // 2. FILESYSTEM VALIDATION (Modified for KAMI RETRO)
+    // 2. FILESYSTEM VALIDATION
     let plist_file_path = format!("{}/Info.plist", path_str);
     let plist_guest = crate::fs::GuestPath::new(&plist_file_path);
     
@@ -270,14 +307,18 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // 3. STUB FALLBACK (Essential for "Full" Support)
-    // If no plist or dict was found, we still create the host object.
-    // This prevents "SUPER HACK! Faking borrow for missing object" warnings.
-    if bundle_identifier == nil {
-        bundle_identifier = ns_string::get_static_str(env, "com.gamevil.kamiretro.stub");
-    }
-
     let bundle_path_ns = ns_string::from_rust_string(env, path_str.clone());
+
+    // 3. STUB FALLBACK
+    // Provide a smart default bundle identifier if Info.plist parsing failed
+    if bundle_identifier == nil {
+        let last_comp: id = msg![env; bundle_path_ns lastPathComponent];
+        if last_comp != nil {
+            bundle_identifier = retain(env, last_comp);
+        } else {
+            bundle_identifier = ns_string::get_static_str(env, "com.unknown.stub");
+        }
+    }
     
     // 4. HOST OBJECT INITIALIZATION
     *env.objc.borrow_mut::<NSBundleHostObject>(this) = NSBundleHostObject {
@@ -322,9 +363,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let info_dictionary   = host.info_dictionary;
     drop(host);
 
-    release(env, bundle_path);
-    release(env, bundle_identifier);
-    if let Some(url)  = bundle_url       { release(env, url);  }
+    if bundle_path != nil { release(env, bundle_path); }
+    if bundle_identifier != nil { release(env, bundle_identifier); }
+    if let Some(url)  = bundle_url       { release(env, url); }
     if let Some(dict) = info_dictionary  { release(env, dict); }
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -346,6 +387,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         return url;
     }
     let bundle_path: id = msg![env; this bundlePath];
+    if bundle_path == nil {
+        return nil;
+    }
     let new: id = msg_class![env; NSURL alloc];
     let new: id = msg![env; new initFileURLWithPath:bundle_path];
     env.objc.borrow_mut::<NSBundleHostObject>(this).bundle_url = Some(new);
@@ -483,23 +527,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         None
     };
+
     let subpath_str = if subpath != nil {
         ns_string::to_rust_string(env, subpath)
     } else {
         std::borrow::Cow::Borrowed("")
     };
+
     let bundle_path: id = msg![env; this bundlePath];
     let base_path = ns_string::to_rust_string(env, bundle_path);
     let mut search_dir_str = base_path.into_owned();
+
     if !subpath_str.is_empty() {
         search_dir_str.push('/');
         search_dir_str.push_str(&subpath_str);
     }
     let search_dir = crate::fs::GuestPath::new(&search_dir_str);
+
     // Collect matching filenames into plain Rust Strings BEFORE calling any
-    // env-mutating functions (from_rust_string).  The iterator holds an
-    // immutable borrow on env.fs for its entire lifetime, which would conflict
-    // with the mutable borrow required by from_rust_string.
+    // env-mutating functions (from_rust_string).
     let matched_names: Vec<String> = match env.fs.enumerate(search_dir) {
         Ok(iterator) => iterator
             .filter(|entry| match &ext_str {
@@ -516,12 +562,14 @@ pub const CLASSES: ClassExports = objc_classes! {
             Vec::new()
         }
     };
+
     // Iterator and its fs borrow are now fully dropped — safe to call env mutators.
     let mut result_paths: Vec<id> = Vec::with_capacity(matched_names.len());
     for full_path in matched_names {
         result_paths.push(ns_string::from_rust_string(env, full_path));
     }
     let array: id = crate::frameworks::foundation::ns_array::from_vec(env, result_paths);
+
     autorelease(env, array)
 }
 
@@ -539,6 +587,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         subpath
     };
+
     msg![env; this pathsForResourcesOfType:ext inDirectory:effective_subpath]
 }
 
@@ -547,6 +596,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let paths: id = msg![env; this pathsForResourcesOfType:ext inDirectory:subpath];
     let count: NSUInteger = msg![env; paths count];
     let result: id = msg_class![env; NSMutableArray new];
+
     let mut i: NSUInteger = 0;
     while i < count {
         let path: id = msg![env; paths objectAtIndex:i];
@@ -570,6 +620,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let langs: id = msg_class![env; NSLocale preferredLanguages];
     let lang_count: NSUInteger = msg![env; langs count];
     let mut unknown_codes = HashSet::new();
+
     for i in 0..lang_count {
         let lang_code: id = msg![env; langs objectAtIndex:i];
         let lang_code_str = ns_string::to_rust_string(env, lang_code);
@@ -676,6 +727,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         return dict;
     }
     let bundle_path = env.objc.borrow::<NSBundleHostObject>(this).bundle_path;
+    if bundle_path == nil {
+        return nil;
+    }
     let plist_comp = ns_string::get_static_str(env, "Info.plist");
     let plist_path: id = msg![env; bundle_path stringByAppendingPathComponent:plist_comp];
     let dict: id = msg_class![env; NSDictionary alloc];
@@ -716,14 +770,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // 3. Determine the table name
-    let name = if tableName == nil || tableName == nil {
+    let name = if tableName == nil {
         ns_string::get_static_str(env, "Localizable")
     } else {
         tableName
     };
 
     // 4. Bundle Check
-    // KAMI RETRO often uses sub-bundles for localizations. 
     // We should allow table lookup on ANY bundle that has a path.
     let host = env.objc.borrow::<NSBundleHostObject>(this);
     let is_valid_bundle = host.bundle_path != nil;
@@ -776,7 +829,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // 6. Final String Extraction
     let res: id = msg![env; dict objectForKey:key];
-    
     if res == nil {
         // Return the 'value' if provided, otherwise the 'key' itself
         return if value == nil || value == empty_str { key } else { value };
@@ -914,12 +966,14 @@ fn path_for_resource_helper(
     }
     let file_manager: id = msg_class![env; NSFileManager defaultManager];
     let file_exists: bool = msg![env; file_manager fileExistsAtPath:path];
+
     if file_exists {
         return path;
     }
     // Case-insensitive fallback: scan the parent directory.
     let path_str = ns_string::to_rust_string(env, path);
     let rust_path = std::path::Path::new(path_str.as_ref());
+
     if let (Some(parent), Some(file_name)) = (rust_path.parent(), rust_path.file_name()) {
         let parent_str  = parent.to_str().unwrap_or("");
         let target_name = file_name.to_str().unwrap_or("").to_lowercase();
@@ -939,3 +993,4 @@ fn path_for_resource_helper(
     }
     nil
 }
+
