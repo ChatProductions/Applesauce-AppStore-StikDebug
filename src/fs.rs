@@ -1054,12 +1054,18 @@ m.modified())
     ) -> Result<GuestFile, ()> {
         let GuestOpenOptions {
             read,
-            write,
+            mut write, // ИСПРАВЛЕНИЕ: Разрешаем менять переменную
             append,
             create,
             truncate,
         } = options;
-        assert!((!truncate && !create) || write || append);
+
+        // ИСПРАВЛЕНИЕ: Мягкий перехват вместо вызова panic!.
+        // Если запрашивается создание или очистка файла без права записи, принудительно даем право на запись.
+        if (truncate || create) && !write && !append {
+            log!("Warning: App tried to create/truncate file without write permissions. Forcing write = true.");
+            write = true;
+        }
 
         let path = path.as_ref();
 
@@ -1322,5 +1328,4 @@ m.modified())
         );
         Ok(())
     }
-}
-
+    }
