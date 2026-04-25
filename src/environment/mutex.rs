@@ -210,7 +210,7 @@ impl Environment {
                 MutexType::PTHREAD_MUTEX_NORMAL => {
                     // Убираем panic!, так как реальные iOS-игры часто пытаются 
                     // разблокировать уже разблокированные мьютексы.
-                    log!(
+                    log_dbg!(
                         "Warning: Attempted to unlock non-error-checking mutex #{mutex_id} for thread {current_thread}, already unlocked! Ignoring and returning EPERM.",
                     );
                     return Err(EPERM);
