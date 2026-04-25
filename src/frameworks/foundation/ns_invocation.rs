@@ -74,7 +74,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let sig: id = msg![env; sig init];
 
     if !_types.is_null() {
-        let types_str = env.mem.cstr_at_utf8(_types.cast_const()).unwrap_or("");
+        // ИСПРАВЛЕНИЕ E0308: Приводим Ptr<c_void> к Ptr<u8> через .cast()
+        let types_str = env.mem.cstr_at_utf8(_types.cast_const().cast()).unwrap_or("");
         let mut parsed_types = Vec::new();
         let mut chars = types_str.chars().peekable();
         
@@ -161,9 +162,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         let bytes = host.return_type.as_bytes();
         let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
         for (i, &b) in bytes.iter().enumerate() {
-            env.mem.write(ptr.offset(i as isize), b);
+            // ИСПРАВЛЕНИЕ E0599: Используем оператор сложения (ptr + i) вместо .offset()
+            env.mem.write(ptr + (i as u32), b);
         }
-        env.mem.write(ptr.offset(bytes.len() as isize), 0u8);
+        env.mem.write(ptr + (bytes.len() as u32), 0u8);
         host.return_type_ptr = Some(ptr);
     }
     host.return_type_ptr.unwrap().cast_const().cast()
@@ -178,17 +180,19 @@ pub const CLASSES: ClassExports = objc_classes! {
             let bytes = host.argument_types[idx].as_bytes();
             let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
             for (i, &b) in bytes.iter().enumerate() {
-                env.mem.write(ptr.offset(i as isize), b);
+                // ИСПРАВЛЕНИЕ E0599: Используем ptr + i
+                env.mem.write(ptr + (i as u32), b);
             }
-            env.mem.write(ptr.offset(bytes.len() as isize), 0u8);
+            env.mem.write(ptr + (bytes.len() as u32), 0u8);
             host.argument_type_ptrs[idx] = Some(ptr);
         }
         host.argument_type_ptrs[idx].unwrap().cast_const().cast()
     } else {
         // Fallback на случай выхода за границы
         let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(2).cast();
-        env.mem.write(ptr.offset(0), b'@');
-        env.mem.write(ptr.offset(1), 0);
+        // ИСПРАВЛЕНИЕ E0599: Используем ptr и ptr + 1
+        env.mem.write(ptr, b'@');
+        env.mem.write(ptr + 1u32, 0);
         ptr.cast_const().cast()
     }
 }
@@ -515,7 +519,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
         if !ret_type.is_null() {
             let ret_char = env.mem.read(ret_type);
-            // Предупреждаем только если это действительно не void тип
             if ret_char != b'v' {
                 log!("Warning: NSInvocation return type is '{}', expected 'v'. Invoking anyway.", ret_char as char);
             }
