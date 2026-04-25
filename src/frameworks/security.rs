@@ -664,6 +664,7 @@ pub const CONSTANTS: ConstantExports = &[
     ("_kSecMatchLimit",             HostConstant::NSString("kSecMatchLimit")),
     ("_kSecMatchLimitOne",          HostConstant::NSString("kSecMatchLimitOne")),
     ("_kSecMatchLimitAll",          HostConstant::NSString("kSecMatchLimitAll")),
+    ("_kSecMatchItemList",          HostConstant::NSString("kSecMatchItemList")),
     ("_kSecMatchIssuers",           HostConstant::NSString("kSecMatchIssuers")),
     ("_kSecMatchEmailAddressIfPresent",
         HostConstant::NSString("kSecMatchEmailAddressIfPresent")),
@@ -753,4 +754,3 @@ pub const DYLIB: HostDylib = HostDylib {
     constant_exports: &[CONSTANTS],
     function_exports: &[FUNCTIONS],
 };
-
