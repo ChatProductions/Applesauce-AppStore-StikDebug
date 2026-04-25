@@ -436,8 +436,28 @@ impl Dyld {
         let stub_count = stubs.size / entry_size;
         for i in 0..stub_count {
             let ptr: MutPtr<u32> = Ptr::from_bits(stubs.addr + i * entry_size);
+
+            // Check that the stub matches the expected pattern.
+            // Some apps (e.g. Thumb-compiled) may have different patterns —
+            // skip them rather than panicking.
+            let mut mismatch = false;
             for (j, &instr) in expected_instructions.iter().enumerate() {
-                assert!(mem.read(ptr + j.try_into().unwrap()) == instr);
+                if mem.read(ptr + j.try_into().unwrap()) != instr {
+                    log_dbg!(
+                        "Warning: stub {} at {:#x} has unexpected instruction at offset {} \
+                         (expected {:#010x}, got {:#010x}), skipping",
+                        i,
+                        stubs.addr + i * entry_size,
+                        j,
+                        instr,
+                        mem.read::<u32>(ptr + j.try_into().unwrap())
+                    );
+                    mismatch = true;
+                    break;
+                }
+            }
+            if mismatch {
+                continue;
             }
 
             // For convenience, make the stub return once the SVC is done
