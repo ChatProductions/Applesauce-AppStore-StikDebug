@@ -238,8 +238,8 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let ip_octets: [u8; 4] = if let Some(octets) = parse_ipv4(&hostname) {
         octets
     } else {
-        match hostname.as_str() {
-            "localhost" | "loopback" => [127, 0, 0, 1],
+                match hostname.as_str() {
+            "localhost" | "loopback" | "touchHLE" => [127, 0, 0, 1],
             "broadcasthost"          => [255, 255, 255, 255],
             _ => {
                 if !env.options.network_access {
@@ -406,8 +406,8 @@ fn getaddrinfo(
 ) -> i32 {
     if !env.options.network_access && !node_name.is_null() {
         let hn = env.mem.cstr_at_utf8(node_name.cast_const()).unwrap_or_default().to_owned();
-        // Allow localhost even without network access.
-        if hn != "localhost" && hn != "127.0.0.1" && parse_ipv4(&hn).is_none() {
+                // Allow localhost even without network access.
+        if hn != "localhost" && hn != "127.0.0.1" && hn != "touchHLE" && parse_ipv4(&hn).is_none() {
             log_dbg!("getaddrinfo: network disabled (node={}) -> EAI_FAIL", hn);
             return EAI_FAIL;
         }
@@ -444,11 +444,11 @@ fn getaddrinfo(
         if ai_flags & AI_PASSIVE != 0 { [0, 0, 0, 0] } else { [127, 0, 0, 1] }
     } else {
         let hostname = env.mem.cstr_at_utf8(node_name.cast_const()).unwrap_or_default().to_owned();
-        if let Some(octets) = parse_ipv4(&hostname) {
+                if let Some(octets) = parse_ipv4(&hostname) {
             octets
         } else {
             match hostname.as_str() {
-                "localhost" | "loopback" => [127, 0, 0, 1],
+                "localhost" | "loopback" | "touchHLE" => [127, 0, 0, 1],
                 _ => {
                     log!("getaddrinfo: hostname \"{}\" not resolvable -> EAI_FAIL", hostname);
                     return EAI_FAIL;
