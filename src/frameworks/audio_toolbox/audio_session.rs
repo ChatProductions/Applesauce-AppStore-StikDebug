@@ -345,6 +345,48 @@ pub fn AudioSessionRemovePropertyListener(
     kAudioSessionNoErr
 }
 
+// Recommended replacement for AudioSessionAddPropertyListener / -RemovePropertyListener,
+// see Apple's `Audio Session Support` (`AudioToolbox/AudioServices.h`).
+//
+// The signature mirrors the other `…WithUserData` Audio Toolbox APIs
+// (e.g. `AudioUnitAddPropertyListenerWithUserData`):
+//
+//     extern OSStatus
+//     AudioSessionAddPropertyListenerWithUserData(
+//         AudioSessionPropertyID         inID,
+//         AudioSessionPropertyListener   inProc,
+//         void                          *inUserData);
+//
+// PvZ (com.popcap.PvZ) uses the `WithUserData` remove variant for cleanup;
+// without an export the load-time non-lazy bind fails and any subsequent
+// invocation jumps to a NULL pointer. Provide a no-op stub matching the
+// existing listener stubs so the linker is satisfied.
+pub fn AudioSessionAddPropertyListenerWithUserData(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _in_proc: AudioSessionPropertyListener,
+    _in_user_data: ConstVoidPtr,
+) -> OSStatus {
+    log_dbg!(
+        "TODO: AudioSessionAddPropertyListenerWithUserData {}",
+        debug_fourcc(in_id)
+    );
+    kAudioSessionNoErr
+}
+
+pub fn AudioSessionRemovePropertyListenerWithUserData(
+    _env: &mut Environment,
+    in_id: AudioSessionPropertyID,
+    _in_proc: AudioSessionPropertyListener,
+    _in_user_data: ConstVoidPtr,
+) -> OSStatus {
+    log_dbg!(
+        "TODO: AudioSessionRemovePropertyListenerWithUserData {}",
+        debug_fourcc(in_id)
+    );
+    kAudioSessionNoErr
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionInitialize(_, _, _, _)),
     export_c_func!(AudioSessionGetProperty(_, _, _)),
@@ -353,5 +395,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionSetActive(_)),
     export_c_func!(AudioSessionAddPropertyListener(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListener(_)),
+    export_c_func!(AudioSessionAddPropertyListenerWithUserData(_, _, _)),
+    export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
 
