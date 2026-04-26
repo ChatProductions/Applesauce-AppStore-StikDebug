@@ -131,17 +131,32 @@ impl AudioFile {
             let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
             return Ok(AudioFileInner::Wave(reader));
         }
-        
+
         if is_adts_aac(&bytes) {
             if let Ok(aac) = parse_adts_aac(bytes.clone()) {
                 return Ok(AudioFileInner::Aac(aac));
             }
         }
 
-        if let Ok(reader) = caf::CafPacketReader::new(Cursor::new(bytes.clone()), vec![]) {
-            return Ok(AudioFileInner::Caf(reader));
-        }
-    
+        // NOTE: We deliberately do NOT route CAF files through `caf::CafPacketReader`
+        // here. That crate only reads packets — it does not decode them — and the
+        // surrounding code in this module previously reported every such file as
+        // `AudioFormat::LinearPcm` regardless of the file's actual codec. Most CAF
+        // files used by iOS games (notably PvZ / Plants vs. Zombies) contain
+        // IMA4 ADPCM payloads, not raw LPCM, so callers like
+        // `AudioServicesCreateSystemSoundID` ended up feeding undecoded IMA4
+        // packets to OpenAL as if they were 16-bit PCM, producing silence /
+        // garbage instead of audible sound effects.
+        //
+        // Symphonia (the next branch) supports the CAF container plus the
+        // codecs we actually care about (IMA QT ADPCM, IMA WAV ADPCM, ALAC,
+        // AAC LC, MP3, PCM S16LE) per the feature list in `Cargo.toml`, and it
+        // returns properly-decoded little-endian 16-bit PCM, which the rest of
+        // the audio pipeline (AudioFile / ExtAudioFile / AudioServices / AudioQueue
+        // `decode_buffer` LPCM path) already handles correctly.
+        //
+        // See Apple's CAF specification for the data-formats CAF can carry:
+        // https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_intro/CAF_intro.html
         if let Ok(pcm) = symphonia_formats::decode_symphonia_to_pcm(Cursor::new(bytes)) {
             Ok(AudioFileInner::Symphonia(pcm))
         } else {
