@@ -278,10 +278,19 @@ pub fn AudioQueueNewOutput(
         log_dbg!("Warning: Audio queue will be ignored (unsupported format).");
     }
 
-    log_dbg!(
-        "AudioQueueNewOutput() for format {:#?}, new audio queue handle: {:?}",
-        format,
-        aq_ref,
+    let (fid, sr, ch, bc, bpf, bpp, fpp, fl) = (
+        format.format_id,
+        format.sample_rate,
+        format.channels_per_frame,
+        format.bits_per_channel,
+        format.bytes_per_frame,
+        format.bytes_per_packet,
+        format.frames_per_packet,
+        format.format_flags,
+    );
+    log!(
+        "AudioQueueNewOutput() format_id={}, sample_rate={}, channels={}, bits={}, bpf={}, bpp={}, fpp={}, flags=0x{:x} -> aq={:?}",
+        debug_fourcc(fid), sr, ch, bc, bpf, bpp, fpp, fl, aq_ref,
     );
 
     0 // success
@@ -1137,7 +1146,20 @@ pub fn AudioQueueStart(
         let al_source = host_object.al_source.unwrap();
 
         unsafe { context.SourcePlay(al_source) };
-        assert!(unsafe { context.GetError() } == 0);
+        let mut state_val: ALint = 0;
+        let mut max_gain: ALfloat = 0.0;
+        let mut buffers_queued: ALint = 0;
+        let err = unsafe {
+            context.GetSourcei(al_source, al::AL_SOURCE_STATE, &mut state_val);
+            context.GetSourcef(al_source, al::AL_MAX_GAIN, &mut max_gain);
+            context.GetSourcei(al_source, al::AL_BUFFERS_QUEUED, &mut buffers_queued);
+            context.GetError()
+        };
+        log!(
+            "AudioQueueStart({:?}) source={} -> state=0x{:x}, max_gain={}, buffers_queued={}, err=0x{:x}",
+            in_aq, al_source, state_val, max_gain, buffers_queued, err
+        );
+        assert!(err == 0);
 
     } else {
         log!(
