@@ -37,9 +37,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
-@implementation UIWindow: UIView {
-    id _rootViewController;
-}
+@implementation UIWindow: UIView
 
 // TODO: more?
 
@@ -150,48 +148,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     subviews.first().copied().unwrap_or(nil)
 }
 
-- (id)rootViewController {
-    env.objc.get_ivar::<id>(this, "_rootViewController")
+// Support for rootViewController (iOS 4+)
+- (())setRootViewController:(id)view_controller {
+    log_dbg!("[(UIWindow*){:?} setRootViewController:{:?}]", this, view_controller);
+    
+    // The default behavior in iOS is to add the view controller's view as a subview of the window.
+    if view_controller != nil {
+        let view: id = msg![env; view_controller view];
+        () = msg![env; this addSubview:view];
+    }
 }
 
-- (())setRootViewController:(id)rootViewController {
-    log_dbg!("[(UIWindow*){:?} setRootViewController:{:?}]", this, rootViewController);
-    
-    let old_vc: id = env.objc.get_ivar::<id>(this, "_rootViewController");
-    
-    // Если пытаемся установить тот же самый контроллер, ничего не делаем
-    if old_vc != rootViewController {
-        
-        // 1. Очищаем старый контроллер
-        if old_vc != nil {
-            let old_view: id = msg![env; old_vc view];
-            if old_view != nil {
-                () = msg![env; old_view removeFromSuperview];
-            }
-            // Отпускаем ссылку на старый контроллер
-            crate::objc::release(env, old_vc);
-        }
-        
-        // 2. Обновляем значение ivar
-        env.objc.set_ivar::<id>(this, "_rootViewController", rootViewController);
-        
-        // 3. Настраиваем новый контроллер
-        if rootViewController != nil {
-            // Захватываем ссылку, так как окно теперь владеет контроллером
-            crate::objc::retain(env, rootViewController);
-            
-            let new_view: id = msg![env; rootViewController view];
-            if new_view != nil {
-                // Воспроизводим поведение iOS: view контроллера автоматически 
-                // растягивается на весь размер окна
-                let bounds: CGRect = msg![env; this bounds];
-                () = msg![env; new_view setFrame:bounds];
-                
-                // Добавляем view на окно
-                () = msg![env; this addSubview:new_view];
-            }
-        }
-    }
+- (id)rootViewController {
+    log!("TODO: [(UIWindow*){:?} rootViewController] full implementation missing", this);
+    nil
 }
 
 // UIResponder implementation
