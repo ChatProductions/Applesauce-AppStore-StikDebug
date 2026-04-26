@@ -154,7 +154,6 @@ pub struct OpaqueAudioComponentInstance {
 unsafe impl SafeRead for OpaqueAudioComponentInstance {}
 
 pub type AudioComponentInstance = MutPtr<OpaqueAudioComponentInstance>;
-
 #[repr(C, packed)]
 struct AudioComponentDescription {
     component_type: u32,
@@ -176,10 +175,11 @@ fn AudioComponentFindNext(
     let comp_type = audio_comp_descr.component_type;
     let comp_sub_type = audio_comp_descr.component_sub_type;
     let comp_manufacturer = audio_comp_descr.component_manufacturer;
-
-    let is_remote_io = comp_type == kAudioUnitType_Output
-        && comp_sub_type == kAudioUnitSubType_RemoteIO
-        && comp_manufacturer == kAudioUnitManufacturer_Apple;
+    
+    // ХАК: Принудительно отключаем RemoteIO. 
+    // Из-за этого игры будут думать, что устройство не поддерживает 
+    // низкоуровневый звук, и перейдут на стабильный AudioQueue!
+    let is_remote_io = false; 
 
     let is_3d_mixer = comp_type == kAudioUnitType_Mixer
         && comp_sub_type == kAudioUnitSubType_3DMixer
@@ -219,15 +219,12 @@ fn AudioComponentInstanceNew(
 
     let mut host_object = AudioComponentInstanceHostObject::default();
     host_object.is_3d_mixer = true;
-
     let guest_instance: AudioComponentInstance = env
         .mem
         .alloc_and_write(OpaqueAudioComponentInstance { _pad: 0 });
-        
     State::get(&mut env.framework_state)
         .audio_component_instances
         .insert(guest_instance, host_object);
-        
     env.mem.write(out_instance, guest_instance);
 
     log!(
