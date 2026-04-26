@@ -788,37 +788,37 @@ pub fn AudioFormatGetPropertyInfo(
 // MARK: - Exports
 // =========================================================================
 
-// ИСПРАВЛЕНИЕ: Для AudioFileInitializeWithCallbacks добавлено 9 подчеркиваний
+// Число _ = число параметров функции минус 1 (env не считается)
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(AudioFileCreateWithURL(_, _, _, _, _, _)),
+    export_c_func!(AudioFileCreateWithURL(_, _, _, _, _)),
     export_c_func!(AudioFileInitializeWithCallbacks(_, _, _, _, _, _, _, _, _)),
-    export_c_func!(AudioFileOpenURL(_, _, _, _, _)),
-    export_c_func!(AudioFileOpenWithCallbacks(_, _, _, _, _, _, _, _)),
-    export_c_func!(AudioFileClose(_, _)),
-    
-    export_c_func!(AudioFileReadBytes(_, _, _, _, _, _)),
-    export_c_func!(AudioFileWriteBytes(_, _, _, _, _, _)),
-    export_c_func!(AudioFileReadPackets(_, _, _, _, _, _, _, _)),
-    export_c_func!(AudioFileReadPacketData(_, _, _, _, _, _, _, _)),
-    export_c_func!(AudioFileWritePackets(_, _, _, _, _, _, _, _)),
-    
-    export_c_func!(AudioFileGetPropertyInfo(_, _, _, _, _)),
-    export_c_func!(AudioFileGetProperty(_, _, _, _, _)),
-    export_c_func!(AudioFileSetProperty(_, _, _, _, _)),
-    
-    export_c_func!(AudioFileCountUserData(_, _, _, _)),
-    export_c_func!(AudioFileGetUserDataSize(_, _, _, _, _)),
-    export_c_func!(AudioFileGetUserDataSize64(_, _, _, _, _)),
-    export_c_func!(AudioFileGetUserData(_, _, _, _, _, _)),
-    export_c_func!(AudioFileGetUserDataAtOffset(_, _, _, _, _, _, _)),
-    export_c_func!(AudioFileSetUserData(_, _, _, _, _, _)),
-    export_c_func!(AudioFileRemoveUserData(_, _, _, _)),
-    
-    export_c_func!(AudioFileGetGlobalInfoSize(_, _, _, _, _)),
-    export_c_func!(AudioFileGetGlobalInfo(_, _, _, _, _, _)),
-    export_c_func!(AudioFileOptimize(_, _)),
-    
-    export_c_func!(AudioFileStreamOpen(_, _, _, _, _, _)),
-    export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _, _)),
+    export_c_func!(AudioFileOpenURL(_, _, _, _)),
+    export_c_func!(AudioFileOpenWithCallbacks(_, _, _, _, _, _, _)),
+    export_c_func!(AudioFileClose(_)),
+
+    export_c_func!(AudioFileReadBytes(_, _, _, _, _)),
+    export_c_func!(AudioFileWriteBytes(_, _, _, _, _)),
+    export_c_func!(AudioFileReadPackets(_, _, _, _, _, _, _)),
+    export_c_func!(AudioFileReadPacketData(_, _, _, _, _, _, _)),
+    export_c_func!(AudioFileWritePackets(_, _, _, _, _, _, _)),
+
+    export_c_func!(AudioFileGetPropertyInfo(_, _, _, _)),
+    export_c_func!(AudioFileGetProperty(_, _, _, _)),
+    export_c_func!(AudioFileSetProperty(_, _, _, _)),
+
+    export_c_func!(AudioFileCountUserData(_, _, _)),
+    export_c_func!(AudioFileGetUserDataSize(_, _, _, _)),
+    export_c_func!(AudioFileGetUserDataSize64(_, _, _, _)),
+    export_c_func!(AudioFileGetUserData(_, _, _, _, _)),
+    export_c_func!(AudioFileGetUserDataAtOffset(_, _, _, _, _, _)),
+    export_c_func!(AudioFileSetUserData(_, _, _, _, _)),
+    export_c_func!(AudioFileRemoveUserData(_, _, _)),
+
+    export_c_func!(AudioFileGetGlobalInfoSize(_, _, _, _)),
+    export_c_func!(AudioFileGetGlobalInfo(_, _, _, _, _)),
+    export_c_func!(AudioFileOptimize(_)),
+
+    export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
+    export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
 ];
 
