@@ -145,6 +145,7 @@ const k3DMixerParam_Distance: AudioUnitParameterID = 2;
 // =========================================================================
 
 fn AudioUnitInitialize(env: &mut Environment, in_unit: AudioUnit) -> OSStatus {
+    log!("AudioUnitInitialize({:?})", in_unit);
     let run_loop = CFRunLoopGetMain(env);
     ns_run_loop::add_audio_unit(env, run_loop, in_unit);
     0
@@ -203,14 +204,39 @@ fn AudioUnitSetProperty(
             kAudioUnitProperty_SetRenderCallback => {
                 let render_callback = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
                 host_object.render_callback = Some(render_callback);
+                let proc_copy = render_callback.input_proc;
+                let ref_con_copy = render_callback.input_proc_ref_con;
+                log!(
+                    "AudioUnitSetProperty(SetRenderCallback) unit={:?} scope={} element={} proc={:?} ref_con={:?}",
+                    in_unit, in_scope, in_element, proc_copy, ref_con_copy
+                );
             }
             kAudioOutputUnitProperty_SetInputCallback => {
                 let cb = env.mem.read::<AURenderCallbackStruct, false>(in_data.cast());
                 host_object.render_callback = Some(cb);
+                let proc_copy = cb.input_proc;
+                let ref_con_copy = cb.input_proc_ref_con;
+                log!(
+                    "AudioUnitSetProperty(SetInputCallback) unit={:?} scope={} element={} proc={:?} ref_con={:?}",
+                    in_unit, in_scope, in_element, proc_copy, ref_con_copy
+                );
             }
             kAudioUnitProperty_StreamFormat => {
                 let stream_format = env.mem.read::<AudioStreamBasicDescription, false>(in_data.cast());
                 log_if_broken_audio_format(&stream_format);
+                let (sf_id, sf_sr, sf_ch, sf_bc, sf_bpf, sf_flags) = (
+                    stream_format.format_id,
+                    stream_format.sample_rate,
+                    stream_format.channels_per_frame,
+                    stream_format.bits_per_channel,
+                    stream_format.bytes_per_frame,
+                    stream_format.format_flags,
+                );
+                log!(
+                    "AudioUnitSetProperty(StreamFormat) unit={:?} scope={} element={} format_id=0x{:x} sr={} ch={} bits={} bpf={} flags=0x{:x}",
+                    in_unit, in_scope, in_element,
+                    sf_id, sf_sr, sf_ch, sf_bc, sf_bpf, sf_flags
+                );
                 match in_scope {
                     kAudioUnitScope_Global => host_object.global_stream_format = stream_format,
                     kAudioUnitScope_Output => host_object.output_stream_format = Some(stream_format),
@@ -410,7 +436,15 @@ fn AudioUnitReset(env: &mut Environment, in_unit: AudioUnit, _s: AudioUnitScope,
 // =========================================================================
 
 fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
-    log!("AudioOutputUnitStart({:?})", ci);
+    let has_callback = audio_components::State::get(&mut env.framework_state)
+        .audio_component_instances
+        .get(&ci)
+        .map(|o| o.render_callback.is_some())
+        .unwrap_or(false);
+    log!(
+        "AudioOutputUnitStart({:?}) render_callback_set={}",
+        ci, has_callback
+    );
     let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
     let mut source: ALuint = 0;
     unsafe {
@@ -472,7 +506,10 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
 
     let (sample_rate, started, is_running, stream_format, has_input_format, al_source, last_render_time, callback) = {
         let at = &mut env.framework_state.audio_toolbox;
-        let Some(obj) = at.audio_components.audio_component_instances.get_mut(&audio_unit) else { return; };
+        let Some(obj) = at.audio_components.audio_component_instances.get_mut(&audio_unit) else {
+            log_once!("render_audio_unit: instance not found");
+            return;
+        };
         (
             obj.input_stream_format.map(|f| f.sample_rate).unwrap_or(at.audio_session.current_hardware_sample_rate),
             obj.started, obj.is_running_handler,
@@ -482,15 +519,41 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         )
     };
 
-    if !started || is_running { return; }
+    if !started {
+        log_once!("render_audio_unit: skipped (started=false)");
+        return;
+    }
+    if is_running {
+        log_once!("render_audio_unit: skipped (already running handler)");
+        return;
+    }
 
     if let Some(obj) = env.framework_state.audio_toolbox.audio_components.audio_component_instances.get_mut(&audio_unit) {
         obj.is_running_handler = true;
     }
 
-    let Some(al_source) = al_source else { return; };
-    let Some(last_render_time) = last_render_time else { return; };
-    let Some(callback) = callback else { return; };
+    let Some(al_source) = al_source else {
+        log_once!("render_audio_unit: skipped (al_source = None)");
+        if let Some(obj) = env.framework_state.audio_toolbox.audio_components.audio_component_instances.get_mut(&audio_unit) {
+            obj.is_running_handler = false;
+        }
+        return;
+    };
+    let Some(last_render_time) = last_render_time else {
+        log_once!("render_audio_unit: skipped (last_render_time = None)");
+        if let Some(obj) = env.framework_state.audio_toolbox.audio_components.audio_component_instances.get_mut(&audio_unit) {
+            obj.is_running_handler = false;
+        }
+        return;
+    };
+    let Some(callback) = callback else {
+        log_once!("render_audio_unit: skipped (render_callback = None)");
+        if let Some(obj) = env.framework_state.audio_toolbox.audio_components.audio_component_instances.get_mut(&audio_unit) {
+            obj.is_running_handler = false;
+        }
+        return;
+    };
+    log_once!("render_audio_unit: entering callback for the first time");
 
     let mut al_buffers = Vec::new();
     {

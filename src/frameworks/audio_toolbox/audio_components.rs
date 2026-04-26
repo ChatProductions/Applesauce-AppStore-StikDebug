@@ -224,6 +224,10 @@ fn AudioComponentInstanceNew(
         
     env.mem.write(out_instance, guest_instance);
 
+    log!(
+        "AudioComponentInstanceNew(component={:?}) -> instance={:?}",
+        in_component, guest_instance
+    );
     0
 }
 
