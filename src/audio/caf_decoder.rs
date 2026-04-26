@@ -28,6 +28,7 @@
 use super::ima4::decode_ima4;
 use super::symphonia_formats::SymphoniaDecodedToPcm;
 use std::io::Cursor;
+use std::panic::AssertUnwindSafe;
 
 /// Decode the contents of a `.caf` file into 16-bit little-endian interleaved
 /// PCM, returning the same in-memory shape that [`SymphoniaDecodedToPcm`]
@@ -41,15 +42,61 @@ use std::io::Cursor;
 /// Anything else (MPEG-4 AAC, MP3, ALAC, …) is returned as `Err(())` so the
 /// caller can fall through to a different decoder.
 pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, ()> {
+    // The `caf` crate `panic!`s in a few corner cases that show up in real
+    // iOS games (notably `to_next_chunk` / `read_chunk_body` on chunks whose
+    // `mChunkSize == -1`, which Apple's CAF spec says is legal for the last
+    // chunk to mean "extends to the end of the file"). Wrap the whole demux
+    // in `catch_unwind` so a panic there is converted into a graceful
+    // fall-through to the next decoder instead of taking the whole emulator
+    // down. We log so we can see *why* it failed in the next bug report.
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| decode_caf_to_pcm_inner(file)));
+    match result {
+        Ok(Ok(pcm)) => Ok(pcm),
+        Ok(Err(why)) => {
+            log!("caf_decoder: refusing this CAF file: {}", why);
+            Err(())
+        }
+        Err(payload) => {
+            let msg = if let Some(s) = payload.downcast_ref::<&'static str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "(non-string panic payload)".to_string()
+            };
+            log!(
+                "caf_decoder: panic from `caf` crate while demuxing CAF: {}",
+                msg
+            );
+            Err(())
+        }
+    }
+}
+
+fn decode_caf_to_pcm_inner(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm, &'static str> {
     use caf::FormatType;
 
-    let mut reader = caf::CafPacketReader::new(file, vec![]).map_err(|_| ())?;
+    let mut reader =
+        caf::CafPacketReader::new(file, vec![]).map_err(|_| "CafPacketReader::new failed")?;
     let desc = reader.audio_desc.clone();
+    log!(
+        "caf_decoder: format_id={:?}, sample_rate={}, channels={}, bytes_per_packet={}, frames_per_packet={}, bits_per_channel={}, format_flags=0x{:x}",
+        desc.format_id,
+        desc.sample_rate,
+        desc.channels_per_frame,
+        desc.bytes_per_packet,
+        desc.frames_per_packet,
+        desc.bits_per_channel,
+        desc.format_flags,
+    );
 
     let sample_rate: u32 = desc.sample_rate.round() as u32;
     let channels: u32 = desc.channels_per_frame;
-    if sample_rate == 0 || channels == 0 {
-        return Err(());
+    if sample_rate == 0 {
+        return Err("sample_rate == 0");
+    }
+    if channels == 0 {
+        return Err("channels == 0");
     }
 
     let mut out_pcm: Vec<u8> = Vec::new();
@@ -71,18 +118,35 @@ pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm,
             {
                 // Not actually a 34-bytes-per-channel packet layout — refuse
                 // rather than producing garbage.
-                return Err(());
+                return Err("IMA4 bytes_per_packet != 34 * channels");
             }
 
             // Greedily collect every CAF packet, then chunk into 34-byte
             // sub-packets and decode in (channel, channel, …) order.
+            //
+            // For PvZ-style CAF files where the Audio Data chunk has
+            // `mChunkSize == -1`, `caf::CafPacketReader::next_packet`
+            // ultimately calls `read_exact` on the underlying cursor and will
+            // return an `UnexpectedEof` `Err` once we walk off the end of the
+            // file. That's the natural termination signal here.
             let mut all_bytes: Vec<u8> = Vec::new();
-            while let Ok(Some(pkt)) = reader.next_packet() {
-                all_bytes.extend_from_slice(&pkt);
+            loop {
+                match reader.next_packet() {
+                    Ok(Some(pkt)) => all_bytes.extend_from_slice(&pkt),
+                    Ok(None) => break,
+                    Err(_) => break,
+                }
             }
+            log!(
+                "caf_decoder: IMA4 collected {} bytes of packet data from CAF",
+                all_bytes.len()
+            );
 
-            if !all_bytes.len().is_multiple_of(sub_packet_bytes) {
-                return Err(());
+            // Trim any tail that doesn't form a complete 34-byte sub-packet.
+            let aligned_len = (all_bytes.len() / sub_packet_bytes) * sub_packet_bytes;
+            all_bytes.truncate(aligned_len);
+            if all_bytes.is_empty() {
+                return Err("IMA4 file had no decodable packet data");
             }
 
             let mut sub_packets = all_bytes.chunks_exact(sub_packet_bytes);
@@ -98,7 +162,7 @@ pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm,
                 2 => {
                     while let Some(left) = sub_packets.next() {
                         let Some(right) = sub_packets.next() else {
-                            return Err(());
+                            break;
                         };
                         let l_pcm: [i16; 64] = decode_ima4(left.try_into().unwrap());
                         let r_pcm: [i16; 64] = decode_ima4(right.try_into().unwrap());
@@ -108,7 +172,7 @@ pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm,
                         }
                     }
                 }
-                _ => return Err(()),
+                _ => return Err("IMA4 with >2 channels is not supported"),
             }
         }
         FormatType::LinearPcm => {
@@ -120,16 +184,21 @@ pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm,
             let is_float = (desc.format_flags & 0b01) != 0;
             let is_little_endian = (desc.format_flags & 0b10) != 0;
             if is_float {
-                return Err(());
+                return Err("LPCM float is not supported by this decoder");
             }
 
             let bits = desc.bits_per_channel;
             if !matches!(bits, 8 | 16 | 24 | 32) {
-                return Err(());
+                return Err("LPCM bits_per_channel must be 8, 16, 24, or 32");
             }
 
             let bytes_per_sample = (bits / 8) as usize;
-            while let Ok(Some(pkt)) = reader.next_packet() {
+            loop {
+                let pkt = match reader.next_packet() {
+                    Ok(Some(pkt)) => pkt,
+                    Ok(None) => break,
+                    Err(_) => break,
+                };
                 for sample in pkt.chunks_exact(bytes_per_sample) {
                     let mut buf = [0u8; 8];
                     buf[..sample.len()].copy_from_slice(sample);
@@ -169,13 +238,19 @@ pub fn decode_caf_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecodedToPcm,
             }
         }
         // Compressed formats other than IMA4 (AAC, MP3, ALAC, …) — leave them
-        // for Symphonia to handle when it eventually grows correct support.
-        _ => return Err(()),
+        // for Symphonia to handle.
+        _ => return Err("format_id is not LPCM or IMA4 — leaving for Symphonia"),
     }
 
     if out_pcm.is_empty() {
-        return Err(());
+        return Err("decoded output is empty");
     }
+    log!(
+        "caf_decoder: produced {} bytes of 16-bit LE PCM ({} Hz, {} ch)",
+        out_pcm.len(),
+        sample_rate,
+        channels
+    );
 
     Ok(SymphoniaDecodedToPcm {
         bytes: out_pcm,
