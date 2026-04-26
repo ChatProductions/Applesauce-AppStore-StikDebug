@@ -560,7 +560,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 
                 if let Ok(mut entries) = env.fs.enumerate(crate::fs::GuestPath::new(parent_str)) {
                     if let Some(real_name) = entries.find(|e| e.to_lowercase() == target_name) {
-                        actual_dir_str = format!("{}/{}", parent_str, real_name).into();
+                        actual_dir_str = format!("{}/{}", parent_str, real_name);
                     }
                 }
             }
@@ -587,12 +587,11 @@ pub const CLASSES: ClassExports = objc_classes! {
                             true
                         }
                     })
-                    .map(|s| s.to_string()) // <--- Добавьте эту строку перед collect()
                     .collect();
 
                 // Добавляем полные пути в итоговый массив
                 for file_name in matched_files {
-                    let ns_file_name = ns_string::from_rust_string(env, file_name);
+                    let ns_file_name = ns_string::from_rust_string(env, &file_name);
                     let full_path: id = msg![env; dir_path stringByAppendingPathComponent:ns_file_name];
                     let _: () = msg![env; array addObject:full_path];
                 }
