@@ -56,8 +56,6 @@ impl State {
 
 struct AudioQueueHostObject {
     format: AudioStreamBasicDescription,
-    offline_format: Option<AudioStreamBasicDescription>, // ДОБАВЛЕНО
-    offline_remainder: Vec<u8>,                          // ДОБАВЛЕНО
     callback_proc: AudioQueueOutputCallback,
     callback_user_data: MutVoidPtr,
     /// Weak reference
@@ -131,7 +129,6 @@ const kAudioQueueErr_InvalidBuffer: OSStatus = -66687;
 const kAudioQueueErr_InvalidPropertySize: OSStatus = -66683;
 const kAudioQueueErr_BufferInQueue: OSStatus = -66679;
 const kAudioQueueErr_InvalidProperty: OSStatus = -66684;
-const kAudioQueueErr_InvalidParameter: OSStatus = -66682;
 
 pub fn AudioQueueNewOutput(
     env: &mut Environment,
@@ -180,8 +177,6 @@ pub fn AudioQueueNewOutput(
 
     let host_object = AudioQueueHostObject {
         format,
-        offline_format: None, // ДОБАВЛЕНО
-        offline_remainder: Vec::new(), // ДОБАВЛЕНО
         callback_proc: in_callback_proc,
         callback_user_data: in_user_data,
         run_loop: in_callback_run_loop,
@@ -715,10 +710,6 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         return;
     }
 
-    if host_object.offline_format.is_some() {
-        return;
-    }
-
     if host_object.al_source.is_none() {
         let volume = host_object.volume.clamp(0.0, 1.0);
         let mut al_source = 0;
@@ -826,10 +817,6 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
-
-    if host_object.offline_format.is_some() {
-        return; 
-    }
 
     let Some(al_source) = host_object.al_source else {
         return;
@@ -988,10 +975,7 @@ pub fn AudioQueueStart(
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
 
-    if host_object.offline_format.is_some() {
-        log_dbg!("AudioQueueStart({:?}) starting in offline mode.", in_aq);
-        host_object.is_running = AudioQueueIsRunning::Running;
-    } else if is_supported_audio_format(&host_object.format) {
+    if is_supported_audio_format(&host_object.format) {
         host_object.is_running = AudioQueueIsRunning::Running;
 
         let al_source = host_object.al_source.unwrap();
@@ -1104,7 +1088,6 @@ fn AudioQueueReset(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
     }
 
     host_object.buffer_queue.clear();
-    host_object.offline_remainder.clear();
 
     0 // success
 }
@@ -1214,8 +1197,6 @@ pub fn AudioQueueNewInput(
 
     let host_object = AudioQueueHostObject {
         format,
-        offline_format: None, // ДОБАВЛЕНО
-        offline_remainder: Vec::new(), // ДОБАВЛЕНО
         callback_proc: in_callback_proc,
         callback_user_data: in_user_data,
         run_loop: in_callback_run_loop,
@@ -1246,116 +1227,6 @@ pub fn AudioQueueNewInput(
     0
 }
 
-pub fn AudioQueueSetOfflineRenderFormat(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    in_format: ConstPtr<AudioStreamBasicDescription>,
-    _in_layout: ConstVoidPtr,
-) -> OSStatus {
-    return_if_null!(in_aq);
-    let state = State::get(&mut env.framework_state);
-    let host_object = match state.audio_queues.get_mut(&in_aq) {
-        Some(obj) => obj,
-        None => return kAudioQueueErr_InvalidParameter,
-    };
-
-    if in_format.is_null() {
-        host_object.offline_format = None;
-        log_dbg!("AudioQueueSetOfflineRenderFormat disabled offline rendering");
-    } else {
-        let format = env.mem.read(in_format);
-        host_object.offline_format = Some(format);
-        log_dbg!("AudioQueueSetOfflineRenderFormat enabled: {:?}", format);
-    }
-    0
-}
-
-pub fn AudioQueueOfflineRender(
-    env: &mut Environment,
-    in_aq: AudioQueueRef,
-    _in_timestamp: ConstPtr<AudioTimeStamp>,
-    io_buffer: AudioQueueBufferRef,
-    in_number_frames: u32,
-) -> OSStatus {
-    return_if_null!(in_aq);
-    
-    let capacity;
-    let mut extracted_bytes = 0;
-    let mut data_to_copy = Vec::new();
-    let mut buffers_to_reuse = Vec::new();
-    let callback_proc;
-    let callback_user_data;
-
-    {
-        let state = State::get(&mut env.framework_state);
-        let host_object = match state.audio_queues.get_mut(&in_aq) {
-            Some(obj) => obj,
-            None => return kAudioQueueErr_InvalidParameter,
-        };
-        
-        callback_proc = host_object.callback_proc;
-        callback_user_data = host_object.callback_user_data;
-
-        let out_buf = env.mem.read(io_buffer);
-        
-        let req_bytes = if in_number_frames > 0 && host_object.offline_format.is_some() {
-            let fmt = host_object.offline_format.as_ref().unwrap();
-            in_number_frames * fmt.bytes_per_frame
-        } else {
-            out_buf.audio_data_bytes_capacity
-        };
-        
-        capacity = out_buf.audio_data_bytes_capacity.min(req_bytes);
-
-        if !host_object.offline_remainder.is_empty() {
-            let take = host_object.offline_remainder.len().min(capacity as usize);
-            data_to_copy.extend(host_object.offline_remainder.drain(..take));
-            extracted_bytes += take as u32;
-        }
-
-        while extracted_bytes < capacity && !host_object.buffer_queue.is_empty() {
-            let next_buffer_ref = host_object.buffer_queue.pop_front().unwrap();
-            let next_buffer = env.mem.read(next_buffer_ref);
-
-            let (_, _, decoded_data) = decode_buffer(
-                &env.mem,
-                &host_object.format,
-                next_buffer.audio_data.cast(),
-                next_buffer.audio_data_byte_size,
-            );
-
-            let needed = capacity - extracted_bytes;
-            if decoded_data.len() as u32 <= needed {
-                data_to_copy.extend(&decoded_data);
-                extracted_bytes += decoded_data.len() as u32;
-            } else {
-                data_to_copy.extend(&decoded_data[..needed as usize]);
-                host_object.offline_remainder.extend(&decoded_data[needed as usize..]);
-                extracted_bytes += needed;
-            }
-
-            buffers_to_reuse.push(next_buffer_ref);
-        }
-    }
-
-    let mut out_buf = env.mem.read(io_buffer);
-    let base_ptr = out_buf.audio_data.cast::<u8>();
-    
-    // БЕЗОПАСНАЯ ПОБАЙТОВАЯ ЗАПИСЬ (компилируется везде)
-    for (i, &byte) in data_to_copy.iter().enumerate() {
-        env.mem.write(base_ptr + (i as u32), byte);
-    }
-    
-    out_buf.audio_data_byte_size = extracted_bytes;
-    env.mem.write(io_buffer, out_buf);
-
-    for buffer_ref in buffers_to_reuse {
-        let () = callback_proc.call_from_host(env, (callback_user_data, in_aq, buffer_ref));
-    }
-
-    0
-}
-
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueNewOutput(_, _, _, _, _, _, _)),
     export_c_func!(AudioQueueGetParameter(_, _, _)),
@@ -1378,9 +1249,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueFreeBuffer(_, _)),
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
-    
-    // Новые функции добавлены с правильным количеством аргументов:
-    export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)), 
-    export_c_func!(AudioQueueOfflineRender(_, _, _, _)),
 ];
 
