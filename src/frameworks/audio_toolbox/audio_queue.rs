@@ -1332,11 +1332,10 @@ pub fn AudioQueueOfflineRender(
     }
 
     let mut out_buf = env.mem.read(io_buffer);
-    let len_to_write = data_to_copy.len() as u32;
     
-    if len_to_write > 0 {
-        let dst_slice = env.mem.mut_bytes_at(out_buf.audio_data.cast(), len_to_write as GuestUSize);
-        dst_slice.copy_from_slice(&data_to_copy);
+    // БЕЗОПАСНАЯ ЗАПИСЬ В ГОСТЕВУЮ ПАМЯТЬ IOS:
+    if !data_to_copy.is_empty() {
+        env.mem.write_bytes(out_buf.audio_data.cast(), &data_to_copy);
     }
     
     out_buf.audio_data_byte_size = extracted_bytes;
