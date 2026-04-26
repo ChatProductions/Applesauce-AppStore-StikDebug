@@ -1332,10 +1332,11 @@ pub fn AudioQueueOfflineRender(
     }
 
     let mut out_buf = env.mem.read(io_buffer);
+    let base_ptr = out_buf.audio_data.cast::<u8>();
     
-    // БЕЗОПАСНАЯ ЗАПИСЬ В ГОСТЕВУЮ ПАМЯТЬ IOS:
-    if !data_to_copy.is_empty() {
-        env.mem.write_bytes(out_buf.audio_data.cast(), &data_to_copy);
+    // БЕЗОПАСНАЯ ПОБАЙТОВАЯ ЗАПИСЬ (универсальный метод для touchHLE):
+    for (i, &byte) in data_to_copy.iter().enumerate() {
+        env.mem.write(base_ptr + (i as u32), byte);
     }
     
     out_buf.audio_data_byte_size = extracted_bytes;
