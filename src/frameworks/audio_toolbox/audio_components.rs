@@ -45,6 +45,9 @@ pub struct MixerBusState {
     pub position: [f32; 3], // X, Y, Z
     pub volume: f32,
     pub distance_params: MixerDistanceParams,
+    pub render_callback: Option<AURenderCallbackStruct>,
+    pub stream_format: Option<AudioStreamBasicDescription>,
+    pub last_render_time: Option<Instant>,
 }
 
 impl Default for MixerBusState {
@@ -58,6 +61,9 @@ impl Default for MixerBusState {
                 maximum_distance: 100000.0,
                 rolloff_factor: 1.0,
             },
+            render_callback: None,
+            stream_format: None,
+            last_render_time: None,
         }
     }
 }
@@ -229,6 +235,20 @@ fn AudioComponentInstanceNew(
         in_component, guest_instance
     );
     0
+}
+
+/// Создать AudioUnit instance напрямую (используется из `au_graph::AUGraphOpen`),
+/// минуя обычный путь `AudioComponentInstanceNew`.
+pub fn create_audio_unit_instance(env: &mut Environment) -> AudioComponentInstance {
+    let mut host_object = AudioComponentInstanceHostObject::default();
+    host_object.is_3d_mixer = true;
+    let guest_instance: AudioComponentInstance = env
+        .mem
+        .alloc_and_write(OpaqueAudioComponentInstance { _pad: 0 });
+    State::get(&mut env.framework_state)
+        .audio_component_instances
+        .insert(guest_instance, host_object);
+    guest_instance
 }
 
 fn AudioComponentInstanceDispose(
