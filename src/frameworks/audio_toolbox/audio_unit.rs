@@ -410,6 +410,7 @@ fn AudioUnitReset(env: &mut Environment, in_unit: AudioUnit, _s: AudioUnitScope,
 // =========================================================================
 
 fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
+    log!("AudioOutputUnitStart({:?})", ci);
     let context = env.framework_state.audio_toolbox.make_al_context_current(&mut env.openal_manager);
     let mut source: ALuint = 0;
     unsafe {

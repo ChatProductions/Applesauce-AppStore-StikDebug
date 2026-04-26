@@ -195,6 +195,10 @@ fn AudioComponentFindNext(
             env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
     }
 
+    log!(
+        "AudioComponentFindNext: matched type=0x{:08x} sub_type=0x{:08x} manuf=0x{:08x} -> {:?}",
+        comp_type, comp_sub_type, comp_manufacturer, state.audio_component
+    );
     state.audio_component
 }
 
