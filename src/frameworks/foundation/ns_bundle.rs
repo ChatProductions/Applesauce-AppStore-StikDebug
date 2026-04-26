@@ -543,36 +543,43 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     let array: id = msg_class![env; NSMutableArray array];
-    // Теперь честно читаем директорию
-    match env.fs.enumerate(crate::fs::GuestPath::new(&actual_dir_str)) {
-        Ok(entries) => {
-            let target_ext = ext_str.as_ref().map(|s| s.to_lowercase());
-            // Собираем имена в вектор, чтобы освободить заимствование env.fs
-            let matched_files: Vec<String> = entries
-                .filter(|entry| {
-                    if let Some(t_ext) = &target_ext {
-                        let entry_ext = std::path::Path::new(entry)
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .map(|s| s.to_lowercase());
-                        entry_ext.as_ref() == Some(t_ext)
-                    } else {
-                        // Если расширение не указано (nil или пустое), возвращаем все файлы
-                        true
-                    }
-                })
-                .map(|s| s.to_string()).collect();
-            // Добавляем полные пути в итоговый массив
-            for file_name in matched_files {
-                let ns_file_name = ns_string::from_rust_string(env, file_name);
-                let full_path: id = msg![env; dir_path stringByAppendingPathComponent:ns_file_name];
-                let _: () = msg![env; array addObject:full_path];
+    
+    // Собираем имена файлов в вектор в отдельном блоке,
+    // чтобы заимствование env.fs освободилось до вызовов msg! / from_rust_string
+    let matched_files: Vec<String> = {
+        let target_ext = ext_str.as_ref().map(|s| s.to_lowercase());
+        match env.fs.enumerate(crate::fs::GuestPath::new(&actual_dir_str)) {
+            Ok(entries) => {
+                entries
+                    .filter(|entry| {
+                        if let Some(t_ext) = &target_ext {
+                            let entry_ext = std::path::Path::new(entry)
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .map(|s| s.to_lowercase());
+                            entry_ext.as_ref() == Some(t_ext)
+                        } else {
+                            // Если расширение не указано (nil или пустое), возвращаем все файлы
+                            true
+                        }
+                    })
+                    .map(|s| s.to_string())
+                    .collect()
+            }
+            Err(e) => {
+                log_dbg!("Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?} (error: {:?})", actual_dir_str, e);
+                Vec::new()
             }
         }
-        Err(e) => {
-            log_dbg!("Warning: pathsForResourcesOfType:inDirectory: could not read directory {:?} (error: {:?})", actual_dir_str, e);
-        }
+    };
+    
+    // Теперь env.fs не заимствован — можно безопасно использовать env
+    for file_name in matched_files {
+        let ns_file_name = ns_string::from_rust_string(env, file_name);
+        let full_path: id = msg![env; dir_path stringByAppendingPathComponent:ns_file_name];
+        let _: () = msg![env; array addObject:full_path];
     }
+    
     array
 }
 
