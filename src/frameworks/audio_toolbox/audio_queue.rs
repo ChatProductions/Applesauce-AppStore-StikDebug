@@ -790,7 +790,6 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         return;
     }
 
-    // Если включен offline рендеринг, не загружаем данные в OpenAL
     if host_object.offline_format.is_some() {
         return;
     }
@@ -898,7 +897,6 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
 
-    // Если включен offline рендеринг, мы не управляем OpenAL
     if host_object.offline_format.is_some() {
         return; 
     }
@@ -1157,7 +1155,6 @@ fn AudioQueueReset(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
 
 fn AudioQueueFlush(_env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
     return_if_null!(in_aq);
-    // TODO
     0 // success
 }
 
@@ -1248,7 +1245,6 @@ pub fn AudioQueueGetCurrentTime(
     0
 }
 
-[span_0](start_span)// РЕАЛИЗАЦИЯ: AudioQueueSetOfflineRenderFormat[span_0](end_span)
 pub fn AudioQueueSetOfflineRenderFormat(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -1270,7 +1266,6 @@ pub fn AudioQueueSetOfflineRenderFormat(
     0 // success
 }
 
-[span_1](start_span)// РЕАЛИЗАЦИЯ: AudioQueueOfflineRender[span_1](end_span)
 pub fn AudioQueueOfflineRender(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -1296,7 +1291,6 @@ pub fn AudioQueueOfflineRender(
 
         let out_buf = env.mem.read(io_buffer);
         
-        // Считаем сколько байтов запрашивает игра
         let req_bytes = if in_number_frames > 0 && host_object.offline_format.is_some() {
             let fmt = host_object.offline_format.as_ref().unwrap();
             in_number_frames * fmt.bytes_per_frame
@@ -1306,19 +1300,16 @@ pub fn AudioQueueOfflineRender(
         
         capacity = out_buf.audio_data_bytes_capacity.min(req_bytes);
 
-        // 1. Берем остатки с прошлого запроса (если они есть)
         if !host_object.offline_remainder.is_empty() {
             let take = host_object.offline_remainder.len().min(capacity as usize);
             data_to_copy.extend(host_object.offline_remainder.drain(..take));
             extracted_bytes += take as u32;
         }
 
-        // 2. Декодируем буферы из очереди пока не заполним емкость
         while extracted_bytes < capacity && !host_object.buffer_queue.is_empty() {
             let next_buffer_ref = host_object.buffer_queue.pop_front().unwrap();
             let next_buffer = env.mem.read(next_buffer_ref);
 
-            // Используем стандартный парсер touchHLE для получения сырого PCM-звука
             let (_, _, decoded_data) = decode_buffer(
                 &env.mem,
                 &host_object.format,
@@ -1340,19 +1331,17 @@ pub fn AudioQueueOfflineRender(
         }
     }
 
-    // Записываем данные в память гостевого iOS-приложения
     let mut out_buf = env.mem.read(io_buffer);
-    let len_to_write = data_to_copy.len();
+    let len_to_write = data_to_copy.len() as u32;
     
     if len_to_write > 0 {
-        let dst_slice = env.mem.mut_bytes_at(out_buf.audio_data.cast(), len_to_write);
+        let dst_slice = env.mem.mut_bytes_at(out_buf.audio_data.cast(), len_to_write as GuestUSize);
         dst_slice.copy_from_slice(&data_to_copy);
     }
     
     out_buf.audio_data_byte_size = extracted_bytes;
     env.mem.write(io_buffer, out_buf);
 
-    // Вызываем коллбеки: сообщаем игре, что старые буферы можно заполнять по новой
     for buffer_ref in buffers_to_reuse {
         let () = callback_proc.call_from_host(env, (callback_user_data, in_aq, buffer_ref));
     }
@@ -1386,8 +1375,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueGetCurrentTime(_, _, _, _)),
     
-    // Внимание: Здесь количество нижних подчеркиваний строго соответствует количеству гостевых аргументов из C API!
-    export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)), // 3 аргумента
-    export_c_func!(AudioQueueOfflineRender(_, _, _, _)),       // 4 аргумента
+    export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)),
+    export_c_func!(AudioQueueOfflineRender(_, _, _, _)),
 ];
 
