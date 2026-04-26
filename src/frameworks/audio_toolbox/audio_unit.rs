@@ -170,8 +170,12 @@ fn AudioUnitSetProperty(
     in_scope: AudioUnitScope,
     in_element: AudioUnitElement,
     in_data: ConstVoidPtr,
-    _in_data_size: u32,
+    in_data_size: u32,
 ) -> OSStatus {
+    log!(
+        "AudioUnitSetProperty(unit={:?}, prop={}, scope={}, element={}, data={:?}, size={})",
+        in_unit, in_id, in_scope, in_element, in_data, in_data_size
+    );
     let mut update_al_distance = None;
 
     // Ограничиваем область видимости заимствования
@@ -263,15 +267,28 @@ fn AudioUnitSetProperty(
                 host_object.maximum_frames_per_slice = frames;
             }
             kAudioUnitProperty_MakeConnection => {
-                let _conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
+                let conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
+                let src_unit = conn.source_audio_unit;
+                let src_out = conn.source_output_number;
+                let dst_in = conn.dest_input_number;
+                log!(
+                    "AudioUnitSetProperty(MakeConnection) dest_unit={:?} dest_input={} src_unit={:?} src_output={}",
+                    in_unit, dst_in, src_unit, src_out
+                );
             }
             kAudioOutputUnitProperty_EnableIO => {
                 // Из оригинала: Ввод/Вывод включен по умолчанию. Игнорируем или возвращаем успех.
                 let enabled = env.mem.read::<u32, false>(in_data.cast());
-                log_dbg!("AudioUnitSetProperty EnableIO: {}", enabled);
+                log!(
+                    "AudioUnitSetProperty(EnableIO) unit={:?} scope={} element={} enabled={}",
+                    in_unit, in_scope, in_element, enabled
+                );
             }
             _ => {
-                log_dbg!("AudioUnitSetProperty: свойство {} проигнорировано", in_id);
+                log!(
+                    "AudioUnitSetProperty: UNHANDLED property {} (unit={:?}, scope={}, element={}, size={})",
+                    in_id, in_unit, in_scope, in_element, in_data_size
+                );
             }
         }
     } // Конец заимствования host_object и env.framework_state
@@ -298,10 +315,14 @@ fn AudioUnitGetProperty(
     in_unit: AudioUnit,
     in_id: AudioUnitPropertyID,
     in_scope: AudioUnitScope,
-    _in_element: AudioUnitElement,
+    in_element: AudioUnitElement,
     out_data: MutVoidPtr,
     io_data_size: MutPtr<u32>,
 ) -> OSStatus {
+    log!(
+        "AudioUnitGetProperty(unit={:?}, prop={}, scope={}, element={})",
+        in_unit, in_id, in_scope, in_element
+    );
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
         .get_mut(&in_unit)
@@ -336,7 +357,13 @@ fn AudioUnitGetProperty(
             env.mem.write(out_data.cast(), running);
             env.mem.write(io_data_size, guest_size_of::<u32>());
         }
-        _ => return -1,
+        _ => {
+            log!(
+                "AudioUnitGetProperty: UNHANDLED property {} (unit={:?}, scope={}, element={})",
+                in_id, in_unit, in_scope, in_element
+            );
+            return -1;
+        }
     }
     0
 }
@@ -370,11 +397,15 @@ fn AudioUnitSetParameter(
     env: &mut Environment,
     in_unit: AudioUnit,
     in_id: AudioUnitParameterID,
-    _in_scope: AudioUnitScope,
+    in_scope: AudioUnitScope,
     in_element: AudioUnitElement,
     in_value: AudioUnitParameterValue,
     _in_offset: u32,
 ) -> OSStatus {
+    log!(
+        "AudioUnitSetParameter(unit={:?}, param={}, scope={}, element={}, value={})",
+        in_unit, in_id, in_scope, in_element, in_value
+    );
     let mut update_al_pos = None;
 
     // Ограничиваем область видимости заимствования
@@ -420,12 +451,16 @@ fn AudioUnitSetParameter(
 
 fn AudioUnitGetParameter(
     env: &mut Environment,
-    _in_unit: AudioUnit,
-    _in_id: AudioUnitParameterID,
-    _in_scope: AudioUnitScope,
-    _in_element: AudioUnitElement,
+    in_unit: AudioUnit,
+    in_id: AudioUnitParameterID,
+    in_scope: AudioUnitScope,
+    in_element: AudioUnitElement,
     out_value: MutPtr<AudioUnitParameterValue>,
 ) -> OSStatus {
+    log!(
+        "AudioUnitGetParameter(unit={:?}, param={}, scope={}, element={})",
+        in_unit, in_id, in_scope, in_element
+    );
     if !out_value.is_null() {
         env.mem.write(out_value, 1.0);
     }
@@ -561,8 +596,20 @@ fn AudioOutputUnitStop(env: &mut Environment, ci: AudioUnit) -> OSStatus {
 // MARK: - Рендеринг (Render)
 // =========================================================================
 
-fn AudioUnitAddRenderNotify(_e: &mut Environment, _u: AudioUnit, _p: ConstVoidPtr, _r: ConstVoidPtr) -> OSStatus { 0 }
-fn AudioUnitRemoveRenderNotify(_e: &mut Environment, _u: AudioUnit, _p: ConstVoidPtr, _r: ConstVoidPtr) -> OSStatus { 0 }
+fn AudioUnitAddRenderNotify(_e: &mut Environment, u: AudioUnit, p: ConstVoidPtr, r: ConstVoidPtr) -> OSStatus {
+    log!(
+        "AudioUnitAddRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
+        u, p, r
+    );
+    0
+}
+fn AudioUnitRemoveRenderNotify(_e: &mut Environment, u: AudioUnit, p: ConstVoidPtr, r: ConstVoidPtr) -> OSStatus {
+    log!(
+        "AudioUnitRemoveRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
+        u, p, r
+    );
+    0
+}
 
 fn AudioUnitRender(env: &mut Environment, in_unit: AudioUnit, _f: MutPtr<u32>, _t: ConstVoidPtr, _b: u32, _n: u32, _d: MutVoidPtr) -> OSStatus {
     render_audio_unit(env, in_unit);

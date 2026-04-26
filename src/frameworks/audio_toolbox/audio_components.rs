@@ -255,15 +255,16 @@ fn AudioComponentInstanceDispose(
     env: &mut Environment,
     in_instance: AudioComponentInstance,
 ) -> OSStatus {
+    log!("AudioComponentInstanceDispose({:?})", in_instance);
     if in_instance.is_null() {
         return paramErr;
     }
-    
+
     State::get(&mut env.framework_state)
         .audio_component_instances
         .remove(&in_instance);
     env.mem.free(in_instance.cast());
-    
+
     0
 }
 
