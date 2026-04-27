@@ -58,7 +58,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         host_object.ns_timer = ns_timer;
     }
     
-    log_dbg!("[CADisplayLink displayLinkWithTarget:{:?} selector:{}] => {:?}", target, sel.as_str(&env.mem), display_link);
+    log!("[CADisplayLink displayLinkWithTarget:{:?} selector:{}] => {:?}", target, sel.as_str(&env.mem), display_link);
     autorelease(env, display_link)
 }
 
@@ -124,7 +124,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())addToRunLoop:(id)run_loop forMode:(NSRunLoopMode)mode {
-    log_dbg!("[(CADisplayLink*){:?} addToRunLoop:{:?} forMode:{:?}]", this, run_loop, mode);
+    log!("[(CADisplayLink*){:?} addToRunLoop:{:?} forMode:{:?}]", this, run_loop, mode);
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
     if ns_timer != nil {
         () = msg![env; run_loop addTimer:ns_timer forMode:mode];
