@@ -640,6 +640,16 @@ fn __udivsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
     }
 }
 
+// __umodsi3: unsigned int % unsigned int
+fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        log!("Warning: __umodsi3 modulo by zero!");
+        0
+    } else {
+        a % b
+    }
+}
+
 // Честная реализация C++ Singleton<TimerManager>::getInstance()
 fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
     // Проверяем, создавали ли мы уже этот объект
@@ -784,5 +794,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__divdi3(_, _)),  // <--- 2 подчеркивания
     export_c_func!(__moddi3(_, _)),  // <--- 2 подчеркивания
     export_c_func!(__udivsi3(_, _)),
+    export_c_func!(__umodsi3(_, _)),
     export_c_func!(_ZN9SingletonI12TimerManagerE11getInstanceEv()),
 ];
