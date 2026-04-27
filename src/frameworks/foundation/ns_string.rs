@@ -1177,6 +1177,43 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, ns);
 }
 
+- (NSUInteger)replaceOccurrencesOfString:(id)target
+                              withString:(id)replacement
+                                 options:(NSStringCompareOptions)options
+                                   range:(NSRange)search_range {
+    if target == nil || replacement == nil {
+        return 0;
+    }
+    let target_len: NSUInteger = msg![env; target length];
+    if target_len == 0 {
+        return 0;
+    }
+    let replacement_len: NSUInteger = msg![env; replacement length];
+    let mut count: NSUInteger = 0;
+    let mut pos = search_range.location;
+    let mut end = search_range.location + search_range.length;
+
+    loop {
+        if pos > end || end.saturating_sub(pos) < target_len {
+            break;
+        }
+        let remaining = NSRange { location: pos, length: end - pos };
+        let found: NSRange = msg![env; this rangeOfString:target
+                                                  options:options
+                                                    range:remaining];
+        if found.location == NSNotFound as NSUInteger {
+            break;
+        }
+        let found_loc = found.location;
+        () = msg![env; this replaceCharactersInRange:found withString:replacement];
+        count += 1;
+        pos = found_loc + replacement_len;
+        // Adjust end for the length difference
+        end = end - target_len + replacement_len;
+    }
+    count
+}
+
 @end
 
 @implementation _touchHLE_NSString: NSString
@@ -1235,6 +1272,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
     *env.objc.borrow_mut(this) = host_object;
     this
+}
+
+- (id)initWithBytesNoCopy:(MutPtr<u8>)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)_free {
+    msg![env; this initWithBytes:(bytes.cast_const()) length:len encoding:encoding]
 }
 
 - (id)initWithCharacters:(ConstPtr<unichar>)characters length:(NSUInteger)len {
@@ -1602,6 +1646,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
     *env.objc.borrow_mut(this) = host_object;
     this
+}
+
+- (id)initWithBytesNoCopy:(MutPtr<u8>)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)_free {
+    msg![env; this initWithBytes:(bytes.cast_const()) length:len encoding:encoding]
 }
 
 - (id)initWithFormat:(id)format, ...args {
