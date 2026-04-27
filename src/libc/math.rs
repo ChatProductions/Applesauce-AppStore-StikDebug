@@ -20,6 +20,7 @@ const FE_TOWARDZERO: FERoundingDirection = 0xc00000;
 #[derive(Default)]
 pub struct State {
     rounding_direction: FERoundingDirection,
+    timer_manager_instance: u32,
 }
 
 // The sections in this file are organized to match the C standard.
@@ -626,6 +627,23 @@ fn ___moddi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
     }
 }
 
+// Честная реализация C++ Singleton<TimerManager>::getInstance()
+fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
+    // Проверяем, создавали ли мы уже этот объект
+    if env.libc_state.math.timer_manager_instance == 0 {
+        // Выделяем память под объект TimerManager (1024 байта с запасом).
+        // Используем calloc, чтобы вся память была заполнена нулями — 
+        // это предотвратит краш, если игра попытается прочитать внутренние поля класса.
+        let ptr = env.mem.calloc(1024);
+        env.libc_state.math.timer_manager_instance = ptr.to_bits();
+        
+        log_dbg!("Allocated TimerManager singleton at {:#x}", ptr.to_bits());
+    }
+    
+    // Возвращаем один и тот же валидный указатель при каждом вызове
+    env.libc_state.math.timer_manager_instance
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(abs(_)),
     export_c_func!(fabs(_)),
@@ -752,5 +770,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(___umoddi3(_, _)),
     export_c_func!(___divdi3(_, _)),
     export_c_func!(___moddi3(_, _)),
+    export_c_func!(_ZN9SingletonI12TimerManagerE11getInstanceEv()),
 ];
 
