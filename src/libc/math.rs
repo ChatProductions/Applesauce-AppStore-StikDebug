@@ -748,9 +748,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(hypot(_, _)),
     export_c_func!(hypotf(_, _)),
     export_c_func!(__fpclassifyf(_)),
-    export_c_func!(___udivdi3(_, _, _)),
-    export_c_func!(___umoddi3(_, _, _)),
-    export_c_func!(___divdi3(_, _, _)),
-    export_c_func!(___moddi3(_, _, _)),
+    export_c_func!(___udivdi3(_, _)),
+    export_c_func!(___umoddi3(_, _)),
+    export_c_func!(___divdi3(_, _)),
+    export_c_func!(___moddi3(_, _)),
 ];
 
