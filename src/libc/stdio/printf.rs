@@ -211,24 +211,31 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Integer specifiers
             b'c' => {
                 assert!(!prepend_sign);
-                // TODO: support length modifier
-                assert!(length_modifier.is_none());
-                let c: u8 = args.next(env);
-                assert!(pad_char == ' ' && pad_width == 0);
-                // TODO
-                res.push(c);
+                
+                // Если передали %lc, обрабатываем как широкий символ (аналог %C)
+                if length_modifier == Some("l") {
+                    let c: wchar_t = args.next(env);
+                    // Безопасно парсим, если символ кривой - ставим '?' вместо краша
+                    let ch = char::from_u32(c as u32).unwrap_or('?');
+                    write!(&mut res, "{ch}").unwrap();
+                } else {
+                    let c: u8 = args.next(env);
+                    assert!(pad_char == ' ' && pad_width == 0);
+                    // TODO
+                    res.push(c);
+                }
             }
             // Apple extension?
             // Seemingly works in both NSLog and printf.
+                        // Apple extension?
+            // Seemingly works in both NSLog and printf.
             b'C' => {
                 assert!(!prepend_sign);
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 let c: unichar = args.next(env);
-                // TODO
                 assert!(pad_char == ' ' && pad_width == 0);
-                // This will panic if it's a surrogate! This isn't good if
-                // targeting UTF-16 ([NSString stringWithFormat:] etc).
-                let c = char::from_u32(c.into()).unwrap();
+                // Заменяем .unwrap() на .unwrap_or('?'), чтобы не было паники на невалидном UTF-16!
+                let c = char::from_u32(c.into()).unwrap_or('?');
                 write!(&mut res, "{c}").unwrap();
             }
             b's' => {
@@ -262,8 +269,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'S' => {
                 assert!(!prepend_sign);
-                // TODO: support length modifier
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 // TODO: support other locales
                 let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
                 assert_eq!(env.mem.read(ctype_locale), b'C');
@@ -310,7 +316,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'@' if NS_LOG => {
                 assert!(!prepend_sign);
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 let object: id = args.next(env);
                 // TODO: use localized description if available?
                 let description: id = msg![env; object description];
@@ -454,7 +460,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'p' => {
                 assert!(!prepend_sign);
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 let ptr: MutVoidPtr = args.next(env);
                 // '%p' is implementation defined,
                 // but this matches iOS simulator output
@@ -1338,7 +1344,7 @@ where
             }
             b'[' => {
                 assert_eq!(max_width, 0);
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 // [set] case
                 assert_ne!(env.mem.read(format + format_char_idx), b']');
                 let mut c: u8;
@@ -1451,7 +1457,7 @@ where
             }
             b's' => {
                 assert_eq!(max_width, 0);
-                assert!(length_modifier.is_none());
+                // Убрали assert!(length_modifier.is_none());
                 let mut dst_ptr: Option<MutPtr<u8>> = if !suppress_assignment {
                     Some(args.next(env))
                 } else {
