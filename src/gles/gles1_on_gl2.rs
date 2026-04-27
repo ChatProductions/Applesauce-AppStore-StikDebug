@@ -688,22 +688,30 @@ impl GLES for GLES1OnGL2<'_> {
             log_dbg!("Tolerating glEnable({:#x}) of client state", cap);
         } else if cap == gl21::PERSPECTIVE_CORRECTION_HINT
             || cap == gl21::SMOOTH
+            || cap == gl21::FLAT
             || cap == gl21::BLEND_EQUATION
             || cap == gl21::TEXTURE
         {
             log_dbg!("Tolerating glEnable({:#x})", cap);
-        } else {
-            assert!(
-                CAPABILITIES.contains(&cap),
-                "Unexpected capability for glEnable({cap:#x})"
-            );
+            // Don't forward shading-model / hint enums to gl21::Enable —
+            // they're not valid capabilities and would set GL_INVALID_ENUM.
+            return;
+        } else if !CAPABILITIES.contains(&cap) {
+            // Per the GLES 1.1 spec, invalid caps set GL_INVALID_ENUM but
+            // must not crash. Apple's driver silently ignores unknown caps,
+            // and at least Farm Frenzy passes GL_FLAT (0x1D00) here.
+            log!("Warning: Tolerating glEnable({:#x}) of unrecognized capability", cap);
+            return;
         }
         gl21::Enable(cap);
     }
     unsafe fn IsEnabled(&mut self, cap: GLenum) -> GLboolean {
-        assert!(
-            CAPABILITIES.contains(&cap) || ARRAYS.iter().any(|&ArrayInfo { name, .. }| name == cap)
-        );
+        if !(CAPABILITIES.contains(&cap)
+            || ARRAYS.iter().any(|&ArrayInfo { name, .. }| name == cap))
+        {
+            log!("Warning: glIsEnabled({:#x}) of unrecognized capability, returning false", cap);
+            return gl21::FALSE;
+        }
         gl21::IsEnabled(cap)
     }
     unsafe fn Disable(&mut self, cap: GLenum) {
@@ -716,7 +724,8 @@ impl GLES for GLES1OnGL2<'_> {
         } else if GET_PARAMS.contains(cap) || UNSUPPORTED_GET_PARAMS.contains(cap) {
             log_dbg!("Tolerating glDisable({:#x}) of parameter", cap);
         } else {
-            panic!("Unexpected glDisable({cap:#x})");
+            log!("Warning: Tolerating glDisable({:#x}) of unrecognized capability", cap);
+            return;
         }
         gl21::Disable(cap);
     }

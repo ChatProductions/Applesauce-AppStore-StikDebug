@@ -799,6 +799,45 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, res)
 }
 
+// Apple: Returns a new string formed from the receiver by either removing
+// characters from the end, or by appending as many occurrences as necessary
+// of a given pad string starting at a given index.
+// https://developer.apple.com/documentation/foundation/nsstring/1416085-stringbypaddingtolength
+- (id)stringByPaddingToLength:(NSUInteger)new_length
+                   withString:(id)pad_string
+              startingAtIndex:(NSUInteger)pad_index {
+    let current_length: NSUInteger = msg![env; this length];
+    if new_length <= current_length {
+        return msg![env; this substringToIndex:new_length];
+    }
+    if pad_string == nil {
+        // Apple raises NSInvalidArgumentException; soft-fail to original.
+        log!("Warning: [NSString stringByPaddingToLength:withString:nil startingAtIndex:] called.");
+        let copy: id = msg![env; this copy];
+        return autorelease(env, copy);
+    }
+    let pad_length: NSUInteger = msg![env; pad_string length];
+    if pad_length == 0 {
+        // Apple raises NSInvalidArgumentException for empty pad string.
+        log!("Warning: [NSString stringByPaddingToLength:withString:@\"\" startingAtIndex:] called.");
+        let copy: id = msg![env; this copy];
+        return autorelease(env, copy);
+    }
+    let safe_pad_index = pad_index % pad_length;
+    let mut res_utf16: Utf16String = Vec::with_capacity(new_length as usize);
+    for_each_code_unit(env, this, |_idx, c| { res_utf16.push(c); });
+    let mut cursor = safe_pad_index;
+    while (res_utf16.len() as NSUInteger) < new_length {
+        let c: u16 = msg![env; pad_string characterAtIndex:cursor];
+        res_utf16.push(c);
+        cursor += 1;
+        if cursor >= pad_length { cursor = 0; }
+    }
+    let res = msg_class![env; _touchHLE_NSString alloc];
+    *env.objc.borrow_mut(res) = StringHostObject::Utf16(res_utf16);
+    autorelease(env, res)
+}
+
 - (id)stringByTrimmingCharactersInSet:(id)set {
     let initial_length: NSUInteger = msg![env; this length];
     let mut res_start: NSUInteger = 0;
