@@ -584,6 +584,48 @@ fn __fpclassifyf(_env: &mut Environment, arg: f32) -> GuestFPCategory {
     }
 }
 
+// Честные 64-битные целочисленные операции (Compiler Intrinsics)
+
+// ___udivdi3: unsigned long long / unsigned long long
+fn ___udivdi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        log!("Warning: ___udivdi3 division by zero!");
+        0
+    } else {
+        a / b
+    }
+}
+
+// ___umoddi3: unsigned long long % unsigned long long
+fn ___umoddi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        log!("Warning: ___umoddi3 modulo by zero!");
+        0
+    } else {
+        a % b
+    }
+}
+
+// ___divdi3: signed long long / signed long long
+fn ___divdi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
+    if b == 0 {
+        log!("Warning: ___divdi3 division by zero!");
+        0
+    } else {
+        a / b
+    }
+}
+
+// ___moddi3: signed long long % signed long long
+fn ___moddi3(_env: &mut Environment, a: i64, b: i64) -> i64 {
+    if b == 0 {
+        log!("Warning: ___moddi3 modulo by zero!");
+        0
+    } else {
+        a % b
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(abs(_)),
     export_c_func!(fabs(_)),
@@ -706,5 +748,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(hypot(_, _)),
     export_c_func!(hypotf(_, _)),
     export_c_func!(__fpclassifyf(_)),
+    export_c_func!(___udivdi3(_, _, _)),
+    export_c_func!(___umoddi3(_, _, _)),
+    export_c_func!(___divdi3(_, _, _)),
+    export_c_func!(___moddi3(_, _, _)),
 ];
 
