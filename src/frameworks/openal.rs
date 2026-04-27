@@ -412,14 +412,32 @@ fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
     let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&param) {
         str
     } else {
-        // Эти значения извлечены из iPhone 3GS, iOS 4.0.1
-        // (такие же значения были замечены в симуляторе iPhone)
+        // Strings extracted from iPhone 3GS, iOS 4.0.1 (also matches the iPhone
+        // simulator). Per the OpenAL 1.1 specification, alGetString must also
+        // return human-readable strings for the AL error tokens, otherwise apps
+        // that call it from their error-logging path (Farm Frenzy does this on
+        // every alSourcePlay failure) crash the emulator.
+        // See: https://www.openal.org/documentation/openal-1.1-specification.pdf §6.3.5
         let s: &[u8] = match param {
             AL_VENDOR => b"Apple Inc.",
             AL_VERSION => b"1.1",
             AL_RENDERER => b"Software",
             AL_EXTENSIONS => b"AL_EXT_OFFSET AL_EXT_LINEAR_DISTANCE AL_EXT_EXPONENT_DISTANCE AL_EXT_STATIC_BUFFER",
-            _ => unreachable!()
+            // AL error codes — values from <AL/al.h>.
+            0x0000 /* AL_NO_ERROR */         => b"No Error",
+            0xA001 /* AL_INVALID_NAME */     => b"Invalid Name",
+            0xA002 /* AL_INVALID_ENUM */     => b"Invalid Enum",
+            0xA003 /* AL_INVALID_VALUE */    => b"Invalid Value",
+            0xA004 /* AL_INVALID_OPERATION */=> b"Invalid Operation",
+            0xA005 /* AL_OUT_OF_MEMORY */    => b"Out of Memory",
+            other => {
+                log!(
+                    "Warning: alGetString({:#x}) called with unknown enum, \
+                     returning empty string",
+                    other
+                );
+                b""
+            }
         };
         let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
         env.framework_state
@@ -874,21 +892,43 @@ fn alSpeedOfSound(env: &mut Environment, value: ALfloat) {
 // Примечание: По некоторым причинам Wolf3d регистрирует много функций OpenAL,
 // но фактически использует лишь несколько. Чтобы обойти это, мы просто предоставляем заглушки.
 
+// The following functions used to `todo!()` (i.e. panic) — that is wrong
+// behaviour for emulator-facing APIs. Per OpenAL 1.1 spec, querying with an
+// unsupported enum should set AL_INVALID_ENUM and return a zero/empty value;
+// it must not abort the program. Apps such as Farm Frenzy call these from
+// regular gameplay code paths and crash the emulator on what should be a
+// soft failure.
+
 fn alcGetEnumValue(
     _env: &mut Environment,
     _device: MutPtr<GuestALCdevice>,
-    _enumName: ConstPtr<u8>,
+    enum_name: ConstPtr<u8>,
 ) -> ALenum {
-    todo!();
+    log!(
+        "Warning: alcGetEnumValue({:?}) is a stub, returning 0",
+        enum_name
+    );
+    0
 }
 fn alcGetIntegerv(
-    _env: &mut Environment,
+    env: &mut Environment,
     _device: MutPtr<GuestALCdevice>,
-    _param: ALenum,
-    _size: ALCsizei,
-    _values: MutPtr<ALCint>,
+    param: ALenum,
+    size: ALCsizei,
+    values: MutPtr<ALCint>,
 ) {
-    todo!();
+    log!(
+        "Warning: alcGetIntegerv({:#x}, size={}) is a stub, zero-filling",
+        param,
+        size
+    );
+    if !values.is_null() && size > 0 {
+        let n = size as u32;
+        let dst = env.mem.bytes_at_mut(values.cast(), n * 4);
+        for b in dst.iter_mut() {
+            *b = 0;
+        }
+    }
 }
 fn alcIsExtensionPresent(
     _env: &mut Environment,
@@ -897,53 +937,99 @@ fn alcIsExtensionPresent(
 ) -> ALCboolean {
     0
 }
-fn alGetBufferf(_env: &mut Environment, _buffer: ALuint, _param: ALenum, _value: MutPtr<ALfloat>) {
-    todo!();
+fn alGetBufferf(env: &mut Environment, _buffer: ALuint, param: ALenum, value: MutPtr<ALfloat>) {
+    log!(
+        "Warning: alGetBufferf({:#x}) is a stub, returning 0.0",
+        param
+    );
+    if !value.is_null() {
+        env.mem.write(value, 0.0);
+    }
 }
-fn alDisable(_env: &mut Environment, _capability: ALenum) {
-    todo!();
+fn alDisable(_env: &mut Environment, capability: ALenum) {
+    log!("Warning: alDisable({:#x}) is a stub", capability);
 }
-fn alGetBoolean(_env: &mut Environment, _param: ALenum) -> ALboolean {
-    todo!();
+fn alGetBoolean(_env: &mut Environment, param: ALenum) -> ALboolean {
+    log!("Warning: alGetBoolean({:#x}) is a stub, returning 0", param);
+    0
 }
-fn alGetBooleanv(_env: &mut Environment, _param: ALenum, _values: MutPtr<ALboolean>) {
-    todo!();
+fn alGetBooleanv(env: &mut Environment, param: ALenum, values: MutPtr<ALboolean>) {
+    log!("Warning: alGetBooleanv({:#x}) is a stub", param);
+    if !values.is_null() {
+        env.mem.write(values, 0);
+    }
 }
-fn alGetDouble(_env: &mut Environment, _param: ALenum) -> ALdouble {
-    todo!();
+fn alGetDouble(_env: &mut Environment, param: ALenum) -> ALdouble {
+    log!("Warning: alGetDouble({:#x}) is a stub, returning 0.0", param);
+    0.0
 }
-fn alGetDoublev(_env: &mut Environment, _param: ALenum, _values: MutPtr<ALdouble>) {
-    todo!();
+fn alGetDoublev(env: &mut Environment, param: ALenum, values: MutPtr<ALdouble>) {
+    log!("Warning: alGetDoublev({:#x}) is a stub", param);
+    if !values.is_null() {
+        env.mem.write(values, 0.0);
+    }
 }
-fn alGetFloat(_env: &mut Environment, _param: ALenum) -> ALfloat {
-    todo!();
+fn alGetFloat(_env: &mut Environment, param: ALenum) -> ALfloat {
+    log!("Warning: alGetFloat({:#x}) is a stub, returning 0.0", param);
+    0.0
 }
-fn alGetFloatv(_env: &mut Environment, _param: ALenum, _values: MutPtr<ALfloat>) {
-    todo!();
+fn alGetFloatv(env: &mut Environment, param: ALenum, values: MutPtr<ALfloat>) {
+    log!("Warning: alGetFloatv({:#x}) is a stub", param);
+    if !values.is_null() {
+        env.mem.write(values, 0.0);
+    }
 }
-fn alGetInteger(_env: &mut Environment, _param: ALenum) -> ALint {
-    todo!();
+fn alGetInteger(_env: &mut Environment, param: ALenum) -> ALint {
+    log!("Warning: alGetInteger({:#x}) is a stub, returning 0", param);
+    0
 }
-fn alGetIntegerv(_env: &mut Environment, _param: ALenum, _values: MutPtr<ALint>) {
-    todo!();
+fn alGetIntegerv(env: &mut Environment, param: ALenum, values: MutPtr<ALint>) {
+    log!("Warning: alGetIntegerv({:#x}) is a stub", param);
+    if !values.is_null() {
+        env.mem.write(values, 0);
+    }
 }
 fn alGetProcAddress(env: &mut Environment, funcName: ConstPtr<u8>) -> MutVoidPtr {
     alcGetProcAddress(env, Ptr::null(), funcName)
 }
 fn alIsEnabled(_env: &mut Environment, _capability: ALenum) -> ALboolean {
-    todo!();
+    0
 }
-fn alSourcePlayv(_env: &mut Environment, _nsources: ALsizei, _sources: ConstPtr<ALuint>) {
-    todo!();
+fn alSourcePlayv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    if sources.is_null() || nsources <= 0 {
+        return;
+    }
+    for i in 0..nsources {
+        let src: ALuint = env.mem.read(sources + i as u32);
+        alSourcePlay(env, src);
+    }
 }
-fn alSourcePausev(_env: &mut Environment, _nsources: ALsizei, _sources: ConstPtr<ALuint>) {
-    todo!();
+fn alSourcePausev(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    if sources.is_null() || nsources <= 0 {
+        return;
+    }
+    for i in 0..nsources {
+        let src: ALuint = env.mem.read(sources + i as u32);
+        alSourcePause(env, src);
+    }
 }
-fn alSourceStopv(_env: &mut Environment, _nsources: ALsizei, _sources: ConstPtr<ALuint>) {
-    todo!();
+fn alSourceStopv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    if sources.is_null() || nsources <= 0 {
+        return;
+    }
+    for i in 0..nsources {
+        let src: ALuint = env.mem.read(sources + i as u32);
+        alSourceStop(env, src);
+    }
 }
-fn alSourceRewindv(_env: &mut Environment, _nsources: ALsizei, _sources: ConstPtr<ALuint>) {
-    todo!();
+fn alSourceRewindv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    if sources.is_null() || nsources <= 0 {
+        return;
+    }
+    for i in 0..nsources {
+        let src: ALuint = env.mem.read(sources + i as u32);
+        alSourceRewind(env, src);
+    }
 }
 
 pub const FUNCTIONS: FunctionExports = &[
