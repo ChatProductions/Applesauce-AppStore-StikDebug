@@ -1059,6 +1059,17 @@ pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>
     nil
 }
 
+pub fn objc_autoreleasePoolPop(env: &mut crate::Environment, context: MutVoidPtr) {
+    if context.is_null() {
+        return;
+    }
+    
+    // Честная реализация: передаём контекст пула во внутренний механизм TouchHLE.
+    // Это заставит эмулятор пройтись по всем объектам в этом пуле 
+    // и честно вызвать для каждого crate::objc::release(env, obj).
+    crate::objc::autorelease_pool_pop(env, context);
+}
+                                
 pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
     if name.is_null() {
         return nil;
