@@ -171,7 +171,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_autoreleaseReturnValue(_)),
     export_c_func!(objc_retainAutoreleaseReturnValue(_)),
     export_c_func!(objc_autoreleasePoolPush(_)),
-    export_c_func!(objc_autoreleasePoolPop(_)), 
+    export_c_func!(objc_autoreleasePoolPop(_)),
     export_c_func!(objc_retain(_)),
     export_c_func!(objc_release(_)),
     export_c_func!(objc_setProperty_nonatomic(_)),

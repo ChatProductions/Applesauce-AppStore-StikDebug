@@ -1065,7 +1065,7 @@ pub fn objc_autoreleasePoolPop(_env: &mut crate::Environment, _context: MutVoidP
     // nil, and there is nothing to drain here. iPhone OS 2.x/3.x apps target
     // this path very rarely (it's primarily used by ARC).
 }
-                                
+
 pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
     if name.is_null() {
         return nil;

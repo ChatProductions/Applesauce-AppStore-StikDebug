@@ -177,4 +177,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(thread_resume(_)),
     export_c_func!(thread_get_state(_, _, _, _)),
 ];
-
