@@ -95,10 +95,7 @@ fn ensure_class_initialized(env: &mut Environment, class_to_init: Class) {
         env.cpu.regs()[2],
         env.cpu.regs()[3],
     ];
-    log_dbg!(
-        "Dispatching +[{:?} initialize]",
-        class_to_init
-    );
+    log_dbg!("Dispatching +[{:?} initialize]", class_to_init);
     let _: () = msg_send_no_type_checking(env, (class_to_init, sel_initialize));
     let regs = env.cpu.regs_mut();
     regs[0..4].copy_from_slice(&saved_r0_r3);
