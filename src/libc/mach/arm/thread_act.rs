@@ -6,13 +6,16 @@
 //! Mach task functions for ARM arch.
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::libc::mach::core_types::natural_t;
+use crate::environment::ThreadBlock;
+use crate::libc::mach::core_types::{integer_t, natural_t};
 use crate::libc::mach::init::MACH_TASK_SELF;
 use crate::libc::mach::port::mach_port_t;
-use crate::libc::mach::thread_info::{kern_return_t, thread_state_flavor_t, KERN_SUCCESS};
+use crate::libc::mach::thread_info::{
+    kern_return_t, thread_state_flavor_t, thread_state_t, KERN_SUCCESS,
+};
 use crate::libc::mach::vm_map::vm_allocate;
-use crate::mem::{guest_size_of, GuestUSize, MutPtr};
-use crate::Environment;
+use crate::mem::{guest_size_of, GuestUSize, MutPtr, SafeRead};
+use crate::{Environment, ThreadId};
 
 pub type task_t = mach_port_t;
 
@@ -23,6 +26,19 @@ type mach_msg_type_number_t = natural_t;
 
 type exception_mask_t = u32;
 type exception_behavior_t = i32;
+
+const ARM_THREAD_STATE: thread_state_flavor_t = 1;
+const MACHINE_THREAD_STATE: thread_state_flavor_t = ARM_THREAD_STATE;
+
+#[repr(C, packed)]
+struct arm_thread_state {
+    r: [u32; 13], // r0-r12
+    sp: u32,      // r13
+    lr: u32,      // r14
+    pc: u32,      // r15
+    cpsr: u32,
+}
+unsafe impl SafeRead for arm_thread_state {}
 
 fn task_threads(
     env: &mut Environment,
@@ -104,27 +120,61 @@ fn thread_resume(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
     KERN_SUCCESS
 }
 
-// --- НАША НОВАЯ ЗАГЛУШКА ---
 fn thread_get_state(
-    _env: &mut Environment,
-    _target_act: thread_act_t,
-    _flavor: thread_state_flavor_t,
-    _old_state: MutPtr<u32>,
-    _old_state_cnt: MutPtr<mach_msg_type_number_t>,
+    env: &mut Environment,
+    target_thread: thread_act_t,
+    flavor: thread_state_flavor_t,
+    old_state: thread_state_t,
+    old_state_count: MutPtr<mach_msg_type_number_t>,
 ) -> kern_return_t {
-    log!("Warning: thread_get_state called (stubbed, faking success!)");
-    
-    // Возвращаем KERN_SUCCESS (0), чтобы обмануть сборщик мусора Mono.
-    // Пусть думает, что он успешно прочитал пустые регистры.
+    // Mono's GC and signal handling rely on actually reading the suspended
+    // thread's CPU registers (especially SP) so that the GC can scan its
+    // stack. A stub that returns success without writing the buffer leaves
+    // the caller with zeroed registers and causes it to scan starting from
+    // address 0 (NULL-PAGE READ), hanging Unity games during startup.
+    assert_eq!(flavor, MACHINE_THREAD_STATE);
+
+    let out_size_available = env.mem.read(old_state_count);
+    let out_size_expected = guest_size_of::<arm_thread_state>() / guest_size_of::<integer_t>();
+    assert!(out_size_expected <= out_size_available);
+
+    // Expected `thread send right` is thread_id + 1. See `mach_thread_self()`.
+    let thread_id = (target_thread - 1) as ThreadId;
+
+    let (regs, cpsr) = if thread_id == env.current_thread {
+        (*env.cpu.regs(), env.cpu.cpsr())
+    } else {
+        // Mono only calls this on threads it has previously suspended.
+        assert!(matches!(
+            env.threads[thread_id].blocked_by,
+            ThreadBlock::Suspended(_, _)
+        ));
+        let ctx = env
+            .threads
+            .get(thread_id)
+            .and_then(|t| t.guest_context.as_ref())
+            .expect("thread_get_state on thread without saved context");
+        (ctx.regs, ctx.cpsr)
+    };
+
+    let state = arm_thread_state {
+        r: regs[..13].try_into().unwrap(),
+        sp: regs[crate::cpu::Cpu::SP],
+        lr: regs[crate::cpu::Cpu::LR],
+        pc: regs[crate::cpu::Cpu::PC],
+        cpsr,
+    };
+    env.mem.write(old_state.cast(), state);
+    env.mem.write(old_state_count, out_size_expected);
+
     KERN_SUCCESS
 }
 
-// --- ОБНОВЛЕННЫЙ СПИСОК ЭКСПОРТА ---
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(task_threads(_, _, _)),
     export_c_func!(task_set_exception_ports(_, _, _, _, _)),
     export_c_func!(thread_suspend(_)),
     export_c_func!(thread_resume(_)),
-    export_c_func!(thread_get_state(_, _, _, _)), // 4 аргумента для игры
+    export_c_func!(thread_get_state(_, _, _, _)),
 ];
 
