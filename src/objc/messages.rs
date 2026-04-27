@@ -23,6 +23,87 @@ use crate::mem::{ConstPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
 use std::any::TypeId;
 
+/// Implements Apple's lazy `+initialize` contract:
+/// > The runtime sends `initialize` to each class in a program just before the
+/// > class, or any class that inherits from it, is sent its first message from
+/// > within the program. Superclasses receive this message before their
+/// > subclasses.
+///
+/// See <https://developer.apple.com/documentation/objectivec/nsobject/1418639-initialize>.
+///
+/// `class_to_init` must be a (regular) class, not a metaclass. The class is
+/// marked as initialized *before* `+initialize` is dispatched, so that any
+/// messages sent to it from within `+initialize` itself do not cause infinite
+/// recursion.
+fn ensure_class_initialized(env: &mut Environment, class_to_init: Class) {
+    if class_to_init == nil {
+        return;
+    }
+    if env.objc.initialized_classes.contains(&class_to_init) {
+        return;
+    }
+
+    // Initialize the superclass first ("Superclasses receive this message
+    // before their subclasses").
+    let superclass = {
+        let Some(host_object) = env.objc.get_host_object(class_to_init) else {
+            // Class has no host object – nothing to initialize. Mark it as
+            // done so we don't waste cycles re-checking on every dispatch.
+            env.objc.initialized_classes.insert(class_to_init);
+            return;
+        };
+        if let Some(co) = host_object
+            .as_any()
+            .downcast_ref::<super::ClassHostObject>()
+        {
+            co.superclass
+        } else {
+            // FakeClass / UnimplementedClass – nothing to initialize.
+            env.objc.initialized_classes.insert(class_to_init);
+            return;
+        }
+    };
+    ensure_class_initialized(env, superclass);
+
+    // Re-check after recursion (the recursive call could not have
+    // initialised this class, but be defensive).
+    if !env.objc.initialized_classes.insert(class_to_init) {
+        return;
+    }
+
+    // Decide whether to actually dispatch `+initialize`. We send it iff
+    // any class in the metaclass chain implements `initialize`. Otherwise
+    // there is nothing to call (the inherited NSObject default is a no-op
+    // anyway) and dispatching would just emit a "does not respond" warning.
+    let metaclass = ObjC::read_isa(class_to_init, &env.mem);
+    let Some(sel_initialize) = env.objc.lookup_selector("initialize") else {
+        return;
+    };
+    if !env.objc.class_has_method(metaclass, sel_initialize) {
+        return;
+    }
+
+    // `+initialize` only takes (self, _cmd); however, the *outer* message
+    // dispatch we're nested inside has its real arguments sitting in r0..r3
+    // (and possibly on the stack). Dispatching `+initialize` will clobber
+    // r0..r3, so snapshot them and restore afterwards. SP/LR are already
+    // preserved by `call_from_host`. Stack arguments and VFP registers used
+    // for FP arguments aren't touched by a 2-argument `+initialize` call.
+    let saved_r0_r3 = [
+        env.cpu.regs()[0],
+        env.cpu.regs()[1],
+        env.cpu.regs()[2],
+        env.cpu.regs()[3],
+    ];
+    log_dbg!(
+        "Dispatching +[{:?} initialize]",
+        class_to_init
+    );
+    let _: () = msg_send_no_type_checking(env, (class_to_init, sel_initialize));
+    let regs = env.cpu.regs_mut();
+    regs[0..4].copy_from_slice(&saved_r0_r3);
+}
+
 /// The core implementation of `objc_msgSend`, the main function of Objective-C.
 ///
 /// Note that while only two parameters (usually receiver and selector) are
@@ -65,6 +146,34 @@ fn objc_msgSend_inner(
         log!("Warning: receiver {:?} has nil isa! Ignoring message \"{}\".", receiver, selector.as_str(&env.mem));
         env.cpu.regs_mut()[0..2].fill(0);
         return;
+    }
+
+    // Lazily dispatch `+initialize` to the receiver's class (and its
+    // superclasses) before this message reaches its IMP. Skipped for super
+    // calls — the calling class is already initialized by the time we reach
+    // a `super` call site inside one of its methods.
+    if super2.is_none() {
+        let class_to_init = if let Some(host_object) = env.objc.get_host_object(orig_class) {
+            if let Some(co) = host_object
+                .as_any()
+                .downcast_ref::<super::ClassHostObject>()
+            {
+                if co.is_metaclass {
+                    // Class method: receiver itself is the class.
+                    receiver
+                } else {
+                    // Instance method: orig_class is the class.
+                    orig_class
+                }
+            } else {
+                nil
+            }
+        } else {
+            nil
+        };
+        if class_to_init != nil {
+            ensure_class_initialized(env, class_to_init);
+        }
     }
 
     // Traverse the chain of superclasses to find the method implementation.
