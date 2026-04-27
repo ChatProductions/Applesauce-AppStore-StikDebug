@@ -238,6 +238,63 @@ pub const CLASSES: ClassExports = objc_classes! {
     CGContextDrawImage(env, context, rect, image);
 }
 
+// `blendMode` and `alpha` arguments are accepted and validated, but applying
+// them to the bitmap blit path is not yet implemented. The standard, opaque
+// draw still happens so the image is not invisible (which is what blocked
+// FarmFrenzy from progressing past its loading screen).
+// See https://developer.apple.com/documentation/uikit/uiimage/1624155-drawinrect
+- (())drawInRect:(CGRect)rect blendMode:(i32)_blend_mode alpha:(CGFloat)_alpha {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil { return; }
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    CGContextDrawImage(env, context, rect, image);
+}
+
+- (())drawAtPoint:(CGPoint)point blendMode:(i32)_blend_mode alpha:(CGFloat)_alpha {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil { return; }
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    let rect = CGRect {
+        origin: point,
+        size: CGSize {
+            width: CGImageGetWidth(env, image) as CGFloat,
+            height: CGImageGetHeight(env, image) as CGFloat,
+        }
+    };
+    CGContextDrawImage(env, context, rect, image);
+}
+
+// Apple: "Draws the image, tiled, in a rectangle." The receiver's CGImage is
+// repeated horizontally and vertically to fill `rect` in the current graphics
+// context, anchored at the rect's top-left.
+// https://developer.apple.com/documentation/uikit/uiimage/1624157-drawaspatterninrect
+- (())drawAsPatternInRect:(CGRect)rect {
+    let context = UIGraphicsGetCurrentContext(env);
+    if context == nil { return; }
+    let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
+    if image == nil { return; }
+    let tile_w = CGImageGetWidth(env, image) as CGFloat;
+    let tile_h = CGImageGetHeight(env, image) as CGFloat;
+    if tile_w <= 0.0 || tile_h <= 0.0 || rect.size.width <= 0.0 || rect.size.height <= 0.0 {
+        return;
+    }
+    let mut y = rect.origin.y;
+    let y_end = rect.origin.y + rect.size.height;
+    let x_end = rect.origin.x + rect.size.width;
+    while y < y_end {
+        let mut x = rect.origin.x;
+        while x < x_end {
+            let tile_rect = CGRect {
+                origin: CGPoint { x, y },
+                size: CGSize { width: tile_w, height: tile_h },
+            };
+            CGContextDrawImage(env, context, tile_rect, image);
+            x += tile_w;
+        }
+        y += tile_h;
+    }
+}
+
 // MARK: - Memory Management
 
 - (())dealloc {
