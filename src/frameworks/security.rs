@@ -626,6 +626,7 @@ pub const CONSTANTS: ConstantExports = &[
     ("_kSecAttrPort",               HostConstant::NSString("kSecAttrPort")),
     ("_kSecAttrProtocol",           HostConstant::NSString("kSecAttrProtocol")),
     ("_kSecAttrAuthenticationType", HostConstant::NSString("kSecAttrAuthenticationType")),
+    ("_kSecAttrAuthenticationTypeDefault", HostConstant::NSString("dflt")),
     ("_kSecAttrSecurityDomain",     HostConstant::NSString("kSecAttrSecurityDomain")),
     // kSecAttrAccessible values
     ("_kSecAttrAccessibleWhenUnlocked",

@@ -185,10 +185,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     if start_immediately {
-        env.objc.borrow_mut::<NSURLConnectionHostObject>(this).cancelled = true;
-        retain(env, this);
-        notify_delegate_failure(env, this, delegate);
-        autorelease(env, this);
+        // Do NOT call the delegate failure callback synchronously.
+        // Calling it immediately during initWithRequest: triggers the game's
+        // error-handling code before the render loop is set up, which can
+        // leave the app in a broken state (white screen). Instead, silently
+        // drop the request — the app will eventually time out or proceed
+        // without the network data.
+        log!(
+            "NSURLConnection: request will silently fail \
+             (networking not supported in touchHLE)"
+        );
     }
 
     this
@@ -197,19 +203,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Instance methods
 
 - (())start {
-    let host     = env.objc.borrow::<NSURLConnectionHostObject>(this);
-    let already  = host.cancelled;
-    let delegate = host.delegate;
-    drop(host);
-
-    if !already {
-        env.objc
-            .borrow_mut::<NSURLConnectionHostObject>(this)
-            .cancelled = true;
-        retain(env, this);
-        notify_delegate_failure(env, this, delegate);
-        autorelease(env, this);
-    }
+    log!(
+        "NSURLConnection start: silently dropping \
+         (networking not supported in touchHLE)"
+    );
 }
 
 - (())cancel {

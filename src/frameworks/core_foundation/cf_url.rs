@@ -17,7 +17,8 @@ use crate::frameworks::core_foundation::cf_string::{
     CFStringEncoding, CFStringRef,
 };
 use crate::frameworks::foundation::ns_string::{
-    get_static_str, to_rust_string, NSASCIIStringEncoding, NSUTF8StringEncoding,
+    from_rust_string, get_static_str, to_rust_string, NSASCIIStringEncoding,
+    NSUTF8StringEncoding,
 };
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, MutPtr, Ptr};
@@ -941,8 +942,8 @@ fn CFURLCreateStringByAddingPercentEscapes(
     env: &mut Environment,
     allocator: CFAllocatorRef,
     original_string: CFStringRef,
-    _characters_to_leave_unescaped: CFStringRef,
-    _legal_url_characters_to_be_escaped: CFStringRef,
+    characters_to_leave_unescaped: CFStringRef,
+    legal_url_characters_to_be_escaped: CFStringRef,
     _encoding: CFStringEncoding,
 ) -> CFStringRef {
     if !validate_allocator(env, allocator) {
@@ -953,8 +954,69 @@ fn CFURLCreateStringByAddingPercentEscapes(
         return nil;
     }
 
-    log!("TODO: CFURLCreateStringByAddingPercentEscapes is stubbed to prevent crash");
-    msg![env; original_string copy]
+    let original = to_rust_string(env, original_string);
+
+    let leave_unescaped: Option<String> = if characters_to_leave_unescaped.is_null() {
+        None
+    } else {
+        Some(to_rust_string(env, characters_to_leave_unescaped).to_string())
+    };
+
+    let force_escaped: Option<String> = if legal_url_characters_to_be_escaped.is_null() {
+        None
+    } else {
+        Some(to_rust_string(env, legal_url_characters_to_be_escaped).to_string())
+    };
+
+    // RFC 3986 unreserved characters that are never percent-encoded
+    let is_unreserved = |c: char| -> bool {
+        c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~'
+    };
+
+    // RFC 3986 reserved characters that are normally kept as-is in URLs
+    let is_reserved = |c: char| -> bool {
+        matches!(
+            c,
+            ':' | '/' | '?' | '#' | '[' | ']' | '@' | '!' | '$' | '&'
+                | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '='
+        )
+    };
+
+    let mut result = String::with_capacity(original.len());
+    for c in original.chars() {
+        // Check if this character should be forced to escape
+        let force_escape = force_escaped
+            .as_ref()
+            .map_or(false, |chars| chars.contains(c));
+
+        // Check if this character should be left unescaped
+        let leave_alone = leave_unescaped
+            .as_ref()
+            .map_or(false, |chars| chars.contains(c));
+
+        if force_escape && !leave_alone {
+            // Force-escape this character
+            for byte in c.to_string().as_bytes() {
+                result.push('%');
+                result.push_str(&format!("{:02X}", byte));
+            }
+        } else if leave_alone || is_unreserved(c) || is_reserved(c) {
+            // Keep as-is
+            result.push(c);
+        } else if c == '%' {
+            // Keep existing percent escapes
+            result.push(c);
+        } else {
+            // Percent-encode this character as UTF-8 bytes
+            for byte in c.to_string().as_bytes() {
+                result.push('%');
+                result.push_str(&format!("{:02X}", byte));
+            }
+        }
+    }
+
+    let ns_result = from_rust_string(env, result);
+    ns_result
 }
 
 // MARK: - Type Info

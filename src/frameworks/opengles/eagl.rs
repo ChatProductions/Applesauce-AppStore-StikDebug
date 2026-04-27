@@ -200,6 +200,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)renderbufferStorage:(NSUInteger)target
                fromDrawable:(id)drawable { // EAGLDrawable (always CAEAGLayer*)
+    log!("[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}]", target, drawable);
     assert!(drawable != nil); // TODO: handle unbinding
 
     assert!(target == gles11::RENDERBUFFER_OES);
