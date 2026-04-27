@@ -568,9 +568,50 @@ fn kqueue(_env: &mut Environment) -> i32 {
     999
 }
 
-fn _NSGetExecutablePath(_env: &mut Environment) -> i32 {
-    // FakeKqueue
-    999
+/// `int _NSGetExecutablePath(char *buf, uint32_t *bufsize);` — see
+/// <https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html>.
+///
+/// Writes the path of the currently running executable into `buf`. On entry
+/// `*bufsize` is the capacity of `buf`; on success the path (including the
+/// trailing NUL byte) is written and 0 is returned. If the buffer is too
+/// small, `*bufsize` is updated to the required capacity and -1 is returned
+/// (the buffer contents are undefined in that case).
+///
+/// This function is the canonical way iOS apps locate their bundle, so a
+/// stub that returned 999 (and didn't even take the right argument types)
+/// caused real-world apps such as Farm Frenzy to mis-construct paths and
+/// then `chdir("")` / fail every resource lookup.
+fn _NSGetExecutablePath(
+    env: &mut Environment,
+    buf: MutPtr<u8>,
+    bufsize: MutPtr<u32>,
+) -> i32 {
+    if bufsize.is_null() {
+        return -1;
+    }
+    let exe_path = env.bundle.executable_path();
+    let path_bytes = exe_path.as_str().as_bytes();
+    // Required size includes the trailing NUL byte.
+    let required: u32 = path_bytes.len() as u32 + 1;
+    let provided: u32 = env.mem.read(bufsize);
+    if provided < required {
+        env.mem.write(bufsize, required);
+        log_dbg!(
+            "_NSGetExecutablePath: buffer too small ({} < {}), reporting required size",
+            provided,
+            required
+        );
+        return -1;
+    }
+    if buf.is_null() {
+        return -1;
+    }
+    let dst = env.mem.bytes_at_mut(buf, required);
+    dst[..path_bytes.len()].copy_from_slice(path_bytes);
+    dst[path_bytes.len()] = 0;
+    env.mem.write(bufsize, required);
+    log_dbg!("_NSGetExecutablePath => {:?}", exe_path);
+    0
 }
 
 fn kevent(
@@ -1020,7 +1061,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(system(_)),
     export_c_func!(dladdr(_, _)),
     export_c_func!(kqueue()),
-    export_c_func!(_NSGetExecutablePath()),
+    export_c_func!(_NSGetExecutablePath(_, _)),
     export_c_func!(kevent(_, _, _, _, _, _)),
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
     export_c_func!(putenv(_)),
