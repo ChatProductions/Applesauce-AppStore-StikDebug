@@ -170,6 +170,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithArray:(id)array { // NSArray*
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_array(env, array);
+    this
+}
+
 - (())dealloc {
     std::mem::take(&mut env.objc.borrow_mut::<SetHostObject>(this).dict).release(env);
     env.objc.dealloc_object(this, &mut env.mem)
@@ -259,6 +264,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithObjects:(id)first_obj, ...args {
     env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_objects(env, first_obj, args);
+    this
+}
+
+- (id)initWithArray:(id)array { // NSArray*
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_array(env, array);
     this
 }
 
@@ -371,6 +381,24 @@ fn set_from_objects(env: &mut Environment, first_obj: id, args: DotDotDot) -> Di
             break;
         }
         dict.insert(env, next_arg, null, /* copy_key: */ false);
+    }
+    dict
+}
+
+/// Helper method shared between `initWithArray:` of `_touchHLE_NSSet` and
+/// `_touchHLE_NSMutableSet`. Iterates the given array (which may be `nil`)
+/// and inserts each object into a fresh dictionary, mirroring the semantics
+/// of `-[NSSet initWithArray:]` documented by Apple.
+fn set_from_array(env: &mut Environment, array: id) -> DictionaryHostObject {
+    let mut dict = <DictionaryHostObject as Default>::default();
+    if array == nil {
+        return dict;
+    }
+    let null: id = msg_class![env; NSNull null];
+    let count: NSUInteger = msg![env; array count];
+    for i in 0..count {
+        let object: id = msg![env; array objectAtIndex:i];
+        dict.insert(env, object, null, /* copy_key: */ false);
     }
     dict
 }

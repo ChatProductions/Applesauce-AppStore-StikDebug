@@ -21,7 +21,7 @@
 
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
 use crate::MutexId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod classes;
 mod messages;
@@ -90,6 +90,12 @@ pub struct ObjC {
     /// Type information isn't part of the `objc_msgSend` ABI, so an alternative
     /// channel is needed.
     message_type_info: Option<(std::any::TypeId, &'static str)>,
+
+    /// Set of classes that have already had `+initialize` sent to them
+    /// (or were determined not to need it). Used to implement Apple's lazy
+    /// `+initialize` dispatch contract:
+    /// <https://developer.apple.com/documentation/objectivec/nsobject/1418639-initialize>
+    pub(super) initialized_classes: HashSet<Class>,
 }
 
 impl ObjC {
@@ -100,6 +106,7 @@ impl ObjC {
             classes: HashMap::new(),
             sync_mutexes: HashMap::new(),
             message_type_info: None,
+            initialized_classes: HashSet::new(),
         }
     }
 
