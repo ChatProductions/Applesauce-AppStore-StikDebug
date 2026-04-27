@@ -142,7 +142,16 @@ fn alcCloseDevice(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> bool
 }
 
 fn alcGetError(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> i32 {
-    let &host_device = State::get(env).devices.get(&device).unwrap();
+    // Per OpenAL spec, alcGetError on an invalid device returns
+    // ALC_INVALID_DEVICE rather than a host-level crash.
+    let Some(&host_device) = State::get(env).devices.get(&device) else {
+        log!(
+            "Warning: alcGetError({:?}) called with unknown/NULL device, returning ALC_INVALID_DEVICE",
+            device
+        );
+        // ALC_INVALID_DEVICE = 0xA001, per the OpenAL 1.1 specification.
+        return 0xA001;
+    };
 
     let res = unsafe { al::alcGetError(host_device) };
     log_dbg!("alcGetError({:?}) => {:#x}", host_device, res);
@@ -219,7 +228,18 @@ fn alcCreateContext(
     };
 
     let state = State::get(env);
-    let &host_device = state.devices.get(&device).unwrap();
+    // Per OpenAL spec, alcCreateContext with an invalid (e.g. NULL) device
+    // must set ALC_INVALID_DEVICE and return NULL. Farm Frenzy initializes
+    // its sound system, fails ("Unable Initialize sound device!"), then still
+    // calls alcCreateContext(NULL, ...) — the game proceeds silently if we
+    // return NULL here.
+    let Some(&host_device) = state.devices.get(&device) else {
+        log!(
+            "Warning: alcCreateContext({:?}, ...) called with unknown/NULL device, returning NULL",
+            device
+        );
+        return Ptr::null();
+    };
 
     let res = unsafe {
         OpenALContext::new_with_device_and_attrlist(
