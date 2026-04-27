@@ -31,7 +31,7 @@ mod properties;
 mod selectors;
 mod synchronization;
 
-pub use classes::{objc_classes, objc_getClass, object_getClassName, objc_getMetaClass, object_getClass, objc_setProperty_nonatomic, objc_autoreleaseReturnValue, objc_retainAutoreleasedReturnValue, objc_retainAutoreleaseReturnValue, objc_autoreleasePoolPush, objc_autoreleasePoolPop, objc_release, objc_exception_throw, objc_begin_catch, objc_end_catch, class_getSuperclass, class_getInstanceSize, class_getInstanceMethod, class_replaceMethod, method_getImplementation, method_setImplementation, method_getTypeEncoding, Class, ClassExports, ClassTemplate, objc_autoreleasePoolPop, objc_retain};
+pub use classes::{objc_classes, objc_getClass, object_getClassName, objc_getMetaClass, object_getClass, objc_setProperty_nonatomic, objc_autoreleaseReturnValue, objc_retainAutoreleasedReturnValue, objc_retainAutoreleaseReturnValue, objc_autoreleasePoolPush, objc_autoreleasePoolPop, objc_release, objc_exception_throw, objc_begin_catch, objc_end_catch, class_getSuperclass, class_getInstanceSize, class_getInstanceMethod, class_replaceMethod, method_getImplementation, method_setImplementation, method_getTypeEncoding, Class, ClassExports, ClassTemplate, objc_retain};
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
     objc_super, release, retain,
