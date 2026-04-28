@@ -492,11 +492,16 @@ impl Window {
             let (out_w, out_h) = window.size_unrotated_unscaled();
             let out_x = (x + 0.5) * out_w as f32;
             let out_y = (y + 0.5) * out_h as f32;
-            // Final guard against floating-point overshoot at the very edges
-            // — keep the result strictly within the iOS window's bounds so
-            // -[UIWindow pointInside:withEvent:] always succeeds.
-            let out_x = out_x.clamp(0.0, out_w as f32);
-            let out_y = out_y.clamp(0.0, out_h as f32);
+            // Keep the result strictly *inside* the iOS window. CGRect
+            // containment is half-open on the high edge (a point with
+            // y == bounds.size.height is *outside*), so clamping to the
+            // exclusive size of the window — e.g. y == 480 on an iPhone
+            // 480-pt landscape screen — would still cause -[UIWindow
+            // pointInside:] to return false. Subtract a single point.
+            let max_x = (out_w.saturating_sub(1)) as f32;
+            let max_y = (out_h.saturating_sub(1)) as f32;
+            let out_x = out_x.clamp(0.0, max_x);
+            let out_y = out_y.clamp(0.0, max_y);
             // Round to match touch precision of official devices.
             (out_x.round(), out_y.round())
         }
