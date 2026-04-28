@@ -67,6 +67,29 @@ pub const CLASSES: ClassExports = objc_classes! {
     // a notification.
     () = msg_super![env; this setHidden:true];
 
+    // Real iOS forces UIWindow.frame to match UIScreen.bounds regardless of
+    // whatever frame was encoded in the NIB. Interface Builder by default
+    // uses a 320x460 canvas (status bar visible) for iPhone XIBs, so a
+    // window loaded from a NIB will normally come out at 320x460 and miss
+    // the bottom 20px of the screen. Apps that hide the status bar via
+    // Info.plist (e.g. Minecraft PE 0.6.x) then end up with their EAGLView
+    // sized to the truncated window, producing a visible offset/shift.
+    //
+    // Mirror Apple's behaviour by re-setting the frame to the full screen
+    // bounds after the super decoder runs.
+    let screen: id = msg_class![env; UIScreen mainScreen];
+    let screen_bounds: CGRect = msg![env; screen bounds];
+    let current_bounds: CGRect = msg![env; this bounds];
+    if current_bounds.size != screen_bounds.size {
+        log_dbg!(
+            "UIWindow {:?}: overriding NIB-encoded size {:?} with UIScreen.bounds size {:?}",
+            this,
+            current_bounds.size,
+            screen_bounds.size,
+        );
+        () = msg![env; this setFrame:screen_bounds];
+    }
+
     let list = &mut env.framework_state.uikit.ui_view.ui_window.windows;
     list.push(this);
     log_dbg!(
