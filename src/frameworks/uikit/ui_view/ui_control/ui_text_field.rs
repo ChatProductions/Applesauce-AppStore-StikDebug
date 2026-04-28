@@ -546,7 +546,13 @@ pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
 
     if should {
         let new_text: id = msg![env; curr_text stringByAppendingString:txt];
-        let _: () = msg![env; text_label setText:new_text];
+        // Route through `setText:` on the text field (not directly on the
+        // text label) so that `UITextFieldTextDidChangeNotification` is
+        // posted. Some apps (e.g. the Minecraft PE 0.6.1 iOS port's
+        // `ShowKeyboardView`) drive their input loop entirely from this
+        // notification, so skipping it makes typing on the soft keyboard
+        // appear to do nothing.
+        let _: () = msg![env; text_field setText:new_text];
         let _: () = msg![env; text_field setNeedsDisplay];
         release(env, new_text);
     }
@@ -576,9 +582,10 @@ pub fn handle_backspace(env: &mut Environment, text_field: id) {
 
     if should {
         let new_text: id = msg![env; curr_text substringToIndex:(len - 1)];
-        let _: () = msg![env; text_label setText:new_text];
+        // See `handle_text` above: go through `setText:` so that the
+        // `UITextFieldTextDidChangeNotification` observer is notified.
+        let _: () = msg![env; text_field setText:new_text];
         let _: () = msg![env; text_field setNeedsDisplay];
-        release(env, new_text);
     }
 }
 
