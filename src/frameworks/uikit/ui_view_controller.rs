@@ -44,6 +44,13 @@ struct UIViewControllerHostObject {
     title: id,                   // Для хранения строки заголовка
     parent_view_controller: id,  // Для связи с родительским VC
     navigation_controller: id,   // Для фикса ошибки "does not respond to selector"
+    /// Currently presented modal view controller (retained), or `nil`.
+    /// `UIViewController*`
+    presented_view_controller: id,
+    /// View controller that is presenting `self` modally (non-retained
+    /// back-pointer), or `nil`.
+    /// `UIViewController*`
+    presenting_view_controller: id,
     // ---------------------------
     modal_transition_style: UIModalTransitionStyle,
     modal_presentation_style: UIModalPresentationStyle,
@@ -124,11 +131,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UIViewControllerHostObject { view, nib_name, bundle, title, .. } = env.objc.borrow(this);
+    let &UIViewControllerHostObject {
+        view, nib_name, bundle, title, presented_view_controller, ..
+    } = env.objc.borrow(this);
     if view != nil { release(env, view); }
     if nib_name != nil { release(env, nib_name); }
     if bundle != nil { release(env, bundle); }
     if title != nil { release(env, title); }
+    if presented_view_controller != nil { release(env, presented_view_controller); }
+    // presenting_view_controller is a non-retained back-pointer; do not release.
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -247,8 +258,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dismissModalViewControllerAnimated:(bool)animated {
-    log!("TODO: [(UIViewController*){:?} dismissModalViewControllerAnimated:{}]", this, animated);
-    // TODO
+    // Apple docs: "If you call this method on the modal view controller
+    // itself, it automatically forwards the message to the presenting view
+    // controller." Forward the call up the chain when `self` does not own a
+    // presented view controller.
+    let presented = env.objc.borrow::<UIViewControllerHostObject>(this).presented_view_controller;
+    if presented == nil {
+        let presenter = env.objc.borrow::<UIViewControllerHostObject>(this).presenting_view_controller;
+        if presenter != nil {
+            return msg![env; presenter dismissModalViewControllerAnimated:animated];
+        }
+        log_dbg!(
+            "[(UIViewController*){:?} dismissModalViewControllerAnimated:{}] no presented vc",
+            this, animated
+        );
+        return;
+    }
+
+    () = msg![env; presented viewWillDisappear:animated];
+
+    let presented_view: id = msg![env; presented view];
+    if presented_view != nil {
+        () = msg![env; presented_view removeFromSuperview];
+    }
+
+    () = msg![env; presented viewDidDisappear:animated];
+
+    env.objc.borrow_mut::<UIViewControllerHostObject>(presented).presenting_view_controller = nil;
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).presented_view_controller = nil;
+    release(env, presented);
 }
 - (())dismissMoviePlayerViewControllerAnimated {
     log!("TODO: [(UIViewController*){:?} dismissMoviePlayerViewControllerAnimated]", this);
@@ -338,20 +376,79 @@ pub const CLASSES: ClassExports = objc_classes! {
         "[(UIViewController*){:?} presentModalViewController:{:?} animated:{}]",
         this, modal_vc, animated
     );
+    if modal_vc == nil {
+        return;
+    }
+
+    // The presenting view controller retains the presented one until it is
+    // dismissed. The reverse pointer (`presenting_view_controller`) is a weak
+    // back-reference per Apple's UIViewController documentation.
+    retain(env, modal_vc);
+    let host_obj = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
+    let old_modal = std::mem::replace(&mut host_obj.presented_view_controller, modal_vc);
+    if old_modal != nil {
+        // Stack-on-stack presentation is not supported here; just drop the
+        // previous reference cleanly. Apps that need this should be fixed up
+        // separately.
+        log!(
+            "WARNING: presentModalViewController: replacing existing presented vc {:?} on {:?}",
+            old_modal, this
+        );
+        release(env, old_modal);
+    }
+    env.objc.borrow_mut::<UIViewControllerHostObject>(modal_vc).presenting_view_controller = this;
+
+    // Trigger -loadView/-viewDidLoad if the view hasn't been instantiated yet.
+    let modal_view: id = msg![env; modal_vc view];
+    if modal_view == nil {
+        log!(
+            "WARNING: presentModalViewController: modal vc {:?} has no view",
+            modal_vc
+        );
+        return;
+    }
+
+    // Locate a window to host the modal view. Prefer the presenting view's
+    // window (matches Apple's behaviour of presenting on top of the existing
+    // hierarchy). Fall back to the application's key window when the
+    // presenting controller is not yet attached.
+    let presenter_view: id = msg![env; this view];
+    let mut window: id = if presenter_view != nil {
+        msg![env; presenter_view window]
+    } else {
+        nil
+    };
+    if window == nil {
+        let app: id = msg_class![env; UIApplication sharedApplication];
+        window = msg![env; app keyWindow];
+    }
+    if window == nil {
+        log!(
+            "WARNING: presentModalViewController: no window found for {:?}",
+            this
+        );
+        return;
+    }
+
     () = msg![env; modal_vc viewWillAppear:animated];
+    // UIWindow's -addSubview: applies the auto-rotation transform when the
+    // view has an associated UIViewController and posts the appropriate
+    // appearance hooks for the new view, so we route through the window
+    // directly instead of adding the view to the presenter's view.
+    () = msg![env; window addSubview:modal_view];
     () = msg![env; modal_vc viewDidAppear:animated];
 }
 
 - (id)modalViewController {
-    nil
+    env.objc.borrow::<UIViewControllerHostObject>(this).presented_view_controller
 }
 
 - (id)presentingViewController {
-    nil
+    env.objc.borrow::<UIViewControllerHostObject>(this).presenting_view_controller
 }
 
 - (id)presentedViewController {
-    nil
+    env.objc.borrow::<UIViewControllerHostObject>(this).presented_view_controller
 }
 
 - (())presentViewController:(id)vc
