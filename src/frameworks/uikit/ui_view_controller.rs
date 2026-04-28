@@ -51,6 +51,9 @@ struct UIViewControllerHostObject {
     /// back-pointer), or `nil`.
     /// `UIViewController*`
     presenting_view_controller: id,
+    /// Lazily-created `UINavigationItem` returned by `-navigationItem`.
+    /// Retained while it lives in this slot.
+    navigation_item: id,
     // ---------------------------
     modal_transition_style: UIModalTransitionStyle,
     modal_presentation_style: UIModalPresentationStyle,
@@ -140,6 +143,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if title != nil { release(env, title); }
     if presented_view_controller != nil { release(env, presented_view_controller); }
     // presenting_view_controller is a non-retained back-pointer; do not release.
+    let navigation_item = env.objc.borrow::<UIViewControllerHostObject>(this).navigation_item;
+    if navigation_item != nil { release(env, navigation_item); }
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -491,11 +496,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)navigationItem {
-    let class: Class = msg![env; this class];
-    let class_name: id = NSStringFromClass(env, class);
+    let existing = env.objc.borrow::<UIViewControllerHostObject>(this).navigation_item;
+    if existing != nil {
+        return existing;
+    }
+    // Match Apple: lazily create an item whose title is the controller's
+    // current `title` (falling back to the class name when unset). Retain it
+    // on the host object so subsequent property writes (e.g.
+    // `self.navigationItem.rightBarButtonItem = ...`) are not lost.
+    let title: id = msg![env; this title];
+    let init_title = if title != nil {
+        title
+    } else {
+        let class: Class = msg![env; this class];
+        NSStringFromClass(env, class)
+    };
     let item: id = msg_class![env; UINavigationItem alloc];
-    let item: id = msg![env; item initWithTitle:class_name];
-    crate::objc::autorelease(env, item)
+    let item: id = msg![env; item initWithTitle:init_title];
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).navigation_item = item;
+    item
 }
 
 - (())didReceiveMemoryWarning {
