@@ -1680,6 +1680,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCapacity:(NSUInteger)_capacity { msg![env; this init] }
 
+- (id)initWithCoder:(id)coder {
+    // NIB archives store some UI strings (placeholder text, default
+    // contents of UITextField, IASK setting titles, etc.) as
+    // NSMutableString instances. Without this method, NIB decoding warns
+    // "does not respond to selector initWithCoder:" and the property
+    // becomes nil, which on Minecraft PE shows up as empty Create World
+    // text fields and a non-functional keyboard.
+    let class: Class = msg![env; coder class];
+    let nib_archive_class: Class = msg_class![env; _touchHLE_NIBArchiveDecoder class];
+    if env.objc.class_is_subclass_of(class, nib_archive_class) {
+        let decoded = _nib_archive_decoder::decode_current_string(env, coder);
+        if decoded != nil {
+            () = msg![env; this setString:decoded];
+            release(env, decoded);
+        }
+    } else {
+        println!("Warning: _touchHLE_NSMutableString initWithCoder: unsupported coder class, returning empty string");
+    }
+    this
+}
+
 - (id)initWithBytes:(ConstPtr<u8>)bytes length:(NSUInteger)len encoding:(NSStringEncoding)encoding {
     let slice = env.mem.bytes_at(bytes, len);
     let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);

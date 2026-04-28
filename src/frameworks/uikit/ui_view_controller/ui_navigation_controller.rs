@@ -7,8 +7,8 @@
 
 use crate::frameworks::foundation::{ns_array, NSUInteger};
 use crate::objc::{
-    autorelease, id, impl_HostObject_with_superclass, msg, msg_class, nil, objc_classes,
-    release, retain, ClassExports, NSZonePtr, SEL,
+    autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil,
+    objc_classes, release, retain, ClassExports, NSZonePtr, SEL,
 };
 
 #[derive(Default)]
@@ -236,6 +236,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     if root == nil { return nil; }
     msg![env; this popToViewController:root animated:animated]
+}
+
+// =========================================================================
+// MARK: - Appearance forwarding
+// =========================================================================
+// UINavigationController forwards appearance callbacks to the currently
+// visible (top) child view controller. Without this, frameworks like
+// IASKAppSettingsKit — which do all of their setup in -viewWillAppear: —
+// never get called when the navigation controller itself is presented.
+
+- (())viewWillAppear:(bool)animated {
+    () = msg_super![env; this viewWillAppear:animated];
+    let top: id = msg![env; this topViewController];
+    if top != nil {
+        () = msg![env; top viewWillAppear:animated];
+    }
+}
+
+- (())viewDidAppear:(bool)animated {
+    () = msg_super![env; this viewDidAppear:animated];
+    let top: id = msg![env; this topViewController];
+    if top != nil {
+        () = msg![env; top viewDidAppear:animated];
+    }
+}
+
+- (())viewWillDisappear:(bool)animated {
+    let top: id = msg![env; this topViewController];
+    if top != nil {
+        () = msg![env; top viewWillDisappear:animated];
+    }
+    () = msg_super![env; this viewWillDisappear:animated];
+}
+
+- (())viewDidDisappear:(bool)animated {
+    let top: id = msg![env; this topViewController];
+    if top != nil {
+        () = msg![env; top viewDidDisappear:animated];
+    }
+    () = msg_super![env; this viewDidDisappear:animated];
 }
 
 // =========================================================================

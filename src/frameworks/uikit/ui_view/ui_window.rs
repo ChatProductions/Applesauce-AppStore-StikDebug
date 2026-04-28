@@ -101,6 +101,42 @@ pub const CLASSES: ClassExports = objc_classes! {
     // отправляя сообщение layoutSubviews самому себе (наследуется от UIView)
     () = msg![env; this layoutSubviews];
 }
+
+// Permissive hit-testing for the application window.
+//
+// On real iOS, UIWindow's frame matches UIScreen.bounds and touches always
+// land inside it, so the standard UIView hitTest implementation is fine.
+// In touchHLE, however, the host window can be larger than the iPhone's
+// virtual screen (Android phones, large desktop windows). Even with the
+// touch-coordinate clamp in `transform_input_coords`, edge cases such as
+// the rootViewController's view being rotated for landscape orientation
+// can leave individual modal/overlay subviews positioned in such a way
+// that a touch landing on them produces a window-coordinate point just
+// outside of UIWindow's own bounds (off-by-one at the bottom row, status
+// bar overlap, etc.). The default UIView.hitTest then early-exits via
+// pointInside, returning nil for the entire touch — which is what
+// produced the `SUPER HACK: Forcing rejected touch ...` log spam and
+// stopped the in-game chat / Create World text fields from ever becoming
+// first responder.
+//
+// Override hitTest to ALWAYS recurse into subviews. If any subview claims
+// the touch we return it; otherwise we fall back to the window itself so
+// touch dispatch is never lost. This matches Apple's documented intent:
+// "Windows don't actively participate in event handling. They merely
+// pass events on to their subviews."
+- (id)hitTest:(CGPoint)point withEvent:(id)event {
+    let subviews = env.objc.borrow::<super::UIViewHostObject>(this).subviews.clone();
+    for subview in subviews.into_iter().rev() {
+        let hidden: bool = msg![env; subview isHidden];
+        let alpha: crate::frameworks::core_graphics::CGFloat = msg![env; subview alpha];
+        let interactible: bool = msg![env; subview isUserInteractionEnabled];
+        if hidden || alpha < 0.01 || !interactible { continue; }
+        let sub_point: CGPoint = msg![env; subview convertPoint:point fromView:this];
+        let hit: id = msg![env; subview hitTest:sub_point withEvent:event];
+        if hit != nil { return hit; }
+    }
+    this
+}
     
 - (())setHidden:(bool)is_hidden {
     () = msg_super![env; this setHidden:is_hidden];
