@@ -468,6 +468,20 @@ impl Window {
             } else {
                 window.viewport()
             };
+            // Clamp into the viewport. On hosts (Android, large desktops) the
+            // SDL drawable is bigger than the iPhone's virtual screen and is
+            // letterboxed inside the viewport. Touches landing in the
+            // letterbox bars used to produce out-of-window iOS coordinates
+            // (e.g. y == -91 or y == 570 for a 320x460 portrait window),
+            // which made -[UIWindow hitTest:withEvent:] return nil for every
+            // such touch. The "SUPER HACK" fallback in ui_touch then forced
+            // the touch directly into the window object, bypassing all
+            // subviews — so taps near the very top/bottom of a landscape
+            // screen never reached overlay UI like CreateNewWorld dialogs
+            // or the in-game chat field. Clamping to the viewport keeps the
+            // touch on the nearest visible edge instead.
+            let in_x = in_x.clamp(vx as f32, (vx + vw) as f32);
+            let in_y = in_y.clamp(vy as f32, (vy + vh) as f32);
             // normalize to unit square centred on origin
             let x = (in_x - vx as f32) / vw as f32 - 0.5;
             let y = (in_y - vy as f32) / vh as f32 - 0.5;
@@ -478,6 +492,11 @@ impl Window {
             let (out_w, out_h) = window.size_unrotated_unscaled();
             let out_x = (x + 0.5) * out_w as f32;
             let out_y = (y + 0.5) * out_h as f32;
+            // Final guard against floating-point overshoot at the very edges
+            // — keep the result strictly within the iOS window's bounds so
+            // -[UIWindow pointInside:withEvent:] always succeeds.
+            let out_x = out_x.clamp(0.0, out_w as f32);
+            let out_y = out_y.clamp(0.0, out_h as f32);
             // Round to match touch precision of official devices.
             (out_x.round(), out_y.round())
         }
