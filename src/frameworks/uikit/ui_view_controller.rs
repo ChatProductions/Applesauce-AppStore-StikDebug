@@ -206,12 +206,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)view {
-    let view = env.objc.borrow_mut::<UIViewControllerHostObject>(this).view;
+    // Apple's UIViewController.view documentation:
+    // "If you access this property and its value is currently nil, the view
+    // controller automatically calls the loadView method and returns the
+    // resulting view."  The view *must* be re-read from the host object after
+    // -viewDidLoad runs, because subclasses (e.g. ones that build an OpenGL
+    // EAGL view in -viewDidLoad) commonly call -setView: from within
+    // -viewDidLoad to swap out the placeholder UIView created by -loadView.
+    // If we returned the value captured before -viewDidLoad, callers would
+    // hold a dangling pointer to the just-released placeholder.
+    let view = env.objc.borrow::<UIViewControllerHostObject>(this).view;
     if view == nil {
         () = msg![env; this loadView];
-        let view = env.objc.borrow_mut::<UIViewControllerHostObject>(this).view;
         () = msg![env; this viewDidLoad];
-        view
+        env.objc.borrow::<UIViewControllerHostObject>(this).view
     } else {
         view
     }
