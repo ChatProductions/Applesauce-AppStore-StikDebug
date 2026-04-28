@@ -377,7 +377,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())presentModalViewController:(id)modal_vc animated:(bool)animated {
-    log_dbg!(
+    // Logged at info level so we can confirm modal presentation actually
+    // happens at runtime even on builds without RUST_LOG=debug.
+    log!(
         "[(UIViewController*){:?} presentModalViewController:{:?} animated:{}]",
         this, modal_vc, animated
     );
