@@ -668,11 +668,31 @@ pub fn decode_buffer(
                 processed_data
             };
 
-            let f = match (actual_channels_per_frame, format.bits_per_channel) {
+                        let f = match (actual_channels_per_frame, format.bits_per_channel) {
                 (1, 8) => al::AL_FORMAT_MONO8,
                 (1, 16) => al::AL_FORMAT_MONO16,
                 (2, 8) => al::AL_FORMAT_STEREO8,
                 (2, 16) => al::AL_FORMAT_STEREO16,
+                // --- ДОБАВЛЕНА РАБОЧАЯ ВЕТКА ДЛЯ (1, 32) ---
+                (1, 32) => {
+                    assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
+
+                    assert!(processed_data.len().is_multiple_of(4));
+                    let new_size = (processed_data.len() / 4) * 2; 
+                    let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
+
+                    for chunk in processed_data.chunks(4) {
+                        let val: i32 = i32::from_le_bytes(chunk.try_into().unwrap());
+                        let new_val: i16 = (val >> 16) as i16;
+                        new_processed_data.extend(new_val.to_le_bytes());
+                    }
+                    return (
+                        al::AL_FORMAT_MONO16,
+                        format.sample_rate as ALsizei,
+                        new_processed_data,
+                    );
+                }
+                // --- СУЩЕСТВУЮЩАЯ ВЕТКА (2, 32) ---
                 (2, 32) => {
                     assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
 
@@ -691,7 +711,8 @@ pub fn decode_buffer(
                         new_processed_data,
                     );
                 }
-                _ => unreachable!(),
+                // --- УЛУЧШЕННЫЙ ОТЛОВ ОШИБОК ---
+                _ => unreachable!("Unhandled audio format: {} channels, {} bits", actual_channels_per_frame, format.bits_per_channel),
             };
 
             (f, format.sample_rate as ALsizei, processed_data)
