@@ -530,6 +530,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     false
 }
 
+- (id)destinationOfSymbolicLinkAtPath:(id)path
+                                error:(MutPtr<id>)error {
+    if path.is_null() {
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
+        return nil;
+    }
+
+    let path_str = ns_string::to_rust_string(env, path);
+    let guest_path = GuestPath::new(&path_str);
+
+    // 1. Честно проверяем, существует ли вообще файл/папка по этому пути
+    if !env.fs.exists(guest_path) {
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
+        return nil;
+    }
+
+    // 2. В виртуальной ФС touchHLE реальных симлинков нет (они либо резолвятся при распаковке, 
+    // либо не поддерживаются). По документации Apple, если файл существует, 
+    // но НЕ является симлинком, метод возвращает nil и ошибку (обычно код 256 - NSFileReadUnknownError 
+    // или POSIX EINVAL 22). Эмулируем этот легальный отказ:
+    if !error.is_null() {
+        let domain = get_static_str(env, NSCocoaErrorDomain);
+        let ns_error = msg_class![env; NSError alloc];
+        let ns_error = msg![env; ns_error initWithDomain:domain code:256 userInfo:nil];
+        env.mem.write(error, ns_error);
+    }
+    
+    return nil;
+}
+    
 - (bool)removeItemAtPath:(id)path
                    error:(MutPtr<id>)out_error {
     if path.is_null() {
