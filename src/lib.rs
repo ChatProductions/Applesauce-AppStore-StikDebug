@@ -269,14 +269,11 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         }
     }
 
-    if required_device_capabilities.contains(&"opengles-2")
-        || required_device_capabilities.contains(&"opengles-3")
-    {
-        echo!("Warning: app requires OpenGL ES 2.0+ support. Only OpenGL ES 1.1 is currently supported.");
+    if required_device_capabilities.contains(&"opengles-3") {
+        echo!(
+            "Warning: app requires OpenGL ES 3.0+ support. Only OpenGL ES 1.1 and 2.0 are currently supported."
+        );
     }
-
-    // Регистрация GLES 2.0 stub функций
-    dyld::register_gles2_stubs();
 
     if just_info {
         return Ok(());
@@ -364,4 +361,3 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     env.run();
     Ok(())
 }
-

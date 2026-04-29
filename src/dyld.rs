@@ -543,11 +543,7 @@ impl Dyld {
                 let addr = *block_class_addrs
                     .entry(name.clone())
                     .or_insert_with(|| mem.alloc(16).to_bits());
-                log_dbg!(
-                    "Patched block class descriptor {} -> {:#x}",
-                    name,
-                    addr
-                );
+                log_dbg!("Patched block class descriptor {} -> {:#x}", name, addr);
                 Ptr::from_bits(addr)
             } else if let Some(&external_addr) = bins
                 .iter()
@@ -632,7 +628,11 @@ impl Dyld {
                     .unwrap()
                     .to_ptr();
                 mem.write(ptr_ptr, trampoline_ptr);
-                log_dbg!("Linked non-lazy host function {} at {:?}", symbol, trampoline_ptr);
+                log_dbg!(
+                    "Linked non-lazy host function {} at {:?}",
+                    symbol,
+                    trampoline_ptr
+                );
                 continue;
             }
 
@@ -709,10 +709,7 @@ impl Dyld {
                 mem.write(fn_ptr + 0, encode_a32_ret());
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 mem.write(ptr_ptr, fn_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___objc_personality_v0 -> {:#x}",
-                    fn_ptr.to_bits()
-                );
+                log_dbg!("Stubbed ___objc_personality_v0 -> {:#x}", fn_ptr.to_bits());
                 continue;
             }
 
@@ -722,10 +719,7 @@ impl Dyld {
                 let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(val_ptr, 1u32);
                 mem.write(ptr_ptr, val_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___mb_cur_max -> {:#x}",
-                    val_ptr.to_bits()
-                );
+                log_dbg!("Stubbed ___mb_cur_max -> {:#x}", val_ptr.to_bits());
                 continue;
             }
 
@@ -800,7 +794,6 @@ impl Dyld {
         cpu: &mut Cpu,
         svc_pc: u32,
     ) -> Option<HostFunction> {
-        
         // Links by restoring the original stub function, then updating
         // __la_symbol_ptr to the appropriate function.
         fn link_by_restoring_stub(
@@ -811,8 +804,7 @@ impl Dyld {
             entry_size: u32,
             pic_offset: u32,
         ) -> (MutPtr<u32>, MutPtr<u32>) {
-       
-             let original_instructions = match entry_size {
+            let original_instructions = match entry_size {
                 4 => Dyld::SYMBOL_STUB1_INSTRUCTIONS.as_slice(),
                 12 => Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 16 => Dyld::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
@@ -950,10 +942,8 @@ impl Dyld {
             svc_pc
         );
         // `linked_host_functions` requires a `&'static str`, so leak the name.
-        let leaked_symbol: &'static str =
-            Box::leak(symbol.to_string().into_boxed_str());
-        let f: HostFunction =
-            &(unimplemented_function_stub as fn(&mut Environment) -> i32);
+        let leaked_symbol: &'static str = Box::leak(symbol.to_string().into_boxed_str());
+        let f: HostFunction = &(unimplemented_function_stub as fn(&mut Environment) -> i32);
         // Allocate an SVC ID for this stub (same pattern as the host-dylib
         // branch above).
         let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
@@ -1006,14 +996,15 @@ impl Dyld {
             if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol_name) {
                 return Ok(cached_fn);
             }
-            
+
             let (_, f) = export_c_func!(dyld_stub_binder(_));
             // Передаем именно статическую строку
             let function_ptr = self.create_guest_function(mem, symbol_name, f);
-            self.non_lazy_host_functions.insert(symbol_name, function_ptr);
+            self.non_lazy_host_functions
+                .insert(symbol_name, function_ptr);
             return Ok(function_ptr);
         }
-        
+
         let &(symbol, f) = search_host_dylibs(|dylib| dylib.function_exports, symbol).ok_or(())?;
         if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol) {
             return Ok(cached_fn);
@@ -1043,14 +1034,6 @@ impl Dyld {
     }
 }
 
-/// Вызывается из `lib.rs` для регистрации GLES 2.0 заглушек.
-pub fn register_gles2_stubs() {
-    log!("Регистрация GLES 2.0 заглушек...");
-    // В зависимости от того, как устроен ваш модуль gles2_stubs, здесь можно вызвать:
-    // crate::gles::gles2_stubs::register();
-    // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
-}
-
 fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
     panic!("dyld_stub_binder was called! Under HLE, all lazy symbols are bound eagerly, making this unreachable.");
 }
@@ -1064,4 +1047,3 @@ fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
 fn unimplemented_function_stub(_env: &mut Environment) -> i32 {
     0
 }
-
