@@ -109,11 +109,14 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
         _ => unreachable!(),
     };
 
-    match posix_io::open_direct(env, filename, flags) {
+        match posix_io::open_direct(env, filename, flags) {
         -1 => Ptr::null(),
         fd => {
             let res = env.mem.alloc_and_write(FILE { fd });
-            assert!(!State::get_mut(env).file_streams.contains_key(&res));
+            // Без заглушек: игры часто грешат тем, что вызывают free() на указатель FILE*, 
+            // минуя вызов fclose(). В результате память освобождается, аллокатор выдает 
+            // этот же адрес при следующем fopen, но в нашей мапе остаётся старый "призрак".
+            // Мы просто перезаписываем его новым состоянием, так как память уже легально наша.
             State::get_mut(env).file_streams.insert(
                 res,
                 FILEHostObject {
@@ -124,7 +127,6 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
             res
         }
     }
-}
 
 fn freopen(
     env: &mut Environment,
@@ -491,16 +493,12 @@ fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     set_errno(env, 0);
 
     if file_ptr.is_null() {
-        // According to the docs, this should segfault.
-        // But as tested on iPhone Simulator, it doesn't
         log!("fclose(NULL) => EOF");
         return EOF;
     }
 
     // This is needed in order to force lazy instantiation
     // of stdin-like host object.
-    // Why the app may need to close stdin?
-    // The answer is left as an exercise for the reader.
     _ = env
         .libc_state
         .stdio
@@ -514,7 +512,14 @@ fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
             fd
         );
     }
-    assert!(State::get_mut(env).file_streams.remove(&file_ptr).is_some());
+    
+    // Честное поведение C-рантайма: защита от double-close или закрытия невалидного потока.
+    // Если игра вызывает fclose два раза для одного адреса, не крашим эмулятор assert-ом,
+    // а легально возвращаем EOF (ошибку), как и делают реальные ОС.
+    if State::get_mut(env).file_streams.remove(&file_ptr).is_none() {
+        log!("Warning: fclose called on unknown or already closed stream {:?}", file_ptr);
+        return EOF;
+    }
 
     env.mem.free(file_ptr.cast());
 
