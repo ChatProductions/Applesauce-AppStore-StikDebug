@@ -5,6 +5,8 @@
  */
 //! `NSCondition` and `NSConditionLock`.
 
+use std::collections::VecDeque;
+
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
@@ -17,11 +19,12 @@ use crate::objc::{
 struct NSConditionHostObject {
     /// Name NSString* — for debugging.
     name: id,
-    /// Simulated signal count — incremented by signal/broadcast,
-    /// decremented by wait. Since we have no real OS condition variable
-    /// in the guest, we track signals so that wait: returns immediately
-    /// when a signal is already pending.
-    pending_signals: u32,
+    /// Состояние внутреннего мьютекса
+    locked: bool,
+    /// Потоки, ожидающие захвата блокировки (lock)
+    lock_waiting_threads: VecDeque<crate::environment::ThreadId>,
+    /// Потоки, ожидающие сигнала (wait)
+    waiting_threads: VecDeque<crate::environment::ThreadId>,
 }
 impl HostObject for NSConditionHostObject {}
 
@@ -35,6 +38,9 @@ struct NSConditionLockHostObject {
     condition: NSInteger,
     /// Whether the lock is currently held.
     locked: bool,
+    /// Потоки, ожидающие захвата. Option<NSInteger> указывает, ждет ли поток 
+    /// конкретного состояния (Some) или просто освобождения блокировки (None).
+    waiting_threads: VecDeque<(crate::environment::ThreadId, Option<NSInteger>)>,
 }
 impl HostObject for NSConditionLockHostObject {}
 
@@ -51,7 +57,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(NSConditionHostObject {
         name: nil,
-        pending_signals: 0,
+        locked: false,
+        lock_waiting_threads: VecDeque::new(),
+        waiting_threads: VecDeque::new(),
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -82,75 +90,113 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: NSLocking protocol
 
 - (())lock {
-    // In a real implementation this would acquire the underlying mutex.
-    // Since touchHLE is single-threaded at the guest level we treat all
-    // locking as no-ops, but keep the signal accounting intact.
-    log_dbg!("NSCondition lock {:?}", this);
+    loop {
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+            if !host.locked {
+                host.locked = true;
+                break;
+            }
+            // Мьютекс занят, добавляем себя в очередь и засыпаем
+            let current_thread = env.current_thread;
+            host.lock_waiting_threads.push_back(current_thread);
+        }
+        env.suspend_thread(env.current_thread);
+    }
 }
 
 - (())unlock {
-    log_dbg!("NSCondition unlock {:?}", this);
+    let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+    host.locked = false;
+    
+    // Будим первый поток в очереди
+    if let Some(thread) = host.lock_waiting_threads.pop_front() {
+        env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+    }
 }
 
 // MARK: Wait / signal / broadcast
 
 - (())wait {
-    // Consume one pending signal if available, otherwise log a warning
-    // (a real wait would block until signalled).
-    let pending = env.objc.borrow::<NSConditionHostObject>(this).pending_signals;
-    if pending > 0 {
-        env.objc.borrow_mut::<NSConditionHostObject>(this).pending_signals -= 1;
-        log_dbg!("NSCondition wait {:?}: consumed pending signal", this);
-    } else {
-        log!(
-            "Warning: NSCondition wait {:?}: no pending signal — \
-             returning immediately (single-threaded guest)",
-            this
-        );
+    // 1. Атомарно освобождаем блокировку и добавляем себя в очередь ожидания сигнала
+    {
+        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        host.locked = false;
+        if let Some(thread) = host.lock_waiting_threads.pop_front() {
+            env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+        }
+        
+        let current_thread = env.current_thread;
+        host.waiting_threads.push_back(current_thread);
     }
+    
+    // 2. Засыпаем, пока нас не разбудит `signal` или `broadcast`
+    env.suspend_thread(env.current_thread);
+    
+    // 3. По правилам POSIX, после пробуждения необходимо снова захватить мьютекс
+    () = msg![env; this lock];
 }
 
 - (bool)waitUntilDate:(id)limit_date { // NSDate*
-    // Check if the date has already passed.
     let ti: f64 = msg![env; limit_date timeIntervalSinceNow];
     if ti <= 0.0 {
-        log_dbg!("NSCondition waitUntilDate: date already passed => NO", );
         return false;
     }
-    // Try to consume a pending signal; if none just return YES as a
-    // spurious wake-up (acceptable per POSIX).
-    let pending = env.objc.borrow::<NSConditionHostObject>(this).pending_signals;
-    if pending > 0 {
-        env.objc.borrow_mut::<NSConditionHostObject>(this).pending_signals -= 1;
-        log_dbg!("NSCondition waitUntilDate: consumed pending signal => YES");
-        return true;
+    
+    // 1. Освобождаем блокировку
+    {
+        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        host.locked = false;
+        if let Some(thread) = host.lock_waiting_threads.pop_front() {
+            env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+        }
+        
+        let current_thread = env.current_thread;
+        host.waiting_threads.push_back(current_thread);
     }
-    log_dbg!(
-        "NSCondition waitUntilDate: no pending signal, returning YES (spurious wake-up)"
-    );
-    true
+    
+    // 2. Засыпаем с таймаутом
+    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+    env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
+    
+    // 3. Проверяем, проснулись ли мы сами (таймаут) или нас разбудили
+    let mut timed_out = false;
+    {
+        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        let current_thread = env.current_thread;
+        if let Some(pos) = host.waiting_threads.iter().position(|&t| t == current_thread) {
+            host.waiting_threads.remove(pos);
+            timed_out = true;
+        }
+    }
+    
+    // 4. Захватываем блокировку обратно
+    () = msg![env; this lock];
+    
+    !timed_out
 }
 
 - (())signal {
-    // Record a pending signal so the next wait() returns immediately.
-    env.objc.borrow_mut::<NSConditionHostObject>(this).pending_signals += 1;
-    log_dbg!("NSCondition signal {:?}: pending={}", this,
-        env.objc.borrow::<NSConditionHostObject>(this).pending_signals);
+    // Будим один ждущий поток
+    if let Some(thread) = env.objc.borrow_mut::<NSConditionHostObject>(this).waiting_threads.pop_front() {
+        env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+    }
 }
 
 - (())broadcast {
-    // A broadcast wakes all waiters. We set pending to a large number
-    // so any subsequent waits return immediately.
-    env.objc.borrow_mut::<NSConditionHostObject>(this).pending_signals = u32::MAX;
-    log_dbg!("NSCondition broadcast {:?}", this);
+    // Будим все ждущие потоки
+    let threads = std::mem::take(&mut env.objc.borrow_mut::<NSConditionHostObject>(this).waiting_threads);
+    for thread in threads {
+        env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+    }
 }
 
 // MARK: Description
 
 - (id)description {
-    let (name, pending) = {
+    let (name, waiting_count) = {
         let h = env.objc.borrow::<NSConditionHostObject>(this);
-        (h.name, h.pending_signals)
+        (h.name, h.waiting_threads.len())
     };
     let name_str = if name != nil {
         crate::frameworks::foundation::ns_string::to_rust_string(env, name).into_owned()
@@ -158,8 +204,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         "(nil)".to_string()
     };
     let s = format!(
-        "<NSCondition: {:?}; name={}; pendingSignals={}>",
-        this, name_str, pending
+        "<NSCondition: {:?}; name={}; waitingThreads={}>",
+        this, name_str, waiting_count
     );
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
@@ -178,6 +224,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         name: nil,
         condition: 0,
         locked: false,
+        waiting_threads: VecDeque::new(),
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -219,75 +266,129 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: NSLocking protocol
 
 - (())lock {
-    log_dbg!("NSConditionLock lock {:?}", this);
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
+    loop {
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            if !host.locked {
+                host.locked = true;
+                break;
+            }
+            let current_thread = env.current_thread;
+            host.waiting_threads.push_back((current_thread, None));
+        }
+        env.suspend_thread(env.current_thread);
+    }
 }
 
 - (())unlock {
-    log_dbg!("NSConditionLock unlock {:?}", this);
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = false;
+    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    host.locked = false;
+    
+    // Ищем первый поток, который ждет освобождения или ждет текущего condition
+    let mut to_wake = None;
+    for (i, &(_, cond)) in host.waiting_threads.iter().enumerate() {
+        if cond.is_none() || cond == Some(host.condition) {
+            to_wake = Some(i);
+            break;
+        }
+    }
+    
+    if let Some(i) = to_wake {
+        let (thread, _) = host.waiting_threads.remove(i).unwrap();
+        env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+    }
 }
 
 // MARK: Conditional locking
 
 - (())lockWhenCondition:(NSInteger)condition {
-    // In a real implementation this would block until the condition matches.
-    // We just set the condition and lock immediately.
-    log_dbg!("NSConditionLock lockWhenCondition:{} — locking immediately", condition);
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
+    loop {
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            if !host.locked && host.condition == condition {
+                host.locked = true;
+                break;
+            }
+            let current_thread = env.current_thread;
+            host.waiting_threads.push_back((current_thread, Some(condition)));
+        }
+        env.suspend_thread(env.current_thread);
+    }
 }
 
 - (bool)lockWhenCondition:(NSInteger)condition
                beforeDate:(id)limit_date { // NSDate*
-    let ti: f64 = msg![env; limit_date timeIntervalSinceNow];
-    if ti <= 0.0 {
-        log_dbg!("NSConditionLock lockWhenCondition:{} beforeDate: expired => NO", condition);
-        return false;
+    loop {
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            if !host.locked && host.condition == condition {
+                host.locked = true;
+                return true;
+            }
+        }
+        
+        let ti: f64 = msg![env; limit_date timeIntervalSinceNow];
+        if ti <= 0.0 {
+            return false;
+        }
+        
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let current_thread = env.current_thread;
+            host.waiting_threads.push_back((current_thread, Some(condition)));
+        }
+        
+        let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+        env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
+        
+        // Удаляем себя из очереди, если мы проснулись по таймауту 
+        // (если разбудили — следующая итерация захватит блокировку)
+        {
+            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let current_thread = env.current_thread;
+            if let Some(pos) = host.waiting_threads.iter().position(|&(t, _)| t == current_thread) {
+                host.waiting_threads.remove(pos);
+            }
+        }
     }
-    let current = env.objc.borrow::<NSConditionLockHostObject>(this).condition;
-    if current == condition {
-        env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
-        log_dbg!("NSConditionLock lockWhenCondition:{} matched => YES", condition);
-        return true;
-    }
-    log_dbg!(
-        "NSConditionLock lockWhenCondition:{} current={} — locking anyway (stub) => YES",
-        condition, current
-    );
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
-    true
 }
 
 - (bool)tryLock {
-    let locked = env.objc.borrow::<NSConditionLockHostObject>(this).locked;
-    if locked {
-        log_dbg!("NSConditionLock tryLock: already locked => NO");
-        return false;
+    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    if !host.locked {
+        host.locked = true;
+        return true;
     }
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
-    log_dbg!("NSConditionLock tryLock => YES");
-    true
+    false
 }
 
 - (bool)tryLockWhenCondition:(NSInteger)condition {
-    let host = env.objc.borrow::<NSConditionLockHostObject>(this);
-    if host.locked || host.condition != condition {
-        log_dbg!(
-            "NSConditionLock tryLockWhenCondition:{} failed (locked={} cond={}) => NO",
-            condition, host.locked, host.condition
-        );
-        return false;
+    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    if !host.locked && host.condition == condition {
+        host.locked = true;
+        return true;
     }
-    env.objc.borrow_mut::<NSConditionLockHostObject>(this).locked = true;
-    log_dbg!("NSConditionLock tryLockWhenCondition:{} => YES", condition);
-    true
+    false
 }
 
 - (())unlockWithCondition:(NSInteger)condition {
-    log_dbg!("NSConditionLock unlockWithCondition:{}", condition);
-    let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     host.locked = false;
     host.condition = condition;
+    
+    // Ищем первый поток, который ждет нового condition
+    let mut to_wake = None;
+    for (i, &(_, cond)) in host.waiting_threads.iter().enumerate() {
+        if cond.is_none() || cond == Some(condition) {
+            to_wake = Some(i);
+            break;
+        }
+    }
+    
+    if let Some(i) = to_wake {
+        let (thread, _) = host.waiting_threads.remove(i).unwrap();
+        env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
+    }
 }
 
 // MARK: Description
