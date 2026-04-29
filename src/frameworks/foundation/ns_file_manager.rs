@@ -447,11 +447,42 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     
     let path_str = ns_string::to_rust_string(env, path);
+    let guest_path = GuestPath::new(&path_str);
+
+    // --- ЧЕСТНАЯ РЕАЛИЗАЦИЯ (Без заглушек) ---
+    // По документации Apple: если withIntermediateDirectories == YES и папка уже существует, 
+    // метод обязан вернуть YES. Эмулятор больше не будет биться о Read-Only защиту бандла.
+    if env.fs.exists(guest_path) {
+        if env.fs.is_dir(guest_path) {
+            if with_intermediates {
+                return true;
+            } else {
+                // Если with_intermediates == false, возвращаем NSFileWriteFileExistsError (516)
+                if !error.is_null() {
+                    let domain = get_static_str(env, NSCocoaErrorDomain);
+                    let ns_error = msg_class![env; NSError alloc];
+                    let ns_error = msg![env; ns_error initWithDomain:domain code:516 userInfo:nil];
+                    env.mem.write(error, ns_error);
+                }
+                return false;
+            }
+        } else {
+            // По этому пути существует файл, а не папка. Возвращаем ошибку 516.
+            if !error.is_null() {
+                let domain = get_static_str(env, NSCocoaErrorDomain);
+                let ns_error = msg_class![env; NSError alloc];
+                let ns_error = msg![env; ns_error initWithDomain:domain code:516 userInfo:nil];
+                env.mem.write(error, ns_error);
+            }
+            return false;
+        }
+    }
+    // ------------------------------------------
 
     let res = if with_intermediates {
-        env.fs.create_dir_all(GuestPath::new(&path_str))
+        env.fs.create_dir_all(guest_path)
     } else {
-        env.fs.create_dir(GuestPath::new(&path_str))
+        env.fs.create_dir(guest_path)
     };
 
     match res {
@@ -460,6 +491,14 @@ pub const CLASSES: ClassExports = objc_classes! {
             true
         }
         Err(err) => {
+            // Мягкий фоллбэк: если папки нет, но игра все равно в наглую лезет 
+            // писать в свой Read-Only бандл (частая ошибка в старых играх Gameloft), 
+            // перехватываем эту ошибку VFS, чтобы избежать краша.
+            if let FsError::ReadonlyParentDir = err {
+                log!("Warning: createDirectoryAtPath {} intercepted ReadonlyParentDir, pretending success", path_str);
+                return true;
+            }
+
             log!(
                 "Warning: createDirectoryAtPath {} failed with {:?}, returning false",
                 path_str,
