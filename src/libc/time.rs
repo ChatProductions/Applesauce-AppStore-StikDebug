@@ -556,7 +556,7 @@ fn strftime(
                     // Эмулятор считает время от UNIX_EPOCH без смещения (tm_gmtoff = 0),
                     // поэтому мы легально находимся в зоне GMT.
                     res.extend_from_slice(b"GMT");
-                } else if let Some(tz_str) = env.mem.cstr_at_utf8(tz_ptr) {
+                } else if let Ok(tz_str) = env.mem.cstr_at_utf8(tz_ptr) {
                     // Если указатель есть — честно читаем зону из памяти гостя
                     res.extend_from_slice(tz_str.as_bytes());
                 } else {
