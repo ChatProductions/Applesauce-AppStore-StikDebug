@@ -14,16 +14,24 @@ use crate::libc::sysctl::SysInfoType::String;
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
 use crate::Environment;
 
-static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 19] = [
+static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 24] = [
     // Generic CPU, I/O
     ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
     ((6,2), "hw.model" , String(b"M68AP")),
     ((6,3), "hw.ncpu" , SysInfoType::Int32(1)),
+    ((6,25), "hw.activecpu" , SysInfoType::Int32(1)), // Активные ядра
     ((0,0), "hw.cputype" , SysInfoType::Int32(12)),
     ((0,0), "hw.cpusubtype" , SysInfoType::Int32(6)),
     ((6,15), "hw.cpufrequency" , SysInfoType::Int64(412000000)),
-    ((6,16), "hw.cpufrequency_max", SysInfoType::Int64(412000000)), // Добавлена макс. частота
+    ((6,16), "hw.cpufrequency_max", SysInfoType::Int64(412000000)),
     ((6,14), "hw.busfrequency" , SysInfoType::Int64(103000000)),
+    
+    // Честные параметры кэша для ARM1176JZF-S (iPhone 2G / 3G)
+    ((0,0), "hw.cachelinesize", SysInfoType::Int32(32)),
+    ((0,0), "hw.l1dcachesize", SysInfoType::Int32(16384)),
+    ((0,0), "hw.l2cachesize", SysInfoType::Int32(0)),
+    ((0,0), "hw.l3cachesize", SysInfoType::Int32(0)),
+    
     ((1, 14), "kern.osversion", String(b"5A347")),
     ((6,5), "hw.physmem" , SysInfoType::Int32(121634816)),
     ((6,6), "hw.usermem" , SysInfoType::Int32(93564928)),
@@ -35,7 +43,7 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 19] = [
     ((1,3), "kern.osversion" , String(b"8A293")),
     ((1,10), "kern.hostname" , String(b"touchHLE")),
     ((1,4), "kern.version" , String(b"Darwin Kernel Version 10.4.0: Thu Jun 10 14:26:58 PDT 2010; root:xnu-1504.58.2~1/RELEASE_ARM_S5L8900X")),
-    ((1,21), "kern.boottime" , SysInfoType::Int64(1600000000)), // Добавлено время загрузки (struct timeval в виде 8 байт)
+    ((1,21), "kern.boottime" , SysInfoType::Int64(1600000000)),
 ];
 
 static STRING_MAP: LazyLock<HashMap<&str, SysInfoType>> = LazyLock::new(|| {
