@@ -711,8 +711,16 @@ pub fn decode_buffer(
                         new_processed_data,
                     );
                 }
-                // --- УЛУЧШЕННЫЙ ОТЛОВ ОШИБОК ---
-                _ => unreachable!("Unhandled audio format: {} channels, {} bits", actual_channels_per_frame, format.bits_per_channel),
+                                // ... предыдущие рабочие ветки (1, 32) и (2, 32) остаются как есть ...
+                _ => {
+                    // Копируем значение в локальную переменную, чтобы избежать создания ссылки на packed-поле
+                    let bits = format.bits_per_channel;
+                    unreachable!(
+                        "Unhandled audio format: {} channels, {} bits", 
+                        actual_channels_per_frame, 
+                        bits
+                    )
+                }
             };
 
             (f, format.sample_rate as ALsizei, processed_data)
