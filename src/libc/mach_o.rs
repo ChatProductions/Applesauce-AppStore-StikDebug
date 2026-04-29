@@ -104,5 +104,5 @@ fn get_etext(env: &mut Environment) -> u32 {
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(get_end()), 
     export_c_func!(get_etext()),
-    export_c_func!(host_info(_, _, _, _, _)),
+    export_c_func!(host_info(_, _, _, _)),
 ];
