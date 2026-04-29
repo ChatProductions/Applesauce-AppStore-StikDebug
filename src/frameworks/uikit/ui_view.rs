@@ -491,9 +491,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; UIColor colorWithCGColor:cg_color]
 }
 - (())setBackgroundColor:(id)color {
-    let color: CGColorRef = if color != nil { msg![env; color CGColor] } else { crate::objc::nil };
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
-    msg![env; layer setBackgroundColor:color]
+
+    if color != nil {
+        let pattern_image = super::ui_color::get_pattern_image(&env.objc, color);
+        if pattern_image != nil {
+            let cg_image: id = msg![env; pattern_image CGImage];
+            crate::frameworks::core_animation::ca_layer::set_background_pattern_cg_image(
+                env, layer, cg_image,
+            );
+            let clear: CGColorRef = nil;
+            () = msg![env; layer setBackgroundColor:clear];
+            return;
+        }
+    }
+
+    let cg_color: CGColorRef = if color != nil { msg![env; color CGColor] } else { nil };
+    () = msg![env; layer setBackgroundColor:cg_color];
 }
 
 - (())setNeedsDisplay {

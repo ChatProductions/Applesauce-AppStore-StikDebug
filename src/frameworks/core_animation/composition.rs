@@ -529,6 +529,77 @@ unsafe fn composite_layer_recursive(
         false
     };
 
+    // Draw background pattern image (tiled), if any
+    let have_background = if host_obj.background_pattern_cg_image != nil {
+        let pattern_cg = host_obj.background_pattern_cg_image;
+        let image = cg_image::borrow_image(&env.objc, pattern_cg);
+        let (img_w, img_h) = image.dimensions();
+
+        // Get or create the cached GL texture for this pattern
+        let pattern_tex = {
+            let orig = env.objc.borrow::<CALayerHostObject>(layer);
+            orig.background_pattern_gles_texture
+        };
+        let tex = if let Some(t) = pattern_tex {
+            t
+        } else {
+            let mut t: GLuint = 0;
+            gles.GenTextures(1, &mut t);
+            gles.BindTexture(gles11::TEXTURE_2D, t);
+            let pixels = image.pixels();
+            upload_rgba8_pixels(gles.as_mut(), pixels, (img_w, img_h));
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_MIN_FILTER, gles11::NEAREST as _);
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_MAG_FILTER, gles11::NEAREST as _);
+            env.objc.borrow_mut::<CALayerHostObject>(layer).background_pattern_gles_texture = Some(t);
+            t
+        };
+        gles.BindTexture(gles11::TEXTURE_2D, tex);
+
+        // Compute tiled texture coordinates
+        let tile_x = host_obj.bounds.size.width / img_w as f32;
+        let tile_y = host_obj.bounds.size.height / img_h as f32;
+        let tiled_coords: [f32; 8] = [
+            0.0,    tile_y,
+            0.0,    0.0,
+            tile_x, tile_y,
+            tile_x, 0.0,
+        ];
+
+        let misc = env
+            .framework_state
+            .core_animation
+            .composition
+            .misc_gl_objects
+            .as_ref()
+            .unwrap();
+
+        gles.Color4f(opacity, opacity, opacity, opacity);
+        gles.Enable(gles11::BLEND);
+        gles.BlendFunc(gles11::ONE, gles11::ONE_MINUS_SRC_ALPHA);
+        gles.Enable(gles11::TEXTURE_2D);
+
+        gles.EnableClientState(gles11::VERTEX_ARRAY);
+        gles.BindBuffer(gles11::ARRAY_BUFFER, misc.basic_square_buffer);
+        gles.VertexPointer(2, gles11::FLOAT, 0, 0 as *const GLvoid);
+
+        gles.EnableClientState(gles11::TEXTURE_COORD_ARRAY);
+        gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
+        gles.TexCoordPointer(2, gles11::FLOAT, 0, tiled_coords.as_ptr() as *const GLvoid);
+
+        gles.DrawElements(
+            gles11::TRIANGLES,
+            SQUARE_INDICES.len() as _,
+            gles11::UNSIGNED_BYTE,
+            0 as *const GLvoid,
+        );
+
+        true
+    } else {
+        have_background
+    };
+
     let need_texture = host_obj.presented_pixels.is_some()
         || host_obj.contents != nil
         || host_obj.cg_context.is_some();

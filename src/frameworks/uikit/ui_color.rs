@@ -13,8 +13,8 @@ use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::NSInteger;
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr, ObjC,
-    SEL,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr, ObjC, SEL,
 };
 use crate::Environment;
 use std::collections::HashMap;
@@ -48,8 +48,16 @@ fn get_standard_color(
 
 struct UIColorHostObject {
     cg_color: CGColorRef,
+    /// Non-nil when this color was created via `colorWithPatternImage:`.
+    pattern_image: id,
 }
 impl HostObject for UIColorHostObject {}
+
+/// Returns the pattern image associated with a UIColor, or nil if it is not a
+/// pattern color.
+pub fn get_pattern_image(objc: &ObjC, color: id) -> id {
+    objc.borrow::<UIColorHostObject>(color).pattern_image
+}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -60,6 +68,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIColorHostObject {
         cg_color: nil,
+        pattern_image: nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -120,10 +129,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)colorWithPatternImage:(id)_image { // UIImage*
-    // No pattern rendering — return clear color as a safe fallback.
-    log!("UIColor colorWithPatternImage: stubbed, returning clearColor");
-    msg_class![env; UIColor clearColor]
++ (id)colorWithPatternImage:(id)image { // UIImage*
+    let new: id = msg![env; this alloc];
+    // Use a fully transparent CGColor; the actual rendering is done by
+    // checking `pattern_image` on the UIView side.
+    env.objc.borrow_mut::<UIColorHostObject>(new).cg_color =
+        cg_color::from_rgba(env, (0.0, 0.0, 0.0, 0.0));
+    retain(env, image);
+    env.objc.borrow_mut::<UIColorHostObject>(new).pattern_image = image;
+    autorelease(env, new)
 }
 
 // iOS 13+ dynamic color — we always use the light variant.
@@ -440,8 +454,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let color = env.objc.borrow_mut::<UIColorHostObject>(this).cg_color;
+    let host = env.objc.borrow_mut::<UIColorHostObject>(this);
+    let color = host.cg_color;
+    let pattern = host.pattern_image;
     CGColorRelease(env, color);
+    release(env, pattern);
 
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -466,6 +483,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIColorHostObject {
         cg_color: nil,
+        pattern_image: nil,
     });
     env.objc.alloc_static_object(this, host_object, &mut env.mem)
 }

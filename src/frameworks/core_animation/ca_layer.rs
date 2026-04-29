@@ -47,6 +47,9 @@ pub(super) struct CALayerHostObject {
     pub(super) opaque: bool,
     pub(super) opacity: f32,
     pub(super) background_color: Option<CGColorHostObject>,
+    /// CGImageRef for pattern backgrounds (set via colorWithPatternImage:)
+    pub(super) background_pattern_cg_image: id,
+    pub(super) background_pattern_gles_texture: Option<crate::gles::gles11_raw::types::GLuint>,
     pub(super) corner_radius: CGFloat,
     pub(super) border_width: CGFloat,
     pub(super) border_color: Option<CGColorHostObject>,
@@ -78,6 +81,25 @@ impl CALayerHostObject {
                 self.position.y,
             ))
     }
+}
+
+/// Set a CGImage as the tiled background pattern for this layer.
+/// Called from UIView when a pattern-based UIColor is set as backgroundColor.
+pub fn set_background_pattern_cg_image(
+    env: &mut Environment,
+    layer: id,
+    cg_image: id,
+) {
+    use crate::objc::{release, retain};
+    retain(env, cg_image);
+    let old = env
+        .objc
+        .borrow::<CALayerHostObject>(layer)
+        .background_pattern_cg_image;
+    release(env, old);
+    env.objc
+        .borrow_mut::<CALayerHostObject>(layer)
+        .background_pattern_cg_image = cg_image;
 }
 
 pub const kCAFilterLinear: &str = "kCAFilterLinear";
@@ -113,6 +135,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         opaque: false,
         opacity: 1.0,
         background_color: None,
+        background_pattern_cg_image: nil,
+        background_pattern_gles_texture: None,
         corner_radius: 0.0,
         border_width: 0.0,
         border_color: None,
