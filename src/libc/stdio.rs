@@ -127,6 +127,7 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
             res
         }
     }
+}
 
 fn freopen(
     env: &mut Environment,
