@@ -550,6 +550,19 @@ fn strftime(
                 let formatted_year = format!("{:02}", year);
                 res.extend_from_slice(formatted_year.as_bytes());
             }
+            b'Z' => { 
+                let tz_ptr = time_val.tm_zone;
+                if tz_ptr.is_null() {
+                    // Эмулятор считает время от UNIX_EPOCH без смещения (tm_gmtoff = 0),
+                    // поэтому мы легально находимся в зоне GMT.
+                    res.extend_from_slice(b"GMT");
+                } else if let Some(tz_str) = env.mem.cstr_at_utf8(tz_ptr) {
+                    // Если указатель есть — честно читаем зону из памяти гостя
+                    res.extend_from_slice(tz_str.as_bytes());
+                } else {
+                    res.extend_from_slice(b"GMT");
+                }
+            }
             b'S' => { 
                 let second = time_val.tm_sec;
                 assert!((0..=60).contains(&second));
