@@ -1309,7 +1309,75 @@ fn glFramebufferRenderbufferOES(
     renderbuffer: GLuint,
 ) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
-        gles.FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer)
+        gles.FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer);
+        // When an iOS app attaches its drawable color renderbuffer to an FBO,
+        // it commonly forgets to also attach a depth renderbuffer. On real iOS
+        // GPUs / desktop GL the missing depth attachment is treated leniently,
+        // but a strict OpenGL ES 2.0 driver (e.g. Mesa or Mali) will then
+        // discard every drawn fragment when the app enables GL_DEPTH_TEST.
+        // To match the lenient behaviour we auto-create and attach a matching
+        // depth renderbuffer the first time a color attachment is set up on a
+        // user-managed framebuffer.
+        if gles.is_es2()
+            && attachment == gles11::COLOR_ATTACHMENT0_OES
+            && renderbuffertarget == gles11::RENDERBUFFER_OES
+            && renderbuffer != 0
+        {
+            // Don't clobber an explicitly-attached depth attachment.
+            let mut depth_attached: GLint = 0;
+            gles.GetFramebufferAttachmentParameterivOES(
+                target,
+                gles11::DEPTH_ATTACHMENT_OES,
+                gles11::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_OES,
+                &mut depth_attached,
+            );
+            // Drain any error from the lookup (e.g. on freshly-attached FBO).
+            while gles.GetError() != 0 {}
+            if depth_attached == 0 {
+                // Query renderbuffer size from the just-attached color RB.
+                let mut prev_rb: GLint = 0;
+                gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut prev_rb);
+                gles.BindRenderbufferOES(gles11::RENDERBUFFER_OES, renderbuffer);
+                let mut w: GLint = 0;
+                let mut h: GLint = 0;
+                gles.GetRenderbufferParameterivOES(
+                    gles11::RENDERBUFFER_OES,
+                    gles11::RENDERBUFFER_WIDTH_OES,
+                    &mut w,
+                );
+                gles.GetRenderbufferParameterivOES(
+                    gles11::RENDERBUFFER_OES,
+                    gles11::RENDERBUFFER_HEIGHT_OES,
+                    &mut h,
+                );
+                if w > 0 && h > 0 {
+                    let mut depth_rb: GLuint = 0;
+                    gles.GenRenderbuffersOES(1, &mut depth_rb);
+                    gles.BindRenderbufferOES(gles11::RENDERBUFFER_OES, depth_rb);
+                    gles.RenderbufferStorageOES(
+                        gles11::RENDERBUFFER_OES,
+                        gles11::DEPTH_COMPONENT16_OES,
+                        w,
+                        h,
+                    );
+                    gles.FramebufferRenderbufferOES(
+                        target,
+                        gles11::DEPTH_ATTACHMENT_OES,
+                        gles11::RENDERBUFFER_OES,
+                        depth_rb,
+                    );
+                    log_dbg!(
+                        "Auto-attached depth renderbuffer ({}x{}) to FBO target={:#x} attach={:#x}",
+                        w,
+                        h,
+                        target,
+                        attachment
+                    );
+                }
+                gles.BindRenderbufferOES(gles11::RENDERBUFFER_OES, prev_rb as GLuint);
+            }
+            while gles.GetError() != 0 {}
+        }
     })
 }
 fn glFramebufferTexture2DOES(
@@ -1636,7 +1704,22 @@ fn glDeleteShader(env: &mut Environment, shader: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.DeleteShader(shader) });
 }
 fn glCompileShader(env: &mut Environment, shader: GLuint) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.CompileShader(shader) });
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.CompileShader(shader);
+        let mut ok: GLint = 0;
+        gles.GetShaderiv(shader, 0x8B81 /* GL_COMPILE_STATUS */, &mut ok);
+        if ok == 0 {
+            let mut buf = [0i8; 1024];
+            let mut len: GLsizei = 0;
+            gles.GetShaderInfoLog(shader, 1024, &mut len, buf.as_mut_ptr());
+            let s = std::str::from_utf8(std::slice::from_raw_parts(
+                buf.as_ptr() as *const u8,
+                len as usize,
+            ))
+            .unwrap_or("?");
+            log!("Shader {} compile failed: {}", shader, s);
+        }
+    });
 }
 fn glAttachShader(env: &mut Environment, program: GLuint, shader: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
@@ -1649,7 +1732,22 @@ fn glDetachShader(env: &mut Environment, program: GLuint, shader: GLuint) {
     });
 }
 fn glLinkProgram(env: &mut Environment, program: GLuint) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.LinkProgram(program) });
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.LinkProgram(program);
+        let mut ok: GLint = 0;
+        gles.GetProgramiv(program, 0x8B82 /* GL_LINK_STATUS */, &mut ok);
+        if ok == 0 {
+            let mut buf = [0i8; 1024];
+            let mut len: GLsizei = 0;
+            gles.GetProgramInfoLog(program, 1024, &mut len, buf.as_mut_ptr());
+            let s = std::str::from_utf8(std::slice::from_raw_parts(
+                buf.as_ptr() as *const u8,
+                len as usize,
+            ))
+            .unwrap_or("?");
+            log!("Program {} link failed: {}", program, s);
+        }
+    });
 }
 fn glValidateProgram(env: &mut Environment, program: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.ValidateProgram(program) });
