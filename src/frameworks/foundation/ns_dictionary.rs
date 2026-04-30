@@ -899,38 +899,34 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-- (())setObject:(id)object
-             forKey:(id)key {
-        // Если объект nil, по правилам iOS должно быть исключение NSInvalidArgumentException.
-        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем добавление.
-        if object == nil {
-            let key_str = if key != nil { 
-                crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string() 
-            } else { 
-                "nil".to_string() 
-            };
-            log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to insert nil object for key {} — ignoring", key_str);
-            return;
-        }
-        
-        if key == nil {
-            log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to use nil key — ignoring");
-            return;
-        }
-
-        let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
-        host_obj.insert(env, key, object, /* copy_key: */ true);
-        *env.objc.borrow_mut(this) = host_obj;
-    }
-
-- (())removeObjectForKey:(id)key {
-    if key.is_null() {
-        log!("Warning: [NSMutableDictionary removeObjectForKey:] key is nil — ignored");
+- (())setObject:(id)object forKey:(id)key {
+    if key == nil {
+        log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to insert object for nil key — ignoring");
         return;
     }
-    let mut host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(this));
-    host_obj.remove(env, key);
-    *env.objc.borrow_mut(this) = host_obj;
+
+    if object == nil {
+        // Вместо игнорирования (заглушки) вызываем удаление. 
+        // Это критично для логики сброса данных, таких как "toplist-local".
+        () = msg![env; this removeObjectForKey:key];
+    } else {
+        // Честная вставка: DictionaryHostObject сам позаботится о копировании ключа
+        // и ретейне нового объекта. Нам нужно лишь освободить старый.
+        let old = env.objc.borrow_mut::<DictionaryHostObject>(this).insert(env, key, object, true);
+        release(env, old);
+    }
+}
+
+- (())setValue:(id)value forKey:(id)key {
+    // Перенаправляем в setObject, который теперь умеет правильно обрабатывать nil
+    () = msg![env; this setObject:value forKey:key];
+}
+    
+- (())removeObjectForKey:(id)key {
+    if key == nil { return; }
+    // Удаляем объект из внутреннего HashMap и вызываем release
+    let old = env.objc.borrow_mut::<DictionaryHostObject>(this).remove(key);
+    release(env, old);
 }
 
 - (())removeAllObjects {
