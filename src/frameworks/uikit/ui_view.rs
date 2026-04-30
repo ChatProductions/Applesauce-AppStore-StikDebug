@@ -59,6 +59,7 @@ pub(super) struct UIViewHostObject {
     animation_interval: f64,
     is_animating: bool,
     clips_to_bounds: bool,
+    is_uncontrolled: bool,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -80,6 +81,7 @@ impl Default for UIViewHostObject {
             animation_interval: 1.0 / 60.0,
             is_animating: false,
             clips_to_bounds: false,
+            is_uncontrolled: false,
         }
     }
 }
@@ -128,6 +130,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (())setAnimationsEnabled:(f32)enabled { }
 + (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache { }
 
+- (())setIsUncontrolled:(bool)uncontrolled { 
+    env.objc.borrow_mut::<UIViewHostObject>(this).is_uncontrolled = uncontrolled; 
+}
+    
 - (id)init {
     msg![env; this initWithFrame:(<CGRect as Default>::default())]
 }
@@ -581,6 +587,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer containsPoint:point]
 }
 
+- (bool)isUncontrolled { 
+    env.objc.borrow::<UIViewHostObject>(this).is_uncontrolled 
+}
+    
 - (id)hitTest:(CGPoint)point withEvent:(id)event {
     let is_inside: bool = msg![env; this pointInside:point withEvent:event];
     let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
