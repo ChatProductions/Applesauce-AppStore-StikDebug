@@ -30,48 +30,38 @@ pub struct State {
 
 fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
+
+    // =========================================================================
+    // FIX: Перехват бага разработчиков игр (Integer Underflow)
+    // Если размер подозрительно огромный (близок к 32-битному лимиту, > 0xF0000000),
+    // это почти наверняка отрицательное число (как -1920 байт для шага экрана).
+    // Берем модуль (абсолютное значение), чтобы спасти игру от краша.
+    // =========================================================================
+    if size > 0xF000_0000 {
+        let actual_size = (-(size as i32)) as GuestUSize;
+        log!("TouchHLE::libc::stdlib: Hack! malloc passed negative size {:#x} ({}). Allocating {} bytes instead.", size, size as i32, actual_size);
+        size = actual_size;
+    }
+
     if size == 0 {
         size = 1;
         // Protect against dying on a 0-byte allocation: ISO C lets malloc(0)
-        // return either NULL or a unique pointer; we choose unique so guest
-        // code that later free()s the pointer doesn't crash.
+        // return either NULL or a unique pointer; we choose unique...
     }
-    // Reject obviously absurd allocations (would overflow page alignment in
-    // the underlying allocator) and return NULL — that's what real malloc
-    // does on systems that can't satisfy the request.
-    if size >= 0xf000_0000 {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static HUGE_COUNT: AtomicU32 = AtomicU32::new(0);
-        let n = HUGE_COUNT.fetch_add(1, Ordering::Relaxed);
-        if n < 8 {
-            let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
-            let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
-            let sp = env.cpu.regs()[crate::cpu::Cpu::SP];
-            let fp = env.cpu.regs()[7];
-            let mut stack_words = [0u32; 16];
-            for (i, slot) in stack_words.iter_mut().enumerate() {
-                let addr = sp.wrapping_add((i as u32) * 4);
-                if addr < 0x1000 || addr.checked_add(4).is_none() {
-                    break;
-                }
-                *slot = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(addr));
-            }
-            log!(
-                "malloc({:#x}) refused as out of range — returning NULL \
-                 (#{}, PC={:#x} LR={:#x} SP={:#x} FP={:#x} stack={:#x?})",
-                size,
-                n + 1,
-                pc,
-                lr,
-                sp,
-                fp,
-                stack_words
-            );
-        }
-        set_errno(env, 12); // ENOMEM
-        return Ptr::null();
+
+    // Твой стандартный лимит TouchHLE (обычно 128 МБ - 0x0800_0000)
+    // Если в твоем файле лимит другой - оставь свою цифру.
+    if size > 0x0800_0000 {
+        log!("TouchHLE::libc::stdlib: malloc({:#x}) refused as out of range — returning NULL", size);
+        set_errno(env, crate::libc::errno::ENOMEM);
+        return MutVoidPtr::null();
     }
-    env.mem.alloc(size)
+
+    let ptr = env.mem.alloc(size as u32);
+    if ptr.is_null() {
+        set_errno(env, crate::libc::errno::ENOMEM);
+    }
+    ptr.cast()
 }
 
 fn malloc_size(env: &mut Environment, ptr: ConstVoidPtr) -> GuestUSize {
