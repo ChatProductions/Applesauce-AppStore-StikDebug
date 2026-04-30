@@ -15,7 +15,7 @@ use crate::frameworks::foundation::NSUInteger;
 use crate::gles::gles11_raw as gles11; // constants only
 use crate::gles::gles11_raw::types::*;
 use crate::gles::present::{present_frame, FpsCounter};
-use crate::gles::{create_gles1_ctx, gles1_on_gl2, GLESContext, GLES};
+use crate::gles::{create_gles1_ctx, create_gles2_ctx, gles1_on_gl2, GLESContext, GLES};
 use crate::mem::MutPtr;
 use crate::objc::{id, msg, nil, objc_classes, release, retain, ClassExports, HostObject};
 use crate::options::Options;
@@ -54,13 +54,16 @@ pub const CONSTANTS: ConstantExports = &[
 
 type EAGLRenderingAPI = u32;
 const kEAGLRenderingAPIOpenGLES1: EAGLRenderingAPI = 1;
-#[allow(dead_code)]
 const kEAGLRenderingAPIOpenGLES2: EAGLRenderingAPI = 2;
 #[allow(dead_code)]
 const kEAGLRenderingAPIOpenGLES3: EAGLRenderingAPI = 3;
 
 pub(super) struct EAGLContextHostObject {
     pub(super) gles_ctx: Option<Box<dyn GLESContext>>,
+    /// Which EAGL rendering API was requested. This influences how
+    /// [super::gles_guest] dispatches calls and how the present-renderbuffer
+    /// path saves and restores state.
+    pub(super) api: EAGLRenderingAPI,
     /// Mapping of OpenGL ES renderbuffer names to `EAGLDrawable` instances
     /// (always `CAEAGLLayer*`). Retains the instance so it won't dangle.
     renderbuffer_drawable_bindings: Rc<RefCell<HashMap<GLuint, id>>>,
@@ -79,6 +82,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)alloc {
     let host_object = Box::new(EAGLContextHostObject {
         gles_ctx: None,
+        api: kEAGLRenderingAPIOpenGLES1,
         renderbuffer_drawable_bindings: Rc::new(RefCell::new(HashMap::new())),
         fps_counter: None,
         next_frame_due: None,
@@ -110,9 +114,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithAPI:(EAGLRenderingAPI)api sharegroup:(id)group {
-    if api != kEAGLRenderingAPIOpenGLES1 {
+    if api != kEAGLRenderingAPIOpenGLES1 && api != kEAGLRenderingAPIOpenGLES2 {
         log!(
-            "TODO: App requested EAGL initWithAPI:{} sharegroup:{:?}, returning nil as we only support API 1 for now",
+            "TODO: App requested EAGL initWithAPI:{} sharegroup:{:?}, returning nil as we only support API 1 and 2",
             api,
             group
         );
@@ -135,15 +139,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.window.as_mut().unwrap().set_share_with_current_context(true);
 
-    let mut gles1_ins = create_gles1_ctx(env);
+    let mut gles_ins = if api == kEAGLRenderingAPIOpenGLES2 {
+        create_gles2_ctx(env)
+    } else {
+        create_gles1_ctx(env)
+    };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
     {
-        let gles1_ctx = gles1_ins.make_current(window);
-        log!("Driver info: {}", unsafe { gles1_ctx.driver_description() });
+        let gles_ctx = gles_ins.make_current(window);
+        log!("Driver info: {}", unsafe { gles_ctx.driver_description() });
     }
 
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles1_ins);
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = api;
 
     env.window.as_mut().unwrap().set_share_with_current_context(false);
 
@@ -152,30 +161,34 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithAPI:(EAGLRenderingAPI)api {
-    if api != kEAGLRenderingAPIOpenGLES1 {
+    if api != kEAGLRenderingAPIOpenGLES1 && api != kEAGLRenderingAPIOpenGLES2 {
         log!(
-            "TODO: App requested EAGL initWithAPI:{}, returning nil as we only support API 1 for now",
+            "TODO: App requested EAGL initWithAPI:{}, returning nil as we only support API 1 and 2",
             api
         );
         return nil;
     }
 
-    let mut gles1_ins = create_gles1_ctx(env);
+    let mut gles_ins = if api == kEAGLRenderingAPIOpenGLES2 {
+        create_gles2_ctx(env)
+    } else {
+        create_gles1_ctx(env)
+    };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
     {
-        let gles1_ctx = gles1_ins.make_current(window);
-        log!("Driver info: {}", unsafe { gles1_ctx.driver_description() });
+        let gles_ctx = gles_ins.make_current(window);
+        log!("Driver info: {}", unsafe { gles_ctx.driver_description() });
     }
 
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles1_ins);
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = api;
 
     this
 }
 
 - (EAGLRenderingAPI)API {
-    // TODO: support later API versions
-    kEAGLRenderingAPIOpenGLES1
+    env.objc.borrow::<EAGLContextHostObject>(this).api
 }
 
 - (id)sharegroup {
@@ -544,6 +557,344 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
     (pixel_buffer, width_u32, height_u32)
 }
 
+/// Shader-based variant of the renderbuffer presenter, used when the
+/// underlying driver is a real OpenGL ES 2.0 driver (no fixed-function
+/// pipeline available).
+///
+/// This is intentionally simpler than the fixed-function version: we save the
+/// minimum amount of ES 2.0 state, draw the textured quad with a small
+/// dedicated shader program, and restore. The app's matrices, vertex pointers
+/// etc. are not part of ES 2.0 state and thus need no save/restore.
+unsafe fn present_renderbuffer_es2(
+    gles: &mut dyn GLES,
+    viewport: (u32, u32, u32, u32),
+    rotation_matrix: crate::matrix::Matrix<2>,
+    virtual_cursor_visible_at: Option<(f32, f32, bool)>,
+) {
+    use crate::gles::gles2_raw as gles2;
+
+    // Save state we are about to clobber
+    let mut old_program: GLint = 0;
+    gles.GetIntegerv(gles2::CURRENT_PROGRAM, &mut old_program);
+    let mut old_array_buffer: GLint = 0;
+    gles.GetIntegerv(gles2::ARRAY_BUFFER_BINDING, &mut old_array_buffer);
+    let mut old_elem_buffer: GLint = 0;
+    gles.GetIntegerv(gles2::ELEMENT_ARRAY_BUFFER_BINDING, &mut old_elem_buffer);
+    let mut old_active_texture: GLint = 0;
+    gles.GetIntegerv(gles2::ACTIVE_TEXTURE, &mut old_active_texture);
+    let mut old_texture: GLint = 0;
+    gles.GetIntegerv(gles2::TEXTURE_BINDING_2D, &mut old_texture);
+    let mut old_framebuffer: GLint = 0;
+    gles.GetIntegerv(gles2::FRAMEBUFFER_BINDING, &mut old_framebuffer);
+    let mut old_viewport = [0i32; 4];
+    gles.GetIntegerv(gles2::VIEWPORT, old_viewport.as_mut_ptr());
+    let mut old_clear_color = [0.0f32; 4];
+    gles.GetFloatv(gles2::COLOR_CLEAR_VALUE, old_clear_color.as_mut_ptr());
+    let depth_test_was_on = gles.IsEnabled(gles2::DEPTH_TEST) != 0;
+    let cull_was_on = gles.IsEnabled(gles2::CULL_FACE) != 0;
+    let blend_was_on = gles.IsEnabled(gles2::BLEND) != 0;
+    let scissor_was_on = gles.IsEnabled(gles2::SCISSOR_TEST) != 0;
+
+    // Save the enabled state of every vertex attribute slot we might touch.
+    // The app may have left attributes 0..N enabled; mutating them here would
+    // break its next draw call.
+    let mut attrib_was_enabled = [0u8; 16];
+    for (i, slot) in attrib_was_enabled.iter_mut().enumerate() {
+        let mut v: GLint = 0;
+        gles.GetVertexAttribiv(i as GLuint, gles2::VERTEX_ATTRIB_ARRAY_ENABLED, &mut v);
+        *slot = v as u8;
+    }
+
+    // Resolve renderbuffer → texture via a temporary FBO + glCopyTexImage2D,
+    // exactly like the fixed-function path but using the ES 2.0 entry points.
+    let mut renderbuffer: GLint = 0;
+    gles.GetIntegerv(gles2::RENDERBUFFER_BINDING, &mut renderbuffer);
+    let (width, height) = {
+        let mut w: GLint = 0;
+        let mut h: GLint = 0;
+        gles.GetRenderbufferParameteriv(gles2::RENDERBUFFER, gles2::RENDERBUFFER_WIDTH, &mut w);
+        gles.GetRenderbufferParameteriv(gles2::RENDERBUFFER, gles2::RENDERBUFFER_HEIGHT, &mut h);
+        (w, h)
+    };
+
+    let mut src_fb: GLuint = 0;
+    gles.GenFramebuffers(1, &mut src_fb);
+    gles.BindFramebuffer(gles2::FRAMEBUFFER, src_fb);
+    gles.FramebufferRenderbuffer(
+        gles2::FRAMEBUFFER,
+        gles2::COLOR_ATTACHMENT0,
+        gles2::RENDERBUFFER,
+        renderbuffer as GLuint,
+    );
+
+    let mut tex: GLuint = 0;
+    gles.GenTextures(1, &mut tex);
+    gles.ActiveTexture(gles2::TEXTURE0);
+    gles.BindTexture(gles2::TEXTURE_2D, tex);
+    gles.CopyTexImage2D(gles2::TEXTURE_2D, 0, gles2::RGB, 0, 0, width, height, 0);
+    gles.TexParameteri(
+        gles2::TEXTURE_2D,
+        gles2::TEXTURE_MIN_FILTER,
+        gles2::LINEAR as _,
+    );
+    gles.TexParameteri(
+        gles2::TEXTURE_2D,
+        gles2::TEXTURE_MAG_FILTER,
+        gles2::LINEAR as _,
+    );
+    gles.TexParameteri(
+        gles2::TEXTURE_2D,
+        gles2::TEXTURE_WRAP_S,
+        gles2::CLAMP_TO_EDGE as _,
+    );
+    gles.TexParameteri(
+        gles2::TEXTURE_2D,
+        gles2::TEXTURE_WRAP_T,
+        gles2::CLAMP_TO_EDGE as _,
+    );
+
+    gles.BindFramebuffer(gles2::FRAMEBUFFER, 0);
+    gles.DeleteFramebuffers(1, &src_fb);
+
+    // Configure the destination viewport (the window) and clear.
+    gles.Viewport(
+        viewport.0 as _,
+        viewport.1 as _,
+        viewport.2 as _,
+        viewport.3 as _,
+    );
+    gles.ClearColor(0.0, 0.0, 0.0, 1.0);
+    gles.Disable(gles2::DEPTH_TEST);
+    gles.Disable(gles2::CULL_FACE);
+    gles.Disable(gles2::BLEND);
+    gles.Disable(gles2::SCISSOR_TEST);
+    gles.Clear(gles2::COLOR_BUFFER_BIT | gles2::DEPTH_BUFFER_BIT | gles2::STENCIL_BUFFER_BIT);
+
+    // Compile the present shader program once and cache it.
+    let program = ensure_present_program(gles);
+    gles.UseProgram(program.program);
+    gles.Uniform1i(program.u_tex, 0);
+    let m = crate::matrix::Matrix::<4>::from(&rotation_matrix);
+    let cols = m.columns();
+    gles.UniformMatrix4fv(
+        program.u_tex_mat,
+        1,
+        gles2::FALSE,
+        cols.as_ptr() as *const _,
+    );
+
+    // Pixel-coordinate quad covering the whole viewport.
+    #[rustfmt::skip]
+    let verts: [f32; 24] = [
+        // x, y, u, v
+        -1.0, -1.0, 0.0, 0.0,
+         1.0, -1.0, 1.0, 0.0,
+        -1.0,  1.0, 0.0, 1.0,
+         1.0, -1.0, 1.0, 0.0,
+         1.0,  1.0, 1.0, 1.0,
+        -1.0,  1.0, 0.0, 1.0,
+    ];
+    gles.BindBuffer(gles2::ARRAY_BUFFER, 0);
+    gles.EnableVertexAttribArray(program.a_pos as _);
+    gles.EnableVertexAttribArray(program.a_uv as _);
+    gles.VertexAttribPointer(
+        program.a_pos as _,
+        2,
+        gles2::FLOAT,
+        gles2::FALSE,
+        16,
+        verts.as_ptr() as *const _,
+    );
+    gles.VertexAttribPointer(
+        program.a_uv as _,
+        2,
+        gles2::FLOAT,
+        gles2::FALSE,
+        16,
+        (verts.as_ptr() as *const u8).add(8) as *const _,
+    );
+    gles.DrawArrays(gles2::TRIANGLES, 0, 6);
+
+    // Optional: virtual cursor.
+    if let Some((cx, cy, pressed)) = virtual_cursor_visible_at {
+        let (vx, vy, vw, vh) = viewport;
+        let x = cx - vx as f32;
+        let y = cy - vy as f32;
+        let radius = 10.0_f32;
+        // Build quad in NDC.
+        let mut q: [f32; 24] = [
+            -1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 0.0,
+            1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 0.0, 1.0,
+        ];
+        for i in (0..q.len()).step_by(4) {
+            q[i] = (q[i] * radius + x) / (vw as f32 / 2.0) - 1.0;
+            q[i + 1] = 1.0 - (q[i + 1] * radius + y) / (vh as f32 / 2.0);
+        }
+        // Use a solid black quasi-shadow via a separate program, but to keep
+        // things simple just sample our present texture with very low alpha
+        // — skip for now if no separate cursor shader.
+        let _ = pressed;
+    }
+
+    gles.DeleteTextures(1, &tex);
+
+    // Restore vertex attribute enabled state so the app's next draw works.
+    for (i, &was) in attrib_was_enabled.iter().enumerate() {
+        if was != 0 {
+            gles.EnableVertexAttribArray(i as GLuint);
+        } else {
+            gles.DisableVertexAttribArray(i as GLuint);
+        }
+    }
+
+    // Restore state we touched
+    gles.UseProgram(if old_program > 0 {
+        old_program as GLuint
+    } else {
+        0
+    });
+    gles.BindBuffer(gles2::ARRAY_BUFFER, old_array_buffer as GLuint);
+    gles.BindBuffer(gles2::ELEMENT_ARRAY_BUFFER, old_elem_buffer as GLuint);
+    gles.BindFramebuffer(gles2::FRAMEBUFFER, old_framebuffer as GLuint);
+    gles.BindTexture(gles2::TEXTURE_2D, old_texture as GLuint);
+    gles.ActiveTexture(old_active_texture as GLenum);
+    gles.Viewport(
+        old_viewport[0],
+        old_viewport[1],
+        old_viewport[2] as _,
+        old_viewport[3] as _,
+    );
+    gles.ClearColor(
+        old_clear_color[0],
+        old_clear_color[1],
+        old_clear_color[2],
+        old_clear_color[3],
+    );
+    if depth_test_was_on {
+        gles.Enable(gles2::DEPTH_TEST);
+    }
+    if cull_was_on {
+        gles.Enable(gles2::CULL_FACE);
+    }
+    if blend_was_on {
+        gles.Enable(gles2::BLEND);
+    }
+    if scissor_was_on {
+        gles.Enable(gles2::SCISSOR_TEST);
+    }
+}
+
+#[derive(Copy, Clone)]
+struct PresentProgram {
+    program: GLuint,
+    a_pos: GLint,
+    a_uv: GLint,
+    u_tex: GLint,
+    u_tex_mat: GLint,
+}
+
+thread_local! {
+    static PRESENT_PROGRAM: std::cell::Cell<Option<PresentProgram>> =
+        const { std::cell::Cell::new(None) };
+}
+
+unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
+    use crate::gles::gles2_raw as gles2;
+    if let Some(p) = PRESENT_PROGRAM.with(|c| c.get()) {
+        return p;
+    }
+
+    let vs_src = b"\
+        attribute vec2 aPos;\n\
+        attribute vec2 aUV;\n\
+        uniform mat4 uTexMat;\n\
+        varying vec2 vUV;\n\
+        void main() {\n\
+            gl_Position = vec4(aPos, 0.0, 1.0);\n\
+            vUV = (uTexMat * vec4(aUV, 0.0, 1.0)).xy;\n\
+        }\0";
+    let fs_src = b"\
+        precision mediump float;\n\
+        varying vec2 vUV;\n\
+        uniform sampler2D uTex;\n\
+        void main() {\n\
+            gl_FragColor = texture2D(uTex, vUV);\n\
+        }\0";
+
+    let vs = gles.CreateShader(gles2::VERTEX_SHADER);
+    let vs_ptr = vs_src.as_ptr() as *const _;
+    let vs_len = (vs_src.len() - 1) as GLint;
+    gles.ShaderSource(vs, 1, &vs_ptr, &vs_len);
+    gles.CompileShader(vs);
+    let mut ok: GLint = 0;
+    gles.GetShaderiv(vs, gles2::COMPILE_STATUS, &mut ok);
+    if ok == 0 {
+        let mut buf = [0u8; 1024];
+        let mut len: GLsizei = 0;
+        gles.GetShaderInfoLog(vs, 1024, &mut len, buf.as_mut_ptr() as *mut _);
+        let s = std::str::from_utf8(std::slice::from_raw_parts(
+            buf.as_ptr() as *const u8,
+            len as _,
+        ))
+        .unwrap_or("?");
+        panic!("present_es2 vertex shader compile failed: {s}");
+    }
+
+    let fs = gles.CreateShader(gles2::FRAGMENT_SHADER);
+    let fs_ptr = fs_src.as_ptr() as *const _;
+    let fs_len = (fs_src.len() - 1) as GLint;
+    gles.ShaderSource(fs, 1, &fs_ptr, &fs_len);
+    gles.CompileShader(fs);
+    gles.GetShaderiv(fs, gles2::COMPILE_STATUS, &mut ok);
+    if ok == 0 {
+        let mut buf = [0u8; 1024];
+        let mut len: GLsizei = 0;
+        gles.GetShaderInfoLog(fs, 1024, &mut len, buf.as_mut_ptr() as *mut _);
+        let s = std::str::from_utf8(std::slice::from_raw_parts(
+            buf.as_ptr() as *const u8,
+            len as _,
+        ))
+        .unwrap_or("?");
+        panic!("present_es2 fragment shader compile failed: {s}");
+    }
+
+    let prog = gles.CreateProgram();
+    gles.AttachShader(prog, vs);
+    gles.AttachShader(prog, fs);
+    // Bind to high attribute slots so we never collide with the app's
+    // attribute layout (which typically starts at 0).
+    gles.BindAttribLocation(prog, 6, b"aPos\0".as_ptr() as *const _);
+    gles.BindAttribLocation(prog, 7, b"aUV\0".as_ptr() as *const _);
+    gles.LinkProgram(prog);
+    gles.GetProgramiv(prog, gles2::LINK_STATUS, &mut ok);
+    if ok == 0 {
+        let mut buf = [0u8; 1024];
+        let mut len: GLsizei = 0;
+        gles.GetProgramInfoLog(prog, 1024, &mut len, buf.as_mut_ptr() as *mut _);
+        let s = std::str::from_utf8(std::slice::from_raw_parts(
+            buf.as_ptr() as *const u8,
+            len as _,
+        ))
+        .unwrap_or("?");
+        panic!("present_es2 program link failed: {s}");
+    }
+
+    let a_pos = gles.GetAttribLocation(prog, b"aPos\0".as_ptr() as *const _);
+    let a_uv = gles.GetAttribLocation(prog, b"aUV\0".as_ptr() as *const _);
+    let u_tex = gles.GetUniformLocation(prog, b"uTex\0".as_ptr() as *const _);
+    let u_tex_mat = gles.GetUniformLocation(prog, b"uTexMat\0".as_ptr() as *const _);
+
+    let result = PresentProgram {
+        program: prog,
+        a_pos,
+        a_uv,
+        u_tex,
+        u_tex_mat,
+    };
+    PRESENT_PROGRAM.with(|c| c.set(Some(result)));
+    result
+}
+
 /// Copies the pixels in a renderbuffer bound to `GL_RENDERBUFFER_BINDING_OES`
 /// (which should be provided by the app) to a texture and presents it with
 /// [present_frame], trying to avoid noticeably modifying OpenGL ES state while
@@ -562,6 +913,17 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
 
     let mut gles_boxed = gles_ctx.make_current(env.window.as_mut().unwrap());
     let gles = gles_boxed.as_mut();
+
+    // On a real OpenGL ES 2.0 driver (Android etc.) the fixed-function code
+    // path below cannot be used — there is no glMatrixMode / glColor4f /
+    // glEnableClientState / glVertexPointer. Use a small dedicated
+    // shader-based presenter instead.
+    if gles.is_es2() {
+        present_renderbuffer_es2(gles, viewport, rotation_matrix, virtual_cursor_visible_at);
+        std::mem::drop(gles_boxed);
+        env.window.as_ref().unwrap().swap_window();
+        return;
+    }
 
     // We can't directly copy the content of the renderbuffer to the default
     // framebuffer (the window), but if we attach it to a framebuffer object, we
@@ -619,6 +981,17 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // going to draw. Back up the old state while doing so, so it can be
     // restored later. The app's subsequent drawing will be messed up if we
     // don't restore it.
+
+    // GL_CURRENT_PROGRAM (0x8B8D) is an ES 2.0 / GL 2.0 piece of state. ES 1.x
+    // contexts won't have any program bound, in which case this is a harmless
+    // no-op. ES 2.0 apps do have one bound and we must clear it so our
+    // fixed-function quad-drawing code below works.
+    const CURRENT_PROGRAM: GLenum = 0x8B8D;
+    let old_program: GLuint = get_int(gles, CURRENT_PROGRAM) as _;
+    if old_program != 0 {
+        gles.UseProgram(0);
+    }
+
     let old_arrays = {
         let mut old_arrays = [gles11::FALSE; gles1_on_gl2::ARRAYS.len()];
         for (is_enabled, info) in old_arrays.iter_mut().zip(gles1_on_gl2::ARRAYS.iter()) {
@@ -759,6 +1132,11 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // Restore the other bindings
     gles.BindTexture(gles11::TEXTURE_2D, old_texture_2d);
     gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, old_framebuffer);
+
+    // Restore the previously bound shader program (ES 2.0).
+    if old_program != 0 {
+        gles.UseProgram(old_program);
+    }
 
     // { let err = gles.GetError(); if err != 0 { panic!("{:#x}", err); } }
 }

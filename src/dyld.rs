@@ -498,6 +498,10 @@ impl Dyld {
         // causing a NULL-page read the first time the ObjC runtime tries to
         // retain or release a block object.
         let mut block_class_addrs: HashMap<String, u32> = HashMap::new();
+        // Cache for C++ Itanium ABI type_info vtables. All references to the
+        // same vtable symbol must resolve to the same address so that vtable
+        // identity checks in dynamic_cast work correctly.
+        let mut cxxabi_vtable_addrs: HashMap<String, u32> = HashMap::new();
         for &(ptr_ptr, ref name) in &bin.external_relocations {
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptr_ptr);
             // There will be an existing value at the address, which is an
@@ -543,12 +547,70 @@ impl Dyld {
                 let addr = *block_class_addrs
                     .entry(name.clone())
                     .or_insert_with(|| mem.alloc(16).to_bits());
-                log_dbg!(
-                    "Patched block class descriptor {} -> {:#x}",
-                    name,
-                    addr
-                );
+                log_dbg!("Patched block class descriptor {} -> {:#x}", name, addr);
                 Ptr::from_bits(addr)
+            } else if name == "__ZTVN10__cxxabiv117__class_type_infoE"
+                || name == "__ZTVN10__cxxabiv120__si_class_type_infoE"
+                || name == "__ZTVN10__cxxabiv121__vmi_class_type_infoE"
+            {
+                // C++ Itanium ABI type_info vtable. Without this every
+                // type_info object in the app has a NULL vptr, and any call
+                // through the vptr (dynamic_cast, exception type matching,
+                // type_info comparison) lands on address 0 and crashes.
+                //
+                // Layout (32-bit ARM, addend +8 from the symbol so callers
+                // land on the first method):
+                //   +0   offset_to_top   (= 0)
+                //   +4   typeinfo for the vtable's class (= 0; never used)
+                //   +8   ~type_info() complete dtor   -> BX LR stub
+                //   +12  ~type_info() deleting dtor   -> BX LR stub
+                //   +16  __is_pointer_p()             -> returns 0 (false)
+                //   +20  __is_function_p()            -> returns 0 (false)
+                //   +24  __do_catch()                 -> returns 0 (no match)
+                //   +28  __do_upcast()                -> returns 0 (no match)
+                //   +32  reserved
+                //   +36  reserved
+                let addr = *cxxabi_vtable_addrs.entry(name.clone()).or_insert_with(|| {
+                    // Shared method stub: minimal ARM32 function (BX LR)
+                    // returning 0/false for every virtual call.
+                    let stub: MutPtr<u32> = mem.alloc(8).cast();
+                    mem.write(stub + 0, encode_a32_ret());
+                    mem.write(stub + 1, encode_a32_trap());
+                    let stub_addr = stub.to_bits();
+
+                    let v: MutPtr<u32> = mem.alloc(40).cast();
+                    mem.write(v + 0, 0); // offset_to_top
+                    mem.write(v + 1, 0); // typeinfo
+                    for i in 2..10 {
+                        mem.write(v + i, stub_addr);
+                    }
+                    v.to_bits()
+                });
+                log_dbg!("Stubbed C++ vtable {} -> {:#x}", name, addr);
+                Ptr::from_bits(addr)
+            } else if name == "___gxx_personality_sj0" {
+                // C++ SjLj exception personality routine. Called by the
+                // unwinder for every frame; returning 0 (_URC_NO_REASON)
+                // tells it "no handler here, keep going". touchHLE never
+                // actually invokes the unwinder, but other code may store
+                // this pointer in an LSDA and read it back.
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
+                fn_ptr.cast().cast_const()
+            } else if name == "___cxa_terminate_handler"
+                || name == "___cxa_unexpected_handler"
+                || name == "___cxa_new_handler"
+            {
+                // Global function-pointer variables: std::terminate_handler,
+                // std::unexpected_handler, std::new_handler. The default
+                // value is a NULL function pointer; the real C++ runtime
+                // checks for NULL and falls back to abort. Provide a single
+                // word of zero-initialised guest memory.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                p.cast().cast_const()
             } else if let Some(&external_addr) = bins
                 .iter()
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
@@ -632,7 +694,11 @@ impl Dyld {
                     .unwrap()
                     .to_ptr();
                 mem.write(ptr_ptr, trampoline_ptr);
-                log_dbg!("Linked non-lazy host function {} at {:?}", symbol, trampoline_ptr);
+                log_dbg!(
+                    "Linked non-lazy host function {} at {:?}",
+                    symbol,
+                    trampoline_ptr
+                );
                 continue;
             }
 
@@ -709,10 +775,7 @@ impl Dyld {
                 mem.write(fn_ptr + 0, encode_a32_ret());
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 mem.write(ptr_ptr, fn_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___objc_personality_v0 -> {:#x}",
-                    fn_ptr.to_bits()
-                );
+                log_dbg!("Stubbed ___objc_personality_v0 -> {:#x}", fn_ptr.to_bits());
                 continue;
             }
 
@@ -722,10 +785,27 @@ impl Dyld {
                 let val_ptr: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(val_ptr, 1u32);
                 mem.write(ptr_ptr, val_ptr.cast().cast_const());
-                log_dbg!(
-                    "Stubbed ___mb_cur_max -> {:#x}",
-                    val_ptr.to_bits()
-                );
+                log_dbg!("Stubbed ___mb_cur_max -> {:#x}", val_ptr.to_bits());
+                continue;
+            }
+
+            if symbol == "___gxx_personality_sj0" {
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                mem.write(ptr_ptr, fn_ptr.cast().cast_const());
+                log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
+                continue;
+            }
+
+            if symbol == "___cxa_terminate_handler"
+                || symbol == "___cxa_unexpected_handler"
+                || symbol == "___cxa_new_handler"
+            {
+                // Default-NULL global handler pointer.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
                 continue;
             }
 
@@ -800,7 +880,6 @@ impl Dyld {
         cpu: &mut Cpu,
         svc_pc: u32,
     ) -> Option<HostFunction> {
-        
         // Links by restoring the original stub function, then updating
         // __la_symbol_ptr to the appropriate function.
         fn link_by_restoring_stub(
@@ -811,8 +890,7 @@ impl Dyld {
             entry_size: u32,
             pic_offset: u32,
         ) -> (MutPtr<u32>, MutPtr<u32>) {
-       
-             let original_instructions = match entry_size {
+            let original_instructions = match entry_size {
                 4 => Dyld::SYMBOL_STUB1_INSTRUCTIONS.as_slice(),
                 12 => Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 16 => Dyld::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
@@ -950,10 +1028,8 @@ impl Dyld {
             svc_pc
         );
         // `linked_host_functions` requires a `&'static str`, so leak the name.
-        let leaked_symbol: &'static str =
-            Box::leak(symbol.to_string().into_boxed_str());
-        let f: HostFunction =
-            &(unimplemented_function_stub as fn(&mut Environment) -> i32);
+        let leaked_symbol: &'static str = Box::leak(symbol.to_string().into_boxed_str());
+        let f: HostFunction = &(unimplemented_function_stub as fn(&mut Environment) -> i32);
         // Allocate an SVC ID for this stub (same pattern as the host-dylib
         // branch above).
         let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
@@ -1006,14 +1082,15 @@ impl Dyld {
             if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol_name) {
                 return Ok(cached_fn);
             }
-            
+
             let (_, f) = export_c_func!(dyld_stub_binder(_));
             // Передаем именно статическую строку
             let function_ptr = self.create_guest_function(mem, symbol_name, f);
-            self.non_lazy_host_functions.insert(symbol_name, function_ptr);
+            self.non_lazy_host_functions
+                .insert(symbol_name, function_ptr);
             return Ok(function_ptr);
         }
-        
+
         let &(symbol, f) = search_host_dylibs(|dylib| dylib.function_exports, symbol).ok_or(())?;
         if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol) {
             return Ok(cached_fn);
@@ -1043,14 +1120,6 @@ impl Dyld {
     }
 }
 
-/// Вызывается из `lib.rs` для регистрации GLES 2.0 заглушек.
-pub fn register_gles2_stubs() {
-    log!("Регистрация GLES 2.0 заглушек...");
-    // В зависимости от того, как устроен ваш модуль gles2_stubs, здесь можно вызвать:
-    // crate::gles::gles2_stubs::register();
-    // или добавить вашу новую `HostDylib` в глобальную/мутабельную версию `DYLIB_LIST`.
-}
-
 fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
     panic!("dyld_stub_binder was called! Under HLE, all lazy symbols are bound eagerly, making this unreachable.");
 }
@@ -1064,4 +1133,3 @@ fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
 fn unimplemented_function_stub(_env: &mut Environment) -> i32 {
     0
 }
-

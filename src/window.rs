@@ -46,25 +46,25 @@ impl DeviceFamily {
     /// iPhone 5 screen is 1136×640 px retina (2×), so 568×320 pts.
     pub fn portrait_size(&self) -> (u32, u32) {
         match self {
-            DeviceFamily::iPhone  => (320, 480),
+            DeviceFamily::iPhone => (320, 480),
             DeviceFamily::iPhone5 => (320, 568),
-            DeviceFamily::iPad    => (768, 1024),
+            DeviceFamily::iPad => (768, 1024),
         }
     }
     /// UIScreen.scale — retina multiplier.
     pub fn scale_factor(&self) -> f32 {
         match self {
-            DeviceFamily::iPhone  => 1.0,
+            DeviceFamily::iPhone => 1.0,
             DeviceFamily::iPhone5 => 2.0,
-            DeviceFamily::iPad    => 1.0,
+            DeviceFamily::iPad => 1.0,
         }
     }
     /// hw.machine string returned by sysctl / uname.
     pub fn machine_name(&self) -> &'static str {
         match self {
-            DeviceFamily::iPhone  => "iPhone1,1",
+            DeviceFamily::iPhone => "iPhone1,1",
             DeviceFamily::iPhone5 => "iPhone5,1",
-            DeviceFamily::iPad    => "iPad1,1",
+            DeviceFamily::iPad => "iPad1,1",
         }
     }
 }
@@ -82,10 +82,10 @@ impl TryFrom<&str> for DeviceFamily {
     type Error = ();
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "iphone"  => Ok(DeviceFamily::iPhone),
+            "iphone" => Ok(DeviceFamily::iPhone),
             "iphone5" => Ok(DeviceFamily::iPhone5),
-            "ipad"    => Ok(DeviceFamily::iPad),
-            _         => Err(()),
+            "ipad" => Ok(DeviceFamily::iPad),
+            _ => Err(()),
         }
     }
 }
@@ -193,6 +193,8 @@ pub enum BatteryState {
 pub enum GLVersion {
     /// OpenGL ES 1.1
     GLES11,
+    /// OpenGL ES 2.0
+    GLES20,
     /// OpenGL 2.1 compatibility profile
     GL21Compat,
 }
@@ -1197,6 +1199,10 @@ impl Window {
                 attr.set_context_version(1, 1);
                 attr.set_context_profile(sdl2::video::GLProfile::GLES);
             }
+            GLVersion::GLES20 => {
+                attr.set_context_version(2, 0);
+                attr.set_context_profile(sdl2::video::GLProfile::GLES);
+            }
             GLVersion::GL21Compat => {
                 attr.set_context_version(2, 1);
                 attr.set_context_profile(sdl2::video::GLProfile::Compatibility);
@@ -1631,4 +1637,4 @@ pub fn show_alert_dialog(
             _ => 0,
         }
     })
-        }
+}
