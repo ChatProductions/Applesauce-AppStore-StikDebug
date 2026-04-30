@@ -10,12 +10,19 @@
 //! - avoid crashes on simple create/open checks
 //! - behave safely when the game polls streams or hosts
 
+//!
+//! Note: CFHost* functions are implemented in
+//! [crate::frameworks::core_foundation::cf_host] and are registered with
+//! CoreFoundation's HostDylib. On a real device they live in CFNetwork, but
+//! touchHLE's dyld searches all frameworks so the binding resolves regardless
+//! of which framework the app links against. Keeping them only in one place
+//! avoids `no_duplicate_functions` test failures.
+
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::MutPtr;
 use crate::Environment;
 
 const DUMMY_STREAM: u32 = 0xC0F0_0001;
-const DUMMY_HOST: u32 = 0xC0F0_0002;
 
 fn CFReadStreamCreateForHTTPRequest(
     _env: &mut Environment,
@@ -98,34 +105,6 @@ fn CFReadStreamCopyError(_env: &mut Environment, _stream: u32) -> u32 {
     0
 }
 
-fn CFHostCreateWithAddress(_env: &mut Environment, _allocator: u32, _address: u32) -> u32 {
-    DUMMY_HOST
-}
-
-fn CFHostStartInfoResolution(
-    _env: &mut Environment,
-    _the_host: u32,
-    _info: u32,
-    _error: u32,
-) -> bool {
-    true
-}
-
-fn CFHostCancelInfoResolution(_env: &mut Environment, _the_host: u32) {}
-
-fn CFHostGetAddresses(_env: &mut Environment, _the_host: u32, _resolved: u32) -> u32 {
-    0
-}
-
-fn CFHostSetClient(
-    _env: &mut Environment,
-    _the_host: u32,
-    _client_cb: u32,
-    _client_context: u32,
-) -> bool {
-    true
-}
-
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamCreateForHTTPRequest(_, _)),
     export_c_func!(CFReadStreamOpen(_)),
@@ -139,10 +118,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamSetClient(_, _, _, _)),
     export_c_func!(CFReadStreamGetStatus(_)),
     export_c_func!(CFReadStreamCopyError(_)),
-    export_c_func!(CFHostCreateWithAddress(_, _)),
-    export_c_func!(CFHostStartInfoResolution(_, _, _)),
-    export_c_func!(CFHostCancelInfoResolution(_)),
-    export_c_func!(CFHostGetAddresses(_, _)),
-    export_c_func!(CFHostSetClient(_, _, _)),
 ];
 
