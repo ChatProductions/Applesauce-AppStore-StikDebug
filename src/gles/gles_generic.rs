@@ -834,14 +834,22 @@ pub trait GLES {
         unimplemented!("UnmapBufferOES not implemented by this backend")
     }
 
-    // OpenGL ES 2.0 entry points. Default implementations panic — only
-    // backends that actually support shaders (currently [super::gles1_on_gl2])
-    // implement these. EAGL routes ES 2.0 contexts to such a backend.
+    // OpenGL ES 2.0 entry points. Backends that actually support shaders
+    // (currently [super::gles1_on_gl2] and [super::gles2_native]) implement
+    // these. EAGL routes ES 2.0 contexts to such a backend.
+    //
+    // The default implementations log a warning once and return safe defaults
+    // rather than panicking. This lets apps that probe for shader support on
+    // an ES 1.1 context (or that mistakenly call ES 2.0 entry points on an
+    // ES 1.1 context) survive instead of hard-crashing the emulator. Apps
+    // that have a fixed-function fallback path will use it; apps that rely
+    // on shaders working will render incorrectly but still run.
     unsafe fn CreateShader(&mut self, _type_: GLenum) -> GLuint {
-        unimplemented!("CreateShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("CreateShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        0
     }
     unsafe fn DeleteShader(&mut self, _shader: GLuint) {
-        unimplemented!("DeleteShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("DeleteShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn ShaderSource(
         &mut self,
@@ -850,13 +858,13 @@ pub trait GLES {
         _string: *const *const GLchar,
         _length: *const GLint,
     ) {
-        unimplemented!("ShaderSource (OpenGL ES 2.0) not supported by this backend")
+        log_once!("ShaderSource (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn CompileShader(&mut self, _shader: GLuint) {
-        unimplemented!("CompileShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("CompileShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetShaderiv(&mut self, _shader: GLuint, _pname: GLenum, _params: *mut GLint) {
-        unimplemented!("GetShaderiv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetShaderiv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetShaderInfoLog(
         &mut self,
@@ -865,31 +873,33 @@ pub trait GLES {
         _length: *mut GLsizei,
         _infoLog: *mut GLchar,
     ) {
-        unimplemented!("GetShaderInfoLog (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetShaderInfoLog (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn IsShader(&mut self, _shader: GLuint) -> GLboolean {
-        unimplemented!("IsShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("IsShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        0
     }
     unsafe fn CreateProgram(&mut self) -> GLuint {
-        unimplemented!("CreateProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("CreateProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        0
     }
     unsafe fn DeleteProgram(&mut self, _program: GLuint) {
-        unimplemented!("DeleteProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("DeleteProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn AttachShader(&mut self, _program: GLuint, _shader: GLuint) {
-        unimplemented!("AttachShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("AttachShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn DetachShader(&mut self, _program: GLuint, _shader: GLuint) {
-        unimplemented!("DetachShader (OpenGL ES 2.0) not supported by this backend")
+        log_once!("DetachShader (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn LinkProgram(&mut self, _program: GLuint) {
-        unimplemented!("LinkProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("LinkProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn UseProgram(&mut self, _program: GLuint) {
-        unimplemented!("UseProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("UseProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetProgramiv(&mut self, _program: GLuint, _pname: GLenum, _params: *mut GLint) {
-        unimplemented!("GetProgramiv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetProgramiv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetProgramInfoLog(
         &mut self,
@@ -898,13 +908,14 @@ pub trait GLES {
         _length: *mut GLsizei,
         _infoLog: *mut GLchar,
     ) {
-        unimplemented!("GetProgramInfoLog (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetProgramInfoLog (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn IsProgram(&mut self, _program: GLuint) -> GLboolean {
-        unimplemented!("IsProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("IsProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        0
     }
     unsafe fn ValidateProgram(&mut self, _program: GLuint) {
-        unimplemented!("ValidateProgram (OpenGL ES 2.0) not supported by this backend")
+        log_once!("ValidateProgram (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn BindAttribLocation(
         &mut self,
@@ -912,13 +923,15 @@ pub trait GLES {
         _index: GLuint,
         _name: *const GLchar,
     ) {
-        unimplemented!("BindAttribLocation (OpenGL ES 2.0) not supported by this backend")
+        log_once!("BindAttribLocation (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetAttribLocation(&mut self, _program: GLuint, _name: *const GLchar) -> GLint {
-        unimplemented!("GetAttribLocation (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetAttribLocation (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        -1
     }
     unsafe fn GetUniformLocation(&mut self, _program: GLuint, _name: *const GLchar) -> GLint {
-        unimplemented!("GetUniformLocation (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetUniformLocation (OpenGL ES 2.0) not supported by this backend [stubbed]");
+        -1
     }
     unsafe fn GetActiveAttrib(
         &mut self,
@@ -930,7 +943,7 @@ pub trait GLES {
         _type_: *mut GLenum,
         _name: *mut GLchar,
     ) {
-        unimplemented!("GetActiveAttrib (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetActiveAttrib (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetActiveUniform(
         &mut self,
@@ -942,13 +955,17 @@ pub trait GLES {
         _type_: *mut GLenum,
         _name: *mut GLchar,
     ) {
-        unimplemented!("GetActiveUniform (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetActiveUniform (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn EnableVertexAttribArray(&mut self, _index: GLuint) {
-        unimplemented!("EnableVertexAttribArray (OpenGL ES 2.0) not supported by this backend")
+        log_once!(
+            "EnableVertexAttribArray (OpenGL ES 2.0) not supported by this backend [stubbed]"
+        );
     }
     unsafe fn DisableVertexAttribArray(&mut self, _index: GLuint) {
-        unimplemented!("DisableVertexAttribArray (OpenGL ES 2.0) not supported by this backend")
+        log_once!(
+            "DisableVertexAttribArray (OpenGL ES 2.0) not supported by this backend [stubbed]"
+        );
     }
     unsafe fn VertexAttribPointer(
         &mut self,
@@ -959,16 +976,16 @@ pub trait GLES {
         _stride: GLsizei,
         _pointer: *const GLvoid,
     ) {
-        unimplemented!("VertexAttribPointer (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttribPointer (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib1f(&mut self, _index: GLuint, _x: GLfloat) {
-        unimplemented!("VertexAttrib1f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib1f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib2f(&mut self, _index: GLuint, _x: GLfloat, _y: GLfloat) {
-        unimplemented!("VertexAttrib2f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib2f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib3f(&mut self, _index: GLuint, _x: GLfloat, _y: GLfloat, _z: GLfloat) {
-        unimplemented!("VertexAttrib3f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib3f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib4f(
         &mut self,
@@ -978,28 +995,28 @@ pub trait GLES {
         _z: GLfloat,
         _w: GLfloat,
     ) {
-        unimplemented!("VertexAttrib4f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib4f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib1fv(&mut self, _index: GLuint, _v: *const GLfloat) {
-        unimplemented!("VertexAttrib1fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib1fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib2fv(&mut self, _index: GLuint, _v: *const GLfloat) {
-        unimplemented!("VertexAttrib2fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib2fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib3fv(&mut self, _index: GLuint, _v: *const GLfloat) {
-        unimplemented!("VertexAttrib3fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib3fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn VertexAttrib4fv(&mut self, _index: GLuint, _v: *const GLfloat) {
-        unimplemented!("VertexAttrib4fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("VertexAttrib4fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform1f(&mut self, _location: GLint, _v0: GLfloat) {
-        unimplemented!("Uniform1f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform1f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform2f(&mut self, _location: GLint, _v0: GLfloat, _v1: GLfloat) {
-        unimplemented!("Uniform2f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform2f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform3f(&mut self, _location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat) {
-        unimplemented!("Uniform3f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform3f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform4f(
         &mut self,
@@ -1009,16 +1026,16 @@ pub trait GLES {
         _v2: GLfloat,
         _v3: GLfloat,
     ) {
-        unimplemented!("Uniform4f (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform4f (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform1i(&mut self, _location: GLint, _v0: GLint) {
-        unimplemented!("Uniform1i (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform1i (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform2i(&mut self, _location: GLint, _v0: GLint, _v1: GLint) {
-        unimplemented!("Uniform2i (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform2i (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform3i(&mut self, _location: GLint, _v0: GLint, _v1: GLint, _v2: GLint) {
-        unimplemented!("Uniform3i (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform3i (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform4i(
         &mut self,
@@ -1028,31 +1045,31 @@ pub trait GLES {
         _v2: GLint,
         _v3: GLint,
     ) {
-        unimplemented!("Uniform4i (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform4i (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform1fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
-        unimplemented!("Uniform1fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform1fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform2fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
-        unimplemented!("Uniform2fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform2fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform3fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
-        unimplemented!("Uniform3fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform3fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform4fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
-        unimplemented!("Uniform4fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform4fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform1iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
-        unimplemented!("Uniform1iv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform1iv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform2iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
-        unimplemented!("Uniform2iv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform2iv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform3iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
-        unimplemented!("Uniform3iv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform3iv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn Uniform4iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
-        unimplemented!("Uniform4iv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("Uniform4iv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn UniformMatrix2fv(
         &mut self,
@@ -1061,7 +1078,7 @@ pub trait GLES {
         _transpose: GLboolean,
         _value: *const GLfloat,
     ) {
-        unimplemented!("UniformMatrix2fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("UniformMatrix2fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn UniformMatrix3fv(
         &mut self,
@@ -1070,7 +1087,7 @@ pub trait GLES {
         _transpose: GLboolean,
         _value: *const GLfloat,
     ) {
-        unimplemented!("UniformMatrix3fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("UniformMatrix3fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn UniformMatrix4fv(
         &mut self,
@@ -1079,16 +1096,16 @@ pub trait GLES {
         _transpose: GLboolean,
         _value: *const GLfloat,
     ) {
-        unimplemented!("UniformMatrix4fv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("UniformMatrix4fv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn BlendColor(&mut self, _r: GLclampf, _g: GLclampf, _b: GLclampf, _a: GLclampf) {
-        unimplemented!("BlendColor (OpenGL ES 2.0) not supported by this backend")
+        log_once!("BlendColor (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn BlendEquation(&mut self, _mode: GLenum) {
-        unimplemented!("BlendEquation (OpenGL ES 2.0) not supported by this backend")
+        log_once!("BlendEquation (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn BlendEquationSeparate(&mut self, _modeRGB: GLenum, _modeAlpha: GLenum) {
-        unimplemented!("BlendEquationSeparate (OpenGL ES 2.0) not supported by this backend")
+        log_once!("BlendEquationSeparate (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn BlendFuncSeparate(
         &mut self,
@@ -1097,7 +1114,7 @@ pub trait GLES {
         _srcAlpha: GLenum,
         _dstAlpha: GLenum,
     ) {
-        unimplemented!("BlendFuncSeparate (OpenGL ES 2.0) not supported by this backend")
+        log_once!("BlendFuncSeparate (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn StencilFuncSeparate(
         &mut self,
@@ -1106,7 +1123,7 @@ pub trait GLES {
         _ref_: GLint,
         _mask: GLuint,
     ) {
-        unimplemented!("StencilFuncSeparate (OpenGL ES 2.0) not supported by this backend")
+        log_once!("StencilFuncSeparate (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn StencilOpSeparate(
         &mut self,
@@ -1115,16 +1132,16 @@ pub trait GLES {
         _dpfail: GLenum,
         _dppass: GLenum,
     ) {
-        unimplemented!("StencilOpSeparate (OpenGL ES 2.0) not supported by this backend")
+        log_once!("StencilOpSeparate (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn StencilMaskSeparate(&mut self, _face: GLenum, _mask: GLuint) {
-        unimplemented!("StencilMaskSeparate (OpenGL ES 2.0) not supported by this backend")
+        log_once!("StencilMaskSeparate (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetVertexAttribiv(&mut self, _index: GLuint, _pname: GLenum, _params: *mut GLint) {
-        unimplemented!("GetVertexAttribiv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetVertexAttribiv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetVertexAttribfv(&mut self, _index: GLuint, _pname: GLenum, _params: *mut GLfloat) {
-        unimplemented!("GetVertexAttribfv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetVertexAttribfv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetVertexAttribPointerv(
         &mut self,
@@ -1132,13 +1149,15 @@ pub trait GLES {
         _pname: GLenum,
         _pointer: *mut *mut GLvoid,
     ) {
-        unimplemented!("GetVertexAttribPointerv (OpenGL ES 2.0) not supported by this backend")
+        log_once!(
+            "GetVertexAttribPointerv (OpenGL ES 2.0) not supported by this backend [stubbed]"
+        );
     }
     unsafe fn GetUniformiv(&mut self, _program: GLuint, _location: GLint, _params: *mut GLint) {
-        unimplemented!("GetUniformiv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetUniformiv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetUniformfv(&mut self, _program: GLuint, _location: GLint, _params: *mut GLfloat) {
-        unimplemented!("GetUniformfv (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetUniformfv (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetAttachedShaders(
         &mut self,
@@ -1147,7 +1166,7 @@ pub trait GLES {
         _count: *mut GLsizei,
         _shaders: *mut GLuint,
     ) {
-        unimplemented!("GetAttachedShaders (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetAttachedShaders (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn GetShaderSource(
         &mut self,
@@ -1156,7 +1175,7 @@ pub trait GLES {
         _length: *mut GLsizei,
         _source: *mut GLchar,
     ) {
-        unimplemented!("GetShaderSource (OpenGL ES 2.0) not supported by this backend")
+        log_once!("GetShaderSource (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
     unsafe fn ReleaseShaderCompiler(&mut self) {
         // No-op: we always have a shader compiler.
@@ -1168,7 +1187,9 @@ pub trait GLES {
         _range: *mut GLint,
         _precision: *mut GLint,
     ) {
-        unimplemented!("GetShaderPrecisionFormat (OpenGL ES 2.0) not supported by this backend")
+        log_once!(
+            "GetShaderPrecisionFormat (OpenGL ES 2.0) not supported by this backend [stubbed]"
+        );
     }
     unsafe fn ShaderBinary(
         &mut self,
@@ -1178,6 +1199,6 @@ pub trait GLES {
         _binary: *const GLvoid,
         _length: GLsizei,
     ) {
-        unimplemented!("ShaderBinary (OpenGL ES 2.0) not supported by this backend")
+        log_once!("ShaderBinary (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
 }

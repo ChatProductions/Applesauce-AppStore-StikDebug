@@ -25,12 +25,12 @@ macro_rules! return_if_null {
 
 pub mod au_graph;
 pub mod audio_components;
+pub mod audio_converter;
 pub mod audio_file;
 pub mod audio_queue;
 pub mod audio_services;
 pub mod audio_session;
 pub mod audio_unit;
-pub mod audio_converter;
 pub mod ext_audio_file;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -83,7 +83,24 @@ impl LazyALContext {
     }
     pub fn get_context(&mut self, manager: &mut OpenALManager) -> &mut OpenALContext {
         if self.0.is_none() {
-            let context = OpenALContext::new(manager).unwrap();
+            // OpenALContext::new already attempts a fallback to OpenAL Soft's
+            // "No Output" null backend if the host audio device cannot be
+            // opened, so under normal circumstances this will succeed. If even
+            // that fails we still cannot keep going (the audio frameworks
+            // assume a context exists), but emit a clear log message before
+            // unwinding so the user understands what happened instead of
+            // seeing only a raw `unwrap` panic.
+            let context = match OpenALContext::new(manager) {
+                Ok(ctx) => ctx,
+                Err(err) => {
+                    log!(
+                        "Fatal: could not create OpenAL context for \
+                         AudioToolbox: {}. Audio cannot be initialised.",
+                        err
+                    );
+                    panic!("Could not create OpenAL context: {}", err);
+                }
+            };
             log_dbg!("Новый внутренний контекст OpenAL ({:?})", context);
             self.0 = Some(context);
         }
