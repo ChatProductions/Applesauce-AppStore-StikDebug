@@ -40,34 +40,34 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     // the underlying allocator) and return NULL — that's what real malloc
     // does on systems that can't satisfy the request.
     if size >= 0xf000_0000 {
-        let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
-        let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
-        let sp = env.cpu.regs()[crate::cpu::Cpu::SP];
-        let fp = env.cpu.regs()[7];
-        // Try to dump the first N words on the current stack to help spot the
-        // caller. The ARM EABI frame chain may not be walkable if the app was
-        // built with -fomit-frame-pointer, so fall back to a raw stack peek.
-        let mut stack_words = [0u32; 16];
-        // Stack sits at the very top of the address space (0xfff00000+), so
-        // only guard against obviously invalid low addresses and off-the-end
-        // wraparound.
-        for (i, slot) in stack_words.iter_mut().enumerate() {
-            let addr = sp.wrapping_add((i as u32) * 4);
-            if addr < 0x1000 || addr.checked_add(4).is_none() {
-                break;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static HUGE_COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = HUGE_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 8 {
+            let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
+            let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
+            let sp = env.cpu.regs()[crate::cpu::Cpu::SP];
+            let fp = env.cpu.regs()[7];
+            let mut stack_words = [0u32; 16];
+            for (i, slot) in stack_words.iter_mut().enumerate() {
+                let addr = sp.wrapping_add((i as u32) * 4);
+                if addr < 0x1000 || addr.checked_add(4).is_none() {
+                    break;
+                }
+                *slot = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(addr));
             }
-            *slot = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(addr));
+            log!(
+                "malloc({:#x}) refused as out of range — returning NULL \
+                 (#{}, PC={:#x} LR={:#x} SP={:#x} FP={:#x} stack={:#x?})",
+                size,
+                n + 1,
+                pc,
+                lr,
+                sp,
+                fp,
+                stack_words
+            );
         }
-        log!(
-            "malloc({:#x}) refused as out of range — returning NULL \
-             (PC={:#x} LR={:#x} SP={:#x} FP={:#x} stack={:#x?})",
-            size,
-            pc,
-            lr,
-            sp,
-            fp,
-            stack_words
-        );
         set_errno(env, 12); // ENOMEM
         return Ptr::null();
     }
