@@ -906,14 +906,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     if object == nil {
-        // Вместо игнорирования (заглушки) вызываем удаление. 
-        // Это критично для логики сброса данных, таких как "toplist-local".
+        // Если передали nil, честно удаляем ключ
         () = msg![env; this removeObjectForKey:key];
     } else {
-        // Честная вставка: DictionaryHostObject сам позаботится о копировании ключа
-        // и ретейне нового объекта. Нам нужно лишь освободить старый.
-        let old = env.objc.borrow_mut::<DictionaryHostObject>(this).insert(env, key, object, true);
-        release(env, old);
+        // Внутренний метод insert сам освобождает старый объект (если он был).
+        // Нам не нужно ловить old и вызывать release вручную.
+        env.objc.borrow_mut::<DictionaryHostObject>(this).insert(env, key, object, true);
     }
 }
 
@@ -924,9 +922,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     
 - (())removeObjectForKey:(id)key {
     if key == nil { return; }
-    // Удаляем объект из внутреннего HashMap и вызываем release
-    let old = env.objc.borrow_mut::<DictionaryHostObject>(this).remove(key);
-    release(env, old);
+    // Внутренний метод remove принимает env и сам вызывает release для удаляемого объекта
+    env.objc.borrow_mut::<DictionaryHostObject>(this).remove(env, key);
 }
 
 - (())removeAllObjects {
