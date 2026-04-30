@@ -730,6 +730,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; ranged getCharacters:buffer]
 }
 
+    // ИСПРАВЛЕНИЕ: Обход Type Confusion. 
+    // Игра думает, что строка - это NSMutableArray, и вызывает addObject:.
+    // Вместо пустой заглушки мы честно конвертируем объект в строку и приклеиваем в конец.
+    - (())addObject:(id)object {
+        if object != nil {
+            // Получаем строковое описание объекта (аналог [object description])
+            let desc: id = msg![env; object description];
+            if desc != nil {
+                // Если у нас уже есть реализация appendString:, используем её.
+                // В touchHLE StringHostObject хранит Rust-строку, поэтому мы можем 
+                // мутировать её напрямую, даже если формально это иммутабельный NSString.
+                let mut host_obj = env.objc.borrow_mut::<super::ns_string::StringHostObject>(this);
+                let suffix = super::ns_string::to_rust_string(env, desc);
+                host_obj.string.push_str(&suffix);
+                
+                log_dbg!("Workaround: Appended object to NSString via addObject: '{}'", suffix);
+            }
+        }
+    }
+    
 - (())getCharacters:(MutPtr<unichar>)buffer {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (utf16, did_convert) = host_object.convert_to_utf16_inplace();
