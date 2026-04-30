@@ -3,24 +3,26 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! `cxxabi.h`
+//! `cxxabi.h` and the SjLj exception unwinder.
 //!
 //! Resources:
-//! - [Itanium C++ ABI specification](https://itanium-cxx-abi.github.io/cxx-abi/abi.html#dso-dtor-runtime-api)
+//! - [Itanium C++ ABI specification](https://itanium-cxx-abi.github.io/cxx-abi/abi.html)
+//! - [SjLj-style exception unwinding overview](https://gcc.gnu.org/wiki/SjLjEH)
 
-use crate::abi::GuestFunction;
+use crate::abi::{GuestFunction, FRAME_POINTER};
+use crate::cpu::Cpu;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
 use crate::Environment;
 use std::sync::Mutex;
 
-// Static vector of registered destructors: (func, arg, dso_handle)
-static ATEXIT_HANDLERS: Mutex<Vec<(GuestFunction, MutVoidPtr, MutVoidPtr)>> =
-    Mutex::new(Vec::new());
+// === atexit / finalize ===
+
+static ATEXIT_HANDLERS: Mutex<Vec<(GuestFunction, MutVoidPtr, MutVoidPtr)>> = Mutex::new(Vec::new());
 
 fn __cxa_atexit(
     _env: &mut Environment,
-    func: GuestFunction, // void (*func)(void *)
+    func: GuestFunction,
     p: MutVoidPtr,
     d: MutVoidPtr,
 ) -> i32 {
@@ -34,7 +36,6 @@ fn __cxa_atexit(
 
 fn __cxa_finalize(_env: &mut Environment, d: MutVoidPtr) {
     let mut to_run = Vec::new();
-
     if let Ok(mut handlers) = ATEXIT_HANDLERS.lock() {
         if d.is_null() {
             to_run = handlers.drain(..).collect();
@@ -49,28 +50,24 @@ fn __cxa_finalize(_env: &mut Environment, d: MutVoidPtr) {
             }
         }
     }
-
     for (_func, _p, _d) in to_run.into_iter().rev() {
-        // C++ requires LIFO destruction order. We currently rely on host
-        // process exit to clean up; calling the guest destructor here would
-        // need CallFromHost wiring.
+        // touchHLE relies on host-process exit for cleanup; we just drop
+        // the registered destructors.
     }
 }
 
 // === C++ Itanium ABI: guard variables for static initialisation ===
 //
-// `__cxa_guard_acquire(guard*)` returns 1 if the guarded static variable
-// still needs to be initialised, 0 if it's already initialised. After a
-// successful initialisation the caller invokes `__cxa_guard_release(guard*)`.
+// `__cxa_guard_acquire(guard*)` returns 1 if the guarded static still
+// needs to be initialised, 0 if it's already initialised. After a
+// successful initialisation the caller invokes `__cxa_guard_release`.
 //
 // On 32-bit ARM the guard is a 64-bit object whose first byte is the
-// "initialised" flag (non-zero = initialised). touchHLE is single-threaded
-// at the static-initialiser level, so we don't need the locking machinery.
+// "initialised" flag. touchHLE is single-threaded for static init so
+// we don't need locking. We pre-mark it 1 so a re-entrant call sees
+// "already done".
+
 fn __cxa_guard_acquire(env: &mut Environment, guard: MutPtr<u8>) -> i32 {
-    // Itanium ABI: returns 1 if the caller should run the static
-    // initialiser, 0 if it has already been run. We mark the guard as
-    // initialised eagerly so that __cxa_guard_release becomes a no-op
-    // and a re-entrant call sees "already done".
     let initialized = env.mem.read(guard);
     if initialized != 0 {
         0
@@ -84,21 +81,85 @@ fn __cxa_guard_release(env: &mut Environment, guard: MutPtr<u8>) {
     env.mem.write(guard, 1);
 }
 
-fn __cxa_guard_abort(_env: &mut Environment, _guard: MutPtr<u8>) {
-    // No-op: failed initialisation just leaves the guard at 0, so the next
-    // call to acquire will retry. This is the simplest reasonable behaviour.
+fn __cxa_guard_abort(env: &mut Environment, guard: MutPtr<u8>) {
+    env.mem.write(guard, 0);
+}
+
+// === SjLj exception bypass ===
+//
+// touchHLE has no real C++ unwinder. Implementing one means parsing
+// .gcc_except_table LSDAs, walking the SjLj jmpbuf chain and dispatching
+// to the right `catch` clause. That's a multi-week project.
+//
+// Instead, when a guest exception is thrown we walk the ARM frame-pointer
+// chain looking for a return address that lives inside the user code
+// segment (below 0x10000000 — guest binaries always load there; the
+// system dylibs are mapped at >= 0x38000000). When we find one, we treat
+// that frame as if it caught the exception: restore SP and FP for that
+// frame, set R0=0 (the "no exception in flight" return) and branch to
+// LR. Effectively we make the throwing function return to the first
+// app-level frame above it.
+//
+// This is wrong in the strict sense — destructors of automatic objects
+// in skipped frames don't run, the exception object leaks, and the
+// caller's local state may be inconsistent — but it lets games that
+// throw recoverable errors (parse failures, missing assets, etc.) keep
+// running instead of crashing on a NULL-page indirect call.
+
+const APP_CODE_LIMIT: u32 = 0x1000_0000;
+
+fn unwind_to_app_frame(env: &mut Environment) -> bool {
+    // The thread's stack typically lives at the top of the 4 GiB guest
+    // address space (e.g. SP ≈ 0xffffee40). Use the recorded stack range
+    // when available — otherwise fall back to "any non-zero, non-all-ones
+    // address that's 4-byte aligned".
+    let stack_range = env
+        .threads
+        .get(env.current_thread)
+        .and_then(|t| t.stack.clone());
+
+    let mut fp = env.cpu.regs()[FRAME_POINTER];
+    let return_to_host = env.dyld.return_to_host_routine().addr_with_thumb_bit();
+    let thread_exit = env.dyld.thread_exit_routine().addr_with_thumb_bit();
+
+    for _ in 0..64 {
+        if fp == 0 || fp == 0xffff_ffff || (fp & 3) != 0 {
+            break;
+        }
+        if let Some(ref r) = stack_range {
+            if !r.contains(&fp) {
+                break;
+            }
+        }
+        let prev_fp: u32 = env.mem.read(ConstPtr::<u32>::from_bits(fp));
+        let lr: u32 = env.mem.read(ConstPtr::<u32>::from_bits(fp + 4));
+        let lr_no_thumb = lr & !1;
+        // Skip frames where LR is one of touchHLE's host trampoline
+        // sentinels (return-to-host / thread-exit). Those mark the
+        // boundary between host and guest code; unwinding past them
+        // would dump us back into the wrong place.
+        let is_host_trampoline = lr == return_to_host || lr == thread_exit;
+        if !is_host_trampoline && lr_no_thumb > 0 && lr_no_thumb < APP_CODE_LIMIT {
+            let regs = env.cpu.regs_mut();
+            regs[FRAME_POINTER] = prev_fp;
+            regs[Cpu::SP] = fp + 8;
+            regs[0] = 0;
+            env.cpu
+                .branch(GuestFunction::from_addr_with_thumb_bit(lr));
+            return true;
+        }
+        fp = prev_fp;
+    }
+    false
 }
 
 // === C++ Itanium ABI: exception machinery ===
 //
-// We don't implement real exception handling — touchHLE has no SjLj
-// unwinder. But we still need these entry points to behave sensibly so
-// the binary's exception-using code doesn't dereference NULL.
-//
-// `__cxa_allocate_exception(size)` is supposed to return a pointer to
-// `size` bytes of memory, prefixed by a `__cxa_exception` header. We
-// just allocate `header + size` bytes and hand back a pointer past the
-// header so the caller's offset arithmetic stays valid.
+// We allocate the requested storage prefixed by a fake __cxa_exception
+// header, so that pointer arithmetic in the app's exception-handling
+// code (ABI offsets, exception_class field, etc.) lands inside live
+// memory. We never actually free the storage — exceptions are extremely
+// rare and the leak is bounded.
 
 const CXA_EXCEPTION_HEADER_SIZE: GuestUSize = 0x60;
 
@@ -108,80 +169,115 @@ fn __cxa_allocate_exception(env: &mut Environment, thrown_size: GuestUSize) -> M
 }
 
 fn __cxa_free_exception(_env: &mut Environment, _thrown: MutVoidPtr) {
-    // We never free guest memory we've allocated this way; it's a one-shot.
+    // Leak — see comment above.
 }
 
-fn __cxa_throw(env: &mut Environment, _exc: MutVoidPtr, tinfo: ConstVoidPtr, _dtor: GuestFunction) {
+fn __cxa_throw(
+    env: &mut Environment,
+    _exc: MutVoidPtr,
+    tinfo: ConstVoidPtr,
+    _dtor: GuestFunction,
+) {
     // Itanium type_info layout (32-bit):
     //   +0  vptr
     //   +4  const char *name
-    let name_field: ConstPtr<ConstPtr<u8>> = tinfo.cast();
-    let name = if !tinfo.is_null() {
+    let type_name = if !tinfo.is_null() {
+        let name_field: ConstPtr<ConstPtr<u8>> = tinfo.cast();
         let name_ptr: ConstPtr<u8> = env.mem.read(name_field + 1);
         if !name_ptr.is_null() {
             env.mem
                 .cstr_at_utf8(name_ptr)
-                .unwrap_or("(non-utf8 name)")
+                .unwrap_or("(non-utf8)")
                 .to_owned()
         } else {
-            "(unknown type)".to_owned()
+            "(unknown)".to_owned()
         }
     } else {
         "(null type_info)".to_owned()
     };
-    panic!(
-        "Guest threw a C++ exception of type {:?}. touchHLE does not implement \
-         a real C++ unwinder, so this is fatal. Look at the call site to see \
-         if the throw can be avoided (out-of-range, bad_alloc, etc.).",
-        name
+    log!(
+        "Guest threw a C++ exception of type {:?} — bypassing via SjLj-style \
+         frame-pointer walk (touchHLE has no real unwinder).",
+        type_name
     );
+    if !unwind_to_app_frame(env) {
+        panic!(
+            "Could not unwind past C++ exception ({}); no app-level frame on \
+             the stack",
+            type_name
+        );
+    }
 }
 
-fn __cxa_rethrow(_env: &mut Environment) {
-    panic!("__cxa_rethrow called but touchHLE has no exception handler");
+fn __cxa_rethrow(env: &mut Environment) {
+    log!("__cxa_rethrow — bypassing");
+    if !unwind_to_app_frame(env) {
+        panic!("Could not unwind past __cxa_rethrow");
+    }
 }
 
 fn __cxa_begin_catch(_env: &mut Environment, exception_obj: MutVoidPtr) -> MutVoidPtr {
-    // Should never be reached because __cxa_throw panics first. If we do get
-    // here it means someone synthesised an exception object directly; just
-    // return it unchanged.
+    // Return the exception object unchanged. Combined with the unwind
+    // bypass above, no frame ever actually reaches __cxa_begin_catch
+    // unless someone called it manually; in that case keep the value
+    // sane.
     exception_obj
 }
 
-fn __cxa_end_catch(_env: &mut Environment) {
-    // No-op.
+fn __cxa_end_catch(_env: &mut Environment) {}
+
+fn __cxa_pure_virtual(env: &mut Environment) {
+    log!("Pure virtual function called — vtable slot was NULL. Bypassing.");
+    if !unwind_to_app_frame(env) {
+        panic!("Pure virtual function called and no recoverable frame found");
+    }
 }
 
-fn __cxa_pure_virtual(_env: &mut Environment) {
-    panic!("Pure virtual function called — guest object's vtable is corrupt");
+fn __cxa_call_unexpected(env: &mut Environment, _exc: MutVoidPtr) {
+    log!("__cxa_call_unexpected — bypassing");
+    if !unwind_to_app_frame(env) {
+        panic!("__cxa_call_unexpected with no recoverable frame");
+    }
 }
 
-fn __cxa_call_unexpected(_env: &mut Environment, _exc: MutVoidPtr) {
-    panic!("__cxa_call_unexpected called");
-}
-
-// === SjLj exception unwinder stubs ===
+// === SjLj unwinder entry points ===
 //
-// `__Unwind_SjLj_Register(jmpbuf)` is called in every function with a
-// try block to push its `__cxa_eh_globals`-style buffer onto the
-// thread-local SjLj chain. `__Unwind_SjLj_Unregister(jmpbuf)` pops it.
-// Because we never actually throw (see __cxa_throw above), the chain
-// is unused — these can be no-ops. The previous "return-0 stub" path
-// did the right thing by accident; making them real exports just
-// removes the warning spam.
+// `_Unwind_SjLj_Register/Unregister` push and pop a jmpbuf onto the
+// thread-local SjLj exception chain. We never actually consult the
+// chain (because __cxa_throw doesn't walk it), so register/unregister
+// are no-ops. `_Unwind_SjLj_RaiseException` and `_Unwind_SjLj_Resume`
+// fall through to the same frame-pointer bypass as __cxa_throw.
+
 #[allow(non_snake_case)]
-fn _Unwind_SjLj_Register(_env: &mut Environment, _jmpbuf: MutVoidPtr) {
-    // No-op.
+fn _Unwind_SjLj_Register(_env: &mut Environment, _jmpbuf: MutVoidPtr) {}
+
+#[allow(non_snake_case)]
+fn _Unwind_SjLj_Unregister(_env: &mut Environment, _jmpbuf: MutVoidPtr) {}
+
+#[allow(non_snake_case)]
+fn _Unwind_SjLj_RaiseException(env: &mut Environment, _exc: MutVoidPtr) -> i32 {
+    log!("_Unwind_SjLj_RaiseException — bypassing");
+    if !unwind_to_app_frame(env) {
+        panic!("_Unwind_SjLj_RaiseException with no recoverable frame");
+    }
+    0
 }
 
 #[allow(non_snake_case)]
-fn _Unwind_SjLj_Unregister(_env: &mut Environment, _jmpbuf: MutVoidPtr) {
-    // No-op.
+fn _Unwind_SjLj_Resume(env: &mut Environment, _exc: MutVoidPtr) {
+    log!("_Unwind_SjLj_Resume — bypassing");
+    if !unwind_to_app_frame(env) {
+        panic!("_Unwind_SjLj_Resume with no recoverable frame");
+    }
 }
 
 #[allow(non_snake_case)]
-fn _Unwind_SjLj_Resume(_env: &mut Environment, _exception_object: MutVoidPtr) {
-    panic!("_Unwind_SjLj_Resume called — no active exception in touchHLE");
+fn _Unwind_SjLj_Resume_or_Rethrow(env: &mut Environment, _exc: MutVoidPtr) -> i32 {
+    log!("_Unwind_SjLj_Resume_or_Rethrow — bypassing");
+    if !unwind_to_app_frame(env) {
+        panic!("_Unwind_SjLj_Resume_or_Rethrow with no recoverable frame");
+    }
+    0
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -200,5 +296,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_call_unexpected(_)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
+    export_c_func!(_Unwind_SjLj_RaiseException(_)),
     export_c_func!(_Unwind_SjLj_Resume(_)),
+    export_c_func!(_Unwind_SjLj_Resume_or_Rethrow(_)),
 ];

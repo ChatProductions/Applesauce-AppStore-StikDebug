@@ -309,17 +309,13 @@ impl Mem {
         let null_stub_page = unsafe {
             let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
             let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
-            
-            // 1. Заполняем всё нулями.
-            // Чтение *(void**)0 вернет 0x00000000 (NULL).
-            // Вызов адреса 0x0 запустит выполнение безвредных NOP-ов (MOVS R0, R0).
+
+            // Fill with zeros so that data reads of a NULL pointer
+            // (e.g. `*(void**)0`) keep returning NULL. We don't try to
+            // turn this page into an instruction "BX LR sled" — guest
+            // code that actually jumps through NULL is treated as a
+            // hard error elsewhere in the CPU emulator.
             stub_slice.fill(0);
-            
-            // 2. В самом конце страницы ставим BX LR (Thumb).
-            // Процессор "проскользит" по нулям до конца страницы, выполнит BX LR и вернется назад.
-            let last_idx = (PAGE_SIZE as usize) - 2;
-            stub_slice[last_idx] = 0x70;
-            stub_slice[last_idx + 1] = 0x47;
             page as *mut u8
         };
 
@@ -588,12 +584,50 @@ impl Mem {
     }
 
     /// C-style `memmove`.
+    ///
+    /// Sanity-checks the arguments. If `src + size` or `dest + size` would
+    /// run off the end of the 4 GiB guest address space, the operation is
+    /// logged and skipped instead of panicking. This is a defensive measure
+    /// for guest code that calls `memmove`/`memcpy` with corrupted arguments
+    /// (for example, an uninitialised `std::string` whose internal length
+    /// happens to be wildly out of range): a guest bug shouldn't take down
+    /// the whole emulator.
     pub fn memmove(&mut self, dest: MutVoidPtr, src: ConstVoidPtr, size: GuestUSize) {
-        let src = src.to_bits() as usize;
-        let dest = dest.to_bits() as usize;
-        let size = size as usize;
+        let src_addr = src.to_bits() as usize;
+        let dest_addr = dest.to_bits() as usize;
+        let size_us = size as usize;
+        let max = self.bytes_mut().len();
+
+        let src_end = match src_addr.checked_add(size_us) {
+            Some(v) if v <= max => v,
+            _ => {
+                log!(
+                    "WARNING: memmove with bogus args (src={:#x}, dest={:#x}, \
+                     size={:#x}) — skipping to avoid host crash",
+                    src_addr,
+                    dest_addr,
+                    size_us
+                );
+                return;
+            }
+        };
+        let dest_end = match dest_addr.checked_add(size_us) {
+            Some(v) if v <= max => v,
+            _ => {
+                log!(
+                    "WARNING: memmove with bogus args (src={:#x}, dest={:#x}, \
+                     size={:#x}) — skipping to avoid host crash",
+                    src_addr,
+                    dest_addr,
+                    size_us
+                );
+                return;
+            }
+        };
+        let _ = (src_end, dest_end);
+
         self.bytes_mut()
-            .copy_within(src..src.checked_add(size).unwrap(), dest)
+            .copy_within(src_addr..src_addr + size_us, dest_addr)
     }
 
     /// Allocate `size` bytes.

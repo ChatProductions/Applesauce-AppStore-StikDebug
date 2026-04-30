@@ -32,7 +32,20 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if size == 0 {
         size = 1;
-        // Защита от падения при выделении 0 байт
+        // Protect against dying on a 0-byte allocation: ISO C lets malloc(0)
+        // return either NULL or a unique pointer; we choose unique so guest
+        // code that later free()s the pointer doesn't crash.
+    }
+    // Reject obviously absurd allocations (would overflow page alignment in
+    // the underlying allocator) and return NULL — that's what real malloc
+    // does on systems that can't satisfy the request.
+    if size >= 0xf000_0000 {
+        log!(
+            "malloc({:#x}) refused as out of range — returning NULL",
+            size
+        );
+        set_errno(env, 12); // ENOMEM
+        return Ptr::null();
     }
     env.mem.alloc(size)
 }
