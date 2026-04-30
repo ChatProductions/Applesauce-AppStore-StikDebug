@@ -48,6 +48,8 @@ const KEY_URL:                       &str = "NSURL";
 const KEY_FILE_PATH:                 &str = "NSFilePath";
 const KEY_STRING_ENCODING:           &str = "NSStringEncoding";
 const KEY_DEBUG_DESCRIPTION:         &str = "NSDebugDescription";
+const KEY_FAILING_URL_STRING:        &str = "NSErrorFailingURLStringKey";
+const KEY_FAILING_URL:               &str = "NSErrorFailingURLKey";
 
 struct ErrorHostObject {
     domain: NSErrorDomain,
@@ -247,6 +249,8 @@ pub const CONSTANTS: ConstantExports = &[
     ("_NSFilePathErrorKey",                 HostConstant::NSString(KEY_FILE_PATH)),
     ("_NSDebugDescriptionErrorKey",         HostConstant::NSString(KEY_DEBUG_DESCRIPTION)),
     ("_NSStringEncodingErrorKey",           HostConstant::NSString(KEY_STRING_ENCODING)),
+    ("_NSErrorFailingURLStringKey",         HostConstant::NSString(KEY_FAILING_URL_STRING)),
+    ("_NSErrorFailingURLKey",               HostConstant::NSString(KEY_FAILING_URL)),
     // Error domains
     ("_NSCocoaErrorDomain",     HostConstant::NSString(NSCocoaErrorDomain)),
     ("_NSOSStatusErrorDomain",  HostConstant::NSString(NSOSStatusErrorDomain)),

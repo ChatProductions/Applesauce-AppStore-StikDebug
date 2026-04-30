@@ -13,6 +13,7 @@
 
 mod generic_char;
 pub mod arpa;
+pub mod asl;
 pub mod clocale;
 pub mod crypto;
 pub mod ctype;
@@ -56,6 +57,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[ctype::CONSTANTS, dispatch::CONSTANTS, stdio::CONSTANTS, mach::init::CONSTANTS, ssp::CONSTANTS],
     function_exports: &[
         arpa::inet::FUNCTIONS,
+        asl::FUNCTIONS,
         clocale::FUNCTIONS,
         ctype::FUNCTIONS,
         cxxabi::FUNCTIONS,

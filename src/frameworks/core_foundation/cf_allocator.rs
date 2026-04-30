@@ -47,4 +47,12 @@ pub const CONSTANTS: ConstantExports = &[
             env.mem.alloc_and_write(allocator_ptr).cast().cast_const()
         }),
     ),
+    // CFAllocator variants that touchHLE treats as aliases for the system
+    // default. CFDataCreateWithBytesNoCopy etc. use kCFAllocatorNull to mean
+    // "do not free the backing bytes", which is fine because touchHLE always
+    // copies anyway.
+    ("_kCFAllocatorMalloc", HostConstant::NullPtr),
+    ("_kCFAllocatorMallocZone", HostConstant::NullPtr),
+    ("_kCFAllocatorNull", HostConstant::NullPtr),
+    ("_kCFAllocatorUseContext", HostConstant::NullPtr),
 ];

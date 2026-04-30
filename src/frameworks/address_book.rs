@@ -359,7 +359,36 @@ pub const FUNCTIONS: FunctionExports = &[
 ];
 
 pub const CONSTANTS: ConstantExports = &[
+    // ABPerson property IDs. Apple exports these as `CFNumberRef`-wrapped
+    // integers via the AddressBook framework, but every caller just uses them
+    // as opaque pointers passed back through ABRecordCopyValue/ABRecordSetValue,
+    // which are stubbed. Publishing them as NullPtr is enough to unblock dyld
+    // lookups from apps that reference the property constants at load time.
+    ("_kABPersonFirstNameProperty", HostConstant::NullPtr),
+    ("_kABPersonLastNameProperty", HostConstant::NullPtr),
+    ("_kABPersonMiddleNameProperty", HostConstant::NullPtr),
+    ("_kABPersonPrefixProperty", HostConstant::NullPtr),
+    ("_kABPersonSuffixProperty", HostConstant::NullPtr),
+    ("_kABPersonNicknameProperty", HostConstant::NullPtr),
+    ("_kABPersonFirstNamePhoneticProperty", HostConstant::NullPtr),
+    ("_kABPersonLastNamePhoneticProperty", HostConstant::NullPtr),
+    ("_kABPersonMiddleNamePhoneticProperty", HostConstant::NullPtr),
+    ("_kABPersonOrganizationProperty", HostConstant::NullPtr),
+    ("_kABPersonJobTitleProperty", HostConstant::NullPtr),
+    ("_kABPersonDepartmentProperty", HostConstant::NullPtr),
     ("_kABPersonEmailProperty", HostConstant::NullPtr),
+    ("_kABPersonBirthdayProperty", HostConstant::NullPtr),
+    ("_kABPersonNoteProperty", HostConstant::NullPtr),
+    ("_kABPersonCreationDateProperty", HostConstant::NullPtr),
+    ("_kABPersonModificationDateProperty", HostConstant::NullPtr),
+    ("_kABPersonAddressProperty", HostConstant::NullPtr),
+    ("_kABPersonDateProperty", HostConstant::NullPtr),
+    ("_kABPersonKindProperty", HostConstant::NullPtr),
+    ("_kABPersonPhoneProperty", HostConstant::NullPtr),
+    ("_kABPersonInstantMessageProperty", HostConstant::NullPtr),
+    ("_kABPersonURLProperty", HostConstant::NullPtr),
+    ("_kABPersonRelatedNamesProperty", HostConstant::NullPtr),
+    ("_kABPersonSocialProfileProperty", HostConstant::NullPtr),
 ];
 
 pub const DYLIB: HostDylib = HostDylib {
