@@ -40,10 +40,34 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     // the underlying allocator) and return NULL — that's what real malloc
     // does on systems that can't satisfy the request.
     if size >= 0xf000_0000 {
-        log!(
-            "malloc({:#x}) refused as out of range — returning NULL",
-            size
-        );
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static HUGE_COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = HUGE_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 8 {
+            let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
+            let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
+            let sp = env.cpu.regs()[crate::cpu::Cpu::SP];
+            let fp = env.cpu.regs()[7];
+            let mut stack_words = [0u32; 16];
+            for (i, slot) in stack_words.iter_mut().enumerate() {
+                let addr = sp.wrapping_add((i as u32) * 4);
+                if addr < 0x1000 || addr.checked_add(4).is_none() {
+                    break;
+                }
+                *slot = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(addr));
+            }
+            log!(
+                "malloc({:#x}) refused as out of range — returning NULL \
+                 (#{}, PC={:#x} LR={:#x} SP={:#x} FP={:#x} stack={:#x?})",
+                size,
+                n + 1,
+                pc,
+                lr,
+                sp,
+                fp,
+                stack_words
+            );
+        }
         set_errno(env, 12); // ENOMEM
         return Ptr::null();
     }
@@ -124,6 +148,38 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
     }
     set_errno(env, 0);
     if ptr.is_null() {
+        return;
+    }
+    let addr = ptr.to_bits();
+    // If the pointer looks obviously bogus, log caller context so we can trace
+    // where the corruption originated, then bail out instead of confusing the
+    // underlying allocator.
+    if addr >= 0xfff0_0000 || addr < 0x1000 {
+        let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
+        let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
+        log!(
+            "free({:#x}) rejected: pointer outside any plausible heap range \
+             (caller PC={:#x} LR={:#x})",
+            addr,
+            pc,
+            lr
+        );
+        return;
+    }
+    // If the pointer isn't part of any known allocation, bail out — the
+    // underlying allocator will otherwise log "Can't free" without context.
+    // This catches cases where a buggy stub returned garbage that the guest
+    // later hands back to free() (e.g. misinterpreting a float as a pointer).
+    if !env.mem.is_known_allocation(addr) {
+        let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
+        let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
+        log!(
+            "free({:#x}) rejected: not a known allocation \
+             (caller PC={:#x} LR={:#x})",
+            addr,
+            pc,
+            lr
+        );
         return;
     }
     env.mem.free(ptr);

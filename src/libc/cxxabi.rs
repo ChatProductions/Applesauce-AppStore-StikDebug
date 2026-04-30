@@ -195,11 +195,46 @@ fn __cxa_throw(
     } else {
         "(null type_info)".to_owned()
     };
-    log!(
-        "Guest threw a C++ exception of type {:?} — bypassing via SjLj-style \
-         frame-pointer walk (touchHLE has no real unwinder).",
-        type_name
-    );
+
+    // Throw-rate limiter: if the app enters an exception loop (e.g. because
+    // our SjLj bypass returns it to a `while (true) new X;` path that throws
+    // again the next iteration), we'll silently burn CPU forever. Track the
+    // rate of throws of the same type and abort after a reasonable ceiling so
+    // the emulator stays responsive.
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Mutex;
+    static LAST_THROW_TYPE: Mutex<String> = Mutex::new(String::new());
+    static SAME_TYPE_COUNT: AtomicU32 = AtomicU32::new(0);
+    const THROW_LOOP_LIMIT: u32 = 512;
+    let count = {
+        let mut last = LAST_THROW_TYPE.lock().unwrap();
+        if *last == type_name {
+            SAME_TYPE_COUNT.fetch_add(1, Ordering::Relaxed) + 1
+        } else {
+            *last = type_name.clone();
+            SAME_TYPE_COUNT.store(1, Ordering::Relaxed);
+            1
+        }
+    };
+
+    if count <= 3 || count.is_multiple_of(64) {
+        log!(
+            "Guest threw a C++ exception of type {:?} (consecutive #{}): \
+             touchHLE has no real unwinder, so we unwind to the nearest \
+             app-level frame via the frame-pointer chain.",
+            type_name,
+            count
+        );
+    }
+    if count >= THROW_LOOP_LIMIT {
+        panic!(
+            "Exception loop detected: {} threw {} times in a row. touchHLE's \
+             SjLj bypass is returning into a caller that re-throws every \
+             iteration; giving up instead of spinning forever.",
+            type_name, count
+        );
+    }
+
     if !unwind_to_app_frame(env) {
         panic!(
             "Could not unwind past C++ exception ({}); no app-level frame on \

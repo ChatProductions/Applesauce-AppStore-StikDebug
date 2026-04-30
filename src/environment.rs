@@ -117,6 +117,9 @@ pub struct Environment {
     // Sadly, setting ticks to 1 does not step properly, so Option is required.
     remaining_ticks: Option<u64>,
     panic_cell: Rc<Cell<Option<Environment>>>,
+    /// Tracks repeated UndefinedInstruction bypasses. See `debug_cpu_error`.
+    udf_bypass_last: Option<(u32, u32)>,
+    udf_bypass_count: u32,
 }
 
 /// What to do next when executing this thread.
@@ -601,6 +604,8 @@ let device_family = match device_family_array.len() {
             yielder: std::ptr::null(),
             remaining_ticks: None,
             panic_cell: Rc::new(Cell::new(None)),
+            udf_bypass_last: None,
+            udf_bypass_count: 0,
         };
 
         if env.options.dumping_options.any() {
@@ -741,6 +746,8 @@ let device_family = match device_family_array.len() {
             yielder: std::ptr::null(),
             remaining_ticks: None,
             panic_cell: Rc::new(Cell::new(None)),
+            udf_bypass_last: None,
+            udf_bypass_count: 0,
         };
 
         env.set_up_initial_env_vars();
@@ -800,6 +807,8 @@ let device_family = match device_family_array.len() {
             yielder: std::ptr::null(),
             remaining_ticks: None,
             panic_cell: Rc::new(Cell::new(None)),
+            udf_bypass_last: None,
+            udf_bypass_count: 0,
         }
     }
 
@@ -1503,21 +1512,56 @@ let device_family = match device_family_array.len() {
 		}
 	   
             if self.gdb_server.is_none() {
-            // ИСПРАВЛЕНИЕ: Обход крашей без написания заглушек для фреймворков.
-            // Игры часто вызывают abort() / __builtin_trap() (UndefinedInstruction)
-            // если им не нравится, что API (например OpenFeint) вернуло nil.
+            // Bypass crashes without implementing stubs for every framework.
+            // Games often trigger UndefinedInstruction (abort/__builtin_trap)
+            // when an API returns nil or an otherwise unexpected value.
+            // Fake a function return to LR to keep execution going.
+            //
+            // However: if we hit the SAME (PC,LR) pair too many times in a row
+            // this indicates we are looping forever (LR itself points back
+            // through an infinite chain of UDF instructions). In that case
+            // panic with a clear message instead of wedging the emulator.
             if matches!(error, cpu::CpuError::UndefinedInstruction) {
                 let pc = self.cpu.regs()[cpu::Cpu::PC];
                 let lr = self.cpu.regs()[cpu::Cpu::LR];
-                
-                log_no_panic!(
-                    "Warning: Ignored UndefinedInstruction at {:#x}. Faking function return to LR ({:#x}) to bypass crash!",
-                    pc,
-                    lr
-                );
-                
-                // Вместо сдвига PC вперед по мусорным данным, мы имитируем выход 
-                // из упавшей функции обратно к вызывающему коду.
+
+                // Track repeated occurrences of the same bypass site.
+                const BYPASS_LIMIT: u32 = 256;
+                const LOG_RATE: u32 = 32;
+                let key = (pc, lr);
+                let count = if self.udf_bypass_last == Some(key) {
+                    self.udf_bypass_count = self.udf_bypass_count.saturating_add(1);
+                    self.udf_bypass_count
+                } else {
+                    self.udf_bypass_last = Some(key);
+                    self.udf_bypass_count = 1;
+                    1
+                };
+
+                if count == 1 || count % LOG_RATE == 0 {
+                    log_no_panic!(
+                        "Warning: Ignored UndefinedInstruction at {:#x}. \
+                         Faking function return to LR ({:#x}) to bypass crash! \
+                         (occurrence {} of at most {})",
+                        pc,
+                        lr,
+                        count,
+                        BYPASS_LIMIT
+                    );
+                }
+
+                if count >= BYPASS_LIMIT {
+                    panic!(
+                        "UndefinedInstruction at {:#x} looped {} times with \
+                         LR={:#x}; giving up to avoid hanging. This usually \
+                         means a framework stub returned bogus data that the \
+                         guest keeps re-trapping on.",
+                        pc, count, lr
+                    );
+                }
+
+                // Instead of skipping forward through garbage data, pretend the
+                // faulting function returned to its caller.
                 self.cpu.branch(GuestFunction::from_addr_with_thumb_bit(lr));
                 return;
             }
