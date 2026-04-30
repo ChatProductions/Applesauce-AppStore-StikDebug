@@ -498,6 +498,10 @@ impl Dyld {
         // causing a NULL-page read the first time the ObjC runtime tries to
         // retain or release a block object.
         let mut block_class_addrs: HashMap<String, u32> = HashMap::new();
+        // Cache for C++ Itanium ABI type_info vtables. All references to the
+        // same vtable symbol must resolve to the same address so that vtable
+        // identity checks in dynamic_cast work correctly.
+        let mut cxxabi_vtable_addrs: HashMap<String, u32> = HashMap::new();
         for &(ptr_ptr, ref name) in &bin.external_relocations {
             let ptr_ptr: MutPtr<ConstVoidPtr> = Ptr::from_bits(ptr_ptr);
             // There will be an existing value at the address, which is an
@@ -545,6 +549,68 @@ impl Dyld {
                     .or_insert_with(|| mem.alloc(16).to_bits());
                 log_dbg!("Patched block class descriptor {} -> {:#x}", name, addr);
                 Ptr::from_bits(addr)
+            } else if name == "__ZTVN10__cxxabiv117__class_type_infoE"
+                || name == "__ZTVN10__cxxabiv120__si_class_type_infoE"
+                || name == "__ZTVN10__cxxabiv121__vmi_class_type_infoE"
+            {
+                // C++ Itanium ABI type_info vtable. Without this every
+                // type_info object in the app has a NULL vptr, and any call
+                // through the vptr (dynamic_cast, exception type matching,
+                // type_info comparison) lands on address 0 and crashes.
+                //
+                // Layout (32-bit ARM, addend +8 from the symbol so callers
+                // land on the first method):
+                //   +0   offset_to_top   (= 0)
+                //   +4   typeinfo for the vtable's class (= 0; never used)
+                //   +8   ~type_info() complete dtor   -> BX LR stub
+                //   +12  ~type_info() deleting dtor   -> BX LR stub
+                //   +16  __is_pointer_p()             -> returns 0 (false)
+                //   +20  __is_function_p()            -> returns 0 (false)
+                //   +24  __do_catch()                 -> returns 0 (no match)
+                //   +28  __do_upcast()                -> returns 0 (no match)
+                //   +32  reserved
+                //   +36  reserved
+                let addr = *cxxabi_vtable_addrs.entry(name.clone()).or_insert_with(|| {
+                    // Shared method stub: minimal ARM32 function (BX LR)
+                    // returning 0/false for every virtual call.
+                    let stub: MutPtr<u32> = mem.alloc(8).cast();
+                    mem.write(stub + 0, encode_a32_ret());
+                    mem.write(stub + 1, encode_a32_trap());
+                    let stub_addr = stub.to_bits();
+
+                    let v: MutPtr<u32> = mem.alloc(40).cast();
+                    mem.write(v + 0, 0); // offset_to_top
+                    mem.write(v + 1, 0); // typeinfo
+                    for i in 2..10 {
+                        mem.write(v + i, stub_addr);
+                    }
+                    v.to_bits()
+                });
+                log_dbg!("Stubbed C++ vtable {} -> {:#x}", name, addr);
+                Ptr::from_bits(addr)
+            } else if name == "___gxx_personality_sj0" {
+                // C++ SjLj exception personality routine. Called by the
+                // unwinder for every frame; returning 0 (_URC_NO_REASON)
+                // tells it "no handler here, keep going". touchHLE never
+                // actually invokes the unwinder, but other code may store
+                // this pointer in an LSDA and read it back.
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
+                fn_ptr.cast().cast_const()
+            } else if name == "___cxa_terminate_handler"
+                || name == "___cxa_unexpected_handler"
+                || name == "___cxa_new_handler"
+            {
+                // Global function-pointer variables: std::terminate_handler,
+                // std::unexpected_handler, std::new_handler. The default
+                // value is a NULL function pointer; the real C++ runtime
+                // checks for NULL and falls back to abort. Provide a single
+                // word of zero-initialised guest memory.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                p.cast().cast_const()
             } else if let Some(&external_addr) = bins
                 .iter()
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
@@ -720,6 +786,26 @@ impl Dyld {
                 mem.write(val_ptr, 1u32);
                 mem.write(ptr_ptr, val_ptr.cast().cast_const());
                 log_dbg!("Stubbed ___mb_cur_max -> {:#x}", val_ptr.to_bits());
+                continue;
+            }
+
+            if symbol == "___gxx_personality_sj0" {
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                mem.write(ptr_ptr, fn_ptr.cast().cast_const());
+                log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
+                continue;
+            }
+
+            if symbol == "___cxa_terminate_handler"
+                || symbol == "___cxa_unexpected_handler"
+                || symbol == "___cxa_new_handler"
+            {
+                // Default-NULL global handler pointer.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
                 continue;
             }
 
