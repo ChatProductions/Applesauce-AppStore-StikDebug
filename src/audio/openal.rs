@@ -45,9 +45,28 @@ pub struct OpenALContext {
 
 impl OpenALContext {
     pub fn new(_manager: &mut OpenALManager) -> Result<Self, String> {
-        let device = unsafe { al_sys::alcOpenDevice(std::ptr::null()) };
+        // Try the host's default audio device first.
+        let mut device = unsafe { al_sys::alcOpenDevice(std::ptr::null()) };
         if device.is_null() {
-            return Err("Could not open OpenAL device".to_string());
+            // Fall back to OpenAL Soft's "No Output" null backend so that
+            // emulation can keep running on hosts without a working audio
+            // device (for example: headless/CI hosts, broken ALSA configs,
+            // restricted Android audio policies). Sound will be silent, but
+            // the emulator will not crash and the audio APIs will continue
+            // to behave as expected from the guest's perspective.
+            log!(
+                "Could not open default OpenAL device; \
+                 falling back to OpenAL Soft \"No Output\" (silent) backend. \
+                 Sound will not be audible."
+            );
+            let null_name = b"No Output\0";
+            device = unsafe { al_sys::alcOpenDevice(null_name.as_ptr() as *const _) };
+            if device.is_null() {
+                return Err(
+                    "Could not open OpenAL device (default and \"No Output\" both failed)"
+                        .to_string(),
+                );
+            }
         }
         unsafe { Self::new_with_device_and_attrlist(_manager, device, std::ptr::null()) }
     }
