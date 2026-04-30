@@ -372,21 +372,46 @@ impl Mem {
         unsafe { &mut *self.bytes }
     }
 
-    // ХАК: Мягкий обработчик null-page доступов. Без паники!
+    // Soft handler for null-page accesses. No panic; returns a stub page.
+    // Rate-limited: only the first N unique (addr, is_write) pairs are logged,
+    // further occurrences are silently counted. This prevents the log from
+    // being flooded when the game repeatedly probes null-page addresses.
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize, is_write: bool, caller: &str) {
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+        static SEEN: Mutex<Option<HashSet<(VAddr, bool)>>> = Mutex::new(None);
+        const MAX_UNIQUE_LOGS: usize = 64;
+
+        let mut guard = SEEN.lock().unwrap();
+        let set = guard.get_or_insert_with(HashSet::new);
+        let key = (at, is_write);
+        if set.contains(&key) {
+            return;
+        }
+        if set.len() >= MAX_UNIQUE_LOGS {
+            if set.len() == MAX_UNIQUE_LOGS {
+                // Insert a sentinel to emit the notice only once.
+                set.insert((0xFFFF_FFFE, false));
+                log!(
+                    "touchHLE::mem: further NULL-PAGE warnings silenced after {} unique sites",
+                    MAX_UNIQUE_LOGS
+                );
+            }
+            return;
+        }
+        set.insert(key);
         let op_type = if is_write { "WRITE" } else { "READ" };
-        eprintln!("\n=== touchHLE NULL-PAGE ACCESS DETECTED ===");
-        eprintln!("Operation: {}", op_type);
-        eprintln!("Address:   0x{:08x} (NULL + 0x{:x} bytes)", at, at);
-        eprintln!("Size:      0x{:x} bytes", size);
-        eprintln!("Caller:    {}", caller);
-        eprintln!("===========================================");
-        eprintln!("WARNING: Access ALLOWED (returning stub page with BX LR).");
-        eprintln!("Game may behave unexpectedly but should not crash.");
-        eprintln!("===========================================\n");
-        log!("WARNING: NULL-PAGE {} at 0x{:x} (size: 0x{:x}) from {} - HACK ACTIVE", 
-             op_type, at, size, caller);
+        log!(
+            "touchHLE::mem: NULL-PAGE {} at 0x{:08x} (size: 0x{:x}) from {} \
+             — returning stub page (unique sites logged: {}/{})",
+            op_type,
+            at,
+            size,
+            caller,
+            set.len(),
+            MAX_UNIQUE_LOGS
+        );
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
