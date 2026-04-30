@@ -33,6 +33,7 @@ pub mod ui_local_notification;
 pub mod ui_navigation_bar;
 pub mod ui_nib;
 pub mod ui_pasteboard;
+pub mod ui_pinch_gesture_recognizer;
 pub mod ui_popover_controller;
 pub mod ui_responder;
 pub mod ui_screen;
@@ -136,6 +137,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_navigation_bar::CLASSES,
         ui_nib::CLASSES,
         ui_pasteboard::CLASSES,
+        ui_pinch_gesture_recognizer::CLASSES,
         ui_popover_controller::CLASSES,
         ui_responder::CLASSES,
         ui_screen_mode::CLASSES,
