@@ -438,6 +438,8 @@ impl ObjC {
 
         let class_host_object: Box<dyn AnyHostObject>;
         let metaclass_host_object: Box<dyn AnyHostObject>;
+            if let Some(template) = Self::find_template(name) {
+            // We have a template (host implementation) for this class, use it.
             if let Some(superclass_name) = template.superclass {
                 // В реальном Objective-C рантайме классы могут загружаться динамически.
                 // Вместо жесткого падения (assert!), если шаблон суперкласса не найден,
