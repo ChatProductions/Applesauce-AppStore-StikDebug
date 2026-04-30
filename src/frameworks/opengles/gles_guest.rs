@@ -1709,9 +1709,9 @@ fn glCompileShader(env: &mut Environment, shader: GLuint) {
         let mut ok: GLint = 0;
         gles.GetShaderiv(shader, 0x8B81 /* GL_COMPILE_STATUS */, &mut ok);
         if ok == 0 {
-            let mut buf = [0i8; 1024];
+            let mut buf = [0u8; 1024];
             let mut len: GLsizei = 0;
-            gles.GetShaderInfoLog(shader, 1024, &mut len, buf.as_mut_ptr());
+            gles.GetShaderInfoLog(shader, 1024, &mut len, buf.as_mut_ptr() as *mut _);
             let s = std::str::from_utf8(std::slice::from_raw_parts(
                 buf.as_ptr() as *const u8,
                 len as usize,
@@ -1737,9 +1737,9 @@ fn glLinkProgram(env: &mut Environment, program: GLuint) {
         let mut ok: GLint = 0;
         gles.GetProgramiv(program, 0x8B82 /* GL_LINK_STATUS */, &mut ok);
         if ok == 0 {
-            let mut buf = [0i8; 1024];
+            let mut buf = [0u8; 1024];
             let mut len: GLsizei = 0;
-            gles.GetProgramInfoLog(program, 1024, &mut len, buf.as_mut_ptr());
+            gles.GetProgramInfoLog(program, 1024, &mut len, buf.as_mut_ptr() as *mut _);
             let s = std::str::from_utf8(std::slice::from_raw_parts(
                 buf.as_ptr() as *const u8,
                 len as usize,

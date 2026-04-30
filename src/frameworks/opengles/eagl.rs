@@ -829,9 +829,9 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
     let mut ok: GLint = 0;
     gles.GetShaderiv(vs, gles2::COMPILE_STATUS, &mut ok);
     if ok == 0 {
-        let mut buf = [0i8; 1024];
+        let mut buf = [0u8; 1024];
         let mut len: GLsizei = 0;
-        gles.GetShaderInfoLog(vs, 1024, &mut len, buf.as_mut_ptr());
+        gles.GetShaderInfoLog(vs, 1024, &mut len, buf.as_mut_ptr() as *mut _);
         let s = std::str::from_utf8(std::slice::from_raw_parts(
             buf.as_ptr() as *const u8,
             len as _,
@@ -847,9 +847,9 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
     gles.CompileShader(fs);
     gles.GetShaderiv(fs, gles2::COMPILE_STATUS, &mut ok);
     if ok == 0 {
-        let mut buf = [0i8; 1024];
+        let mut buf = [0u8; 1024];
         let mut len: GLsizei = 0;
-        gles.GetShaderInfoLog(fs, 1024, &mut len, buf.as_mut_ptr());
+        gles.GetShaderInfoLog(fs, 1024, &mut len, buf.as_mut_ptr() as *mut _);
         let s = std::str::from_utf8(std::slice::from_raw_parts(
             buf.as_ptr() as *const u8,
             len as _,
@@ -868,9 +868,9 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
     gles.LinkProgram(prog);
     gles.GetProgramiv(prog, gles2::LINK_STATUS, &mut ok);
     if ok == 0 {
-        let mut buf = [0i8; 1024];
+        let mut buf = [0u8; 1024];
         let mut len: GLsizei = 0;
-        gles.GetProgramInfoLog(prog, 1024, &mut len, buf.as_mut_ptr());
+        gles.GetProgramInfoLog(prog, 1024, &mut len, buf.as_mut_ptr() as *mut _);
         let s = std::str::from_utf8(std::slice::from_raw_parts(
             buf.as_ptr() as *const u8,
             len as _,
