@@ -343,6 +343,13 @@ impl Allocator {
         size.get()
     }
 
+    /// Returns whether `base` is currently a live allocation (the exact base
+    /// address of a used chunk). Used by `free()` wrappers to reject clearly
+    /// bogus pointers before passing them to the allocator.
+    pub fn is_known_allocation(&self, base: VAddr) -> bool {
+        self.used_chunks.get_size_with_base(base).is_some()
+    }
+
     /// Returns the size of the freed chunk so it can be zeroed if desired
     #[must_use]
     pub fn free(&mut self, base: VAddr) -> GuestUSize {

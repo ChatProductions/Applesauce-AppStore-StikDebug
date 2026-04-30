@@ -677,6 +677,12 @@ impl Mem {
         self.allocator.find_allocated_size(ptr.to_bits())
     }
 
+    /// Returns whether `addr` is the exact base of a live allocation. Used to
+    /// defensively reject garbage pointers at the libc free() wrapper.
+    pub fn is_known_allocation(&self, addr: VAddr) -> bool {
+        self.allocator.is_known_allocation(addr)
+    }
+
     pub fn realloc(&mut self, old_ptr: MutVoidPtr, size: GuestUSize) -> MutVoidPtr {
         if old_ptr.is_null() {
             return self.alloc(size);
