@@ -272,7 +272,7 @@ fn alcDestroyContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
     }
     let _host_context = State::get(env).contexts.remove(&context).unwrap();
     env.mem.free(context.cast());
-    log!("alcDestroyContext({:?})", context);
+    log_dbg!("alcDestroyContext({:?})", context);
 }
 
 fn alcProcessContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {

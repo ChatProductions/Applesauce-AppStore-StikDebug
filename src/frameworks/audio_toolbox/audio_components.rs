@@ -201,7 +201,7 @@ fn AudioComponentFindNext(
             env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
     }
 
-    log!(
+    log_dbg!(
         "AudioComponentFindNext: matched type=0x{:08x} sub_type=0x{:08x} manuf=0x{:08x} -> {:?}",
         comp_type, comp_sub_type, comp_manufacturer, state.audio_component
     );
@@ -230,7 +230,7 @@ fn AudioComponentInstanceNew(
         
     env.mem.write(out_instance, guest_instance);
 
-    log!(
+    log_dbg!(
         "AudioComponentInstanceNew(component={:?}) -> instance={:?}",
         in_component, guest_instance
     );
@@ -255,7 +255,7 @@ fn AudioComponentInstanceDispose(
     env: &mut Environment,
     in_instance: AudioComponentInstance,
 ) -> OSStatus {
-    log!("AudioComponentInstanceDispose({:?})", in_instance);
+    log_dbg!("AudioComponentInstanceDispose({:?})", in_instance);
     if in_instance.is_null() {
         return paramErr;
     }
