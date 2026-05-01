@@ -318,6 +318,8 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
 
     env.objc.borrow_mut::<NSTimerHostObject>(timer).is_running_callback = true;
 
+    log_once!("First NSTimer fired (run loop is delivering scheduled events)");
+
     log_dbg!(
         "Timer {:?} fired, sending {:?} message to {:?}",
         timer,

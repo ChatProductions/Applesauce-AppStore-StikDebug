@@ -276,6 +276,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)presentRenderbuffer:(NSUInteger)target {
+    // First-frame breadcrumb. presentRenderbuffer is called every frame, so a
+    // plain log!() would flood, but the very first call is a key signal that
+    // the app actually got past splash/init and is rendering.
+    log_once!("[EAGLContext presentRenderbuffer:] first call (app reached first frame)");
+
     assert!(target == gles11::RENDERBUFFER_OES);
 
     // The presented frame should be displayed ASAP, but the next one must be

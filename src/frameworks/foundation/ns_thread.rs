@@ -223,6 +223,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 - (())start {
+    log_once!("First [NSThread start] (app spawned a worker thread)");
+
     let symb = "__touchHLE_NSThreadInvocationHelper";
     let hf: HostFunction = &(_touchHLE_NSThreadInvocationHelper as fn(&mut Environment, _) -> _);
     let gf = env.dyld.create_guest_function(&mut env.mem, symb, hf);

@@ -276,6 +276,14 @@ pub fn run_run_loop(
 
     let is_main_run_loop = env.current_thread == 0;
 
+    if is_main_run_loop {
+        // Important breadcrumb for diagnosing "app freezes after splash"
+        // reports: this only fires once, when the main run loop actually
+        // starts iterating, which means UIApplicationMain has finished
+        // applicationDidFinishLaunching: + applicationDidBecomeActive:.
+        log_once!("Main NSRunLoop reached its first iteration (app finished launching)");
+    }
+
     loop {
         let mut sleep_until = None;
 
