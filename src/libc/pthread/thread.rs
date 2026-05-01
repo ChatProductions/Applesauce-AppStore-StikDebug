@@ -267,6 +267,7 @@ pub fn pthread_create(
         "pthread_create({:?}, {:?}, {:?}, {:?}) => 0, pthread_t={:?} thread_id={}",
         thread, attr, start_routine, user_data, opaque, thread_id
     );
+    log_once!("First pthread_create (app spawned a worker thread via raw pthread)");
     0
 }
 

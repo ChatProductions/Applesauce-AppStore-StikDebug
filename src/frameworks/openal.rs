@@ -677,20 +677,25 @@ fn alGetSourceiv(env: &mut Environment, source: ALuint, param: ALenum, values: M
 fn alSourcePlay(env: &mut Environment, source: ALuint) {
     try_get_context!(env, context);
     unsafe { context.SourcePlay(source) };
-    let mut state: ALint = 0;
-    let mut max_gain: ALfloat = 0.0;
-    let mut buffer: ALint = 0;
-    let err: ALenum;
-    unsafe {
-        context.GetSourcei(source, al::AL_SOURCE_STATE, &mut state as *mut _);
-        context.GetSourcef(source, al::AL_MAX_GAIN, &mut max_gain as *mut _);
-        context.GetSourcei(source, al::AL_BUFFER, &mut buffer as *mut _);
-        err = context.GetError();
+    // Streaming sources call SourcePlay every audio buffer refill, so the
+    // post-play diagnostic readback is only worth doing (and printing) when
+    // debug logging for this module is enabled.
+    if crate::log::ENABLED_MODULES.contains(&module_path!()) {
+        let mut state: ALint = 0;
+        let mut max_gain: ALfloat = 0.0;
+        let mut buffer: ALint = 0;
+        let err: ALenum;
+        unsafe {
+            context.GetSourcei(source, al::AL_SOURCE_STATE, &mut state as *mut _);
+            context.GetSourcef(source, al::AL_MAX_GAIN, &mut max_gain as *mut _);
+            context.GetSourcei(source, al::AL_BUFFER, &mut buffer as *mut _);
+            err = context.GetError();
+        }
+        log_dbg!(
+            "alSourcePlay(source={}) -> state=0x{:x}, max_gain={}, buffer={}, err=0x{:x}",
+            source, state, max_gain, buffer, err
+        );
     }
-    log!(
-        "alSourcePlay(source={}) -> state=0x{:x}, max_gain={}, buffer={}, err=0x{:x}",
-        source, state, max_gain, buffer, err
-    );
 }
 fn alSourcePause(env: &mut Environment, source: ALuint) {
     try_get_context!(env, context);
@@ -821,7 +826,9 @@ fn alBufferData(
         let data_slice = env.mem.bytes_at(data.cast(), size_usize);
         data_slice.as_ptr() as *const _
     };
-    log!(
+    // Streaming audio refills the same buffers many times per second, so this
+    // log line is debug-only to avoid drowning out other diagnostics.
+    log_dbg!(
         "alBufferData(buffer={}, format=0x{:x}, size={}, samplerate={})",
         buffer, format, size, samplerate
     );

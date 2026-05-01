@@ -276,6 +276,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)presentRenderbuffer:(NSUInteger)target {
+    // First-frame breadcrumb. presentRenderbuffer is called every frame, so a
+    // plain log!() would flood, but the very first call is a key signal that
+    // the app actually got past splash/init and is rendering.
+    log_once!("[EAGLContext presentRenderbuffer:] first call (app reached first frame)");
+
+    // Frame-count milestones. presentRenderbuffer is called every frame, so we
+    // want a small, fixed number of log lines that prove the render loop is
+    // still progressing (useful for distinguishing "actually hung" from
+    // "running but invisible because the app's stdout doesn't reach this log
+    // sink"). The milestones are roughly logarithmic so they cover the range
+    // from sub-second to ~10 minutes at 60 FPS without flooding.
+    {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static FRAME_COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = FRAME_COUNTER.fetch_add(1, Ordering::Relaxed) + 1;
+        if matches!(n, 10 | 60 | 300 | 1800 | 3600 | 7200 | 18000 | 36000) {
+            log!(
+                "[EAGLContext presentRenderbuffer:] frame {} reached (render loop is alive)",
+                n
+            );
+        }
+    }
+
     assert!(target == gles11::RENDERBUFFER_OES);
 
     // The presented frame should be displayed ASAP, but the next one must be
