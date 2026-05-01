@@ -972,6 +972,31 @@ impl Dyld {
             return None;
         }
 
+        // Prefer guest dylibs (libstdc++.6.dylib, libgcc_s.1.dylib, …) over
+        // host dylib stubs. Apps that bundle their own libstdc++ rely on the
+        // proper guest C++ ABI (`__cxa_throw`, `__cxa_begin_catch`, the SjLj
+        // unwinder, …) reaching the actual library — if a partial host stub
+        // wins the lookup, exception handling silently breaks. This mirrors
+        // what `do_non_lazy_linking` already does for non-lazy bindings, and
+        // matches iOS dyld's behaviour of preferring the app's own linked
+        // dylibs over fallback implementations.
+        for dylib in bins.iter() {
+            if let Some(&addr) = dylib.exported_symbols.get(symbol) {
+                let (stub_function_ptr, la_symbol_ptr) =
+                    link_by_restoring_stub(mem, cpu, addr, svc_pc, info.entry_size, pic_offset);
+                log_dbg!(
+                    "Linked {} at {:?}/{:?} to {:#x} from {}",
+                    symbol,
+                    stub_function_ptr,
+                    la_symbol_ptr,
+                    addr,
+                    dylib.name
+                );
+                // Tell the caller it needs to restart execution at svc_pc.
+                return None;
+            }
+        }
+
         if let Some(&(symbol, f)) = search_host_dylibs(|dylib| dylib.function_exports, symbol) {
             // Allocate an SVC ID for this host function
             let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
@@ -998,23 +1023,6 @@ impl Dyld {
             // Return the host function so that we can call it now that we're
             // done.
             return Some(f);
-        }
-
-        for dylib in bins.iter() {
-            if let Some(&addr) = dylib.exported_symbols.get(symbol) {
-                let (stub_function_ptr, la_symbol_ptr) =
-                    link_by_restoring_stub(mem, cpu, addr, svc_pc, info.entry_size, pic_offset);
-                log_dbg!(
-                    "Linked {} at {:?}/{:?} to {:#x} from {}",
-                    symbol,
-                    stub_function_ptr,
-                    la_symbol_ptr,
-                    addr,
-                    dylib.name
-                );
-                // Tell the caller it needs to restart execution at svc_pc.
-                return None;
-            }
         }
 
         // Fallback: the symbol isn't implemented by any host dylib and isn't
