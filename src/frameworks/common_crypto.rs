@@ -556,6 +556,10 @@ fn CCCrypt(
             env.mem.write(data_out_moved, out_len as GuestUSize);
         } else {
             // Decrypt
+            if input_len == 0 {
+                env.mem.write(data_out_moved, 0);
+                return kCCSuccess;
+            }
             if input_len % block_size != 0 {
                 return kCCAlignmentError;
             }
