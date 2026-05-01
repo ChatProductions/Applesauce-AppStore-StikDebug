@@ -27,19 +27,54 @@ use crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform;
 use crate::frameworks::core_graphics::cg_color::CGColorRef;
 use crate::frameworks::core_graphics::cg_context::{CGContextClearRect, CGContextRef};
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::get_static_str;
+use crate::frameworks::foundation::ns_dictionary::dict_from_keys_and_objects;
+use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::{ns_array, NSInteger, NSUInteger};
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class,
-    ClassExports, HostObject, NSZonePtr, ObjC, SEL,
+    autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain,
+    Class, ClassExports, HostObject, NSZonePtr, ObjC, SEL,
 };
 use crate::Environment;
+
+/// State maintained for UIView's class-level animation block API
+/// (`+beginAnimations:context:` ... `+commitAnimations`). At most one block
+/// may be open at a time on the main thread; if a new `beginAnimations:` is
+/// received before the previous block was committed, the in-progress state is
+/// discarded.
+pub(super) struct AnimationBlockState {
+    pub(super) in_block: bool,
+    pub(super) animation_id: id,
+    pub(super) context: MutPtr<()>,
+    pub(super) duration: f64,
+    pub(super) delay: f64,
+    /// Per Apple's docs the delegate is **not** retained while inside an
+    /// animation block. We do retain it temporarily here so that we can hold
+    /// onto it until the (asynchronous) completion fires.
+    pub(super) delegate: id,
+    pub(super) did_stop_selector: Option<SEL>,
+    pub(super) will_start_selector: Option<SEL>,
+}
+impl Default for AnimationBlockState {
+    fn default() -> AnimationBlockState {
+        AnimationBlockState {
+            in_block: false,
+            animation_id: nil,
+            context: MutPtr::from_bits(0),
+            duration: 0.2, // UIKit default
+            delay: 0.0,
+            delegate: nil,
+            did_stop_selector: None,
+            will_start_selector: None,
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct State {
     pub(super) views: Vec<id>,
     pub ui_window: ui_window::State,
+    pub(super) animation_block: AnimationBlockState,
 }
 
 pub(super) struct UIViewHostObject {
@@ -70,7 +105,7 @@ impl Default for UIViewHostObject {
             superview: nil,
             view_controller: nil,
             tag: 0,
-            content_mode: 0, // UIViewContentModeScaleToFill
+            content_mode: 0,      // UIViewContentModeScaleToFill
             autoresizing_mask: 0, // UIViewAutoresizingNone
             autoresizes_subviews: true,
             clears_context_before_drawing: true,
@@ -116,24 +151,200 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (Class)layerClass { env.objc.get_known_class("CALayer", &mut env.mem) }
 
-+ (())beginAnimations:(id)animationID context:(MutPtr<()>)context { }
-+ (())commitAnimations { }
-+ (())setAnimationDuration:(f64)duration { }
-+ (())setAnimationCurve:(NSInteger)curve { }
-+ (())setAnimationDelegate:(id)delegate { }
-+ (())setAnimationDidStopSelector:(SEL)selector { }
-+ (())setAnimationWillStartSelector:(SEL)selector { }
-+ (())setAnimationBeginsFromCurrentState:(bool)from { }
-+ (())setAnimationRepeatAutoreverses:(bool)repeatAutoreverses { }
-+ (())setAnimationRepeatCount:(f32)repeatCount { }
-+ (())setAnimationDelay:(f32)delay { }
-+ (())setAnimationsEnabled:(f32)enabled { }
-+ (())setAnimationTransition:(NSInteger)transition forView:(id)view cache:(bool)cache { }
+// MARK: - Class-level animation block API
+//
+// touchHLE does not currently animate the visual side of these UIView
+// animation blocks (positions/opacity/transforms snap immediately to their
+// final value). However, a correct implementation **must** still call the
+// configured `setAnimationDidStopSelector:` on the configured
+// `setAnimationDelegate:` once the would-be animation finishes, otherwise
+// games that drive their state machine off animation completion callbacks
+// (very common — e.g. fade-in/fade-out transitions, splash → menu hand-offs)
+// hang forever waiting for the callback. We therefore record the parameters
+// of each block and schedule a one-shot NSTimer at `commitAnimations` that
+// fires the callback after `delay + duration` seconds.
 
-- (())setIsUncontrolled:(bool)uncontrolled { 
-    env.objc.borrow_mut::<UIViewHostObject>(this).is_uncontrolled = uncontrolled; 
++ (())beginAnimations:(id)animationID context:(MutPtr<()>)context {
+    let block = std::mem::take(&mut env.framework_state.uikit.ui_view.animation_block);
+    // If a previous block was opened but never committed, drop it. This
+    // matches what apps typically expect: starting a new block resets state.
+    if block.in_block {
+        log_dbg!(
+            "Warning: nested/uncommitted UIView animation block discarded \
+             (animationID={:?}, delegate={:?})",
+            block.animation_id,
+            block.delegate
+        );
+        if block.delegate != nil { release(env, block.delegate); }
+        if block.animation_id != nil { release(env, block.animation_id); }
+    }
+    if animationID != nil { let _: id = msg![env; animationID retain]; }
+    env.framework_state.uikit.ui_view.animation_block = AnimationBlockState {
+        in_block: true,
+        animation_id: animationID,
+        context,
+        ..Default::default()
+    };
 }
-    
+
++ (())setAnimationDuration:(f64)duration {
+    let block = &mut env.framework_state.uikit.ui_view.animation_block;
+    if block.in_block { block.duration = duration.max(0.0); }
+}
+
++ (())setAnimationDelay:(f32)delay {
+    let block = &mut env.framework_state.uikit.ui_view.animation_block;
+    if block.in_block { block.delay = (delay as f64).max(0.0); }
+}
+
++ (())setAnimationDelegate:(id)delegate {
+    if !env.framework_state.uikit.ui_view.animation_block.in_block { return; }
+    let prev = env.framework_state.uikit.ui_view.animation_block.delegate;
+    if delegate != nil { let _: id = msg![env; delegate retain]; }
+    env.framework_state.uikit.ui_view.animation_block.delegate = delegate;
+    if prev != nil { release(env, prev); }
+}
+
++ (())setAnimationDidStopSelector:(SEL)selector {
+    let block = &mut env.framework_state.uikit.ui_view.animation_block;
+    if !block.in_block { return; }
+    block.did_stop_selector = if selector.is_null() { None } else { Some(selector) };
+}
+
++ (())setAnimationWillStartSelector:(SEL)selector {
+    let block = &mut env.framework_state.uikit.ui_view.animation_block;
+    if !block.in_block { return; }
+    block.will_start_selector = if selector.is_null() { None } else { Some(selector) };
+}
+
++ (())commitAnimations {
+    let block = std::mem::take(&mut env.framework_state.uikit.ui_view.animation_block);
+    if !block.in_block { return; }
+
+    // Fire `setAnimationWillStartSelector:` synchronously. This is good enough
+    // for the apps that touchHLE supports; iOS would normally fire it at the
+    // start of the next display frame.
+    if block.delegate != nil {
+        if let Some(sel) = block.will_start_selector {
+            let _: () = msg_send_no_type_checking(
+                env,
+                (block.delegate, sel, block.animation_id, block.context),
+            );
+        }
+    }
+
+    // Schedule the `setAnimationDidStopSelector:` callback. Even when the
+    // delegate is nil we still need to release the retained animation_id, so
+    // the early-return paths below take care of that.
+    let total_delay = (block.delay + block.duration).max(0.0);
+
+    if block.delegate == nil || block.did_stop_selector.is_none() {
+        if block.delegate != nil { release(env, block.delegate); }
+        if block.animation_id != nil { release(env, block.animation_id); }
+        return;
+    }
+
+    let did_stop_selector = block.did_stop_selector.unwrap();
+    let sel_name = did_stop_selector.as_str(&env.mem).to_string();
+    let sel_str: id = from_rust_string(env, sel_name);
+
+    // Pack the raw context pointer in an NSNumber so it can survive a trip
+    // through `userInfo`.
+    let context_bits = block.context.to_bits();
+    let context_num: id = msg_class![env; NSNumber numberWithUnsignedInt:context_bits];
+
+    let key_delegate: id = get_static_str(env, "_touchHLE_uiview_anim_delegate");
+    let key_sel: id = get_static_str(env, "_touchHLE_uiview_anim_sel");
+    let key_anim_id: id = get_static_str(env, "_touchHLE_uiview_anim_id");
+    let key_context: id = get_static_str(env, "_touchHLE_uiview_anim_context");
+
+    // NSDictionary cannot store nil values; substitute NSNull for a missing
+    // animationID.
+    let anim_id_obj: id = if block.animation_id == nil {
+        msg_class![env; NSNull null]
+    } else {
+        block.animation_id
+    };
+
+    let dict: id = dict_from_keys_and_objects(
+        env,
+        &[
+            (key_delegate, block.delegate),
+            (key_sel, sel_str),
+            (key_anim_id, anim_id_obj),
+            (key_context, context_num),
+        ],
+    );
+
+    let fire_sel = env.objc.lookup_selector("_touchHLE_animationDidStopFireMethod:")
+        .expect("UIView _touchHLE_animationDidStopFireMethod: not registered");
+    let ui_view_class: Class = env.objc.get_known_class("UIView", &mut env.mem);
+    let _: id = msg_class![env;
+        NSTimer scheduledTimerWithTimeInterval:total_delay
+                                       target:ui_view_class
+                                     selector:fire_sel
+                                     userInfo:dict
+                                      repeats:false
+    ];
+
+    // The dictionary retains `delegate` and `animation_id`, so release the
+    // retains we held in our state struct.
+    release(env, block.delegate);
+    if block.animation_id != nil { release(env, block.animation_id); }
+}
+
++ (())_touchHLE_animationDidStopFireMethod:(id)which_timer {
+    let dict: id = msg![env; which_timer userInfo];
+    let key_delegate: id = get_static_str(env, "_touchHLE_uiview_anim_delegate");
+    let key_sel: id = get_static_str(env, "_touchHLE_uiview_anim_sel");
+    let key_anim_id: id = get_static_str(env, "_touchHLE_uiview_anim_id");
+    let key_context: id = get_static_str(env, "_touchHLE_uiview_anim_context");
+
+    let delegate: id = msg![env; dict objectForKey:key_delegate];
+    let sel_str_id: id = msg![env; dict objectForKey:key_sel];
+    let mut animation_id: id = msg![env; dict objectForKey:key_anim_id];
+    let context_num: id = msg![env; dict objectForKey:key_context];
+
+    let null_class: Class = env.objc.get_known_class("NSNull", &mut env.mem);
+    if !animation_id.is_null() {
+        let id_class: Class = msg![env; animation_id class];
+        if id_class == null_class { animation_id = nil; }
+    }
+
+    let sel_str = to_rust_string(env, sel_str_id).to_string();
+    let Some(sel) = env.objc.lookup_selector(&sel_str) else {
+        log!(
+            "Warning: animation didStopSelector \"{}\" no longer exists; skipping callback.",
+            sel_str
+        );
+        return;
+    };
+
+    let context_bits: u32 = msg![env; context_num unsignedIntValue];
+    let context: MutPtr<()> = MutPtr::from_bits(context_bits);
+    let finished: bool = true;
+
+    if delegate == nil {
+        return;
+    }
+    let _: () = msg_send_no_type_checking(env, (delegate, sel, animation_id, finished, context));
+}
+
+// Visual properties of animation blocks that touchHLE does not animate.
+// These are intentionally no-ops, but they must remain present so that the
+// app's calls don't fall through to the dynamic dispatcher's "unimplemented
+// selector" path.
++ (())setAnimationCurve:(NSInteger)_curve { }
++ (())setAnimationBeginsFromCurrentState:(bool)_from { }
++ (())setAnimationRepeatAutoreverses:(bool)_autoreverses { }
++ (())setAnimationRepeatCount:(f32)_count { }
++ (())setAnimationsEnabled:(f32)_enabled { }
++ (())setAnimationTransition:(NSInteger)_transition forView:(id)_view cache:(bool)_cache { }
+
+- (())setIsUncontrolled:(bool)uncontrolled {
+    env.objc.borrow_mut::<UIViewHostObject>(this).is_uncontrolled = uncontrolled;
+}
+
 - (id)init {
     msg![env; this initWithFrame:(<CGRect as Default>::default())]
 }
@@ -187,11 +398,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let content_mode: NSInteger = if msg![env; coder containsValueForKey:key_content_mode] { msg![env; coder decodeIntegerForKey:key_content_mode] } else { 0 };
 
     let key_autoresizing_mask = get_static_str(env, "UIAutoresizingMask");
-    let autoresizing_mask: NSUInteger = if msg![env; coder containsValueForKey:key_autoresizing_mask] { 
+    let autoresizing_mask: NSUInteger = if msg![env; coder containsValueForKey:key_autoresizing_mask] {
         let mask: NSInteger = msg![env; coder decodeIntegerForKey:key_autoresizing_mask];
-        mask as NSUInteger 
-    } else { 
-        0 
+        mask as NSUInteger
+    } else {
+        0
     };
 
     let key_autoresizes_subviews = get_static_str(env, "UIAutoresizesSubviews");
@@ -209,9 +420,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         let screen_bounds: CGRect = msg![env; screen bounds];
         () = msg![env; this setBounds:screen_bounds];
 
-        let new_center = CGPoint { 
-            x: screen_bounds.size.width / 2.0, 
-            y: screen_bounds.size.height / 2.0 
+        let new_center = CGPoint {
+            x: screen_bounds.size.width / 2.0,
+            y: screen_bounds.size.height / 2.0
         };
         () = msg![env; this setCenter:new_center];
     } else {
@@ -222,7 +433,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setHidden:hidden];
     () = msg![env; this setOpaque:opaque];
     if bg_color != nil { () = msg![env; this setBackgroundColor:bg_color]; }
-    
+
     () = msg![env; this setTag:tag];
     () = msg![env; this setContentMode:content_mode];
     () = msg![env; this setAutoresizingMask:autoresizing_mask];
@@ -251,7 +462,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (f64)animationInterval { env.objc.borrow::<UIViewHostObject>(this).animation_interval }
 - (())setAnimationInterval:(f64)interval { env.objc.borrow_mut::<UIViewHostObject>(this).animation_interval = interval; }
-    
+
 - (id)delegate { env.objc.borrow::<UIViewHostObject>(this).delegate }
 - (())setDelegate:(id)delegate { env.objc.borrow_mut::<UIViewHostObject>(this).delegate = delegate; }
 
@@ -598,25 +809,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer containsPoint:point]
 }
 
-- (bool)isUncontrolled { 
-    env.objc.borrow::<UIViewHostObject>(this).is_uncontrolled 
+- (bool)isUncontrolled {
+    env.objc.borrow::<UIViewHostObject>(this).is_uncontrolled
 }
-    
+
 - (id)hitTest:(CGPoint)point withEvent:(id)event {
     let is_inside: bool = msg![env; this pointInside:point withEvent:event];
     let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
-    
+
     for subview in subviews.into_iter().rev() {
         let hidden: bool = msg![env; subview isHidden];
         let alpha: CGFloat = msg![env; subview alpha];
         let interactible: bool = msg![env; subview isUserInteractionEnabled];
         if hidden || alpha < 0.01 || !interactible { continue; }
-        
+
         let sub_point: CGPoint = msg![env; subview convertPoint:point fromView:this];
         let subview_hit: id = msg![env; subview hitTest:sub_point withEvent:event];
         if subview_hit != nil { return subview_hit; }
     }
-    
+
     if is_inside { this } else { nil }
 }
 
@@ -647,7 +858,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return point; }
         return msg![env; this convertPoint:point fromView:window]
     }
-    
+
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
     let actual_other = if is_view { other } else {
@@ -672,7 +883,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return point; }
         return msg![env; this convertPoint:point toView:window]
     }
-    
+
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
     let actual_other = if is_view { other } else {
@@ -697,7 +908,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return rect; }
         return msg![env; this convertRect:rect fromView:window]
     }
-    
+
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
     let actual_other = if is_view { other } else {
@@ -722,7 +933,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if window == nil { return rect; }
         return msg![env; this convertRect:rect toView:window]
     }
-    
+
     let view_class: id = msg_class![env; UIView class];
     let is_view: bool = msg![env; other isKindOfClass:view_class];
     let actual_other = if is_view { other } else {
