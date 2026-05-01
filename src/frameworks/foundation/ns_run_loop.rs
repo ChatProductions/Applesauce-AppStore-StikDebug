@@ -76,9 +76,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (()) release {}
 - (id) autorelease { this }
 
-- (bool)runMode:(id)_mode beforeDate:(id)_limit_date {
-    // Мы просто говорим игре, что цикл "прокрутился".
-    // Этого обычно достаточно, чтобы сетевые запросы не вешали игру.
+- (bool)runMode:(id)_mode beforeDate:(id)limit_date {
+    // Run the run loop for one iteration, honouring the caller's time limit.
+    // Apps frequently call this in a synchronous spin like:
+    //
+    //     while (!flag) {
+    //         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+    //                                  beforeDate:[NSDate distantFuture]];
+    //     }
+    //
+    // expecting each pass to drain timers/sources (in particular the
+    // `performSelectorOnMainThread:withObject:waitUntilDone:` timers we
+    // queue with `afterDelay:0.0`). A no-op stub here causes any such app
+    // to spin forever in the guest, never letting the scheduled selectors
+    // fire (e.g. Angry Birds 1.0 hangs after preloading INGAME_*.pvr
+    // because the asset-load completion handler never gets a chance to
+    // run). Returning `true` matches the docs ("the input source was
+    // processed").
+    let time_limit: Option<NSTimeInterval> = if limit_date == nil {
+        None
+    } else {
+        Some(msg![env; limit_date timeIntervalSince1970])
+    };
+    log_dbg!(
+        "[(NSRunLoop*){:?} runMode:_ beforeDate:{:?}] limit={:?}",
+        this,
+        limit_date,
+        time_limit
+    );
+    run_run_loop(env, this, /* single_iteration: */ true, time_limit);
     true
 }
 
@@ -101,7 +127,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         ns_string::to_rust_string(env, mode),
     );
 
-    // FIX: Check if the timer is already in the list. If it is, exit early to 
+    // FIX: Check if the timer is already in the list. If it is, exit early to
     // prevent duplicate entries and subsequent assertion panics on removal.
     if env.objc.borrow::<NSRunLoopHostObject>(this).timers.contains(&timer) {
         log_dbg!("Timer {:?} is already in run loop {:?}, ignoring duplicate addition.", timer, this);
@@ -122,7 +148,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
         log_dbg!("NSRunLoop: cancelPerformSelectorsWithTarget: {:?}", target);
 
-        // Клонируем список таймеров, так как вызов invalidate приведет к 
+        // Клонируем список таймеров, так как вызов invalidate приведет к
         // удалению таймера из списка (через remove_timer), что изменит массив.
         let timers = env.objc.borrow::<NSRunLoopHostObject>(this).timers.clone();
 
@@ -135,18 +161,18 @@ pub const CLASSES: ClassExports = objc_classes! {
         for &timer in &timers {
             // Запрашиваем целевой объект у таймера напрямую через сообщение.
             let timer_target: id = msg![env; timer target];
-            
+
             // Если цель совпадает, инвалидируем таймер (он сам удалится из run loop)
             if timer_target == target {
                 log_dbg!("NSRunLoop: invalidating timer {:?} for target {:?}", timer, target);
                 let _: () = msg![env; timer invalidate];
             }
-            
+
             // Отпускаем локальный retain
             release(env, timer);
         }
 }
-    
+
 - (())run {
     run_run_loop(env, this, /* single_iteration: */ false, None);
 }
@@ -208,7 +234,7 @@ pub fn remove_audio_queue(env: &mut Environment, run_loop: id, queue: AudioQueue
 /// For use by NSTimer so it can remove itself once it's invalidated.
 pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
     log_dbg!("Removing timer {:?} from run loop {:?}", timer, run_loop);
-    
+
     // Честная логика Objective-C: если run_loop равен nil, нам не откуда удалять таймер.
     if run_loop == nil {
         return;
@@ -226,7 +252,7 @@ pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
             i += 1;
         }
     }
-    
+
     // Убираем жесткий assert!(release_count == 1);
     // В iOS таймер мог быть отменен до добавления в цикл или отменен дважды.
     // Мы просто делаем release столько раз, сколько реально удалили из массива.
@@ -235,9 +261,8 @@ pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
     }
 }
 
-/// Run the run loop for just a single iteration. This is a special mode just
-/// for the app picker, since we don't have `runMode:beforeDate:` yet.
-/// (TODO: implement those to replace this.)
+/// Run the run loop for just a single iteration. Used by the app picker and
+/// by `-[NSRunLoop runMode:beforeDate:]`.
 pub fn run_run_loop_single_iteration(env: &mut Environment, run_loop: id) {
     run_run_loop(env, run_loop, /* single_iteration: */ true, None)
 }
@@ -411,4 +436,3 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
         .get(&thread_id)
         .unwrap()
 }
-
