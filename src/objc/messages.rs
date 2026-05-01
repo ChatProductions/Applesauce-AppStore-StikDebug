@@ -128,6 +128,42 @@ fn objc_msgSend_inner(
         selector.as_str(&env.mem),
         receiver
     );
+    // Host-side recursion guard. If an Objective-C method (typically
+    // `hitTest:withEvent:` or `pointInside:withEvent:`) ends up recursing
+    // into itself indirectly, the host call stack balloons because every
+    // round trip goes host -> guest -> host. Without this guard that path
+    // SIGSEGVs the whole emulator once the native stack is exhausted.
+    //
+    // We use a thread-local counter instead of tracking it in
+    // `Environment`, since `objc_msgSend_inner` is the single chokepoint
+    // through which every dispatch (host or guest) must pass.
+    const MAX_DEPTH: usize = 256;
+    thread_local! {
+        static DISPATCH_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+    let depth = DISPATCH_DEPTH.with(|d| {
+        let new = d.get() + 1;
+        d.set(new);
+        new
+    });
+    struct DepthGuard;
+    impl Drop for DepthGuard {
+        fn drop(&mut self) {
+            DISPATCH_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
+        }
+    }
+    let _guard = DepthGuard;
+    if depth > MAX_DEPTH {
+        log!(
+            "Warning: objc_msgSend recursion limit ({}) exceeded while dispatching \"{}\" to {:?}; bailing out with a nil return.",
+            MAX_DEPTH,
+            selector.as_str(&env.mem),
+            receiver,
+        );
+        env.cpu.regs_mut()[0..2].fill(0);
+        return;
+    }
+
     let message_type_info = env.objc.message_type_info.take();
 
     if receiver == nil {
