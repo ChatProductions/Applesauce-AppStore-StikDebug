@@ -591,6 +591,12 @@ fn strftime(
     res.len().try_into().unwrap()
 }
 
+fn difftime(_env: &mut Environment, time1: time_t, time0: time_t) -> f64 {
+    // Возвращаем разницу в секундах.
+    // Приведение к f64 гарантирует, что мы отдаем честный double, как того ждет игра.
+    (time1 as f64) - (time0 as f64)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(clock()),
     export_c_func!(time(_)),
@@ -604,5 +610,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(nanosleep(_, _)),
     export_c_func!(strptime(_, _, _)),
     export_c_func!(strftime(_, _, _, _)),
+    export_c_func!(difftime(_, _)),
 ];
                        
