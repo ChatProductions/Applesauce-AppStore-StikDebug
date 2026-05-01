@@ -7,8 +7,69 @@
 
 use super::{Class, ClassHostObject};
 use crate::mem::{guest_size_of, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
-use std::any::Any;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::num::NonZeroU32;
+use std::sync::Mutex;
+
+/// Per-(id, TypeId) cache of phantom host-object buffers used when a
+/// `borrow`/`borrow_mut` call hits an object that has no real host-side
+/// record. Each entry is a zero-initialised, leaked buffer large enough to
+/// hold `T`; callers get a stable reference that isn't aliased with buffers
+/// for other objects/types.
+///
+/// The cache is behind a single process-wide `Mutex` because touchHLE keeps
+/// a single `ObjC` instance but this function is used from both immutable
+/// (`&self`) and mutable (`&mut self`) receivers, and from many framework
+/// modules. Contention here is only hit on the error path, so a plain
+/// `Mutex` is fine.
+static PHANTOM_STORE: Mutex<Option<HashMap<(TypeId, usize), usize>>> = Mutex::new(None);
+
+fn phantom_buffer_for<T: 'static>(object: id) -> *mut u8 {
+    let key = (TypeId::of::<T>(), object.to_bits() as usize);
+    let mut guard = PHANTOM_STORE.lock().unwrap();
+    let map = guard.get_or_insert_with(HashMap::new);
+    if let Some(&ptr) = map.get(&key) {
+        return ptr as *mut u8;
+    }
+    // Leak a zero-initialised buffer sized for T. `alloc_zeroed` guarantees
+    // the correct alignment for the layout, and the allocation is never
+    // freed, so the resulting pointer is effectively `'static`.
+    let layout = std::alloc::Layout::new::<T>();
+    // SAFETY: `layout.size()` is non-zero for any real host object.
+    let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
+    assert!(!ptr.is_null(), "phantom host object allocation failed");
+    map.insert(key, ptr as usize);
+    ptr
+}
+
+/// Return a `&T` pointing at a stable, zero-initialised backing buffer for
+/// the given missing-object id. Repeated calls with the same `object` and
+/// `T` return the same buffer.
+fn phantom_host_object<T: 'static>(object: id) -> &'static T {
+    let ptr = phantom_buffer_for::<T>(object) as *const T;
+    // SAFETY: `phantom_buffer_for` returns a freshly allocated, zero-
+    // initialised region of exactly `size_of::<T>()` bytes with the
+    // required alignment. Subsequent calls return the same region, giving
+    // a stable `'static` reference. Treating zero bytes as a valid `T` is
+    // unsound for types containing `Vec`/`Box` in a non-empty state, but
+    // the callers of this fallback only ever read field values, and a
+    // zero Vec (`ptr=0, len=0, cap=0`) is observationally indistinguishable
+    // from an empty Vec for `len()`/`is_empty()`/`iter()`-like access.
+    unsafe { &*ptr }
+}
+
+/// Return a `&mut T` pointing at a stable, zero-initialised backing buffer
+/// for the given missing-object id. Repeated calls with the same `object`
+/// and `T` return a reference to the same buffer.
+fn phantom_host_object_mut<T: 'static>(object: id) -> &'static mut T {
+    let ptr = phantom_buffer_for::<T>(object) as *mut T;
+    // SAFETY: See `phantom_host_object`. Additionally, because the cache
+    // keys on `(TypeId, object)` each call-site gets an isolated buffer,
+    // so mutations by one fake-borrow won't be visible to another fake-
+    // borrow of a different object or type.
+    unsafe { &mut *ptr }
+}
 
 #[repr(C, packed)]
 pub struct objc_object {
@@ -168,12 +229,27 @@ impl super::ObjC {
             }
         }
 
-        // SUPER HACK: Вместо паники создаем "мираж" объекта в памяти
-        log!("Warning: SUPER HACK! Faking borrow for missing object {:?} of type {}", object, std::any::type_name::<T>());
-        unsafe {
-            static mut DUMMY_BUF: [u64; 256] = [0; 256];
-            & *(&DUMMY_BUF as *const _ as *const T)
-        }
+        // Fallback for missing / wrong-type objects.
+        //
+        // Previously we returned a reference to a single shared
+        // `static DUMMY_BUF: [u64; 256] = [0; 256]`. That one buffer was
+        // aliased across EVERY fake borrow of EVERY type, so as soon as a
+        // `borrow_mut` populated e.g. `UIViewHostObject.subviews` with a
+        // non-empty Vec, every subsequent fake borrow saw the same list —
+        // including of itself, causing `hitTest:` to recurse infinitely and
+        // overflow the host stack.
+        //
+        // We now leak a fresh zero-initialized buffer per (id, type) pair
+        // so the returned reference has stable, isolated storage. A proper
+        // fix would register a real `Default::default()` host object, but
+        // that requires a `T: Default` bound which many callers don't yet
+        // provide.
+        log!(
+            "Warning: SUPER HACK! Faking borrow for missing object {:?} of type {}",
+            object,
+            std::any::type_name::<T>()
+        );
+        phantom_host_object::<T>(object)
     }
 
     pub fn borrow_mut<T: AnyHostObject + 'static>(&mut self, object: id) -> &mut T {
@@ -185,7 +261,7 @@ impl super::ObjC {
                 if let Some(res) = unsafe { &mut *current_ptr }.as_any_mut().downcast_mut() {
                     return res;
                 }
-                
+
                 let has_super = unsafe { &*current_ptr }.as_superclass().is_some();
                 if has_super {
                     host_object = unsafe { &mut *current_ptr }.as_superclass_mut().unwrap();
@@ -194,13 +270,14 @@ impl super::ObjC {
                 }
             }
         }
-        
-        // SUPER HACK: Возвращаем кусок нулей под видом нужного объекта
-        log!("Warning: SUPER HACK! Faking borrow_mut for missing object {:?} of type {}", object, std::any::type_name::<T>());
-        unsafe {
-            static mut DUMMY_BUF: [u64; 256] = [0; 256];
-            &mut *(&mut DUMMY_BUF as *mut _ as *mut T)
-        }
+
+        // See comment in `borrow` above for rationale.
+        log!(
+            "Warning: SUPER HACK! Faking borrow_mut for missing object {:?} of type {}",
+            object,
+            std::any::type_name::<T>()
+        );
+        phantom_host_object_mut::<T>(object)
     }
 
     pub fn get_refcount(&mut self, object: id) -> NonZeroU32 {

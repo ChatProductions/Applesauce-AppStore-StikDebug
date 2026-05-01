@@ -516,6 +516,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; layer setBackgroundColor:cg_color];
 }
 
+// Some apps (notably Google Mobile 0.1.337) call -setLineBreakMode: on plain
+// UIView subclasses that contain a UILabel, expecting the view to proxy the
+// call. UIKit itself silently ignored this on iOS 2.x, so we mirror that by
+// making UIView accept (and discard) the call.
+- (())setLineBreakMode:(i32)_mode { }
+- (i32)lineBreakMode { 0 }
+// Same treatment for a couple of other label-style setters that iOS 2.x apps
+// sometimes invoke on container views.
+- (())setTextAlignment:(i32)_align { }
+- (i32)textAlignment { 0 }
+
 - (())setNeedsDisplay {
     let this_class = ObjC::read_isa(this, &env.mem);
     let ui_view_class = env.objc.get_known_class("UIView", &mut env.mem);

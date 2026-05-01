@@ -6,11 +6,16 @@
  */
 //! `UIWebView`.
 
-use crate::frameworks::core_graphics::CGRect;
+use crate::frameworks::core_graphics::{cg_image, CGRect};
 use crate::frameworks::foundation::ns_string::{self, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
+use crate::image::Image;
 use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::Environment;
 use std::borrow::Cow;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // UIWebViewNavigationType constants
 pub type UIWebViewNavigationType = i32;
@@ -147,7 +152,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         String::new()
     };
-    log_dbg!("UIWebView loadRequest: {}", url_string);
+    log!("UIWebView loadRequest: {}", url_string);
+
+    let frame: CGRect = msg![env; this frame];
+    render_url_to_layer(env, this, &url_string, frame);
 
     // Push current URL onto back stack before navigating.
     let old_url = env.objc.borrow::<UIWebViewHostObject>(this).current_url;
@@ -503,4 +511,101 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+// =========================================================================
+// MARK: - Chromium/CDP bridge: render a URL into the view's layer.contents
+// =========================================================================
+//
+// touchHLE has no HTML rendering engine. As an opportunistic fallback (see
+// PR description) we shell out to the host's headless Chromium to rasterise
+// the target URL into a PNG, then install that PNG as the CALayer contents
+// for the UIWebView. This gives apps like Google Mobile a visible web page
+// instead of a blank rectangle, at the cost of interactivity.
+
+/// Counter used for unique temp filenames.
+static SNAP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// Find a headless-capable Chromium binary on the host. Returns `None` when
+/// no suitable browser is available — in that case we leave the layer blank.
+fn find_chromium_binary() -> Option<PathBuf> {
+    // Allow env var override for advanced users / CI.
+    if let Ok(path) = std::env::var("TOUCHHLE_CHROMIUM") {
+        let p = PathBuf::from(path);
+        if p.exists() { return Some(p); }
+    }
+    let candidates = [
+        "/opt/.devin/chrome/chrome/linux-137.0.7118.2/chrome-linux64/chrome",
+        "/opt/.devin/playwright_browsers/chromium-1097/chrome-linux/chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome-stable",
+    ];
+    for c in candidates {
+        let p = PathBuf::from(c);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Shell out to headless Chromium to snapshot `url` at `width x height` and
+/// return the resulting PNG bytes. Returns `None` on any failure; callers
+/// are expected to treat that as "leave the layer blank".
+fn snapshot_url_with_chromium(url: &str, width: u32, height: u32) -> Option<Vec<u8>> {
+    let Some(chrome) = find_chromium_binary() else {
+        log!("UIWebView bridge: no Chromium binary found; leaving layer blank");
+        return None;
+    };
+    let idx = SNAP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!("touchhle_uiwebview_{}.png", idx));
+    // Chromium refuses to run as root unless given --no-sandbox.
+    let status = Command::new(&chrome)
+        .arg("--headless=new")
+        .arg("--disable-gpu")
+        .arg("--hide-scrollbars")
+        .arg("--no-sandbox")
+        .arg("--disable-dev-shm-usage")
+        .arg(format!("--window-size={},{}", width, height))
+        .arg(format!("--screenshot={}", tmp.display()))
+        .arg(url)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            log!("UIWebView bridge: chromium exited with {}", s);
+        }
+        Err(e) => {
+            log!("UIWebView bridge: failed to spawn chromium: {}", e);
+            return None;
+        }
+    }
+    let bytes = std::fs::read(&tmp).ok();
+    let _ = std::fs::remove_file(&tmp);
+    bytes
+}
+
+/// Snapshot `url` and install the decoded PNG as the UIWebView's
+/// `layer.contents` so the user sees the rendered web page.
+fn render_url_to_layer(env: &mut Environment, this: id, url: &str, frame: CGRect) {
+    if url.is_empty() || !(url.starts_with("http://") || url.starts_with("https://")) {
+        return;
+    }
+    let width = (frame.size.width.max(1.0) as u32).max(1);
+    let height = (frame.size.height.max(1.0) as u32).max(1);
+    let Some(png) = snapshot_url_with_chromium(url, width, height) else {
+        return;
+    };
+    let Ok(image) = Image::from_bytes(&png) else {
+        log!("UIWebView bridge: could not decode PNG snapshot");
+        return;
+    };
+    let cg_image = cg_image::from_image(env, image);
+    let layer: id = msg![env; this layer];
+    let _: () = msg![env; layer setContents:cg_image];
+    let _: () = msg![env; this setNeedsDisplay];
+    cg_image::CGImageRelease(env, cg_image);
+}
 
