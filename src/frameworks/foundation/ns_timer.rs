@@ -132,6 +132,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some()
 }
 
+- (bool)isCancelled {
+        let is_valid = env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some();
+        !is_valid
+}
+    
 - (())invalidate {
     let run_loop_to_remove = {
         let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
