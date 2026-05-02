@@ -662,7 +662,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(stpncpy(_, _, _)),
     export_c_func!(strfry(_)),
     export_c_func!(explicit_bzero(_, _)),
-    export_c_func!(strerror(_)),
+    // strerror is exported from libc::errno; not duplicated here.
     export_c_func!(strerror_r(_, _, _)),
     export_c_func!(bcopy(_, _, _)),
     export_c_func!(strnlen(_, _)),

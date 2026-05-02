@@ -345,24 +345,8 @@ pub const CONSTANTS: ConstantExports = &[
         "_UIWindowDidBecomeKeyNotification",
         HostConstant::NSString(UIWindowDidBecomeKeyNotification),
     ),
-    (
-        "_UIKeyboardWillShowNotification",
-        HostConstant::NSString(UIKeyboardWillShowNotification),
-    ),
-    (
-        "_UIKeyboardDidShowNotification",
-        HostConstant::NSString(UIKeyboardDidShowNotification),
-    ),
-    (
-        "_UIKeyboardWillHideNotification",
-        HostConstant::NSString(UIKeyboardWillHideNotification),
-    ),
-    (
-        "_UIKeyboardDidHideNotification",
-        HostConstant::NSString(UIKeyboardDidHideNotification),
-    ),
-    (
-        "_UIKeyboardBoundsUserInfoKey",
-        HostConstant::NSString(UIKeyboardBoundsUserInfoKey),
-    ),
+    // _UIKeyboardWillShowNotification, _UIKeyboardDidShowNotification,
+    // _UIKeyboardWillHideNotification, _UIKeyboardDidHideNotification and
+    // _UIKeyboardBoundsUserInfoKey are exported from
+    // uikit::ui_keyboard::CONSTANTS; not duplicated here.
 ];

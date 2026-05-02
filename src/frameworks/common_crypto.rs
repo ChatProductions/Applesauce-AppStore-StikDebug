@@ -1055,10 +1055,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_MD5_Init(_)),         // Было (_, _), нужно (_)
     export_c_func!(CC_MD5_Update(_, _, _)), // Было (_, _, _, _), нужно (_, _, _)
     export_c_func!(CC_MD5_Final(_, _)),     // Было (_, _, _), нужно (_, _)
-    export_c_func!(SecItemCopyMatching(_, _)),
-    export_c_func!(SecItemAdd(_, _)),
-    export_c_func!(SecItemUpdate(_, _)),
-    export_c_func!(SecItemDelete(_)),
+                                            // SecItem* helpers are exported from frameworks::security; not duplicated.
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

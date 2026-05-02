@@ -628,8 +628,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSNetServiceBrowser: NSObject
 @end
 
-@implementation NSHTTPURLResponse: NSObject
-@end
+// NSHTTPURLResponse is defined in foundation::ns_url_response; not
+// duplicated here.
 
 // MARK: - NSURLCache stub
 

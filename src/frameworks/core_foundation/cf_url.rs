@@ -1116,6 +1116,5 @@ pub const FUNCTIONS: FunctionExports = &[
         _
     )),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
-    // Type Info
-    export_c_func!(CFURLGetTypeID()),
+    // Type Info — CFURLGetTypeID is exported from cf_type; not duplicated.
 ];

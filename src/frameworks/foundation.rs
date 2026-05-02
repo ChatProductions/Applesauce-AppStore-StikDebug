@@ -307,14 +307,8 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 }
 
 pub const STUB_CONSTANTS: ConstantExports = &[
-    (
-        "_NSLocalizedFailureReasonErrorKey",
-        HostConstant::NSString("NSLocalizedFailureReasonErrorKey"),
-    ),
-    (
-        "_NSURLErrorDomain",
-        HostConstant::NSString("NSURLErrorDomain"),
-    ),
+    // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
+    // from foundation::ns_error::CONSTANTS; not duplicated here.
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

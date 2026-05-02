@@ -695,7 +695,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFArrayApplyFunction(_, _, _, _, _)),
     // Description
     export_c_func!(CFArrayCreateDescription(_)),
-    // Type info and utilities
-    export_c_func!(CFArrayGetTypeID()),
+    // Type info and utilities — CFArrayGetTypeID is exported from cf_type.
     export_c_func!(CFMakeCollectable(_)),
 ];

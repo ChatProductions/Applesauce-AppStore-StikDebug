@@ -323,10 +323,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setSelectedIndex:0];
 }
 
-- (())setViewControllers:(id)view_controllers animated:(bool)_animated {
-    let _: () = msg![env; this setViewControllers:view_controllers];
-}
-
 // MARK: - Selected index / controller
 
 - (NSUInteger)selectedIndex {

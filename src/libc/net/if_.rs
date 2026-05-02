@@ -19,4 +19,6 @@ fn if_nameindex(_env: &mut Environment) -> ConstPtr<if_nameindex> {
     Ptr::null()
 }
 
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(if_nameindex())];
+pub const FUNCTIONS: FunctionExports = &[
+    // if_nameindex is exported from libc::ifaddrs; not duplicated here.
+];

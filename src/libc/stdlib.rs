@@ -1136,8 +1136,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),
-    export_c_func!(mbstowcs(_, _, _)),
-    export_c_func!(wcstombs(_, _, _)),
+    // mbstowcs and wcstombs are exported from libc::wchar; not duplicated here.
     export_c_func!(NSZoneMalloc(_, _)),
     export_c_func!(NSZoneFree(_, _)),
     export_c_func!(NSZoneRealloc(_, _, _)),

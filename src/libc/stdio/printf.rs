@@ -1843,8 +1843,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fprintf(_, _, _)),
     export_c_func!(vfprintf(_, _, _)),
     export_c_func!(vwprintf(_, _)),
-    export_c_func!(NSLog(_, _)),
-    export_c_func!(NSLogv(_, _)),
+    // NSLog and NSLogv are exported from foundation::ns_log; not duplicated.
 ];
 
 // Helper function, not a part of printf family

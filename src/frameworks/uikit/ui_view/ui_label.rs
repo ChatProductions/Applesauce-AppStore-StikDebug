@@ -199,7 +199,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setShadowColor:(id)color { todo_objc_setter!(this, color); }
-- (())setBaselineAdjustment:(id)adj { todo_objc_setter!(this, adj); }
 - (())setShadowOffset:(CGSize)value { todo_objc_setter!(this, value); }
 - (())setOpaque:(bool)_opaque { }
 

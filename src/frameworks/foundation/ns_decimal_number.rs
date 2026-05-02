@@ -419,9 +419,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 // NSDecimalNumberBehaviors protocol stubs.
-- (NSRoundingMode)roundingMode {
-    env.objc.borrow::<NSDecimalNumberHandlerHostObject>(this).rounding_mode
-}
+// (roundingMode is defined above; not duplicated here.)
 
 - (id)exceptionDuringOperation:(id)_operation
                           error:(NSCalculationError)error

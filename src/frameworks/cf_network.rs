@@ -99,15 +99,7 @@ fn CFReadStreamCopyError(_env: &mut Environment, _stream: u32) -> u32 {
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamCreateForHTTPRequest(_, _)),
-    export_c_func!(CFReadStreamOpen(_)),
-    export_c_func!(CFReadStreamHasBytesAvailable(_)),
-    export_c_func!(CFReadStreamRead(_, _, _)),
-    export_c_func!(CFReadStreamClose(_)),
-    export_c_func!(CFReadStreamSetProperty(_, _, _)),
-    export_c_func!(CFReadStreamCopyProperty(_, _)),
-    export_c_func!(CFReadStreamScheduleWithRunLoop(_, _, _)),
-    export_c_func!(CFReadStreamUnscheduleFromRunLoop(_, _, _)),
-    export_c_func!(CFReadStreamSetClient(_, _, _, _)),
-    export_c_func!(CFReadStreamGetStatus(_)),
+    // Other CFReadStream* helpers are exported from
+    // core_foundation::cf_stream; not duplicated here.
     export_c_func!(CFReadStreamCopyError(_)),
 ];

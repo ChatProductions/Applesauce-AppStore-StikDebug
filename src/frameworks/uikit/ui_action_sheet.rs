@@ -239,24 +239,6 @@ destructiveButtonTitle:(id)destructive_title // NSString*
         return;
     }
 
-    // actionSheet:clickedButtonAtIndex:
-    let _: () = msg![env; delegate actionSheet:this clickedButtonAtIndex:index];
-
-    // actionSheet:willDismissWithButtonIndex:
-    let _: () = msg![env; delegate actionSheet:this willDismissWithButtonIndex:index];
-
-    // actionSheet:didDismissWithButtonIndex:
-    let _: () = msg![env; delegate actionSheet:this didDismissWithButtonIndex:index];
-}
-
-- (())dismissWithClickedButtonIndex:(NSUInteger)index animated:(bool)_animated {
-    env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;
-
-    let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
-    if delegate == nil {
-        return;
-    }
-
     let sel_clicked        = env.objc.lookup_selector("actionSheet:clickedButtonAtIndex:")       .unwrap();
     let sel_will_dismiss   = env.objc.lookup_selector("actionSheet:willDismissWithButtonIndex:") .unwrap();
     let sel_did_dismiss    = env.objc.lookup_selector("actionSheet:didDismissWithButtonIndex:")  .unwrap();

@@ -1522,7 +1522,6 @@ pub const FUNCTIONS: FunctionExports = &[
     // Normalization and transformation
     export_c_func!(CFStringNormalize(_, _)),
     export_c_func!(CFStringTransform(_, _, _, _)),
-    // Type info
-    export_c_func!(CFStringGetTypeID()),
+    // Type info — CFStringGetTypeID is exported from cf_type; not duplicated.
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];

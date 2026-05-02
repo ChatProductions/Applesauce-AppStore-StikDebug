@@ -354,5 +354,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGImageGetShouldInterpolate(_)),
     export_c_func!(CGImageGetRenderingIntent(_)),
     export_c_func!(CGImageIsMask(_)),
-    export_c_func!(CGImageCreateWithImageInRect(_, _)),
 ];

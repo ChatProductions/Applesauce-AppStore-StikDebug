@@ -419,84 +419,8 @@ fn fminf(_env: &mut Environment, arg1: f32, arg2: f32) -> f32 {
     arg1.min(arg2)
 }
 
-fn sqlite3_open(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_errcode(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_errmsg(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_prepare_v2(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_step(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_finalize(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_mprintf(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_close(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_reset(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_int(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_double(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_parameter_count(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_get_table(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_free_table(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_exec(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_int(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_text(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_text(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_last_insert_rowid(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_prepare(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_count(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_name(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_int64(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_column_decltype(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_parameter_index(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
-fn sqlite3_bind_null(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
-    arg1.min(arg2)
-}
+// sqlite3_open / sqlite3_errcode are exported from frameworks::libsqlite3;
+// not duplicated in libc::math.
 fn _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(
     _env: &mut Environment,
     arg1: f64,
@@ -765,32 +689,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fmaxf(_, _)),
     export_c_func!(fmin(_, _)),
     export_c_func!(fminf(_, _)),
-    export_c_func!(sqlite3_open(_, _)),
-    export_c_func!(sqlite3_errcode(_, _)),
-    export_c_func!(sqlite3_errmsg(_, _)),
-    export_c_func!(sqlite3_prepare_v2(_, _)),
-    export_c_func!(sqlite3_step(_, _)),
-    export_c_func!(sqlite3_finalize(_, _)),
-    export_c_func!(sqlite3_mprintf(_, _)),
-    export_c_func!(sqlite3_close(_, _)),
-    export_c_func!(sqlite3_reset(_, _)),
-    export_c_func!(sqlite3_bind_int(_, _)),
-    export_c_func!(sqlite3_bind_double(_, _)),
-    export_c_func!(sqlite3_bind_parameter_count(_, _)),
-    export_c_func!(sqlite3_get_table(_, _)),
-    export_c_func!(sqlite3_free_table(_, _)),
-    export_c_func!(sqlite3_exec(_, _)),
-    export_c_func!(sqlite3_column_int(_, _)),
-    export_c_func!(sqlite3_bind_text(_, _)),
-    export_c_func!(sqlite3_column_text(_, _)),
-    export_c_func!(sqlite3_last_insert_rowid(_, _)),
-    export_c_func!(sqlite3_prepare(_, _)),
-    export_c_func!(sqlite3_column_count(_, _)),
-    export_c_func!(sqlite3_column_name(_, _)),
-    export_c_func!(sqlite3_column_int64(_, _)),
-    export_c_func!(sqlite3_column_decltype(_, _)),
-    export_c_func!(sqlite3_bind_parameter_index(_, _)),
-    export_c_func!(sqlite3_bind_null(_, _)),
     export_c_func!(_ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_, _)),
