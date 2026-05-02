@@ -28,6 +28,15 @@ pub const CF_NETWORK: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::cf_network::FUNCTIONS],
 };
 
+// MobileCoreServices (stub — no UTType implementation yet)
+pub const MOBILE_CORE_SERVICES: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::mobile_core_services::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -60,6 +69,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::game_controller::DYLIB,
     &CORE_AUDIO,
     &CF_NETWORK,
+    &MOBILE_CORE_SERVICES,
 ];
 
 #[cfg(test)]
