@@ -447,3 +447,42 @@ button.primary:hover { opacity: 0.9; }
   .kv-table th { width: 140px; }
   .rating-choice { grid-template-columns: 24px 110px 1fr; }
 }
+
+/* Sortable / searchable tables (used on the home page apps list). */
+.sortable-table th {
+  white-space: nowrap;
+}
+.sortable-column-header {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sortable-column-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: #888;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 5px;
+}
+.sortable-column-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.table-search {
+  display: block;
+  margin: 8px 0;
+  font-size: 14px;
+  color: #555;
+}
+.table-search input {
+  margin-left: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  min-width: 220px;
+}

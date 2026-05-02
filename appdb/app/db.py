@@ -147,6 +147,17 @@ class Report(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Auto-triage: a scheduled Devin session can claim broken reports
+    # (rating <= 3) and try to fix them. ``triage_session_id`` stores the
+    # claiming session id (or any short marker); ``triage_pr_url`` is set
+    # once Devin opens a PR; ``triage_notes`` is a free-text outcome from
+    # the Devin session (e.g. "could not reproduce"). All three are NULL
+    # for unclaimed / non-broken reports.
+    triage_session_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    triage_claimed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    triage_pr_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    triage_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     app: Mapped[App] = relationship("App", back_populates="reports")
     reporter: Mapped[User | None] = relationship(
         "User", back_populates="reports", foreign_keys=[reporter_user_id]
@@ -202,6 +213,22 @@ def init_db() -> None:
         if "rejection_reason" not in report_cols:
             conn.exec_driver_sql(
                 "ALTER TABLE reports ADD COLUMN rejection_reason TEXT"
+            )
+        if "triage_session_id" not in report_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE reports ADD COLUMN triage_session_id VARCHAR(80)"
+            )
+        if "triage_claimed_at" not in report_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE reports ADD COLUMN triage_claimed_at DATETIME"
+            )
+        if "triage_pr_url" not in report_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE reports ADD COLUMN triage_pr_url VARCHAR(500)"
+            )
+        if "triage_notes" not in report_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE reports ADD COLUMN triage_notes TEXT"
             )
 
 

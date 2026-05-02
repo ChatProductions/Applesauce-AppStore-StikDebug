@@ -30,7 +30,7 @@
   <p class="muted">{{ total_apps }} app{{ '' if total_apps == 1 else 's' }} listed.
     <a href="/submit">Submit a compatibility report →</a></p>
 
-  <table class="apps-table">
+  <table class="apps-table sortable-table searchable-table">
     <thead>
       <tr>
         <th>App name</th>
@@ -47,7 +47,7 @@
         <td>{{ a.release_year or '' }}</td>
         <td>{{ a.developer_publisher or '' }}</td>
         <td class="stars">{{ best_rating.get(a.id) | stars }}</td>
-        <td>{{ last_updated.get(a.id) | fmt_dt }}</td>
+        <td>{% set lu = last_updated.get(a.id) %}{% if lu %}<time datetime="{{ lu | iso_utc }}">{{ lu | fmt_dt }}</time>{% endif %}</td>
       </tr>
       {% else %}
       <tr><td colspan="5" class="empty">No apps match.</td></tr>

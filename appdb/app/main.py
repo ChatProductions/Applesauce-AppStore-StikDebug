@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -85,8 +85,16 @@ def _format_dt(dt: datetime | None) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _iso_utc(dt: datetime | None) -> str:
+    """ISO-8601 UTC with trailing Z for use in <time datetime>."""
+    if dt is None:
+        return ""
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 templates.env.filters["stars"] = stars
 templates.env.filters["fmt_dt"] = _format_dt
+templates.env.filters["iso_utc"] = _iso_utc
 
 
 app = FastAPI(title="HyperHLE app compatibility database")
@@ -791,3 +799,217 @@ def about(request: Request, db: Annotated[Session, Depends(get_db)] = None):
         "about.html",
         {**_common_context(request, db), "rating_legend": RATING_LEGEND},
     )
+
+
+# ---------------------------------------------------------------------------
+# JSON API for the scheduled "auto-triage" Devin session.
+#
+# A scheduled Devin session calls these endpoints once a day to find
+# approved reports with rating <= 3 ("broken / has problems"), claim one,
+# attempt a fix in the Rust emulator, and (best case) link a PR back via
+# /api/broken-reports/{id}/triage-result.
+#
+# Read endpoints are public (no auth). Write endpoints require a bearer
+# token from the ``APPDB_TRIAGE_TOKEN`` env var.
+# ---------------------------------------------------------------------------
+
+# Reports with rating <= TRIAGE_RATING_THRESHOLD are eligible for auto-triage.
+TRIAGE_RATING_THRESHOLD = 3
+# Stale claims older than this many seconds are released so a new session
+# can pick the report up. 7 days = 7 * 24 * 3600.
+TRIAGE_CLAIM_TTL_SECONDS = 7 * 24 * 3600
+
+
+def _triage_token() -> str | None:
+    return os.environ.get("APPDB_TRIAGE_TOKEN")
+
+
+def _require_triage_token(authorization: str | None) -> None:
+    expected = _triage_token()
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-triage API is not configured on this server "
+            "(APPDB_TRIAGE_TOKEN env var is unset).",
+        )
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token.")
+    presented = authorization.split(None, 1)[1].strip()
+    if not py_secrets.compare_digest(presented, expected):
+        raise HTTPException(status_code=403, detail="Invalid bearer token.")
+
+
+def _serialise_report(r: Report, *, full: bool) -> dict:
+    base = {
+        "id": r.id,
+        "app_id": r.app_id,
+        "app_name": r.app.name if r.app else None,
+        "rating": r.rating,
+        "version_number": r.version_number,
+        "operating_system": r.operating_system,
+        "gpu": r.gpu,
+        "scale_hack": r.scale_hack,
+        "touchhle_version": r.touchhle_version,
+        "reported_at": _iso_utc(r.reported_at),
+        "reported_by": r.reported_by,
+        "url": f"/apps/{r.app_id}#report-{r.id}",
+        "triage_session_id": r.triage_session_id,
+        "triage_claimed_at": _iso_utc(r.triage_claimed_at),
+        "triage_pr_url": r.triage_pr_url,
+    }
+    if full:
+        base.update({
+            "display_name": r.display_name,
+            "bundle_identifier": r.bundle_identifier,
+            "minimum_ios_version": r.minimum_ios_version,
+            "remarks": r.remarks,
+            "screenshot_url": r.screenshot_url,
+            "screenshot_filename": r.screenshot_filename,
+            "triage_notes": r.triage_notes,
+        })
+    return base
+
+
+def _is_claim_stale(claimed_at: datetime | None) -> bool:
+    if claimed_at is None:
+        return True
+    age = (datetime.utcnow() - claimed_at).total_seconds()
+    return age > TRIAGE_CLAIM_TTL_SECONDS
+
+
+@app.get("/api/broken-reports")
+def api_broken_reports(
+    db: Annotated[Session, Depends(get_db)] = None,
+    limit: int = 25,
+    include_claimed: bool = False,
+) -> dict:
+    """List approved reports with rating <= 3 ("broken").
+
+    By default only returns reports that haven't been claimed by another
+    Devin session (or whose claim is older than ``TRIAGE_CLAIM_TTL_SECONDS``).
+    Pass ``include_claimed=true`` to see everything regardless of triage state.
+    """
+    limit = max(1, min(100, limit))
+    q = (
+        db.query(Report)
+        .filter(Report.status == STATUS_APPROVED)
+        .filter(Report.rating <= TRIAGE_RATING_THRESHOLD)
+        .order_by(Report.reported_at.desc())
+    )
+    rows = q.limit(limit * 4).all()  # over-fetch so we can filter stale claims
+    results = []
+    for r in rows:
+        if not include_claimed and r.triage_session_id and not _is_claim_stale(
+            r.triage_claimed_at
+        ):
+            continue
+        results.append(_serialise_report(r, full=False))
+        if len(results) >= limit:
+            break
+    return {
+        "count": len(results),
+        "rating_threshold": TRIAGE_RATING_THRESHOLD,
+        "reports": results,
+    }
+
+
+@app.get("/api/broken-reports/{report_id}")
+def api_broken_report_detail(
+    report_id: int,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict:
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None or r.status != STATUS_APPROVED:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    return _serialise_report(r, full=True)
+
+
+@app.post("/api/broken-reports/{report_id}/claim")
+def api_claim_report(
+    report_id: int,
+    payload: Annotated[dict, Body()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict:
+    """Claim a report for triage.
+
+    Body: ``{"session_id": "devin-...", "force": false}``. Refuses to claim
+    if the report is already claimed by another (still-fresh) session unless
+    ``force`` is true.
+    """
+    _require_triage_token(authorization)
+    payload = payload or {}
+    session_id = (payload.get("session_id") or "").strip()
+    force = bool(payload.get("force"))
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required.")
+    if len(session_id) > 80:
+        raise HTTPException(status_code=400, detail="session_id is too long.")
+
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None or r.status != STATUS_APPROVED:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if r.rating > TRIAGE_RATING_THRESHOLD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Report rating ({r.rating}) is above the triage threshold "
+            f"({TRIAGE_RATING_THRESHOLD}).",
+        )
+    if (
+        r.triage_session_id
+        and r.triage_session_id != session_id
+        and not _is_claim_stale(r.triage_claimed_at)
+        and not force
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Report already claimed by {r.triage_session_id} at "
+            f"{_iso_utc(r.triage_claimed_at)}.",
+        )
+
+    r.triage_session_id = session_id
+    r.triage_claimed_at = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "report": _serialise_report(r, full=True)}
+
+
+@app.post("/api/broken-reports/{report_id}/triage-result")
+def api_triage_result(
+    report_id: int,
+    payload: Annotated[dict, Body()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+) -> dict:
+    """Record the outcome of a triage attempt.
+
+    Body: ``{"session_id": "...", "pr_url": "...", "notes": "..."}``. Only
+    the session that holds the claim can update the result.
+    """
+    _require_triage_token(authorization)
+    payload = payload or {}
+    session_id = (payload.get("session_id") or "").strip()
+    pr_url = (payload.get("pr_url") or "").strip() or None
+    notes = (payload.get("notes") or "").strip() or None
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required.")
+
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    if r.triage_session_id and r.triage_session_id != session_id:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Report is claimed by a different session "
+            f"({r.triage_session_id}).",
+        )
+    if r.triage_session_id is None:
+        # Allow updating without an explicit prior claim — record the session
+        # as the claimant retroactively.
+        r.triage_session_id = session_id
+        r.triage_claimed_at = datetime.utcnow()
+    if pr_url is not None:
+        r.triage_pr_url = pr_url[:500]
+    if notes is not None:
+        r.triage_notes = notes
+    db.commit()
+    return {"ok": True, "report": _serialise_report(r, full=True)}
