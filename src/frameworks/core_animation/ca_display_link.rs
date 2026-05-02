@@ -44,7 +44,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, target);
 
     // Создаем внутренний таймер, но его целью делаем НАШ display_link.
-    // Таймер удержит (retain) display_link, предотвращая его удаление и Use-After-Free.
+    // Таймер удержит (retain) display_link, предотвращая его удаление и
+    // Use-After-Free.
     let fire_sel = env.objc.lookup_selector("_touchHLE_displayLinkFired:").unwrap();
     let ns_timer = msg_class![env; NSTimer timerWithTimeInterval:(1.0/60.0)
                      target:display_link
@@ -87,7 +88,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-// Честный timestamp, необходимый для вычисления Delta Time в играх (уберет черный экран)
+// Честный timestamp, необходимый для вычисления Delta Time в играх (уберет
+// черный экран)
 - (f64)timestamp {
     msg_class![env; NSDate timeIntervalSinceReferenceDate]
 }
@@ -113,7 +115,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setFrameInterval:(NSInteger)frameInterval {
     log_dbg!("[(CADisplayLink*){:?} setFrameInterval:{}]", this, frameInterval);
 
-    // Предотвращаем деление на 0 или отрицательные значения (безопаснее, чем assert)
+    // Предотвращаем деление на 0 или отрицательные значения (безопаснее, чем
+    // assert)
     let safe_interval = frameInterval.max(1);
     let interval = safe_interval as f64 / 60.0;
 

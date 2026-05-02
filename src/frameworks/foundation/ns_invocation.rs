@@ -39,7 +39,8 @@ struct NSInvocationHostObject {
     argument_types: Vec<String>,
     target: id,
     selector: Option<SEL>,
-    /// Выделенный буфер для каждого аргумента. Option указывает, был ли аргумент задан через `setArgument:atIndex:`
+    /// Выделенный буфер для каждого аргумента. Option указывает, был ли
+    //аргумент задан через `setArgument:atIndex:`
     arguments: Vec<Option<MutVoidPtr>>,
     arguments_retained: bool,
     /// Объекты, удержанные через `retainArguments`
@@ -87,7 +88,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
             let mut current_type = String::new();
 
-            // Читаем модификаторы (const, in, inout, out, bycopy, byref, oneway) и указатели
+            // Читаем модификаторы (const, in, inout, out, bycopy, byref,
+            // oneway) и указатели
             while let Some(&m) = chars.peek() {
                 if "rnNoORV^".contains(m) {
                     current_type.push(chars.next().unwrap());
@@ -162,7 +164,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let bytes = host.return_type.as_bytes();
         let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
         for (i, &b) in bytes.iter().enumerate() {
-            // ИСПРАВЛЕНИЕ E0599: Используем оператор сложения (ptr + i) вместо .offset()
+            // ИСПРАВЛЕНИЕ E0599: Используем оператор сложения (ptr + i) вместо
+            // .offset()
             env.mem.write(ptr + (i as u32), b);
         }
         env.mem.write(ptr + (bytes.len() as u32), 0u8);

@@ -37,7 +37,8 @@ pub struct pthread_attr_t {
     // ИСПРАВЛЕНИЕ: Добавляем реальные поля для политики и параметров
     sched_policy: i32,
     sched_param: sched_param,
-    // Уменьшаем _unused с 7 до 5, так как добавили два 4-байтовых поля (чтобы сохранить общий размер в 40 байт)
+    // Уменьшаем _unused с 7 до 5, так как добавили два 4-байтовых поля (чтобы
+    // сохранить общий размер в 40 байт)
     _unused: [u32; 5],
 }
 unsafe impl SafeRead for pthread_attr_t {}
@@ -218,7 +219,8 @@ fn pthread_attr_setschedparam(
     param: ConstPtr<sched_param>,
 ) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    // ИСПРАВЛЕНИЕ: Реально читаем параметры из гостевой памяти и сохраняем в структуру
+    // ИСПРАВЛЕНИЕ: Реально читаем параметры из гостевой памяти и сохраняем в
+    // структуру
     let new_param = env.mem.read(param);
 
     let mut attr_copy = env.mem.read(attr);

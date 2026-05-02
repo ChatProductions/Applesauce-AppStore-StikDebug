@@ -535,7 +535,8 @@ fn strfry(env: &mut Environment, s: MutPtr<u8>) -> MutPtr<u8> {
 }
 
 fn explicit_bzero(env: &mut Environment, dest: MutVoidPtr, count: GuestUSize) {
-    // Same as bzero but compiler must not optimize away (no difference in our emulated context).
+    // Same as bzero but compiler must not optimize away (no difference in our
+    // emulated context).
     for i in 0..count {
         env.mem.write(dest.cast::<u8>() + i, 0u8);
     }
@@ -585,7 +586,8 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
     let haystack_str = env.mem.cstr_at(haystack.cast_const());
     let needle_str = env.mem.cstr_at(needle);
 
-    // Если искомая подстрока пустая, стандартное поведение — вернуть саму строку
+    // Если искомая подстрока пустая, стандартное поведение — вернуть саму
+    // строку
     if needle_str.is_empty() {
         return haystack;
     }
@@ -598,7 +600,8 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
         return Ptr::null();
     }
 
-    // Ищем совпадение, используя стандартный метод Rust без учета ASCII-регистра
+    // Ищем совпадение, используя стандартный метод Rust без учета
+    // ASCII-регистра
     for i in 0..=haystack_str.len() - needle_len {
         // saturating_sub больше не нужен
         let window = &haystack_str[i..i + needle_len];

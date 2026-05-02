@@ -224,7 +224,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: Add Recipients
 
 - (())addRecipientsWithPlayerIDs:(id)_playerIDs {
-    // В эмуляторе реальная отправка не происходит, поэтому мы просто принимаем данные
+    // В эмуляторе реальная отправка не происходит, поэтому мы просто принимаем
+    // данные
 }
 
 - (())addRecipientsWithEmailAddresses:(id)_emailAddresses {

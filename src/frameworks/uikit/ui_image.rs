@@ -36,7 +36,8 @@ impl State {
     }
 }
 
-// В iOS 2-4 stretchableImage хранило параметры leftCapWidth и topCapHeight прямо в объекте.
+// В iOS 2-4 stretchableImage хранило параметры leftCapWidth и topCapHeight
+// прямо в объекте.
 struct UIImageHostObject {
     cg_image: CGImageRef,
     orientation: NSInteger, // UIImageOrientation
@@ -230,8 +231,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())drawInRect:(CGRect)rect {
     let context = UIGraphicsGetCurrentContext(env);
     if context == nil { return; }
-    // TODO: Здесь должна быть логика отрисовки с учетом leftCapWidth и topCapHeight
-    // Если left_cap_width > 0 || top_cap_height > 0, нужно делить картинку на 9 частей (nine-patch)
+    // TODO: Здесь должна быть логика отрисовки с учетом leftCapWidth и
+    // topCapHeight
+    // Если left_cap_width > 0 || top_cap_height > 0, нужно делить картинку на 9
+    // частей (nine-patch)
     // и отрисовывать через CGContextDrawImage кусками. Пока рисуем целиком.
     let image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
     CGContextDrawImage(env, context, rect, image);
@@ -307,7 +310,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIImageNibPlaceholder: NSObject
 
 - (id)initWithCoder:(id)coder {
-    // В NIB-файлах плейсхолдеры картинок хранят имя ресурса под ключом UIResourceName
+    // В NIB-файлах плейсхолдеры картинок хранят имя ресурса под ключом
+    // UIResourceName
     let key = get_static_str(env, "UIResourceName");
     let name: id = msg![env; coder decodeObjectForKey:key];
 
@@ -316,14 +320,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this dealloc];
 
     if name != nil {
-        // Запрашиваем настоящую картинку (твой метод imageNamed: сам проверит кэш или загрузит)
+        // Запрашиваем настоящую картинку (твой метод imageNamed: сам проверит
+        // кэш или загрузит)
         let image: id = msg_class![env; UIImage imageNamed:name];
 
         // Важный момент (без заглушек и утечек):
         // Вызов [UIImageNibPlaceholder alloc] initWithCoder:] подразумевает,
         // что возвращенный объект будет иметь retain count +1 (владение).
-        // Но [UIImage imageNamed:] возвращает закэшированный/autorelease объект!
-        // Поэтому мы ОБЯЗАНЫ сделать retain возвращаемой картинке, иначе она удалится раньше времени.
+        // Но [UIImage imageNamed:] возвращает закэшированный/autorelease
+        // объект!
+        // Поэтому мы ОБЯЗАНЫ сделать retain возвращаемой картинке, иначе она
+        // удалится раньше времени.
         if image != nil {
             retain(env, image);
         }

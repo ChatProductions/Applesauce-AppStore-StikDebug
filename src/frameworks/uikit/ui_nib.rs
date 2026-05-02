@@ -132,7 +132,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
         let objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
 
-        // Удерживаем объекты ДО удаления анрайхиватора, иначе они могут вычиститься
+        // Удерживаем объекты ДО удаления анрайхиватора, иначе они могут
+        // вычиститься
         if objects != nil {
             retain(env, objects);
         }
@@ -224,8 +225,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let object: id = msg![env; selected_class alloc];
 
-    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это чисто кастомный плейсхолдер Interface Builder
-    // Инициализация системных UIViewController через 'init' оставляет их сломанными и ведет к NULL-PAGE READ.
+    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это
+    // чисто кастомный плейсхолдер Interface Builder
+    // Инициализация системных UIViewController через 'init' оставляет их
+    // сломанными и ведет к NULL-PAGE READ.
     let object: id = if orig == "UICustomObject" {
         msg![env; object init]
     } else {
@@ -323,7 +326,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let source_class: Class = msg![env; source class];
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
 
-        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто заглушка NSObject
+        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто
+        // заглушка NSObject
         if source_class == ns_object_class {
             let label_str = to_rust_string(env, label);
             log!("touchHLE NIB: Skipping outlet '{}' connection because source is an unhandled NSObject", label_str);
@@ -363,7 +367,8 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     };
 
     let len: NSUInteger = msg![env; ns_data length];
-    // Если длина файла достаточна, значит указатель bytes гарантированно существует
+    // Если длина файла достаточна, значит указатель bytes гарантированно
+    // существует
     if len < 10 {
         return Err(());
     }

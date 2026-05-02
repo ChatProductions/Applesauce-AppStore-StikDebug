@@ -463,8 +463,10 @@ impl MachO {
                             &mut cursor,
                         );
                         indirect_undef_symbols.push(match sym {
-                            // Если имя есть (Some), оно превратится в Some(String).
-                            // Если имени нет (None), вернется None, и мы избежим паники.
+                            // Если имя есть (Some), оно превратится в
+                            // Some(String).
+                            // Если имени нет (None), вернется None, и мы
+                            // избежим паники.
                             Some(Symbol::Undefined { name, .. }) => name.map(String::from),
                             Some(Symbol::Prebound { name, .. }) => name.map(String::from),
                             Some(Symbol::Defined { name, .. }) => name.map(String::from),

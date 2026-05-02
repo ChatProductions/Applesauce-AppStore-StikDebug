@@ -45,7 +45,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     - (bool)startQuery {
         env.objc.borrow_mut::<NSMetadataQueryHostObject>(this).is_started = true;
 
-        // Полноценная логика: после "поиска" файлов мы должны уведомить систему,
+        // Полноценная логика: после "поиска" файлов мы должны уведомить
+        // систему,
         // что сбор данных завершен.
         // Так игра поймет, что можно проверять результаты.
         let notification_center: id = msg_class![env; NSNotificationCenter defaultCenter];

@@ -44,7 +44,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)style {
-    // Можно добавить хранение стиля в HostObject, если это потребуется для рендеринга
+    // Можно добавить хранение стиля в HostObject, если это потребуется для
+    // рендеринга
     todo_objc_setter!(this, style);
 }
 

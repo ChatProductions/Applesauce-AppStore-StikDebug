@@ -805,9 +805,11 @@ pub fn CGContextDrawLinearGradient(
         return;
     }
 
-    // Честная отрисовка градиента требует попиксельной интерполяции между цветами
+    // Честная отрисовка градиента требует попиксельной интерполяции между
+    // цветами
     // объекта CGGradientRef. Так как реализация самого CGGradientRef находится
-    // в другом модуле, здесь мы честно вычисляем границы текущего отсечения (clipping box)
+    // в другом модуле, здесь мы честно вычисляем границы текущего отсечения
+    // (clipping box)
     // и заполняем эту область текущим цветом контекста.
     let rect = CGContextGetClipBoundingBox(env, context);
     cg_bitmap_context::fill_rect(env, context, rect, false);

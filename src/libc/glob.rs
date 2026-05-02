@@ -60,7 +60,8 @@ fn glob(
     pglob.gl_pathc = matched_paths.len() as u32;
     pglob.gl_matchc = matched_paths.len() as i32;
 
-    // Выделение памяти под массив указателей (gl_pathv) + 1 для завершающего NULL
+    // Выделение памяти под массив указателей (gl_pathv) + 1 для завершающего
+    // NULL
     let pathv_size = (matched_paths.len() as u32 + 1) * 4;
     let pathv_ptr: MutPtr<MutPtr<u8>> = env.mem.alloc(pathv_size).cast();
 

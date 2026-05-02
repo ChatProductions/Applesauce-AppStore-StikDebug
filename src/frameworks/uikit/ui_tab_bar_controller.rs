@@ -126,7 +126,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if found || item == nil {
         env.objc.borrow_mut::<UITabBarHostObject>(this).selected_item = item;
 
-        // Обязательно уведомляем делегата (контроллер), иначе логика игры не поймет, что вкладка сменилась
+        // Обязательно уведомляем делегата (контроллер), иначе логика игры не
+        // поймет, что вкладка сменилась
         let delegate = env.objc.borrow::<UITabBarHostObject>(this).delegate;
         if delegate != nil {
             let _: () = msg![env; delegate tabBar:this didSelectItem:item];
@@ -299,7 +300,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, vcs);
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).view_controllers = vcs;
 
-    // 2. СИНХРОНИЗАЦИЯ: Извлекаем tabBarItem из каждого контроллера и отдаем их таббару
+    // 2. СИНХРОНИЗАЦИЯ: Извлекаем tabBarItem из каждого контроллера и отдаем их
+    // таббару
     let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
     if tab_bar != nil && vcs != nil {
         let items_array: id = msg_class![env; NSMutableArray array];
@@ -347,7 +349,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if tab_bar != nil {
         let vc: id = msg![env; vcs objectAtIndex:index];
         let item: id = msg![env; vc tabBarItem];
-        // Теперь это не вызовет варнинг, так как мы наполнили массив в setViewControllers
+        // Теперь это не вызовет варнинг, так как мы наполнили массив в
+        // setViewControllers
         let _: () = msg![env; tab_bar setSelectedItem:item];
     }
 }

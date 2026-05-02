@@ -64,7 +64,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, title);
     retain(env, message);
     {
-        // ИСПРАВЛЕНИЕ: Добавлен `mut`, так как изменение полей `RefMut` требует мутабельности переменной
+        // ИСПРАВЛЕНИЕ: Добавлен `mut`, так как изменение полей `RefMut` требует
+        // мутабельности переменной
         let mut host = env.objc.borrow_mut::<UIAlertViewHostObject>(this);
         host.title    = title;
         host.message  = message;
@@ -86,7 +87,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    // ИСПРАВЛЕНИЕ: Блокируем `host` в узком scope, чтобы снять заимствование до `release`
+    // ИСПРАВЛЕНИЕ: Блокируем `host` в узком scope, чтобы снять заимствование до
+    // `release`
     let (title, message, buttons) = {
         let host = env.objc.borrow::<UIAlertViewHostObject>(this);
         (host.title, host.message, host.button_titles)
@@ -139,7 +141,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (NSInteger)cancelButtonIndex { env.objc.borrow::<UIAlertViewHostObject>(this).cancel_button_index }
 - (())setCancelButtonIndex:(NSInteger)index { env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index = index; }
 - (NSInteger)firstOtherButtonIndex {
-    // ИСПРАВЛЕНИЕ: Скоуп не даст возникнуть ошибке заимствования на `msg![env; ...]`
+    // ИСПРАВЛЕНИЕ: Скоуп не даст возникнуть ошибке заимствования на `msg![env;
+    // ...]`
     let (buttons, cancel) = {
         let host = env.objc.borrow::<UIAlertViewHostObject>(this);
         (host.button_titles, host.cancel_button_index)
@@ -151,7 +154,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)textFieldAtIndex:(NSInteger)_index { nil }
 
 - (())addSubview:(id)_view {
-    // UIAlertView doesn't support subviews in touchHLE (SDL2 dialog implementation)
+    // UIAlertView doesn't support subviews in touchHLE (SDL2 dialog
+    // implementation)
     log_dbg!("UIAlertView addSubview: ignored");
 }
 - (())removeFromSuperview {

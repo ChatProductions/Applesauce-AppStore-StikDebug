@@ -209,7 +209,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             )
         }
         NSValueHostObject::NSRange(r) => {
-            // Копируем значения в локальные переменные, чтобы избежать взятия ссылки на packed-структуру
+            // Копируем значения в локальные переменные, чтобы избежать взятия
+            // ссылки на packed-структуру
             let loc = r.location;
             let len = r.length;
             format!("NSRange: {{{}, {}}}", loc, len)
@@ -541,7 +542,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     new_num
 }
 
-// ИЗМЕНЕНО: Добавлена заглушка для сохранения числа, предотвращающая вылет (Panic)
+// ИЗМЕНЕНО: Добавлена заглушка для сохранения числа, предотвращающая вылет
+// (Panic)
 - (())encodeWithCoder:(id)_coder {
     log!("Warning: stubbed NSNumber encodeWithCoder:");
 }
@@ -748,7 +750,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         NSNumberHostObject::Short(_) => b"s\0",
         NSNumberHostObject::UnsignedShort(_) => b"S\0",
     };
-    // Переводим [u8; 2] в u16 (little-endian), так как u16 поддерживает SafeWrite
+    // Переводим [u8; 2] в u16 (little-endian), так как u16 поддерживает
+    // SafeWrite
     let typ_val = u16::from_le_bytes(*typ);
     // Выделяем память под u16 и возвращаем указатель
     env.mem.alloc_and_write(typ_val).cast_void().cast_const()

@@ -4,7 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `MFMailComposeViewController`, `MFMailComposeViewControllerDelegate`,
-//! `MFMessageComposeViewController`, and `MFMessageComposeViewControllerDelegate`.
+//! `MFMessageComposeViewController`, and
+//! `MFMessageComposeViewControllerDelegate`.
 
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{

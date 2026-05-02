@@ -183,7 +183,8 @@ fn UIGraphicsGetPDFContextBounds(_env: &mut Environment) -> CGRect {
     }
 }
 
-// MARK: - Convenience rect fill / clip (commonly called without a full context setup)
+// MARK: - Convenience rect fill / clip (commonly called without a full context
+// setup)
 
 fn UIRectFill(env: &mut Environment, rect: CGRect) {
     let ctx = UIGraphicsGetCurrentContext(env);

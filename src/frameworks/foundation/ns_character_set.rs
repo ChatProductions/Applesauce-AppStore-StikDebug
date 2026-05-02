@@ -406,7 +406,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let self_host = env.objc.borrow::<CharacterSetHostObject>(this);
 
     if other_inverted {
-        // other is an inverted set — too large to iterate; log and return false.
+        // other is an inverted set — too large to iterate; log and return
+        // false.
         log_dbg!("isSupersetOfSet: other is inverted, returning false (not supported)");
         return false;
     }

@@ -104,7 +104,8 @@ fn property_size(property_id: ExtAudioFilePropertyID) -> Option<GuestUSize> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Build an `ExtAudioFileHostObject` from an already-opened `AudioFileHostObject`
+/// Build an `ExtAudioFileHostObject` from an already-opened
+//`AudioFileHostObject`
 /// and insert it into state, returning the new opaque handle written to
 /// `out_ext_audio_file`.
 fn register_ext_audio_file(

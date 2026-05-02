@@ -469,7 +469,8 @@ pub const CONSTANTS: ConstantExports = &[
         "_NSWordTablesWriteException",
         HostConstant::NSString("NSWordTablesWriteException"),
     ),
-    // UIKit exception names (placed here for proximity to Foundation exceptions)
+    // UIKit exception names (placed here for proximity to Foundation
+    // exceptions)
     (
         "_UIViewControllerHierarchyInconsistencyException",
         HostConstant::NSString("UIViewControllerHierarchyInconsistencyException"),

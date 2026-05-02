@@ -31,9 +31,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     env.objc.borrow_mut::<FBSessionHostObject>(session).delegate = delegate;
 
-    // Сразу же имитируем неудачный логин, чтобы игра не ждала ответа от серверов FB
+    // Сразу же имитируем неудачный логин, чтобы игра не ждала ответа от
+    // серверов FB
     if delegate != nil {
-        // В старом Facebook Connect SDK для iOS ошибка логина обычно обрабатывалась этим методом
+        // В старом Facebook Connect SDK для iOS ошибка логина обычно
+        // обрабатывалась этим методом
         let sel = env.objc.register_host_selector(
             "sessionDidNotLogin:".to_string(),
             &mut env.mem

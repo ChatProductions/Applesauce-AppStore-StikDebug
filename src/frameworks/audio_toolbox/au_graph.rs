@@ -159,7 +159,8 @@ fn AUGraphAddNode(
     env.mem.write(out_node, node_id);
 
     // Вытаскиваем значения в локальные переменные (копии),
-    // чтобы избежать UB при взятии ссылки макросом log! из упакованной структуры.
+    // чтобы избежать UB при взятии ссылки макросом log! из упакованной
+    // структуры.
     let dt = desc.component_type;
     let ds = desc.component_sub_type;
 

@@ -53,7 +53,8 @@ fn mmap(
         assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
 
         // Убираем жесткие assert_eq!(fd, -1) и assert_eq!(offset, 0).
-        // В реальной iOS/Darwin при наличии флага MAP_ANON аргументы fd и offset
+        // В реальной iOS/Darwin при наличии флага MAP_ANON аргументы fd и
+        // offset
         // просто игнорируются ОС. Движки вроде Adobe AIR передают сюда мусор.
         if fd != -1 || offset != 0 {
             log_dbg!("Warning: mmap MAP_ANON called with fd={} and offset={}. Ignoring them as per OS behavior.", fd, offset);

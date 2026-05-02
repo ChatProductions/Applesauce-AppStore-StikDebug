@@ -281,7 +281,8 @@ fn blend_premultiplied(bg: (f32, f32, f32, f32), fg: (f32, f32, f32, f32)) -> (f
 }
 
 // ИСПРАВЛЕНИЕ: Убраны все `unreachable!()` и `unimplemented!()`
-// Теперь, если игра передает нестандартный формат, мы безопасно откатываемся на RGBA
+// Теперь, если игра передает нестандартный формат, мы безопасно откатываемся на
+// RGBA
 fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usize>) {
     if data.color_space == kCGColorSpaceGenericGray {
         match data.alpha_info {

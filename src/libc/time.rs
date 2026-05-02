@@ -33,9 +33,12 @@ type clock_t = u64;
 const CLOCKS_PER_SEC: clock_t = 1000000;
 
 fn clock(env: &mut Environment) -> clock_t {
-    // ИСПРАВЛЕНИЕ: Возвращаем точное время в микросекундах (а не усекаем до секунд).
-    // Это критически важно для игр (Cocos2D и др.), которые считают дельту времени.
-    // Иначе delta time = 0.0, что ведет к делению на ноль -> NaN -> отрицательный sleep -> Crash.
+    // ИСПРАВЛЕНИЕ: Возвращаем точное время в микросекундах (а не усекаем до
+    // секунд).
+    // Это критически важно для игр (Cocos2D и др.), которые считают дельту
+    // времени.
+    // Иначе delta time = 0.0, что ведет к делению на ноль -> NaN ->
+    // отрицательный sleep -> Crash.
     Instant::now().duration_since(env.startup_time).as_micros() as clock_t
 }
 
@@ -334,7 +337,8 @@ fn nanosleep(env: &mut Environment, rqtp: ConstPtr<timespec>, _rmtp: MutPtr<time
 
     let t = env.mem.read(rqtp);
     // ИСПРАВЛЕНИЕ: Исключаем панику при отрицательном времени.
-    // Функция `try_into().unwrap()` скрашилась бы с `TryFromIntError` при отрицательных значениях от плохих игр.
+    // Функция `try_into().unwrap()` скрашилась бы с `TryFromIntError` при
+    // отрицательных значениях от плохих игр.
     // Защищаем Rust-составляющую, ограничивая минимальное время нулем.
     let tv_sec = t.tv_sec.max(0) as u64;
     let tv_nsec = t.tv_nsec.max(0) as u64;
@@ -550,7 +554,8 @@ fn strftime(
             b'Z' => {
                 let tz_ptr = time_val.tm_zone;
                 if tz_ptr.is_null() {
-                    // Эмулятор считает время от UNIX_EPOCH без смещения (tm_gmtoff = 0),
+                    // Эмулятор считает время от UNIX_EPOCH без смещения
+                    // (tm_gmtoff = 0),
                     // поэтому мы легально находимся в зоне GMT.
                     res.extend_from_slice(b"GMT");
                 } else if let Ok(tz_str) = env.mem.cstr_at_utf8(tz_ptr) {
@@ -590,7 +595,8 @@ fn strftime(
 
 fn difftime(_env: &mut Environment, time1: time_t, time0: time_t) -> f64 {
     // Возвращаем разницу в секундах.
-    // Приведение к f64 гарантирует, что мы отдаем честный double, как того ждет игра.
+    // Приведение к f64 гарантирует, что мы отдаем честный double, как того ждет
+    // игра.
     (time1 as f64) - (time0 as f64)
 }
 

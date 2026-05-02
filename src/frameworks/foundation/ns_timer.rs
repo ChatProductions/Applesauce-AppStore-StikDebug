@@ -100,7 +100,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dealloc {
     let _: () = msg![env; this invalidate];
 
-    // ИСПРАВЛЕНИЕ: Используем блок для освобождения заимствования до вызова release
+    // ИСПРАВЛЕНИЕ: Используем блок для освобождения заимствования до вызова
+    // release
     let (target, user_info) = {
         let host = env.objc.borrow::<NSTimerHostObject>(this);
         (host.target, host.user_info)
@@ -217,7 +218,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // ИСПРАВЛЕНИЕ E0499: Вычисляем fire_time ДО того, как берём `borrow_mut`
     let fire_time = if _date != crate::objc::nil {
-        // Здесь безопасно использовать env, так как мы еще ничего не позаимствовали
+        // Здесь безопасно использовать env, так как мы еще ничего не
+        // позаимствовали
         let time_interval: NSTimeInterval = msg![env; _date timeIntervalSinceNow];
         if time_interval.is_nan() || time_interval <= 0.0 {
             std::time::Instant::now()
@@ -248,7 +250,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 - (id)description {
-    // ИСПРАВЛЕНИЕ: Формируем строку внутри блока, освобождаем borrow, потом вызываем msg_class!
+    // ИСПРАВЛЕНИЕ: Формируем строку внутри блока, освобождаем borrow, потом
+    // вызываем msg_class!
     let s = {
         let host = env.objc.borrow::<NSTimerHostObject>(this);
         let validity = if host.due_by.is_some() { "valid" } else { "invalid" };
@@ -286,7 +289,8 @@ pub(super) fn set_run_loop(env: &mut Environment, timer: id, run_loop: id) {
     host_object.run_loop = run_loop;
 }
 
-/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if necessary.
+/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if
+//necessary.
 /// Returns the next firing time, if any.
 pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> {
     let &NSTimerHostObject {

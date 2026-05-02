@@ -163,7 +163,8 @@ fn CGPathCreateWithEllipseInRect(
     rect: CGRect,
     _transform: MutVoidPtr,
 ) -> CGPathRef {
-    // Approximate ellipse with four cubic Bézier curves (standard magic number).
+    // Approximate ellipse with four cubic Bézier curves (standard magic
+    // number).
     let path = alloc_path(env, false);
     let k: CGFloat = 0.5522848;
     let cx = rect.origin.x + rect.size.width * 0.5;
@@ -463,7 +464,8 @@ fn CGPathEqualToPath(env: &mut Environment, path1: CGPathRef, path2: CGPathRef) 
     if path1.is_null() || path2.is_null() {
         return false;
     }
-    // Compare element counts as a quick proxy; deep equality not needed for stubs.
+    // Compare element counts as a quick proxy; deep equality not needed for
+    // stubs.
     env.objc.borrow::<CGPathHostObject>(path1).elements.len()
         == env.objc.borrow::<CGPathHostObject>(path2).elements.len()
 }

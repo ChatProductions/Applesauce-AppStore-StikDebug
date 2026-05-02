@@ -470,7 +470,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // 1. Получаем все ключи словаря в виде объекта NSArray
     let keys: id = msg![env; this allKeys];
 
-    // 2. Возвращаем готовый энумератор массива (он уже честно реализован в ns_array.rs)
+    // 2. Возвращаем готовый энумератор массива (он уже честно реализован в
+    // ns_array.rs)
     msg![env; keys objectEnumerator]
 }
 
@@ -792,7 +793,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     init_with_objects_for_keys_common(env, this, objects, keys)
 }
 
-// FIX: Added missing instance method initWithObjects:forKeys:count: for mutable dictionary
+// FIX: Added missing instance method initWithObjects:forKeys:count: for mutable
+// dictionary
 - (id)initWithObjects:(ConstPtr<id>)objects
               forKeys:(ConstPtr<id>)keys
                 count:(NSUInteger)count {
@@ -901,8 +903,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setObject:(id)object
              forKey:(id)key {
-        // Если объект nil, по правилам iOS должно быть исключение NSInvalidArgumentException.
-        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем добавление.
+        // Если объект nil, по правилам iOS должно быть исключение
+        // NSInvalidArgumentException.
+        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем
+        // добавление.
         if object == nil {
             let key_str = if key != nil {
                 crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string()

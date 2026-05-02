@@ -29,7 +29,8 @@ const U_ZERO_ERROR: i32 = 0;
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-// Конвертируем специфичный ICU синтаксис \Q...\E (литералы) в экранированный Rust regex
+// Конвертируем специфичный ICU синтаксис \Q...\E (литералы) в экранированный
+// Rust regex
 fn convert_icu_to_rust_regex(pattern: &str) -> String {
     let mut res = String::new();
     let mut in_q = false;
@@ -134,7 +135,8 @@ pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>
     }
     let map = UREGEX_MAP.lock().unwrap();
     if let Some(state) = map.get(&regexp) {
-        // Честно считаем группы, скомпилированные движком (без учета 0-й группы)
+        // Честно считаем группы, скомпилированные движком (без учета 0-й
+        // группы)
         state.re.captures_len().saturating_sub(1) as i32
     } else {
         if !status.is_null() {
@@ -214,7 +216,8 @@ pub fn uregex_find(
         if let Some(captures) = reg_state.re.captures(search_text) {
             txt_state.groups.clear();
 
-            // Сохраняем границы всех найденных групп (они понадобятся в uregex_start)
+            // Сохраняем границы всех найденных групп (они понадобятся в
+            // uregex_start)
             for i in 0..reg_state.re.captures_len() {
                 if let Some(m) = captures.get(i) {
                     let abs_start_utf8 = start_utf8 + m.start();

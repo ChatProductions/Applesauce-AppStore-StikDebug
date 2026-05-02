@@ -499,9 +499,11 @@ impl Dyld {
         let mut unhandled_relocations: HashMap<&str, Vec<u32>> = HashMap::new();
         // Cache for Objective-C blocks runtime class descriptors.
         // All relocation sites for the same name must resolve to the same
-        // non-null guest address so that `block->isa == &_NSConcreteGlobalBlock`
+        // non-null guest address so that `block->isa ==
+        // &_NSConcreteGlobalBlock`
         // identity checks in the blocks runtime work correctly.
-        // Without this, the isa field of every global/stack block is NULL (0x0),
+        // Without this, the isa field of every global/stack block is NULL
+        // (0x0),
         // causing a NULL-page read the first time the ObjC runtime tries to
         // retain or release a block object.
         let mut block_class_addrs: HashMap<String, u32> = HashMap::new();
@@ -538,10 +540,12 @@ impl Dyld {
                 val_ptr.cast().cast_const()
             } else if name == "dyld_stub_binder" || name == "_dyld_stub_binder" {
                 // In iOS, dyld_stub_binder handles lazy symbol binding.
-                // However, touchHLE resolves lazy symbols entirely via SVC traps,
+                // However, touchHLE resolves lazy symbols entirely via SVC
+                // traps,
                 // bypassing the need for a guest-side binder.
                 // We create a minimal ARM32 function (BX LR) so if it's somehow
-                // called, it just returns safely without executing random memory.
+                // called, it just returns safely without executing random
+                // memory.
                 let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
                 mem.write(fn_ptr + 0, encode_a32_ret());
                 mem.write(fn_ptr + 1, encode_a32_trap());
@@ -628,7 +632,8 @@ impl Dyld {
             } else if let Some((symbol, _)) =
                 search_host_dylibs(|dylib| dylib.function_exports, name)
             {
-                // We want the same symbol name to always point to the same function.
+                // We want the same symbol name to always point to the same
+                // function.
                 let trampoline_ptr = self
                     .create_proc_address_no_inval(mem, symbol)
                     .unwrap()
@@ -695,7 +700,8 @@ impl Dyld {
             }
 
             if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
-                // Используем наш паникующий хэндлер, который вы зарегистрировали в create_proc_address_no_inval
+                // Используем наш паникующий хэндлер, который вы
+                // зарегистрировали в create_proc_address_no_inval
                 let trampoline_ptr = self
                     .create_proc_address_no_inval(mem, symbol)
                     .unwrap()
@@ -1092,7 +1098,8 @@ impl Dyld {
     ) -> Result<GuestFunction, ()> {
         // Нативно обрабатываем рудимент ленивой загрузки Apple:
         if symbol == "dyld_stub_binder" || symbol == "_dyld_stub_binder" {
-            // Используем "dyld_stub_binder" (это &'static str), а не переменную symbol
+            // Используем "dyld_stub_binder" (это &'static str), а не переменную
+            // symbol
             let symbol_name = "dyld_stub_binder";
             if let Some(&cached_fn) = self.non_lazy_host_functions.get(symbol_name) {
                 return Ok(cached_fn);

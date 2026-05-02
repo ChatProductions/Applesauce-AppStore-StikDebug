@@ -65,7 +65,8 @@ fn name_for_abbr(abbr: &str) -> Option<&'static str> {
 }
 
 struct NSTimeZoneHostObject {
-    /// NSString* — the IANA zone name (or abbreviation string for offset-only zones)
+    /// NSString* — the IANA zone name (or abbreviation string for offset-only
+    //zones)
     time_zone: id,
     /// Seconds east of GMT
     seconds_from_gmt: i32,
@@ -146,7 +147,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let names: Vec<id> = ZONE_TABLE
         .iter()
         .filter(|r| r.0 == r.0) // keep all; caller can filter
-        // Deduplicate: only include rows where the name is not a bare abbreviation
+        // Deduplicate: only include rows where the name is not a bare
+        // abbreviation
         .filter(|r| !r.0.chars().all(|c| c.is_ascii_uppercase() || c == '/'))
         // Actually: exclude rows that are pure-abbreviation aliases
         .filter(|r| r.0.contains('/') || r.0 == "UTC" || r.0 == "GMT")
@@ -156,7 +158,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array)
 }
 
-// Returns an NSDictionary<NSString*, NSString*> mapping abbreviation → IANA name.
+// Returns an NSDictionary<NSString*, NSString*> mapping abbreviation → IANA
+// name.
 + (id)abbreviationDictionary {
     // ИЗМЕНЕНО: Используем один вектор пар (ключ, значение)
     let mut keys_and_vals: Vec<(id, id)> = Vec::new();
@@ -189,7 +192,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-// ── Instance methods ──────────────────────────────────────────────────────────
+// ── Instance methods
+// ──────────────────────────────────────────────────────────
 
 - (())dealloc {
     let tz_name = env.objc.borrow_mut::<NSTimeZoneHostObject>(this).time_zone;

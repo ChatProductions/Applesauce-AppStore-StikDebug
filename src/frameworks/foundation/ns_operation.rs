@@ -72,7 +72,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    // Extract all properties to temporary variables to avoid borrow checker conflicts
+    // Extract all properties to temporary variables to avoid borrow checker
+    // conflicts
     let (deps, completion, name, target, arg) = {
         let host_object = env.objc.borrow::<NSOperationHostObject>(this);
         (
@@ -544,7 +545,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())waitUntilAllOperationsAreFinished {
     // In HLE, operations are synchronous, so this is effectively a no-op
-    // All operations added to the queue have already finished by the time addOperation: returns
+    // All operations added to the queue have already finished by the time
+    // addOperation: returns
 }
 
 // MARK: - Properties

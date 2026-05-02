@@ -211,7 +211,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setRootViewController:(id)view_controller {
     log_dbg!("[(UIWindow*){:?} setRootViewController:{:?}]", this, view_controller);
 
-    // The default behavior in iOS is to add the view controller's view as a subview of the window.
+    // The default behavior in iOS is to add the view controller's view as a
+    // subview of the window.
     if view_controller != nil {
         let view: id = msg![env; view_controller view];
         () = msg![env; this addSubview:view];

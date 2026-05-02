@@ -103,7 +103,8 @@ pub fn NSGetSizeAndAlignment(
 }
 
 fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8>, u32, u32) {
-    // Пропускаем модификаторы типа (const, in, out, inout, bycopy, byref, oneway)
+    // Пропускаем модификаторы типа (const, in, out, inout, bycopy, byref,
+    // oneway)
     loop {
         let c = env.mem.read(ptr) as char;
 
@@ -127,10 +128,12 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         'q' | 'Q' | 'd' => (ptr, 8, 8),
         'v' => (ptr, 0, 1), // void
 
-        // Указатели, объекты (id), классы (Class), селекторы (SEL), неизвестные указатели (?)
+        // Указатели, объекты (id), классы (Class), селекторы (SEL), неизвестные
+        // указатели (?)
         '*' | '@' | '#' | ':' | '?' => (ptr, 4, 4),
 
-        // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип, на который он указывает
+        // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип,
+        // на который он указывает
         '^' => {
             let (next_ptr, _, _) = parse_objc_type(env, ptr);
 

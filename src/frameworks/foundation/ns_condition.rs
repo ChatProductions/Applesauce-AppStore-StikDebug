@@ -118,7 +118,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: Wait / signal / broadcast
 
 - (())wait {
-    // 1. Атомарно освобождаем блокировку и добавляем себя в очередь ожидания сигнала
+    // 1. Атомарно освобождаем блокировку и добавляем себя в очередь ожидания
+    // сигнала
     {
         let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
         host.locked = false;
@@ -133,7 +134,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // 2. Засыпаем, пока нас не разбудит `signal` или `broadcast`
     env.suspend_thread(env.current_thread);
 
-    // 3. По правилам POSIX, после пробуждения необходимо снова захватить мьютекс
+    // 3. По правилам POSIX, после пробуждения необходимо снова захватить
+    // мьютекс
     () = msg![env; this lock];
 }
 

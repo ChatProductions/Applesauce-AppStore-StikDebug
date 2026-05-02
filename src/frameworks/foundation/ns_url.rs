@@ -169,7 +169,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             .replacen("file://", "", 1)
             .replacen("file:", "", 1);
 
-        // Выделяем создание строки в отдельный шаг, чтобы порадовать borrow checker
+        // Выделяем создание строки в отдельный шаг, чтобы порадовать borrow
+        // checker
         let new_ns_string = from_rust_string(env, stripped);
         safe_path = autorelease(env, new_ns_string);
     }

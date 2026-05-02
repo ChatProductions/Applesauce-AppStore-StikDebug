@@ -147,7 +147,8 @@ impl GLES for GLES1Native<'_> {
                 let orig_ptr = gles11::GetString(name);
                 if !orig_ptr.is_null() {
                     let orig_str = std::ffi::CStr::from_ptr(orig_ptr as *const _).to_string_lossy();
-                    // Вырезаем OES_matrix_palette чтобы заставить AC2 использовать CPU анимацию
+                    // Вырезаем OES_matrix_palette чтобы заставить AC2
+                    // использовать CPU анимацию
                     let filtered = orig_str.replace("GL_OES_matrix_palette", "");
                     let c_str = std::ffi::CString::new(filtered).unwrap();
                     FILTERED_EXTS = c_str.into_raw();

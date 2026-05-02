@@ -672,7 +672,8 @@ fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
     if env.libc_state.math.timer_manager_instance == 0 {
         // Выделяем память под объект TimerManager (1024 байта с запасом).
         // Используем calloc, чтобы вся память была заполнена нулями —
-        // это предотвратит краш, если игра попытается прочитать внутренние поля класса.
+        // это предотвратит краш, если игра попытается прочитать внутренние поля
+        // класса.
         let ptr = env.mem.calloc(1024);
         env.libc_state.math.timer_manager_instance = ptr.to_bits();
 

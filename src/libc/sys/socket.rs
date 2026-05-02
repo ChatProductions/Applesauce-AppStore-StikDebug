@@ -260,7 +260,8 @@ fn setsockopt(
     match (level, option_name) {
         (SOL_SOCKET, SO_DEBUG) => {
             // Silently ignore SO_DEBUG — requires elevated privileges on most
-            // platforms; apps set this speculatively and don't check the result.
+            // platforms; apps set this speculatively and don't check the
+            // result.
             log_dbg!("setsockopt: ignoring SO_DEBUG on socket {}", socket);
             0
         }
@@ -299,12 +300,15 @@ fn setsockopt(
                 }
             }
             // SO_NOSIGPIPE просто сохраняется в options.
-            // В Rust попытка записи в закрытый сокет и так возвращает ErrorKind::BrokenPipe вместо убийства процесса.
+            // В Rust попытка записи в закрытый сокет и так возвращает
+            // ErrorKind::BrokenPipe вместо убийства процесса.
             0
         }
         (SOL_SOCKET, SO_LINGER) => {
-            // Некоторые приложения (например, Minecraft PE) передают 4 байта (размер обычного int)
-            // вместо положенных 8 байт (struct linger). Обрабатываем оба варианта легально:
+            // Некоторые приложения (например, Minecraft PE) передают 4 байта
+            // (размер обычного int)
+            // вместо положенных 8 байт (struct linger). Обрабатываем оба
+            // варианта легально:
             let (l_onoff, l_linger) = if option_len == guest_size_of::<linger>() {
                 let linger_val: linger = env.mem.read(option_value.cast());
                 (linger_val.l_onoff, linger_val.l_linger)
@@ -334,8 +338,10 @@ fn setsockopt(
                     .tcp_stream
                     .as_ref()
                 {
-                    // Имитируем успешную установку SO_LINGER. Реальный вызов stream.set_linger
-                    // заменен на логирование, так как фича `tcp_linger` нестабильна в std::net
+                    // Имитируем успешную установку SO_LINGER. Реальный вызов
+                    // stream.set_linger
+                    // заменен на логирование, так как фича `tcp_linger`
+                    // нестабильна в std::net
                     log!("setsockopt: SO_LINGER (duration: {:?}) requested, ignoring due to unstable tcp_linger feature", duration);
                 }
             }
@@ -345,8 +351,10 @@ fn setsockopt(
             assert_eq!(option_len, guest_size_of::<i32>());
             let buf_size: i32 = env.mem.read(option_value.cast());
 
-            // Rust std::net не экспортирует управление размером буфера (set_recv_buffer_size).
-            // Но современные ОС сами отлично балансируют TCP-окно (auto-tuning), что работает
+            // Rust std::net не экспортирует управление размером буфера
+            // (set_recv_buffer_size).
+            // Но современные ОС сами отлично балансируют TCP-окно
+            // (auto-tuning), что работает
             // намного лучше фиксированных лимитов из старых iOS-приложений.
             // Честно валидируем чтение памяти гостя и подтверждаем успех.
             log_dbg!(
@@ -466,7 +474,8 @@ fn bind(
                         set_errno(env, EIO);
                         return -1;
                     }
-                    // Apply SO_REUSEADDR if set (best-effort; std doesn't expose it directly)
+                    // Apply SO_REUSEADDR if set (best-effort; std doesn't
+                    // expose it directly)
                     State::get_mut(env)
                         .sockets
                         .get_mut(&socket)
@@ -666,7 +675,8 @@ fn select(
     set_errno(env, 0);
     assert!(n_fds >= 0 && n_fds <= 1024);
 
-    // В POSIX вызов select с n_fds = 0 используется для точного сна (микросекунды)
+    // В POSIX вызов select с n_fds = 0 используется для точного сна
+    // (микросекунды)
     if n_fds == 0 {
         if !timeout.is_null() {
             let timeval = env.mem.read(timeout);

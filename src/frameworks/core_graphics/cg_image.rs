@@ -305,7 +305,8 @@ fn CGImageGetBitmapInfo(_env: &mut Environment, image: CGImageRef) -> CGBitmapIn
     if image.is_null() {
         return 0;
     }
-    // Report premultiplied-last RGBA, big-endian 32-bit — matches our Image format.
+    // Report premultiplied-last RGBA, big-endian 32-bit — matches our Image
+    // format.
     kCGImageAlphaPremultipliedLast | kCGImageByteOrder32Big
 }
 

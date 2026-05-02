@@ -90,7 +90,8 @@ fn CFTimeZoneGetSecondsFromGMT(
 }
 
 fn CFTimeZoneGetName(_env: &mut Environment, _tz: CFTimeZoneRef) -> CFTypeRef {
-    // Returning nil is safe — callers that only display the name will show nothing.
+    // Returning nil is safe — callers that only display the name will show
+    // nothing.
     nil
 }
 
@@ -184,7 +185,8 @@ fn CFAbsoluteTimeGetDayOfWeek(env: &mut Environment, at: CFAbsoluteTime, tz: CFT
     let m = gd.month as i32;
     let d = gd.day as i32;
     static T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-    // Returns 0 = Sunday … 6 = Saturday; convert to CF (1 = Monday … 7 = Sunday).
+    // Returns 0 = Sunday … 6 = Saturday; convert to CF (1 = Monday … 7 =
+    // Sunday).
     let dow = (y + y / 4 - y / 100 + y / 400 + T[(m - 1) as usize] + d) % 7;
     if dow == 0 {
         7

@@ -159,7 +159,8 @@ fn port_service(port: u16) -> Option<&'static str> {
 }
 
 /// Allocate a guest `hostent` for `ip_octets` with the given `canonical_name`.
-/// Returns the pointer to the struct; caller must not free (caller manages lifetime).
+/// Returns the pointer to the struct; caller must not free (caller manages
+//lifetime).
 fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str) -> u32 {
     // Layout in guest memory:
     //   hostent_guest  (5 × 4 = 20 bytes)
@@ -573,7 +574,8 @@ fn getnameinfo(
         return EAI_FAIL;
     }
 
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Прямое чтение из гостевой памяти по смещениям (AF_INET/sockaddr_in layout)
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Прямое чтение из гостевой памяти по смещениям
+    // (AF_INET/sockaddr_in layout)
     let sa_ptr = sa.cast::<u8>();
     let port = u16::from_be_bytes([env.mem.read(sa_ptr + 2u32), env.mem.read(sa_ptr + 3u32)]);
     let octets: [u8; 4] = [

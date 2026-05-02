@@ -231,7 +231,8 @@ fn objc_msgSend_inner(
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
 
-            // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! (мягкий фейл форка) ---
+            // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! (мягкий фейл
+            // форка) ---
             log!(
                 "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
                 if is_metaclass { "Class" } else { "Object" },
@@ -250,7 +251,7 @@ fn objc_msgSend_inner(
             // Имитируем возврат nil/0, чтобы приложение продолжило работу
             env.cpu.regs_mut()[0..2].fill(0);
             return;
-            // ------------------------------------------------------------------------
+            // ------------------------------------------------------------
         }
 
         let Some(host_object) = env.objc.get_host_object(class) else {
@@ -483,7 +484,8 @@ pub trait MsgSendSignature: 'static {
     }
 }
 
-// --- Extended implementations for higher number of arguments (7, 8, 9 parameters) ---
+// --- Extended implementations for higher number of arguments (7, 8, 9
+// parameters) ---
 impl<
         R: 'static,
         P1: 'static,

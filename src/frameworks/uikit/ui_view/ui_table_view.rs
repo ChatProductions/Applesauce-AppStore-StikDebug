@@ -143,7 +143,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // но для безопасности создадим пустой, если его нет.
     let frame = <CGRect as Default>::default();
 
-    // Исправлено здесь: убран get_known_class и переменная, имя класса передано напрямую
+    // Исправлено здесь: убран get_known_class и переменная, имя класса передано
+    // напрямую
     let content_view: id = msg_class![env; UITableViewCellContentView alloc];
     let content_view: id = msg![env; content_view initWithFrame:frame];
 

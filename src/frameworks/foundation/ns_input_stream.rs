@@ -271,7 +271,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             return 0;
         }
 
-        // Защита от E0502: копируем во временный вектор, чтобы не держать одновременные borrow
+        // Защита от E0502: копируем во временный вектор, чтобы не держать
+        // одновременные borrow
         let src_slice = env.mem.bytes_at(bytes_ptr.cast::<u8>() + current_offset as u32, to_read as u32).to_vec();
         env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(&src_slice);
 

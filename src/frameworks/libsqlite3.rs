@@ -32,7 +32,8 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 
     // Конвертируем прочитанные байты в строку Rust
     let filename = String::from_utf8_lossy(&filename_bytes).into_owned();
 
-    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора безопасно
+    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора
+    // безопасно
     let safe_name = filename.replace("/", "_");
     // Сохраняем базу в директорию приложения
     let path = format!(
@@ -80,7 +81,8 @@ pub fn sqlite3_open_v2(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u
     // Конвертируем прочитанные байты в строку Rust
     let filename = String::from_utf8_lossy(&filename_bytes).into_owned();
 
-    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора безопасно
+    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора
+    // безопасно
     let safe_name = filename.replace("/", "_");
     // Сохраняем базу в директорию приложения
     let path = format!(

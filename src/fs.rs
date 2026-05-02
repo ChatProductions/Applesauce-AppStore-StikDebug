@@ -651,7 +651,8 @@ impl Fs {
             None => FsNode::dir(),
         };
 
-        // Создаем физическую папку для корня ФС (чтобы shm_open мог создавать файлы вроде /mono.1)
+        // Создаем физическую папку для корня ФС (чтобы shm_open мог создавать
+        // файлы вроде /mono.1)
         let root_host_path = paths::user_data_base_path()
             .join(paths::SANDBOX_DIR)
             .join(bundle_id)
@@ -665,7 +666,8 @@ impl Fs {
             }
         }
 
-        // Если режим не read_only, монтируем физическую папку как корень с правами на запись
+        // Если режим не read_only, монтируем физическую папку как корень с
+        // правами на запись
         let root_node = if read_only_mode {
             FsNode::dir()
         } else {
@@ -1067,7 +1069,8 @@ impl Fs {
         } = options;
 
         // ИСПРАВЛЕНИЕ: Мягкий перехват вместо вызова panic!.
-        // Если запрашивается создание или очистка файла без права записи, принудительно даем право на запись.
+        // Если запрашивается создание или очистка файла без права записи,
+        // принудительно даем право на запись.
         if (truncate || create) && !write && !append {
             log!("Warning: App tried to create/truncate file without write permissions. Forcing write = true.");
             write = true;
@@ -1261,7 +1264,8 @@ impl Fs {
 
         // 1. Получаем компоненты пути.
         // .into_iter().map(|s| s.to_string()).collect() — КРИТИЧЕСКИ ВАЖНО.
-        // Это превращает Vec<&str> в Vec<String>, освобождая self от заимствования.
+        // Это превращает Vec<&str> в Vec<String>, освобождая self от
+        // заимствования.
         let components: Vec<String> = resolve_path(path, Some(&self.working_directory))
             .into_iter()
             .map(|s| s.to_string())
@@ -1269,16 +1273,19 @@ impl Fs {
 
         let mut current_path = String::new();
 
-        // 2. Теперь мы можем спокойно итерироваться и вызывать мутабельные методы self
+        // 2. Теперь мы можем спокойно итерироваться и вызывать мутабельные
+        // методы self
         for component in components {
-            // Собираем путь по кусочкам: /var -> /var/mobile -> /var/mobile/Applications...
+            // Собираем путь по кусочкам: /var -> /var/mobile ->
+            // /var/mobile/Applications...
             current_path.push('/');
             current_path.push_str(&component);
 
             let res = self.create_dir(GuestPathBuf::from(current_path.clone()));
             match res {
                 Ok(_) | Err(FsError::AlreadyExist) => {
-                    // Если папка уже есть — это нормально, идем дальше к вложенным
+                    // Если папка уже есть — это нормально, идем дальше к
+                    // вложенным
                 }
                 _ => return res, // Если другая ошибка (нет прав и т.д.) — выходим
             }

@@ -127,9 +127,11 @@ fn sysctl(
     sysctl_generic(
         env,
         |_env| {
-            // Используем INT_MAP для поиска по числовым идентификаторам (name0, name1)
+            // Используем INT_MAP для поиска по числовым идентификаторам (name0,
+            // name1)
             let Some((name_str, val)) = INT_MAP.get(&(name0, name1)) else {
-                // Убираем unimplemented!, чтобы избежать паники, просто логируем и возвращаем ошибку, как в sysctlbyname
+                // Убираем unimplemented!, чтобы избежать паники, просто
+                // логируем и возвращаем ошибку, как в sysctlbyname
                 log!(
                     "sysctl(): unknown parameter [{}, {}], returning -1",
                     name0,

@@ -517,14 +517,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let guest_path = GuestPath::new(&path_str);
 
     // --- ЧЕСТНАЯ РЕАЛИЗАЦИЯ (Без заглушек) ---
-    // По документации Apple: если withIntermediateDirectories == YES и папка уже существует,
-    // метод обязан вернуть YES. Эмулятор больше не будет биться о Read-Only защиту бандла.
+    // По документации Apple: если withIntermediateDirectories == YES и папка
+    // уже существует,
+    // метод обязан вернуть YES. Эмулятор больше не будет биться о Read-Only
+    // защиту бандла.
     if env.fs.exists(guest_path) {
         if env.fs.is_dir(guest_path) {
             if with_intermediates {
                 return true;
             } else {
-                // Если with_intermediates == false, возвращаем NSFileWriteFileExistsError (516)
+                // Если with_intermediates == false, возвращаем
+                // NSFileWriteFileExistsError (516)
                 if !error.is_null() {
                     let domain = get_static_str(env, NSCocoaErrorDomain);
                     let ns_error = msg_class![env; NSError alloc];
@@ -559,7 +562,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         Err(err) => {
             // Мягкий фоллбэк: если папки нет, но игра все равно в наглую лезет
-            // писать в свой Read-Only бандл (частая ошибка в старых играх Gameloft),
+            // писать в свой Read-Only бандл (частая ошибка в старых играх
+            // Gameloft),
             // перехватываем эту ошибку VFS, чтобы избежать краша.
             if let FsError::ReadonlyParentDir = err {
                 log!("Warning: createDirectoryAtPath {} intercepted ReadonlyParentDir, pretending success", path_str);
@@ -631,9 +635,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
 
-    // 2. В виртуальной ФС touchHLE реальных симлинков нет (они либо резолвятся при распаковке,
+    // 2. В виртуальной ФС touchHLE реальных симлинков нет (они либо резолвятся
+    // при распаковке,
     // либо не поддерживаются). По документации Apple, если файл существует,
-    // но НЕ является симлинком, метод возвращает nil и ошибку (обычно код 256 - NSFileReadUnknownError
+    // но НЕ является симлинком, метод возвращает nil и ошибку (обычно код 256 -
+    // NSFileReadUnknownError
     // или POSIX EINVAL 22). Эмулируем этот легальный отказ:
     if !error.is_null() {
         let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -846,7 +852,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return false;
     }
-    // We don't support execution right now, but for compatibility might want to return true for certain files
+    // We don't support execution right now, but for compatibility might want to
+    // return true for certain files
     let path = ns_string::to_rust_string(env, path);
     env.fs.exists(GuestPath::new(&path))
 }
@@ -913,7 +920,8 @@ pub const CLASSES: ClassExports = objc_classes! {
               traverseLink:(bool)_traverse {
     // В старых версиях iOS этот метод просто возвращал словарь с атрибутами.
     // Так как у нас уже есть полноценная реализация атрибутов,
-    // мы честно делегируем вызов в неё, передав null вместо указателя на ошибку.
+    // мы честно делегируем вызов в неё, передав null вместо указателя на
+    // ошибку.
     let error: MutPtr<id> = Ptr::null();
     msg![env; this attributesOfItemAtPath:path error:error]
 }
@@ -950,7 +958,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)setAttributes:(id)attributes
          ofItemAtPath:(id)path
                 error:(MutPtr<id>)error {
-    // Setting attributes is not fully supported, but we claim success if file exists
+    // Setting attributes is not fully supported, but we claim success if file
+    // exists
     let exists: bool = msg![env; this fileExistsAtPath:path];
     if !exists {
         if !error.is_null() {
@@ -1003,7 +1012,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSDirectoryEnumerator: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    // Дефолтная пустышка, реальные данные уже заполняются в твоем enumeratorAtPath:
+    // Дефолтная пустышка, реальные данные уже заполняются в твоем
+    // enumeratorAtPath:
     let host = Box::new(NSDirectoryEnumeratorHostObject {
         iterator: Vec::new().into_iter(),
         base_path: GuestPathBuf::from(GuestPath::new("")),
@@ -1023,7 +1033,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let path_str = path.as_str();
         let base_str = host.base_path.as_str();
 
-        // По документации Apple, NSDirectoryEnumerator возвращает пути относительно базовой директории.
+        // По документации Apple, NSDirectoryEnumerator возвращает пути
+        // относительно базовой директории.
         // Поэтому мы честно отрезаем base_path от начала строки.
         let rel_path = if path_str.starts_with(base_str) {
             let mut stripped = &path_str[base_str.len()..];

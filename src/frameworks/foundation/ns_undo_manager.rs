@@ -30,7 +30,8 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
     - (()) registerUndoWithTarget:(id)target selector:(SEL)selector object:(id)anObject {
         if let Some(stack) = env.framework_state.foundation.ns_undo_manager.stacks.get_mut(&this) {
             stack.push(UndoAction { target, selector, object: anObject });
-            // println!("NSUndoManager: Зарегистрировано действие. Всего в стеке: {}", stack.len());
+            // println!("NSUndoManager: Зарегистрировано действие. Всего в
+            // стеке: {}", stack.len());
         }
     }
 
@@ -47,8 +48,10 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
     - (()) undo {
         if let Some(stack) = env.framework_state.foundation.ns_undo_manager.stacks.get_mut(&this) {
             if let Some(_action) = stack.pop() {
-                // ВАЖНО: Прямой вызов гостевого objc_msgSend из хоста требует настройки CPU.
-                // Пока мы просто извлекаем действие, чтобы эмулятор не паниковал,
+                // ВАЖНО: Прямой вызов гостевого objc_msgSend из хоста требует
+                // настройки CPU.
+                // Пока мы просто извлекаем действие, чтобы эмулятор не
+                // паниковал,
                 // и игра могла продолжить свою работу без вылета.
                 println!("NSUndoManager: Вызван метод undo! (Гостевой вызов пропущен)");
             }

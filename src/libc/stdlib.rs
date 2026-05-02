@@ -33,7 +33,8 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
 
     // =========================================================================
     // FIX: Перехват бага разработчиков игр (Integer Underflow)
-    // Если размер подозрительно огромный (близок к 32-битному лимиту, > 0xF0000000),
+    // Если размер подозрительно огромный (близок к 32-битному лимиту, >
+    // 0xF0000000),
     // это почти наверняка отрицательное число (как -1920 байт для шага экрана).
     // Берем модуль (абсолютное значение), чтобы спасти игру от краша.
     // =========================================================================
@@ -301,8 +302,10 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
     let Some(&value) = env.env_vars.get(name_cstr) else {
-        // Игнорируем предупреждения для известных переменных, отсутствие которых — норма.
-        // MMGC_HEAP_LIMIT и MMGC_HEAP_SOFT_LIMIT ищет Adobe AIR / Flash (Macromedia GC).
+        // Игнорируем предупреждения для известных переменных, отсутствие
+        // которых — норма.
+        // MMGC_HEAP_LIMIT и MMGC_HEAP_SOFT_LIMIT ищет Adobe AIR / Flash
+        // (Macromedia GC).
         // Возвращать NULL для них — это правильное и честное поведение,
         // так как движок сам подставит нужные дефолтные лимиты для iOS.
         if name_str != "LUA_PATH"
@@ -362,14 +365,17 @@ fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
 fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
 
-    // Забираем список функций через mem::take, чтобы избежать проблем с borrow checker,
+    // Забираем список функций через mem::take, чтобы избежать проблем с borrow
+    // checker,
     // так как вызов call_from_host требует мутабельного доступа к env.
     let handlers = std::mem::take(&mut env.libc_state.stdlib.atexit_handlers);
 
-    // По стандарту atexit вызывает функции в обратном порядке (LIFO), поэтому делаем .rev()
+    // По стандарту atexit вызывает функции в обратном порядке (LIFO), поэтому
+    // делаем .rev()
     for func in handlers.into_iter().rev() {
         log_dbg!("Executing atexit handler: {:?}", func);
-        // Вызываем гостевую функцию (она не принимает аргументов и ничего не возвращает)
+        // Вызываем гостевую функцию (она не принимает аргументов и ничего не
+        // возвращает)
         let _: () = func.call_from_host(env, ());
     }
 
@@ -381,7 +387,8 @@ fn exit(env: &mut Environment, exit_code: i32) {
 
 fn abort(_env: &mut Environment) {
     // ИСПРАВЛЕНИЕ ДЛЯ BOX2D: Отключаем краш эмулятора при вызове abort()
-    // echo!("App called abort()! The guest application encountered a fatal error. Ignoring to bypass Box2D crash!");
+    // echo!("App called abort()! The guest application encountered a fatal
+    // error. Ignoring to bypass Box2D crash!");
     std::process::exit(1);
 }
 
@@ -816,7 +823,8 @@ fn _fcvt(
 fn _gcvt(env: &mut Environment, value: f64, ndigit: i32, buf: MutPtr<u8>) -> MutPtr<u8> {
     set_errno(env, 0);
     let ndigit = ndigit.max(0) as usize;
-    // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт Display
+    // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт
+    // Display
     // с указанием точности (количества знаков после запятой).
     let s = format!("{:.*}", ndigit, value);
 

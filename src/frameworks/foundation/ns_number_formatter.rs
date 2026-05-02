@@ -3,7 +3,8 @@
  * License, v. 2.0.
  */
 //!
-//! `NSNumberFormatter` - formats numbers into strings and parses strings into numbers.
+//! `NSNumberFormatter` - formats numbers into strings and parses strings into
+//! numbers.
 
 use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
@@ -112,7 +113,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let rust_string: String;
 
-    // 0 = NoStyle, 1 = DecimalStyle, 2 = CurrencyStyle, 3 = PercentStyle, 4 = ScientificStyle
+    // 0 = NoStyle, 1 = DecimalStyle, 2 = CurrencyStyle, 3 = PercentStyle, 4 =
+    // ScientificStyle
     if style == 2 {
         rust_string = format!("${:.2}", val);
     } else if style == 3 {

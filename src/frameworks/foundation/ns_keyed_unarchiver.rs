@@ -135,7 +135,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_count = plist.get("$objects").and_then(|v| v.as_array()).map_or(0, |a| a.len());
 
-    // 4. Инициализация объекта (borrow_mut вызывается только ПОСЛЕ всех проверок)
+    // 4. Инициализация объекта (borrow_mut вызывается только ПОСЛЕ всех
+    // проверок)
     let host_obj = env.objc.borrow_mut::<NSKeyedUnarchiverHostObject>(this);
     assert!(host_obj.already_unarchived.is_empty());
     assert!(host_obj.current_key.is_none());

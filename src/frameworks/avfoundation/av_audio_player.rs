@@ -560,8 +560,10 @@ fn derive_buffer_size(
     const min_buffer_size: u32 = 0x4000;
 
     // ЧЕСТНЫЙ ФИКС: Защита от деления на ноль.
-    // Если upper bound размера пакета = 0, пытаемся взять размер из дескриптора формата.
-    // Если и там пусто, ставим безопасный дефолт, как это делает настоящий CoreAudio.
+    // Если upper bound размера пакета = 0, пытаемся взять размер из дескриптора
+    // формата.
+    // Если и там пусто, ставим безопасный дефолт, как это делает настоящий
+    // CoreAudio.
     let actual_max_packet_size = if max_packet_size > 0 {
         max_packet_size
     } else if audio_desc.bytes_per_packet > 0 {

@@ -100,9 +100,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
     () = msg![env; this setView:view];
 
-    // Документация Apple: "When instantiating a view controller from a storyboard/nib,
-    // iOS initializes the new view controller by calling its initWithCoder: method instead of this method
-    // and sets the nibName property to a nib file stored inside the storyboard."
+    // Документация Apple: "When instantiating a view controller from a
+    // storyboard/nib,
+    // iOS initializes the new view controller by calling its initWithCoder:
+    // method instead of this method
+    // and sets the nibName property to a nib file stored inside the
+    // storyboard."
     let nib_name_key = get_static_str(env, "UINibName");
     let mut nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
 
@@ -142,7 +145,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if bundle != nil { release(env, bundle); }
     if title != nil { release(env, title); }
     if presented_view_controller != nil { release(env, presented_view_controller); }
-    // presenting_view_controller is a non-retained back-pointer; do not release.
+    // presenting_view_controller is a non-retained back-pointer; do not
+    // release.
     let navigation_item = env.objc.borrow::<UIViewControllerHostObject>(this).navigation_item;
     if navigation_item != nil { release(env, navigation_item); }
 
@@ -158,7 +162,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())loadView {
-    // В этот момент msg![env; this nibName] уже резолвит и применяет правила поиска (см. метод nibName ниже)
+    // В этот момент msg![env; this nibName] уже резолвит и применяет правила
+    // поиска (см. метод nibName ниже)
     let nib_name: id = msg![env; this nibName];
 
     let mut bundle: id = msg![env; this nibBundle];
@@ -178,7 +183,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // "If the view controller does not have an associated nib file, this method creates a plain UIView object instead."
+    // "If the view controller does not have an associated nib file, this method
+    // creates a plain UIView object instead."
     let screen = msg_class![env; UIScreen mainScreen];
     let bounds: CGRect = msg![env; screen bounds];
 

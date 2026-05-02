@@ -13,7 +13,8 @@
 //! call any UTType function directly.
 //!
 //! Without a [crate::dyld::HostDylib] entry for the path
-//! `/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices`,
+//! `/System/Library/Frameworks/MobileCoreServices.framework/`
+//! `MobileCoreServices`,
 //! touchHLE prints a `Warning: app binary depends on unimplemented or missing
 //! dylib …` at startup, which can spook users into reporting otherwise-fine
 //! apps as broken (e.g. HyperHLE appdb report #23, Mutant Fridge).

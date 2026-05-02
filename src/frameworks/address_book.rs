@@ -349,7 +349,8 @@ pub const FUNCTIONS: FunctionExports = &[
 pub const CONSTANTS: ConstantExports = &[
     // ABPerson property IDs. Apple exports these as `CFNumberRef`-wrapped
     // integers via the AddressBook framework, but every caller just uses them
-    // as opaque pointers passed back through ABRecordCopyValue/ABRecordSetValue,
+    // as opaque pointers passed back through
+    // ABRecordCopyValue/ABRecordSetValue,
     // which are stubbed. Publishing them as NullPtr is enough to unblock dyld
     // lookups from apps that reference the property constants at load time.
     ("_kABPersonFirstNameProperty", HostConstant::NullPtr),

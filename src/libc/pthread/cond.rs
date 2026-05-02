@@ -74,9 +74,12 @@ pub fn pthread_cond_init(
     };
     env.mem.write(cond, opaque);
 
-    // ЧЕСТНЫЙ ФИКС: Убираем жесткий assert!(!State::get(env).condition_variables.contains_key(&cond));
-    // Если игра (например, Minecraft PE) переиспользует память без вызова pthread_cond_destroy,
-    // мы не крашим эмулятор, а просто логируем предупреждение и штатно заменяем объект,
+    // ЧЕСТНЫЙ ФИКС: Убираем жесткий
+    // assert!(!State::get(env).condition_variables.contains_key(&cond));
+    // Если игра (например, Minecraft PE) переиспользует память без вызова
+    // pthread_cond_destroy,
+    // мы не крашим эмулятор, а просто логируем предупреждение и штатно заменяем
+    // объект,
     // как это сделала бы настоящая iOS.
     if State::get(env).condition_variables.contains_key(&cond) {
         log_dbg!(
@@ -130,8 +133,10 @@ pub fn pthread_cond_timedwait(
     }
 
     let res = pthread_mutex_unlock(env, mutex);
-    // ЧЕСТНЫЙ ФИКС: Если мьютекс не был заблокирован этим потоком (возвращен EPERM = 1),
-    // мы не паникуем, а возвращаем ошибку обратно в игру, как делает реальная ОС.
+    // ЧЕСТНЫЙ ФИКС: Если мьютекс не был заблокирован этим потоком (возвращен
+    // EPERM = 1),
+    // мы не паникуем, а возвращаем ошибку обратно в игру, как делает реальная
+    // ОС.
     if res != 0 {
         log_dbg!("Warning: pthread_cond_timedwait called with unlocked/invalid mutex, returning error {}", res);
         return res;
@@ -282,7 +287,8 @@ pub fn pthread_cond_destroy(env: &mut Environment, cond: MutPtr<pthread_cond_t>)
     0 // success
 }
 
-/// pthread_cond_timedwait_relative_np — Apple extension with a relative timeout.
+/// pthread_cond_timedwait_relative_np — Apple extension with a relative
+//timeout.
 /// Same stub approach as timedwait in the fork, effectively acting as wait.
 pub fn pthread_cond_timedwait_relative_np(
     env: &mut Environment,
@@ -337,7 +343,8 @@ pub fn pthread_condattr_getpshared(
     0
 }
 
-/// pthread_condattr_setclock — set clock attribute (stub, always CLOCK_REALTIME).
+/// pthread_condattr_setclock — set clock attribute (stub, always
+//CLOCK_REALTIME).
 pub fn pthread_condattr_setclock(
     _env: &mut Environment,
     _attr: MutPtr<pthread_condattr_t>,

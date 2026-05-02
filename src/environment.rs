@@ -314,7 +314,8 @@ impl Environment {
                 let mut result = only_supported; // ← mutable variable for flexible return
 
                 if let Some(dfo) = device_family_override {
-                    // Allow iPhone5 override unconditionally when explicitly requested
+                    // Allow iPhone5 override unconditionally when explicitly
+                    // requested
                     if dfo == DeviceFamily::iPhone5 {
                         result = DeviceFamily::iPhone5; // ← assign, don't return
                     } else if dfo != only_supported {
@@ -326,7 +327,8 @@ impl Environment {
             // iPhone and iPad
             2 => {
                 if let Some(dfo) = device_family_override {
-                    // Allow iPhone5 override unconditionally when explicitly requested
+                    // Allow iPhone5 override unconditionally when explicitly
+                    // requested
                     if dfo == DeviceFamily::iPhone5 {
                         DeviceFamily::iPhone5 // ← direct return works here (last expr in branch)
                     } else {
@@ -1664,14 +1666,16 @@ impl Environment {
                             log_dbg!("Thread {} has completed execution.", self.current_thread);
                             self.threads[self.current_thread].active = false;
 
-                            // Мы должны сменить поток, так как текущий завершился
+                            // Мы должны сменить поток, так как текущий
+                            // завершился
                             let next_thread = self.schedule_next_thread();
                             if next_thread == self.current_thread {
                                 log_no_panic!("All threads exited. Returning to host.");
                                 return ThreadNextAction::ReturnToHost;
                             }
 
-                            // Возвращаемся в цикл (run_inner вызовет yield_thread,
+                            // Возвращаемся в цикл (run_inner вызовет
+                            // yield_thread,
                             // а потом run переключит поток)
                             return ThreadNextAction::Continue;
                         }
@@ -1843,15 +1847,20 @@ impl Environment {
                                 assert!(!host_cond.timed_out.contains(&thread_id));
                                 host_cond.timed_out.insert(thread_id);
 
-                                // FIX 1: Если тред уже был в очереди waking (ему отправили
-                                // сигнал, но он ещё не успел захватить мьютекс),
+                                // FIX 1: Если тред уже был в очереди waking
+                                // (ему отправили
+                                // сигнал, но он ещё не успел захватить
+                                // мьютекс),
                                 // удаляем его оттуда вместо паники.
                                 host_cond.waking.retain(|&t| t != thread_id);
                                 host_cond.waiting.retain(|&t| t != thread_id);
 
-                                // FIX 2: Если мьютекс всё ещё занят другим тредом при
-                                // таймауте, не паникуем, а переводим тред в ожидание
-                                // мьютекса (как в настоящем pthread_cond_timedwait).
+                                // FIX 2: Если мьютекс всё ещё занят другим
+                                // тредом при
+                                // таймауте, не паникуем, а переводим тред в
+                                // ожидание
+                                // мьютекса (как в настоящем
+                                // pthread_cond_timedwait).
                                 if self.mutex_state.mutex_is_locked(mutex) {
                                     log_dbg!(
                                         "Thread {} timed out on cond var {:?} but mutex is locked, blocking on mutex.",
@@ -1866,9 +1875,12 @@ impl Environment {
                                 }
                             } else {
                                 // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ ДЕДЛОКА ---
-                                // Если таймаут еще не вышел, вычисляем остаток времени
-                                // и добавляем его в next_awakening планировщика!
-                                // Теперь эмулятор не упадет, а честно уснет до этого момента.
+                                // Если таймаут еще не вышел, вычисляем остаток
+                                // времени
+                                // и добавляем его в next_awakening
+                                // планировщика!
+                                // Теперь эмулятор не упадет, а честно уснет до
+                                // этого момента.
                                 let remaining = deadline - time;
                                 let awakening = Instant::now() + remaining;
                                 next_awakening = match next_awakening {

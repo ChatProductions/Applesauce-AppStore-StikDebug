@@ -323,7 +323,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         return true;
     }
 
-    // Check if other is an NSDate. Выносим вызов msg_class! в отдельную переменную,
+    // Check if other is an NSDate. Выносим вызов msg_class! в отдельную
+    // переменную,
     // чтобы избежать ошибки парсинга макроса msg!.
     let nsdate_class: id = msg_class![env; NSDate class];
     let is_kind_of_class: bool = msg![env; other isKindOfClass:nsdate_class];

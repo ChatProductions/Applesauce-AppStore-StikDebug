@@ -529,7 +529,8 @@ fn dispatch_main(_env: &mut Environment) {
 // MARK: - Helpers
 
 /// Invoke a GCD block (`void (^)(void)`).
-/// On ARM32 a block is a struct whose second word is the invoke function pointer.
+/// On ARM32 a block is a struct whose second word is the invoke function
+//pointer.
 /// Layout: [isa, flags, reserved, invoke, descriptor, captures...]
 fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);

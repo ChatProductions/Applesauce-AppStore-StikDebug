@@ -4,7 +4,8 @@
  * If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! Quick-and-dirty decoding of miscellaneous formats (MP3, AAC, CAF) to linear PCM.
+//! Quick-and-dirty decoding of miscellaneous formats (MP3, AAC, CAF) to linear
+//! PCM.
 //!
 //! This should be the only module in touchHLE that makes use of [symphonia].
 
@@ -95,7 +96,8 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
             let decoded_packet = match decoder.decode(&packet) {
                 Ok(p) => p,
                 Err(symphonia::core::errors::Error::DecodeError(e)) => {
-                    // Ошибки декодирования (битый фрейм MP3/AAC) можно игнорировать и идти дальше
+                    // Ошибки декодирования (битый фрейм MP3/AAC) можно
+                    // игнорировать и идти дальше
                     log!("Symphonia decode error (recoverable): {:?}", e);
                     continue;
                 }

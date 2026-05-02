@@ -2625,8 +2625,10 @@ impl GLES for GLES1OnGL2<'_> {
         // Desktop GL 2.1 has no shader binary format we can pass through;
         // signal failure via GL_INVALID_ENUM.
         gl21::GetError(); // discard prior error
-                          // GL has no direct way to set INVALID_ENUM, but issuing an invalid
-                          // call achieves it. Easiest: call Enable with an invalid cap.
+                          // GL has no direct way to set INVALID_ENUM, but
+                          // issuing an invalid
+                          // call achieves it. Easiest: call Enable with an
+                          // invalid cap.
         gl21::Enable(0);
     }
 }

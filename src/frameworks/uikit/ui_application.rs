@@ -209,8 +209,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     if *count > 0 {
         *count -= 1;
     } else {
-        // В реальной iOS здесь выбрасывается исключение NSInternalInconsistencyException,
-        // но для стабильности эмулятора мы просто залогируем предупреждение, если игра ошиблась со счетчиком.
+        // В реальной iOS здесь выбрасывается исключение
+        // NSInternalInconsistencyException,
+        // но для стабильности эмулятора мы просто залогируем предупреждение,
+        // если игра ошиблась со счетчиком.
         log!("Warning: endIgnoringInteractionEvents called without matching beginIgnoringInteractionEvents");
     }
 }

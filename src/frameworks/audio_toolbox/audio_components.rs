@@ -240,7 +240,8 @@ fn AudioComponentInstanceNew(
     0
 }
 
-/// Создать AudioUnit instance напрямую (используется из `au_graph::AUGraphOpen`),
+/// Создать AudioUnit instance напрямую (используется из
+//`au_graph::AUGraphOpen`),
 /// минуя обычный путь `AudioComponentInstanceNew`.
 pub fn create_audio_unit_instance(env: &mut Environment) -> AudioComponentInstance {
     let mut host_object = AudioComponentInstanceHostObject::default();

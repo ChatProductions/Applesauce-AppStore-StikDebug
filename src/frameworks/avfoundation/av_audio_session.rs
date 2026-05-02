@@ -255,7 +255,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation AVAudioSession: NSObject
 
 + (id)sharedInstance {
-    // ИСПРАВЛЕНО: Теперь объект действительно работает как синглтон и сохраняет свое состояние
+    // ИСПРАВЛЕНО: Теперь объект действительно работает как синглтон и сохраняет
+    // свое состояние
     if let Some(instance) = env.framework_state.avfoundation.av_audio_session.shared_instance {
         return instance;
     }
@@ -496,7 +497,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setDelegate:(id)delegate {
-    // В Objective-C делегаты обычно хранятся как weak ссылки (без retain/release)
+    // В Objective-C делегаты обычно хранятся как weak ссылки (без
+    // retain/release)
     env.objc.borrow_mut::<AVAudioSessionHostObject>(this).delegate = delegate;
 }
 

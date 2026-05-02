@@ -81,7 +81,8 @@ impl GuestArg for CATransform3D {
     }
 }
 
-// Этот макрос автоматически реализует возврат структуры через скрытый указатель (sret)
+// Этот макрос автоматически реализует возврат структуры через скрытый указатель
+// (sret)
 impl_GuestRet_for_large_struct!(CATransform3D);
 
 impl From<CATransform3D> for Matrix<4> {

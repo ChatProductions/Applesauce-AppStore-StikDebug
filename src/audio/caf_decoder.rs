@@ -20,7 +20,8 @@
 //! References:
 //! - Apple, *Apple Core Audio Format Specification 1.0*, "The Audio Data Chunk"
 //!   <https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_chunks/CAF_chunks.html>
-//! - Apple, *Apple Core Audio Format Specification 1.0*, "The Audio Description Chunk"
+//! - Apple, *Apple Core Audio Format Specification 1.0*, "The Audio Description
+//! Chunk"
 //!   <https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_chunks/CAF_chunks.html#//apple_ref/doc/uid/TP40001862-CH210-SW2>
 //! - Apple, *AudioServicesCreateSystemSoundID*
 //!   <https://developer.apple.com/documentation/audiotoolbox/audioservicescreatesystemsoundid(_:_:)>
@@ -35,7 +36,8 @@ use std::panic::AssertUnwindSafe;
 /// uses so the rest of the audio pipeline can consume it uniformly.
 ///
 /// Currently supported audio data formats inside the CAF container:
-/// - `lpcm` — Linear PCM (8/16/24/32-bit signed integer, big- or little-endian).
+/// - `lpcm` — Linear PCM (8/16/24/32-bit signed integer, big- or
+//little-endian).
 ///   Float PCM is rejected.
 /// - `ima4` — Apple IMA 4:1 ADPCM (mono or stereo).
 ///

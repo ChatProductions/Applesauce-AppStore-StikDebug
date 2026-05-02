@@ -455,7 +455,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             for i in 0..count {
                 let item: id = msg![env; seg_array objectAtIndex:i];
                 retain(env, item);
-                // Сохраняем "сырой" объект, init_visuals сам разберется, строка это или UISegment
+                // Сохраняем "сырой" объект, init_visuals сам разберется, строка
+                // это или UISegment
                 () = msg![env; segments addObject:item];
             }
         }

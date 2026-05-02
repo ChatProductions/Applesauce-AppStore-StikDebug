@@ -28,7 +28,8 @@ struct UINavigationControllerHostObject {
     hides_bars_on_keyboard_appearance: bool,
     /// Whether we hide bars when swiping down (default false).
     hides_bars_on_swipe: bool,
-    /// Whether we hide bars when the tap is in a readable content area (default false).
+    /// Whether we hide bars when the tap is in a readable content area (default
+    //false).
     hides_bars_when_browsing: bool,
 }
 impl_HostObject_with_superclass!(UINavigationControllerHostObject);

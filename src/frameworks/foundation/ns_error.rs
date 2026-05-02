@@ -40,7 +40,8 @@ pub const NSURLErrorBadURL: NSInteger = -1000;
 pub const NSURLErrorTimedOut: NSInteger = -1001;
 pub const NSURLErrorNotConnectedToInternet: NSInteger = -1009;
 
-// UserInfo dictionary keys (as Rust string literals — exported as constants below)
+// UserInfo dictionary keys (as Rust string literals — exported as constants
+// below)
 const KEY_LOCALIZED_DESCRIPTION: &str = "NSLocalizedDescription";
 const KEY_LOCALIZED_FAILURE_REASON: &str = "NSLocalizedFailureReason";
 const KEY_LOCALIZED_RECOVERY_SUGGESTION: &str = "NSLocalizedRecoverySuggestion";

@@ -293,7 +293,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         .inner
         .clone();
     let (mutex, condvar) = &*inner;
-    // Фикс: используем блок, чтобы MutexGuard удалился до того, как 'inner' выйдет из области видимости.
+    // Фикс: используем блок, чтобы MutexGuard удалился до того, как 'inner'
+    // выйдет из области видимости.
     {
         let mut state = condvar
             .wait_while(mutex.lock().unwrap(), |s| s.locked)

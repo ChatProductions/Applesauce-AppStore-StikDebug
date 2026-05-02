@@ -70,7 +70,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             false
         };
         let alternative_form = if get_format_char(&env.mem, format_char_idx) == b'#' {
-            // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix for octal
+            // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix
+            // for octal
             format_char_idx += 1;
             true
         } else {
@@ -197,10 +198,12 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             b'c' => {
                 assert!(!prepend_sign);
 
-                // Если передали %lc, обрабатываем как широкий символ (аналог %C)
+                // Если передали %lc, обрабатываем как широкий символ (аналог
+                // %C)
                 if length_modifier == Some("l") {
                     let c: wchar_t = args.next(env);
-                    // Безопасно парсим, если символ кривой - ставим '?' вместо краша
+                    // Безопасно парсим, если символ кривой - ставим '?' вместо
+                    // краша
                     let ch = char::from_u32(c as u32).unwrap_or('?');
                     write!(&mut res, "{ch}").unwrap();
                 } else {
@@ -219,7 +222,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 // Убрали assert!(length_modifier.is_none());
                 let c: unichar = args.next(env);
                 assert!(pad_char == ' ' && pad_width == 0);
-                // Заменяем .unwrap() на .unwrap_or('?'), чтобы не было паники на невалидном UTF-16!
+                // Заменяем .unwrap() на .unwrap_or('?'), чтобы не было паники
+                // на невалидном UTF-16!
                 let c = char::from_u32(c.into()).unwrap_or('?');
                 write!(&mut res, "{c}").unwrap();
             }
@@ -351,7 +355,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let pad_width = pad_width as usize;
                     let formatted = format!("{}{:o}", prefix, uint);
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(1);
                             write!(&mut res, "0{:0>1$o}", uint, remaining_width).unwrap();
@@ -397,7 +402,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     // TODO
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(2);
                             write!(&mut res, "0x{:0>1$x}", uint, remaining_width).unwrap();
@@ -449,7 +455,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(2);
                             write!(&mut res, "0X{:0>1$X}", uint, remaining_width).unwrap();

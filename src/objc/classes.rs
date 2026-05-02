@@ -453,11 +453,14 @@ impl ObjC {
         if let Some(template) = Self::find_template(name) {
             // We have a template (host implementation) for this class, use it.
             if let Some(superclass_name) = template.superclass {
-                // В реальном Objective-C рантайме классы могут загружаться динамически.
-                // Вместо жесткого падения (assert!), если шаблон суперкласса не найден,
+                // В реальном Objective-C рантайме классы могут загружаться
+                // динамически.
+                // Вместо жесткого падения (assert!), если шаблон суперкласса не
+                // найден,
                 // мы просто логируем это и позволяем рантайму легально создать
                 // UnimplementedClass (или FakeClass) через механизм link_class.
-                // Это честное поведение динамического линкера: иерархия сохраняется!
+                // Это честное поведение динамического линкера: иерархия
+                // сохраняется!
                 if Self::find_template(superclass_name).is_none() {
                     log!("Warning: Host class template {} inherits from missing {}, falling back to dynamic placeholder.", name, superclass_name);
                 }
@@ -514,7 +517,8 @@ impl ObjC {
                     is_metaclass: true,
                 });
             } else {
-                // We don't have a real implementation for this class, use a placeholder.
+                // We don't have a real implementation for this class, use a
+                // placeholder.
                 class_host_object = Box::new(UnimplementedClass {
                     name: name.to_string(),
                     is_metaclass: false,

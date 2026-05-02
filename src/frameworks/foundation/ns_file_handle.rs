@@ -135,7 +135,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())synchronizeFile {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
-    // Causes all in-memory data and attributes of the file represented by the handle to write to permanent storage.
+    // Causes all in-memory data and attributes of the file represented by the
+    // handle to write to permanent storage.
     if posix_io::fsync(env, fd) == -1 {
         log_dbg!("synchronizeFile: fsync failed for fd {}", fd);
     }
@@ -143,7 +144,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())truncateFileAtOffset:(i64)offset {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
-    // Truncates or extends the file represented by the file handle to a specified offset
+    // Truncates or extends the file represented by the file handle to a
+    // specified offset
     if posix_io::ftruncate(env, fd, offset) == -1 {
         panic!("truncateFileAtOffset: failed")
     }

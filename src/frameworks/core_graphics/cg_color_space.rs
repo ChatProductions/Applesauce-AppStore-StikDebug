@@ -214,7 +214,8 @@ fn CGColorSpaceCopyName(env: &mut Environment, cs: CGColorSpaceRef) -> CFStringR
     let ns = ns_string::from_rust_string(env, name.to_string());
     // CFStringRef is toll-free bridged with NSString; autorelease so caller
     // gets a +0 reference (matching real CG behaviour of "Copy" returning +1,
-    // but apps usually don't release it — autorelease is the safe middle ground).
+    // but apps usually don't release it — autorelease is the safe middle
+    // ground).
     crate::objc::autorelease(env, ns)
 }
 

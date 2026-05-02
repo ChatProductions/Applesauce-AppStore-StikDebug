@@ -96,8 +96,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)bundleForClass:(id)_aClass {
-    // Return the main bundle. For single-bundle iPhone apps this is always correct.
-    // A full implementation would look up which bundle contains the given class.
+    // Return the main bundle. For single-bundle iPhone apps this is always
+    // correct.
+    // A full implementation would look up which bundle contains the given
+    // class.
     msg_class![env; NSBundle mainBundle]
 }
 
@@ -530,7 +532,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let dir_str = ns_string::to_rust_string(env, dir_path);
     let rust_dir_path = std::path::Path::new(dir_str.as_ref());
     let mut actual_dir_str = dir_str.clone();
-    // Case-insensitive fallback: если папка не читается напрямую, ищем её у родителя без учёта регистра
+    // Case-insensitive fallback: если папка не читается напрямую, ищем её у
+    // родителя без учёта регистра
     if env.fs.enumerate(crate::fs::GuestPath::new(&dir_str)).is_err() {
         if let (Some(parent), Some(dir_name)) = (rust_dir_path.parent(), rust_dir_path.file_name()) {
             let parent_str = parent.to_str().unwrap_or("");
@@ -545,7 +548,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let array: id = msg_class![env; NSMutableArray array];
 
     // Собираем имена файлов в вектор в отдельном блоке,
-    // чтобы заимствование env.fs освободилось до вызовов msg! / from_rust_string
+    // чтобы заимствование env.fs освободилось до вызовов msg! /
+    // from_rust_string
     let matched_files: Vec<String> = {
         let target_ext = ext_str.as_ref().map(|s| s.to_lowercase());
         match env.fs.enumerate(crate::fs::GuestPath::new(&actual_dir_str)) {
@@ -559,7 +563,8 @@ pub const CLASSES: ClassExports = objc_classes! {
                                 .map(|s| s.to_lowercase());
                             entry_ext.as_ref() == Some(t_ext)
                         } else {
-                            // Если расширение не указано (nil или пустое), возвращаем все файлы
+                            // Если расширение не указано (nil или пустое),
+                            // возвращаем все файлы
                             true
                         }
                     })
@@ -800,7 +805,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         // Attempt to find the [Table].strings file
         let dict_url: id = msg![env; this URLForResource:name withExtension:extension];
         if dict_url == nil {
-            // Log that a translation table is missing (common in many Gamevil ports)
+            // Log that a translation table is missing (common in many Gamevil
+            // ports)
             log_dbg!("Localization table '{}.strings' not found, using fallback",
                 ns_string::to_rust_string(env, name));
             return if value == nil || value == empty_str { key } else { value };
@@ -926,7 +932,8 @@ fn path_for_resource_helper(
     extension: id,
 ) -> id {
     if name == nil {
-        // В реальной iOS метод pathForResource:ofType: при name == nil обязан возвращать nil.
+        // В реальной iOS метод pathForResource:ofType: при name == nil обязан
+        // возвращать nil.
         return nil;
     }
 
@@ -940,7 +947,8 @@ fn path_for_resource_helper(
 
     // Честное поведение iOS: никаких костылей для PvZ.
     // Если name = @"", мы ничего не приклеиваем.
-    // path останется директорией ресурсов (напр. .../ZumaHD.app), что является легальным путем.
+    // path останется директорией ресурсов (напр. .../ZumaHD.app), что является
+    // легальным путем.
     let name_str = ns_string::to_rust_string(env, name);
     if !name_str.is_empty() {
         path = msg![env; path stringByAppendingPathComponent:name];

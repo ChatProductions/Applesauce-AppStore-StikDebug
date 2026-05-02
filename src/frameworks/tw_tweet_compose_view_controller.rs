@@ -79,7 +79,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)addImage:(id)_image {
-    // Сохранение картинки не критично для логики эмулятора, просто возвращаем успешный статус
+    // Сохранение картинки не критично для логики эмулятора, просто возвращаем
+    // успешный статус
     true
 }
 
@@ -102,7 +103,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setCompletionHandler:(id)handler {
-    // В Objective-C блоки всегда должны копироваться (copy), а не просто удерживаться (retain)
+    // В Objective-C блоки всегда должны копироваться (copy), а не просто
+    // удерживаться (retain)
     let copied_handler: id = if handler != nil {
         msg![env;
         handler copy]
@@ -125,7 +127,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let handler = env.objc.borrow::<TWTweetComposeViewControllerHostObject>(this).completion_handler;
     if handler != nil {
-        // Примечание: Для честного вызова Objective-C блока (вместо делегата) из Rust нужно использовать
+        // Примечание: Для честного вызова Objective-C блока (вместо делегата)
+        // из Rust нужно использовать
         // внутреннее FFI эмулятора (вызов указателя функции).
         // Чтобы избежать паник компилятора из-за
         // разницы в версиях touchHLE, мы оставляем логирование.

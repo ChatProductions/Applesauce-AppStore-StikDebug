@@ -30,7 +30,8 @@ impl HostObject for ASIdentifierManagerHostObject {}
 struct ATTrackingManagerHostObject;
 impl HostObject for ATTrackingManagerHostObject {}
 
-// ATTrackingManager authorization status values (ATTrackingManagerAuthorizationStatus)
+// ATTrackingManager authorization status values
+// (ATTrackingManagerAuthorizationStatus)
 pub type ATTrackingManagerAuthorizationStatus = u32;
 pub const ATTrackingManagerAuthorizationStatusNotDetermined: ATTrackingManagerAuthorizationStatus =
     0;
@@ -187,7 +188,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if completion_handler == nil {
         return;
     }
-    // The completion handler is a block: ^(ATTrackingManagerAuthorizationStatus status)
+    // The completion handler is a block: ^(ATTrackingManagerAuthorizationStatus
+    // status)
     // We call it by sending it the __FuncPtr invoke message with the status.
     let status: ATTrackingManagerAuthorizationStatus = ATTrackingManagerAuthorizationStatusDenied;
     // Invoke the block — blocks respond to `invoke` in touchHLE's block model.

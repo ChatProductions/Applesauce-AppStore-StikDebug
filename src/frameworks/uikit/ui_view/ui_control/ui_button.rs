@@ -221,11 +221,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Честно обрабатываем все типы кнопок, чтобы UI работал корректно
     match button_type {
         UIButtonTypeCustom | UIButtonTypeRoundedRect => {
-            // Обычные кнопки. Игра сама настроит их размер, текст и внешний вид.
+            // Обычные кнопки. Игра сама настроит их размер, текст и внешний
+            // вид.
         }
         UIButtonTypeDetailDisclosure | UIButtonTypeInfoLight | UIButtonTypeInfoDark => {
             // Системные Info-кнопки (типы 2, 3 и 4).
-            // Без заглушек: задаём хардкодный размер из оригинальной iOS (18x19),
+            // Без заглушек: задаём хардкодный размер из оригинальной iOS
+            // (18x19),
             // чтобы кнопка физически существовала на экране и ловила тапы.
             let bounds = CGRect {
                 origin: CGPoint { x: 0.0, y: 0.0 },
@@ -420,7 +422,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIButtonHostObject>(this).content_vertical_alignment = alignment;
 }
 
-// MARK: - Edge insets (Hacked to use CGRect for GuestArg/GuestRet compatibility)
+// MARK: - Edge insets (Hacked to use CGRect for GuestArg/GuestRet
+// compatibility)
 
 - (CGRect)contentEdgeInsets {
     let insets = env.objc.borrow::<UIButtonHostObject>(this).content_edge_insets;
