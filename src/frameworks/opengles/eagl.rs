@@ -12,6 +12,7 @@ use crate::frameworks::core_animation::ca_eagl_layer::{
 use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::uikit;
 use crate::gles::gles11_raw as gles11; // constants only
 use crate::gles::gles11_raw::types::*;
 use crate::gles::present::{present_frame, FpsCounter};
@@ -276,6 +277,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)presentRenderbuffer:(NSUInteger)target {
+    // Some games (e.g. Angry Birds 1.0) run their main loop without going
+    // through the NSRunLoop, so handle_events() in the run loop never fires.
+    // Poll and dispatch pending input events here, at the natural per-frame
+    // boundary, so touches always reach the game.
+    if env.current_thread == 0 {
+        env.on_parent_stack_in_coroutine(|window, options| {
+            window.poll_for_events(options);
+        });
+        uikit::handle_events(env);
+    }
+
     // First-frame breadcrumb. presentRenderbuffer is called every frame, so a
     // plain log!() would flood, but the very first call is a key signal that
     // the app actually got past splash/init and is rendering.
