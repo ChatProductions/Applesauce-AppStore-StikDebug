@@ -4,8 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use super::{ns_string, NSRange, NSUInteger};
-use crate::objc::{id, objc_classes, HostObject, ClassExports, NSZonePtr, nil};
+use super::{ns_string, NSRange, NSUInteger, NSNotFound}; // Добавили NSNotFound
+use crate::objc::{id, objc_classes, HostObject, ClassExports, NSZonePtr, nil, autorelease}; // Добавили autorelease
 use crate::Environment;
 use regex::Regex;
 
@@ -14,6 +14,12 @@ struct NSRegularExpressionHostObject {
     regex: Option<Regex>,
 }
 impl HostObject for NSRegularExpressionHostObject {}
+
+/// Хост-объект для хранения результата поиска
+struct NSTextCheckingResultHostObject {
+    ranges: Vec<NSRange>,
+}
+impl HostObject for NSTextCheckingResultHostObject {}
 
 pub const CLASSES: ClassExports = objc_classes! {
     (env, this, _cmd);
@@ -25,11 +31,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
 
-    // - (id)initWithPattern:(NSString *)pattern options:(NSRegularExpressionOptions)options error:(NSError **)error
     - (id)initWithPattern:(id)pattern options:(u32)_options error:(id)_error {
         let pattern_str = ns_string::to_rust_string(env, pattern);
-        
-        // Компилируем реальное регулярное выражение
         let compiled = Regex::new(&pattern_str);
         
         let mut host_obj = env.objc.borrow_mut::<NSRegularExpressionHostObject>(this);
@@ -40,17 +43,51 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
             Err(e) => {
                 log!("NSRegularExpression: failed to compile pattern '{}': {}", pattern_str, e);
-                // В полноценной реализации здесь нужно создавать NSError, но пока возвращаем nil
                 nil
             }
         }
     }
 
-    // Метод для подсчета совпадений (часто используется для проверок)
+    // ИСПРАВЛЕНИЕ: Реализация первого совпадения
+    - (id)firstMatchInString:(id)string options:(u32)_options range:(NSRange)range {
+        let full_text = ns_string::to_rust_string(env, string);
+        let start = range.location as usize;
+        let end = (range.location + range.length) as usize;
+
+        if start > full_text.len() || end > full_text.len() {
+            return nil;
+        }
+
+        let target_text = &full_text[start..end];
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+
+        if let Some(re) = &host_obj.regex {
+            // Используем captures, чтобы поддержать не только всё совпадение, но и скобки
+            if let Some(caps) = re.captures(target_text) {
+                let mut ranges = Vec::new();
+                for i in 0..caps.len() {
+                    if let Some(m) = caps.get(i) {
+                        ranges.push(NSRange {
+                            location: (range.location as usize + m.start()) as NSUInteger,
+                            length: (m.end() - m.start()) as NSUInteger,
+                        });
+                    } else {
+                        ranges.push(NSRange { location: NSNotFound, length: 0 });
+                    }
+                }
+                
+                // Создаем объект результата
+                let result_host = Box::new(NSTextCheckingResultHostObject { ranges });
+                let class = env.objc.get_known_class("NSTextCheckingResult", &mut env.mem);
+                let result = env.objc.alloc_object(class, result_host, &mut env.mem);
+                return autorelease(env, result);
+            }
+        }
+        nil
+    }
+
     - (NSUInteger)numberOfMatchesInString:(id)string options:(u32)_options range:(NSRange)range {
         let full_text = ns_string::to_rust_string(env, string);
-        
-        // Извлекаем подстроку согласно NSRange
         let start = range.location as usize;
         let end = (range.location + range.length) as usize;
         
@@ -66,6 +103,26 @@ pub const CLASSES: ClassExports = objc_classes! {
         } else {
             0
         }
+    }
+
+    @end
+
+    // Вспомогательный класс для возврата результатов
+    @implementation NSTextCheckingResult: NSObject
+
+    - (NSRange)range {
+        let host_obj = env.objc.borrow::<NSTextCheckingResultHostObject>(this);
+        host_obj.ranges.first().cloned().unwrap_or(NSRange { location: NSNotFound, length: 0 })
+    }
+
+    - (NSRange)rangeAtIndex:(NSUInteger)idx {
+        let host_obj = env.objc.borrow::<NSTextCheckingResultHostObject>(this);
+        host_obj.ranges.get(idx as usize).cloned().unwrap_or(NSRange { location: NSNotFound, length: 0 })
+    }
+
+    - (NSUInteger)numberOfRanges {
+        let host_obj = env.objc.borrow::<NSTextCheckingResultHostObject>(this);
+        host_obj.ranges.len() as NSUInteger
     }
 
     @end
