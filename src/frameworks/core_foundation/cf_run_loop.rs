@@ -14,15 +14,15 @@ use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
-use crate::mem::{SafeRead, GuestISize, ConstPtr, MutVoidPtr};
+use crate::mem::{ConstPtr, GuestISize, MutVoidPtr, SafeRead};
 use crate::objc::{id, msg, msg_class, nil, HostObject};
 use crate::Environment;
 
-pub type CFRunLoopRef     = CFTypeRef;
-pub type CFRunLoopMode    = super::cf_string::CFStringRef;
+pub type CFRunLoopRef = CFTypeRef;
+pub type CFRunLoopMode = super::cf_string::CFStringRef;
 pub type CFRunLoopSourceRef = CFTypeRef;
 pub type CFRunLoopObserverRef = CFTypeRef;
-pub type CFRunLoopTimerRef  = CFTypeRef;
+pub type CFRunLoopTimerRef = CFTypeRef;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -50,27 +50,33 @@ pub struct CFRunLoopTimerHostObject {
 impl HostObject for CFRunLoopTimerHostObject {}
 
 // CFRunLoopRunResult
-const kCFRunLoopRunFinished:     i32 = 1;
-const kCFRunLoopRunStopped:      i32 = 2;
-const kCFRunLoopRunTimedOut:     i32 = 3;
+const kCFRunLoopRunFinished: i32 = 1;
+const kCFRunLoopRunStopped: i32 = 2;
+const kCFRunLoopRunTimedOut: i32 = 3;
 const kCFRunLoopRunHandledSource: i32 = 4;
 
 // CFRunLoopActivity flags
 type CFRunLoopActivity = u32;
-const kCFRunLoopEntry:         CFRunLoopActivity = 1 << 0;
-const kCFRunLoopBeforeTimers:  CFRunLoopActivity = 1 << 1;
+const kCFRunLoopEntry: CFRunLoopActivity = 1 << 0;
+const kCFRunLoopBeforeTimers: CFRunLoopActivity = 1 << 1;
 const kCFRunLoopBeforeSources: CFRunLoopActivity = 1 << 2;
 const kCFRunLoopBeforeWaiting: CFRunLoopActivity = 1 << 5;
-const kCFRunLoopAfterWaiting:  CFRunLoopActivity = 1 << 6;
-const kCFRunLoopExit:          CFRunLoopActivity = 1 << 7;
+const kCFRunLoopAfterWaiting: CFRunLoopActivity = 1 << 6;
+const kCFRunLoopExit: CFRunLoopActivity = 1 << 7;
 const kCFRunLoopAllActivities: CFRunLoopActivity = 0x0FFFFFFF;
 
 pub const kCFRunLoopCommonModes: &str = "kCFRunLoopCommonModes";
 pub const kCFRunLoopDefaultMode: &str = "kCFRunLoopDefaultMode";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_kCFRunLoopCommonModes", HostConstant::NSString(kCFRunLoopCommonModes)),
-    ("_kCFRunLoopDefaultMode", HostConstant::NSString(kCFRunLoopDefaultMode)),
+    (
+        "_kCFRunLoopCommonModes",
+        HostConstant::NSString(kCFRunLoopCommonModes),
+    ),
+    (
+        "_kCFRunLoopDefaultMode",
+        HostConstant::NSString(kCFRunLoopDefaultMode),
+    ),
 ];
 
 // MARK: - Helpers
@@ -78,18 +84,23 @@ pub const CONSTANTS: ConstantExports = &[
 fn is_known_mode(env: &mut Environment, mode: CFRunLoopMode) -> bool {
     let default_mode = ns_string::get_static_str(env, kCFRunLoopDefaultMode);
     let common_modes = ns_string::get_static_str(env, kCFRunLoopCommonModes);
-    msg![env; mode isEqualToString:default_mode]
-        || msg![env; mode isEqualToString:common_modes]
+    msg![env; mode isEqualToString:default_mode] || msg![env; mode isEqualToString:common_modes]
 }
 
 // MARK: - Retain / Release
 
 pub fn CFRunLoopRetain(env: &mut Environment, rl: CFRunLoopRef) -> CFRunLoopRef {
-    if !rl.is_null() { CFRetain(env, rl) } else { rl }
+    if !rl.is_null() {
+        CFRetain(env, rl)
+    } else {
+        rl
+    }
 }
 
 pub fn CFRunLoopRelease(env: &mut Environment, rl: CFRunLoopRef) {
-    if !rl.is_null() { CFRelease(env, rl); }
+    if !rl.is_null() {
+        CFRelease(env, rl);
+    }
 }
 
 // MARK: - Accessors
@@ -212,11 +223,17 @@ fn CFRunLoopSourceCreate(
 }
 
 fn CFRunLoopSourceRetain(env: &mut Environment, source: CFRunLoopSourceRef) -> CFRunLoopSourceRef {
-    if !source.is_null() { CFRetain(env, source) } else { source }
+    if !source.is_null() {
+        CFRetain(env, source)
+    } else {
+        source
+    }
 }
 
 fn CFRunLoopSourceRelease(env: &mut Environment, source: CFRunLoopSourceRef) {
-    if !source.is_null() { CFRelease(env, source); }
+    if !source.is_null() {
+        CFRelease(env, source);
+    }
 }
 
 fn CFRunLoopSourceSignal(_env: &mut Environment, _source: CFRunLoopSourceRef) {
@@ -257,8 +274,8 @@ fn CFRunLoopObserverCreate(
     _activities: CFRunLoopActivity,
     _repeats: bool,
     _order: i32,
-    _callout: MutVoidPtr,  // CFRunLoopObserverCallBack
-    _context: MutVoidPtr,  // CFRunLoopObserverContext*
+    _callout: MutVoidPtr, // CFRunLoopObserverCallBack
+    _context: MutVoidPtr, // CFRunLoopObserverContext*
 ) -> CFRunLoopObserverRef {
     log!("CFRunLoopObserverCreate: stubbed, returning null");
     nil
@@ -268,11 +285,17 @@ fn CFRunLoopObserverRetain(
     env: &mut Environment,
     observer: CFRunLoopObserverRef,
 ) -> CFRunLoopObserverRef {
-    if !observer.is_null() { CFRetain(env, observer) } else { observer }
+    if !observer.is_null() {
+        CFRetain(env, observer)
+    } else {
+        observer
+    }
 }
 
 fn CFRunLoopObserverRelease(env: &mut Environment, observer: CFRunLoopObserverRef) {
-    if !observer.is_null() { CFRelease(env, observer); }
+    if !observer.is_null() {
+        CFRelease(env, observer);
+    }
 }
 
 fn CFRunLoopObserverIsValid(_env: &mut Environment, observer: CFRunLoopObserverRef) -> bool {
@@ -290,10 +313,7 @@ fn CFRunLoopObserverGetActivities(
     kCFRunLoopAllActivities
 }
 
-fn CFRunLoopObserverDoesRepeat(
-    _env: &mut Environment,
-    _observer: CFRunLoopObserverRef,
-) -> bool {
+fn CFRunLoopObserverDoesRepeat(_env: &mut Environment, _observer: CFRunLoopObserverRef) -> bool {
     false
 }
 
@@ -313,8 +333,10 @@ fn CFRunLoopAddTimer(
         return;
     }
 
-    // Как сказано в заголовке файла: в touchHLE CFRunLoop и NSRunLoop — это один и тот же тип.
-    // Поэтому мы честно пробрасываем вызов напрямую в NSRunLoop, который умеет работать с таймерами.
+    // Как сказано в заголовке файла: в touchHLE CFRunLoop и NSRunLoop — это
+    // один и тот же тип.
+    // Поэтому мы честно пробрасываем вызов напрямую в NSRunLoop, который умеет
+    // работать с таймерами.
     let _: () = msg![env; rl addTimer:timer forMode:mode];
 }
 
@@ -357,22 +379,27 @@ fn CFRunLoopTimerCreate(
     };
 
     // 3. Выделяем реальный объект, чтобы игра не получила null.
-    // Используем базовый класс NSObject (или если в touchHLE есть NSTimer, то его)
+    // Используем базовый класс NSObject (или если в touchHLE есть NSTimer, то
+    // его)
     let class = env.objc.get_known_class("NSObject", &mut env.mem);
-    
+
     // Возвращаем настоящий валидный указатель на созданный объект
-    env.objc.alloc_object(class, Box::new(host_object), &mut env.mem)
+    env.objc
+        .alloc_object(class, Box::new(host_object), &mut env.mem)
 }
 
-fn CFRunLoopTimerRetain(
-    env: &mut Environment,
-    timer: CFRunLoopTimerRef,
-) -> CFRunLoopTimerRef {
-    if !timer.is_null() { CFRetain(env, timer) } else { timer }
+fn CFRunLoopTimerRetain(env: &mut Environment, timer: CFRunLoopTimerRef) -> CFRunLoopTimerRef {
+    if !timer.is_null() {
+        CFRetain(env, timer)
+    } else {
+        timer
+    }
 }
 
 fn CFRunLoopTimerRelease(env: &mut Environment, timer: CFRunLoopTimerRef) {
-    if !timer.is_null() { CFRelease(env, timer); }
+    if !timer.is_null() {
+        CFRelease(env, timer);
+    }
 }
 
 fn CFRunLoopTimerIsValid(_env: &mut Environment, timer: CFRunLoopTimerRef) -> bool {
@@ -398,10 +425,7 @@ fn CFRunLoopTimerSetNextFireDate(
     log_dbg!("CFRunLoopTimerSetNextFireDate: stubbed");
 }
 
-fn CFRunLoopTimerGetInterval(
-    _env: &mut Environment,
-    _timer: CFRunLoopTimerRef,
-) -> CFTimeInterval {
+fn CFRunLoopTimerGetInterval(_env: &mut Environment, _timer: CFRunLoopTimerRef) -> CFTimeInterval {
     0.0
 }
 

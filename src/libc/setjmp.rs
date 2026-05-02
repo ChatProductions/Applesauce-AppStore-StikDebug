@@ -102,7 +102,7 @@ fn __longjmp(env: &mut Environment, jmp_buf: MutPtr<JmpBuf>, status: u32) {
     longjmp(env, jmp_buf, status)
 }
 
-// Заодно добавим версии с одним подчеркиванием, 
+// Заодно добавим версии с одним подчеркиванием,
 // так как другие игры часто требуют именно их.
 fn _setjmp(env: &mut Environment, jmp_buf: MutPtr<JmpBuf>) -> i32 {
     setjmp(env, jmp_buf)
@@ -113,11 +113,10 @@ fn _longjmp(env: &mut Environment, jmp_buf: MutPtr<JmpBuf>, status: u32) {
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(setjmp(_)), 
+    export_c_func!(setjmp(_)),
     export_c_func!(longjmp(_, _)),
     export_c_func!(__setjmp(_)),
     export_c_func!(__longjmp(_, _)),
     export_c_func!(_setjmp(_)),
     export_c_func!(_longjmp(_, _)),
 ];
-

@@ -54,11 +54,7 @@ fn inet_addr(env: &mut Environment, str: ConstPtr<u8>) -> in_addr_t {
 
 /// `inet_aton` — converts a dotted-decimal string into an `in_addr`.
 /// Returns 1 on success, 0 on failure.
-fn inet_aton(
-    env: &mut Environment,
-    str: ConstPtr<u8>,
-    addr_out: MutPtr<in_addr>,
-) -> i32 {
+fn inet_aton(env: &mut Environment, str: ConstPtr<u8>, addr_out: MutPtr<in_addr>) -> i32 {
     let s = env.mem.cstr_at_utf8(str).unwrap_or_default().to_owned();
     match s.parse::<Ipv4Addr>() {
         Ok(addr) => {
@@ -88,10 +84,7 @@ fn inet_aton(
 /// GuestArg.
 fn inet_ntoa(env: &mut Environment, s_addr: in_addr_t) -> ConstPtr<u8> {
     let octets = s_addr.to_le_bytes();
-    let s = format!(
-        "{}.{}.{}.{}",
-        octets[0], octets[1], octets[2], octets[3]
-    );
+    let s = format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]);
     log_dbg!("inet_ntoa({:#010x}) => {:?}", s_addr, s);
     let bytes = s.as_bytes();
     let buf: MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
@@ -115,10 +108,7 @@ fn inet_ntop(
         x if x == AF_INET => {
             let addr = env.mem.read(src.cast::<in_addr>());
             let octets = addr.s_addr.to_le_bytes();
-            let s = format!(
-                "{}.{}.{}.{}",
-                octets[0], octets[1], octets[2], octets[3]
-            );
+            let s = format!("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]);
             log_dbg!("inet_ntop AF_INET => {:?}", s);
             let bytes = s.as_bytes();
             let len = bytes.len() as u32;
@@ -136,9 +126,7 @@ fn inet_ntop(
             if (s.len() as u32) > size {
                 return ConstPtr::null();
             }
-            env.mem
-                .bytes_at_mut(dst, s.len() as u32)
-                .copy_from_slice(s);
+            env.mem.bytes_at_mut(dst, s.len() as u32).copy_from_slice(s);
             dst.cast_const()
         }
         _ => {
@@ -148,12 +136,7 @@ fn inet_ntop(
     }
 }
 
-fn inet_pton(
-    env: &mut Environment,
-    af: i32,
-    src: ConstPtr<u8>,
-    dst: MutVoidPtr,
-) -> i32 {
+fn inet_pton(env: &mut Environment, af: i32, src: ConstPtr<u8>, dst: MutVoidPtr) -> i32 {
     let s = env.mem.cstr_at_utf8(src).unwrap_or_default().to_owned();
     match af {
         x if x == AF_INET => match s.parse::<Ipv4Addr>() {
@@ -175,10 +158,7 @@ fn inet_pton(
             0
         }
         _ => {
-            log!(
-                "inet_pton: unsupported address family {}, returning -1",
-                af
-            );
+            log!("inet_pton: unsupported address family {}, returning -1", af);
             -1
         }
     }
@@ -279,4 +259,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(inet_makeaddr(_, _)),
     export_c_func!(inet_network(_)),
 ];
-

@@ -14,11 +14,11 @@ use crate::objc::{
 
 pub type ABPersonSortOrdering = u32;
 pub const AB_PERSON_SORT_BY_FIRST_NAME: ABPersonSortOrdering = 0;
-pub const AB_PERSON_SORT_BY_LAST_NAME:  ABPersonSortOrdering = 1;
+pub const AB_PERSON_SORT_BY_LAST_NAME: ABPersonSortOrdering = 1;
 
 pub type ABPersonCompositeNameFormat = u32;
 pub const AB_PERSON_COMPOSITE_NAME_FORMAT_FIRST_NAME_FIRST: ABPersonCompositeNameFormat = 0;
-pub const AB_PERSON_COMPOSITE_NAME_FORMAT_LAST_NAME_FIRST:  ABPersonCompositeNameFormat = 1;
+pub const AB_PERSON_COMPOSITE_NAME_FORMAT_LAST_NAME_FIRST: ABPersonCompositeNameFormat = 1;
 
 // MARK: - Host object
 

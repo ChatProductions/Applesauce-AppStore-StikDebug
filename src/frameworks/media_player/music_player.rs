@@ -20,15 +20,11 @@ pub const MPMediaItemPropertyPersistentID: &str = "persistentID";
 pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMusicPlayerControllerNowPlayingItemDidChangeNotification",
-        HostConstant::NSString(
-            MPMusicPlayerControllerNowPlayingItemDidChangeNotification,
-        ),
+        HostConstant::NSString(MPMusicPlayerControllerNowPlayingItemDidChangeNotification),
     ),
     (
         "_MPMusicPlayerControllerPlaybackStateDidChangeNotification",
-        HostConstant::NSString(
-            MPMusicPlayerControllerPlaybackStateDidChangeNotification,
-        ),
+        HostConstant::NSString(MPMusicPlayerControllerPlaybackStateDidChangeNotification),
     ),
     (
         "_MPMediaItemPropertyPersistentID",

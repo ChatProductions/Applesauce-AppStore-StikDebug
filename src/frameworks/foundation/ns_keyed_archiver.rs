@@ -36,8 +36,7 @@ struct NSKeyedArchiverHostObject {
 }
 impl HostObject for NSKeyedArchiverHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
@@ -267,11 +266,11 @@ fn encode_object(env: &mut Environment, archiver: id, object: id) -> Uid {
                 .borrow_mut::<NSKeyedArchiverHostObject>(archiver)
                 .current_key = previous_key;
         }
-        
+
         // Кэшируем объект, чтобы избежать дубликатов (перенесено из оригинала)
         let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
         host_object.already_archived.insert(object, new_uid);
-        
+
         new_uid
     }
 }

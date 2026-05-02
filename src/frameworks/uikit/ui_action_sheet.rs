@@ -20,7 +20,7 @@ struct UIActionSheetHostObject {
     /// Tag for app use
     tag: i32,
     visible: bool,
-    action_sheet_style: i32
+    action_sheet_style: i32,
 }
 impl HostObject for UIActionSheetHostObject {}
 
@@ -230,24 +230,6 @@ destructiveButtonTitle:(id)destructive_title // NSString*
 }
 
 // MARK: - Dismissal
-
-- (())dismissWithClickedButtonIndex:(NSUInteger)index animated:(bool)_animated {
-    env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;
-
-    let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
-    if delegate == nil {
-        return;
-    }
-
-    // actionSheet:clickedButtonAtIndex:
-    let _: () = msg![env; delegate actionSheet:this clickedButtonAtIndex:index];
-
-    // actionSheet:willDismissWithButtonIndex:
-    let _: () = msg![env; delegate actionSheet:this willDismissWithButtonIndex:index];
-
-    // actionSheet:didDismissWithButtonIndex:
-    let _: () = msg![env; delegate actionSheet:this didDismissWithButtonIndex:index];
-}
 
 - (())dismissWithClickedButtonIndex:(NSUInteger)index animated:(bool)_animated {
     env.objc.borrow_mut::<UIActionSheetHostObject>(this).visible = false;

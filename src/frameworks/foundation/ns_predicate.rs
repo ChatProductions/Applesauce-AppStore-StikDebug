@@ -375,19 +375,15 @@ fn evaluate_predicate(
                 );
                 return false;
             }
-            PredicateKind::Not(p)    => ('n', *p, nil),
+            PredicateKind::Not(p) => ('n', *p, nil),
             PredicateKind::And(a, b) => ('a', *a, *b),
-            PredicateKind::Or(a, b)  => ('o', *a, *b),
+            PredicateKind::Or(a, b) => ('o', *a, *b),
         }
     };
     match kind_snapshot {
         ('n', p, _) => !evaluate_predicate(env, p, object),
-        ('a', a, b) => {
-            evaluate_predicate(env, a, object) && evaluate_predicate(env, b, object)
-        }
-        ('o', a, b) => {
-            evaluate_predicate(env, a, object) || evaluate_predicate(env, b, object)
-        }
+        ('a', a, b) => evaluate_predicate(env, a, object) && evaluate_predicate(env, b, object),
+        ('o', a, b) => evaluate_predicate(env, a, object) || evaluate_predicate(env, b, object),
         _ => false,
     }
 }

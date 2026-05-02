@@ -7,8 +7,10 @@
 
 use crate::audio::openal::{OpenAL, OpenALContext, OpenALManager};
 
-/// Макрос для проверки, является ли аргумент null, и возврата `paramErr` в этом случае.
-/// Похоже, это именно то, что делает настоящий Audio Toolbox, и некоторые приложения полагаются на это.
+/// Макрос для проверки, является ли аргумент null, и возврата `paramErr` в этом
+//случае.
+/// Похоже, это именно то, что делает настоящий Audio Toolbox, и некоторые
+//приложения полагаются на это.
 macro_rules! return_if_null {
     ($param:ident) => {
         if $param.is_null() {

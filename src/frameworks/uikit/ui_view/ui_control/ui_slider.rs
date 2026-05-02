@@ -12,9 +12,7 @@
 use crate::environment::Environment;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::get_static_str;
-use crate::frameworks::uikit::ui_view::ui_control::{
-    send_actions, UIControlEventValueChanged,
-};
+use crate::frameworks::uikit::ui_view::ui_control::{send_actions, UIControlEventValueChanged};
 use crate::objc::{
     id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes, release,
     ClassExports, NSZonePtr,
@@ -64,33 +62,53 @@ fn normalized(value: f32, min: f32, max: f32) -> f32 {
 
 fn layout(env: &mut Environment, this: id) {
     let &UISliderHostObject {
-        value, minimum_value, maximum_value,
-        track_left, track_right, thumb, ..
+        value,
+        minimum_value,
+        maximum_value,
+        track_left,
+        track_right,
+        thumb,
+        ..
     } = env.objc.borrow(this);
 
     let bounds: CGRect = msg![env; this bounds];
     let frac = normalized(value, minimum_value, maximum_value);
 
     let track_start_x = bounds.origin.x + THUMB_RADIUS;
-    let track_end_x   = bounds.origin.x + bounds.size.width - THUMB_RADIUS;
-    let track_width   = (track_end_x - track_start_x).max(0.0);
-    let track_y       = bounds.origin.y + (bounds.size.height - TRACK_HEIGHT) / 2.0;
-    let thumb_cx      = track_start_x + frac * track_width;
+    let track_end_x = bounds.origin.x + bounds.size.width - THUMB_RADIUS;
+    let track_width = (track_end_x - track_start_x).max(0.0);
+    let track_y = bounds.origin.y + (bounds.size.height - TRACK_HEIGHT) / 2.0;
+    let thumb_cx = track_start_x + frac * track_width;
 
     let left_rect = CGRect {
-        origin: CGPoint { x: track_start_x, y: track_y },
-        size:   CGSize  { width: (thumb_cx - track_start_x).max(0.0), height: TRACK_HEIGHT },
+        origin: CGPoint {
+            x: track_start_x,
+            y: track_y,
+        },
+        size: CGSize {
+            width: (thumb_cx - track_start_x).max(0.0),
+            height: TRACK_HEIGHT,
+        },
     };
     let right_rect = CGRect {
-        origin: CGPoint { x: thumb_cx, y: track_y },
-        size:   CGSize  { width: (track_end_x - thumb_cx).max(0.0), height: TRACK_HEIGHT },
+        origin: CGPoint {
+            x: thumb_cx,
+            y: track_y,
+        },
+        size: CGSize {
+            width: (track_end_x - thumb_cx).max(0.0),
+            height: TRACK_HEIGHT,
+        },
     };
     let thumb_rect = CGRect {
         origin: CGPoint {
             x: thumb_cx - THUMB_RADIUS,
             y: bounds.origin.y + (bounds.size.height - THUMB_SIZE) / 2.0,
         },
-        size: CGSize { width: THUMB_SIZE, height: THUMB_SIZE },
+        size: CGSize {
+            width: THUMB_SIZE,
+            height: THUMB_SIZE,
+        },
     };
 
     () = msg![env; track_left  setFrame:left_rect];
@@ -160,9 +178,9 @@ fn init_common(env: &mut Environment, this: id) -> id {
 
     {
         let host = env.objc.borrow_mut::<UISliderHostObject>(this);
-        host.track_left  = track_left;
+        host.track_left = track_left;
         host.track_right = track_right;
-        host.thumb       = thumb;
+        host.thumb = thumb;
     }
 
     () = msg![env; this addSubview:track_left];
@@ -179,8 +197,8 @@ fn init_common(env: &mut Environment, this: id) -> id {
 fn value_from_touch_x(env: &mut Environment, this: id, touch_x: f32) -> f32 {
     let bounds: CGRect = msg![env; this bounds];
     let track_start_x = bounds.origin.x + THUMB_RADIUS;
-    let track_end_x   = bounds.origin.x + bounds.size.width - THUMB_RADIUS;
-    let track_width   = (track_end_x - track_start_x).max(1.0);
+    let track_end_x = bounds.origin.x + bounds.size.width - THUMB_RADIUS;
+    let track_width = (track_end_x - track_start_x).max(1.0);
     let frac = ((touch_x - track_start_x) / track_width).max(0.0).min(1.0);
     let host = env.objc.borrow::<UISliderHostObject>(this);
     host.minimum_value + frac * (host.maximum_value - host.minimum_value)

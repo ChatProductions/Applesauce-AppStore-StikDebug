@@ -91,7 +91,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let length: NSUInteger = msg![env; data length];
     let bytes: ConstVoidPtr = msg![env; data bytes];
-    
+
     // 1. Честная проверка на пустые данные или null-указатель
     if length == 0 || bytes.is_null() {
         log!("Warning: [NSKeyedUnarchiver initForReadingWithData:] called with empty data. Returning nil.");
@@ -126,7 +126,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, this);
         return nil;
     }
-    
+
     if plist.get("$archiver").and_then(|v| v.as_string()) != Some("NSKeyedArchiver") {
         log!("Warning: [NSKeyedUnarchiver initForReadingWithData:] unsupported archiver type.");
         release(env, this);
@@ -135,7 +135,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let key_count = plist.get("$objects").and_then(|v| v.as_array()).map_or(0, |a| a.len());
 
-    // 4. Инициализация объекта (borrow_mut вызывается только ПОСЛЕ всех проверок)
+    // 4. Инициализация объекта (borrow_mut вызывается только ПОСЛЕ всех
+    // проверок)
     let host_obj = env.objc.borrow_mut::<NSKeyedUnarchiverHostObject>(this);
     assert!(host_obj.already_unarchived.is_empty());
     assert!(host_obj.current_key.is_none());

@@ -13,25 +13,25 @@ use crate::objc::{id, msg, objc_classes, ClassExports, HostObject, NSZonePtr};
 /// Host object for NSDateComponents.
 #[derive(Default)]
 pub struct NSDateComponentsHostObject {
-    pub era:        NSInteger,
-    pub year:       NSInteger,
-    pub month:      NSInteger,
-    pub week:       NSInteger,
-    pub day:        NSInteger,
-    pub hour:       NSInteger,
-    pub minute:     NSInteger,
-    pub second:     NSInteger,
+    pub era: NSInteger,
+    pub year: NSInteger,
+    pub month: NSInteger,
+    pub week: NSInteger,
+    pub day: NSInteger,
+    pub hour: NSInteger,
+    pub minute: NSInteger,
+    pub second: NSInteger,
     pub nanosecond: NSInteger,
-    pub weekday:    NSInteger,
-    pub weekday_ordinal:    NSInteger,
-    pub week_of_month:      NSInteger,
-    pub week_of_year:       NSInteger,
+    pub weekday: NSInteger,
+    pub weekday_ordinal: NSInteger,
+    pub week_of_month: NSInteger,
+    pub week_of_year: NSInteger,
     pub year_for_week_of_year: NSInteger,
-    pub quarter:    NSInteger,
+    pub quarter: NSInteger,
     /// `NSCalendar*` — weak (not retained since components are lightweight)
-    pub calendar:   id,
+    pub calendar: id,
     /// `NSTimeZone*`
-    pub time_zone:  id,
+    pub time_zone: id,
 }
 impl HostObject for NSDateComponentsHostObject {}
 
@@ -210,4 +210,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

@@ -10,16 +10,16 @@
 //! - [View Controller Programming Guide for iOS (Legacy)](https://developer.apple.com/library/archive/documentation/WindowsViews/Conceptual/ViewControllerPGforiOSLegacy/BasicViewControllers/BasicViewControllers.html)
 
 use crate::frameworks::core_graphics::CGRect;
-use crate::frameworks::foundation::NSUInteger;
 use crate::frameworks::foundation::ns_objc_runtime::NSStringFromClass;
 use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
+use crate::frameworks::foundation::NSUInteger;
 use crate::frameworks::uikit::ui_application::{
     UIInterfaceOrientation, UIInterfaceOrientationPortrait,
 };
 use crate::frameworks::uikit::ui_view::set_view_controller;
 use crate::objc::{
-    autorelease, id, msg, msg_class, msg_super, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, msg_super, nil, objc_classes, release, retain,
+    todo_objc_setter, Class, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 
@@ -41,9 +41,9 @@ struct UIViewControllerHostObject {
     /// of the nib by name, may be nil.
     /// `NSBundle*`
     bundle: id,
-    title: id,                   // Для хранения строки заголовка
-    parent_view_controller: id,  // Для связи с родительским VC
-    navigation_controller: id,   // Для фикса ошибки "does not respond to selector"
+    title: id,                  // Для хранения строки заголовка
+    parent_view_controller: id, // Для связи с родительским VC
+    navigation_controller: id,  // Для фикса ошибки "does not respond to selector"
     /// Currently presented modal view controller (retained), or `nil`.
     /// `UIViewController*`
     presented_view_controller: id,
@@ -100,12 +100,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let view: id = msg![env; coder decodeObjectForKey:key_ns_string];
     () = msg![env; this setView:view];
 
-    // Документация Apple: "When instantiating a view controller from a storyboard/nib, 
-    // iOS initializes the new view controller by calling its initWithCoder: method instead of this method 
-    // and sets the nibName property to a nib file stored inside the storyboard."
+    // Документация Apple: "When instantiating a view controller from a
+    // storyboard/nib,
+    // iOS initializes the new view controller by calling its initWithCoder:
+    // method instead of this method
+    // and sets the nibName property to a nib file stored inside the
+    // storyboard."
     let nib_name_key = get_static_str(env, "UINibName");
     let mut nib_name: id = msg![env; coder decodeObjectForKey:nib_name_key];
-    
+
     // В старых рантаймах/сторибордах ключ может быть другим
     if nib_name == nil {
         let sb_name_key = get_static_str(env, "UIStoryboardName");
@@ -119,7 +122,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         host_obj.nib_name = nib_name;
         release(env, old_nib_name);
     }
-    
+
     let bundle_key = get_static_str(env, "UIBundleName");
     let bundle: id = msg![env; coder decodeObjectForKey:bundle_key];
     if bundle != nil {
@@ -142,7 +145,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if bundle != nil { release(env, bundle); }
     if title != nil { release(env, title); }
     if presented_view_controller != nil { release(env, presented_view_controller); }
-    // presenting_view_controller is a non-retained back-pointer; do not release.
+    // presenting_view_controller is a non-retained back-pointer; do not
+    // release.
     let navigation_item = env.objc.borrow::<UIViewControllerHostObject>(this).navigation_item;
     if navigation_item != nil { release(env, navigation_item); }
 
@@ -158,19 +162,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())loadView {
-    // В этот момент msg![env; this nibName] уже резолвит и применяет правила поиска (см. метод nibName ниже)
+    // В этот момент msg![env; this nibName] уже резолвит и применяет правила
+    // поиска (см. метод nibName ниже)
     let nib_name: id = msg![env; this nibName];
-    
+
     let mut bundle: id = msg![env; this nibBundle];
     if bundle == nil {
         bundle = msg_class![env; NSBundle mainBundle];
     }
-    
+
     if nib_name != nil {
         let nib: id = msg_class![env; UINib nibWithNibName:nib_name bundle:bundle];
         if nib != nil {
             () = msg![env; nib instantiateWithOwner:this options:nil];
-            
+
             // Если NIB загружен и outlet view инициализирован:
             if env.objc.borrow::<UIViewControllerHostObject>(this).view != nil {
                 return;
@@ -178,10 +183,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    // "If the view controller does not have an associated nib file, this method creates a plain UIView object instead."
+    // "If the view controller does not have an associated nib file, this method
+    // creates a plain UIView object instead."
     let screen = msg_class![env; UIScreen mainScreen];
     let bounds: CGRect = msg![env; screen bounds];
-    
+
     let view = msg_class![env; UIView alloc];
     let view: id = msg![env; view initWithFrame:bounds];
     () = msg![env; this setView:view];
@@ -258,7 +264,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, old_title);
     }
     if title != nil {
-        retain(env, title); 
+        retain(env, title);
     }
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).title = title;
 }
@@ -345,7 +351,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let class: Class = msg![env; this class];
     let class_name: id = NSStringFromClass(env, class);
-    
+
     let resolved = resolve_nib_name_from_class(env, bundle, class_name);
     release(env, class_name);
 
@@ -597,7 +603,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())viewDidAppear:(bool)animated {
     () = msg_super![env; this viewDidAppear:animated];
     log!("[HACK] VideoViewController auto-closing!");
-    
+
     () = msg![env; this dismissModalViewControllerAnimated:false];
     let view: id = msg![env; this view];
     if view != nil {
@@ -612,7 +618,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())viewDidAppear:(bool)animated {
     () = msg_super![env; this viewDidAppear:animated];
     log!("[HACK] BarcodeReaderViewController auto-closing!");
-    
+
     () = msg![env; this dismissModalViewControllerAnimated:false];
     let view: id = msg![env; this view];
     if view != nil {
@@ -632,17 +638,19 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
     let base_name_str = to_rust_string(env, base_name);
     // Перебираем варианты регистра и суффиксов
     let bases = [base_name_str.to_string(), base_name_str.to_lowercase()];
-    let suffixes = ["", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad"];
+    let suffixes = [
+        "", "~iphone", "~ipad", "-iPhone", "-iPad", "_iPhone", "_iPad",
+    ];
     for base in &bases {
         for suffix in &suffixes {
             let candidate = format!("{}{}", base, suffix);
             let candidate_ns: id = from_rust_string(env, candidate);
-            
+
             // Проверяем существование файла
             let path: id = msg![env; bundle pathForResource:candidate_ns ofType:type_];
             if path != nil {
                 release(env, path);
-                return autorelease(env, candidate_ns); 
+                return autorelease(env, candidate_ns);
             }
             release(env, candidate_ns);
         }
@@ -651,12 +659,16 @@ fn check_and_resolve_nib(env: &mut Environment, bundle: id, base_name: id) -> id
 }
 
 fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id) -> id {
-    if class_name == nil { return nil; }
-    
+    if class_name == nil {
+        return nil;
+    }
+
     // 1. Пробуем полное имя класса (напр. MainViewController)
     let res = check_and_resolve_nib(env, bundle, class_name);
-    if res != nil { return res; }
-    
+    if res != nil {
+        return res;
+    }
+
     // 2. Пробуем имя без суффикса "Controller" (напр. MainView)
     let class_str = to_rust_string(env, class_name);
     if class_str.ends_with("Controller") {
@@ -664,8 +676,10 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
         let short_ns = from_rust_string(env, short_name.to_string());
         let res = check_and_resolve_nib(env, bundle, short_ns);
         release(env, short_ns);
-        if res != nil { return res; }
+        if res != nil {
+            return res;
+        }
     }
-    
+
     nil
 }

@@ -40,10 +40,10 @@ pub mod core_video;
 pub mod foundation;
 pub mod game_controller;
 pub mod game_kit;
+pub mod libbz2;
 pub mod libicucore;
 pub mod libsqlite3;
 pub mod libxml2;
-pub mod libbz2;
 pub mod media_player;
 pub mod mobile_core_services;
 pub mod openal;
@@ -62,9 +62,13 @@ pub struct State {
     core_animation: core_animation::State,
     foundation: foundation::State,
     pub game_kit: game_kit::State,
-	pub store_kit: store_kit::State,
+    pub store_kit: store_kit::State,
     media_player: media_player::State,
     openal: openal::State,
     opengles: opengles::State,
     uikit: uikit::State,
 }
+
+/// Container for thread local state of various child modules
+#[derive(Default)]
+pub struct ThreadLocalState {}

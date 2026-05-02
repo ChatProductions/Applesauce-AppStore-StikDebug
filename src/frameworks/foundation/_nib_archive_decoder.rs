@@ -182,8 +182,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGPoint)decodeCGPointForKey:(id)key { // NSString*
     let val = get_value_to_decode_for_key(env, this, key);
-    if val.is_none() { 
-        return CGPoint { x: 0.0, y: 0.0 }; 
+    if val.is_none() {
+        return CGPoint { x: 0.0, y: 0.0 };
     }
     let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
@@ -197,11 +197,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (CGRect)decodeCGRectForKey:(id)key { // NSString*
     let val = get_value_to_decode_for_key(env, this, key);
-    if val.is_none() { 
-        return CGRect { 
-            origin: CGPoint { x: 0.0, y: 0.0 }, 
-            size: CGSize { width: 0.0, height: 0.0 } 
-        }; 
+    if val.is_none() {
+        return CGRect {
+            origin: CGPoint { x: 0.0, y: 0.0 },
+            size: CGSize { width: 0.0, height: 0.0 }
+        };
     }
     let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
@@ -217,7 +217,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         size: CGSize { width, height },
     }
 }
-    
+
 @end
 
 };
@@ -389,4 +389,3 @@ pub fn decode_current_number(env: &mut Environment, unarchiver: id) -> id {
         _ => unimplemented!("decode_current_number: {key}"),
     }
 }
-

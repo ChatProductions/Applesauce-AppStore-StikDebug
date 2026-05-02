@@ -24,73 +24,157 @@ type CFLocaleKey = CFStringRef;
 
 // MARK: - Constants
 
-pub const kCFLocaleIdentifier:        &str = "kCFLocaleIdentifierKey";
-pub const kCFLocaleLanguageCode:      &str = "kCFLocaleLanguageCode";
-pub const kCFLocaleCountryCode:       &str = "kCFLocaleCountryCodeKey";
-pub const kCFLocaleScriptCode:        &str = "kCFLocaleScriptCode";
-pub const kCFLocaleVariantCode:       &str = "kCFLocaleVariantCode";
+pub const kCFLocaleIdentifier: &str = "kCFLocaleIdentifierKey";
+pub const kCFLocaleLanguageCode: &str = "kCFLocaleLanguageCode";
+pub const kCFLocaleCountryCode: &str = "kCFLocaleCountryCodeKey";
+pub const kCFLocaleScriptCode: &str = "kCFLocaleScriptCode";
+pub const kCFLocaleVariantCode: &str = "kCFLocaleVariantCode";
 pub const kCFLocaleCalendarIdentifier: &str = "kCFLocaleCalendarIdentifier";
-pub const kCFLocaleCalendar:          &str = "kCFLocaleCalendar";
+pub const kCFLocaleCalendar: &str = "kCFLocaleCalendar";
 pub const kCFLocaleCollationIdentifier: &str = "kCFLocaleCollationIdentifier";
-pub const kCFLocaleUsesMetricSystem:  &str = "kCFLocaleUsesMetricSystem";
+pub const kCFLocaleUsesMetricSystem: &str = "kCFLocaleUsesMetricSystem";
 pub const kCFLocaleMeasurementSystem: &str = "kCFLocaleMeasurementSystem";
-pub const kCFLocaleDecimalSeparator:  &str = "kCFLocaleDecimalSeparator";
+pub const kCFLocaleDecimalSeparator: &str = "kCFLocaleDecimalSeparator";
 pub const kCFLocaleGroupingSeparator: &str = "kCFLocaleGroupingSeparator";
-pub const kCFLocaleCurrencySymbol:    &str = "kCFLocaleCurrencySymbol";
-pub const kCFLocaleCurrencyCode:      &str = "kCFLocaleCurrencyCode";
+pub const kCFLocaleCurrencySymbol: &str = "kCFLocaleCurrencySymbol";
+pub const kCFLocaleCurrencyCode: &str = "kCFLocaleCurrencyCode";
 pub const kCFLocaleCollatorIdentifier: &str = "kCFLocaleCollatorIdentifier";
 
 // Calendar identifier constants
-pub const kCFGregorianCalendar:       &str = "gregorian";
-pub const kCFBuddhistCalendar:        &str = "buddhist";
-pub const kCFChineseCalendar:         &str = "chinese";
-pub const kCFHebrewCalendar:          &str = "hebrew";
-pub const kCFIslamicCalendar:         &str = "islamic";
-pub const kCFIslamicCivilCalendar:    &str = "islamic-civil";
-pub const kCFJapaneseCalendar:        &str = "japanese";
+pub const kCFGregorianCalendar: &str = "gregorian";
+pub const kCFBuddhistCalendar: &str = "buddhist";
+pub const kCFChineseCalendar: &str = "chinese";
+pub const kCFHebrewCalendar: &str = "hebrew";
+pub const kCFIslamicCalendar: &str = "islamic";
+pub const kCFIslamicCivilCalendar: &str = "islamic-civil";
+pub const kCFJapaneseCalendar: &str = "japanese";
 pub const kCFRepublicOfChinaCalendar: &str = "roc";
-pub const kCFPersianCalendar:         &str = "persian";
-pub const kCFIndianCalendar:          &str = "indian";
-pub const kCFISO8601Calendar:         &str = "iso8601";
+pub const kCFPersianCalendar: &str = "persian";
+pub const kCFIndianCalendar: &str = "indian";
+pub const kCFISO8601Calendar: &str = "iso8601";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_kCFLocaleIdentifier",          HostConstant::NSString(kCFLocaleIdentifier)),
-    ("_kCFLocaleLanguageCode",        HostConstant::NSString(kCFLocaleLanguageCode)),
-    ("_kCFLocaleCountryCode",         HostConstant::NSString(kCFLocaleCountryCode)),
-    ("_kCFLocaleScriptCode",          HostConstant::NSString(kCFLocaleScriptCode)),
-    ("_kCFLocaleVariantCode",         HostConstant::NSString(kCFLocaleVariantCode)),
-    ("_kCFLocaleCalendarIdentifier",  HostConstant::NSString(kCFLocaleCalendarIdentifier)),
-    ("_kCFLocaleCalendar",            HostConstant::NSString(kCFLocaleCalendar)),
-    ("_kCFLocaleCollationIdentifier", HostConstant::NSString(kCFLocaleCollationIdentifier)),
-    ("_kCFLocaleUsesMetricSystem",    HostConstant::NSString(kCFLocaleUsesMetricSystem)),
-    ("_kCFLocaleMeasurementSystem",   HostConstant::NSString(kCFLocaleMeasurementSystem)),
-    ("_kCFLocaleDecimalSeparator",    HostConstant::NSString(kCFLocaleDecimalSeparator)),
-    ("_kCFLocaleGroupingSeparator",   HostConstant::NSString(kCFLocaleGroupingSeparator)),
-    ("_kCFLocaleCurrencySymbol",      HostConstant::NSString(kCFLocaleCurrencySymbol)),
-    ("_kCFLocaleCurrencyCode",        HostConstant::NSString(kCFLocaleCurrencyCode)),
-    ("_kCFLocaleCollatorIdentifier",  HostConstant::NSString(kCFLocaleCollatorIdentifier)),
+    (
+        "_kCFLocaleIdentifier",
+        HostConstant::NSString(kCFLocaleIdentifier),
+    ),
+    (
+        "_kCFLocaleLanguageCode",
+        HostConstant::NSString(kCFLocaleLanguageCode),
+    ),
+    (
+        "_kCFLocaleCountryCode",
+        HostConstant::NSString(kCFLocaleCountryCode),
+    ),
+    (
+        "_kCFLocaleScriptCode",
+        HostConstant::NSString(kCFLocaleScriptCode),
+    ),
+    (
+        "_kCFLocaleVariantCode",
+        HostConstant::NSString(kCFLocaleVariantCode),
+    ),
+    (
+        "_kCFLocaleCalendarIdentifier",
+        HostConstant::NSString(kCFLocaleCalendarIdentifier),
+    ),
+    (
+        "_kCFLocaleCalendar",
+        HostConstant::NSString(kCFLocaleCalendar),
+    ),
+    (
+        "_kCFLocaleCollationIdentifier",
+        HostConstant::NSString(kCFLocaleCollationIdentifier),
+    ),
+    (
+        "_kCFLocaleUsesMetricSystem",
+        HostConstant::NSString(kCFLocaleUsesMetricSystem),
+    ),
+    (
+        "_kCFLocaleMeasurementSystem",
+        HostConstant::NSString(kCFLocaleMeasurementSystem),
+    ),
+    (
+        "_kCFLocaleDecimalSeparator",
+        HostConstant::NSString(kCFLocaleDecimalSeparator),
+    ),
+    (
+        "_kCFLocaleGroupingSeparator",
+        HostConstant::NSString(kCFLocaleGroupingSeparator),
+    ),
+    (
+        "_kCFLocaleCurrencySymbol",
+        HostConstant::NSString(kCFLocaleCurrencySymbol),
+    ),
+    (
+        "_kCFLocaleCurrencyCode",
+        HostConstant::NSString(kCFLocaleCurrencyCode),
+    ),
+    (
+        "_kCFLocaleCollatorIdentifier",
+        HostConstant::NSString(kCFLocaleCollatorIdentifier),
+    ),
     // Calendar identifiers
-    ("_kCFGregorianCalendar",         HostConstant::NSString(kCFGregorianCalendar)),
-    ("_kCFBuddhistCalendar",          HostConstant::NSString(kCFBuddhistCalendar)),
-    ("_kCFChineseCalendar",           HostConstant::NSString(kCFChineseCalendar)),
-    ("_kCFHebrewCalendar",            HostConstant::NSString(kCFHebrewCalendar)),
-    ("_kCFIslamicCalendar",           HostConstant::NSString(kCFIslamicCalendar)),
-    ("_kCFIslamicCivilCalendar",      HostConstant::NSString(kCFIslamicCivilCalendar)),
-    ("_kCFJapaneseCalendar",          HostConstant::NSString(kCFJapaneseCalendar)),
-    ("_kCFRepublicOfChinaCalendar",   HostConstant::NSString(kCFRepublicOfChinaCalendar)),
-    ("_kCFPersianCalendar",           HostConstant::NSString(kCFPersianCalendar)),
-    ("_kCFIndianCalendar",            HostConstant::NSString(kCFIndianCalendar)),
-    ("_kCFISO8601Calendar",           HostConstant::NSString(kCFISO8601Calendar)),
+    (
+        "_kCFGregorianCalendar",
+        HostConstant::NSString(kCFGregorianCalendar),
+    ),
+    (
+        "_kCFBuddhistCalendar",
+        HostConstant::NSString(kCFBuddhistCalendar),
+    ),
+    (
+        "_kCFChineseCalendar",
+        HostConstant::NSString(kCFChineseCalendar),
+    ),
+    (
+        "_kCFHebrewCalendar",
+        HostConstant::NSString(kCFHebrewCalendar),
+    ),
+    (
+        "_kCFIslamicCalendar",
+        HostConstant::NSString(kCFIslamicCalendar),
+    ),
+    (
+        "_kCFIslamicCivilCalendar",
+        HostConstant::NSString(kCFIslamicCivilCalendar),
+    ),
+    (
+        "_kCFJapaneseCalendar",
+        HostConstant::NSString(kCFJapaneseCalendar),
+    ),
+    (
+        "_kCFRepublicOfChinaCalendar",
+        HostConstant::NSString(kCFRepublicOfChinaCalendar),
+    ),
+    (
+        "_kCFPersianCalendar",
+        HostConstant::NSString(kCFPersianCalendar),
+    ),
+    (
+        "_kCFIndianCalendar",
+        HostConstant::NSString(kCFIndianCalendar),
+    ),
+    (
+        "_kCFISO8601Calendar",
+        HostConstant::NSString(kCFISO8601Calendar),
+    ),
 ];
 
 // MARK: - Retain / Release
 
 pub fn CFLocaleRetain(env: &mut Environment, locale: CFLocaleRef) -> CFLocaleRef {
-    if !locale.is_null() { CFRetain(env, locale) } else { locale }
+    if !locale.is_null() {
+        CFRetain(env, locale)
+    } else {
+        locale
+    }
 }
 
 pub fn CFLocaleRelease(env: &mut Environment, locale: CFLocaleRef) {
-    if !locale.is_null() { CFRelease(env, locale); }
+    if !locale.is_null() {
+        CFRelease(env, locale);
+    }
 }
 
 // MARK: - Constructors
@@ -105,7 +189,9 @@ fn CFLocaleCreateCopy(
     _allocator: CFAllocatorRef,
     locale: CFLocaleRef,
 ) -> CFLocaleRef {
-    if locale.is_null() { return nil; }
+    if locale.is_null() {
+        return nil;
+    }
     msg![env; locale copy]
 }
 
@@ -154,7 +240,13 @@ fn CFLocaleCreateCanonicalLanguageIdentifierFromString(
     }
     // Strip country suffix if present: "en_US" → "en".
     let s = ns_string::to_rust_string(env, locale_identifier).into_owned();
-    let lang = s.split('_').next().unwrap_or(&s).split('-').next().unwrap_or(&s);
+    let lang = s
+        .split('_')
+        .next()
+        .unwrap_or(&s)
+        .split('-')
+        .next()
+        .unwrap_or(&s);
     let ns = ns_string::from_rust_string(env, lang.to_string());
     autorelease(env, ns)
 }
@@ -173,7 +265,8 @@ fn CFLocaleCreateComponentsFromLocaleIdentifier(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
     locale_identifier: CFLocaleIdentifier,
-) -> CFTypeRef { // CFDictionaryRef
+) -> CFTypeRef {
+    // CFDictionaryRef
     msg_class![env; NSLocale componentsFromLocaleIdentifier:locale_identifier]
 }
 
@@ -197,11 +290,7 @@ fn CFLocaleGetWindowsLocaleCodeFromLocaleIdentifier(
 
 // MARK: - Value accessors
 
-fn CFLocaleGetValue(
-    env: &mut Environment,
-    locale: CFLocaleRef,
-    key: CFLocaleKey,
-) -> CFTypeRef {
+fn CFLocaleGetValue(env: &mut Environment, locale: CFLocaleRef, key: CFLocaleKey) -> CFTypeRef {
     msg![env; locale objectForKey:key]
 }
 
@@ -213,14 +302,13 @@ fn CFLocaleCopyDisplayNameForPropertyValue(
 ) -> CFStringRef {
     // Delegate to NSLocale displayNameForKey:value:
     let result: id = msg![env; display_locale displayNameForKey:key value:value];
-    if result.is_null() { return nil; }
+    if result.is_null() {
+        return nil;
+    }
     msg![env; result copy]
 }
 
-fn CFLocaleGetIdentifier(
-    env: &mut Environment,
-    locale: CFLocaleRef,
-) -> CFLocaleIdentifier {
+fn CFLocaleGetIdentifier(env: &mut Environment, locale: CFLocaleRef) -> CFLocaleIdentifier {
     msg![env; locale localeIdentifier]
 }
 
@@ -268,4 +356,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFLocaleCopyISOCountryCodes()),
     export_c_func!(CFLocaleCopyISOCurrencyCodes()),
 ];
-

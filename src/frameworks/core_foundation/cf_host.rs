@@ -47,7 +47,9 @@ use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use crate::frameworks::core_foundation::cf_array::{CFArrayAppendValue, CFArrayCreateMutable};
-use crate::frameworks::core_foundation::cf_data::{CFDataCreate, CFDataGetBytePtr, CFDataGetLength};
+use crate::frameworks::core_foundation::cf_data::{
+    CFDataCreate, CFDataGetBytePtr, CFDataGetLength,
+};
 use crate::frameworks::core_foundation::cf_type::CFTypeID;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
@@ -206,11 +208,7 @@ fn alloc_cfhost(
     )
 }
 
-fn write_stream_error(
-    env: &mut Environment,
-    error_ptr: MutPtr<CFStreamError>,
-    err: CFStreamError,
-) {
+fn write_stream_error(env: &mut Environment, error_ptr: MutPtr<CFStreamError>, err: CFStreamError) {
     if !error_ptr.is_null() {
         env.mem.write(error_ptr, err);
     }
@@ -410,11 +408,7 @@ fn CFHostStartInfoResolution(
     result
 }
 
-fn start_addresses(
-    env: &mut Environment,
-    host: CFHostRef,
-    error: MutPtr<CFStreamError>,
-) -> bool {
+fn start_addresses(env: &mut Environment, host: CFHostRef, error: MutPtr<CFStreamError>) -> bool {
     let (name_opt, static_addr) = {
         let h = env.objc.borrow::<CFHostHostObject>(host);
         (h.name.clone(), h.address)
@@ -472,11 +466,7 @@ fn start_addresses(
     }
 }
 
-fn start_names(
-    env: &mut Environment,
-    host: CFHostRef,
-    _error: MutPtr<CFStreamError>,
-) -> bool {
+fn start_names(env: &mut Environment, host: CFHostRef, _error: MutPtr<CFStreamError>) -> bool {
     // Reverse DNS is rarely useful for touchHLE; report the name we were
     // created with, if any, so callers that inspect names don't see nil.
     let (name_opt, addr_opt) = {
@@ -494,11 +484,7 @@ fn start_names(
     true
 }
 
-fn CFHostCancelInfoResolution(
-    env: &mut Environment,
-    host: CFHostRef,
-    info: CFHostInfoType,
-) {
+fn CFHostCancelInfoResolution(env: &mut Environment, host: CFHostRef, info: CFHostInfoType) {
     if host.is_null() {
         return;
     }
@@ -677,11 +663,7 @@ fn CFHostSetClient(
 
 // MARK: - Info accessors
 
-fn CFHostIsInfoResolved(
-    env: &mut Environment,
-    host: CFHostRef,
-    info: CFHostInfoType,
-) -> bool {
+fn CFHostIsInfoResolved(env: &mut Environment, host: CFHostRef, info: CFHostInfoType) -> bool {
     if host.is_null() {
         return false;
     }
@@ -754,10 +736,7 @@ fn CFHostGetNames(
 
     let (resolved_flag, names) = {
         let h = env.objc.borrow::<CFHostHostObject>(host);
-        (
-            h.resolved[kCFHostNames as usize],
-            h.resolved_names.clone(),
-        )
+        (h.resolved[kCFHostNames as usize], h.resolved_names.clone())
     };
 
     if !has_been_resolved.is_null() {
@@ -788,7 +767,8 @@ fn CFHostGetReachability(
         }
         return nil;
     }
-    let resolved_flag = env.objc.borrow::<CFHostHostObject>(host).resolved[kCFHostReachability as usize];
+    let resolved_flag =
+        env.objc.borrow::<CFHostHostObject>(host).resolved[kCFHostReachability as usize];
     if !has_been_resolved.is_null() {
         env.mem.write(has_been_resolved, resolved_flag as u8);
     }

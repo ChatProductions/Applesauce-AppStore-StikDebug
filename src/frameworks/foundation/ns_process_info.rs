@@ -161,7 +161,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; NSString stringWithUTF8String:cstr]
 }
 
-// NSOperatingSystemVersion is {major: NSInteger, minor: NSInteger, patch: NSInteger}.
+// NSOperatingSystemVersion is {major: NSInteger, minor: NSInteger, patch:
+// NSInteger}.
 // We receive it as three stacked guest integers; Objective-C ABI passes structs
 // by value on the stack after the implicit (self, _cmd) arguments, so we model
 // it as three separate NSUInteger parameters here.

@@ -17,8 +17,7 @@ use crate::frameworks::core_foundation::cf_string::{
     CFStringEncoding, CFStringRef,
 };
 use crate::frameworks::foundation::ns_string::{
-    from_rust_string, get_static_str, to_rust_string, NSASCIIStringEncoding,
-    NSUTF8StringEncoding,
+    from_rust_string, get_static_str, to_rust_string, NSASCIIStringEncoding, NSUTF8StringEncoding,
 };
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, MutPtr, Ptr};
@@ -49,7 +48,9 @@ pub const kCFURLComponentFragment: CFURLComponentType = 12;
 
 // Helper function to validate allocator
 fn validate_allocator(env: &mut Environment, allocator: CFAllocatorRef) -> bool {
-    allocator == kCFAllocatorDefault || allocator.is_null() || env.mem.read(allocator).is_system_default()
+    allocator == kCFAllocatorDefault
+        || allocator.is_null()
+        || env.mem.read(allocator).is_system_default()
 }
 
 // MARK: - Retain / Release
@@ -92,7 +93,7 @@ pub fn CFURLGetFileSystemRepresentation(
     } else {
         url
     };
-    
+
     let buffer_size: NSUInteger = buffer_size.try_into().unwrap_or(0);
     msg![env; actual_url getFileSystemRepresentation:buffer maxLength:buffer_size]
 }
@@ -160,10 +161,10 @@ fn CFURLCreateFromFileSystemRepresentationRelativeToBase(
     } else {
         let file_url: id = msg_class![env; NSURL fileURLWithPath:string isDirectory:is_directory];
         // Явное указание типа : id
-        let absolute_string: id = msg![env; file_url absoluteString]; 
+        let absolute_string: id = msg![env; file_url absoluteString];
         msg![env; url initWithString:absolute_string relativeToURL:base_url]
     };
-    
+
     release(env, string);
     res
 }
@@ -207,7 +208,7 @@ fn CFURLCreateWithBytes(
     } else {
         msg![env; url initWithString:string relativeToURL:base_url]
     };
-    
+
     release(env, string);
     res
 }
@@ -248,20 +249,27 @@ fn CFURLCreateAbsoluteURLWithBytes(
     }
 
     // Create the relative URL first
-    let relative_url = CFURLCreateWithBytes(env, allocator, relative_url_bytes, length, encoding, base_url);
+    let relative_url = CFURLCreateWithBytes(
+        env,
+        allocator,
+        relative_url_bytes,
+        length,
+        encoding,
+        base_url,
+    );
     if relative_url.is_null() {
         return nil;
     }
 
     // Get absolute URL
     let absolute_url: id = msg![env; relative_url absoluteURL];
-    
+
     // Retain and release appropriately
     if !absolute_url.is_null() {
         retain(env, absolute_url);
     }
     release(env, relative_url);
-    
+
     // Compatibility mode affects URL parsing - for now we ignore it
     let _ = use_compatibility_mode;
     absolute_url
@@ -336,7 +344,7 @@ fn CFURLCreateWithFileSystemPathRelativeToBase(
     let url_string: id = msg![env; file_url absoluteString];
     let url: id = msg_class![env; NSURL alloc];
     let result = msg![env; url initWithString:url_string relativeToURL:base_url];
-    
+
     release(env, file_url);
     result
 }
@@ -357,7 +365,8 @@ fn CFURLCreateCopyAppendingPathComponent(
     }
 
     // Явное указание типа : id
-    let new_url: id = msg![env; url URLByAppendingPathComponent:path_component isDirectory:is_directory];
+    let new_url: id =
+        msg![env; url URLByAppendingPathComponent:path_component isDirectory:is_directory];
     if new_url.is_null() {
         return nil;
     }
@@ -537,7 +546,7 @@ fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     // Net location is typically host:port
     let host: id = msg![env; url host];
     let port: id = msg![env; url port];
-    
+
     if host.is_null() {
         return nil;
     }
@@ -546,11 +555,11 @@ fn CFURLCopyNetLocation(env: &mut Environment, url: CFURLRef) -> CFStringRef {
         msg![env; host copy]
     } else {
         let port_str: id = msg![env; port stringValue];
-        
+
         let colon = get_static_str(env, ":");
         let host_with_colon: id = msg![env; host stringByAppendingString:colon];
         let net_location: id = msg![env; host_with_colon stringByAppendingString:port_str];
-        
+
         msg![env; net_location copy]
     }
 }
@@ -568,7 +577,11 @@ fn CFURLCopyPath(env: &mut Environment, url: CFURLRef) -> CFStringRef {
     msg![env; path copy]
 }
 
-fn CFURLCopyStrictPath(env: &mut Environment, url: CFURLRef, is_absolute: MutPtr<bool>) -> CFStringRef {
+fn CFURLCopyStrictPath(
+    env: &mut Environment,
+    url: CFURLRef,
+    is_absolute: MutPtr<bool>,
+) -> CFStringRef {
     if url.is_null() {
         return nil;
     }
@@ -594,7 +607,7 @@ fn CFURLCopyResourceSpecifier(env: &mut Environment, url: CFURLRef) -> CFStringR
 
     // Resource specifier is everything after the path (query + fragment)
     let resource_specifier: id = msg![env; url resourceSpecifier];
-    
+
     if resource_specifier.is_null() {
         return nil;
     }
@@ -740,7 +753,7 @@ fn CFURLHasDirectoryPath(env: &mut Environment, url: CFURLRef) -> bool {
     // Note: cannot use `lastPathComponent` here!
     let components: id = msg![env; path pathComponents];
     let count: NSUInteger = msg![env; components count];
-    
+
     if count == 0 {
         return false;
     }
@@ -857,7 +870,7 @@ fn CFURLGetByteRangeForComponent(
             nil
         }
     };
-    
+
     if component_str.is_null() {
         return super::CFRange {
             location: super::kCFNotFound,
@@ -868,7 +881,7 @@ fn CFURLGetByteRangeForComponent(
     // Find the component in the URL string
     use crate::frameworks::foundation::NSRange;
     let range: NSRange = msg![env; url_string rangeOfString:component_str];
-    
+
     if range.location == crate::frameworks::foundation::NSNotFound as NSUInteger {
         return super::CFRange {
             location: super::kCFNotFound,
@@ -880,7 +893,7 @@ fn CFURLGetByteRangeForComponent(
         location: range.location.try_into().unwrap_or(super::kCFNotFound),
         length: range.length.try_into().unwrap_or(0),
     };
-    
+
     // TODO: Include separators if requested
     if !range_incl_separators.is_null() {
         env.mem.write(range_incl_separators, cf_range);
@@ -929,7 +942,10 @@ fn CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
         );
     }
 
-    log!("TODO: Percent escape replacement with encoding {:#x}", encoding);
+    log!(
+        "TODO: Percent escape replacement with encoding {:#x}",
+        encoding
+    );
     CFURLCreateStringByReplacingPercentEscapes(
         env,
         allocator,
@@ -977,8 +993,23 @@ fn CFURLCreateStringByAddingPercentEscapes(
     let is_reserved = |c: char| -> bool {
         matches!(
             c,
-            ':' | '/' | '?' | '#' | '[' | ']' | '@' | '!' | '$' | '&'
-                | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '='
+            ':' | '/'
+                | '?'
+                | '#'
+                | '['
+                | ']'
+                | '@'
+                | '!'
+                | '$'
+                | '&'
+                | '\''
+                | '('
+                | ')'
+                | '*'
+                | '+'
+                | ','
+                | ';'
+                | '='
         )
     };
 
@@ -1032,12 +1063,16 @@ pub const FUNCTIONS: FunctionExports = &[
     // Retain/Release
     export_c_func!(CFURLRetain(_)),
     export_c_func!(CFURLRelease(_)),
-    
     // File System Representation
     export_c_func!(CFURLGetFileSystemRepresentation(_, _, _, _)),
     export_c_func!(CFURLCreateFromFileSystemRepresentation(_, _, _, _)),
-    export_c_func!(CFURLCreateFromFileSystemRepresentationRelativeToBase(_, _, _, _, _)),
-    
+    export_c_func!(CFURLCreateFromFileSystemRepresentationRelativeToBase(
+        _,
+        _,
+        _,
+        _,
+        _
+    )),
     // Creation
     export_c_func!(CFURLCreateWithBytes(_, _, _, _, _)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
@@ -1048,7 +1083,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCreateCopyAppendingPathExtension(_, _, _)),
     export_c_func!(CFURLCreateCopyDeletingLastPathComponent(_, _)),
     export_c_func!(CFURLCreateCopyDeletingPathExtension(_, _)),
-    
     // Copying and Conversion
     export_c_func!(CFURLCopyAbsoluteURL(_)),
     export_c_func!(CFURLCopyFileSystemPath(_, _)),
@@ -1058,7 +1092,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCopyNetLocation(_)),
     export_c_func!(CFURLCopyPath(_)),
     export_c_func!(CFURLCopyStrictPath(_, _)),
-  
     export_c_func!(CFURLCopyResourceSpecifier(_)),
     export_c_func!(CFURLCopyHostName(_)),
     export_c_func!(CFURLCopyUserName(_)),
@@ -1067,7 +1100,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLCopyQueryString(_, _)),
     export_c_func!(CFURLCopyFragment(_, _)),
     export_c_func!(CFURLGetPortNumber(_)),
-    
     // Properties
     export_c_func!(CFURLCanBeDecomposed(_)),
     export_c_func!(CFURLHasDirectoryPath(_)),
@@ -1075,12 +1107,14 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFURLGetString(_)),
     export_c_func!(CFURLGetBytes(_, _, _)),
     export_c_func!(CFURLGetByteRangeForComponent(_, _, _)),
-    
     // Percent Escaping (ИСПРАВЛЕНО КОЛИЧЕСТВО АРГУМЕНТОВ ЗДЕСЬ)
     export_c_func!(CFURLCreateStringByReplacingPercentEscapes(_, _, _)),
-    export_c_func!(CFURLCreateStringByReplacingPercentEscapesUsingEncoding(_, _, _, _)),
+    export_c_func!(CFURLCreateStringByReplacingPercentEscapesUsingEncoding(
+        _,
+        _,
+        _,
+        _
+    )),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
-    
-    // Type Info
-    export_c_func!(CFURLGetTypeID()),
+    // Type Info — CFURLGetTypeID is exported from cf_type; not duplicated.
 ];

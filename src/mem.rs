@@ -14,6 +14,8 @@
 //! Relevant Apple documentation:
 //! * [Memory Usage Performance Guidelines](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/ManagingMemory.html)
 
+use std::num::NonZeroU32;
+
 use crate::libc::wchar::wchar_t;
 
 mod allocator;
@@ -25,6 +27,9 @@ pub type GuestUSize = u32;
 /// Equivalent of `isize` for guest memory.
 pub type GuestISize = i32;
 
+/// Nonzero version of [GuestUSize].
+pub type NonZeroGuestUSize = NonZeroU32;
+
 /// [std::mem::size_of], but returning a [GuestUSize].
 pub const fn guest_size_of<T: Sized>() -> GuestUSize {
     assert!(std::mem::size_of::<T>() <= u32::MAX as usize);
@@ -33,6 +38,9 @@ pub const fn guest_size_of<T: Sized>() -> GuestUSize {
 
 /// Internal type for representing an untyped virtual address.
 type VAddr = GuestUSize;
+
+/// Internal type for representing an untyped virtual address.
+type NonZeroVAddr = NonZeroGuestUSize;
 
 /// Pointer type for guest memory, or the "guest pointer" type.
 ///
@@ -101,6 +109,10 @@ impl<T, const MUT: bool> Ptr<T, MUT> {
     pub fn is_null(self) -> bool {
         self.to_bits() == 0
     }
+
+    pub fn non_null(self) -> Option<NonNullPtr<T>> {
+        NonNullPtr::try_from_bits(self.0)
+    }
 }
 
 impl<T> ConstPtr<T> {
@@ -166,6 +178,79 @@ impl<T, const MUT: bool> std::ops::Sub<GuestUSize> for Ptr<T, MUT> {
 impl<T, const MUT: bool> std::ops::SubAssign<GuestUSize> for Ptr<T, MUT> {
     fn sub_assign(&mut self, rhs: GuestUSize) {
         *self = *self - rhs;
+    }
+}
+
+/// Non-null pointer type for guest memory, similar to [std::ptr::NonNull].
+/// You should use this wrapped in [Option] when storing types instead of
+/// storing null pointers.
+///
+/// You can convert to this type using [Ptr::non_null] (where null pointers
+/// will become [None] and other pointers will becone [Some], and convert back
+/// using [Self::const_ptr] and [Self::mut_ptr].
+#[repr(transparent)]
+pub struct NonNullPtr<T>(NonZeroVAddr, std::marker::PhantomData<T>);
+
+#[allow(unused)]
+pub type NonNullVoidPtr = NonNullPtr<std::ffi::c_void>;
+
+// #[derive(...)] doesn't work for this type because it expects T to have the
+// trait we want implemented
+impl<T> Clone for NonNullPtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for NonNullPtr<T> {}
+impl<T> PartialEq for NonNullPtr<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+impl<T> Eq for NonNullPtr<T> {}
+impl<T> std::hash::Hash for NonNullPtr<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+#[allow(unused)]
+impl<T> NonNullPtr<T> {
+    pub fn to_bits(self) -> VAddr {
+        self.0.into()
+    }
+    pub fn try_from_bits(bits: VAddr) -> Option<Self> {
+        if bits == 0 {
+            None
+        } else {
+            Some(Self(bits.try_into().unwrap(), std::marker::PhantomData))
+        }
+    }
+
+    pub fn from_bits(bits: VAddr) -> Self {
+        Self::try_from_bits(bits).expect("Tried to create a NonNullPtr with a null value!")
+    }
+
+    pub fn cast<U>(self) -> NonNullPtr<U> {
+        NonNullPtr::<U>::try_from_bits(self.to_bits()).unwrap()
+    }
+
+    pub fn cast_void(self) -> NonNullPtr<std::ffi::c_void> {
+        self.cast()
+    }
+
+    pub fn mut_ptr(self) -> MutPtr<T> {
+        MutPtr::from_bits(self.0.into())
+    }
+
+    pub fn const_ptr(self) -> MutPtr<T> {
+        MutPtr::from_bits(self.0.into())
+    }
+}
+
+impl<T> std::fmt::Debug for NonNullPtr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#x}", self.to_bits())
     }
 }
 
@@ -256,10 +341,12 @@ pub struct Mem {
     /// See [crate::Environment] for more info.
     pub(super) zero_memory_on_free: bool,
 
-    /// ХАК: Страница-заглушка для null-page доступов.
-    /// Использует технику NOP-sled: страница заполнена нулями (безопасно для чтения данных/указателей),
-    /// а в самом конце находится инструкция BX LR (0x4770 в Thumb) для безопасного возврата при прямом вызове NULL.
-    /// Это позволяет играм продолжить работу вместо краша на UndefinedInstruction.
+    /// HACK: stub page for null-page accesses.
+    /// Uses NOP-sled: page is filled with zeros (safe for reading
+    /// data/pointers), and at the end has a BX LR instruction
+    /// (0x4770 in Thumb) for a safe return on direct NULL calls.
+    /// This lets games keep running instead of crashing on
+    /// UndefinedInstruction.
     null_stub_page: *mut u8,
 }
 
@@ -269,7 +356,8 @@ impl Drop for Mem {
             crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
             // Освобождаем страницу-заглушку
             if !self.null_stub_page.is_null() {
-                crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize).unwrap();
+                crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize)
+                    .unwrap();
             }
         }
     }
@@ -302,10 +390,11 @@ impl Mem {
         let bytes = ptr as *mut Bytes;
 
         // ХАК: Создаём страницу-заглушку для null-page (4KB)
-        // Используем технику NOP-sled (салазки).
-        // Заполняем страницу нулями, чтобы чтение *(void**)0 возвращало NULL.
-        // Если игра делает прямой вызов NULL: ((void(*)())0)(), процессор выполнит NOP-ы (MOVS R0,R0)
-        // и доскользит до конца страницы, где встретит BX LR и вернется назад.
+        // Use a NOP-sled technique.
+        // Fill the page with zeros so that reading *(void**)0 returns NULL.
+        // If the game calls NULL directly: ((void(*)())0)(), the CPU will
+        // execute NOPs (MOVS R0,R0) and slide to the end of the page, where
+        // it hits BX LR and returns.
         let null_stub_page = unsafe {
             let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
             let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
@@ -423,7 +512,10 @@ impl Mem {
             let offset = (addr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let stub_slice = unsafe {
-                std::slice::from_raw_parts(self.null_stub_page.add(offset), PAGE_SIZE as usize - offset)
+                std::slice::from_raw_parts(
+                    self.null_stub_page.add(offset),
+                    PAGE_SIZE as usize - offset,
+                )
             };
             return Some(&stub_slice[..count_usize.min(stub_slice.len())]);
         }
@@ -497,7 +589,8 @@ impl Mem {
         // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
-            // Для записи в null-page - возвращаем stub-страницу (запись будет проигнорирована)
+            // For writes to null-page, return the stub page (the write
+            // will be silently ignored).
             let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let available = PAGE_SIZE as usize - offset;
@@ -774,4 +867,3 @@ impl Mem {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }
-

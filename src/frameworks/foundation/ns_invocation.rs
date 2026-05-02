@@ -11,8 +11,8 @@ use crate::frameworks::foundation::{NSInteger, NSUInteger};
 use crate::libc::string::strdup;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, objc_msgSend, release, retain, ClassExports, HostObject,
-    NSZonePtr, SEL,
+    autorelease, id, msg, msg_class, nil, objc_classes, objc_msgSend, release, retain,
+    ClassExports, HostObject, NSZonePtr, SEL,
 };
 
 // =========================================================================
@@ -39,7 +39,8 @@ struct NSInvocationHostObject {
     argument_types: Vec<String>,
     target: id,
     selector: Option<SEL>,
-    /// Выделенный буфер для каждого аргумента. Option указывает, был ли аргумент задан через `setArgument:atIndex:`
+    /// Выделенный буфер для каждого аргумента. Option указывает, был ли
+    //аргумент задан через `setArgument:atIndex:`
     arguments: Vec<Option<MutVoidPtr>>,
     arguments_retained: bool,
     /// Объекты, удержанные через `retainArguments`
@@ -78,16 +79,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         let types_str = env.mem.cstr_at_utf8(_types.cast_const().cast()).unwrap_or("");
         let mut parsed_types = Vec::new();
         let mut chars = types_str.chars().peekable();
-        
+
         while let Some(&c) = chars.peek() {
             if c.is_ascii_digit() {
                 chars.next(); // Игнорируем размеры и смещения
                 continue;
             }
-            
+
             let mut current_type = String::new();
-            
-            // Читаем модификаторы (const, in, inout, out, bycopy, byref, oneway) и указатели
+
+            // Читаем модификаторы (const, in, inout, out, bycopy, byref,
+            // oneway) и указатели
             while let Some(&m) = chars.peek() {
                 if "rnNoORV^".contains(m) {
                     current_type.push(chars.next().unwrap());
@@ -95,7 +97,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     break;
                 }
             }
-            
+
             // Читаем основной тип (включая структуры, массивы и объединения)
             if let Some(c) = chars.next() {
                 current_type.push(c);
@@ -123,7 +125,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     }
                 }
             }
-            
+
             if !current_type.is_empty() {
                 parsed_types.push(current_type);
             }
@@ -162,7 +164,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         let bytes = host.return_type.as_bytes();
         let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
         for (i, &b) in bytes.iter().enumerate() {
-            // ИСПРАВЛЕНИЕ E0599: Используем оператор сложения (ptr + i) вместо .offset()
+            // ИСПРАВЛЕНИЕ E0599: Используем оператор сложения (ptr + i) вместо
+            // .offset()
             env.mem.write(ptr + (i as u32), b);
         }
         env.mem.write(ptr + (bytes.len() as u32), 0u8);
@@ -174,7 +177,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)_index {
     let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     let idx = _index as usize;
-    
+
     if idx < host.argument_types.len() {
         if host.argument_type_ptrs[idx].is_none() {
             let bytes = host.argument_types[idx].as_bytes();
@@ -205,13 +208,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let ret_type_str = env.mem.cstr_at_utf8(ret_type_ptr.cast()).unwrap_or("");
     let core_type = ret_type_str.trim_start_matches(|c| "rnNoORV".contains(c));
-    
+
     match core_type.chars().next() {
-        Some('v') => 0, 
-        Some('c') | Some('C') | Some('B') => 1, 
+        Some('v') => 0,
+        Some('c') | Some('C') | Some('B') => 1,
         Some('s') | Some('S') => 2,
         Some('i') | Some('I') | Some('l') | Some('L') | Some('f') => 4,
-        Some('q') | Some('Q') | Some('d') => 8, 
+        Some('q') | Some('Q') | Some('d') => 8,
         Some('@') | Some('#') | Some('*') | Some('^') | Some(':') | Some('?') => 4,
         Some('{') => {
             log!("Warning: methodReturnLength for struct {} not calculated", core_type);
@@ -261,16 +264,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-+ (id)invocationWithMethodSignature:(id)sig { 
++ (id)invocationWithMethodSignature:(id)sig {
     retain(env, sig);
     let num_of_args: NSUInteger = msg![env; sig numberOfArguments];
     let mut argument_types: Vec<String> = Vec::with_capacity(num_of_args as usize);
-    
+
     for i in 0..num_of_args {
         let type_ptr: ConstPtr<u8> = msg![env; sig getArgumentTypeAtIndex:i];
         argument_types.push(env.mem.cstr_at_utf8(type_ptr).unwrap().to_string());
     }
-    
+
     let host_object = Box::new(NSInvocationHostObject {
         sig,
         argument_types,
@@ -514,7 +517,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let sig = env.objc.borrow::<NSInvocationHostObject>(this).sig;
-    
+
     if sig != nil {
         let ret_type: ConstPtr<u8> = msg![env; sig methodReturnType];
         if !ret_type.is_null() {
@@ -527,7 +530,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let mut reg_count = 0;
     let argument_types: &Vec<String> = env.objc.borrow::<NSInvocationHostObject>(this).argument_types.as_ref();
-    
+
     if argument_types.is_empty() {
         reg_count = 2;
     } else {
@@ -541,18 +544,18 @@ pub const CLASSES: ClassExports = objc_classes! {
                 _ if arg_type.starts_with('^') => <MutVoidPtr as GuestArg>::REG_COUNT,
                 // Double/Long Long occupy 2 registers (8 bytes) on 32-bit ARM
                 "q" | "Q" | "d" => 2,
-                _ => <u32 as GuestArg>::REG_COUNT 
+                _ => <u32 as GuestArg>::REG_COUNT
             }
         }
     }
-    
+
     let regs = env.cpu.regs_mut();
     let old_sp = extend_stack_for_args(reg_count, regs);
     let arguments: &Vec<Option<MutVoidPtr>> = env.objc.borrow::<NSInvocationHostObject>(this).arguments.as_ref();
-    
+
     let num_args = std::cmp::max(2, arguments.len());
     let mut reg_offset = 0;
-    
+
     for i in 0..num_args {
         if i == 0 {
             let target = env.objc.borrow::<NSInvocationHostObject>(this).target;
@@ -613,14 +616,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &NSInvocationHostObject { target, selector, .. } = env.objc.borrow::<NSInvocationHostObject>(this);
     objc_msgSend(env, target, selector.unwrap());
 
-    let regs = env.cpu.regs_mut(); 
+    let regs = env.cpu.regs_mut();
     regs[Cpu::SP] = old_sp;
 }
 
 - (())dealloc {
     let &NSInvocationHostObject { sig, target, arguments_retained, .. } = env.objc.borrow::<NSInvocationHostObject>(this);
     release(env, sig);
-    
+
     if arguments_retained {
         release(env, target);
         let retained_objects = std::mem::take(
@@ -639,7 +642,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         assert!(env.objc.borrow::<NSInvocationHostObject>(this).retained_objects.is_empty());
         assert!(env.objc.borrow::<NSInvocationHostObject>(this).copied_strings.is_empty());
     }
-    
+
     for ptr in env.objc.borrow::<NSInvocationHostObject>(this).arguments.iter().flatten() {
         env.mem.free(ptr.cast());
     }
@@ -649,4 +652,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

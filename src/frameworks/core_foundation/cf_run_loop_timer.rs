@@ -101,9 +101,8 @@ fn CFRunLoopTimerInvalidate(env: &mut Environment, timer: CFRunLoopTimerRef) {
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(CFRunLoopTimerCreate(_, _, _, _, _, _, _)),
-    export_c_func!(CFRunLoopAddTimer(_, _, _)),
-    export_c_func!(CFRunLoopTimerInvalidate(_)),
+    // CFRunLoopTimerCreate, CFRunLoopAddTimer and CFRunLoopTimerInvalidate
+    // are exported from cf_run_loop; not duplicated here.
 ];
 
 /// Belongs to _touchHLE_CFTimerTarget

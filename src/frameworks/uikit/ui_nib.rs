@@ -71,7 +71,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle,
         file_owner: nil
     });
-    
+
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
     autorelease(env, new)
 }
@@ -82,7 +82,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         bundle,
         ..
     } = env.objc.borrow(this);
-    
+
     release(env, nib_name);
     release(env, bundle);
     env.objc.dealloc_object(this, &mut env.mem)
@@ -95,7 +95,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
     let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
     let type_: id = get_static_str(env, "nib");
-    
+
     let mut path: id = msg![env; bundle pathForResource:nib_name ofType:type_];
 
     // Фолбэк 1: Имя уже может содержать расширение, ищем без указания типа
@@ -123,21 +123,22 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("Warning: UINib instantiateWithOwner: nib file {:?} not found", to_rust_string(env, nib_name));
         return nil;
     }
-    
+
     let nib_path = to_rust_string(env, path).to_string();
     assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
     env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
-    
+
     let top_level_objects = if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
         let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
         let objects = msg![env; unarchiver decodeObjectForKey:top_level_objects_key];
-        
-        // Удерживаем объекты ДО удаления анрайхиватора, иначе они могут вычиститься
+
+        // Удерживаем объекты ДО удаления анрайхиватора, иначе они могут
+        // вычиститься
         if objects != nil {
             retain(env, objects);
         }
         release(env, unarchiver);
-        
+
         if objects != nil {
             autorelease(env, objects)
         } else {
@@ -146,7 +147,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         nil
     };
-    
+
     env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
     top_level_objects
 }
@@ -159,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
     let id = to_rust_string(env, id_nss);
-    
+
     if id == "IBFilesOwner" {
         let delegate: id = msg![env; coder delegate];
         if delegate != nil {
@@ -168,7 +169,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 return file_owner;
             }
         }
-        
+
         log!("touchHLE Warning: IBFilesOwner requested but file_owner is nil! Returning dummy.");
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
         let dummy: id = msg![env; ns_object_class alloc];
@@ -200,7 +201,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let orig = to_rust_string(env, orig_nss);
 
     log!("[DEBUG NIB] UIClassSwapper loading class: {} (original: {})", name, orig);
-    
+
     // Блок для определения подменного класса без ворнингов на лишний `mut`
     let selected_class = {
         let mut c = env.objc.get_known_class(&name, &mut env.mem);
@@ -208,7 +209,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
             c = env.objc.get_known_class(&orig, &mut env.mem);
         }
-        
+
         let problematic_views = ["FBLoginButton"];
         if c == nil || problematic_views.iter().any(|&prob| name == prob) {
             log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
@@ -223,15 +224,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     let object: id = msg![env; selected_class alloc];
-    
-    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это чисто кастомный плейсхолдер Interface Builder
-    // Инициализация системных UIViewController через 'init' оставляет их сломанными и ведет к NULL-PAGE READ.
+
+    // ВАЖНО: Всегда используем initWithCoder:, кроме тех случаев, когда это
+    // чисто кастомный плейсхолдер Interface Builder
+    // Инициализация системных UIViewController через 'init' оставляет их
+    // сломанными и ведет к NULL-PAGE READ.
     let object: id = if orig == "UICustomObject" {
         msg![env; object init]
     } else {
         msg![env; object initWithCoder:coder]
     };
-    
+
     release(env, this);
     object
 }
@@ -258,7 +261,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, destination);
     retain(env, source);
     retain(env, label);
-    
+
     let host_obj = env.objc.borrow_mut::<UIRuntimeConnectionHostObject>(this);
     host_obj.destination = destination;
     host_obj.label = label;
@@ -286,7 +289,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())connect {
     let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
     let &UIRuntimeEventConnectionHostObject { superclass: _, event_mask } = env.objc.borrow(this);
-    
+
     if source != nil && destination != nil && label != nil {
         let selector = to_rust_string(env, label);
         if let Some(action) = env.objc.lookup_selector(&selector) {
@@ -317,13 +320,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())connect {
     let &UIRuntimeConnectionHostObject { destination, label, source } = env.objc.borrow(this);
-    
+
     if source != nil && destination != nil && label != nil {
         // ЯВНО УКАЗЫВАЕМ ТИП Class, чтобы компилятор не ругался
         let source_class: Class = msg![env; source class];
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
-        
-        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто заглушка NSObject
+
+        // Предотвращаем краш KVC (Key-Value Coding), если source — это просто
+        // заглушка NSObject
         if source_class == ns_object_class {
             let label_str = to_rust_string(env, label);
             log!("touchHLE NIB: Skipping outlet '{}' connection because source is an unhandled NSObject", label_str);
@@ -341,15 +345,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Result<id, ()> {
     let path_str = ns_string::from_rust_string(env, path.as_str().to_string());
     let mut ns_data: id = msg_class![env; NSData dataWithContentsOfFile:path_str];
-    
-    // Если NSData вернул nil (скорее всего путь указывает на директорию), 
+
+    // Если NSData вернул nil (скорее всего путь указывает на директорию),
     // ищем внутри скомпилированный файл keyedobjects.nib
     if ns_data == nil {
         let keyed_path = format!("{}/keyedobjects.nib", path.as_str());
         let keyed_path_str = ns_string::from_rust_string(env, keyed_path);
         ns_data = msg_class![env; NSData dataWithContentsOfFile:keyed_path_str];
     }
-    
+
     // Запасной старый формат - objects.nib
     if ns_data == nil {
         let objects_path = format!("{}/objects.nib", path.as_str());
@@ -363,11 +367,12 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
     };
 
     let len: NSUInteger = msg![env; ns_data length];
-    // Если длина файла достаточна, значит указатель bytes гарантированно существует
+    // Если длина файла достаточна, значит указатель bytes гарантированно
+    // существует
     if len < 10 {
         return Err(());
     }
-    
+
     let bytes: ConstVoidPtr = msg![env; ns_data bytes];
 
     // ... дальше без изменений, начиная с let unarchiver = ...
@@ -384,11 +389,11 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
 
     let objects_key = get_static_str(env, "UINibObjectsKey");
     let objects: id = msg![env; unarchiver decodeObjectForKey:objects_key];
-    
+
     if objects != nil {
         retain(env, objects); // Защита от преждевременного удаления
     }
-    
+
     let conns_key = get_static_str(env, "UINibConnectionsKey");
     let conns: id = msg![env; unarchiver decodeObjectForKey:conns_key];
     if conns != nil {
@@ -428,4 +433,3 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
 
     Ok(unarchiver)
 }
-

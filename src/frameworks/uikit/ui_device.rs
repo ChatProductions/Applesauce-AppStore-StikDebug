@@ -24,26 +24,26 @@ pub const UIDeviceProximityStateDidChangeNotification: &str =
 
 pub type UIDeviceOrientation = NSInteger;
 
-pub const UIDeviceOrientationUnknown:           UIDeviceOrientation = 0;
-pub const UIDeviceOrientationPortrait:          UIDeviceOrientation = 1;
+pub const UIDeviceOrientationUnknown: UIDeviceOrientation = 0;
+pub const UIDeviceOrientationPortrait: UIDeviceOrientation = 1;
 
 pub const UIDeviceOrientationPortraitUpsideDown: UIDeviceOrientation = 2;
-pub const UIDeviceOrientationLandscapeLeft:     UIDeviceOrientation = 3;
-pub const UIDeviceOrientationLandscapeRight:    UIDeviceOrientation = 4;
+pub const UIDeviceOrientationLandscapeLeft: UIDeviceOrientation = 3;
+pub const UIDeviceOrientationLandscapeRight: UIDeviceOrientation = 4;
 
-pub const UIDeviceOrientationFaceUp:            UIDeviceOrientation = 5;
+pub const UIDeviceOrientationFaceUp: UIDeviceOrientation = 5;
 
-pub const UIDeviceOrientationFaceDown:          UIDeviceOrientation = 6;
+pub const UIDeviceOrientationFaceDown: UIDeviceOrientation = 6;
 
 pub type UIDeviceBatteryState = NSInteger;
-pub const UIDeviceBatteryStateUnknown:   UIDeviceBatteryState = 0;
+pub const UIDeviceBatteryStateUnknown: UIDeviceBatteryState = 0;
 pub const UIDeviceBatteryStateUnplugged: UIDeviceBatteryState = 1;
-pub const UIDeviceBatteryStateCharging:  UIDeviceBatteryState = 2;
-pub const UIDeviceBatteryStateFull:      UIDeviceBatteryState = 3;
+pub const UIDeviceBatteryStateCharging: UIDeviceBatteryState = 2;
+pub const UIDeviceBatteryStateFull: UIDeviceBatteryState = 3;
 
 pub type UIUserInterfaceIdiom = NSInteger;
 pub const UIUserInterfaceIdiomPhone: UIUserInterfaceIdiom = 0;
-pub const UIUserInterfaceIdiomPad:   UIUserInterfaceIdiom = 1;
+pub const UIUserInterfaceIdiomPad: UIUserInterfaceIdiom = 1;
 
 #[derive(Default)]
 pub struct State {

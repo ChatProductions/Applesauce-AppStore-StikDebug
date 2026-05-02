@@ -343,9 +343,7 @@ fn safe_local_name(name_bytes: &[u8]) -> String {
 
 /// Safely decode text from a Text event, returning None on failure.
 fn safe_decode_text(e: &quick_xml::events::BytesText<'_>) -> Option<String> {
-    e.decode()
-        .ok()
-        .map(|cow| cow.to_string())
+    e.decode().ok().map(|cow| cow.to_string())
 }
 
 /// Build an NSDictionary from XML element attributes, gracefully skipping
@@ -399,4 +397,4 @@ fn make_parse_error(env: &mut Environment, code: i32, message: String) -> id {
                                                     userInfo:user_info];
     retain(env, error);
     error
-                }
+}

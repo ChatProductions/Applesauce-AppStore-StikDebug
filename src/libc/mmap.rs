@@ -9,7 +9,7 @@ use crate::environment::Environment;
 use crate::export_c_func;
 use crate::libc::errno::{set_errno, EINVAL, ENOTSUP};
 use crate::libc::posix_io;
-use crate::libc::posix_io::{off_t, FileDescriptor, SEEK_SET, open_direct};
+use crate::libc::posix_io::{off_t, open_direct, FileDescriptor, SEEK_SET};
 use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
 use std::collections::HashMap;
 
@@ -51,14 +51,15 @@ fn mmap(
 
     if (flags & MAP_ANON) != 0 {
         assert!(ptr.to_bits() & PAGE_SIZE_ALIGN_MASK == 0);
-        
+
         // Убираем жесткие assert_eq!(fd, -1) и assert_eq!(offset, 0).
-        // В реальной iOS/Darwin при наличии флага MAP_ANON аргументы fd и offset 
+        // В реальной iOS/Darwin при наличии флага MAP_ANON аргументы fd и
+        // offset
         // просто игнорируются ОС. Движки вроде Adobe AIR передают сюда мусор.
         if fd != -1 || offset != 0 {
             log_dbg!("Warning: mmap MAP_ANON called with fd={} and offset={}. Ignoring them as per OS behavior.", fd, offset);
         }
-        
+
         if !addr.is_null() {
             log!(
                 "Warning: mmap MAP_ANON ignoring hint for address {:?}, actual is {:?}",
@@ -73,7 +74,7 @@ fn mmap(
         assert_eq!(new_offset, offset);
 
         let read = posix_io::read(env, fd, ptr, len);
-        assert_eq!(read as u32, len); 
+        assert_eq!(read as u32, len);
     }
 
     assert!(!env.libc_state.mmap.allocations.contains_key(&ptr));
@@ -93,7 +94,7 @@ fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
         log!("Warning: munmap({:?}, {}) failed, returning -1", addr, len);
         return -1;
     }
-    
+
     assert_eq!(*env.libc_state.mmap.allocations.get(&addr).unwrap(), len);
     env.mem.free(addr);
     env.libc_state.mmap.allocations.remove(&addr);
@@ -112,7 +113,7 @@ fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, mode: u32) ->
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or("<invalid>");
     log_dbg!("shm_open({:?}, {:#x}, {:#x})", name_str, oflag, mode);
 
-    // Используем open_direct! Параметр mode для эмулятора здесь не нужен, 
+    // Используем open_direct! Параметр mode для эмулятора здесь не нужен,
     // поэтому просто передаем env, name и oflag.
     open_direct(env, name, oflag)
 }

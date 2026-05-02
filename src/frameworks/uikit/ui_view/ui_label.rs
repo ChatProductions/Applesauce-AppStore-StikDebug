@@ -20,6 +20,8 @@ use crate::objc::{
     retain, todo_objc_setter, ClassExports, NSZonePtr,
 };
 
+type UIBaselineAdjustment = NSInteger;
+
 pub struct UILabelHostObject {
     superclass: super::UIViewHostObject,
     text: id,
@@ -197,7 +199,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setShadowColor:(id)color { todo_objc_setter!(this, color); }
-- (())setBaselineAdjustment:(id)adj { todo_objc_setter!(this, adj); }
 - (())setShadowOffset:(CGSize)value { todo_objc_setter!(this, value); }
 - (())setOpaque:(bool)_opaque { }
 
@@ -219,6 +220,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setNeedsDisplay];
 }
 
+- (())setBaselineAdjustment:(UIBaselineAdjustment)value {
+    log!("TODO: [(UILabel*) {:?} setBaselineAdjustment:{}]", this, value);
+}
+
+- (())sizeToFit {
+    log!("TODO: [UILabel*) {:?} sizeToFit]", this);
+}
+
 - (())drawRect:(CGRect)_rect {
     let bounds: CGRect = msg![env; this bounds];
     let context = UIGraphicsGetCurrentContext(env);
@@ -228,7 +237,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = env.objc.borrow_mut(this);
 
     if text == nil || font == nil || text_color == nil { return; }
-    
+
     let len: NSUInteger = msg![env; text length];
     if len == 0 { return; }
 

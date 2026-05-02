@@ -5,10 +5,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crate::objc::{
-    id, msg, msg_class, objc_classes, ClassExports, NSZonePtr, HostObject
-};
 use crate::frameworks::foundation::ns_string::get_static_str;
+use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, HostObject, NSZonePtr};
 use crate::Environment;
 
 pub struct NSMetadataQueryHostObject {
@@ -24,8 +22,7 @@ impl Default for NSMetadataQueryHostObject {
     }
 }
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
     (env, this, _cmd);
 
     @implementation NSMetadataQuery: NSObject
@@ -35,20 +32,21 @@ pub const CLASSES: ClassExports = objc_classes!
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
 
-    // Метод - (id)init удален, так как базовый NSObject уже 
-    // предоставляет стандартную инициализацию, и нам не нужно 
+    // Метод - (id)init удален, так как базовый NSObject уже
+    // предоставляет стандартную инициализацию, и нам не нужно
     // конфликтовать с ключевым словом super.
 
     - (())setSearchScopes:(id)_scopes {}
-    
+
     - (())setPredicate:(id)_predicate {}
-    
+
     - (())setSortDescriptors:(id)_descriptors {}
 
     - (bool)startQuery {
         env.objc.borrow_mut::<NSMetadataQueryHostObject>(this).is_started = true;
-        
-        // Полноценная логика: после "поиска" файлов мы должны уведомить систему, 
+
+        // Полноценная логика: после "поиска" файлов мы должны уведомить
+        // систему,
         // что сбор данных завершен.
         // Так игра поймет, что можно проверять результаты.
         let notification_center: id = msg_class![env; NSNotificationCenter defaultCenter];
@@ -63,7 +61,7 @@ pub const CLASSES: ClassExports = objc_classes!
     }
 
     - (())disableUpdates {}
-    
+
     - (())enableUpdates {}
 
     - (id)results {

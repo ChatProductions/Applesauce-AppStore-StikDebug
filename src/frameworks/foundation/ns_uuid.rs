@@ -31,7 +31,9 @@ impl UuidBytes {
         let mut state = seed as u64 ^ 0x9e3779b97f4a7c15;
         let mut bytes = [0u8; 16];
         for b in &mut bytes {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             *b = (state >> 33) as u8;
         }
 
@@ -48,7 +50,10 @@ impl UuidBytes {
     pub fn from_string(s: &str) -> Option<Self> {
         let s = s.trim();
         // Accept with or without braces: {xxxxxxxx-...} or xxxxxxxx-...
-        let s = s.strip_prefix('{').and_then(|s| s.strip_suffix('}')).unwrap_or(s);
+        let s = s
+            .strip_prefix('{')
+            .and_then(|s| s.strip_suffix('}'))
+            .unwrap_or(s);
         // Remove dashes and parse 32 hex digits.
         let hex: String = s.chars().filter(|&c| c != '-').collect();
         if hex.len() != 32 {
@@ -110,7 +115,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Constructors
 // =========================================================================
 
-// ИСПРАВЛЕНИЕ: заменили `///` на `//` внутри макроса, чтобы не генерировался атрибут #[doc...]
+// ИСПРАВЛЕНИЕ: заменили `///` на `//` внутри макроса, чтобы не генерировался
+// атрибут #[doc...]
 // `+UUID` — convenience constructor returning a new random UUID.
 + (id)UUID {
     let new: id = msg![env; this alloc];

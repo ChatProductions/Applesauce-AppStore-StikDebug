@@ -18,14 +18,10 @@ use std::sync::Mutex;
 
 // === atexit / finalize ===
 
-static ATEXIT_HANDLERS: Mutex<Vec<(GuestFunction, MutVoidPtr, MutVoidPtr)>> = Mutex::new(Vec::new());
+static ATEXIT_HANDLERS: Mutex<Vec<(GuestFunction, MutVoidPtr, MutVoidPtr)>> =
+    Mutex::new(Vec::new());
 
-fn __cxa_atexit(
-    _env: &mut Environment,
-    func: GuestFunction,
-    p: MutVoidPtr,
-    d: MutVoidPtr,
-) -> i32 {
+fn __cxa_atexit(_env: &mut Environment, func: GuestFunction, p: MutVoidPtr, d: MutVoidPtr) -> i32 {
     if let Ok(mut handlers) = ATEXIT_HANDLERS.lock() {
         handlers.push((func, p, d));
         0
@@ -144,8 +140,7 @@ fn unwind_to_app_frame(env: &mut Environment) -> bool {
             regs[FRAME_POINTER] = prev_fp;
             regs[Cpu::SP] = fp + 8;
             regs[0] = 0;
-            env.cpu
-                .branch(GuestFunction::from_addr_with_thumb_bit(lr));
+            env.cpu.branch(GuestFunction::from_addr_with_thumb_bit(lr));
             return true;
         }
         fp = prev_fp;
@@ -172,12 +167,7 @@ fn __cxa_free_exception(_env: &mut Environment, _thrown: MutVoidPtr) {
     // Leak — see comment above.
 }
 
-fn __cxa_throw(
-    env: &mut Environment,
-    _exc: MutVoidPtr,
-    tinfo: ConstVoidPtr,
-    _dtor: GuestFunction,
-) {
+fn __cxa_throw(env: &mut Environment, _exc: MutVoidPtr, tinfo: ConstVoidPtr, _dtor: GuestFunction) {
     // Itanium type_info layout (32-bit):
     //   +0  vptr
     //   +4  const char *name

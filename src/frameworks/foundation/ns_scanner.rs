@@ -138,11 +138,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let NSScannerHostObject { to_be_skipped: _set, string, len, pos } = env.objc.borrow::<NSScannerHostObject>(this).clone();
     if pos >= len { return false; }
-    
+
     let susbstring: id = msg![env; string substringFromIndex:pos];
     // Исправлено: добавлено '_', чтобы избежать ошибки unused variable
     let _tmp = to_rust_string(env, susbstring);
-    
+
     // TODO: Implement actual hex scanning
     env.mem.write(result, 0);
     false
@@ -355,4 +355,3 @@ fn skip_characters(env: &mut Environment, scanner: id) {
     }
     env.objc.borrow_mut::<NSScannerHostObject>(scanner).pos = pos;
 }
-

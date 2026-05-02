@@ -90,25 +90,55 @@ impl GLES for GLES1Native<'_> {
     }
 
     // Generic state manipulation
-    unsafe fn GetError(&mut self) -> GLenum { gles11::GetError() }
-    unsafe fn Enable(&mut self, cap: GLenum) { gles11::Enable(cap) }
-    unsafe fn IsEnabled(&mut self, cap: GLenum) -> GLboolean { gles11::IsEnabled(cap) }
-    unsafe fn Disable(&mut self, cap: GLenum) { gles11::Disable(cap) }
-    unsafe fn ClientActiveTexture(&mut self, texture: GLenum) { gles11::ClientActiveTexture(texture); }
-    unsafe fn EnableClientState(&mut self, array: GLenum) { gles11::EnableClientState(array) }
-    unsafe fn DisableClientState(&mut self, array: GLenum) { gles11::DisableClientState(array) }
-    unsafe fn GetBooleanv(&mut self, pname: GLenum, params: *mut GLboolean) { gles11::GetBooleanv(pname, params) }
-    unsafe fn GetFloatv(&mut self, pname: GLenum, params: *mut GLfloat) { gles11::GetFloatv(pname, params) }
-    unsafe fn GetIntegerv(&mut self, pname: GLenum, params: *mut GLint) { gles11::GetIntegerv(pname, params) }
-    unsafe fn GetTexEnviv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetTexEnviv(target, pname, params) }
-    unsafe fn GetTexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) { gles11::GetTexEnvfv(target, pname, params) }
+    unsafe fn GetError(&mut self) -> GLenum {
+        gles11::GetError()
+    }
+    unsafe fn Enable(&mut self, cap: GLenum) {
+        gles11::Enable(cap)
+    }
+    unsafe fn IsEnabled(&mut self, cap: GLenum) -> GLboolean {
+        gles11::IsEnabled(cap)
+    }
+    unsafe fn Disable(&mut self, cap: GLenum) {
+        gles11::Disable(cap)
+    }
+    unsafe fn ClientActiveTexture(&mut self, texture: GLenum) {
+        gles11::ClientActiveTexture(texture);
+    }
+    unsafe fn EnableClientState(&mut self, array: GLenum) {
+        gles11::EnableClientState(array)
+    }
+    unsafe fn DisableClientState(&mut self, array: GLenum) {
+        gles11::DisableClientState(array)
+    }
+    unsafe fn GetBooleanv(&mut self, pname: GLenum, params: *mut GLboolean) {
+        gles11::GetBooleanv(pname, params)
+    }
+    unsafe fn GetFloatv(&mut self, pname: GLenum, params: *mut GLfloat) {
+        gles11::GetFloatv(pname, params)
+    }
+    unsafe fn GetIntegerv(&mut self, pname: GLenum, params: *mut GLint) {
+        gles11::GetIntegerv(pname, params)
+    }
+    unsafe fn GetTexEnviv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
+        gles11::GetTexEnviv(target, pname, params)
+    }
+    unsafe fn GetTexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
+        gles11::GetTexEnvfv(target, pname, params)
+    }
     unsafe fn GetPointerv(&mut self, pname: GLenum, params: *mut *const GLvoid) {
         gles11::GetPointerv(pname, params as *mut _ as *const _)
     }
-    unsafe fn Hint(&mut self, target: GLenum, mode: GLenum) { gles11::Hint(target, mode) }
-    unsafe fn Finish(&mut self) { gles11::Finish() }
-    unsafe fn Flush(&mut self) { gles11::Flush() }
-    
+    unsafe fn Hint(&mut self, target: GLenum, mode: GLenum) {
+        gles11::Hint(target, mode)
+    }
+    unsafe fn Finish(&mut self) {
+        gles11::Finish()
+    }
+    unsafe fn Flush(&mut self) {
+        gles11::Flush()
+    }
+
     // MALI HACK: Прячем сломанные расширения
     unsafe fn GetString(&mut self, name: GLenum) -> *const GLubyte {
         if name == gles11::EXTENSIONS {
@@ -117,7 +147,8 @@ impl GLES for GLES1Native<'_> {
                 let orig_ptr = gles11::GetString(name);
                 if !orig_ptr.is_null() {
                     let orig_str = std::ffi::CStr::from_ptr(orig_ptr as *const _).to_string_lossy();
-                    // Вырезаем OES_matrix_palette чтобы заставить AC2 использовать CPU анимацию
+                    // Вырезаем OES_matrix_palette чтобы заставить AC2
+                    // использовать CPU анимацию
                     let filtered = orig_str.replace("GL_OES_matrix_palette", "");
                     let c_str = std::ffi::CString::new(filtered).unwrap();
                     FILTERED_EXTS = c_str.into_raw();
@@ -131,76 +162,218 @@ impl GLES for GLES1Native<'_> {
     }
 
     // Other state manipulation
-    unsafe fn AlphaFunc(&mut self, func: GLenum, ref_: GLclampf) { gles11::AlphaFunc(func, ref_) }
-    unsafe fn AlphaFuncx(&mut self, func: GLenum, ref_: GLclampx) { gles11::AlphaFuncx(func, ref_) }
-    unsafe fn BlendFunc(&mut self, sfactor: GLenum, dfactor: GLenum) { gles11::BlendFunc(sfactor, dfactor) }
-    unsafe fn BlendEquationOES(&mut self, mode: GLenum) { gles11::BlendEquationOES(mode); }
-    unsafe fn ColorMask(&mut self, red: GLboolean, green: GLboolean, blue: GLboolean, alpha: GLboolean) { gles11::ColorMask(red, green, blue, alpha) }
-    unsafe fn ClipPlanef(&mut self, plane: GLenum, equation: *const GLfloat) { gles11::ClipPlanef(plane, equation) }
-    unsafe fn ClipPlanex(&mut self, plane: GLenum, equation: *const GLfixed) { gles11::ClipPlanex(plane, equation) }
-    unsafe fn CullFace(&mut self, mode: GLenum) { gles11::CullFace(mode) }
-    unsafe fn DepthFunc(&mut self, func: GLenum) { gles11::DepthFunc(func) }
-    unsafe fn DepthMask(&mut self, flag: GLboolean) { gles11::DepthMask(flag) }
-    unsafe fn FrontFace(&mut self, mode: GLenum) { gles11::FrontFace(mode) }
-    unsafe fn DepthRangef(&mut self, near: GLclampf, far: GLclampf) { gles11::DepthRangef(near, far) }
-    unsafe fn DepthRangex(&mut self, near: GLclampx, far: GLclampx) { gles11::DepthRangex(near, far) }
-    unsafe fn PolygonOffset(&mut self, factor: GLfloat, units: GLfloat) { gles11::PolygonOffset(factor, units) }
-    unsafe fn PolygonOffsetx(&mut self, factor: GLfixed, units: GLfixed) { gles11::PolygonOffsetx(factor, units) }
-    unsafe fn SampleCoverage(&mut self, value: GLclampf, invert: GLboolean) { gles11::SampleCoverage(value, invert) }
-    unsafe fn SampleCoveragex(&mut self, value: GLclampx, invert: GLboolean) { gles11::SampleCoveragex(value, invert) }
-    unsafe fn ShadeModel(&mut self, mode: GLenum) { gles11::ShadeModel(mode) }
-    unsafe fn Scissor(&mut self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) { gles11::Scissor(x, y, width, height) }
-    unsafe fn Viewport(&mut self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) { gles11::Viewport(x, y, width, height) }
-    unsafe fn LineWidth(&mut self, val: GLfloat) { gles11::LineWidth(val) }
-    unsafe fn LineWidthx(&mut self, val: GLfixed) { gles11::LineWidthx(val) }
-    unsafe fn StencilFunc(&mut self, func: GLenum, ref_: GLint, mask: GLuint) { gles11::StencilFunc(func, ref_, mask); }
-    unsafe fn StencilOp(&mut self, sfail: GLenum, dpfail: GLenum, dppass: GLenum) { gles11::StencilOp(sfail, dpfail, dppass); }
-    unsafe fn StencilMask(&mut self, mask: GLuint) { gles11::StencilMask(mask); }
-    unsafe fn LogicOp(&mut self, opcode: GLenum) { gles11::LogicOp(opcode); }
+    unsafe fn AlphaFunc(&mut self, func: GLenum, ref_: GLclampf) {
+        gles11::AlphaFunc(func, ref_)
+    }
+    unsafe fn AlphaFuncx(&mut self, func: GLenum, ref_: GLclampx) {
+        gles11::AlphaFuncx(func, ref_)
+    }
+    unsafe fn BlendFunc(&mut self, sfactor: GLenum, dfactor: GLenum) {
+        gles11::BlendFunc(sfactor, dfactor)
+    }
+    unsafe fn BlendEquationOES(&mut self, mode: GLenum) {
+        gles11::BlendEquationOES(mode);
+    }
+    unsafe fn ColorMask(
+        &mut self,
+        red: GLboolean,
+        green: GLboolean,
+        blue: GLboolean,
+        alpha: GLboolean,
+    ) {
+        gles11::ColorMask(red, green, blue, alpha)
+    }
+    unsafe fn ClipPlanef(&mut self, plane: GLenum, equation: *const GLfloat) {
+        gles11::ClipPlanef(plane, equation)
+    }
+    unsafe fn ClipPlanex(&mut self, plane: GLenum, equation: *const GLfixed) {
+        gles11::ClipPlanex(plane, equation)
+    }
+    unsafe fn CullFace(&mut self, mode: GLenum) {
+        gles11::CullFace(mode)
+    }
+    unsafe fn DepthFunc(&mut self, func: GLenum) {
+        gles11::DepthFunc(func)
+    }
+    unsafe fn DepthMask(&mut self, flag: GLboolean) {
+        gles11::DepthMask(flag)
+    }
+    unsafe fn FrontFace(&mut self, mode: GLenum) {
+        gles11::FrontFace(mode)
+    }
+    unsafe fn DepthRangef(&mut self, near: GLclampf, far: GLclampf) {
+        gles11::DepthRangef(near, far)
+    }
+    unsafe fn DepthRangex(&mut self, near: GLclampx, far: GLclampx) {
+        gles11::DepthRangex(near, far)
+    }
+    unsafe fn PolygonOffset(&mut self, factor: GLfloat, units: GLfloat) {
+        gles11::PolygonOffset(factor, units)
+    }
+    unsafe fn PolygonOffsetx(&mut self, factor: GLfixed, units: GLfixed) {
+        gles11::PolygonOffsetx(factor, units)
+    }
+    unsafe fn SampleCoverage(&mut self, value: GLclampf, invert: GLboolean) {
+        gles11::SampleCoverage(value, invert)
+    }
+    unsafe fn SampleCoveragex(&mut self, value: GLclampx, invert: GLboolean) {
+        gles11::SampleCoveragex(value, invert)
+    }
+    unsafe fn ShadeModel(&mut self, mode: GLenum) {
+        gles11::ShadeModel(mode)
+    }
+    unsafe fn Scissor(&mut self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+        gles11::Scissor(x, y, width, height)
+    }
+    unsafe fn Viewport(&mut self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+        gles11::Viewport(x, y, width, height)
+    }
+    unsafe fn LineWidth(&mut self, val: GLfloat) {
+        gles11::LineWidth(val)
+    }
+    unsafe fn LineWidthx(&mut self, val: GLfixed) {
+        gles11::LineWidthx(val)
+    }
+    unsafe fn StencilFunc(&mut self, func: GLenum, ref_: GLint, mask: GLuint) {
+        gles11::StencilFunc(func, ref_, mask);
+    }
+    unsafe fn StencilOp(&mut self, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
+        gles11::StencilOp(sfail, dpfail, dppass);
+    }
+    unsafe fn StencilMask(&mut self, mask: GLuint) {
+        gles11::StencilMask(mask);
+    }
+    unsafe fn LogicOp(&mut self, opcode: GLenum) {
+        gles11::LogicOp(opcode);
+    }
 
     // Points
-    unsafe fn PointSize(&mut self, size: GLfloat) { gles11::PointSize(size) }
-    unsafe fn PointSizex(&mut self, size: GLfixed) { gles11::PointSizex(size) }
-    unsafe fn PointParameterf(&mut self, pname: GLenum, param: GLfloat) { gles11::PointParameterf(pname, param) }
-    unsafe fn PointParameterx(&mut self, pname: GLenum, param: GLfixed) { gles11::PointParameterx(pname, param) }
-    unsafe fn PointParameterfv(&mut self, pname: GLenum, params: *const GLfloat) { gles11::PointParameterfv(pname, params) }
-    unsafe fn PointParameterxv(&mut self, pname: GLenum, params: *const GLfixed) { gles11::PointParameterxv(pname, params) }
+    unsafe fn PointSize(&mut self, size: GLfloat) {
+        gles11::PointSize(size)
+    }
+    unsafe fn PointSizex(&mut self, size: GLfixed) {
+        gles11::PointSizex(size)
+    }
+    unsafe fn PointParameterf(&mut self, pname: GLenum, param: GLfloat) {
+        gles11::PointParameterf(pname, param)
+    }
+    unsafe fn PointParameterx(&mut self, pname: GLenum, param: GLfixed) {
+        gles11::PointParameterx(pname, param)
+    }
+    unsafe fn PointParameterfv(&mut self, pname: GLenum, params: *const GLfloat) {
+        gles11::PointParameterfv(pname, params)
+    }
+    unsafe fn PointParameterxv(&mut self, pname: GLenum, params: *const GLfixed) {
+        gles11::PointParameterxv(pname, params)
+    }
 
     // Lighting and materials
-    unsafe fn Fogf(&mut self, pname: GLenum, param: GLfloat) { gles11::Fogf(pname, param) }
-    unsafe fn Fogx(&mut self, pname: GLenum, param: GLfixed) { gles11::Fogx(pname, param) }
-    unsafe fn Fogfv(&mut self, pname: GLenum, params: *const GLfloat) { gles11::Fogfv(pname, params) }
-    unsafe fn Fogxv(&mut self, pname: GLenum, params: *const GLfixed) { gles11::Fogxv(pname, params) }
-    unsafe fn Lightf(&mut self, light: GLenum, pname: GLenum, param: GLfloat) { gles11::Lightf(light, pname, param) }
-    unsafe fn Lightx(&mut self, light: GLenum, pname: GLenum, param: GLfixed) { gles11::Lightx(light, pname, param) }
-    unsafe fn Lightfv(&mut self, light: GLenum, pname: GLenum, params: *const GLfloat) { gles11::Lightfv(light, pname, params) }
-    unsafe fn Lightxv(&mut self, light: GLenum, pname: GLenum, params: *const GLfixed) { gles11::Lightxv(light, pname, params) }
-    unsafe fn LightModelf(&mut self, pname: GLenum, param: GLfloat) { gles11::LightModelf(pname, param) }
-    unsafe fn LightModelx(&mut self, pname: GLenum, param: GLfixed) { gles11::LightModelx(pname, param) }
-    unsafe fn LightModelfv(&mut self, pname: GLenum, params: *const GLfloat) { gles11::LightModelfv(pname, params) }
-    unsafe fn LightModelxv(&mut self, pname: GLenum, params: *const GLfixed) { gles11::LightModelxv(pname, params) }
-    unsafe fn Materialf(&mut self, face: GLenum, pname: GLenum, param: GLfloat) { gles11::Materialf(face, pname, param) }
-    unsafe fn Materialx(&mut self, face: GLenum, pname: GLenum, param: GLfixed) { gles11::Materialx(face, pname, param) }
-    unsafe fn Materialfv(&mut self, face: GLenum, pname: GLenum, params: *const GLfloat) { gles11::Materialfv(face, pname, params) }
-    unsafe fn Materialxv(&mut self, face: GLenum, pname: GLenum, params: *const GLfixed) { gles11::Materialxv(face, pname, params) }
+    unsafe fn Fogf(&mut self, pname: GLenum, param: GLfloat) {
+        gles11::Fogf(pname, param)
+    }
+    unsafe fn Fogx(&mut self, pname: GLenum, param: GLfixed) {
+        gles11::Fogx(pname, param)
+    }
+    unsafe fn Fogfv(&mut self, pname: GLenum, params: *const GLfloat) {
+        gles11::Fogfv(pname, params)
+    }
+    unsafe fn Fogxv(&mut self, pname: GLenum, params: *const GLfixed) {
+        gles11::Fogxv(pname, params)
+    }
+    unsafe fn Lightf(&mut self, light: GLenum, pname: GLenum, param: GLfloat) {
+        gles11::Lightf(light, pname, param)
+    }
+    unsafe fn Lightx(&mut self, light: GLenum, pname: GLenum, param: GLfixed) {
+        gles11::Lightx(light, pname, param)
+    }
+    unsafe fn Lightfv(&mut self, light: GLenum, pname: GLenum, params: *const GLfloat) {
+        gles11::Lightfv(light, pname, params)
+    }
+    unsafe fn Lightxv(&mut self, light: GLenum, pname: GLenum, params: *const GLfixed) {
+        gles11::Lightxv(light, pname, params)
+    }
+    unsafe fn LightModelf(&mut self, pname: GLenum, param: GLfloat) {
+        gles11::LightModelf(pname, param)
+    }
+    unsafe fn LightModelx(&mut self, pname: GLenum, param: GLfixed) {
+        gles11::LightModelx(pname, param)
+    }
+    unsafe fn LightModelfv(&mut self, pname: GLenum, params: *const GLfloat) {
+        gles11::LightModelfv(pname, params)
+    }
+    unsafe fn LightModelxv(&mut self, pname: GLenum, params: *const GLfixed) {
+        gles11::LightModelxv(pname, params)
+    }
+    unsafe fn Materialf(&mut self, face: GLenum, pname: GLenum, param: GLfloat) {
+        gles11::Materialf(face, pname, param)
+    }
+    unsafe fn Materialx(&mut self, face: GLenum, pname: GLenum, param: GLfixed) {
+        gles11::Materialx(face, pname, param)
+    }
+    unsafe fn Materialfv(&mut self, face: GLenum, pname: GLenum, params: *const GLfloat) {
+        gles11::Materialfv(face, pname, params)
+    }
+    unsafe fn Materialxv(&mut self, face: GLenum, pname: GLenum, params: *const GLfixed) {
+        gles11::Materialxv(face, pname, params)
+    }
 
     // Buffers
-    unsafe fn IsBuffer(&mut self, buffer: GLuint) -> GLboolean { gles11::IsBuffer(buffer) }
-    unsafe fn GenBuffers(&mut self, n: GLsizei, buffers: *mut GLuint) { gles11::GenBuffers(n, buffers) }
-    unsafe fn DeleteBuffers(&mut self, n: GLsizei, buffers: *const GLuint) { gles11::DeleteBuffers(n, buffers) }
-    unsafe fn BindBuffer(&mut self, target: GLenum, buffer: GLuint) { gles11::BindBuffer(target, buffer) }
-    unsafe fn BufferData(&mut self, target: GLenum, size: GLsizeiptr, data: *const GLvoid, usage: GLenum) { gles11::BufferData(target, size, data, usage) }
-    unsafe fn BufferSubData(&mut self, target: GLenum, offset: GLintptr, size: GLsizeiptr, data: *const GLvoid) { gles11::BufferSubData(target, offset, size, data) }
+    unsafe fn IsBuffer(&mut self, buffer: GLuint) -> GLboolean {
+        gles11::IsBuffer(buffer)
+    }
+    unsafe fn GenBuffers(&mut self, n: GLsizei, buffers: *mut GLuint) {
+        gles11::GenBuffers(n, buffers)
+    }
+    unsafe fn DeleteBuffers(&mut self, n: GLsizei, buffers: *const GLuint) {
+        gles11::DeleteBuffers(n, buffers)
+    }
+    unsafe fn BindBuffer(&mut self, target: GLenum, buffer: GLuint) {
+        gles11::BindBuffer(target, buffer)
+    }
+    unsafe fn BufferData(
+        &mut self,
+        target: GLenum,
+        size: GLsizeiptr,
+        data: *const GLvoid,
+        usage: GLenum,
+    ) {
+        gles11::BufferData(target, size, data, usage)
+    }
+    unsafe fn BufferSubData(
+        &mut self,
+        target: GLenum,
+        offset: GLintptr,
+        size: GLsizeiptr,
+        data: *const GLvoid,
+    ) {
+        gles11::BufferSubData(target, offset, size, data)
+    }
 
     // Non-pointers
-    unsafe fn Color4f(&mut self, red: GLfloat, green: GLfloat, blue: GLfloat, alpha: GLfloat) { gles11::Color4f(red, green, blue, alpha) }
-    unsafe fn Color4x(&mut self, red: GLfixed, green: GLfixed, blue: GLfixed, alpha: GLfixed) { gles11::Color4x(red, green, blue, alpha) }
-    unsafe fn Color4ub(&mut self, red: GLubyte, green: GLubyte, blue: GLubyte, alpha: GLubyte) { gles11::Color4ub(red, green, blue, alpha) }
-    unsafe fn Normal3f(&mut self, nx: GLfloat, ny: GLfloat, nz: GLfloat) { gles11::Normal3f(nx, ny, nz) }
-    unsafe fn Normal3x(&mut self, nx: GLfixed, ny: GLfixed, nz: GLfixed) { gles11::Normal3x(nx, ny, nz) }
+    unsafe fn Color4f(&mut self, red: GLfloat, green: GLfloat, blue: GLfloat, alpha: GLfloat) {
+        gles11::Color4f(red, green, blue, alpha)
+    }
+    unsafe fn Color4x(&mut self, red: GLfixed, green: GLfixed, blue: GLfixed, alpha: GLfixed) {
+        gles11::Color4x(red, green, blue, alpha)
+    }
+    unsafe fn Color4ub(&mut self, red: GLubyte, green: GLubyte, blue: GLubyte, alpha: GLubyte) {
+        gles11::Color4ub(red, green, blue, alpha)
+    }
+    unsafe fn Normal3f(&mut self, nx: GLfloat, ny: GLfloat, nz: GLfloat) {
+        gles11::Normal3f(nx, ny, nz)
+    }
+    unsafe fn Normal3x(&mut self, nx: GLfixed, ny: GLfixed, nz: GLfixed) {
+        gles11::Normal3x(nx, ny, nz)
+    }
 
     // Pointers - Возвращаем твою изначальную правильную защиту от крашей Mali
-    unsafe fn ColorPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+    unsafe fn ColorPointer(
+        &mut self,
+        size: GLint,
+        type_: GLenum,
+        stride: GLsizei,
+        pointer: *const GLvoid,
+    ) {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
@@ -211,7 +384,7 @@ impl GLES for GLES1Native<'_> {
         }
         gles11::ColorPointer(size, type_, stride, pointer)
     }
-    
+
     unsafe fn NormalPointer(&mut self, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
@@ -223,8 +396,14 @@ impl GLES for GLES1Native<'_> {
         }
         gles11::NormalPointer(type_, stride, pointer)
     }
-    
-    unsafe fn TexCoordPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+
+    unsafe fn TexCoordPointer(
+        &mut self,
+        size: GLint,
+        type_: GLenum,
+        stride: GLsizei,
+        pointer: *const GLvoid,
+    ) {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
@@ -235,8 +414,14 @@ impl GLES for GLES1Native<'_> {
         }
         gles11::TexCoordPointer(size, type_, stride, pointer)
     }
-    
-    unsafe fn VertexPointer(&mut self, size: GLint, type_: GLenum, stride: GLsizei, pointer: *const GLvoid) {
+
+    unsafe fn VertexPointer(
+        &mut self,
+        size: GLint,
+        type_: GLenum,
+        stride: GLsizei,
+        pointer: *const GLvoid,
+    ) {
         if pointer.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ARRAY_BUFFER_BINDING, &mut bound_buffer);
@@ -252,129 +437,520 @@ impl GLES for GLES1Native<'_> {
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
         gles11::DrawArrays(mode, first, count)
     }
-    
-    unsafe fn DrawElements(&mut self, mode: GLenum, count: GLsizei, type_: GLenum, indices: *const GLvoid) {
+
+    unsafe fn DrawElements(
+        &mut self,
+        mode: GLenum,
+        count: GLsizei,
+        type_: GLenum,
+        indices: *const GLvoid,
+    ) {
         if indices.is_null() {
             let mut bound_buffer: GLint = 0;
             gles11::GetIntegerv(gles11::ELEMENT_ARRAY_BUFFER_BINDING, &mut bound_buffer);
-            if bound_buffer == 0 { return; }
+            if bound_buffer == 0 {
+                return;
+            }
         }
         gles11::DrawElements(mode, count, type_, indices)
     }
 
     // Clearing
-    unsafe fn Clear(&mut self, mask: GLbitfield) { gles11::Clear(mask) }
-    unsafe fn ClearColor(&mut self, red: GLclampf, green: GLclampf, blue: GLclampf, alpha: GLclampf) { gles11::ClearColor(red, green, blue, alpha) }
-    unsafe fn ClearColorx(&mut self, red: GLclampx, green: GLclampx, blue: GLclampx, alpha: GLclampx) { gles11::ClearColorx(red, green, blue, alpha) }
-    unsafe fn ClearDepthf(&mut self, depth: GLclampf) { gles11::ClearDepthf(depth) }
-    unsafe fn ClearDepthx(&mut self, depth: GLclampx) { gles11::ClearDepthx(depth) }
-    unsafe fn ClearStencil(&mut self, s: GLint) { gles11::ClearStencil(s) }
+    unsafe fn Clear(&mut self, mask: GLbitfield) {
+        gles11::Clear(mask)
+    }
+    unsafe fn ClearColor(
+        &mut self,
+        red: GLclampf,
+        green: GLclampf,
+        blue: GLclampf,
+        alpha: GLclampf,
+    ) {
+        gles11::ClearColor(red, green, blue, alpha)
+    }
+    unsafe fn ClearColorx(
+        &mut self,
+        red: GLclampx,
+        green: GLclampx,
+        blue: GLclampx,
+        alpha: GLclampx,
+    ) {
+        gles11::ClearColorx(red, green, blue, alpha)
+    }
+    unsafe fn ClearDepthf(&mut self, depth: GLclampf) {
+        gles11::ClearDepthf(depth)
+    }
+    unsafe fn ClearDepthx(&mut self, depth: GLclampx) {
+        gles11::ClearDepthx(depth)
+    }
+    unsafe fn ClearStencil(&mut self, s: GLint) {
+        gles11::ClearStencil(s)
+    }
 
     // Textures
-    unsafe fn PixelStorei(&mut self, pname: GLenum, param: GLint) { gles11::PixelStorei(pname, param) }
-    unsafe fn ReadPixels(&mut self, x: GLint, y: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *mut GLvoid) { gles11::ReadPixels(x, y, width, height, format, type_, pixels) }
-    unsafe fn GenTextures(&mut self, n: GLsizei, textures: *mut GLuint) { gles11::GenTextures(n, textures) }
-    unsafe fn DeleteTextures(&mut self, n: GLsizei, textures: *const GLuint) { gles11::DeleteTextures(n, textures) }
-    unsafe fn ActiveTexture(&mut self, texture: GLenum) { gles11::ActiveTexture(texture) }
-    unsafe fn IsTexture(&mut self, texture: GLuint) -> GLboolean { gles11::IsTexture(texture) }
-    unsafe fn BindTexture(&mut self, target: GLenum, texture: GLuint) { gles11::BindTexture(target, texture) }
-    unsafe fn TexParameteri(&mut self, target: GLenum, pname: GLenum, param: GLint) { gles11::TexParameteri(target, pname, param) }
-    unsafe fn TexParameterf(&mut self, target: GLenum, pname: GLenum, param: GLfloat) { gles11::TexParameterf(target, pname, param) }
-    unsafe fn TexParameterx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) { gles11::TexParameterx(target, pname, param) }
-    unsafe fn TexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) { gles11::TexParameteriv(target, pname, params) }
-    unsafe fn TexParameterfv(&mut self, target: GLenum, pname: GLenum, params: *const GLfloat) { gles11::TexParameterfv(target, pname, params) }
-    unsafe fn TexParameterxv(&mut self, target: GLenum, pname: GLenum, params: *const GLfixed) { gles11::TexParameterxv(target, pname, params) }
-    
-    unsafe fn TexImage2D(&mut self, target: GLenum, level: GLint, mut internalformat: GLint, width: GLsizei, height: GLsizei, border: GLint, format: GLenum, type_: GLenum, pixels: *const GLvoid) {
-        if format == gles11::BGRA_EXT { internalformat = gles11::BGRA_EXT as GLint }
-        gles11::TexImage2D(target, level, internalformat, width, height, border, format, type_, pixels)
+    unsafe fn PixelStorei(&mut self, pname: GLenum, param: GLint) {
+        gles11::PixelStorei(pname, param)
     }
-    
-    unsafe fn TexSubImage2D(&mut self, target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, width: GLsizei, height: GLsizei, format: GLenum, type_: GLenum, pixels: *const GLvoid) {
-        gles11::TexSubImage2D(target, level, xoffset, yoffset, width, height, format, type_, pixels)
+    unsafe fn ReadPixels(
+        &mut self,
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *mut GLvoid,
+    ) {
+        gles11::ReadPixels(x, y, width, height, format, type_, pixels)
     }
-    
-    unsafe fn CompressedTexImage2D(&mut self, target: GLenum, level: GLint, internalformat: GLenum, width: GLsizei, height: GLsizei, border: GLint, image_size: GLsizei, data: *const GLvoid) {
-        if data.is_null() { return; } // Защита
+    unsafe fn GenTextures(&mut self, n: GLsizei, textures: *mut GLuint) {
+        gles11::GenTextures(n, textures)
+    }
+    unsafe fn DeleteTextures(&mut self, n: GLsizei, textures: *const GLuint) {
+        gles11::DeleteTextures(n, textures)
+    }
+    unsafe fn ActiveTexture(&mut self, texture: GLenum) {
+        gles11::ActiveTexture(texture)
+    }
+    unsafe fn IsTexture(&mut self, texture: GLuint) -> GLboolean {
+        gles11::IsTexture(texture)
+    }
+    unsafe fn BindTexture(&mut self, target: GLenum, texture: GLuint) {
+        gles11::BindTexture(target, texture)
+    }
+    unsafe fn TexParameteri(&mut self, target: GLenum, pname: GLenum, param: GLint) {
+        gles11::TexParameteri(target, pname, param)
+    }
+    unsafe fn TexParameterf(&mut self, target: GLenum, pname: GLenum, param: GLfloat) {
+        gles11::TexParameterf(target, pname, param)
+    }
+    unsafe fn TexParameterx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) {
+        gles11::TexParameterx(target, pname, param)
+    }
+    unsafe fn TexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) {
+        gles11::TexParameteriv(target, pname, params)
+    }
+    unsafe fn TexParameterfv(&mut self, target: GLenum, pname: GLenum, params: *const GLfloat) {
+        gles11::TexParameterfv(target, pname, params)
+    }
+    unsafe fn TexParameterxv(&mut self, target: GLenum, pname: GLenum, params: *const GLfixed) {
+        gles11::TexParameterxv(target, pname, params)
+    }
+
+    unsafe fn TexImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        mut internalformat: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        border: GLint,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *const GLvoid,
+    ) {
+        if format == gles11::BGRA_EXT {
+            internalformat = gles11::BGRA_EXT as GLint
+        }
+        gles11::TexImage2D(
+            target,
+            level,
+            internalformat,
+            width,
+            height,
+            border,
+            format,
+            type_,
+            pixels,
+        )
+    }
+
+    unsafe fn TexSubImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        type_: GLenum,
+        pixels: *const GLvoid,
+    ) {
+        gles11::TexSubImage2D(
+            target, level, xoffset, yoffset, width, height, format, type_, pixels,
+        )
+    }
+
+    unsafe fn CompressedTexImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+        border: GLint,
+        image_size: GLsizei,
+        data: *const GLvoid,
+    ) {
+        if data.is_null() {
+            return;
+        } // Защита
         let data = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize) };
-        if try_decode_pvrtc(self, target, level, internalformat, width, height, border, data) { return; }
-        if PalettedTextureFormat::get_info(internalformat).is_none() { return; }
-        gles11::CompressedTexImage2D(target, level, internalformat, width, height, border, image_size, data.as_ptr() as *const _);
+        if try_decode_pvrtc(
+            self,
+            target,
+            level,
+            internalformat,
+            width,
+            height,
+            border,
+            data,
+        ) {
+            return;
+        }
+        if PalettedTextureFormat::get_info(internalformat).is_none() {
+            return;
+        }
+        gles11::CompressedTexImage2D(
+            target,
+            level,
+            internalformat,
+            width,
+            height,
+            border,
+            image_size,
+            data.as_ptr() as *const _,
+        );
     }
-    
-    unsafe fn CopyTexImage2D(&mut self, target: GLenum, level: GLint, internalformat: GLenum, x: GLint, y: GLint, width: GLsizei, height: GLsizei, border: GLint) { gles11::CopyTexImage2D(target, level, internalformat, x, y, width, height, border) }
-    unsafe fn CopyTexSubImage2D(&mut self, target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, x: GLint, y: GLint, width: GLsizei, height: GLsizei) { gles11::CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height) }
-    unsafe fn TexEnvf(&mut self, target: GLenum, pname: GLenum, param: GLfloat) { gles11::TexEnvf(target, pname, param) }
-    unsafe fn TexEnvx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) { gles11::TexEnvx(target, pname, param) }
-    unsafe fn TexEnvi(&mut self, target: GLenum, pname: GLenum, param: GLint) { gles11::TexEnvi(target, pname, param) }
-    
+
+    unsafe fn CopyTexImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        internalformat: GLenum,
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        border: GLint,
+    ) {
+        gles11::CopyTexImage2D(target, level, internalformat, x, y, width, height, border)
+    }
+    unsafe fn CopyTexSubImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        x: GLint,
+        y: GLint,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        gles11::CopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height)
+    }
+    unsafe fn TexEnvf(&mut self, target: GLenum, pname: GLenum, param: GLfloat) {
+        gles11::TexEnvf(target, pname, param)
+    }
+    unsafe fn TexEnvx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) {
+        gles11::TexEnvx(target, pname, param)
+    }
+    unsafe fn TexEnvi(&mut self, target: GLenum, pname: GLenum, param: GLint) {
+        gles11::TexEnvi(target, pname, param)
+    }
+
     unsafe fn TexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *const GLfloat) {
         if target == gles11::TEXTURE_FILTER_CONTROL_EXT {
             assert!(pname == gles11::TEXTURE_LOD_BIAS_EXT);
-            unsafe { if !CStr::from_ptr(gles11::GetString(gles11::EXTENSIONS) as _).to_str().unwrap().contains("EXT_texture_lod_bias") { return; } };
+            unsafe {
+                if !CStr::from_ptr(gles11::GetString(gles11::EXTENSIONS) as _)
+                    .to_str()
+                    .unwrap()
+                    .contains("EXT_texture_lod_bias")
+                {
+                    return;
+                }
+            };
         }
         gles11::TexEnvfv(target, pname, params)
     }
-    
-    unsafe fn TexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *const GLfixed) { gles11::TexEnvxv(target, pname, params) }
-    unsafe fn TexEnviv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) { gles11::TexEnviv(target, pname, params) }
-    unsafe fn MultiTexCoord4f(&mut self, target: GLenum, s: GLfloat, t: GLfloat, r: GLfloat, q: GLfloat) { gles11::MultiTexCoord4f(target, s, t, r, q) }
-    unsafe fn MultiTexCoord4x(&mut self, target: GLenum, s: GLfixed, t: GLfixed, r: GLfixed, q: GLfixed) { gles11::MultiTexCoord4x(target, s, t, r, q) }
+
+    unsafe fn TexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *const GLfixed) {
+        gles11::TexEnvxv(target, pname, params)
+    }
+    unsafe fn TexEnviv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) {
+        gles11::TexEnviv(target, pname, params)
+    }
+    unsafe fn MultiTexCoord4f(
+        &mut self,
+        target: GLenum,
+        s: GLfloat,
+        t: GLfloat,
+        r: GLfloat,
+        q: GLfloat,
+    ) {
+        gles11::MultiTexCoord4f(target, s, t, r, q)
+    }
+    unsafe fn MultiTexCoord4x(
+        &mut self,
+        target: GLenum,
+        s: GLfixed,
+        t: GLfixed,
+        r: GLfixed,
+        q: GLfixed,
+    ) {
+        gles11::MultiTexCoord4x(target, s, t, r, q)
+    }
 
     // Matrix stack operations
-    unsafe fn MatrixMode(&mut self, mode: GLenum) { gles11::MatrixMode(mode) }
-    unsafe fn LoadIdentity(&mut self) { gles11::LoadIdentity() }
-    unsafe fn LoadMatrixf(&mut self, m: *const GLfloat) { gles11::LoadMatrixf(m) }
-    unsafe fn LoadMatrixx(&mut self, m: *const GLfixed) { gles11::LoadMatrixx(m) }
-    unsafe fn MultMatrixf(&mut self, m: *const GLfloat) { gles11::MultMatrixf(m) }
-    unsafe fn MultMatrixx(&mut self, m: *const GLfixed) { gles11::MultMatrixx(m) }
-    unsafe fn PushMatrix(&mut self) { gles11::PushMatrix() }
-    unsafe fn PopMatrix(&mut self) { gles11::PopMatrix(); }
-    unsafe fn Orthof(&mut self, left: GLfloat, right: GLfloat, bottom: GLfloat, top: GLfloat, near: GLfloat, far: GLfloat) { gles11::Orthof(left, right, bottom, top, near, far) }
-    unsafe fn Orthox(&mut self, left: GLfixed, right: GLfixed, bottom: GLfixed, top: GLfixed, near: GLfixed, far: GLfixed) { gles11::Orthox(left, right, bottom, top, near, far) }
-    unsafe fn Frustumf(&mut self, left: GLfloat, right: GLfloat, bottom: GLfloat, top: GLfloat, near: GLfloat, far: GLfloat) { gles11::Frustumf(left, right, bottom, top, near, far) }
-    unsafe fn Frustumx(&mut self, left: GLfixed, right: GLfixed, bottom: GLfixed, top: GLfixed, near: GLfixed, far: GLfixed) { gles11::Frustumx(left, right, bottom, top, near, far) }
-    unsafe fn Rotatef(&mut self, angle: GLfloat, x: GLfloat, y: GLfloat, z: GLfloat) { gles11::Rotatef(angle, x, y, z) }
-    unsafe fn Rotatex(&mut self, angle: GLfixed, x: GLfixed, y: GLfixed, z: GLfixed) { gles11::Rotatex(angle, x, y, z) }
-    unsafe fn Scalef(&mut self, x: GLfloat, y: GLfloat, z: GLfloat) { gles11::Scalef(x, y, z) }
-    unsafe fn Scalex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed) { gles11::Scalex(x, y, z) }
-    unsafe fn Translatef(&mut self, x: GLfloat, y: GLfloat, z: GLfloat) { gles11::Translatef(x, y, z) }
-    unsafe fn Translatex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed) { gles11::Translatex(x, y, z) }
+    unsafe fn MatrixMode(&mut self, mode: GLenum) {
+        gles11::MatrixMode(mode)
+    }
+    unsafe fn LoadIdentity(&mut self) {
+        gles11::LoadIdentity()
+    }
+    unsafe fn LoadMatrixf(&mut self, m: *const GLfloat) {
+        gles11::LoadMatrixf(m)
+    }
+    unsafe fn LoadMatrixx(&mut self, m: *const GLfixed) {
+        gles11::LoadMatrixx(m)
+    }
+    unsafe fn MultMatrixf(&mut self, m: *const GLfloat) {
+        gles11::MultMatrixf(m)
+    }
+    unsafe fn MultMatrixx(&mut self, m: *const GLfixed) {
+        gles11::MultMatrixx(m)
+    }
+    unsafe fn PushMatrix(&mut self) {
+        gles11::PushMatrix()
+    }
+    unsafe fn PopMatrix(&mut self) {
+        gles11::PopMatrix();
+    }
+    unsafe fn Orthof(
+        &mut self,
+        left: GLfloat,
+        right: GLfloat,
+        bottom: GLfloat,
+        top: GLfloat,
+        near: GLfloat,
+        far: GLfloat,
+    ) {
+        gles11::Orthof(left, right, bottom, top, near, far)
+    }
+    unsafe fn Orthox(
+        &mut self,
+        left: GLfixed,
+        right: GLfixed,
+        bottom: GLfixed,
+        top: GLfixed,
+        near: GLfixed,
+        far: GLfixed,
+    ) {
+        gles11::Orthox(left, right, bottom, top, near, far)
+    }
+    unsafe fn Frustumf(
+        &mut self,
+        left: GLfloat,
+        right: GLfloat,
+        bottom: GLfloat,
+        top: GLfloat,
+        near: GLfloat,
+        far: GLfloat,
+    ) {
+        gles11::Frustumf(left, right, bottom, top, near, far)
+    }
+    unsafe fn Frustumx(
+        &mut self,
+        left: GLfixed,
+        right: GLfixed,
+        bottom: GLfixed,
+        top: GLfixed,
+        near: GLfixed,
+        far: GLfixed,
+    ) {
+        gles11::Frustumx(left, right, bottom, top, near, far)
+    }
+    unsafe fn Rotatef(&mut self, angle: GLfloat, x: GLfloat, y: GLfloat, z: GLfloat) {
+        gles11::Rotatef(angle, x, y, z)
+    }
+    unsafe fn Rotatex(&mut self, angle: GLfixed, x: GLfixed, y: GLfixed, z: GLfixed) {
+        gles11::Rotatex(angle, x, y, z)
+    }
+    unsafe fn Scalef(&mut self, x: GLfloat, y: GLfloat, z: GLfloat) {
+        gles11::Scalef(x, y, z)
+    }
+    unsafe fn Scalex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed) {
+        gles11::Scalex(x, y, z)
+    }
+    unsafe fn Translatef(&mut self, x: GLfloat, y: GLfloat, z: GLfloat) {
+        gles11::Translatef(x, y, z)
+    }
+    unsafe fn Translatex(&mut self, x: GLfixed, y: GLfixed, z: GLfixed) {
+        gles11::Translatex(x, y, z)
+    }
 
     // OES_framebuffer_object -> EXT_framebuffer_object
-    unsafe fn GenFramebuffersOES(&mut self, n: GLsizei, framebuffers: *mut GLuint) { gles11::GenFramebuffersOES(n, framebuffers) }
-    unsafe fn GenRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *mut GLuint) { gles11::GenRenderbuffersOES(n, renderbuffers) }
-    unsafe fn IsFramebufferOES(&mut self, renderbuffer: GLuint) -> GLboolean { gles11::IsFramebufferOES(renderbuffer) }
-    unsafe fn IsRenderbufferOES(&mut self, renderbuffer: GLuint) -> GLboolean { gles11::IsRenderbufferOES(renderbuffer) }
-    unsafe fn BindFramebufferOES(&mut self, target: GLenum, framebuffer: GLuint) { gles11::BindFramebufferOES(target, framebuffer) }
-    unsafe fn BindRenderbufferOES(&mut self, target: GLenum, renderbuffer: GLuint) { gles11::BindRenderbufferOES(target, renderbuffer) }
-    unsafe fn RenderbufferStorageOES(&mut self, target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) { gles11::RenderbufferStorageOES(target, internalformat, width, height) }
-    unsafe fn FramebufferRenderbufferOES(&mut self, target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint) { gles11::FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer) }
-    unsafe fn FramebufferTexture2DOES(&mut self, target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: i32) { gles11::FramebufferTexture2DOES(target, attachment, textarget, texture, level) }
-    unsafe fn GetFramebufferAttachmentParameterivOES(&mut self, target: GLenum, attachment: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetFramebufferAttachmentParameterivOES(target, attachment, pname, params) }
-    unsafe fn GetRenderbufferParameterivOES(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetRenderbufferParameterivOES(target, pname, params) }
-    unsafe fn CheckFramebufferStatusOES(&mut self, target: GLenum) -> GLenum { gles11::CheckFramebufferStatusOES(target) }
-    unsafe fn DeleteFramebuffersOES(&mut self, n: GLsizei, framebuffers: *const GLuint) { gles11::DeleteFramebuffersOES(n, framebuffers) }
-    unsafe fn DeleteRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *const GLuint) { gles11::DeleteRenderbuffersOES(n, renderbuffers) }
-    unsafe fn GenerateMipmapOES(&mut self, target: GLenum) { gles11::GenerateMipmapOES(target) }
+    unsafe fn GenFramebuffersOES(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
+        gles11::GenFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn GenRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *mut GLuint) {
+        gles11::GenRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn IsFramebufferOES(&mut self, renderbuffer: GLuint) -> GLboolean {
+        gles11::IsFramebufferOES(renderbuffer)
+    }
+    unsafe fn IsRenderbufferOES(&mut self, renderbuffer: GLuint) -> GLboolean {
+        gles11::IsRenderbufferOES(renderbuffer)
+    }
+    unsafe fn BindFramebufferOES(&mut self, target: GLenum, framebuffer: GLuint) {
+        gles11::BindFramebufferOES(target, framebuffer)
+    }
+    unsafe fn BindRenderbufferOES(&mut self, target: GLenum, renderbuffer: GLuint) {
+        gles11::BindRenderbufferOES(target, renderbuffer)
+    }
+    unsafe fn RenderbufferStorageOES(
+        &mut self,
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        gles11::RenderbufferStorageOES(target, internalformat, width, height)
+    }
+    unsafe fn FramebufferRenderbufferOES(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    ) {
+        gles11::FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer)
+    }
+    unsafe fn FramebufferTexture2DOES(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: i32,
+    ) {
+        gles11::FramebufferTexture2DOES(target, attachment, textarget, texture, level)
+    }
+    unsafe fn GetFramebufferAttachmentParameterivOES(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        gles11::GetFramebufferAttachmentParameterivOES(target, attachment, pname, params)
+    }
+    unsafe fn GetRenderbufferParameterivOES(
+        &mut self,
+        target: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        gles11::GetRenderbufferParameterivOES(target, pname, params)
+    }
+    unsafe fn CheckFramebufferStatusOES(&mut self, target: GLenum) -> GLenum {
+        gles11::CheckFramebufferStatusOES(target)
+    }
+    unsafe fn DeleteFramebuffersOES(&mut self, n: GLsizei, framebuffers: *const GLuint) {
+        gles11::DeleteFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn DeleteRenderbuffersOES(&mut self, n: GLsizei, renderbuffers: *const GLuint) {
+        gles11::DeleteRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn GenerateMipmapOES(&mut self, target: GLenum) {
+        gles11::GenerateMipmapOES(target)
+    }
 
     // Non-OES aliases for OES_framebuffer_object functions.
-    unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint) { self.GenFramebuffersOES(n, framebuffers) }
-    unsafe fn GenRenderbuffers(&mut self, n: GLsizei, renderbuffers: *mut GLuint) { self.GenRenderbuffersOES(n, renderbuffers) }
-    unsafe fn IsFramebuffer(&mut self, framebuffer: GLuint) -> GLboolean { self.IsFramebufferOES(framebuffer) }
-    unsafe fn IsRenderbuffer(&mut self, renderbuffer: GLuint) -> GLboolean { self.IsRenderbufferOES(renderbuffer) }
-    unsafe fn BindFramebuffer(&mut self, target: GLenum, framebuffer: GLuint) { self.BindFramebufferOES(target, framebuffer) }
-    unsafe fn BindRenderbuffer(&mut self, target: GLenum, renderbuffer: GLuint) { self.BindRenderbufferOES(target, renderbuffer) }
-    unsafe fn RenderbufferStorage(&mut self, target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) { self.RenderbufferStorageOES(target, internalformat, width, height) }
-    unsafe fn FramebufferRenderbuffer(&mut self, target: GLenum, attachment: GLenum, renderbuffertarget: GLenum, renderbuffer: GLuint) { self.FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer) }
-    unsafe fn FramebufferTexture2D(&mut self, target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: i32) { self.FramebufferTexture2DOES(target, attachment, textarget, texture, level) }
-    unsafe fn CheckFramebufferStatus(&mut self, target: GLenum) -> GLenum { self.CheckFramebufferStatusOES(target) }
-    unsafe fn DeleteFramebuffers(&mut self, n: GLsizei, framebuffers: *const GLuint) { self.DeleteFramebuffersOES(n, framebuffers) }
-    unsafe fn DeleteRenderbuffers(&mut self, n: GLsizei, renderbuffers: *const GLuint) { self.DeleteRenderbuffersOES(n, renderbuffers) }
-    unsafe fn GenerateMipmap(&mut self, target: GLenum) { self.GenerateMipmapOES(target) }
-    unsafe fn GetFramebufferAttachmentParameteriv(&mut self, target: GLenum, attachment: GLenum, pname: GLenum, params: *mut GLint) { self.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params) }
-    unsafe fn GetRenderbufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { self.GetRenderbufferParameterivOES(target, pname, params) }
-    unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) { gles11::GetBufferParameteriv(target, pname, params) }
-    unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid { gles11::MapBufferOES(target, access) }
-    unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean { gles11::UnmapBufferOES(target) }
-                      }
+    unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
+        self.GenFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn GenRenderbuffers(&mut self, n: GLsizei, renderbuffers: *mut GLuint) {
+        self.GenRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn IsFramebuffer(&mut self, framebuffer: GLuint) -> GLboolean {
+        self.IsFramebufferOES(framebuffer)
+    }
+    unsafe fn IsRenderbuffer(&mut self, renderbuffer: GLuint) -> GLboolean {
+        self.IsRenderbufferOES(renderbuffer)
+    }
+    unsafe fn BindFramebuffer(&mut self, target: GLenum, framebuffer: GLuint) {
+        self.BindFramebufferOES(target, framebuffer)
+    }
+    unsafe fn BindRenderbuffer(&mut self, target: GLenum, renderbuffer: GLuint) {
+        self.BindRenderbufferOES(target, renderbuffer)
+    }
+    unsafe fn RenderbufferStorage(
+        &mut self,
+        target: GLenum,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        self.RenderbufferStorageOES(target, internalformat, width, height)
+    }
+    unsafe fn FramebufferRenderbuffer(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        renderbuffertarget: GLenum,
+        renderbuffer: GLuint,
+    ) {
+        self.FramebufferRenderbufferOES(target, attachment, renderbuffertarget, renderbuffer)
+    }
+    unsafe fn FramebufferTexture2D(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        textarget: GLenum,
+        texture: GLuint,
+        level: i32,
+    ) {
+        self.FramebufferTexture2DOES(target, attachment, textarget, texture, level)
+    }
+    unsafe fn CheckFramebufferStatus(&mut self, target: GLenum) -> GLenum {
+        self.CheckFramebufferStatusOES(target)
+    }
+    unsafe fn DeleteFramebuffers(&mut self, n: GLsizei, framebuffers: *const GLuint) {
+        self.DeleteFramebuffersOES(n, framebuffers)
+    }
+    unsafe fn DeleteRenderbuffers(&mut self, n: GLsizei, renderbuffers: *const GLuint) {
+        self.DeleteRenderbuffersOES(n, renderbuffers)
+    }
+    unsafe fn GenerateMipmap(&mut self, target: GLenum) {
+        self.GenerateMipmapOES(target)
+    }
+    unsafe fn GetFramebufferAttachmentParameteriv(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        self.GetFramebufferAttachmentParameterivOES(target, attachment, pname, params)
+    }
+    unsafe fn GetRenderbufferParameteriv(
+        &mut self,
+        target: GLenum,
+        pname: GLenum,
+        params: *mut GLint,
+    ) {
+        self.GetRenderbufferParameterivOES(target, pname, params)
+    }
+    unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
+        gles11::GetBufferParameteriv(target, pname, params)
+    }
+    unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid {
+        gles11::MapBufferOES(target, access)
+    }
+    unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean {
+        gles11::UnmapBufferOES(target)
+    }
+}

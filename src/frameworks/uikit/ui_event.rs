@@ -13,26 +13,26 @@ use crate::objc::{
 };
 use crate::Environment;
 
-type UIEventType    = NSUInteger;
+type UIEventType = NSUInteger;
 type UIEventSubtype = NSInteger;
 
-const UIEventTypeTouches:  UIEventType = 0;
-const UIEventTypePresses:  UIEventType = 1;
-const UIEventTypeMotion:   UIEventType = 2;
+const UIEventTypeTouches: UIEventType = 0;
+const UIEventTypePresses: UIEventType = 1;
+const UIEventTypeMotion: UIEventType = 2;
 const UIEventTypeRemoteControl: UIEventType = 4;
 
-const UIEventSubtypeNone:                    UIEventSubtype = 0;
-const UIEventSubtypeMotionShake:             UIEventSubtype = 1;
-const UIEventSubtypeRemoteControlPlay:       UIEventSubtype = 100;
-const UIEventSubtypeRemoteControlPause:      UIEventSubtype = 101;
-const UIEventSubtypeRemoteControlStop:       UIEventSubtype = 102;
+const UIEventSubtypeNone: UIEventSubtype = 0;
+const UIEventSubtypeMotionShake: UIEventSubtype = 1;
+const UIEventSubtypeRemoteControlPlay: UIEventSubtype = 100;
+const UIEventSubtypeRemoteControlPause: UIEventSubtype = 101;
+const UIEventSubtypeRemoteControlStop: UIEventSubtype = 102;
 const UIEventSubtypeRemoteControlTogglePlayPause: UIEventSubtype = 103;
-const UIEventSubtypeRemoteControlNextTrack:  UIEventSubtype = 104;
+const UIEventSubtypeRemoteControlNextTrack: UIEventSubtype = 104;
 const UIEventSubtypeRemoteControlPreviousTrack: UIEventSubtype = 105;
 const UIEventSubtypeRemoteControlBeginSeekingBackward: UIEventSubtype = 106;
-const UIEventSubtypeRemoteControlEndSeekingBackward:   UIEventSubtype = 107;
-const UIEventSubtypeRemoteControlBeginSeekingForward:  UIEventSubtype = 108;
-const UIEventSubtypeRemoteControlEndSeekingForward:    UIEventSubtype = 109;
+const UIEventSubtypeRemoteControlEndSeekingBackward: UIEventSubtype = 107;
+const UIEventSubtypeRemoteControlBeginSeekingForward: UIEventSubtype = 108;
+const UIEventSubtypeRemoteControlEndSeekingForward: UIEventSubtype = 109;
 
 pub(super) struct UIEventHostObject {
     /// `NSSet<UITouch*>*`

@@ -27,22 +27,22 @@ type clock_serv_t = mach_port_t;
 const MACH_HOST_SELF: host_name_port_t = 0x100c442e;
 
 // Clock service port sentinels — arbitrary unique values, one per clock ID.
-const CLOCK_PORT_REALTIME:  clock_serv_t = 0x200c0001;
+const CLOCK_PORT_REALTIME: clock_serv_t = 0x200c0001;
 const CLOCK_PORT_MONOTONIC: clock_serv_t = 0x200c0002;
-const CLOCK_PORT_CALENDAR:  clock_serv_t = 0x200c0003;
+const CLOCK_PORT_CALENDAR: clock_serv_t = 0x200c0003;
 
 // clock_id_t values (from <mach/clock_types.h>)
-const SYSTEM_CLOCK:   clock_id_t = 0; // monotonic uptime
+const SYSTEM_CLOCK: clock_id_t = 0; // monotonic uptime
 const CALENDAR_CLOCK: clock_id_t = 1; // wall-clock (UTC)
 const REALTIME_CLOCK: clock_id_t = 2; // alias for SYSTEM_CLOCK on Darwin
 
 // Values taken from an iPod Touch 4 running iOS 6.1
 // Used in host_statistics function (returned in vm_statistics)
 // Also used to calcuate PHYSICAL_MEMORY (used by NSProcessInfo)
-const FREE_COUNT:     natural_t = 12897;
-const ACTIVE_COUNT:   natural_t = 0;
+const FREE_COUNT: natural_t = 12897;
+const ACTIVE_COUNT: natural_t = 0;
 const INACTIVE_COUNT: natural_t = 0;
-const WIRE_COUNT:     natural_t = 0;
+const WIRE_COUNT: natural_t = 0;
 
 pub const PHYSICAL_MEMORY: natural_t =
     (FREE_COUNT + ACTIVE_COUNT + INACTIVE_COUNT + WIRE_COUNT) * PAGE_SIZE;
@@ -137,18 +137,22 @@ fn host_get_clock_service(
 ) -> kern_return_t {
     assert_eq!(host, MACH_HOST_SELF);
     let port = match clock_id {
-        SYSTEM_CLOCK   => CLOCK_PORT_MONOTONIC,
+        SYSTEM_CLOCK => CLOCK_PORT_MONOTONIC,
         CALENDAR_CLOCK => CLOCK_PORT_CALENDAR,
         REALTIME_CLOCK => CLOCK_PORT_REALTIME,
         other => {
-            log!("host_get_clock_service: unknown clock_id {}, returning monotonic port", other);
+            log!(
+                "host_get_clock_service: unknown clock_id {}, returning monotonic port",
+                other
+            );
             CLOCK_PORT_MONOTONIC
         }
     };
     env.mem.write(clock_serv, port);
     log_dbg!(
         "host_get_clock_service(clock_id={}) => port {:#010x}",
-        clock_id, port
+        clock_id,
+        port
     );
     KERN_SUCCESS
 }
@@ -160,7 +164,7 @@ fn host_get_clock_service(
 /// `mach_timespec_t` is `{ tv_sec: u32, tv_nsec: u32 }`.
 #[repr(C, packed)]
 struct mach_timespec_t {
-    tv_sec:  u32,
+    tv_sec: u32,
     tv_nsec: u32,
 }
 unsafe impl SafeRead for mach_timespec_t {}
@@ -188,11 +192,19 @@ fn clock_get_time(
             (0, 0)
         }
     };
-    env.mem.write(cur_time, mach_timespec_t {
-        tv_sec:  secs as u32,
-        tv_nsec: nanos,
-    });
-    log_dbg!("clock_get_time(port={:#010x}) => {}.{:09}", clock_serv, secs, nanos);
+    env.mem.write(
+        cur_time,
+        mach_timespec_t {
+            tv_sec: secs as u32,
+            tv_nsec: nanos,
+        },
+    );
+    log_dbg!(
+        "clock_get_time(port={:#010x}) => {}.{:09}",
+        clock_serv,
+        secs,
+        nanos
+    );
     KERN_SUCCESS
 }
 
@@ -212,7 +224,8 @@ fn clock_get_attributes(
 ) -> kern_return_t {
     log_dbg!(
         "clock_get_attributes(port={:#010x}, flavor={}) — returning 1ms resolution",
-        clock_serv, flavor
+        clock_serv,
+        flavor
     );
     // CLOCK_GET_TIME_RES (flavor 1): resolution in nanoseconds.
     // Write a single natural_t value of 1 000 000 (1 ms).

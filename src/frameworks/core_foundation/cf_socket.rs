@@ -14,22 +14,22 @@ use crate::mem::{ConstVoidPtr, MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
-pub type CFSocketRef       = CFTypeRef;
+pub type CFSocketRef = CFTypeRef;
 pub type CFSocketNativeHandle = i32;
 pub type CFSocketCallBackType = u32;
-pub type CFSocketError        = i32;
+pub type CFSocketError = i32;
 
 // CFSocketCallBackType flags
-const kCFSocketNoCallBack:        CFSocketCallBackType = 0;
-const kCFSocketReadCallBack:      CFSocketCallBackType = 1;
-const kCFSocketAcceptCallBack:    CFSocketCallBackType = 2;
-const kCFSocketDataCallBack:      CFSocketCallBackType = 3;
-const kCFSocketConnectCallBack:   CFSocketCallBackType = 4;
-const kCFSocketWriteCallBack:     CFSocketCallBackType = 8;
+const kCFSocketNoCallBack: CFSocketCallBackType = 0;
+const kCFSocketReadCallBack: CFSocketCallBackType = 1;
+const kCFSocketAcceptCallBack: CFSocketCallBackType = 2;
+const kCFSocketDataCallBack: CFSocketCallBackType = 3;
+const kCFSocketConnectCallBack: CFSocketCallBackType = 4;
+const kCFSocketWriteCallBack: CFSocketCallBackType = 8;
 
 // CFSocketError values
 const kCFSocketSuccess: CFSocketError = 0;
-const kCFSocketError:   CFSocketError = -1;
+const kCFSocketError: CFSocketError = -1;
 const kCFSocketTimeout: CFSocketError = -2;
 
 // CFRunLoopSource — opaque stub ref reused from CFTypeRef
@@ -66,11 +66,17 @@ fn alloc_socket(env: &mut Environment, fd: CFSocketNativeHandle) -> CFSocketRef 
 // MARK: - Lifecycle
 
 pub fn CFSocketRetain(env: &mut Environment, s: CFSocketRef) -> CFSocketRef {
-    if !s.is_null() { CFRetain(env, s) } else { s }
+    if !s.is_null() {
+        CFRetain(env, s)
+    } else {
+        s
+    }
 }
 
 pub fn CFSocketRelease(env: &mut Environment, s: CFSocketRef) {
-    if !s.is_null() { CFRelease(env, s); }
+    if !s.is_null() {
+        CFRelease(env, s);
+    }
 }
 
 // MARK: - Constructors
@@ -88,7 +94,10 @@ fn CFSocketCreate(
     assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     log!(
         "CFSocketCreate: family={} type={} protocol={} callbacks={} — stubbed, returning null",
-        protocol_family, socket_type, protocol, callback_types
+        protocol_family,
+        socket_type,
+        protocol,
+        callback_types
     );
     nil
 }
@@ -103,7 +112,8 @@ fn CFSocketCreateWithNative(
 ) -> CFSocketRef {
     log!(
         "CFSocketCreateWithNative: fd={} callbacks={} — stubbed",
-        sock, callback_types
+        sock,
+        callback_types
     );
     alloc_socket(env, sock)
 }
@@ -160,11 +170,7 @@ fn CFSocketDisableCallBacks(
     log!("CFSocketDisableCallBacks: stubbed");
 }
 
-fn CFSocketSetSocketFlags(
-    _env: &mut Environment,
-    _s: CFSocketRef,
-    _flags: u32,
-) {
+fn CFSocketSetSocketFlags(_env: &mut Environment, _s: CFSocketRef, _flags: u32) {
     log!("CFSocketSetSocketFlags: stubbed");
 }
 

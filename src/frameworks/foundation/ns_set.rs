@@ -104,7 +104,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let count: NSUInteger = msg![env; this count];
         count as i32
 }
-    
+
 @end
 
 // NSMutableSet is an abstract class. A subclass must provide everything
@@ -246,7 +246,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithCapacity:(NSUInteger)_numItems {
-    // We ignore the requested capacity as Rust's internal data structures handle resizing automatically.
+    // We ignore the requested capacity as Rust's internal data structures
+    // handle resizing automatically.
     env.objc.borrow_mut::<SetHostObject>(this).dict = Default::default();
     this
 }

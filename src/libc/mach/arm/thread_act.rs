@@ -171,8 +171,8 @@ fn thread_get_state(
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(task_threads(_, _, _)),
-    export_c_func!(task_set_exception_ports(_, _, _, _, _)),
+    // task_threads and task_set_exception_ports are exported from
+    // mach::arm::task; not duplicated here.
     export_c_func!(thread_suspend(_)),
     export_c_func!(thread_resume(_)),
     export_c_func!(thread_get_state(_, _, _, _)),

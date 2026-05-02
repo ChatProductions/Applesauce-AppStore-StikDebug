@@ -321,4 +321,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGSizeApplyAffineTransform(_, _)),
     export_c_func!(CGRectApplyAffineTransform(_, _)),
 ];
-

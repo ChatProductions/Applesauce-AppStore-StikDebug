@@ -44,18 +44,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)style {
-    // Можно добавить хранение стиля в HostObject, если это потребуется для рендеринга
+    // Можно добавить хранение стиля в HostObject, если это потребуется для
+    // рендеринга
     todo_objc_setter!(this, style);
 }
 
 - (())startAnimating {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     host.animating = true;
-    
+
     // Если индикатор запускается, он должен стать видимым
     drop(host); // Освобождаем заимствование перед вызовом msg!
     let _: () = msg![env; this setHidden: false];
-    
+
     log!("UIActivityIndicatorView: started animating [{:?}]", this);
 }
 

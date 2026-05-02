@@ -44,8 +44,7 @@ const kAudioSessionProperty_CurrentHardwareIOBufferDuration: AudioSessionPropert
 const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
 const kAudioSessionProperty_OverrideAudioRoute: AudioSessionPropertyID = fourcc(b"ovrd");
 const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
-const kAudioSessionProperty_OverrideCategoryMixWithOthers: AudioSessionPropertyID =
-    fourcc(b"cmix");
+const kAudioSessionProperty_OverrideCategoryMixWithOthers: AudioSessionPropertyID = fourcc(b"cmix");
 const kAudioSessionProperty_OverrideCategoryDefaultToSpeaker: AudioSessionPropertyID =
     fourcc(b"cspk");
 const kAudioSessionProperty_OverrideCategoryEnableBluetoothInput: AudioSessionPropertyID =
@@ -75,8 +74,10 @@ impl Default for State {
     fn default() -> Self {
         Self {
             active: false,
-            // По умолчанию в iOS — SoloAmbientSound (звук игры заглушает Music.app,
-            // но сам слышен). 'ambi' подошла бы, только если игра хочет микс с музыкой.
+            // По умолчанию в iOS — SoloAmbientSound (звук игры заглушает
+            // Music.app,
+            // но сам слышен). 'ambi' подошла бы, только если игра хочет микс с
+            // музыкой.
             category: kAudioSessionCategory_SoloAmbientSound,
             // Значения, ожидаемые большинством iOS-игр того периода
             current_hardware_sample_rate: 44100.0,
@@ -231,14 +232,16 @@ pub fn AudioSessionGetProperty(
             env.mem.write(out_data.cast::<u32>(), 0);
         }
         kAudioSessionProperty_OverrideCategoryMixWithOthers => {
-            env.mem.write(out_data.cast::<u32>(), session.mix_with_others);
+            env.mem
+                .write(out_data.cast::<u32>(), session.mix_with_others);
         }
         kAudioSessionProperty_OverrideCategoryDefaultToSpeaker => {
             env.mem
                 .write(out_data.cast::<u32>(), session.default_to_speaker);
         }
         kAudioSessionProperty_OverrideCategoryEnableBluetoothInput => {
-            env.mem.write(out_data.cast::<u32>(), session.bluetooth_input);
+            env.mem
+                .write(out_data.cast::<u32>(), session.bluetooth_input);
         }
         _ => {
             log!(
@@ -290,7 +293,10 @@ pub fn AudioSessionSetProperty(
         }
         kAudioSessionProperty_PreferredHardwareSampleRate => {
             let rate = env.mem.read(in_data.cast::<f64>());
-            log_dbg!("AudioSessionSetProperty PreferredHardwareSampleRate -> {}", rate);
+            log_dbg!(
+                "AudioSessionSetProperty PreferredHardwareSampleRate -> {}",
+                rate
+            );
             session.preferred_hardware_sample_rate = rate;
         }
         kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
@@ -302,7 +308,8 @@ pub fn AudioSessionSetProperty(
             session.preferred_hardware_io_buffer_duration = dur;
         }
         kAudioSessionProperty_OverrideAudioRoute => {
-            // Значение игнорируем (у нас один фиксированный маршрут), но не жалуемся.
+            // Значение игнорируем (у нас один фиксированный маршрут), но не
+            // жалуемся.
         }
         kAudioSessionProperty_OverrideCategoryMixWithOthers => {
             session.mix_with_others = env.mem.read(in_data.cast::<u32>());
@@ -330,7 +337,10 @@ pub fn AudioSessionAddPropertyListener(
     _in_proc: AudioSessionPropertyListener,
     _in_client_data: ConstVoidPtr,
 ) -> OSStatus {
-    log_dbg!("TODO: AudioSessionAddPropertyListener {}", debug_fourcc(in_id));
+    log_dbg!(
+        "TODO: AudioSessionAddPropertyListener {}",
+        debug_fourcc(in_id)
+    );
     kAudioSessionNoErr
 }
 
@@ -345,7 +355,8 @@ pub fn AudioSessionRemovePropertyListener(
     kAudioSessionNoErr
 }
 
-// Recommended replacement for AudioSessionAddPropertyListener / -RemovePropertyListener,
+// Recommended replacement for AudioSessionAddPropertyListener /
+// -RemovePropertyListener,
 // see Apple's `Audio Session Support` (`AudioToolbox/AudioServices.h`).
 //
 // The signature mirrors the other `…WithUserData` Audio Toolbox APIs
@@ -398,4 +409,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListenerWithUserData(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
-

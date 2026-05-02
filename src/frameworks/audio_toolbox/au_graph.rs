@@ -8,8 +8,8 @@
 //!
 //! Реализован граф для эмуляции iOS 2.0-4.3.5. Поддерживаются структуры
 //! соединений узлов и рендер-коллбэков для полноценного отслеживания графа,
-//! нужного играм вроде Plants vs Zombies. Каждая input-шина 3D Mixer-а 
-//! превращается в отдельный OpenAL-источник, callback дёргается из общего 
+//! нужного играм вроде Plants vs Zombies. Каждая input-шина 3D Mixer-а
+//! превращается в отдельный OpenAL-источник, callback дёргается из общего
 //! run-loop'а через `audio_unit::render_audio_unit`.
 
 use std::collections::HashMap;
@@ -21,9 +21,7 @@ use crate::export_c_func;
 use crate::frameworks::audio_toolbox::audio_components::{
     self, AURenderCallbackStruct, AudioComponentInstance,
 };
-use crate::frameworks::audio_toolbox::audio_unit::{
-    setup_audio_unit_for_render, AudioUnit,
-};
+use crate::frameworks::audio_toolbox::audio_unit::{setup_audio_unit_for_render, AudioUnit};
 use crate::frameworks::carbon_core::{paramErr, OSStatus};
 use crate::frameworks::core_audio_types::AudioStreamBasicDescription;
 use crate::frameworks::core_foundation::cf_run_loop::CFRunLoopGetMain;
@@ -139,7 +137,7 @@ fn AUGraphAddNode(
     let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) else {
         return paramErr;
     };
-    
+
     state.next_node_id += 1;
     let node_id = state.next_node_id;
     state.nodes.insert(
@@ -153,21 +151,26 @@ fn AUGraphAddNode(
     // Если это RemoteIO — запоминаем его как выходной узел графа.
     let is_output = desc.component_type == kAudioUnitType_Output
         && desc.component_sub_type == kAudioUnitSubType_RemoteIO;
-    
+
     if is_output {
         state.output_node = Some(node_id);
     }
 
     env.mem.write(out_node, node_id);
-    
-    // Вытаскиваем значения в локальные переменные (копии), 
-    // чтобы избежать UB при взятии ссылки макросом log! из упакованной структуры.
+
+    // Вытаскиваем значения в локальные переменные (копии),
+    // чтобы избежать UB при взятии ссылки макросом log! из упакованной
+    // структуры.
     let dt = desc.component_type;
     let ds = desc.component_sub_type;
-    
+
     log_dbg!(
         "AUGraphAddNode({:?}, type=0x{:08x} sub=0x{:08x}) -> node={} (output={})",
-        graph, dt, ds, node_id, is_output
+        graph,
+        dt,
+        ds,
+        node_id,
+        is_output
     );
     0
 }
@@ -176,16 +179,14 @@ fn AUGraphRemoveNode(env: &mut Environment, graph: AUGraph, node: AUNode) -> OSS
     if let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) {
         state.nodes.remove(&node);
         // Очищаем любые соединения, связанные с удаленным узлом
-        state.connections.retain(|c| c.source_node != node && c.dest_node != node);
+        state
+            .connections
+            .retain(|c| c.source_node != node && c.dest_node != node);
     }
     0
 }
 
-fn AUGraphCountNodes(
-    env: &mut Environment,
-    graph: AUGraph,
-    out_count: MutPtr<u32>,
-) -> OSStatus {
+fn AUGraphCountNodes(env: &mut Environment, graph: AUGraph, out_count: MutPtr<u32>) -> OSStatus {
     let count = State::get(&mut env.framework_state)
         .graphs
         .get(&graph)
@@ -280,7 +281,7 @@ fn AUGraphInitialize(env: &mut Environment, graph: AUGraph) -> OSStatus {
     for unit in units {
         ns_run_loop::add_audio_unit(env, run_loop, unit);
     }
-    
+
     if let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) {
         state.is_initialized = true;
     }
@@ -325,7 +326,7 @@ fn AUGraphStop(env: &mut Environment, graph: AUGraph) -> OSStatus {
             obj.started = false;
         }
     }
-    
+
     if let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) {
         state.is_running = false;
     }
@@ -333,19 +334,31 @@ fn AUGraphStop(env: &mut Environment, graph: AUGraph) -> OSStatus {
 }
 
 fn AUGraphIsOpen(env: &mut Environment, graph: AUGraph, out_is_open: MutPtr<u8>) -> OSStatus {
-    let v = State::get(&mut env.framework_state).graphs.get(&graph).map(|s| s.is_open).unwrap_or(false);
+    let v = State::get(&mut env.framework_state)
+        .graphs
+        .get(&graph)
+        .map(|s| s.is_open)
+        .unwrap_or(false);
     env.mem.write(out_is_open, v as u8);
     0
 }
 
 fn AUGraphIsInitialized(env: &mut Environment, graph: AUGraph, out_v: MutPtr<u8>) -> OSStatus {
-    let v = State::get(&mut env.framework_state).graphs.get(&graph).map(|s| s.is_initialized).unwrap_or(false);
+    let v = State::get(&mut env.framework_state)
+        .graphs
+        .get(&graph)
+        .map(|s| s.is_initialized)
+        .unwrap_or(false);
     env.mem.write(out_v, v as u8);
     0
 }
 
 fn AUGraphIsRunning(env: &mut Environment, graph: AUGraph, out_v: MutPtr<u8>) -> OSStatus {
-    let v = State::get(&mut env.framework_state).graphs.get(&graph).map(|s| s.is_running).unwrap_or(false);
+    let v = State::get(&mut env.framework_state)
+        .graphs
+        .get(&graph)
+        .map(|s| s.is_running)
+        .unwrap_or(false);
     env.mem.write(out_v, v as u8);
     0
 }
@@ -364,13 +377,17 @@ fn AUGraphConnectNodeInput(
 ) -> OSStatus {
     log_dbg!(
         "AUGraphConnectNodeInput({:?}): src_node={} out={} -> dest_node={} in={}",
-        graph, src_node, src_output_number, dest_node, dest_input_number
+        graph,
+        src_node,
+        src_output_number,
+        dest_node,
+        dest_input_number
     );
 
     let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) else {
         return paramErr;
     };
-    
+
     state.connections.push(AudioUnitNodeConnection {
         source_node: src_node,
         source_output_number: src_output_number,
@@ -390,10 +407,17 @@ fn AUGraphDisconnectNodeInput(
     let Some(state) = State::get(&mut env.framework_state).graphs.get_mut(&graph) else {
         return paramErr;
     };
-    
-    state.connections.retain(|c| !(c.dest_node == dest_node && c.dest_input_number == dest_input_number));
-    
-    log_dbg!("AUGraphDisconnectNodeInput({:?}): dest_node={} in={}", graph, dest_node, dest_input_number);
+
+    state
+        .connections
+        .retain(|c| !(c.dest_node == dest_node && c.dest_input_number == dest_input_number));
+
+    log_dbg!(
+        "AUGraphDisconnectNodeInput({:?}): dest_node={} in={}",
+        graph,
+        dest_node,
+        dest_input_number
+    );
     0
 }
 
@@ -404,13 +428,15 @@ fn AUGraphSetNodeInputCallback(
     dest_input_number: u32,
     in_input_callback: ConstPtr<AURenderCallbackStruct>,
 ) -> OSStatus {
-    let cb = env.mem.read::<AURenderCallbackStruct, false>(in_input_callback);
+    let cb = env
+        .mem
+        .read::<AURenderCallbackStruct, false>(in_input_callback);
     let dest_unit: Option<AudioUnit> = State::get(&mut env.framework_state)
         .graphs
         .get(&graph)
         .and_then(|s| s.nodes.get(&dest_node))
         .and_then(|n| n.audio_unit);
-        
+
     let Some(dest_unit) = dest_unit else {
         return paramErr;
     };
@@ -428,7 +454,7 @@ fn AUGraphSetNodeInputCallback(
             bus.last_render_time = Some(Instant::now());
         }
     }
-    
+
     log_dbg!(
         "AUGraphSetNodeInputCallback({:?}, dest_node={}, bus={}, proc={:?}, ref_con={:?}) -> unit={:?}",
         graph, dest_node, dest_input_number, proc_copy, ref_con_copy, dest_unit
@@ -444,13 +470,19 @@ fn AUGraphUpdate(env: &mut Environment, _graph: AUGraph, out_is_updated: MutPtr<
 }
 
 fn AUGraphAddRenderNotify(
-    _env: &mut Environment, _graph: AUGraph, _proc: ConstPtr<u8>, _ref_con: ConstPtr<u8>,
+    _env: &mut Environment,
+    _graph: AUGraph,
+    _proc: ConstPtr<u8>,
+    _ref_con: ConstPtr<u8>,
 ) -> OSStatus {
     0
 }
 
 fn AUGraphRemoveRenderNotify(
-    _env: &mut Environment, _graph: AUGraph, _proc: ConstPtr<u8>, _ref_con: ConstPtr<u8>,
+    _env: &mut Environment,
+    _graph: AUGraph,
+    _proc: ConstPtr<u8>,
+    _ref_con: ConstPtr<u8>,
 ) -> OSStatus {
     0
 }
@@ -487,4 +519,3 @@ pub const FUNCTIONS: FunctionExports = &[
 // Предотвращаем "unused" предупреждение для guest_size_of import.
 #[allow(dead_code)]
 const _SIZE_PROBE: usize = guest_size_of::<OpaqueAUGraph>() as usize;
-

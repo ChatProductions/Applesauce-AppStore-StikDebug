@@ -121,7 +121,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if object != nil {
         let _: () = msg![env; invocation setArgument:object atIndex:3];
     }
-    
+
     let state = &mut framework_state!(env).uikit.undo_manager;
     state.undo_stack.push(invocation);
     // Clear redo stack when new action is registered

@@ -16,19 +16,19 @@ use crate::objc::{
 // MARK: - Rounding modes
 
 type NSRoundingMode = NSUInteger;
-const NSRoundPlain:   NSRoundingMode = 0; // round half up
-const NSRoundDown:    NSRoundingMode = 1;
-const NSRoundUp:      NSRoundingMode = 2;
+const NSRoundPlain: NSRoundingMode = 0; // round half up
+const NSRoundDown: NSRoundingMode = 1;
+const NSRoundUp: NSRoundingMode = 2;
 const NSRoundBankers: NSRoundingMode = 3; // round half to even
 
 // MARK: - Calculation error codes
 
 type NSCalculationError = NSUInteger;
-const NSCalculationNoError:             NSCalculationError = 0;
-const NSCalculationLossOfPrecision:     NSCalculationError = 1;
-const NSCalculationUnderflow:           NSCalculationError = 2;
-const NSCalculationOverflow:            NSCalculationError = 3;
-const NSCalculationDivideByZero:        NSCalculationError = 4;
+const NSCalculationNoError: NSCalculationError = 0;
+const NSCalculationLossOfPrecision: NSCalculationError = 1;
+const NSCalculationUnderflow: NSCalculationError = 2;
+const NSCalculationOverflow: NSCalculationError = 3;
+const NSCalculationDivideByZero: NSCalculationError = 4;
 
 // MARK: - Host object
 
@@ -51,8 +51,7 @@ struct NSDecimalNumberHandlerHostObject {
 }
 impl HostObject for NSDecimalNumberHandlerHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
@@ -317,14 +316,14 @@ pub const CLASSES: ClassExports = objc_classes!
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == nil  { return false; }
-    
+
     // ИСПРАВЛЕНИЕ: Безопасная проверка класса вместо try_borrow
     let other_class: crate::objc::Class = msg![env; other class];
     let ns_decimal_class = env.objc.get_known_class("NSDecimalNumber", &mut env.mem);
     if !env.objc.class_is_subclass_of(other_class, ns_decimal_class) {
         return false;
     }
-    
+
     let a = env.objc.borrow::<NSDecimalNumberHostObject>(this).value;
     let b = env.objc.borrow::<NSDecimalNumberHostObject>(other).value;
     a == b
@@ -420,9 +419,7 @@ pub const CLASSES: ClassExports = objc_classes!
 }
 
 // NSDecimalNumberBehaviors protocol stubs.
-- (NSRoundingMode)roundingMode { 
-    env.objc.borrow::<NSDecimalNumberHandlerHostObject>(this).rounding_mode
-}
+// (roundingMode is defined above; not duplicated here.)
 
 - (id)exceptionDuringOperation:(id)_operation
                           error:(NSCalculationError)error
@@ -446,9 +443,7 @@ type NSComparisonResult = NSInteger;
 // MARK: - Helpers
 
 fn decimal_from_f64(env: &mut crate::Environment, value: f64) -> crate::objc::id {
-    let class = env
-        .objc
-        .get_known_class("NSDecimalNumber", &mut env.mem);
+    let class = env.objc.get_known_class("NSDecimalNumber", &mut env.mem);
     let obj = env.objc.alloc_object(
         class,
         Box::new(NSDecimalNumberHostObject { value }),
@@ -456,4 +451,3 @@ fn decimal_from_f64(env: &mut crate::Environment, value: f64) -> crate::objc::id
     );
     obj
 }
-

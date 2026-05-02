@@ -9,7 +9,8 @@ use crate::abi::{CallFromHost, GuestFunction};
 use crate::frameworks::foundation::NSUInteger;
 use crate::mem::{ConstPtr, Ptr}; // Добавили ConstPtr
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 use crate::Environment;
 
@@ -30,10 +31,11 @@ impl Default for UIDocumentHostObject {
 fn call_bool_block(env: &mut Environment, block: id, arg: bool) {
     if block != nil {
         let block_ptr = block.to_bits();
-        // Явно указываем ConstPtr::<u32>, чтобы компилятор не гадал о параметрах MUT и T
+        // Явно указываем ConstPtr::<u32>, чтобы компилятор не гадал о
+        // параметрах MUT и T
         let invoke_addr: u32 = env.mem.read(ConstPtr::<u32>::from_bits(block_ptr + 12));
         let invoke_func = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
-        
+
         let _: () = invoke_func.call_from_host(env, (block, arg as u32));
     }
 }
@@ -50,8 +52,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     - (id)initWithFileURL:(id)url {
         // Вместо msg![env; super init] используем msg_super!
-        let this: id = msg_super![env; this init]; 
-        
+        let this: id = msg_super![env; this init];
+
         if url != nil {
             retain(env, url);
         }
@@ -65,7 +67,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             release(env, url);
         }
         // Здесь тоже меняем на msg_super!
-        msg_super![env; this dealloc] 
+        msg_super![env; this dealloc]
     }
 
     - (id)fileURL {
@@ -91,7 +93,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     - (())updateChangeCount:(NSUInteger)_change {
         // Ничего не делаем, просто принимаем вызов
     }
-    
+
     - (id)localizedName {
         let url = env.objc.borrow::<UIDocumentHostObject>(this).file_url;
         if url != nil {

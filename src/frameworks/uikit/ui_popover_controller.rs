@@ -13,12 +13,11 @@ use crate::objc::{
 
 // UIPopoverArrowDirection bitmask constants
 pub type UIPopoverArrowDirection = NSUInteger;
-pub const UIPopoverArrowDirectionUp:    UIPopoverArrowDirection = 1 << 0;
-pub const UIPopoverArrowDirectionDown:  UIPopoverArrowDirection = 1 << 1;
-pub const UIPopoverArrowDirectionLeft:  UIPopoverArrowDirection = 1 << 2;
+pub const UIPopoverArrowDirectionUp: UIPopoverArrowDirection = 1 << 0;
+pub const UIPopoverArrowDirectionDown: UIPopoverArrowDirection = 1 << 1;
+pub const UIPopoverArrowDirectionLeft: UIPopoverArrowDirection = 1 << 2;
 pub const UIPopoverArrowDirectionRight: UIPopoverArrowDirection = 1 << 3;
-pub const UIPopoverArrowDirectionAny:   UIPopoverArrowDirection =
-    UIPopoverArrowDirectionUp
+pub const UIPopoverArrowDirectionAny: UIPopoverArrowDirection = UIPopoverArrowDirectionUp
     | UIPopoverArrowDirectionDown
     | UIPopoverArrowDirectionLeft
     | UIPopoverArrowDirectionRight;
@@ -287,11 +286,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         let h = env.objc.borrow::<UIPopoverControllerHostObject>(this);
         (h.popover_visible, h.popover_content_size)
     };
-    
+
     // Выносим поля из упакованной структуры CGSize в локальные переменные
     let width = size.width;
     let height = size.height;
-    
+
     let s = format!(
         "<UIPopoverController: {:?}; visible={}; contentSize={{{}, {}}}>",
         this, visible, width, height

@@ -10,7 +10,7 @@ use super::ns_property_list_serialization::{
     deserialize_plist_from_file, NSPropertyListBinaryFormat_v1_0,
 };
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
-use super::{ns_array, ns_keyed_unarchiver, ns_string, ns_url, NSUInteger, _nib_archive_decoder};
+use super::{_nib_archive_decoder, ns_array, ns_keyed_unarchiver, ns_string, ns_url, NSUInteger};
 use crate::abi::{CallFromHost, GuestFunction, VaList};
 use crate::frameworks::core_foundation::{CFHashCode, CFIndex};
 use crate::frameworks::foundation::ns_enumerator::{
@@ -22,8 +22,8 @@ use crate::frameworks::foundation::ns_file_manager::{
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, Class, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, Class,
+    ClassExports, HostObject, NSZonePtr,
 };
 use crate::{impl_HostObject_with_superclass, Environment};
 use std::collections::hash_map::Entry;
@@ -469,8 +469,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)keyEnumerator {
     // 1. Получаем все ключи словаря в виде объекта NSArray
     let keys: id = msg![env; this allKeys];
-    
-    // 2. Возвращаем готовый энумератор массива (он уже честно реализован в ns_array.rs)
+
+    // 2. Возвращаем готовый энумератор массива (он уже честно реализован в
+    // ns_array.rs)
     msg![env; keys objectEnumerator]
 }
 
@@ -479,7 +480,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let values: id = msg![env; this allValues];
     msg![env; values objectEnumerator]
 }
-    
+
 // These probably comes from some category related to plists.
 - (id)initWithContentsOfFile:(id)path { // NSString*
     release(env, this);
@@ -680,7 +681,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let res = crate::frameworks::foundation::ns_array::from_vec(env, values);
     autorelease(env, res)
 }
-    
+
 // NSFastEnumeration implementation
 - (NSUInteger)countByEnumeratingWithState:(MutPtr<NSFastEnumerationState>)state
                                   objects:(MutPtr<id>)stackbuf
@@ -737,7 +738,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setDictionary:(id)dict {
     todo_objc_setter!(this, dict);
 }
-    
+
 - (id)initWithObjectsAndKeys:(id)first_object, ...dots {
     init_with_objects_and_keys(env, this, first_object, dots.start())
 }
@@ -792,7 +793,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     init_with_objects_for_keys_common(env, this, objects, keys)
 }
 
-// FIX: Added missing instance method initWithObjects:forKeys:count: for mutable dictionary
+// FIX: Added missing instance method initWithObjects:forKeys:count: for mutable
+// dictionary
 - (id)initWithObjects:(ConstPtr<id>)objects
               forKeys:(ConstPtr<id>)keys
                 count:(NSUInteger)count {
@@ -901,18 +903,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setObject:(id)object
              forKey:(id)key {
-        // Если объект nil, по правилам iOS должно быть исключение NSInvalidArgumentException.
-        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем добавление.
+        // Если объект nil, по правилам iOS должно быть исключение
+        // NSInvalidArgumentException.
+        // Чтобы не ронять эмулятор паникой, логируем ошибку и прерываем
+        // добавление.
         if object == nil {
-            let key_str = if key != nil { 
-                crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string() 
-            } else { 
-                "nil".to_string() 
+            let key_str = if key != nil {
+                crate::frameworks::foundation::ns_string::to_rust_string(env, key).to_string()
+            } else {
+                "nil".to_string()
             };
             log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to insert nil object for key {} — ignoring", key_str);
             return;
         }
-        
+
         if key == nil {
             log!("Warning: [NSMutableDictionary setObject:forKey:] attempt to use nil key — ignoring");
             return;
@@ -1138,4 +1142,3 @@ fn build_description(env: &mut Environment, dict: id) -> id {
     release(env, desc);
     autorelease(env, desc_imm)
 }
-

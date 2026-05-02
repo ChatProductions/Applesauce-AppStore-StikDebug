@@ -118,7 +118,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
     let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
     // TODO: handle other modes
-    // assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode isEqualToString:common_modes]);
+    // assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode
+    // isEqualToString:common_modes]);
 
     log_dbg!(
         "Adding timer {:?} to run loop {:?} with mode {:?}",
@@ -162,7 +163,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             // Запрашиваем целевой объект у таймера напрямую через сообщение.
             let timer_target: id = msg![env; timer target];
 
-            // Если цель совпадает, инвалидируем таймер (он сам удалится из run loop)
+            // Если цель совпадает, инвалидируем таймер (он сам удалится из run
+            // loop)
             if timer_target == target {
                 log_dbg!("NSRunLoop: invalidating timer {:?} for target {:?}", timer, target);
                 let _: () = msg![env; timer invalidate];
@@ -235,7 +237,8 @@ pub fn remove_audio_queue(env: &mut Environment, run_loop: id, queue: AudioQueue
 pub(super) fn remove_timer(env: &mut Environment, run_loop: id, timer: id) {
     log_dbg!("Removing timer {:?} from run loop {:?}", timer, run_loop);
 
-    // Честная логика Objective-C: если run_loop равен nil, нам не откуда удалять таймер.
+    // Честная логика Objective-C: если run_loop равен nil, нам не откуда
+    // удалять таймер.
     if run_loop == nil {
         return;
     }

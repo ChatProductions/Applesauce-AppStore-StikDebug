@@ -13,12 +13,12 @@ use crate::export_c_func;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 
 pub type LocaleCategory = i32;
-pub const LC_ALL:      LocaleCategory = 0;
-pub const LC_COLLATE:  LocaleCategory = 1;
-pub const LC_CTYPE:    LocaleCategory = 2;
+pub const LC_ALL: LocaleCategory = 0;
+pub const LC_COLLATE: LocaleCategory = 1;
+pub const LC_CTYPE: LocaleCategory = 2;
 pub const LC_MONETARY: LocaleCategory = 3;
-pub const LC_NUMERIC:  LocaleCategory = 4;
-pub const LC_TIME:     LocaleCategory = 5;
+pub const LC_NUMERIC: LocaleCategory = 4;
+pub const LC_TIME: LocaleCategory = 5;
 pub const LC_MESSAGES: LocaleCategory = 6;
 
 // locale_t is an opaque pointer — we use MutVoidPtr as a handle.
@@ -112,7 +112,7 @@ fn localeconv(env: &mut Environment) -> MutVoidPtr {
     }
 
     // Write decimal_point = "." at offset 0 (first field in lconv).
-    let dot  = env.mem.alloc_and_write_cstr(b".");
+    let dot = env.mem.alloc_and_write_cstr(b".");
     let comma = env.mem.alloc_and_write_cstr(b"");
     // Write pointer to "." as first field (decimal_point).
     env.mem.write(block.cast::<MutPtr<u8>>(), dot);
@@ -130,13 +130,13 @@ fn nl_langinfo(env: &mut Environment, item: i32) -> ConstPtr<u8> {
     // CODESET = 0, D_T_FMT = 1, D_FMT = 2, T_FMT = 3,
     // RADIXCHAR = 65536, THOUSEP = 65537
     let s: &[u8] = match item {
-        0       => b"UTF-8\0",  // CODESET
-        1       => b"%a %b %e %H:%M:%S %Y\0", // D_T_FMT
-        2       => b"%m/%d/%y\0",              // D_FMT
-        3       => b"%H:%M:%S\0",              // T_FMT
-        65536   => b".\0",      // RADIXCHAR / decimal_point
-        65537   => b"\0",       // THOUSEP / thousands_sep
-        _       => b"\0",
+        0 => b"UTF-8\0",                // CODESET
+        1 => b"%a %b %e %H:%M:%S %Y\0", // D_T_FMT
+        2 => b"%m/%d/%y\0",             // D_FMT
+        3 => b"%H:%M:%S\0",             // T_FMT
+        65536 => b".\0",                // RADIXCHAR / decimal_point
+        65537 => b"\0",                 // THOUSEP / thousands_sep
+        _ => b"\0",
     };
     let ptr = env.mem.alloc_and_write_cstr(&s[..s.len() - 1]); // strip the \0 we added
     ptr.cast_const()

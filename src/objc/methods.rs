@@ -9,12 +9,9 @@
 //! - [Apple's documentation of `class_addMethod`](https://developer.apple.com/documentation/objectivec/1418901-class_addmethod?language=objc)
 
 use super::{
-    id, nil, objc_super, Class, ClassHostObject, MsgSendSignature,
-    MsgSendSuperSignature, ObjC, SEL,
+    id, nil, objc_super, Class, ClassHostObject, MsgSendSignature, MsgSendSuperSignature, ObjC, SEL,
 };
-use crate::abi::{
-    CallFromGuest, DotDotDot, GuestArg, GuestFunction, GuestRet,
-};
+use crate::abi::{CallFromGuest, DotDotDot, GuestArg, GuestFunction, GuestRet};
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, Mem, Ptr, SafeRead};
 use crate::Environment;
 use std::any::TypeId;
@@ -131,8 +128,7 @@ impl ClassHostObject {
         let method_list_t { entsize, count } = mem.read(method_list_ptr);
         assert!(entsize >= guest_size_of::<method_t>());
 
-        let methods_base_ptr: ConstPtr<method_t> =
-            (method_list_ptr + 1).cast();
+        let methods_base_ptr: ConstPtr<method_t> = (method_list_ptr + 1).cast();
 
         for i in 0..count {
             let method_ptr: ConstPtr<method_t> =
@@ -177,11 +173,7 @@ impl ObjC {
         }
     }
 
-    pub fn class_get_method_signature(
-        &self,
-        class: Class,
-        sel: SEL,
-    ) -> Option<&ConstPtr<u8>> {
+    pub fn class_get_method_signature(&self, class: Class, sel: SEL) -> Option<&ConstPtr<u8>> {
         // TODO: support `host` method signatures
         let mut class = class;
         loop {
@@ -204,11 +196,7 @@ impl ObjC {
     /// Same as [Self::class_has_method], but using a named selector
     /// (rather than a pointer).
     #[allow(dead_code)]
-    pub fn class_has_method_named(
-        &self,
-        class: Class,
-        sel_name: &str,
-    ) -> bool {
+    pub fn class_has_method_named(&self, class: Class, sel_name: &str) -> bool {
         if let Some(sel) = self.lookup_selector(sel_name) {
             self.class_has_method(class, sel)
         } else {
@@ -217,12 +205,7 @@ impl ObjC {
     }
 
     /// Checks if a given object has a method (responds to a selector).
-    pub fn object_has_method(
-        &self,
-        mem: &Mem,
-        obj: id,
-        sel: SEL,
-    ) -> bool {
+    pub fn object_has_method(&self, mem: &Mem, obj: id, sel: SEL) -> bool {
         self.class_has_method(ObjC::read_isa(obj, mem), sel)
     }
 
@@ -238,12 +221,7 @@ impl ObjC {
 
     /// Same as [Self::object_has_method], but using a named selector
     /// (rather than a pointer).
-    pub fn object_has_method_named(
-        &self,
-        mem: &Mem,
-        obj: id,
-        sel_name: &str,
-    ) -> bool {
+    pub fn object_has_method_named(&self, mem: &Mem, obj: id, sel_name: &str) -> bool {
         if let Some(sel) = self.lookup_selector(sel_name) {
             self.object_has_method(mem, obj, sel)
         } else {
@@ -285,11 +263,7 @@ impl ObjC {
         }
     }
 
-    pub fn debug_all_class_selectors_as_strings(
-        &self,
-        mem: &Mem,
-        class: Class,
-    ) -> Vec<String> {
+    pub fn debug_all_class_selectors_as_strings(&self, mem: &Mem, class: Class) -> Vec<String> {
         let mut class = class;
         let mut selector_strings = Vec::new();
         loop {
@@ -312,4 +286,3 @@ impl ObjC {
         selector_strings
     }
 }
-

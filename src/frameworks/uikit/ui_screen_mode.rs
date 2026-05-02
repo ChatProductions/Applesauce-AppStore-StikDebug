@@ -55,13 +55,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)description {
     let host = env.objc.borrow::<UIScreenModeHostObject>(this);
-    
+
     // Копируем значения из упакованной структуры в локальные переменные,
     // чтобы макрос format! не пытался взять невыровненную ссылку.
     let width = host.size.width;
     let height = host.size.height;
     let pixel_aspect_ratio = host.pixel_aspect_ratio;
-    
+
     let s = format!(
         "<UIScreenMode: size=({}, {}), pixelAspectRatio={}>",
         width, height, pixel_aspect_ratio
@@ -77,11 +77,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 /// Allocate a `UIScreenMode` with a specific size and pixel aspect ratio.
 /// For use by `UIScreen` when building its `availableModes` array.
-pub fn from_size(
-    env: &mut crate::Environment,
-    size: CGSize,
-    pixel_aspect_ratio: CGFloat,
-) -> id {
+pub fn from_size(env: &mut crate::Environment, size: CGSize, pixel_aspect_ratio: CGFloat) -> id {
     let mode: id = crate::objc::msg_class![env; UIScreenMode alloc];
     let mut host = env.objc.borrow_mut::<UIScreenModeHostObject>(mode);
     host.size = size;

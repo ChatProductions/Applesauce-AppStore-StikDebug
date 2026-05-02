@@ -13,24 +13,24 @@ use crate::objc::{
 };
 
 type NSURLRequestCachePolicy = NSUInteger;
-const NSURLRequestUseProtocolCachePolicy:      NSURLRequestCachePolicy = 0;
-const NSURLRequestReloadIgnoringLocalCache:    NSURLRequestCachePolicy = 1;
+const NSURLRequestUseProtocolCachePolicy: NSURLRequestCachePolicy = 0;
+const NSURLRequestReloadIgnoringLocalCache: NSURLRequestCachePolicy = 1;
 #[allow(dead_code)]
-const NSURLRequestReloadIgnoringCacheData:     NSURLRequestCachePolicy = 1; // alias
-const NSURLRequestReturnCacheDataElseLoad:     NSURLRequestCachePolicy = 2;
-const NSURLRequestReturnCacheDataDontLoad:     NSURLRequestCachePolicy = 3;
+const NSURLRequestReloadIgnoringCacheData: NSURLRequestCachePolicy = 1; // alias
+const NSURLRequestReturnCacheDataElseLoad: NSURLRequestCachePolicy = 2;
+const NSURLRequestReturnCacheDataDontLoad: NSURLRequestCachePolicy = 3;
 const NSURLRequestReloadRevalidatingCacheData: NSURLRequestCachePolicy = 4;
 
 type NSURLRequestNetworkServiceType = NSUInteger;
-const NSURLNetworkServiceTypeDefault:    NSURLRequestNetworkServiceType = 0;
+const NSURLNetworkServiceTypeDefault: NSURLRequestNetworkServiceType = 0;
 #[allow(dead_code)]
-const NSURLNetworkServiceTypeVoIP:       NSURLRequestNetworkServiceType = 1;
+const NSURLNetworkServiceTypeVoIP: NSURLRequestNetworkServiceType = 1;
 #[allow(dead_code)]
-const NSURLNetworkServiceTypeVideo:      NSURLRequestNetworkServiceType = 2;
+const NSURLNetworkServiceTypeVideo: NSURLRequestNetworkServiceType = 2;
 #[allow(dead_code)]
 const NSURLNetworkServiceTypeBackground: NSURLRequestNetworkServiceType = 3;
 #[allow(dead_code)]
-const NSURLNetworkServiceTypeVoice:      NSURLRequestNetworkServiceType = 4;
+const NSURLNetworkServiceTypeVoice: NSURLRequestNetworkServiceType = 4;
 
 struct NSURLRequestHostObject {
     /// `NSURL*`

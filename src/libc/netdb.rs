@@ -13,45 +13,45 @@ use crate::mem::{guest_size_of, ConstPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
 use std::ops::Add;
 
-const AI_PASSIVE:    i32 = 0x1;
-const AI_CANONNAME:  i32 = 0x2;
+const AI_PASSIVE: i32 = 0x1;
+const AI_CANONNAME: i32 = 0x2;
 const AI_NUMERICHOST: i32 = 0x4;
 const AI_NUMERICSERV: i32 = 0x8;
-const AI_V4MAPPED:   i32 = 0x800;
-const AI_ALL:        i32 = 0x100;
+const AI_V4MAPPED: i32 = 0x800;
+const AI_ALL: i32 = 0x100;
 const AI_ADDRCONFIG: i32 = 0x400;
 
 pub const IPPROTO_TCP: i32 = 6;
 pub const IPPROTO_UDP: i32 = 17;
-const EAI_AGAIN:   i32 = 2;
-const EAI_FAIL:    i32 = 4;
-const EAI_FAMILY:  i32 = 5;
+const EAI_AGAIN: i32 = 2;
+const EAI_FAIL: i32 = 4;
+const EAI_FAMILY: i32 = 5;
 const EAI_SERVICE: i32 = 8;
-const EAI_NONAME:  i32 = 8;
-const EAI_MEMORY:  i32 = 6;
-const EAI_SYSTEM:  i32 = 11;
+const EAI_NONAME: i32 = 8;
+const EAI_MEMORY: i32 = 6;
+const EAI_SYSTEM: i32 = 11;
 const EAI_OVERFLOW: i32 = 14;
 const HOST_NOT_FOUND: i32 = 1;
-const TRY_AGAIN:      i32 = 2;
-const NO_RECOVERY:    i32 = 3;
-const NO_DATA:        i32 = 4;
+const TRY_AGAIN: i32 = 2;
+const NO_RECOVERY: i32 = 3;
+const NO_DATA: i32 = 4;
 const NI_MAXHOST: u32 = 1025;
 const NI_MAXSERV: u32 = 32;
 
 const NI_NUMERICHOST: i32 = 0x01;
 const NI_NUMERICSERV: i32 = 0x02;
-const NI_NAMEREQD:    i32 = 0x04;
-const NI_NOFQDN:      i32 = 0x08;
-const NI_DGRAM:       i32 = 0x10;
+const NI_NAMEREQD: i32 = 0x04;
+const NI_NOFQDN: i32 = 0x08;
+const NI_DGRAM: i32 = 0x10;
 
 #[allow(non_camel_case_types)]
 pub type socklen_t = u32;
 // h_errno values stored in libc state.
-pub const H_ERRNO_SUCCESS:       i32 = 0;
+pub const H_ERRNO_SUCCESS: i32 = 0;
 pub const H_ERRNO_HOST_NOT_FOUND: i32 = HOST_NOT_FOUND;
-pub const H_ERRNO_TRY_AGAIN:     i32 = TRY_AGAIN;
-pub const H_ERRNO_NO_RECOVERY:   i32 = NO_RECOVERY;
-pub const H_ERRNO_NO_DATA:       i32 = NO_DATA;
+pub const H_ERRNO_TRY_AGAIN: i32 = TRY_AGAIN;
+pub const H_ERRNO_NO_RECOVERY: i32 = NO_RECOVERY;
+pub const H_ERRNO_NO_DATA: i32 = NO_DATA;
 // AF_INET in network byte order for in_addr.
 const AF_INET_NBO: u16 = ((AF_INET as u16) << 8) | ((AF_INET as u16) >> 8);
 
@@ -68,10 +68,10 @@ pub struct State {
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 struct hostent_guest {
-    h_name:     MutPtr<u8>,      // canonical name
-    h_aliases:  MutPtr<MutPtr<u8>>, // NULL-terminated alias list
-    h_addrtype: i32,             // AF_INET
-    h_length:   i32,             // 4 for IPv4
+    h_name: MutPtr<u8>,              // canonical name
+    h_aliases: MutPtr<MutPtr<u8>>,   // NULL-terminated alias list
+    h_addrtype: i32,                 // AF_INET
+    h_length: i32,                   // 4 for IPv4
     h_addr_list: MutPtr<MutPtr<u8>>, // NULL-terminated address list
 }
 unsafe impl SafeRead for hostent_guest {}
@@ -80,10 +80,10 @@ unsafe impl SafeRead for hostent_guest {}
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 struct servent_guest {
-    s_name:    MutPtr<u8>,
+    s_name: MutPtr<u8>,
     s_aliases: MutPtr<MutPtr<u8>>,
-    s_port:    i32,   // port in network byte order
-    s_proto:   MutPtr<u8>,
+    s_port: i32, // port in network byte order
+    s_proto: MutPtr<u8>,
 }
 unsafe impl SafeRead for servent_guest {}
 
@@ -91,14 +91,14 @@ unsafe impl SafeRead for servent_guest {}
 #[repr(C, packed)]
 #[allow(non_camel_case_types)]
 pub struct addrinfo {
-    ai_flags:     i32,
-    ai_family:    i32,
-    ai_socktype:  i32,
-    ai_protocol:  i32,
-    ai_addrlen:   socklen_t,
+    ai_flags: i32,
+    ai_family: i32,
+    ai_socktype: i32,
+    ai_protocol: i32,
+    ai_addrlen: socklen_t,
     ai_canonname: MutPtr<u8>,
-    ai_addr:      MutPtr<sockaddr>,
-    ai_next:      MutPtr<addrinfo>,
+    ai_addr: MutPtr<sockaddr>,
+    ai_next: MutPtr<addrinfo>,
 }
 unsafe impl SafeRead for addrinfo {}
 
@@ -112,39 +112,39 @@ fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
 /// Well-known service name → port (host byte order).
 fn service_port(name: &str) -> Option<u16> {
     match name {
-        "http"   => Some(80),
-        "https"  => Some(443),
-        "ftp"    => Some(21),
+        "http" => Some(80),
+        "https" => Some(443),
+        "ftp" => Some(21),
         "ftp-data" => Some(20),
-        "ssh"    => Some(22),
+        "ssh" => Some(22),
         "telnet" => Some(23),
-        "smtp"   => Some(25),
-        "dns"    => Some(53),
-        "pop3"   => Some(110),
-        "nntp"   => Some(119),
-        "imap"   => Some(143),
-        "imap2"  => Some(143),
-        "ldap"   => Some(389),
+        "smtp" => Some(25),
+        "dns" => Some(53),
+        "pop3" => Some(110),
+        "nntp" => Some(119),
+        "imap" => Some(143),
+        "imap2" => Some(143),
+        "ldap" => Some(389),
         // Убрано дублирующееся значение "https" => Some(443),
-        "smtps"  => Some(465),
-        "imaps"  => Some(993),
-        "pop3s"  => Some(995),
-        "ntp"    => Some(123),
-        "snmp"   => Some(161),
-        _        => None,
+        "smtps" => Some(465),
+        "imaps" => Some(993),
+        "pop3s" => Some(995),
+        "ntp" => Some(123),
+        "snmp" => Some(161),
+        _ => None,
     }
 }
 
 /// Port (host byte order) → well-known service name.
 fn port_service(port: u16) -> Option<&'static str> {
     match port {
-        20  => Some("ftp-data"),
-        21  => Some("ftp"),
-        22  => Some("ssh"),
-        23  => Some("telnet"),
-        25  => Some("smtp"),
-        53  => Some("dns"),
-        80  => Some("http"),
+        20 => Some("ftp-data"),
+        21 => Some("ftp"),
+        22 => Some("ssh"),
+        23 => Some("telnet"),
+        25 => Some("smtp"),
+        53 => Some("dns"),
+        80 => Some("http"),
         110 => Some("pop3"),
         119 => Some("nntp"),
         123 => Some("ntp"),
@@ -154,12 +154,13 @@ fn port_service(port: u16) -> Option<&'static str> {
         465 => Some("smtps"),
         993 => Some("imaps"),
         995 => Some("pop3s"),
-        _   => None,
+        _ => None,
     }
 }
 
 /// Allocate a guest `hostent` for `ip_octets` with the given `canonical_name`.
-/// Returns the pointer to the struct; caller must not free (caller manages lifetime).
+/// Returns the pointer to the struct; caller must not free (caller manages
+//lifetime).
 fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str) -> u32 {
     // Layout in guest memory:
     //   hostent_guest  (5 × 4 = 20 bytes)
@@ -170,22 +171,22 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
     //   h_aliases[0]   = NULL              (4 bytes)   (empty alias list)
 
     let name_bytes = canonical_name.as_bytes();
-    let name_len   = name_bytes.len() as u32 + 1;
+    let name_len = name_bytes.len() as u32 + 1;
     let total = guest_size_of::<hostent_guest>()
         + name_len
         + 4   // ip bytes
         + 4   // addr_list[0]
         + 4   // addr_list[1] (NULL)
-        + 4;  // aliases[0]  (NULL)
+        + 4; // aliases[0]  (NULL)
 
     let block: MutPtr<u8> = env.mem.alloc(total).cast();
     let base = block.to_bits();
 
     // Offsets.
-    let name_off      = guest_size_of::<hostent_guest>();
-    let ip_off        = name_off + name_len;
-    let addrlist_off  = ip_off + 4;
-    let aliases_off   = addrlist_off + 8;
+    let name_off = guest_size_of::<hostent_guest>();
+    let ip_off = name_off + name_len;
+    let addrlist_off = ip_off + 4;
+    let aliases_off = addrlist_off + 8;
 
     // Write name.
     let name_ptr: MutPtr<u8> = MutPtr::from_bits(base + name_off);
@@ -202,7 +203,7 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
     // Write addr_list: [ptr_to_ip, NULL].
     let addrlist_ptr: MutPtr<MutPtr<u8>> = MutPtr::from_bits(base + addrlist_off);
-    env.mem.write(addrlist_ptr,       ip_ptr);
+    env.mem.write(addrlist_ptr, ip_ptr);
     env.mem.write(addrlist_ptr + 1u32, MutPtr::null());
 
     // Write aliases: [NULL].
@@ -211,10 +212,10 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
     // Write the hostent_guest header.
     let he = hostent_guest {
-        h_name:      name_ptr,
-        h_aliases:   aliases_ptr,
-        h_addrtype:  AF_INET,
-        h_length:    4,
+        h_name: name_ptr,
+        h_aliases: aliases_ptr,
+        h_addrtype: AF_INET,
+        h_length: 4,
         h_addr_list: addrlist_ptr,
     };
     let he_ptr: MutPtr<hostent_guest> = MutPtr::from_bits(base);
@@ -238,9 +239,9 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let ip_octets: [u8; 4] = if let Some(octets) = parse_ipv4(&hostname) {
         octets
     } else {
-                match hostname.as_str() {
+        match hostname.as_str() {
             "localhost" | "loopback" | "touchHLE" => [127, 0, 0, 1],
-            "broadcasthost"          => [255, 255, 255, 255],
+            "broadcasthost" => [255, 255, 255, 255],
             _ => {
                 if !env.options.network_access {
                     log!(
@@ -270,7 +271,9 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     env.libc_state.netdb.dummy_hostent_ptr = ptr;
     log_dbg!(
         "gethostbyname(\"{}\") -> {:?} at 0x{:08x}",
-        hostname, ip_octets, ptr
+        hostname,
+        ip_octets,
+        ptr
     );
     MutPtr::from_bits(ptr)
 }
@@ -317,11 +320,7 @@ fn gethostbyaddr(
 
 // MARK: - getservbyname / getservbyport
 
-fn getservbyname(
-    env: &mut Environment,
-    name: ConstPtr<u8>,
-    proto: ConstPtr<u8>,
-) -> MutPtr<u8> {
+fn getservbyname(env: &mut Environment, name: ConstPtr<u8>, proto: ConstPtr<u8>) -> MutPtr<u8> {
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     let port = match service_port(&name_str) {
         Some(p) => p,
@@ -341,11 +340,7 @@ fn getservbyname(
     alloc_servent(env, &name_str, port_nbo, &proto_str)
 }
 
-fn getservbyport(
-    env: &mut Environment,
-    port_nbo: i32,
-    proto: ConstPtr<u8>,
-) -> MutPtr<u8> {
+fn getservbyport(env: &mut Environment, port_nbo: i32, proto: ConstPtr<u8>) -> MutPtr<u8> {
     let port_hbo = u16::from_be((port_nbo as u16).to_be());
     let name = match port_service(port_hbo) {
         Some(n) => n,
@@ -364,32 +359,38 @@ fn getservbyport(
 }
 
 fn alloc_servent(env: &mut Environment, name: &str, port_nbo: i32, proto: &str) -> MutPtr<u8> {
-    let name_bytes  = name.as_bytes();
+    let name_bytes = name.as_bytes();
     let proto_bytes = proto.as_bytes();
     let total = guest_size_of::<servent_guest>()
-        + name_bytes.len() as u32 + 1
-        + proto_bytes.len() as u32 + 1
+        + name_bytes.len() as u32
+        + 1
+        + proto_bytes.len() as u32
+        + 1
         + 4; // aliases[0] = NULL
 
     let block: MutPtr<u8> = env.mem.alloc(total).cast();
     let base = block.to_bits();
-    let name_off    = guest_size_of::<servent_guest>();
-    let proto_off   = name_off + name_bytes.len() as u32 + 1;
+    let name_off = guest_size_of::<servent_guest>();
+    let proto_off = name_off + name_bytes.len() as u32 + 1;
     let aliases_off = proto_off + proto_bytes.len() as u32 + 1;
 
-    let name_ptr: MutPtr<u8>  = MutPtr::from_bits(base + name_off);
+    let name_ptr: MutPtr<u8> = MutPtr::from_bits(base + name_off);
     let proto_ptr: MutPtr<u8> = MutPtr::from_bits(base + proto_off);
     let aliases_ptr: MutPtr<MutPtr<u8>> = MutPtr::from_bits(base + aliases_off);
-    for (i, &b) in name_bytes.iter().enumerate()  { env.mem.write(name_ptr  + i as u32, b); }
-    env.mem.write(name_ptr  + name_bytes.len()  as u32, 0u8);
-    for (i, &b) in proto_bytes.iter().enumerate() { env.mem.write(proto_ptr + i as u32, b); }
+    for (i, &b) in name_bytes.iter().enumerate() {
+        env.mem.write(name_ptr + i as u32, b);
+    }
+    env.mem.write(name_ptr + name_bytes.len() as u32, 0u8);
+    for (i, &b) in proto_bytes.iter().enumerate() {
+        env.mem.write(proto_ptr + i as u32, b);
+    }
     env.mem.write(proto_ptr + proto_bytes.len() as u32, 0u8);
     env.mem.write(aliases_ptr, MutPtr::<u8>::null());
     let sv = servent_guest {
-        s_name:    name_ptr,
+        s_name: name_ptr,
         s_aliases: aliases_ptr,
-        s_port:    port_nbo,
-        s_proto:   proto_ptr,
+        s_port: port_nbo,
+        s_proto: proto_ptr,
     };
     env.mem.write(MutPtr::<servent_guest>::from_bits(base), sv);
     block
@@ -405,8 +406,12 @@ fn getaddrinfo(
     res: MutPtr<MutPtr<addrinfo>>,
 ) -> i32 {
     if !env.options.network_access && !node_name.is_null() {
-        let hn = env.mem.cstr_at_utf8(node_name.cast_const()).unwrap_or_default().to_owned();
-                // Allow localhost even without network access.
+        let hn = env
+            .mem
+            .cstr_at_utf8(node_name.cast_const())
+            .unwrap_or_default()
+            .to_owned();
+        // Allow localhost even without network access.
         if hn != "localhost" && hn != "127.0.0.1" && hn != "touchHLE" && parse_ipv4(&hn).is_none() {
             log_dbg!("getaddrinfo: network disabled (node={}) -> EAI_FAIL", hn);
             return EAI_FAIL;
@@ -415,42 +420,67 @@ fn getaddrinfo(
 
     let hint = if hints.is_null() {
         addrinfo {
-            ai_flags: 0, ai_family: 0, ai_socktype: 0, ai_protocol: 0,
+            ai_flags: 0,
+            ai_family: 0,
+            ai_socktype: 0,
+            ai_protocol: 0,
             ai_addrlen: 0,
-            ai_canonname: Ptr::null(), ai_addr: Ptr::null(), ai_next: Ptr::null(),
+            ai_canonname: Ptr::null(),
+            ai_addr: Ptr::null(),
+            ai_next: Ptr::null(),
         }
     } else {
         env.mem.read(hints)
     };
-    let ai_flags    = hint.ai_flags;
-    let ai_family   = hint.ai_family;
+    let ai_flags = hint.ai_flags;
+    let ai_family = hint.ai_family;
     let ai_socktype = hint.ai_socktype;
     let ai_protocol = hint.ai_protocol;
 
     if ai_family != AF_INET && ai_family != 0 {
-        log!("getaddrinfo: unsupported ai_family {} -> EAI_FAMILY", ai_family);
+        log!(
+            "getaddrinfo: unsupported ai_family {} -> EAI_FAMILY",
+            ai_family
+        );
         return EAI_FAMILY;
     }
     if ai_socktype != 0 && ai_socktype != SOCK_STREAM && ai_socktype != SOCK_DGRAM {
-        log!("getaddrinfo: unsupported ai_socktype {} -> EAI_SERVICE", ai_socktype);
+        log!(
+            "getaddrinfo: unsupported ai_socktype {} -> EAI_SERVICE",
+            ai_socktype
+        );
         return EAI_SERVICE;
     }
     if ai_protocol != 0 && ai_protocol != IPPROTO_TCP && ai_protocol != IPPROTO_UDP {
-        log!("getaddrinfo: unsupported ai_protocol {} -> EAI_FAIL", ai_protocol);
+        log!(
+            "getaddrinfo: unsupported ai_protocol {} -> EAI_FAIL",
+            ai_protocol
+        );
         return EAI_FAIL;
     }
 
     let ip_octets: [u8; 4] = if node_name.is_null() {
-        if ai_flags & AI_PASSIVE != 0 { [0, 0, 0, 0] } else { [127, 0, 0, 1] }
+        if ai_flags & AI_PASSIVE != 0 {
+            [0, 0, 0, 0]
+        } else {
+            [127, 0, 0, 1]
+        }
     } else {
-        let hostname = env.mem.cstr_at_utf8(node_name.cast_const()).unwrap_or_default().to_owned();
-                if let Some(octets) = parse_ipv4(&hostname) {
+        let hostname = env
+            .mem
+            .cstr_at_utf8(node_name.cast_const())
+            .unwrap_or_default()
+            .to_owned();
+        if let Some(octets) = parse_ipv4(&hostname) {
             octets
         } else {
             match hostname.as_str() {
                 "localhost" | "loopback" | "touchHLE" => [127, 0, 0, 1],
                 _ => {
-                    log!("getaddrinfo: hostname \"{}\" not resolvable -> EAI_FAIL", hostname);
+                    log!(
+                        "getaddrinfo: hostname \"{}\" not resolvable -> EAI_FAIL",
+                        hostname
+                    );
                     return EAI_FAIL;
                 }
             }
@@ -459,14 +489,21 @@ fn getaddrinfo(
     let port: u16 = if serv_name.is_null() {
         0
     } else {
-        let svc = env.mem.cstr_at_utf8(serv_name.cast_const()).unwrap_or_default().to_owned();
+        let svc = env
+            .mem
+            .cstr_at_utf8(serv_name.cast_const())
+            .unwrap_or_default()
+            .to_owned();
         if let Ok(p) = svc.parse::<u16>() {
             p
         } else {
             match service_port(&svc) {
                 Some(p) => p,
                 None => {
-                    log!("getaddrinfo: named service \"{}\" not supported -> EAI_SERVICE", svc);
+                    log!(
+                        "getaddrinfo: named service \"{}\" not supported -> EAI_SERVICE",
+                        svc
+                    );
                     return EAI_SERVICE;
                 }
             }
@@ -474,16 +511,26 @@ fn getaddrinfo(
     };
     log_dbg!("getaddrinfo: ip={:?} port={}", ip_octets, port);
 
-    let addr_ptr = env.mem.alloc_and_write(sockaddr::from_ipv4_parts(ip_octets, port));
+    let addr_ptr = env
+        .mem
+        .alloc_and_write(sockaddr::from_ipv4_parts(ip_octets, port));
     let result = addrinfo {
-        ai_flags:     ai_flags,
-        ai_family:    AF_INET,
-        ai_socktype:  if ai_socktype != 0 { ai_socktype } else { SOCK_STREAM },
-        ai_protocol:  if ai_protocol != 0 { ai_protocol } else { IPPROTO_TCP },
-        ai_addrlen:   guest_size_of::<sockaddr>(),
+        ai_flags: ai_flags,
+        ai_family: AF_INET,
+        ai_socktype: if ai_socktype != 0 {
+            ai_socktype
+        } else {
+            SOCK_STREAM
+        },
+        ai_protocol: if ai_protocol != 0 {
+            ai_protocol
+        } else {
+            IPPROTO_TCP
+        },
+        ai_addrlen: guest_size_of::<sockaddr>(),
         ai_canonname: Ptr::null(),
-        ai_addr:      addr_ptr,
-        ai_next:      Ptr::null(),
+        ai_addr: addr_ptr,
+        ai_next: Ptr::null(),
     };
     let result_ptr = env.mem.alloc_and_write(result);
     if !res.is_null() {
@@ -493,13 +540,19 @@ fn getaddrinfo(
 }
 
 fn freeaddrinfo(env: &mut Environment, ai: MutPtr<addrinfo>) {
-    if ai.is_null() { return; }
+    if ai.is_null() {
+        return;
+    }
     let mut cur = ai;
     while !cur.is_null() {
-        let node         = env.mem.read(cur);
-        let next         = node.ai_next;
-        if !node.ai_addr.is_null()      { env.mem.free(node.ai_addr.cast());      }
-        if !node.ai_canonname.is_null() { env.mem.free(node.ai_canonname.cast()); }
+        let node = env.mem.read(cur);
+        let next = node.ai_next;
+        if !node.ai_addr.is_null() {
+            env.mem.free(node.ai_addr.cast());
+        }
+        if !node.ai_canonname.is_null() {
+            env.mem.free(node.ai_canonname.cast());
+        }
         env.mem.free(cur.cast());
         cur = next;
     }
@@ -520,13 +573,11 @@ fn getnameinfo(
     if sa.is_null() || salen < guest_size_of::<sockaddr>() {
         return EAI_FAIL;
     }
-    
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Прямое чтение из гостевой памяти по смещениям (AF_INET/sockaddr_in layout)
+
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Прямое чтение из гостевой памяти по смещениям
+    // (AF_INET/sockaddr_in layout)
     let sa_ptr = sa.cast::<u8>();
-    let port = u16::from_be_bytes([
-        env.mem.read(sa_ptr + 2u32),
-        env.mem.read(sa_ptr + 3u32),
-    ]);
+    let port = u16::from_be_bytes([env.mem.read(sa_ptr + 2u32), env.mem.read(sa_ptr + 3u32)]);
     let octets: [u8; 4] = [
         env.mem.read(sa_ptr + 4u32),
         env.mem.read(sa_ptr + 5u32),
@@ -535,8 +586,7 @@ fn getnameinfo(
     ];
 
     if !host.is_null() && hostlen > 0 {
-        let dotted = format!("{}.{}.{}.{}\0",
-            octets[0], octets[1], octets[2], octets[3]);
+        let dotted = format!("{}.{}.{}.{}\0", octets[0], octets[1], octets[2], octets[3]);
         let bytes = dotted.as_bytes();
         let copy_len = bytes.len().min(hostlen as usize);
         for (i, &b) in bytes[..copy_len].iter().enumerate() {
@@ -552,7 +602,7 @@ fn getnameinfo(
         } else {
             match port_service(port) {
                 Some(name) => format!("{}\0", name),
-                None       => format!("{}\0", port),
+                None => format!("{}\0", port),
             }
         };
         let bytes = svc_str.as_bytes();
@@ -585,17 +635,19 @@ fn __h_errno_location(env: &mut Environment) -> MutPtr<i32> {
 
 fn gai_strerror(env: &mut Environment, ecode: i32) -> ConstPtr<u8> {
     let msg: &[u8] = match ecode {
-        0           => b"Success\0",
-        EAI_AGAIN   => b"Temporary failure in name resolution\0",
-        EAI_FAIL    => b"Non-recoverable failure in name resolution\0",
-        EAI_FAMILY  => b"ai_family not supported\0",
+        0 => b"Success\0",
+        EAI_AGAIN => b"Temporary failure in name resolution\0",
+        EAI_FAIL => b"Non-recoverable failure in name resolution\0",
+        EAI_FAMILY => b"ai_family not supported\0",
         EAI_SERVICE => b"Servname not supported for ai_socktype\0",
-        EAI_MEMORY  => b"Memory allocation failure\0",
+        EAI_MEMORY => b"Memory allocation failure\0",
         EAI_OVERFLOW => b"Argument buffer overflow\0",
-        EAI_SYSTEM  => b"System error\0",
-        _           => b"Unknown error\0",
+        EAI_SYSTEM => b"System error\0",
+        _ => b"Unknown error\0",
     };
-    env.mem.alloc_and_write_cstr(&msg[..msg.len() - 1]).cast_const()
+    env.mem
+        .alloc_and_write_cstr(&msg[..msg.len() - 1])
+        .cast_const()
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -610,4 +662,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__h_errno_location()),
     export_c_func!(gai_strerror(_)),
 ];
-

@@ -43,7 +43,7 @@ fn uname(env: &mut Environment, name: MutPtr<utsname>) -> i32 {
     // Same as sysctlbyname 'kern.osversion'
     let version = b"8A293\0"; // iOS 4.0 build
     uts_name.version[..version.len()].copy_from_slice(version);
-	// Same as sysctlbyname 'hw.machine' — depends on emulated device family
+    // Same as sysctlbyname 'hw.machine' — depends on emulated device family
     let machine_str = env.window().device_family().machine_name();
     let mut machine_buf = [0u8; SYS_NAMELEN];
     let bytes = machine_str.as_bytes();

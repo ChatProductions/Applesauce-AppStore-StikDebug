@@ -28,9 +28,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.objc.alloc_object(this, host_object, &mut env.mem)
     }
 
-    // + (NSRegularExpression *)regularExpressionWithPattern:(NSString *)pattern
-    //                                              options:(NSRegularExpressionOptions)options
-    //                                                error:(NSError **)error
+    // + (NSRegularExpression *)
+    //     regularExpressionWithPattern:(NSString *)pattern
+    //     options:(NSRegularExpressionOptions)options
+    //     error:(NSError **)error
     + (id)regularExpressionWithPattern:(id)pattern
                                options:(u32)options
                                  error:(MutPtr<id>)error {

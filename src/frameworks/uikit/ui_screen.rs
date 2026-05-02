@@ -112,7 +112,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         width:  width  as CGFloat,
         height: height as CGFloat,
     };
-    
+
     // Call your new helper function directly
     crate::frameworks::uikit::ui_screen_mode::from_size(env, size, 1.0)
 }

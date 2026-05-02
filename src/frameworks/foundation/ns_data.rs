@@ -11,8 +11,7 @@ use crate::frameworks::foundation::NSRange;
 use crate::fs::GuestPath;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::{msg_class, Environment};
 
@@ -672,4 +671,3 @@ pub fn to_rust_slice(env: &mut Environment, data: id) -> &[u8] {
     let casted_ptr: ConstPtr<u8> = borrowed_data.bytes.cast_const().cast();
     env.mem.bytes_at(casted_ptr, borrowed_data.length)
 }
-

@@ -5,10 +5,10 @@
  */
 //! `UIPasteboard` and `UILocalNotification`.
 
+use crate::frameworks::foundation::ns_string;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
-use crate::frameworks::foundation::ns_string;
 use std::collections::HashMap;
 
 // MARK: - UIPasteboard host object
@@ -82,14 +82,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)generalPasteboard {
-    // В большинстве игр используется для быстрого копирования текста. 
+    // В большинстве игр используется для быстрого копирования текста.
     // Создаем базовый инстанс.
     let instance: id = msg_class![env; UIPasteboard alloc];
     let instance: id = msg![env; instance init];
-    
+
     // generalPasteboard по умолчанию persistent = YES в iOS
     env.objc.borrow_mut::<UIPasteboardHostObject>(instance).persistent = true;
-    
+
     instance
 }
 
@@ -124,13 +124,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             std::mem::take(&mut host.data_by_type),
         )
     };
-    
+
     release(env, name);
     release(env, string);
     for (_, data) in data_by_type {
         release(env, data);
     }
-    
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -147,11 +147,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setString:(id)string { // NSString*
     // Достаем старое значение, чтобы освободить его
     let old = env.objc.borrow::<UIPasteboardHostObject>(this).string;
-    
+
     // Выполняем операции управления памятью
     release(env, old);
     retain(env, string);
-    
+
     // Записываем новое значение
     env.objc.borrow_mut::<UIPasteboardHostObject>(this).string = string;
 }
@@ -170,10 +170,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     if pasteboard_type == nil {
         return nil;
     }
-    
+
     let type_str = ns_string::to_rust_string(env, pasteboard_type);
     let host = env.objc.borrow::<UIPasteboardHostObject>(this);
-    
+
     // Используем .as_ref() чтобы передать &str вместо &Cow
     if let Some(&data) = host.data_by_type.get(type_str.as_ref()) {
         data
@@ -186,13 +186,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     if pasteboard_type == nil {
         return;
     }
-    
+
     let type_str = ns_string::to_rust_string(env, pasteboard_type);
-    
+
     if data != nil {
         retain(env, data);
     }
-    
+
     // Безопасно обновляем HashMap и забираем старое значение
     let old_data = {
         let host = env.objc.borrow_mut::<UIPasteboardHostObject>(this);
@@ -204,205 +204,11 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.data_by_type.remove(type_str.as_ref())
         }
     };
-    
+
     // Освобождаем старое значение вне borrow_mut
     if let Some(old) = old_data {
         release(env, old);
     }
-}
-
-@end
-
-// =========================================================================
-// MARK: - UILocalNotification
-// =========================================================================
-
-@implementation UILocalNotification: NSObject
-
-// =========================================================================
-// МЕТОДЫ КЛАССА (+)
-// =========================================================================
-
-+ (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(UILocalNotificationHostObject {
-        fire_date: nil,
-        time_zone: nil,
-        repeat_interval: 0, // NSCalendarUnitEra = 0 (no repeat)
-        repeat_calendar: nil,
-        alert_body: nil,
-        alert_title: nil,
-        alert_action: nil,
-        alert_launch_image: nil,
-        sound_name: nil,
-        application_icon_badge_number: 0,
-        user_info: nil,
-        has_action: true, // По умолчанию кнопка есть
-    });
-    env.objc.alloc_object(this, host_object, &mut env.mem)
-}
-
-// =========================================================================
-// МЕТОДЫ ЭКЗЕМПЛЯРА (-)
-// =========================================================================
-
-- (id)init {
-    this
-}
-
-- (())dealloc {
-    // Забираем все объекты для освобождения
-    let (fire_date, time_zone, repeat_calendar, alert_body, alert_title, 
-         alert_action, alert_launch_image, sound_name, user_info) = {
-        let host = env.objc.borrow_mut::<UILocalNotificationHostObject>(this);
-        (
-            host.fire_date,
-            host.time_zone,
-            host.repeat_calendar,
-            host.alert_body,
-            host.alert_title,
-            host.alert_action,
-            host.alert_launch_image,
-            host.sound_name,
-            host.user_info,
-        )
-    };
-    
-    release(env, fire_date);
-    release(env, time_zone);
-    release(env, repeat_calendar);
-    release(env, alert_body);
-    release(env, alert_title);
-    release(env, alert_action);
-    release(env, alert_launch_image);
-    release(env, sound_name);
-    release(env, user_info);
-    
-    env.objc.dealloc_object(this, &mut env.mem)
-}
-
-// MARK: - Свойства (Properties)
-
-- (id)fireDate { // NSDate*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).fire_date
-}
-
-- (())setFireDate:(id)fire_date { // NSDate*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).fire_date;
-    release(env, old);
-    retain(env, fire_date);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).fire_date = fire_date;
-}
-
-- (id)timeZone { // NSTimeZone*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).time_zone
-}
-
-- (())setTimeZone:(id)time_zone { // NSTimeZone*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).time_zone;
-    release(env, old);
-    retain(env, time_zone);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).time_zone = time_zone;
-}
-
-- (u32)repeatInterval { // NSCalendarUnit (NSUInteger)
-    env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_interval
-}
-
-- (())setRepeatInterval:(u32)interval {
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).repeat_interval = interval;
-}
-
-- (id)repeatCalendar { // NSCalendar*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_calendar
-}
-
-- (())setRepeatCalendar:(id)calendar { // NSCalendar*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_calendar;
-    release(env, old);
-    retain(env, calendar);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).repeat_calendar = calendar;
-}
-
-- (id)alertBody { // NSString*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).alert_body
-}
-
-- (())setAlertBody:(id)body { // NSString*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_body;
-    release(env, old);
-    retain(env, body);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_body = body;
-}
-
-- (id)alertTitle { // NSString*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).alert_title
-}
-
-- (())setAlertTitle:(id)title { // NSString*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_title;
-    release(env, old);
-    retain(env, title);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_title = title;
-}
-
-- (id)alertAction { // NSString*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).alert_action
-}
-
-- (())setAlertAction:(id)action { // NSString*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_action;
-    release(env, old);
-    retain(env, action);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_action = action;
-}
-
-- (bool)hasAction {
-    env.objc.borrow::<UILocalNotificationHostObject>(this).has_action
-}
-
-- (())setHasAction:(bool)value {
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).has_action = value;
-}
-
-- (id)alertLaunchImage { // NSString*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).alert_launch_image
-}
-
-- (())setAlertLaunchImage:(id)image { // NSString*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_launch_image;
-    release(env, old);
-    retain(env, image);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_launch_image = image;
-}
-
-- (id)soundName { // NSString*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).sound_name
-}
-
-- (())setSoundName:(id)name { // NSString*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).sound_name;
-    release(env, old);
-    retain(env, name);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).sound_name = name;
-}
-
-- (i32)applicationIconBadgeNumber { // NSInteger
-    env.objc.borrow::<UILocalNotificationHostObject>(this).application_icon_badge_number
-}
-
-- (())setApplicationIconBadgeNumber:(i32)number {
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).application_icon_badge_number = number;
-}
-
-- (id)userInfo { // NSDictionary*
-    env.objc.borrow::<UILocalNotificationHostObject>(this).user_info
-}
-
-- (())setUserInfo:(id)info { // NSDictionary*
-    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).user_info;
-    release(env, old);
-    retain(env, info);
-    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).user_info = info;
 }
 
 @end

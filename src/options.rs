@@ -331,4 +331,4 @@ fn parse_dump_options(options: &str) -> Result<DumpingOptions, String> {
         }
     }
     Ok(dumping_options)
-                }
+}

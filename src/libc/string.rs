@@ -337,12 +337,7 @@ fn strndup(env: &mut Environment, src: ConstPtr<u8>, n: GuestUSize) -> MutPtr<u8
     buf
 }
 
-fn memrchr(
-    env: &mut Environment,
-    s: ConstVoidPtr,
-    c: i32,
-    n: GuestUSize,
-) -> ConstVoidPtr {
+fn memrchr(env: &mut Environment, s: ConstVoidPtr, c: i32, n: GuestUSize) -> ConstVoidPtr {
     let needle = c as u8;
     let mut i = n;
     while i > 0 {
@@ -441,8 +436,8 @@ fn strverscmp(env: &mut Environment, a: ConstPtr<u8>, b: ConstPtr<u8>) -> i32 {
     loop {
         match (ia.peek().copied(), ib.peek().copied()) {
             (None, None) => return 0,
-            (None, _)    => return -1,
-            (_, None)    => return 1,
+            (None, _) => return -1,
+            (_, None) => return 1,
             (Some(ca), Some(cb)) => {
                 if ca.is_ascii_digit() && cb.is_ascii_digit() {
                     // Collect numeric runs and compare as integers.
@@ -461,9 +456,9 @@ fn strverscmp(env: &mut Environment, a: ConstPtr<u8>, b: ConstPtr<u8>) -> i32 {
                         s.parse().unwrap_or(0)
                     };
                     match na.cmp(&nb) {
-                        std::cmp::Ordering::Less    => return -1,
+                        std::cmp::Ordering::Less => return -1,
                         std::cmp::Ordering::Greater => return 1,
-                        std::cmp::Ordering::Equal   => {}
+                        std::cmp::Ordering::Equal => {}
                     }
                 } else {
                     if ca != cb {
@@ -525,10 +520,12 @@ fn stpncpy(
 fn strfry(env: &mut Environment, s: MutPtr<u8>) -> MutPtr<u8> {
     // Fisher-Yates shuffle of the string in place.
     let len = strlen(env, s.cast_const());
-    if len <= 1 { return s; }
+    if len <= 1 {
+        return s;
+    }
     for i in (1..len).rev() {
-        let j = (i as u64 * 6364136223846793005u64
-            .wrapping_add(1442695040888963407)) as u32 % (i + 1) as u32;
+        let j = (i as u64 * 6364136223846793005u64.wrapping_add(1442695040888963407)) as u32
+            % (i + 1) as u32;
         let a = env.mem.read(s + i);
         let b = env.mem.read(s + j);
         env.mem.write(s + i, b);
@@ -538,7 +535,8 @@ fn strfry(env: &mut Environment, s: MutPtr<u8>) -> MutPtr<u8> {
 }
 
 fn explicit_bzero(env: &mut Environment, dest: MutVoidPtr, count: GuestUSize) {
-    // Same as bzero but compiler must not optimize away (no difference in our emulated context).
+    // Same as bzero but compiler must not optimize away (no difference in our
+    // emulated context).
     for i in 0..count {
         env.mem.write(dest.cast::<u8>() + i, 0u8);
     }
@@ -551,12 +549,7 @@ fn strerror(_env: &mut Environment, errnum: i32) -> ConstPtr<u8> {
     ConstPtr::null()
 }
 
-fn strerror_r(
-    env: &mut Environment,
-    errnum: i32,
-    buf: MutPtr<u8>,
-    buflen: GuestUSize,
-) -> i32 {
+fn strerror_r(env: &mut Environment, errnum: i32, buf: MutPtr<u8>, buflen: GuestUSize) -> i32 {
     let msg = format!("Error {}", errnum);
     let bytes = msg.as_bytes();
     let copy_len = (bytes.len() as GuestUSize).min(buflen.saturating_sub(1));
@@ -593,21 +586,24 @@ fn strcasestr(env: &mut Environment, haystack: MutPtr<u8>, needle: ConstPtr<u8>)
     let haystack_str = env.mem.cstr_at(haystack.cast_const());
     let needle_str = env.mem.cstr_at(needle);
 
-    // Если искомая подстрока пустая, стандартное поведение — вернуть саму строку
+    // Если искомая подстрока пустая, стандартное поведение — вернуть саму
+    // строку
     if needle_str.is_empty() {
         return haystack;
     }
 
     let needle_len = needle_str.len();
-    
+
     // ИСПРАВЛЕНИЕ: Если строка, в которой ищем, короче искомого слова,
     // совпадение невозможно в принципе. Выходим сразу.
     if haystack_str.len() < needle_len {
         return Ptr::null();
     }
-    
-    // Ищем совпадение, используя стандартный метод Rust без учета ASCII-регистра
-    for i in 0..=haystack_str.len() - needle_len { // saturating_sub больше не нужен
+
+    // Ищем совпадение, используя стандартный метод Rust без учета
+    // ASCII-регистра
+    for i in 0..=haystack_str.len() - needle_len {
+        // saturating_sub больше не нужен
         let window = &haystack_str[i..i + needle_len];
         if window.eq_ignore_ascii_case(needle_str) {
             // Возвращаем указатель на начало найденной подстроки
@@ -666,7 +662,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(stpncpy(_, _, _)),
     export_c_func!(strfry(_)),
     export_c_func!(explicit_bzero(_, _)),
-    export_c_func!(strerror(_)),
+    // strerror is exported from libc::errno; not duplicated here.
     export_c_func!(strerror_r(_, _, _)),
     export_c_func!(bcopy(_, _, _)),
     export_c_func!(strnlen(_, _)),

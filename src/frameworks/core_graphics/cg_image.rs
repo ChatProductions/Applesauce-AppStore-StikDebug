@@ -87,7 +87,7 @@ pub fn from_image(env: &mut Environment, image: Image) -> CGImageRef {
 }
 
 pub fn borrow_image(objc: &ObjC, image: CGImageRef) -> &Image {
-    // ВНИМАНИЕ: Если здесь передан null, эмулятор упадет. 
+    // ВНИМАНИЕ: Если здесь передан null, эмулятор упадет.
     // Но CoreGraphics функции ниже теперь защищены.
     &objc.borrow::<CGImageHostObject>(image).image
 }
@@ -101,16 +101,20 @@ fn CGImageCreateCopyWithColorSpace(
     image: CGImageRef,
     color_space: CGColorSpaceRef,
 ) -> CGImageRef {
-    if image.is_null() { return nil; }
-    
+    if image.is_null() {
+        return nil;
+    }
+
     let image_color_space = CGImageGetColorSpace(env, image);
-    if image_color_space.is_null() { return nil; }
+    if image_color_space.is_null() {
+        return nil;
+    }
 
     assert_eq!(
         CGColorSpaceGetModel(env, image_color_space),
         CGColorSpaceGetModel(env, color_space)
     );
-    
+
     let new_image = env.objc.borrow::<CGImageHostObject>(image).image.clone();
     from_image(env, new_image)
 }
@@ -122,7 +126,9 @@ fn CGImageCreateWithPNGDataProvider(
     _should_interpolate: bool,
     _intent: i32,
 ) -> CGImageRef {
-    if source.is_null() { return nil; }
+    if source.is_null() {
+        return nil;
+    }
     assert!(decode.is_null());
 
     let bytes = cg_data_provider::borrow_bytes(env, source);
@@ -140,7 +146,9 @@ fn CGImageCreateWithJPEGDataProvider(
     _should_interpolate: bool,
     _intent: i32,
 ) -> CGImageRef {
-    if source.is_null() { return nil; }
+    if source.is_null() {
+        return nil;
+    }
     assert!(decode.is_null());
 
     let bytes = cg_data_provider::borrow_bytes(env, source);
@@ -152,18 +160,24 @@ fn CGImageCreateWithJPEGDataProvider(
 }
 
 fn CGImageGetAlphaInfo(_env: &mut Environment, image: CGImageRef) -> CGImageAlphaInfo {
-    if image.is_null() { return kCGImageAlphaNone; }
+    if image.is_null() {
+        return kCGImageAlphaNone;
+    }
     kCGImageAlphaPremultipliedLast
 }
 
 fn CGImageGetColorSpace(env: &mut Environment, image: CGImageRef) -> CGColorSpaceRef {
-    if image.is_null() { return nil; }
+    if image.is_null() {
+        return nil;
+    }
     let srgb_name = ns_string::get_static_str(env, kCGColorSpaceGenericRGB);
     CGColorSpaceCreateWithName(env, srgb_name)
 }
 
 pub fn CGImageGetWidth(env: &mut Environment, image: CGImageRef) -> GuestUSize {
-    if image.is_null() { return 0; }
+    if image.is_null() {
+        return 0;
+    }
     let (width, _height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -173,7 +187,9 @@ pub fn CGImageGetWidth(env: &mut Environment, image: CGImageRef) -> GuestUSize {
 }
 
 pub fn CGImageGetHeight(env: &mut Environment, image: CGImageRef) -> GuestUSize {
-    if image.is_null() { return 0; }
+    if image.is_null() {
+        return 0;
+    }
     let (_width, height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -183,12 +199,16 @@ pub fn CGImageGetHeight(env: &mut Environment, image: CGImageRef) -> GuestUSize 
 }
 
 fn CGImageGetBitsPerPixel(_env: &mut Environment, image: CGImageRef) -> GuestUSize {
-    if image.is_null() { return 0; }
+    if image.is_null() {
+        return 0;
+    }
     32
 }
 
 fn CGImageGetBytesPerRow(env: &mut Environment, image: CGImageRef) -> GuestUSize {
-    if image.is_null() { return 0; }
+    if image.is_null() {
+        return 0;
+    }
     let (width, _height) = env
         .objc
         .borrow::<CGImageHostObject>(image)
@@ -198,19 +218,25 @@ fn CGImageGetBytesPerRow(env: &mut Environment, image: CGImageRef) -> GuestUSize
 }
 
 fn CGImageGetDataProvider(env: &mut Environment, image: CGImageRef) -> CGDataProviderRef {
-    if image.is_null() { return nil; }
+    if image.is_null() {
+        return nil;
+    }
     let cg_data_provider = cg_data_provider::from_cg_image(env, image);
     autorelease(env, cg_data_provider)
 }
 
 fn CGImageGetBitsPerComponent(_: &mut Environment, image: CGImageRef) -> GuestUSize {
-    if image.is_null() { return 0; }
+    if image.is_null() {
+        return 0;
+    }
     8
 }
 
 /// Copy of an existing CGImage — just clone the underlying Image.
 fn CGImageCreateCopy(env: &mut Environment, image: CGImageRef) -> CGImageRef {
-    if image.is_null() { return nil; }
+    if image.is_null() {
+        return nil;
+    }
     let new_image = env.objc.borrow::<CGImageHostObject>(image).image.clone();
     from_image(env, new_image)
 }
@@ -221,7 +247,9 @@ fn CGImageCreateWithImageInRect(
     image: CGImageRef,
     rect: super::CGRect,
 ) -> CGImageRef {
-    if image.is_null() { return nil; }
+    if image.is_null() {
+        return nil;
+    }
 
     let (img_w, img_h) = env
         .objc
@@ -230,18 +258,16 @@ fn CGImageCreateWithImageInRect(
         .dimensions();
 
     // Clamp rect to image bounds.
-    let x      = (rect.origin.x as u32).min(img_w);
-    let y      = (rect.origin.y as u32).min(img_h);
-    let width  = (rect.size.width  as u32).min(img_w.saturating_sub(x));
+    let x = (rect.origin.x as u32).min(img_w);
+    let y = (rect.origin.y as u32).min(img_h);
+    let width = (rect.size.width as u32).min(img_w.saturating_sub(x));
     let height = (rect.size.height as u32).min(img_h.saturating_sub(y));
 
-    if width == 0 || height == 0 { return nil; }
+    if width == 0 || height == 0 {
+        return nil;
+    }
 
-    let src_pixels = env
-        .objc
-        .borrow::<CGImageHostObject>(image)
-        .image
-        .pixels();
+    let src_pixels = env.objc.borrow::<CGImageHostObject>(image).image.pixels();
 
     // Copy the sub-region row by row (RGBA — 4 bytes per pixel).
     let mut dst = vec![0u8; (width * height * 4) as usize];
@@ -276,8 +302,11 @@ fn CGImageCreateMaskWithImageMask(env: &mut Environment, mask_image: CGImageRef)
 // MARK: - Additional accessors
 
 fn CGImageGetBitmapInfo(_env: &mut Environment, image: CGImageRef) -> CGBitmapInfo {
-    if image.is_null() { return 0; }
-    // Report premultiplied-last RGBA, big-endian 32-bit — matches our Image format.
+    if image.is_null() {
+        return 0;
+    }
+    // Report premultiplied-last RGBA, big-endian 32-bit — matches our Image
+    // format.
     kCGImageAlphaPremultipliedLast | kCGImageByteOrder32Big
 }
 
@@ -287,7 +316,9 @@ fn CGImageGetDecode(_env: &mut Environment, image: CGImageRef) -> ConstPtr<CGFlo
 }
 
 fn CGImageGetShouldInterpolate(_env: &mut Environment, image: CGImageRef) -> bool {
-    if image.is_null() { return false; }
+    if image.is_null() {
+        return false;
+    }
     true
 }
 
@@ -323,6 +354,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGImageGetShouldInterpolate(_)),
     export_c_func!(CGImageGetRenderingIntent(_)),
     export_c_func!(CGImageIsMask(_)),
-    export_c_func!(CGImageCreateWithImageInRect(_, _)),
 ];
-

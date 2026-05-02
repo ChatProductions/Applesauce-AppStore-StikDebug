@@ -6,7 +6,7 @@
  */
 //! `SKPaymentQueue` — StoreKit in-app purchase queue stub.
 
-use crate::frameworks::foundation::{NSInteger, ns_string};
+use crate::frameworks::foundation::{ns_string, NSInteger};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -105,7 +105,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // Build a minimal fake SKPaymentTransaction array and call the delegate.
-    // Most apps only check the transactionState, which we set to SKPaymentTransactionStateFailed (2).
+    // Most apps only check the transactionState, which we set to
+    // SKPaymentTransactionStateFailed (2).
     let transactions: id = msg_class![env; NSArray new];
 
     let sel = env.objc.register_host_selector(
@@ -123,9 +124,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Убрали .unwrap()
     let host_obj = env.objc.borrow::<SKPaymentQueueHostObject>(this);
     let observer = host_obj.observer;
-    
+
     if observer != nil {
-        // Вызываем метод делегата, сообщая, что "восстановление" успешно завершено
+        // Вызываем метод делегата, сообщая, что "восстановление" успешно
+        // завершено
         let _: () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];
     }
 }

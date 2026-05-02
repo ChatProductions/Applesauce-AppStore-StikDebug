@@ -62,7 +62,7 @@ fn pthread_setspecific(env: &mut Environment, key: pthread_key_t, value: ConstVo
 fn pthread_key_delete(_env: &mut Environment, key: pthread_key_t) -> i32 {
     log!("Warning: pthread_key_delete({}) called (stubbed)", key);
     // Просто возвращаем 0 (успех), чтобы успокоить игру
-    0 
+    0
 }
 
 // --- ОБНОВЛЕННЫЙ СПИСОК ЭКСПОРТА ---

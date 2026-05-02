@@ -132,9 +132,9 @@ macro_rules! impl_CallFromGuest {
                 let args: ($($P,)*) = {
                     ($(read_next_arg::<$P>(&mut reg_offset, regs, Ptr::from_bits(regs[Cpu::SP]), &env.mem),)*)
                 };
-                
+
                 log_dbg!("CallFromGuest"); // Убрали попытку вывести args из-за ограничений трейта Debug
-                
+
                 let retval = self(env, $(args.$p),*);
                 log_dbg!("CallFromGuest => {:?}", retval);
                 if let Some(retval_ptr) = retval_ptr {
@@ -161,9 +161,9 @@ macro_rules! impl_CallFromGuest {
                     reg_offset,
                     stack_pointer: Ptr::from_bits(regs[Cpu::SP])
                 });
-                
+
                 log_dbg!("CallFromGuest with va_list: {:?}", va_list); // Аналогично убрали args
-                
+
                 let retval = self(env, $(args.$p,)* va_list);
                 log_dbg!("CallFromGuest => {:?}", retval);
                 if let Some(retval_ptr) = retval_ptr {
@@ -551,7 +551,6 @@ impl GuestArg for VaList {
         }
     }
     fn to_regs(self, _regs: &mut [u32]) {
-        
         todo!()
     }
 }
@@ -627,7 +626,6 @@ macro_rules! impl_GuestRet_with {
                 <$with as GuestRet>::from_regs(regs) as $for
             }
             fn to_regs(self, regs: &mut [u32]) {
-         
                 <$with as GuestRet>::to_regs(self as $with, regs)
             }
         }
@@ -698,7 +696,6 @@ impl GuestRet for f32 {
         Self::from_bits(<u32 as GuestRet>::from_regs(regs))
     }
     fn to_regs(self, regs: &mut [u32]) {
-    
         <u32 as GuestRet>::to_regs(self.to_bits(), regs)
     }
 }
@@ -738,4 +735,3 @@ impl GuestRet for f64 {
         <u64 as GuestRet>::to_regs(self.to_bits(), regs)
     }
 }
-

@@ -57,8 +57,10 @@ fn update_scroll(env: &mut Environment, this: id) {
     let bound_size = bounds.size;
     let font: id = msg![env; this font];
     let text: id = msg![env; this text];
-    if text == nil || font == nil { return; }
-    
+    if text == nil || font == nil {
+        return;
+    }
+
     let calculated_size: CGSize = msg![env; text sizeWithFont:font constrainedToSize:bound_size];
     () = msg![env; this setContentSize:calculated_size];
 
@@ -89,7 +91,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
-    
+
     let key_text = get_static_str(env, "UIText");
     if msg![env; coder containsValueForKey:key_text] {
         let text: id = msg![env; coder decodeObjectForKey:key_text];
@@ -226,7 +228,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bounds: CGRect = msg![env; this bounds];
     let context = UIGraphicsGetCurrentContext(env);
     let &mut UITextViewHostObject { font, text, text_color, text_alignment, .. } = env.objc.borrow_mut(this);
-    
+
     if text == nil || font == nil || text_color == nil { return; }
     let len: NSUInteger = msg![env; text length];
     if len == 0 { return; }

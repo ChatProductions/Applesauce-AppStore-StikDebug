@@ -22,7 +22,7 @@ struct UISearchBarHostObject {
     shows_bookmark_button: bool,
     shows_search_results_button: bool,
     search_results_button_selected: bool,
-    
+
     autocorrection_type: i32,
     autocapitalization_type: i32,
     keyboard_type: i32,
@@ -40,10 +40,10 @@ struct UISearchBarHostObject {
     shows_scope_bar: bool,
     background_image: id,
     scope_bar_background_image: id,
-    
+
     search_field_background_position_adjustment: id,
     search_text_position_adjustment: id,
-    
+
     is_first_responder: bool,
 }
 
@@ -77,7 +77,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.search_field_background_position_adjustment, host.search_text_position_adjustment
         )
     };
-    
+
     release(env, text);
     release(env, placeholder);
     release(env, prompt);

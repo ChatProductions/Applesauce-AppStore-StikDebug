@@ -14,7 +14,7 @@ use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
 use crate::frameworks::carbon_core::OSStatus;
-use crate::frameworks::core_audio_types::{AudioStreamBasicDescription, debug_fourcc};
+use crate::frameworks::core_audio_types::{debug_fourcc, AudioStreamBasicDescription};
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
 
@@ -139,9 +139,10 @@ fn AudioConverterFillComplexBuffer(
 
     // Трюк с пробросом (Passthrough hack):
     // Поскольку у нас LPCM -> LPCM, нам не нужно конвертировать данные.
-    // Мы просто передаем выходные буферы (out_output_data) напрямую в игровой коллбэк,
+    // Мы просто передаем выходные буферы (out_output_data) напрямую в игровой
+    // коллбэк,
     // и игра сама запишет звук сразу в нужный буфер!
-    
+
     let callback_status: OSStatus = in_input_data_proc.call_from_host(
         env,
         (
@@ -153,7 +154,8 @@ fn AudioConverterFillComplexBuffer(
         ),
     );
 
-    // Возвращаем статус коллбэка. Размеры пакетов уже обновлены самой игрой по указателям.
+    // Возвращаем статус коллбэка. Размеры пакетов уже обновлены самой игрой по
+    // указателям.
     callback_status
 }
 

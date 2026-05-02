@@ -23,7 +23,10 @@
 //! - [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/html/index-wide.html)
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::libc::errno::{set_errno, EACCES, ENOTCONN, EAGAIN, EADDRINUSE, EADDRNOTAVAIL, EBADF, ECONNRESET, ECONNREFUSED, EINVAL, EIO, EISCONN, ENETUNREACH, ESOCKTNOSUPPORT, ETIMEDOUT, EPROTONOSUPPORT};
+use crate::libc::errno::{
+    set_errno, EACCES, EADDRINUSE, EADDRNOTAVAIL, EAGAIN, EBADF, ECONNREFUSED, ECONNRESET, EINVAL,
+    EIO, EISCONN, ENETUNREACH, ENOTCONN, EPROTONOSUPPORT, ESOCKTNOSUPPORT, ETIMEDOUT,
+};
 use crate::libc::posix_io::{close, find_or_create_socket, is_socket, FileDescriptor};
 use crate::libc::time::timeval;
 use crate::mem::{
@@ -242,7 +245,11 @@ fn setsockopt(
     set_errno(env, 0);
     log_dbg!(
         "setsockopt({}, {:#x}, {:#x}, {:?}, {})",
-        socket, level, option_name, option_value, option_len
+        socket,
+        level,
+        option_name,
+        option_value,
+        option_len
     );
     let Some(sock) = State::get(env).sockets.get(&socket) else {
         set_errno(env, EBADF);
@@ -253,27 +260,37 @@ fn setsockopt(
     match (level, option_name) {
         (SOL_SOCKET, SO_DEBUG) => {
             // Silently ignore SO_DEBUG — requires elevated privileges on most
-            // platforms; apps set this speculatively and don't check the result.
+            // platforms; apps set this speculatively and don't check the
+            // result.
             log_dbg!("setsockopt: ignoring SO_DEBUG on socket {}", socket);
             0
         }
-        (SOL_SOCKET, SO_REUSEADDR) |
-        (SOL_SOCKET, SO_BROADCAST) | (SOL_SOCKET, SO_NOSIGPIPE) => {
+        (SOL_SOCKET, SO_REUSEADDR) | (SOL_SOCKET, SO_BROADCAST) | (SOL_SOCKET, SO_NOSIGPIPE) => {
             assert_eq!(option_len, guest_size_of::<i32>());
             let val: i32 = env.mem.read(option_value.cast());
             if val != 0 {
                 State::get_mut(env)
-                    .sockets.get_mut(&socket).unwrap()
-                    .options.insert(option_name);
+                    .sockets
+                    .get_mut(&socket)
+                    .unwrap()
+                    .options
+                    .insert(option_name);
             } else {
                 State::get_mut(env)
-                    .sockets.get_mut(&socket).unwrap()
-                    .options.remove(&option_name);
+                    .sockets
+                    .get_mut(&socket)
+                    .unwrap()
+                    .options
+                    .remove(&option_name);
             }
             // Apply SO_BROADCAST immediately if the UDP socket already exists.
             if option_name == SO_BROADCAST {
                 if let Some(udp) = State::get(env)
-                    .sockets.get(&socket).unwrap().udp_socket.as_ref()
+                    .sockets
+                    .get(&socket)
+                    .unwrap()
+                    .udp_socket
+                    .as_ref()
                 {
                     if let Err(e) = udp.set_broadcast(val != 0) {
                         log!("setsockopt: set_broadcast failed: {}", e);
@@ -283,12 +300,15 @@ fn setsockopt(
                 }
             }
             // SO_NOSIGPIPE просто сохраняется в options.
-            // В Rust попытка записи в закрытый сокет и так возвращает ErrorKind::BrokenPipe вместо убийства процесса.
+            // В Rust попытка записи в закрытый сокет и так возвращает
+            // ErrorKind::BrokenPipe вместо убийства процесса.
             0
         }
-                (SOL_SOCKET, SO_LINGER) => {
-            // Некоторые приложения (например, Minecraft PE) передают 4 байта (размер обычного int)
-            // вместо положенных 8 байт (struct linger). Обрабатываем оба варианта легально:
+        (SOL_SOCKET, SO_LINGER) => {
+            // Некоторые приложения (например, Minecraft PE) передают 4 байта
+            // (размер обычного int)
+            // вместо положенных 8 байт (struct linger). Обрабатываем оба
+            // варианта легально:
             let (l_onoff, l_linger) = if option_len == guest_size_of::<linger>() {
                 let linger_val: linger = env.mem.read(option_value.cast());
                 (linger_val.l_onoff, linger_val.l_linger)
@@ -296,38 +316,51 @@ fn setsockopt(
                 let val: i32 = env.mem.read(option_value.cast());
                 (val, 0)
             } else {
-                log!("setsockopt: SO_LINGER with invalid option_len {}, returning EINVAL", option_len);
+                log!(
+                    "setsockopt: SO_LINGER with invalid option_len {}, returning EINVAL",
+                    option_len
+                );
                 set_errno(env, EINVAL);
                 return -1;
             };
-            
+
             let duration = if l_onoff != 0 {
                 Some(std::time::Duration::from_secs(l_linger.max(0) as u64))
             } else {
                 None
             };
-            
+
             if type_ == SOCK_STREAM {
-                if let Some(_stream) = State::get(env).sockets.get(&socket).unwrap().tcp_stream.as_ref() {
-                    // Имитируем успешную установку SO_LINGER. Реальный вызов stream.set_linger
-                    // заменен на логирование, так как фича `tcp_linger` нестабильна в std::net
+                if let Some(_stream) = State::get(env)
+                    .sockets
+                    .get(&socket)
+                    .unwrap()
+                    .tcp_stream
+                    .as_ref()
+                {
+                    // Имитируем успешную установку SO_LINGER. Реальный вызов
+                    // stream.set_linger
+                    // заменен на логирование, так как фича `tcp_linger`
+                    // нестабильна в std::net
                     log!("setsockopt: SO_LINGER (duration: {:?}) requested, ignoring due to unstable tcp_linger feature", duration);
                 }
             }
             0
         }
-        (SOL_SOCKET, SO_SNDBUF) |
-        (SOL_SOCKET, SO_RCVBUF) => {
+        (SOL_SOCKET, SO_SNDBUF) | (SOL_SOCKET, SO_RCVBUF) => {
             assert_eq!(option_len, guest_size_of::<i32>());
             let buf_size: i32 = env.mem.read(option_value.cast());
-            
-            // Rust std::net не экспортирует управление размером буфера (set_recv_buffer_size).
-            // Но современные ОС сами отлично балансируют TCP-окно (auto-tuning), что работает 
+
+            // Rust std::net не экспортирует управление размером буфера
+            // (set_recv_buffer_size).
+            // Но современные ОС сами отлично балансируют TCP-окно
+            // (auto-tuning), что работает
             // намного лучше фиксированных лимитов из старых iOS-приложений.
             // Честно валидируем чтение памяти гостя и подтверждаем успех.
             log_dbg!(
                 "setsockopt: evaluated buffer size {:#x} to {} bytes",
-                option_name, buf_size
+                option_name,
+                buf_size
             );
             0
         }
@@ -339,7 +372,11 @@ fn setsockopt(
                 let val: i32 = env.mem.read(option_value.cast());
                 if type_ == SOCK_STREAM {
                     if let Some(stream) = State::get(env)
-                        .sockets.get(&socket).unwrap().tcp_stream.as_ref()
+                        .sockets
+                        .get(&socket)
+                        .unwrap()
+                        .tcp_stream
+                        .as_ref()
                     {
                         if let Err(e) = stream.set_nodelay(val != 0) {
                             log!("setsockopt TCP_NODELAY failed: {}", e);
@@ -350,20 +387,28 @@ fn setsockopt(
                     // If stream doesn't exist yet, store it for later.
                     if val != 0 {
                         State::get_mut(env)
-                            .sockets.get_mut(&socket).unwrap()
-                            .options.insert(TCP_NODELAY);
+                            .sockets
+                            .get_mut(&socket)
+                            .unwrap()
+                            .options
+                            .insert(TCP_NODELAY);
                     }
                 }
                 0
             } else {
-                log!("setsockopt: unhandled IPPROTO_TCP option {:#x}, ignoring", option_name);
+                log!(
+                    "setsockopt: unhandled IPPROTO_TCP option {:#x}, ignoring",
+                    option_name
+                );
                 0
             }
         }
         (level, option_name) => {
             log!(
                 "setsockopt: unhandled level={:#x} option={:#x} on socket {}, ignoring",
-                level, option_name, socket
+                level,
+                option_name,
+                socket
             );
             0 // Return success rather than crashing the app
         }
@@ -397,16 +442,27 @@ fn bind(
     let socket_address = sockaddr_val.to_sockaddr_v4();
     let type_str = match type_ {
         SOCK_STREAM => "TCP",
-        SOCK_DGRAM  => "UDP",
-        _           => unreachable!(),
+        SOCK_DGRAM => "UDP",
+        _ => unreachable!(),
     };
     log_dbg!(
         "bind({}, {:?} ({:?}), {}) -> {} {:?}",
-        socket, address, sockaddr_val, address_len, type_str, socket_address
+        socket,
+        address,
+        sockaddr_val,
+        address_len,
+        type_str,
+        socket_address
     );
     match type_ {
         SOCK_STREAM => {
-            if State::get(env).sockets.get(&socket).unwrap().tcp_listener.is_some() {
+            if State::get(env)
+                .sockets
+                .get(&socket)
+                .unwrap()
+                .tcp_listener
+                .is_some()
+            {
                 set_errno(env, EINVAL);
                 // already bound
                 return -1;
@@ -418,18 +474,25 @@ fn bind(
                         set_errno(env, EIO);
                         return -1;
                     }
-                    // Apply SO_REUSEADDR if set (best-effort; std doesn't expose it directly)
+                    // Apply SO_REUSEADDR if set (best-effort; std doesn't
+                    // expose it directly)
                     State::get_mut(env)
-                        .sockets.get_mut(&socket).unwrap()
+                        .sockets
+                        .get_mut(&socket)
+                        .unwrap()
                         .tcp_listener = Some(host_socket);
                 }
                 Err(e) => {
-                    log!("bind: TcpListener::bind({:?}) failed: {}", socket_address, e);
+                    log!(
+                        "bind: TcpListener::bind({:?}) failed: {}",
+                        socket_address,
+                        e
+                    );
                     let errno = match e.kind() {
-                        io::ErrorKind::AddrInUse        => EADDRINUSE,
+                        io::ErrorKind::AddrInUse => EADDRINUSE,
                         io::ErrorKind::AddrNotAvailable => EADDRNOTAVAIL,
                         io::ErrorKind::PermissionDenied => EACCES,
-                        _                               => EIO,
+                        _ => EIO,
                     };
                     set_errno(env, errno);
                     return -1;
@@ -437,15 +500,26 @@ fn bind(
             }
         }
         SOCK_DGRAM => {
-            if State::get(env).sockets.get(&socket).unwrap().udp_socket.is_some() {
+            if State::get(env)
+                .sockets
+                .get(&socket)
+                .unwrap()
+                .udp_socket
+                .is_some()
+            {
                 set_errno(env, EINVAL);
                 // already bound
                 return -1;
             }
             // Collect options before the mutable borrow below
             let options: Vec<i32> = State::get(env)
-                .sockets.get(&socket).unwrap()
-                .options.iter().copied().collect();
+                .sockets
+                .get(&socket)
+                .unwrap()
+                .options
+                .iter()
+                .copied()
+                .collect();
             match UdpSocket::bind(socket_address) {
                 Ok(host_socket) => {
                     if let Err(e) = host_socket.set_nonblocking(true) {
@@ -463,16 +537,18 @@ fn bind(
                         }
                     }
                     State::get_mut(env)
-                        .sockets.get_mut(&socket).unwrap()
+                        .sockets
+                        .get_mut(&socket)
+                        .unwrap()
                         .udp_socket = Some(host_socket);
                 }
                 Err(e) => {
                     log!("bind: UdpSocket::bind({:?}) failed: {}", socket_address, e);
                     let errno = match e.kind() {
-                        io::ErrorKind::AddrInUse        => EADDRINUSE,
+                        io::ErrorKind::AddrInUse => EADDRINUSE,
                         io::ErrorKind::AddrNotAvailable => EADDRNOTAVAIL,
                         io::ErrorKind::PermissionDenied => EACCES,
-                        _                               => EIO,
+                        _ => EIO,
                     };
                     set_errno(env, errno);
                     return -1;
@@ -567,15 +643,19 @@ fn connect(
             0 // Success
         }
         Err(e) => {
-            log!("connect: TcpStream::connect({:?}) failed: {}", socket_address, e);
+            log!(
+                "connect: TcpStream::connect({:?}) failed: {}",
+                socket_address,
+                e
+            );
             let errno = match e.kind() {
-                std::io::ErrorKind::ConnectionRefused  => ECONNREFUSED,
-                std::io::ErrorKind::TimedOut           => ETIMEDOUT,
-                std::io::ErrorKind::AddrNotAvailable   => EADDRNOTAVAIL,
-                std::io::ErrorKind::AddrInUse          => EADDRINUSE,
+                std::io::ErrorKind::ConnectionRefused => ECONNREFUSED,
+                std::io::ErrorKind::TimedOut => ETIMEDOUT,
+                std::io::ErrorKind::AddrNotAvailable => EADDRNOTAVAIL,
+                std::io::ErrorKind::AddrInUse => EADDRINUSE,
                 std::io::ErrorKind::NetworkUnreachable => ENETUNREACH,
-                std::io::ErrorKind::PermissionDenied   => EACCES,
-                _                                      => EIO,
+                std::io::ErrorKind::PermissionDenied => EACCES,
+                _ => EIO,
             };
             set_errno(env, errno);
             -1
@@ -591,17 +671,19 @@ fn select(
     error_fds: MutPtr<fd_set>,
     timeout: MutPtr<timeval>,
 ) -> i32 {
-        // TODO: handle errno properly
+    // TODO: handle errno properly
     set_errno(env, 0);
     assert!(n_fds >= 0 && n_fds <= 1024);
 
-    // В POSIX вызов select с n_fds = 0 используется для точного сна (микросекунды)
+    // В POSIX вызов select с n_fds = 0 используется для точного сна
+    // (микросекунды)
     if n_fds == 0 {
         if !timeout.is_null() {
             let timeval = env.mem.read(timeout);
             if timeval.tv_sec > 0 || timeval.tv_usec > 0 {
-                let total_sleep = std::time::Duration::from_secs(timeval.tv_sec.try_into().unwrap_or(0))
-                    + std::time::Duration::from_micros(timeval.tv_usec.try_into().unwrap_or(0));
+                let total_sleep =
+                    std::time::Duration::from_secs(timeval.tv_sec.try_into().unwrap_or(0))
+                        + std::time::Duration::from_micros(timeval.tv_usec.try_into().unwrap_or(0));
                 env.sleep(total_sleep);
             }
         }
@@ -1094,7 +1176,11 @@ fn send(
     match type_ {
         SOCK_STREAM => {
             let Some(mut stream) = State::get(env)
-                .sockets.get(&socket).unwrap().tcp_stream.as_ref()
+                .sockets
+                .get(&socket)
+                .unwrap()
+                .tcp_stream
+                .as_ref()
             else {
                 set_errno(env, ENOTCONN);
                 return -1;
@@ -1105,8 +1191,9 @@ fn send(
                     log_dbg!("send: wrote {} bytes to TCP socket {}", n, socket);
                     n.try_into().unwrap()
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe
-                    || e.kind() == io::ErrorKind::ConnectionReset =>
+                Err(ref e)
+                    if e.kind() == io::ErrorKind::BrokenPipe
+                        || e.kind() == io::ErrorKind::ConnectionReset =>
                 {
                     log!("send: TCP socket {} connection lost: {}", socket, e);
                     set_errno(env, ECONNRESET);
@@ -1127,7 +1214,11 @@ fn send(
         SOCK_DGRAM => {
             // send() on a connected UDP socket — use send() not send_to()
             let Some(udp) = State::get(env)
-                .sockets.get(&socket).unwrap().udp_socket.as_ref()
+                .sockets
+                .get(&socket)
+                .unwrap()
+                .udp_socket
+                .as_ref()
             else {
                 set_errno(env, EBADF);
                 return -1;
@@ -1176,7 +1267,10 @@ fn sendto(
         }
     };
     if type_ != SOCK_DGRAM {
-        log!("sendto: socket fd={} is not SOCK_DGRAM, returning ESOCKTNOSUPPORT", socket);
+        log!(
+            "sendto: socket fd={} is not SOCK_DGRAM, returning ESOCKTNOSUPPORT",
+            socket
+        );
         set_errno(env, ESOCKTNOSUPPORT);
         return -1;
     }
@@ -1335,7 +1429,8 @@ fn getsockname(
     };
 
     if !address.is_null() {
-        env.mem.write(address, sockaddr::from_sockaddr_v4(&local_addr));
+        env.mem
+            .write(address, sockaddr::from_sockaddr_v4(&local_addr));
         if !address_len.is_null() {
             env.mem.write(address_len, guest_size_of::<sockaddr>());
         }
@@ -1370,7 +1465,8 @@ fn getpeername(
     };
 
     if !address.is_null() {
-        env.mem.write(address, sockaddr::from_sockaddr_v4(&peer_addr));
+        env.mem
+            .write(address, sockaddr::from_sockaddr_v4(&peer_addr));
         if !address_len.is_null() {
             env.mem.write(address_len, guest_size_of::<sockaddr>());
         }
@@ -1401,4 +1497,3 @@ pub const FUNCTIONS: FunctionExports = &[
 pub fn close_socket(env: &mut Environment, socket: i32) -> bool {
     State::get_mut(env).sockets.remove(&socket).is_none()
 }
-

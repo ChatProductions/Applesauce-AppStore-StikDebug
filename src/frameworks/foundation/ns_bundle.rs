@@ -22,22 +22,22 @@ use std::collections::{HashMap, HashSet};
 // Should be ISO 639-1 (or ISO 639-2) compliant
 // Legacy projects use language names while newer ones use language code lprojs
 const LANG_ID_TO_LANG_PROJ: &[(&str, &[&str])] = &[
-    ("da", &["Danish.lproj",     "da.lproj"]),
-    ("nl", &["Dutch.lproj",      "nl.lproj"]),
-    ("en", &["English.lproj",    "en.lproj"]),
-    ("fi", &["Finnish.lproj",    "fi.lproj"]),
-    ("fr", &["French.lproj",     "fr.lproj"]),
-    ("de", &["German.lproj",     "de.lproj"]),
-    ("it", &["Italian.lproj",    "it.lproj"]),
-    ("ja", &["Japanese.lproj",   "ja.lproj"]),
-    ("ko", &["Korean.lproj",     "ko.lproj"]),
-    ("no", &["Norwegian.lproj",  "no.lproj"]),
+    ("da", &["Danish.lproj", "da.lproj"]),
+    ("nl", &["Dutch.lproj", "nl.lproj"]),
+    ("en", &["English.lproj", "en.lproj"]),
+    ("fi", &["Finnish.lproj", "fi.lproj"]),
+    ("fr", &["French.lproj", "fr.lproj"]),
+    ("de", &["German.lproj", "de.lproj"]),
+    ("it", &["Italian.lproj", "it.lproj"]),
+    ("ja", &["Japanese.lproj", "ja.lproj"]),
+    ("ko", &["Korean.lproj", "ko.lproj"]),
+    ("no", &["Norwegian.lproj", "no.lproj"]),
     ("pt", &["Portuguese.lproj", "pt.lproj"]),
-    ("ru", &["Russian.lproj",    "ru.lproj"]),
-    ("zh", &["Chinese.lproj",    "zh.lproj"]),
-    ("es", &["Spanish.lproj",    "es.lproj"]),
-    ("sv", &["Swedish.lproj",    "sv.lproj"]),
-    ("tr", &["Turkish.lproj",    "tr.lproj"]),
+    ("ru", &["Russian.lproj", "ru.lproj"]),
+    ("zh", &["Chinese.lproj", "zh.lproj"]),
+    ("es", &["Spanish.lproj", "es.lproj"]),
+    ("sv", &["Swedish.lproj", "sv.lproj"]),
+    ("tr", &["Turkish.lproj", "tr.lproj"]),
 ];
 
 #[derive(Default)]
@@ -96,8 +96,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)bundleForClass:(id)_aClass {
-    // Return the main bundle. For single-bundle iPhone apps this is always correct.
-    // A full implementation would look up which bundle contains the given class.
+    // Return the main bundle. For single-bundle iPhone apps this is always
+    // correct.
+    // A full implementation would look up which bundle contains the given
+    // class.
     msg_class![env; NSBundle mainBundle]
 }
 
@@ -530,7 +532,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let dir_str = ns_string::to_rust_string(env, dir_path);
     let rust_dir_path = std::path::Path::new(dir_str.as_ref());
     let mut actual_dir_str = dir_str.clone();
-    // Case-insensitive fallback: если папка не читается напрямую, ищем её у родителя без учёта регистра
+    // Case-insensitive fallback: если папка не читается напрямую, ищем её у
+    // родителя без учёта регистра
     if env.fs.enumerate(crate::fs::GuestPath::new(&dir_str)).is_err() {
         if let (Some(parent), Some(dir_name)) = (rust_dir_path.parent(), rust_dir_path.file_name()) {
             let parent_str = parent.to_str().unwrap_or("");
@@ -543,9 +546,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     let array: id = msg_class![env; NSMutableArray array];
-    
+
     // Собираем имена файлов в вектор в отдельном блоке,
-    // чтобы заимствование env.fs освободилось до вызовов msg! / from_rust_string
+    // чтобы заимствование env.fs освободилось до вызовов msg! /
+    // from_rust_string
     let matched_files: Vec<String> = {
         let target_ext = ext_str.as_ref().map(|s| s.to_lowercase());
         match env.fs.enumerate(crate::fs::GuestPath::new(&actual_dir_str)) {
@@ -559,7 +563,8 @@ pub const CLASSES: ClassExports = objc_classes! {
                                 .map(|s| s.to_lowercase());
                             entry_ext.as_ref() == Some(t_ext)
                         } else {
-                            // Если расширение не указано (nil или пустое), возвращаем все файлы
+                            // Если расширение не указано (nil или пустое),
+                            // возвращаем все файлы
                             true
                         }
                     })
@@ -572,14 +577,14 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
         }
     };
-    
+
     // Теперь env.fs не заимствован — можно безопасно использовать env
     for file_name in matched_files {
         let ns_file_name = ns_string::from_rust_string(env, file_name);
         let full_path: id = msg![env; dir_path stringByAppendingPathComponent:ns_file_name];
         let _: () = msg![env; array addObject:full_path];
     }
-    
+
     array
 }
 
@@ -800,7 +805,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         // Attempt to find the [Table].strings file
         let dict_url: id = msg![env; this URLForResource:name withExtension:extension];
         if dict_url == nil {
-            // Log that a translation table is missing (common in many Gamevil ports)
+            // Log that a translation table is missing (common in many Gamevil
+            // ports)
             log_dbg!("Localization table '{}.strings' not found, using fallback",
                 ns_string::to_rust_string(env, name));
             return if value == nil || value == empty_str { key } else { value };
@@ -921,12 +927,13 @@ fn path_for_resource_helper(
     env: &mut Environment,
     bundle: id,
     name: id,
-    lproj: id,      // Ожидается кодом ниже
-    directory: id,  // Ожидается кодом ниже
+    lproj: id,     // Ожидается кодом ниже
+    directory: id, // Ожидается кодом ниже
     extension: id,
 ) -> id {
     if name == nil {
-        // В реальной iOS метод pathForResource:ofType: при name == nil обязан возвращать nil.
+        // В реальной iOS метод pathForResource:ofType: при name == nil обязан
+        // возвращать nil.
         return nil;
     }
 
@@ -940,7 +947,8 @@ fn path_for_resource_helper(
 
     // Честное поведение iOS: никаких костылей для PvZ.
     // Если name = @"", мы ничего не приклеиваем.
-    // path останется директорией ресурсов (напр. .../ZumaHD.app), что является легальным путем.
+    // path останется директорией ресурсов (напр. .../ZumaHD.app), что является
+    // легальным путем.
     let name_str = ns_string::to_rust_string(env, name);
     if !name_str.is_empty() {
         path = msg![env; path stringByAppendingPathComponent:name];
@@ -963,23 +971,19 @@ fn path_for_resource_helper(
     let path_str = ns_string::to_rust_string(env, path);
     let rust_path = std::path::Path::new(path_str.as_ref());
     if let (Some(parent), Some(file_name)) = (rust_path.parent(), rust_path.file_name()) {
-        let parent_str  = parent.to_str().unwrap_or("");
+        let parent_str = parent.to_str().unwrap_or("");
         let target_name = file_name.to_str().unwrap_or("").to_lowercase();
         let parent_guest = crate::fs::GuestPath::new(parent_str);
         // Collect all entries first so env.fs borrow is dropped before we call
         // from_rust_string (which needs a mutable borrow on env).
-        let found: Option<String> = env.fs.enumerate(parent_guest)
-            .ok()
-            .and_then(|mut entries| {
-                entries
-                    .find(|e| e.to_lowercase() == target_name)
-                    .map(|e| format!("{}/{}", parent_str, e))
-            });
+        let found: Option<String> = env.fs.enumerate(parent_guest).ok().and_then(|mut entries| {
+            entries
+                .find(|e| e.to_lowercase() == target_name)
+                .map(|e| format!("{}/{}", parent_str, e))
+        });
         if let Some(full) = found {
             return ns_string::from_rust_string(env, full);
         }
     }
     nil
 }
-
-

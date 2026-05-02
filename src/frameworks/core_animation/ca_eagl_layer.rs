@@ -8,7 +8,7 @@
 use super::ca_layer::CALayerHostObject;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect};
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, retain, release, Class, ClassExports};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports};
 use crate::Environment;
 
 // MARK: - EAGLDrawable property key constants
@@ -16,10 +16,10 @@ use crate::Environment;
 // These are the keys apps put in the drawableProperties dictionary.
 // We export them as static strings so other modules can reference them.
 pub const kEAGLDrawablePropertyRetainedBacking: &str = "kEAGLDrawablePropertyRetainedBacking";
-pub const kEAGLDrawablePropertyColorFormat:     &str = "kEAGLDrawablePropertyColorFormat";
+pub const kEAGLDrawablePropertyColorFormat: &str = "kEAGLDrawablePropertyColorFormat";
 
 // kEAGLColorFormat values
-pub const kEAGLColorFormatRGBA8:  &str = "kEAGLColorFormatRGBA8";
+pub const kEAGLColorFormatRGBA8: &str = "kEAGLColorFormatRGBA8";
 pub const kEAGLColorFormatRGB565: &str = "kEAGLColorFormatRGB565";
 pub const kEAGLColorFormatSRGBA8: &str = "kEAGLColorFormatSRGBA8";
 
@@ -264,13 +264,7 @@ pub fn get_pixels_vec_for_presenting(env: &mut Environment, layer: id) -> Vec<u8
 
 /// Stores the new rendered frame in the layer and marks the GLES texture as
 /// stale. Data must be in RGBA8 format.
-pub fn present_pixels(
-    env: &mut Environment,
-    layer: id,
-    pixels: Vec<u8>,
-    width: u32,
-    height: u32,
-) {
+pub fn present_pixels(env: &mut Environment, layer: id, pixels: Vec<u8>, width: u32, height: u32) {
     let host_obj = env.objc.borrow_mut::<CALayerHostObject>(layer);
     host_obj.presented_pixels = Some((pixels, width, height));
     host_obj.gles_texture_is_up_to_date = false;

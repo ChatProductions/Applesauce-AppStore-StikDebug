@@ -15,29 +15,29 @@ use crate::objc::{
 // MARK: - Stream status / error constants
 
 type NSStreamStatus = NSUInteger;
-const NSStreamStatusNotOpen:  NSStreamStatus = 0;
-const NSStreamStatusOpening:  NSStreamStatus = 1;
-const NSStreamStatusOpen:     NSStreamStatus = 2;
-const NSStreamStatusReading:  NSStreamStatus = 3;
-const NSStreamStatusWriting:  NSStreamStatus = 4;
-const NSStreamStatusAtEnd:    NSStreamStatus = 5;
-const NSStreamStatusClosed:   NSStreamStatus = 6;
-const NSStreamStatusError:    NSStreamStatus = 7;
+const NSStreamStatusNotOpen: NSStreamStatus = 0;
+const NSStreamStatusOpening: NSStreamStatus = 1;
+const NSStreamStatusOpen: NSStreamStatus = 2;
+const NSStreamStatusReading: NSStreamStatus = 3;
+const NSStreamStatusWriting: NSStreamStatus = 4;
+const NSStreamStatusAtEnd: NSStreamStatus = 5;
+const NSStreamStatusClosed: NSStreamStatus = 6;
+const NSStreamStatusError: NSStreamStatus = 7;
 
 type NSStreamEvent = NSUInteger;
-const NSStreamEventNone:                 NSStreamEvent = 0;
-const NSStreamEventOpenCompleted:        NSStreamEvent = 1 << 0;
-const NSStreamEventHasBytesAvailable:   NSStreamEvent = 1 << 1;
-const NSStreamEventCanAcceptBytes:       NSStreamEvent = 1 << 2;
-const NSStreamEventErrorOccurred:        NSStreamEvent = 1 << 3;
-const NSStreamEventEndEncountered:       NSStreamEvent = 1 << 4;
+const NSStreamEventNone: NSStreamEvent = 0;
+const NSStreamEventOpenCompleted: NSStreamEvent = 1 << 0;
+const NSStreamEventHasBytesAvailable: NSStreamEvent = 1 << 1;
+const NSStreamEventCanAcceptBytes: NSStreamEvent = 1 << 2;
+const NSStreamEventErrorOccurred: NSStreamEvent = 1 << 3;
+const NSStreamEventEndEncountered: NSStreamEvent = 1 << 4;
 
 // MARK: - Property key constants (as &str for get_static_str)
 pub const NSStreamDataWrittenToMemoryStreamKey: &str = "NSStreamDataWrittenToMemoryStreamKey";
-pub const NSStreamFileCurrentOffsetKey:         &str = "NSStreamFileCurrentOffsetKey";
-pub const NSStreamNetworkServiceType:           &str = "NSStreamNetworkServiceType";
-pub const NSStreamSOCKSProxyConfigurationKey:   &str = "NSStreamSOCKSProxyConfigurationKey";
-pub const NSStreamSSLSettings:                  &str = "NSStreamSSLSettings";
+pub const NSStreamFileCurrentOffsetKey: &str = "NSStreamFileCurrentOffsetKey";
+pub const NSStreamNetworkServiceType: &str = "NSStreamNetworkServiceType";
+pub const NSStreamSOCKSProxyConfigurationKey: &str = "NSStreamSOCKSProxyConfigurationKey";
+pub const NSStreamSSLSettings: &str = "NSStreamSSLSettings";
 
 // MARK: - Host objects
 
@@ -45,7 +45,11 @@ enum InputStreamBacking {
     /// Backed by an in-memory `NSData*`
     Data { data: id, offset: usize },
     /// Backed by a file path — we load it lazily on open.
-    File { path: id, bytes: Vec<u8>, offset: usize },
+    File {
+        path: id,
+        bytes: Vec<u8>,
+        offset: usize,
+    },
     /// No backing (e.g. network stream stub).
     None,
 }
@@ -75,8 +79,7 @@ struct NSOutputStreamHostObject {
 }
 impl HostObject for NSOutputStreamHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
@@ -268,7 +271,8 @@ pub const CLASSES: ClassExports = objc_classes!
             return 0;
         }
 
-        // Защита от E0502: копируем во временный вектор, чтобы не держать одновременные borrow
+        // Защита от E0502: копируем во временный вектор, чтобы не держать
+        // одновременные borrow
         let src_slice = env.mem.bytes_at(bytes_ptr.cast::<u8>() + current_offset as u32, to_read as u32).to_vec();
         env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(&src_slice);
 
@@ -573,4 +577,3 @@ pub const CLASSES: ClassExports = objc_classes!
 @end
 
 };
-

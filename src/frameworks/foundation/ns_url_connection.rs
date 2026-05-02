@@ -15,8 +15,8 @@
 
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
-    ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 
 // NSError domain / code used when reporting "no network in emulator".
@@ -71,11 +71,7 @@ fn make_network_error(env: &mut crate::Environment) -> id {
 // Helper — call `connection:didFailWithError:` on the delegate.
 // Uses msg! which already handles unimplemented selectors gracefully.
 // ---------------------------------------------------------------------------
-fn notify_delegate_failure(
-    env: &mut crate::Environment,
-    connection: id,
-    delegate: id,
-) {
+fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegate: id) {
     if delegate == nil {
         return;
     }

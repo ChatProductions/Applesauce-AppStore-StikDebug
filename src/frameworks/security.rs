@@ -23,41 +23,41 @@ use crate::Environment;
 
 pub type OSStatus = i32;
 
-pub const ERR_SEC_SUCCESS:                 OSStatus = 0;
-pub const ERR_SEC_UNIMPLEMENTED:           OSStatus = -4;
-pub const ERR_SEC_PARAM:                   OSStatus = -50;
-pub const ERR_SEC_ALLOC_FAILED:            OSStatus = -108;
-pub const ERR_SEC_NOT_AVAILABLE:           OSStatus = -25291;
-pub const ERR_SEC_ITEM_NOT_FOUND:          OSStatus = -25300;
-pub const ERR_SEC_DUPLICATE_ITEM:          OSStatus = -25299;
-pub const ERR_SEC_DECODE:                  OSStatus = -26275;
-pub const ERR_SEC_AUTH_FAILED:             OSStatus = -25293;
+pub const ERR_SEC_SUCCESS: OSStatus = 0;
+pub const ERR_SEC_UNIMPLEMENTED: OSStatus = -4;
+pub const ERR_SEC_PARAM: OSStatus = -50;
+pub const ERR_SEC_ALLOC_FAILED: OSStatus = -108;
+pub const ERR_SEC_NOT_AVAILABLE: OSStatus = -25291;
+pub const ERR_SEC_ITEM_NOT_FOUND: OSStatus = -25300;
+pub const ERR_SEC_DUPLICATE_ITEM: OSStatus = -25299;
+pub const ERR_SEC_DECODE: OSStatus = -26275;
+pub const ERR_SEC_AUTH_FAILED: OSStatus = -25293;
 pub const ERR_SEC_INTERACTION_NOT_ALLOWED: OSStatus = -25308;
 
 // =========================================================================
 // MARK: - Opaque type aliases
 // =========================================================================
 
-pub type SecKeychainRef      = CFTypeRef;
-pub type SecKeychainItemRef  = CFTypeRef;
-pub type SecCertificateRef   = CFTypeRef;
-pub type SecKeyRef           = CFTypeRef;
-pub type SecIdentityRef      = CFTypeRef;
-pub type SecTrustRef         = CFTypeRef;
-pub type SecPolicyRef        = CFTypeRef;
-pub type SecAccessRef        = CFTypeRef;
-pub type SecRandomRef        = CFTypeRef;
+pub type SecKeychainRef = CFTypeRef;
+pub type SecKeychainItemRef = CFTypeRef;
+pub type SecCertificateRef = CFTypeRef;
+pub type SecKeyRef = CFTypeRef;
+pub type SecIdentityRef = CFTypeRef;
+pub type SecTrustRef = CFTypeRef;
+pub type SecPolicyRef = CFTypeRef;
+pub type SecAccessRef = CFTypeRef;
+pub type SecRandomRef = CFTypeRef;
 
 // SecTrustResultType
 pub type SecTrustResultType = u32;
 
-pub const kSecTrustResultInvalid:                 SecTrustResultType = 0;
-pub const kSecTrustResultProceed:                 SecTrustResultType = 1;
-pub const kSecTrustResultDeny:                    SecTrustResultType = 3;
-pub const kSecTrustResultUnspecified:             SecTrustResultType = 4;
+pub const kSecTrustResultInvalid: SecTrustResultType = 0;
+pub const kSecTrustResultProceed: SecTrustResultType = 1;
+pub const kSecTrustResultDeny: SecTrustResultType = 3;
+pub const kSecTrustResultUnspecified: SecTrustResultType = 4;
 pub const kSecTrustResultRecoverableTrustFailure: SecTrustResultType = 5;
-pub const kSecTrustResultFatalTrustFailure:       SecTrustResultType = 6;
-pub const kSecTrustResultOtherError:              SecTrustResultType = 7;
+pub const kSecTrustResultFatalTrustFailure: SecTrustResultType = 6;
+pub const kSecTrustResultOtherError: SecTrustResultType = 7;
 
 // =========================================================================
 // MARK: - SecItem (Keychain)
@@ -84,10 +84,7 @@ fn SecItemAdd(
     ERR_SEC_SUCCESS
 }
 
-fn SecItemDelete(
-    _env: &mut Environment,
-    _query: CFDictionaryRef,
-) -> OSStatus {
+fn SecItemDelete(_env: &mut Environment, _query: CFDictionaryRef) -> OSStatus {
     log_dbg!("SecItemDelete — returning errSecItemNotFound");
     ERR_SEC_ITEM_NOT_FOUND
 }
@@ -105,10 +102,7 @@ fn SecItemUpdate(
 // MARK: - Legacy Keychain API (SecKeychain*)
 // =========================================================================
 
-fn SecKeychainGetVersion(
-    env: &mut Environment,
-    version: MutPtr<u32>,
-) -> OSStatus {
+fn SecKeychainGetVersion(env: &mut Environment, version: MutPtr<u32>) -> OSStatus {
     if !version.is_null() {
         env.mem.write(version, 0x02050003); // 2.5.0.3 — a plausible iOS version
     }
@@ -126,10 +120,7 @@ fn SecKeychainOpen(
     ERR_SEC_NOT_AVAILABLE
 }
 
-fn SecKeychainCopyDefault(
-    env: &mut Environment,
-    keychain: MutPtr<SecKeychainRef>,
-) -> OSStatus {
+fn SecKeychainCopyDefault(env: &mut Environment, keychain: MutPtr<SecKeychainRef>) -> OSStatus {
     if !keychain.is_null() {
         env.mem.write(keychain, nil);
     }
@@ -152,10 +143,7 @@ fn SecKeychainItemFreeAttributesAndData(
     ERR_SEC_SUCCESS
 }
 
-fn SecKeychainItemDelete(
-    _env: &mut Environment,
-    _item_ref: SecKeychainItemRef,
-) -> OSStatus {
+fn SecKeychainItemDelete(_env: &mut Environment, _item_ref: SecKeychainItemRef) -> OSStatus {
     log_dbg!("SecKeychainItemDelete — returning errSecItemNotFound");
     ERR_SEC_ITEM_NOT_FOUND
 }
@@ -309,10 +297,7 @@ fn SecCertificateCreateWithData(
     nil
 }
 
-fn SecCertificateCopyData(
-    _env: &mut Environment,
-    _certificate: SecCertificateRef,
-) -> CFDataRef {
+fn SecCertificateCopyData(_env: &mut Environment, _certificate: SecCertificateRef) -> CFDataRef {
     log_dbg!("SecCertificateCopyData — returning nil");
     nil
 }
@@ -329,10 +314,7 @@ fn SecCertificateCopySubjectSummary(
 // MARK: - SecKey
 // =========================================================================
 
-fn SecKeyGetBlockSize(
-    _env: &mut Environment,
-    _key: SecKeyRef,
-) -> u32 {
+fn SecKeyGetBlockSize(_env: &mut Environment, _key: SecKeyRef) -> u32 {
     log_dbg!("SecKeyGetBlockSize — returning 256");
     256
 }
@@ -396,8 +378,12 @@ fn SecKeyGeneratePair(
     private_key: MutPtr<SecKeyRef>,
 ) -> OSStatus {
     log!("TODO: SecKeyGeneratePair — returning errSecUnimplemented");
-    if !public_key.is_null()  { env.mem.write(public_key,  nil); }
-    if !private_key.is_null() { env.mem.write(private_key, nil); }
+    if !public_key.is_null() {
+        env.mem.write(public_key, nil);
+    }
+    if !private_key.is_null() {
+        env.mem.write(private_key, nil);
+    }
     ERR_SEC_UNIMPLEMENTED
 }
 
@@ -440,10 +426,7 @@ fn SecTrustEvaluateAsync(
     ERR_SEC_UNIMPLEMENTED
 }
 
-fn SecTrustGetCertificateCount(
-    _env: &mut Environment,
-    _trust: SecTrustRef,
-) -> u32 {
+fn SecTrustGetCertificateCount(_env: &mut Environment, _trust: SecTrustRef) -> u32 {
     0
 }
 
@@ -455,10 +438,7 @@ fn SecTrustGetCertificateAtIndex(
     nil
 }
 
-fn SecTrustCopyPublicKey(
-    _env: &mut Environment,
-    _trust: SecTrustRef,
-) -> SecKeyRef {
+fn SecTrustCopyPublicKey(_env: &mut Environment, _trust: SecTrustRef) -> SecKeyRef {
     nil
 }
 
@@ -504,17 +484,11 @@ fn SecPolicyCreateSSL(
     nil
 }
 
-fn SecPolicyCreateRevocation(
-    _env: &mut Environment,
-    _revocation_flags: u32,
-) -> SecPolicyRef {
+fn SecPolicyCreateRevocation(_env: &mut Environment, _revocation_flags: u32) -> SecPolicyRef {
     nil
 }
 
-fn SecPolicyCopyProperties(
-    _env: &mut Environment,
-    _policy: SecPolicyRef,
-) -> CFDictionaryRef {
+fn SecPolicyCopyProperties(_env: &mut Environment, _policy: SecPolicyRef) -> CFDictionaryRef {
     nil
 }
 
@@ -580,113 +554,319 @@ fn SecCopyErrorMessageString(
 
 pub const CONSTANTS: ConstantExports = &[
     // kSecClass
-    ("_kSecClass",                  HostConstant::NSString("kSecClass")),
-    ("_kSecClassGenericPassword",   HostConstant::NSString("kSecClassGenericPassword")),
-    ("_kSecClassInternetPassword",  HostConstant::NSString("kSecClassInternetPassword")),
-    ("_kSecClassCertificate",       HostConstant::NSString("kSecClassCertificate")),
-    ("_kSecClassKey",               HostConstant::NSString("kSecClassKey")),
-    ("_kSecClassIdentity",          HostConstant::NSString("kSecClassIdentity")),
+    ("_kSecClass", HostConstant::NSString("kSecClass")),
+    (
+        "_kSecClassGenericPassword",
+        HostConstant::NSString("kSecClassGenericPassword"),
+    ),
+    (
+        "_kSecClassInternetPassword",
+        HostConstant::NSString("kSecClassInternetPassword"),
+    ),
+    (
+        "_kSecClassCertificate",
+        HostConstant::NSString("kSecClassCertificate"),
+    ),
+    ("_kSecClassKey", HostConstant::NSString("kSecClassKey")),
+    (
+        "_kSecClassIdentity",
+        HostConstant::NSString("kSecClassIdentity"),
+    ),
     // Attribute keys
-    ("_kSecAttrAccessGroup",        HostConstant::NSString("kSecAttrAccessGroup")),
-    ("_kSecAttrAccessible",         HostConstant::NSString("kSecAttrAccessible")),
-    ("_kSecAttrAccount",            HostConstant::NSString("kSecAttrAccount")),
-    ("_kSecAttrDescription",        HostConstant::NSString("kSecAttrDescription")),
-    ("_kSecAttrGeneric",            HostConstant::NSString("kSecAttrGeneric")),
-    ("_kSecAttrLabel",              HostConstant::NSString("kSecAttrLabel")),
-    ("_kSecAttrService",            HostConstant::NSString("kSecAttrService")),
-    ("_kSecAttrServer",             HostConstant::NSString("kSecAttrServer")),
-    ("_kSecAttrCreationDate",       HostConstant::NSString("kSecAttrCreationDate")),
-    ("_kSecAttrModificationDate",   HostConstant::NSString("kSecAttrModificationDate")),
-    ("_kSecAttrComment",            HostConstant::NSString("kSecAttrComment")),
-    ("_kSecAttrCreator",            HostConstant::NSString("kSecAttrCreator")),
-    ("_kSecAttrType",               HostConstant::NSString("kSecAttrType")),
-    ("_kSecAttrIsInvisible",        HostConstant::NSString("kSecAttrIsInvisible")),
-    ("_kSecAttrIsNegative",         HostConstant::NSString("kSecAttrIsNegative")),
-    ("_kSecAttrSynchronizable",     HostConstant::NSString("kSecAttrSynchronizable")),
-    ("_kSecAttrApplicationLabel",   HostConstant::NSString("kSecAttrApplicationLabel")),
-    ("_kSecAttrApplicationTag",     HostConstant::NSString("kSecAttrApplicationTag")),
-    ("_kSecAttrKeyType",            HostConstant::NSString("kSecAttrKeyType")),
-    ("_kSecAttrKeySizeInBits",      HostConstant::NSString("kSecAttrKeySizeInBits")),
-    ("_kSecAttrEffectiveKeySize",   HostConstant::NSString("kSecAttrEffectiveKeySize")),
-    ("_kSecAttrCanEncrypt",         HostConstant::NSString("kSecAttrCanEncrypt")),
-    ("_kSecAttrCanDecrypt",         HostConstant::NSString("kSecAttrCanDecrypt")),
-    ("_kSecAttrCanDerive",          HostConstant::NSString("kSecAttrCanDerive")),
-    ("_kSecAttrCanSign",            HostConstant::NSString("kSecAttrCanSign")),
-    ("_kSecAttrCanVerify",          HostConstant::NSString("kSecAttrCanVerify")),
-    ("_kSecAttrCanWrap",            HostConstant::NSString("kSecAttrCanWrap")),
-    ("_kSecAttrCanUnwrap",          HostConstant::NSString("kSecAttrCanUnwrap")),
-    ("_kSecAttrSubject",            HostConstant::NSString("kSecAttrSubject")),
-    ("_kSecAttrIssuer",             HostConstant::NSString("kSecAttrIssuer")),
-    ("_kSecAttrSerialNumber",       HostConstant::NSString("kSecAttrSerialNumber")),
-    ("_kSecAttrSubjectKeyID",       HostConstant::NSString("kSecAttrSubjectKeyID")),
-    ("_kSecAttrPublicKeyHash",      HostConstant::NSString("kSecAttrPublicKeyHash")),
-    ("_kSecAttrCertificateType",    HostConstant::NSString("kSecAttrCertificateType")),
-    ("_kSecAttrCertificateEncoding",HostConstant::NSString("kSecAttrCertificateEncoding")),
-    ("_kSecAttrPath",               HostConstant::NSString("kSecAttrPath")),
-    ("_kSecAttrPort",               HostConstant::NSString("kSecAttrPort")),
-    ("_kSecAttrProtocol",           HostConstant::NSString("kSecAttrProtocol")),
-    ("_kSecAttrAuthenticationType", HostConstant::NSString("kSecAttrAuthenticationType")),
-    ("_kSecAttrAuthenticationTypeDefault", HostConstant::NSString("dflt")),
-    ("_kSecAttrSecurityDomain",     HostConstant::NSString("kSecAttrSecurityDomain")),
+    (
+        "_kSecAttrAccessGroup",
+        HostConstant::NSString("kSecAttrAccessGroup"),
+    ),
+    (
+        "_kSecAttrAccessible",
+        HostConstant::NSString("kSecAttrAccessible"),
+    ),
+    (
+        "_kSecAttrAccount",
+        HostConstant::NSString("kSecAttrAccount"),
+    ),
+    (
+        "_kSecAttrDescription",
+        HostConstant::NSString("kSecAttrDescription"),
+    ),
+    (
+        "_kSecAttrGeneric",
+        HostConstant::NSString("kSecAttrGeneric"),
+    ),
+    ("_kSecAttrLabel", HostConstant::NSString("kSecAttrLabel")),
+    (
+        "_kSecAttrService",
+        HostConstant::NSString("kSecAttrService"),
+    ),
+    ("_kSecAttrServer", HostConstant::NSString("kSecAttrServer")),
+    (
+        "_kSecAttrCreationDate",
+        HostConstant::NSString("kSecAttrCreationDate"),
+    ),
+    (
+        "_kSecAttrModificationDate",
+        HostConstant::NSString("kSecAttrModificationDate"),
+    ),
+    (
+        "_kSecAttrComment",
+        HostConstant::NSString("kSecAttrComment"),
+    ),
+    (
+        "_kSecAttrCreator",
+        HostConstant::NSString("kSecAttrCreator"),
+    ),
+    ("_kSecAttrType", HostConstant::NSString("kSecAttrType")),
+    (
+        "_kSecAttrIsInvisible",
+        HostConstant::NSString("kSecAttrIsInvisible"),
+    ),
+    (
+        "_kSecAttrIsNegative",
+        HostConstant::NSString("kSecAttrIsNegative"),
+    ),
+    (
+        "_kSecAttrSynchronizable",
+        HostConstant::NSString("kSecAttrSynchronizable"),
+    ),
+    (
+        "_kSecAttrApplicationLabel",
+        HostConstant::NSString("kSecAttrApplicationLabel"),
+    ),
+    (
+        "_kSecAttrApplicationTag",
+        HostConstant::NSString("kSecAttrApplicationTag"),
+    ),
+    (
+        "_kSecAttrKeyType",
+        HostConstant::NSString("kSecAttrKeyType"),
+    ),
+    (
+        "_kSecAttrKeySizeInBits",
+        HostConstant::NSString("kSecAttrKeySizeInBits"),
+    ),
+    (
+        "_kSecAttrEffectiveKeySize",
+        HostConstant::NSString("kSecAttrEffectiveKeySize"),
+    ),
+    (
+        "_kSecAttrCanEncrypt",
+        HostConstant::NSString("kSecAttrCanEncrypt"),
+    ),
+    (
+        "_kSecAttrCanDecrypt",
+        HostConstant::NSString("kSecAttrCanDecrypt"),
+    ),
+    (
+        "_kSecAttrCanDerive",
+        HostConstant::NSString("kSecAttrCanDerive"),
+    ),
+    (
+        "_kSecAttrCanSign",
+        HostConstant::NSString("kSecAttrCanSign"),
+    ),
+    (
+        "_kSecAttrCanVerify",
+        HostConstant::NSString("kSecAttrCanVerify"),
+    ),
+    (
+        "_kSecAttrCanWrap",
+        HostConstant::NSString("kSecAttrCanWrap"),
+    ),
+    (
+        "_kSecAttrCanUnwrap",
+        HostConstant::NSString("kSecAttrCanUnwrap"),
+    ),
+    (
+        "_kSecAttrSubject",
+        HostConstant::NSString("kSecAttrSubject"),
+    ),
+    ("_kSecAttrIssuer", HostConstant::NSString("kSecAttrIssuer")),
+    (
+        "_kSecAttrSerialNumber",
+        HostConstant::NSString("kSecAttrSerialNumber"),
+    ),
+    (
+        "_kSecAttrSubjectKeyID",
+        HostConstant::NSString("kSecAttrSubjectKeyID"),
+    ),
+    (
+        "_kSecAttrPublicKeyHash",
+        HostConstant::NSString("kSecAttrPublicKeyHash"),
+    ),
+    (
+        "_kSecAttrCertificateType",
+        HostConstant::NSString("kSecAttrCertificateType"),
+    ),
+    (
+        "_kSecAttrCertificateEncoding",
+        HostConstant::NSString("kSecAttrCertificateEncoding"),
+    ),
+    ("_kSecAttrPath", HostConstant::NSString("kSecAttrPath")),
+    ("_kSecAttrPort", HostConstant::NSString("kSecAttrPort")),
+    (
+        "_kSecAttrProtocol",
+        HostConstant::NSString("kSecAttrProtocol"),
+    ),
+    (
+        "_kSecAttrAuthenticationType",
+        HostConstant::NSString("kSecAttrAuthenticationType"),
+    ),
+    (
+        "_kSecAttrAuthenticationTypeDefault",
+        HostConstant::NSString("dflt"),
+    ),
+    (
+        "_kSecAttrSecurityDomain",
+        HostConstant::NSString("kSecAttrSecurityDomain"),
+    ),
     // kSecAttrAccessible values
-    ("_kSecAttrAccessibleWhenUnlocked",
-        HostConstant::NSString("kSecAttrAccessibleWhenUnlocked")),
-    ("_kSecAttrAccessibleAfterFirstUnlock",
-        HostConstant::NSString("kSecAttrAccessibleAfterFirstUnlock")),
-    ("_kSecAttrAccessibleAlways",
-        HostConstant::NSString("kSecAttrAccessibleAlways")),
-    ("_kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
-        HostConstant::NSString("kSecAttrAccessibleWhenUnlockedThisDeviceOnly")),
-    ("_kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly",
-        HostConstant::NSString("kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly")),
-    ("_kSecAttrAccessibleAlwaysThisDeviceOnly",
-        HostConstant::NSString("kSecAttrAccessibleAlwaysThisDeviceOnly")),
-    ("_kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly",
-        HostConstant::NSString("kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly")),
+    (
+        "_kSecAttrAccessibleWhenUnlocked",
+        HostConstant::NSString("kSecAttrAccessibleWhenUnlocked"),
+    ),
+    (
+        "_kSecAttrAccessibleAfterFirstUnlock",
+        HostConstant::NSString("kSecAttrAccessibleAfterFirstUnlock"),
+    ),
+    (
+        "_kSecAttrAccessibleAlways",
+        HostConstant::NSString("kSecAttrAccessibleAlways"),
+    ),
+    (
+        "_kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
+        HostConstant::NSString("kSecAttrAccessibleWhenUnlockedThisDeviceOnly"),
+    ),
+    (
+        "_kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly",
+        HostConstant::NSString("kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly"),
+    ),
+    (
+        "_kSecAttrAccessibleAlwaysThisDeviceOnly",
+        HostConstant::NSString("kSecAttrAccessibleAlwaysThisDeviceOnly"),
+    ),
+    (
+        "_kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly",
+        HostConstant::NSString("kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly"),
+    ),
     // kSecAttrKeyType values
-    ("_kSecAttrKeyTypeRSA",         HostConstant::NSString("kSecAttrKeyTypeRSA")),
-    ("_kSecAttrKeyTypeEC",          HostConstant::NSString("kSecAttrKeyTypeEC")),
-    ("_kSecAttrKeyTypeECSECPrimeRandom",
-        HostConstant::NSString("kSecAttrKeyTypeECSECPrimeRandom")),
+    (
+        "_kSecAttrKeyTypeRSA",
+        HostConstant::NSString("kSecAttrKeyTypeRSA"),
+    ),
+    (
+        "_kSecAttrKeyTypeEC",
+        HostConstant::NSString("kSecAttrKeyTypeEC"),
+    ),
+    (
+        "_kSecAttrKeyTypeECSECPrimeRandom",
+        HostConstant::NSString("kSecAttrKeyTypeECSECPrimeRandom"),
+    ),
     // kSecAttrProtocol values
-    ("_kSecAttrProtocolHTTPS",      HostConstant::NSString("kSecAttrProtocolHTTPS")),
-    ("_kSecAttrProtocolHTTP",       HostConstant::NSString("kSecAttrProtocolHTTP")),
-    ("_kSecAttrProtocolFTP",        HostConstant::NSString("kSecAttrProtocolFTP")),
+    (
+        "_kSecAttrProtocolHTTPS",
+        HostConstant::NSString("kSecAttrProtocolHTTPS"),
+    ),
+    (
+        "_kSecAttrProtocolHTTP",
+        HostConstant::NSString("kSecAttrProtocolHTTP"),
+    ),
+    (
+        "_kSecAttrProtocolFTP",
+        HostConstant::NSString("kSecAttrProtocolFTP"),
+    ),
     // Value keys
-    ("_kSecValueData",              HostConstant::NSString("kSecValueData")),
-    ("_kSecValueRef",               HostConstant::NSString("kSecValueRef")),
-    ("_kSecValuePersistentRef",     HostConstant::NSString("kSecValuePersistentRef")),
+    ("_kSecValueData", HostConstant::NSString("kSecValueData")),
+    ("_kSecValueRef", HostConstant::NSString("kSecValueRef")),
+    (
+        "_kSecValuePersistentRef",
+        HostConstant::NSString("kSecValuePersistentRef"),
+    ),
     // Return-type keys
-    ("_kSecReturnData",             HostConstant::NSString("kSecReturnData")),
-    ("_kSecReturnAttributes",       HostConstant::NSString("kSecReturnAttributes")),
-    ("_kSecReturnRef",              HostConstant::NSString("kSecReturnRef")),
-    ("_kSecReturnPersistentRef",    HostConstant::NSString("kSecReturnPersistentRef")),
+    ("_kSecReturnData", HostConstant::NSString("kSecReturnData")),
+    (
+        "_kSecReturnAttributes",
+        HostConstant::NSString("kSecReturnAttributes"),
+    ),
+    ("_kSecReturnRef", HostConstant::NSString("kSecReturnRef")),
+    (
+        "_kSecReturnPersistentRef",
+        HostConstant::NSString("kSecReturnPersistentRef"),
+    ),
     // Match keys
-    ("_kSecMatchLimit",             HostConstant::NSString("kSecMatchLimit")),
-    ("_kSecMatchLimitOne",          HostConstant::NSString("kSecMatchLimitOne")),
-    ("_kSecMatchLimitAll",          HostConstant::NSString("kSecMatchLimitAll")),
-    ("_kSecMatchItemList",          HostConstant::NSString("kSecMatchItemList")),
-    ("_kSecMatchIssuers",           HostConstant::NSString("kSecMatchIssuers")),
-    ("_kSecMatchEmailAddressIfPresent",
-        HostConstant::NSString("kSecMatchEmailAddressIfPresent")),
-    ("_kSecMatchSubjectContains",   HostConstant::NSString("kSecMatchSubjectContains")),
-    ("_kSecMatchCaseInsensitive",   HostConstant::NSString("kSecMatchCaseInsensitive")),
-    ("_kSecMatchTrustedOnly",       HostConstant::NSString("kSecMatchTrustedOnly")),
-    ("_kSecMatchValidOnDate",       HostConstant::NSString("kSecMatchValidOnDate")),
-    ("_kSecMatchPolicy",            HostConstant::NSString("kSecMatchPolicy")),
-    ("_kSecMatchSearchList",        HostConstant::NSString("kSecMatchSearchList")),
+    ("_kSecMatchLimit", HostConstant::NSString("kSecMatchLimit")),
+    (
+        "_kSecMatchLimitOne",
+        HostConstant::NSString("kSecMatchLimitOne"),
+    ),
+    (
+        "_kSecMatchLimitAll",
+        HostConstant::NSString("kSecMatchLimitAll"),
+    ),
+    (
+        "_kSecMatchItemList",
+        HostConstant::NSString("kSecMatchItemList"),
+    ),
+    (
+        "_kSecMatchIssuers",
+        HostConstant::NSString("kSecMatchIssuers"),
+    ),
+    (
+        "_kSecMatchEmailAddressIfPresent",
+        HostConstant::NSString("kSecMatchEmailAddressIfPresent"),
+    ),
+    (
+        "_kSecMatchSubjectContains",
+        HostConstant::NSString("kSecMatchSubjectContains"),
+    ),
+    (
+        "_kSecMatchCaseInsensitive",
+        HostConstant::NSString("kSecMatchCaseInsensitive"),
+    ),
+    (
+        "_kSecMatchTrustedOnly",
+        HostConstant::NSString("kSecMatchTrustedOnly"),
+    ),
+    (
+        "_kSecMatchValidOnDate",
+        HostConstant::NSString("kSecMatchValidOnDate"),
+    ),
+    (
+        "_kSecMatchPolicy",
+        HostConstant::NSString("kSecMatchPolicy"),
+    ),
+    (
+        "_kSecMatchSearchList",
+        HostConstant::NSString("kSecMatchSearchList"),
+    ),
     // Use keys
-    ("_kSecUseItemList",            HostConstant::NSString("kSecUseItemList")),
-    ("_kSecUseOperationPrompt",     HostConstant::NSString("kSecUseOperationPrompt")),
-    ("_kSecUseNoAuthenticationUI",  HostConstant::NSString("kSecUseNoAuthenticationUI")),
+    (
+        "_kSecUseItemList",
+        HostConstant::NSString("kSecUseItemList"),
+    ),
+    (
+        "_kSecUseOperationPrompt",
+        HostConstant::NSString("kSecUseOperationPrompt"),
+    ),
+    (
+        "_kSecUseNoAuthenticationUI",
+        HostConstant::NSString("kSecUseNoAuthenticationUI"),
+    ),
     // Trust result constants (NSString form used as dictionary values)
-    ("_kSecTrustInfoExtendedValidationKey",
-        HostConstant::NSString("kSecTrustInfoExtendedValidationKey")),
+    (
+        "_kSecTrustInfoExtendedValidationKey",
+        HostConstant::NSString("kSecTrustInfoExtendedValidationKey"),
+    ),
     // SecRandom
-    ("_kSecRandomDefault",          HostConstant::NullPtr),
+    ("_kSecRandomDefault", HostConstant::NullPtr),
     // Private key generation
-    ("_kSecPrivateKeyAttrs",        HostConstant::NSString("kSecPrivateKeyAttrs")),
-    ("_kSecPublicKeyAttrs",         HostConstant::NSString("kSecPublicKeyAttrs")),
+    (
+        "_kSecPrivateKeyAttrs",
+        HostConstant::NSString("kSecPrivateKeyAttrs"),
+    ),
+    (
+        "_kSecPublicKeyAttrs",
+        HostConstant::NSString("kSecPublicKeyAttrs"),
+    ),
 ];
 
 // =========================================================================
@@ -709,8 +889,40 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(SecKeychainItemModifyAttributesAndData(_, _, _, _)),
     export_c_func!(SecKeychainAddGenericPassword(_, _, _, _, _, _, _, _)),
     export_c_func!(SecKeychainFindGenericPassword(_, _, _, _, _, _, _, _)),
-    export_c_func!(SecKeychainAddInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
-    export_c_func!(SecKeychainFindInternetPassword(_, _, _, _, _, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(SecKeychainAddInternetPassword(
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _
+    )),
+    export_c_func!(SecKeychainFindInternetPassword(
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _
+    )),
     // SecRandom
     export_c_func!(SecRandomCopyBytes(_, _, _)),
     // SecCertificate

@@ -22,34 +22,38 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u32 
         // Используем ConstPtr для безопасного чтения
         let ptr: ConstPtr<u8> = ConstPtr::from_bits(current_addr);
         let byte: u8 = env.mem.read(ptr);
-        if byte == 0 { 
+        if byte == 0 {
             break; // Конец C-строки
         }
         filename_bytes.push(byte);
         current_addr += 1;
     }
-    
+
     // Конвертируем прочитанные байты в строку Rust
     let filename = String::from_utf8_lossy(&filename_bytes).into_owned();
 
-    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора безопасно
+    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора
+    // безопасно
     let safe_name = filename.replace("/", "_");
     // Сохраняем базу в директорию приложения
-    let path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}", safe_name);
+    let path = format!(
+        "/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}",
+        safe_name
+    );
 
     match Connection::open(&path) {
         Ok(conn) => {
             let mut handles = SQLITE_CONNECTIONS.lock().unwrap();
             let mut next_id = NEXT_HANDLE.lock().unwrap();
-            
+
             let handle = *next_id;
             *next_id += 4;
             handles.insert(handle, conn);
-            
+
             // Пишем handle обратно в память по адресу ppDb (тут нужен MutPtr)
             let pp_db_ptr: MutPtr<u32> = MutPtr::from_bits(ppDb);
             env.mem.write(pp_db_ptr, handle);
-            
+
             SQLITE_OK
         }
         Err(e) => {
@@ -67,34 +71,38 @@ pub fn sqlite3_open_v2(env: &mut Environment, filename_ptr: u32, ppDb: u32) -> u
         // Используем ConstPtr для безопасного чтения
         let ptr: ConstPtr<u8> = ConstPtr::from_bits(current_addr);
         let byte: u8 = env.mem.read(ptr);
-        if byte == 0 { 
+        if byte == 0 {
             break; // Конец C-строки
         }
         filename_bytes.push(byte);
         current_addr += 1;
     }
-    
+
     // Конвертируем прочитанные байты в строку Rust
     let filename = String::from_utf8_lossy(&filename_bytes).into_owned();
 
-    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора безопасно
+    // Заменяем слэши, чтобы файл создавался в локальной директории эмулятора
+    // безопасно
     let safe_name = filename.replace("/", "_");
     // Сохраняем базу в директорию приложения
-    let path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}", safe_name);
+    let path = format!(
+        "/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}",
+        safe_name
+    );
 
     match Connection::open(&path) {
         Ok(conn) => {
             let mut handles = SQLITE_CONNECTIONS.lock().unwrap();
             let mut next_id = NEXT_HANDLE.lock().unwrap();
-            
+
             let handle = *next_id;
             *next_id += 4;
             handles.insert(handle, conn);
-            
+
             // Пишем handle обратно в память по адресу ppDb (тут нужен MutPtr)
             let pp_db_ptr: MutPtr<u32> = MutPtr::from_bits(ppDb);
             env.mem.write(pp_db_ptr, handle);
-            
+
             SQLITE_OK
         }
         Err(e) => {
@@ -128,10 +136,10 @@ pub fn sqlite3_free(env: &mut Environment, ptr: u32) {
     if ptr == 0 {
         return; // По спецификации SQLite, вызов free(NULL) безопасен
     }
-    
+
     // ИСПРАВЛЕНО: Используем MutVoidPtr вместо MutPtr<()>
     let mem_ptr = crate::mem::MutVoidPtr::from_bits(ptr);
-    
+
     // Освобождаем память в куче гостя
     env.mem.free(mem_ptr);
 }

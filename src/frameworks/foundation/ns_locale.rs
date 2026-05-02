@@ -8,7 +8,7 @@
 use super::{ns_array, ns_string};
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::core_foundation::cf_locale::{
-    kCFLocaleCountryCode, kCFLocaleLanguageCode, kCFLocaleIdentifier,
+    kCFLocaleCountryCode, kCFLocaleIdentifier, kCFLocaleLanguageCode,
 };
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
@@ -19,38 +19,80 @@ use crate::Environment;
 
 // MARK: - NSLocale key constants
 
-const NSLocaleCountryCode:          &str = "NSLocaleCountryCode";
-const NSLocaleLanguageCode:         &str = "NSLocaleLanguageCode";
-const NSLocaleScriptCode:           &str = "NSLocaleScriptCode";
-const NSLocaleVariantCode:          &str = "NSLocaleVariantCode";
-const NSLocaleIdentifier:           &str = "kCFLocaleIdentifierKey";
-const NSLocaleCalendar:             &str = "NSLocaleCalendar";
-const NSLocaleCollationIdentifier:  &str = "NSLocaleCollationIdentifier";
-const NSLocaleUsesMetricSystem:     &str = "NSLocaleUsesMetricSystem";
-const NSLocaleMeasurementSystem:    &str = "NSLocaleMeasurementSystem";
-const NSLocaleDecimalSeparator:     &str = "NSLocaleDecimalSeparator";
-const NSLocaleGroupingSeparator:    &str = "NSLocaleGroupingSeparator";
-const NSLocaleCurrencySymbol:       &str = "NSLocaleCurrencySymbol";
-const NSLocaleCurrencyCode:         &str = "NSLocaleCurrencyCode";
-const NSLocaleCollatorIdentifier:   &str = "NSLocaleCollatorIdentifier";
+const NSLocaleCountryCode: &str = "NSLocaleCountryCode";
+const NSLocaleLanguageCode: &str = "NSLocaleLanguageCode";
+const NSLocaleScriptCode: &str = "NSLocaleScriptCode";
+const NSLocaleVariantCode: &str = "NSLocaleVariantCode";
+const NSLocaleIdentifier: &str = "kCFLocaleIdentifierKey";
+const NSLocaleCalendar: &str = "NSLocaleCalendar";
+const NSLocaleCollationIdentifier: &str = "NSLocaleCollationIdentifier";
+const NSLocaleUsesMetricSystem: &str = "NSLocaleUsesMetricSystem";
+const NSLocaleMeasurementSystem: &str = "NSLocaleMeasurementSystem";
+const NSLocaleDecimalSeparator: &str = "NSLocaleDecimalSeparator";
+const NSLocaleGroupingSeparator: &str = "NSLocaleGroupingSeparator";
+const NSLocaleCurrencySymbol: &str = "NSLocaleCurrencySymbol";
+const NSLocaleCurrencyCode: &str = "NSLocaleCurrencyCode";
+const NSLocaleCollatorIdentifier: &str = "NSLocaleCollatorIdentifier";
 const NSLocaleQuotationBeginDelimiterKey: &str = "NSLocaleQuotationBeginDelimiterKey";
-const NSLocaleQuotationEndDelimiterKey:   &str = "NSLocaleQuotationEndDelimiterKey";
+const NSLocaleQuotationEndDelimiterKey: &str = "NSLocaleQuotationEndDelimiterKey";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_NSLocaleCountryCode",         HostConstant::NSString(NSLocaleCountryCode)),
-    ("_NSLocaleLanguageCode",        HostConstant::NSString(NSLocaleLanguageCode)),
-    ("_NSLocaleScriptCode",          HostConstant::NSString(NSLocaleScriptCode)),
-    ("_NSLocaleVariantCode",         HostConstant::NSString(NSLocaleVariantCode)),
-    ("_NSLocaleIdentifier",          HostConstant::NSString(NSLocaleIdentifier)),
-    ("_NSLocaleCalendar",            HostConstant::NSString(NSLocaleCalendar)),
-    ("_NSLocaleCollationIdentifier", HostConstant::NSString(NSLocaleCollationIdentifier)),
-    ("_NSLocaleUsesMetricSystem",    HostConstant::NSString(NSLocaleUsesMetricSystem)),
-    ("_NSLocaleMeasurementSystem",   HostConstant::NSString(NSLocaleMeasurementSystem)),
-    ("_NSLocaleDecimalSeparator",    HostConstant::NSString(NSLocaleDecimalSeparator)),
-    ("_NSLocaleGroupingSeparator",   HostConstant::NSString(NSLocaleGroupingSeparator)),
-    ("_NSLocaleCurrencySymbol",      HostConstant::NSString(NSLocaleCurrencySymbol)),
-    ("_NSLocaleCurrencyCode",        HostConstant::NSString(NSLocaleCurrencyCode)),
-    ("_NSLocaleCollatorIdentifier",  HostConstant::NSString(NSLocaleCollatorIdentifier)),
+    (
+        "_NSLocaleCountryCode",
+        HostConstant::NSString(NSLocaleCountryCode),
+    ),
+    (
+        "_NSLocaleLanguageCode",
+        HostConstant::NSString(NSLocaleLanguageCode),
+    ),
+    (
+        "_NSLocaleScriptCode",
+        HostConstant::NSString(NSLocaleScriptCode),
+    ),
+    (
+        "_NSLocaleVariantCode",
+        HostConstant::NSString(NSLocaleVariantCode),
+    ),
+    (
+        "_NSLocaleIdentifier",
+        HostConstant::NSString(NSLocaleIdentifier),
+    ),
+    (
+        "_NSLocaleCalendar",
+        HostConstant::NSString(NSLocaleCalendar),
+    ),
+    (
+        "_NSLocaleCollationIdentifier",
+        HostConstant::NSString(NSLocaleCollationIdentifier),
+    ),
+    (
+        "_NSLocaleUsesMetricSystem",
+        HostConstant::NSString(NSLocaleUsesMetricSystem),
+    ),
+    (
+        "_NSLocaleMeasurementSystem",
+        HostConstant::NSString(NSLocaleMeasurementSystem),
+    ),
+    (
+        "_NSLocaleDecimalSeparator",
+        HostConstant::NSString(NSLocaleDecimalSeparator),
+    ),
+    (
+        "_NSLocaleGroupingSeparator",
+        HostConstant::NSString(NSLocaleGroupingSeparator),
+    ),
+    (
+        "_NSLocaleCurrencySymbol",
+        HostConstant::NSString(NSLocaleCurrencySymbol),
+    ),
+    (
+        "_NSLocaleCurrencyCode",
+        HostConstant::NSString(NSLocaleCurrencyCode),
+    ),
+    (
+        "_NSLocaleCollatorIdentifier",
+        HostConstant::NSString(NSLocaleCollatorIdentifier),
+    ),
     (
         "_NSLocaleQuotationBeginDelimiterKey",
         HostConstant::NSString(NSLocaleQuotationBeginDelimiterKey),
@@ -64,7 +106,7 @@ pub const CONSTANTS: ConstantExports = &[
 #[derive(Default)]
 pub struct State {
     current_locale: Option<id>,
-    system_locale:  Option<id>,
+    system_locale: Option<id>,
     preferred_languages: Option<id>,
 }
 impl State {
@@ -136,7 +178,7 @@ fn locale_identifier(language: &str, country: &str) -> String {
 // MARK: - Host object
 
 struct NSLocaleHostObject {
-    country_code:  id, // NSString* — retained
+    country_code: id,  // NSString* — retained
     language_code: id, // NSString* — retained
 }
 impl HostObject for NSLocaleHostObject {}

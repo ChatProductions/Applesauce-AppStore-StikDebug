@@ -7,8 +7,10 @@
 //! threads for simulation. Since touchHLE is single-threaded we just treat it
 //! identically to `ChipmunkSpace`.
 
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
 use crate::frameworks::foundation::NSInteger;
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 
 // =========================================================================
 // MARK: - ChipmunkSpace host object (base)

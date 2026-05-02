@@ -8,25 +8,26 @@
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 use crate::window;
 
 pub type UIAlertViewStyle = NSInteger;
-pub const UIAlertViewStyleDefault:               UIAlertViewStyle = 0;
-pub const UIAlertViewStyleSecureTextInput:       UIAlertViewStyle = 1;
-pub const UIAlertViewStylePlainTextInput:        UIAlertViewStyle = 2;
+pub const UIAlertViewStyleDefault: UIAlertViewStyle = 0;
+pub const UIAlertViewStyleSecureTextInput: UIAlertViewStyle = 1;
+pub const UIAlertViewStylePlainTextInput: UIAlertViewStyle = 2;
 pub const UIAlertViewStyleLoginAndPasswordInput: UIAlertViewStyle = 3;
 
 pub struct UIAlertViewHostObject {
-    title:               id,
-    message:             id,
-    delegate:            id,
-    button_titles:       id,
+    title: id,
+    message: id,
+    delegate: id,
+    button_titles: id,
     cancel_button_index: NSInteger,
-    visible:             bool,
-    alert_view_style:    UIAlertViewStyle,
-    tag:                 NSInteger,
+    visible: bool,
+    alert_view_style: UIAlertViewStyle,
+    tag: NSInteger,
 }
 impl HostObject for UIAlertViewHostObject {}
 
@@ -55,15 +56,16 @@ pub const CLASSES: ClassExports = objc_classes! {
            delegate:(id)delegate
   cancelButtonTitle:(id)cancel_title
   otherButtonTitles:(id)other_titles {
-    
+
     // ВАЖНО: Вызов базового инициализатора для корректной регистрации объекта
     let this: id = msg_super![env; this init];
-    
+
     let buttons: id = msg_class![env; NSMutableArray new];
     retain(env, title);
     retain(env, message);
     {
-        // ИСПРАВЛЕНИЕ: Добавлен `mut`, так как изменение полей `RefMut` требует мутабельности переменной
+        // ИСПРАВЛЕНИЕ: Добавлен `mut`, так как изменение полей `RefMut` требует
+        // мутабельности переменной
         let mut host = env.objc.borrow_mut::<UIAlertViewHostObject>(this);
         host.title    = title;
         host.message  = message;
@@ -85,7 +87,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    // ИСПРАВЛЕНИЕ: Блокируем `host` в узком scope, чтобы снять заимствование до `release`
+    // ИСПРАВЛЕНИЕ: Блокируем `host` в узком scope, чтобы снять заимствование до
+    // `release`
     let (title, message, buttons) = {
         let host = env.objc.borrow::<UIAlertViewHostObject>(this);
         (host.title, host.message, host.button_titles)
@@ -138,7 +141,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (NSInteger)cancelButtonIndex { env.objc.borrow::<UIAlertViewHostObject>(this).cancel_button_index }
 - (())setCancelButtonIndex:(NSInteger)index { env.objc.borrow_mut::<UIAlertViewHostObject>(this).cancel_button_index = index; }
 - (NSInteger)firstOtherButtonIndex {
-    // ИСПРАВЛЕНИЕ: Скоуп не даст возникнуть ошибке заимствования на `msg![env; ...]`
+    // ИСПРАВЛЕНИЕ: Скоуп не даст возникнуть ошибке заимствования на `msg![env;
+    // ...]`
     let (buttons, cancel) = {
         let host = env.objc.borrow::<UIAlertViewHostObject>(this);
         (host.button_titles, host.cancel_button_index)
@@ -150,7 +154,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)textFieldAtIndex:(NSInteger)_index { nil }
 
 - (())addSubview:(id)_view {
-    // UIAlertView doesn't support subviews in touchHLE (SDL2 dialog implementation)
+    // UIAlertView doesn't support subviews in touchHLE (SDL2 dialog
+    // implementation)
     log_dbg!("UIAlertView addSubview: ignored");
 }
 - (())removeFromSuperview {
@@ -176,19 +181,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())sizeToFit {
     // 1. Получаем текущий frame
     let frame: CGRect = msg![env; this frame];
-    
-    // 2. ВАЖНО: Выносим размер в отдельную переменную. 
+
+    // 2. ВАЖНО: Выносим размер в отдельную переменную.
     // Макрос msg! не принимает "frame.size" как аргумент после двоеточия.
     let current_size = frame.size;
-    
+
     // 3. Запрашиваем подходящий размер
     let new_size: CGSize = msg![env; this sizeThatFits:current_size];
-    
+
     // 4. Формируем новый frame и применяем его
     let new_frame = CGRect { origin: frame.origin, size: new_size };
     let _: () = msg![env; this setFrame:new_frame];
 }
-    
+
 - (())show {
     log!("UIAlertView show (SDL2 dialog)");
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = true;
@@ -230,7 +235,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dismissWithClickedButtonIndex:(NSInteger)button_index animated:(bool)_animated {
     env.objc.borrow_mut::<UIAlertViewHostObject>(this).visible = false;
     let delegate = env.objc.borrow::<UIAlertViewHostObject>(this).delegate;
-    
+
     // Честно проверяем, не был ли делегат удален (isa != 0)
     if delegate != nil {
         let isa: u32 = env.mem.read(delegate.cast());

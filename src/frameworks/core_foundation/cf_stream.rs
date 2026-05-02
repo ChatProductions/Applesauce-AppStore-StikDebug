@@ -14,70 +14,119 @@ use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
-pub type CFReadStreamRef  = CFTypeRef;
+pub type CFReadStreamRef = CFTypeRef;
 pub type CFWriteStreamRef = CFTypeRef;
 
 // CFStreamStatus
 type CFStreamStatus = i32;
-const kCFStreamStatusNotOpen:   CFStreamStatus = 0;
-const kCFStreamStatusOpening:   CFStreamStatus = 1;
-const kCFStreamStatusOpen:      CFStreamStatus = 2;
-const kCFStreamStatusReading:   CFStreamStatus = 3;
-const kCFStreamStatusWriting:   CFStreamStatus = 4;
-const kCFStreamStatusAtEnd:     CFStreamStatus = 5;
-const kCFStreamStatusClosed:    CFStreamStatus = 6;
-const kCFStreamStatusError:     CFStreamStatus = 7;
+const kCFStreamStatusNotOpen: CFStreamStatus = 0;
+const kCFStreamStatusOpening: CFStreamStatus = 1;
+const kCFStreamStatusOpen: CFStreamStatus = 2;
+const kCFStreamStatusReading: CFStreamStatus = 3;
+const kCFStreamStatusWriting: CFStreamStatus = 4;
+const kCFStreamStatusAtEnd: CFStreamStatus = 5;
+const kCFStreamStatusClosed: CFStreamStatus = 6;
+const kCFStreamStatusError: CFStreamStatus = 7;
 
 // CFStreamEventType flags
 type CFStreamEventType = u32;
-const kCFStreamEventNone:               CFStreamEventType = 0;
-const kCFStreamEventOpenCompleted:      CFStreamEventType = 1;
+const kCFStreamEventNone: CFStreamEventType = 0;
+const kCFStreamEventOpenCompleted: CFStreamEventType = 1;
 const kCFStreamEventHasBytesAvailable: CFStreamEventType = 2;
-const kCFStreamEventCanAcceptBytes:     CFStreamEventType = 4;
-const kCFStreamEventErrorOccurred:      CFStreamEventType = 8;
-const kCFStreamEventEndEncountered:     CFStreamEventType = 16;
+const kCFStreamEventCanAcceptBytes: CFStreamEventType = 4;
+const kCFStreamEventErrorOccurred: CFStreamEventType = 8;
+const kCFStreamEventEndEncountered: CFStreamEventType = 16;
 
 // CFStreamErrorDomain
 type CFStreamErrorDomain = i32;
-const kCFStreamErrorDomainCustom:   CFStreamErrorDomain = -1;
-const kCFStreamErrorDomainPOSIX:    CFStreamErrorDomain = 1;
+const kCFStreamErrorDomainCustom: CFStreamErrorDomain = -1;
+const kCFStreamErrorDomainPOSIX: CFStreamErrorDomain = 1;
 const kCFStreamErrorDomainMacOSStatus: CFStreamErrorDomain = 2;
 
 // Property keys
-pub const kCFStreamPropertyDataWritten:       &str = "kCFStreamPropertyDataWritten";
-pub const kCFStreamPropertyAppendToFile:      &str = "kCFStreamPropertyAppendToFile";
+pub const kCFStreamPropertyDataWritten: &str = "kCFStreamPropertyDataWritten";
+pub const kCFStreamPropertyAppendToFile: &str = "kCFStreamPropertyAppendToFile";
 pub const kCFStreamPropertyFileCurrentOffset: &str = "kCFStreamPropertyFileCurrentOffset";
 pub const kCFStreamPropertySocketNativeHandle: &str = "kCFStreamPropertySocketNativeHandle";
 pub const kCFStreamPropertySocketRemoteHostName: &str = "kCFStreamPropertySocketRemoteHostName";
 pub const kCFStreamPropertySocketRemotePortNumber: &str = "kCFStreamPropertySocketRemotePortNumber";
-pub const kCFStreamPropertyShouldCloseNativeSocket: &str = "kCFStreamPropertyShouldCloseNativeSocket";
-pub const kCFStreamPropertySSLSettings:       &str = "kCFStreamPropertySSLSettings";
-pub const kCFStreamSSLLevel:                  &str = "kCFStreamSSLLevel";
+pub const kCFStreamPropertyShouldCloseNativeSocket: &str =
+    "kCFStreamPropertyShouldCloseNativeSocket";
+pub const kCFStreamPropertySSLSettings: &str = "kCFStreamPropertySSLSettings";
+pub const kCFStreamSSLLevel: &str = "kCFStreamSSLLevel";
 pub const kCFStreamSSLAllowsExpiredCertificates: &str = "kCFStreamSSLAllowsExpiredCertificates";
-pub const kCFStreamSSLAllowsExpiredRoots:     &str = "kCFStreamSSLAllowsExpiredRoots";
-pub const kCFStreamSSLAllowsAnyRoot:          &str = "kCFStreamSSLAllowsAnyRoot";
+pub const kCFStreamSSLAllowsExpiredRoots: &str = "kCFStreamSSLAllowsExpiredRoots";
+pub const kCFStreamSSLAllowsAnyRoot: &str = "kCFStreamSSLAllowsAnyRoot";
 pub const kCFStreamSSLValidatesCertificateChain: &str = "kCFStreamSSLValidatesCertificateChain";
-pub const kCFStreamSSLPeerName:               &str = "kCFStreamSSLPeerName";
-pub const kCFStreamSSLCertificates:           &str = "kCFStreamSSLCertificates";
-pub const kCFStreamSSLIsServer:               &str = "kCFStreamSSLIsServer";
+pub const kCFStreamSSLPeerName: &str = "kCFStreamSSLPeerName";
+pub const kCFStreamSSLCertificates: &str = "kCFStreamSSLCertificates";
+pub const kCFStreamSSLIsServer: &str = "kCFStreamSSLIsServer";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_kCFStreamPropertyDataWritten",           HostConstant::NSString(kCFStreamPropertyDataWritten)),
-    ("_kCFStreamPropertyAppendToFile",          HostConstant::NSString(kCFStreamPropertyAppendToFile)),
-    ("_kCFStreamPropertyFileCurrentOffset",     HostConstant::NSString(kCFStreamPropertyFileCurrentOffset)),
-    ("_kCFStreamPropertySocketNativeHandle",    HostConstant::NSString(kCFStreamPropertySocketNativeHandle)),
-    ("_kCFStreamPropertySocketRemoteHostName",  HostConstant::NSString(kCFStreamPropertySocketRemoteHostName)),
-    ("_kCFStreamPropertySocketRemotePortNumber",HostConstant::NSString(kCFStreamPropertySocketRemotePortNumber)),
-    ("_kCFStreamPropertyShouldCloseNativeSocket",HostConstant::NSString(kCFStreamPropertyShouldCloseNativeSocket)),
-    ("_kCFStreamPropertySSLSettings",           HostConstant::NSString(kCFStreamPropertySSLSettings)),
-    ("_kCFStreamSSLLevel",                      HostConstant::NSString(kCFStreamSSLLevel)),
-    ("_kCFStreamSSLAllowsExpiredCertificates",  HostConstant::NSString(kCFStreamSSLAllowsExpiredCertificates)),
-    ("_kCFStreamSSLAllowsExpiredRoots",         HostConstant::NSString(kCFStreamSSLAllowsExpiredRoots)),
-    ("_kCFStreamSSLAllowsAnyRoot",              HostConstant::NSString(kCFStreamSSLAllowsAnyRoot)),
-    ("_kCFStreamSSLValidatesCertificateChain",  HostConstant::NSString(kCFStreamSSLValidatesCertificateChain)),
-    ("_kCFStreamSSLPeerName",                   HostConstant::NSString(kCFStreamSSLPeerName)),
-    ("_kCFStreamSSLCertificates",               HostConstant::NSString(kCFStreamSSLCertificates)),
-    ("_kCFStreamSSLIsServer",                   HostConstant::NSString(kCFStreamSSLIsServer)),
+    (
+        "_kCFStreamPropertyDataWritten",
+        HostConstant::NSString(kCFStreamPropertyDataWritten),
+    ),
+    (
+        "_kCFStreamPropertyAppendToFile",
+        HostConstant::NSString(kCFStreamPropertyAppendToFile),
+    ),
+    (
+        "_kCFStreamPropertyFileCurrentOffset",
+        HostConstant::NSString(kCFStreamPropertyFileCurrentOffset),
+    ),
+    (
+        "_kCFStreamPropertySocketNativeHandle",
+        HostConstant::NSString(kCFStreamPropertySocketNativeHandle),
+    ),
+    (
+        "_kCFStreamPropertySocketRemoteHostName",
+        HostConstant::NSString(kCFStreamPropertySocketRemoteHostName),
+    ),
+    (
+        "_kCFStreamPropertySocketRemotePortNumber",
+        HostConstant::NSString(kCFStreamPropertySocketRemotePortNumber),
+    ),
+    (
+        "_kCFStreamPropertyShouldCloseNativeSocket",
+        HostConstant::NSString(kCFStreamPropertyShouldCloseNativeSocket),
+    ),
+    (
+        "_kCFStreamPropertySSLSettings",
+        HostConstant::NSString(kCFStreamPropertySSLSettings),
+    ),
+    (
+        "_kCFStreamSSLLevel",
+        HostConstant::NSString(kCFStreamSSLLevel),
+    ),
+    (
+        "_kCFStreamSSLAllowsExpiredCertificates",
+        HostConstant::NSString(kCFStreamSSLAllowsExpiredCertificates),
+    ),
+    (
+        "_kCFStreamSSLAllowsExpiredRoots",
+        HostConstant::NSString(kCFStreamSSLAllowsExpiredRoots),
+    ),
+    (
+        "_kCFStreamSSLAllowsAnyRoot",
+        HostConstant::NSString(kCFStreamSSLAllowsAnyRoot),
+    ),
+    (
+        "_kCFStreamSSLValidatesCertificateChain",
+        HostConstant::NSString(kCFStreamSSLValidatesCertificateChain),
+    ),
+    (
+        "_kCFStreamSSLPeerName",
+        HostConstant::NSString(kCFStreamSSLPeerName),
+    ),
+    (
+        "_kCFStreamSSLCertificates",
+        HostConstant::NSString(kCFStreamSSLCertificates),
+    ),
+    (
+        "_kCFStreamSSLIsServer",
+        HostConstant::NSString(kCFStreamSSLIsServer),
+    ),
 ];
 
 // MARK: - ObjC backing classes
@@ -113,19 +162,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Internal helpers
 
 fn alloc_read_stream(env: &mut Environment) -> CFReadStreamRef {
-    let class = env.objc.get_known_class("_touchHLE_CFReadStream", &mut env.mem);
+    let class = env
+        .objc
+        .get_known_class("_touchHLE_CFReadStream", &mut env.mem);
     env.objc.alloc_object(
         class,
-        Box::new(CFReadStreamHostObject { status: kCFStreamStatusNotOpen }),
+        Box::new(CFReadStreamHostObject {
+            status: kCFStreamStatusNotOpen,
+        }),
         &mut env.mem,
     )
 }
 
 fn alloc_write_stream(env: &mut Environment) -> CFWriteStreamRef {
-    let class = env.objc.get_known_class("_touchHLE_CFWriteStream", &mut env.mem);
+    let class = env
+        .objc
+        .get_known_class("_touchHLE_CFWriteStream", &mut env.mem);
     env.objc.alloc_object(
         class,
-        Box::new(CFWriteStreamHostObject { status: kCFStreamStatusNotOpen }),
+        Box::new(CFWriteStreamHostObject {
+            status: kCFStreamStatusNotOpen,
+        }),
         &mut env.mem,
     )
 }
@@ -133,16 +190,28 @@ fn alloc_write_stream(env: &mut Environment) -> CFWriteStreamRef {
 // MARK: - Retain / Release
 
 pub fn CFReadStreamRetain(env: &mut Environment, stream: CFReadStreamRef) -> CFReadStreamRef {
-    if !stream.is_null() { CFRetain(env, stream) } else { stream }
+    if !stream.is_null() {
+        CFRetain(env, stream)
+    } else {
+        stream
+    }
 }
 pub fn CFReadStreamRelease(env: &mut Environment, stream: CFReadStreamRef) {
-    if !stream.is_null() { CFRelease(env, stream); }
+    if !stream.is_null() {
+        CFRelease(env, stream);
+    }
 }
 pub fn CFWriteStreamRetain(env: &mut Environment, stream: CFWriteStreamRef) -> CFWriteStreamRef {
-    if !stream.is_null() { CFRetain(env, stream) } else { stream }
+    if !stream.is_null() {
+        CFRetain(env, stream)
+    } else {
+        stream
+    }
 }
 pub fn CFWriteStreamRelease(env: &mut Environment, stream: CFWriteStreamRef) {
-    if !stream.is_null() { CFRelease(env, stream); }
+    if !stream.is_null() {
+        CFRelease(env, stream);
+    }
 }
 
 // MARK: - Constructors
@@ -189,24 +258,32 @@ fn CFStreamCreatePairWithSocket(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
     _sock: i32, // CFSocketNativeHandle
-    read_stream:  MutPtr<CFReadStreamRef>,
+    read_stream: MutPtr<CFReadStreamRef>,
     write_stream: MutPtr<CFWriteStreamRef>,
 ) {
     log!("CFStreamCreatePairWithSocket: stubbed — streams set to null");
-    if !read_stream.is_null()  { env.mem.write(read_stream,  nil); }
-    if !write_stream.is_null() { env.mem.write(write_stream, nil); }
+    if !read_stream.is_null() {
+        env.mem.write(read_stream, nil);
+    }
+    if !write_stream.is_null() {
+        env.mem.write(write_stream, nil);
+    }
 }
 
 fn CFStreamCreatePairWithPeerSocketSignature(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
     _signature: crate::mem::ConstVoidPtr,
-    read_stream:  MutPtr<CFReadStreamRef>,
+    read_stream: MutPtr<CFReadStreamRef>,
     write_stream: MutPtr<CFWriteStreamRef>,
 ) {
     log!("CFStreamCreatePairWithPeerSocketSignature: stubbed — streams set to null");
-    if !read_stream.is_null()  { env.mem.write(read_stream,  nil); }
-    if !write_stream.is_null() { env.mem.write(write_stream, nil); }
+    if !read_stream.is_null() {
+        env.mem.write(read_stream, nil);
+    }
+    if !write_stream.is_null() {
+        env.mem.write(write_stream, nil);
+    }
 }
 
 fn CFStreamCreatePairWithSocketToHost(
@@ -214,7 +291,7 @@ fn CFStreamCreatePairWithSocketToHost(
     _allocator: CFAllocatorRef,
     host: CFStringRef,
     port: u32,
-    read_stream:  MutPtr<CFReadStreamRef>,
+    read_stream: MutPtr<CFReadStreamRef>,
     write_stream: MutPtr<CFWriteStreamRef>,
 ) {
     let host_str = if host.is_null() {
@@ -224,67 +301,81 @@ fn CFStreamCreatePairWithSocketToHost(
     };
     log!(
         "CFStreamCreatePairWithSocketToHost: {}:{} — stubbed, streams set to null",
-        host_str, port
+        host_str,
+        port
     );
-    if !read_stream.is_null()  { env.mem.write(read_stream,  nil); }
-    if !write_stream.is_null() { env.mem.write(write_stream, nil); }
+    if !read_stream.is_null() {
+        env.mem.write(read_stream, nil);
+    }
+    if !write_stream.is_null() {
+        env.mem.write(write_stream, nil);
+    }
 }
 
 // MARK: - Open / Close
 
 fn CFReadStreamOpen(env: &mut Environment, stream: CFReadStreamRef) -> bool {
-    if stream.is_null() { return false; }
+    if stream.is_null() {
+        return false;
+    }
     log!("CFReadStreamOpen: stubbed -> false");
     env.objc.borrow_mut::<CFReadStreamHostObject>(stream).status = kCFStreamStatusError;
     false
 }
 
 fn CFReadStreamClose(env: &mut Environment, stream: CFReadStreamRef) {
-    if stream.is_null() { return; }
+    if stream.is_null() {
+        return;
+    }
     log_dbg!("CFReadStreamClose: stubbed");
     env.objc.borrow_mut::<CFReadStreamHostObject>(stream).status = kCFStreamStatusClosed;
 }
 
 fn CFWriteStreamOpen(env: &mut Environment, stream: CFWriteStreamRef) -> bool {
-    if stream.is_null() { return false; }
+    if stream.is_null() {
+        return false;
+    }
     log!("CFWriteStreamOpen: stubbed -> false");
-    env.objc.borrow_mut::<CFWriteStreamHostObject>(stream).status = kCFStreamStatusError;
+    env.objc
+        .borrow_mut::<CFWriteStreamHostObject>(stream)
+        .status = kCFStreamStatusError;
     false
 }
 
 fn CFWriteStreamClose(env: &mut Environment, stream: CFWriteStreamRef) {
-    if stream.is_null() { return; }
+    if stream.is_null() {
+        return;
+    }
     log_dbg!("CFWriteStreamClose: stubbed");
-    env.objc.borrow_mut::<CFWriteStreamHostObject>(stream).status = kCFStreamStatusClosed;
+    env.objc
+        .borrow_mut::<CFWriteStreamHostObject>(stream)
+        .status = kCFStreamStatusClosed;
 }
 
 // MARK: - Status
 
 fn CFReadStreamGetStatus(env: &mut Environment, stream: CFReadStreamRef) -> CFStreamStatus {
-    if stream.is_null() { return kCFStreamStatusError; }
+    if stream.is_null() {
+        return kCFStreamStatusError;
+    }
     env.objc.borrow::<CFReadStreamHostObject>(stream).status
 }
 
 fn CFWriteStreamGetStatus(env: &mut Environment, stream: CFWriteStreamRef) -> CFStreamStatus {
-    if stream.is_null() { return kCFStreamStatusError; }
+    if stream.is_null() {
+        return kCFStreamStatusError;
+    }
     env.objc.borrow::<CFWriteStreamHostObject>(stream).status
 }
 
-fn CFReadStreamGetError(
-    _env: &mut Environment,
-    _stream: CFReadStreamRef,
-) -> u64 { // CFStreamError (two i32 fields packed)
+fn CFReadStreamGetError(_env: &mut Environment, _stream: CFReadStreamRef) -> u64 {
+    // CFStreamError (two i32 fields packed)
     // domain=kCFStreamErrorDomainCustom, error=-1
-    ((kCFStreamErrorDomainCustom as u64) & 0xFFFF_FFFF)
-        | ((-1i32 as u32 as u64) << 32)
+    ((kCFStreamErrorDomainCustom as u64) & 0xFFFF_FFFF) | ((-1i32 as u32 as u64) << 32)
 }
 
-fn CFWriteStreamGetError(
-    _env: &mut Environment,
-    _stream: CFWriteStreamRef,
-) -> u64 {
-    ((kCFStreamErrorDomainCustom as u64) & 0xFFFF_FFFF)
-        | ((-1i32 as u32 as u64) << 32)
+fn CFWriteStreamGetError(_env: &mut Environment, _stream: CFWriteStreamRef) -> u64 {
+    ((kCFStreamErrorDomainCustom as u64) & 0xFFFF_FFFF) | ((-1i32 as u32 as u64) << 32)
 }
 
 // MARK: - Read / Write
@@ -308,10 +399,7 @@ fn CFReadStreamGetBuffer(
     ConstPtr::null()
 }
 
-fn CFReadStreamHasBytesAvailable(
-    _env: &mut Environment,
-    _stream: CFReadStreamRef,
-) -> bool {
+fn CFReadStreamHasBytesAvailable(_env: &mut Environment, _stream: CFReadStreamRef) -> bool {
     false
 }
 
@@ -325,10 +413,7 @@ fn CFWriteStreamWrite(
     -1
 }
 
-fn CFWriteStreamCanAcceptBytes(
-    _env: &mut Environment,
-    _stream: CFWriteStreamRef,
-) -> bool {
+fn CFWriteStreamCanAcceptBytes(_env: &mut Environment, _stream: CFWriteStreamRef) -> bool {
     false
 }
 
@@ -435,7 +520,7 @@ fn CFStreamCreatePairWithSocketToCFHost(
     _allocator: CFAllocatorRef,
     host: CFTypeRef,
     port: i32,
-    read_stream:  MutPtr<CFReadStreamRef>,
+    read_stream: MutPtr<CFReadStreamRef>,
     write_stream: MutPtr<CFWriteStreamRef>,
 ) {
     let host_str = if !host.is_null() {
@@ -450,11 +535,16 @@ fn CFStreamCreatePairWithSocketToCFHost(
 
     log!(
         "CFStreamCreatePairWithSocketToCFHost: host={} port={} — stubbed, streams set to null",
-        host_str, port
+        host_str,
+        port
     );
 
-    if !read_stream.is_null()  { env.mem.write(read_stream,  nil); }
-    if !write_stream.is_null() { env.mem.write(write_stream, nil); }
+    if !read_stream.is_null() {
+        env.mem.write(read_stream, nil);
+    }
+    if !write_stream.is_null() {
+        env.mem.write(write_stream, nil);
+    }
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -501,5 +591,4 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFWriteStreamScheduleWithRunLoop(_, _, _)),
     export_c_func!(CFWriteStreamUnscheduleFromRunLoop(_, _, _)),
     export_c_func!(CFStreamCreatePairWithSocketToCFHost(_, _, _, _, _)),
-
 ];

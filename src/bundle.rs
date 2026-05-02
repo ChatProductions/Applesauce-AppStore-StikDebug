@@ -139,49 +139,51 @@ impl Bundle {
             .join(self.plist["CFBundleExecutable"].as_string().unwrap())
     }
 
-pub fn launch_image_path(&self, fs: &Fs, device_family: DeviceFamily) -> GuestPathBuf {
-    // Check if there's a custom base name in plist
-    let base_name = self.plist.get("UILaunchImageFile")
-        .map(|v| v.as_string().unwrap())
-        .unwrap_or("Default");
-    
-    // Try device-specific variants first, then fallback to base name
-    let candidates = match device_family {
-        DeviceFamily::iPhone5 => {
-            vec![
-                format!("{}-568h@2x.png", base_name),  // iPhone 5 (4-inch)
-                format!("{}@2x.png", base_name),        // iPhone Retina
-                format!("{}.png", base_name),           // iPhone non-Retina
-            ]
+    pub fn launch_image_path(&self, fs: &Fs, device_family: DeviceFamily) -> GuestPathBuf {
+        // Check if there's a custom base name in plist
+        let base_name = self
+            .plist
+            .get("UILaunchImageFile")
+            .map(|v| v.as_string().unwrap())
+            .unwrap_or("Default");
+
+        // Try device-specific variants first, then fallback to base name
+        let candidates = match device_family {
+            DeviceFamily::iPhone5 => {
+                vec![
+                    format!("{}-568h@2x.png", base_name), // iPhone 5 (4-inch)
+                    format!("{}@2x.png", base_name),      // iPhone Retina
+                    format!("{}.png", base_name),         // iPhone non-Retina
+                ]
+            }
+            DeviceFamily::iPad => {
+                vec![
+                    format!("{}@2x~ipad.png", base_name), // iPad Retina
+                    format!("{}~ipad.png", base_name),    // iPad non-Retina
+                    format!("{}.png", base_name),         // Fallback
+                ]
+            }
+            DeviceFamily::iPhone => {
+                vec![
+                    format!("{}@2x.png", base_name), // iPhone Retina
+                    format!("{}.png", base_name),    // iPhone non-Retina
+                ]
+            }
+        };
+
+        // Find the first existing file
+        for candidate in &candidates {
+            let path = self.path.join(candidate);
+            if fs.read(&path).is_ok() {
+                log!("Using launch image: {}", candidate);
+                return path;
+            }
         }
-        DeviceFamily::iPad => {
-            vec![
-                format!("{}@2x~ipad.png", base_name),   // iPad Retina
-                format!("{}~ipad.png", base_name),      // iPad non-Retina
-                format!("{}.png", base_name),           // Fallback
-            ]
-        }
-        DeviceFamily::iPhone => {
-            vec![
-                format!("{}@2x.png", base_name),        // iPhone Retina
-                format!("{}.png", base_name),           // iPhone non-Retina
-            ]
-        }
-    };
-    
-    // Find the first existing file
-    for candidate in &candidates {
-        let path = self.path.join(candidate);
-        if fs.read(&path).is_ok() {
-            log!("Using launch image: {}", candidate);
-            return path;
-        }
+
+        // Final fallback
+        log!("Warning: No launch image found, using Default.png");
+        self.path.join("Default.png")
     }
-    
-    // Final fallback
-    log!("Warning: No launch image found, using Default.png");
-    self.path.join("Default.png")
-}
 
     pub fn status_bar_hidden(&self) -> bool {
         self.plist

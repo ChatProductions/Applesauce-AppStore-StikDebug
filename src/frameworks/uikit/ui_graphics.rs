@@ -34,13 +34,7 @@ pub fn UIGraphicsPushContext(env: &mut Environment, context: CGContextRef) {
 }
 
 pub fn UIGraphicsPopContext(env: &mut Environment) {
-    if let Some(context) = env
-        .framework_state
-        .uikit
-        .ui_graphics
-        .context_stack
-        .pop()
-    {
+    if let Some(context) = env.framework_state.uikit.ui_graphics.context_stack.pop() {
         CGContextRelease(env, context);
     } else {
         log!("Warning: UIGraphicsPopContext called on empty stack");
@@ -69,13 +63,14 @@ fn UIGraphicsBeginImageContextWithOptions(
     scale: CGFloat,
 ) {
     let effective_scale = if scale == 0.0 { 1.0 } else { scale };
-    let width  = (size.width  * effective_scale).ceil() as u32;
+    let width = (size.width * effective_scale).ceil() as u32;
     let height = (size.height * effective_scale).ceil() as u32;
 
     if width == 0 || height == 0 {
         log!(
             "Warning: UIGraphicsBeginImageContextWithOptions: zero size ({}, {}), skipping",
-            width, height
+            width,
+            height
         );
         return;
     }
@@ -145,7 +140,7 @@ fn UIGraphicsEndImageContext(env: &mut Environment) {
 
 fn UIGraphicsBeginPDFContextToFile(
     _env: &mut Environment,
-    _path: id,         // NSString*
+    _path: id, // NSString*
     _bounds: CGRect,
     _document_info: id, // NSDictionary*
 ) -> bool {
@@ -155,7 +150,7 @@ fn UIGraphicsBeginPDFContextToFile(
 
 fn UIGraphicsBeginPDFContextToData(
     _env: &mut Environment,
-    _data: id,          // NSMutableData*
+    _data: id, // NSMutableData*
     _bounds: CGRect,
     _document_info: id, // NSDictionary*
 ) {
@@ -181,15 +176,21 @@ fn UIGraphicsBeginPDFPageWithInfo(
 fn UIGraphicsGetPDFContextBounds(_env: &mut Environment) -> CGRect {
     CGRect {
         origin: crate::frameworks::core_graphics::CGPoint { x: 0.0, y: 0.0 },
-        size:   CGSize { width: 0.0, height: 0.0 },
+        size: CGSize {
+            width: 0.0,
+            height: 0.0,
+        },
     }
 }
 
-// MARK: - Convenience rect fill / clip (commonly called without a full context setup)
+// MARK: - Convenience rect fill / clip (commonly called without a full context
+// setup)
 
 fn UIRectFill(env: &mut Environment, rect: CGRect) {
     let ctx = UIGraphicsGetCurrentContext(env);
-    if ctx.is_null() { return; }
+    if ctx.is_null() {
+        return;
+    }
     crate::frameworks::core_graphics::cg_context::CGContextFillRect(env, ctx, rect);
 }
 
@@ -204,13 +205,17 @@ fn UIRectFillUsingBlendMode(
 
 fn UIRectFrame(env: &mut Environment, rect: CGRect) {
     let ctx = UIGraphicsGetCurrentContext(env);
-    if ctx.is_null() { return; }
+    if ctx.is_null() {
+        return;
+    }
     crate::frameworks::core_graphics::cg_context::CGContextClearRect(env, ctx, rect);
 }
 
 fn UIRectClip(env: &mut Environment, rect: CGRect) {
     let ctx = UIGraphicsGetCurrentContext(env);
-    if ctx.is_null() { return; }
+    if ctx.is_null() {
+        return;
+    }
     crate::frameworks::core_graphics::cg_context::CGContextClipToRect(env, ctx, rect);
 }
 
@@ -237,5 +242,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(UIRectFrame(_)),
     export_c_func!(UIRectClip(_)),
 ];
-
-

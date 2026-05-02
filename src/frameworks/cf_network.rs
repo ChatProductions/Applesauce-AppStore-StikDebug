@@ -24,11 +24,7 @@ use crate::Environment;
 
 const DUMMY_STREAM: u32 = 0xC0F0_0001;
 
-fn CFReadStreamCreateForHTTPRequest(
-    _env: &mut Environment,
-    _alloc: u32,
-    _request: u32,
-) -> u32 {
+fn CFReadStreamCreateForHTTPRequest(_env: &mut Environment, _alloc: u32, _request: u32) -> u32 {
     // Return a non-null dummy handle so callers that only check for null
     // continue past the nil check.
     DUMMY_STREAM
@@ -62,11 +58,7 @@ fn CFReadStreamSetProperty(
     true
 }
 
-fn CFReadStreamCopyProperty(
-    _env: &mut Environment,
-    _stream: u32,
-    _property: u32,
-) -> u32 {
+fn CFReadStreamCopyProperty(_env: &mut Environment, _stream: u32, _property: u32) -> u32 {
     0
 }
 
@@ -107,16 +99,7 @@ fn CFReadStreamCopyError(_env: &mut Environment, _stream: u32) -> u32 {
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamCreateForHTTPRequest(_, _)),
-    export_c_func!(CFReadStreamOpen(_)),
-    export_c_func!(CFReadStreamHasBytesAvailable(_)),
-    export_c_func!(CFReadStreamRead(_, _, _)),
-    export_c_func!(CFReadStreamClose(_)),
-    export_c_func!(CFReadStreamSetProperty(_, _, _)),
-    export_c_func!(CFReadStreamCopyProperty(_, _)),
-    export_c_func!(CFReadStreamScheduleWithRunLoop(_, _, _)),
-    export_c_func!(CFReadStreamUnscheduleFromRunLoop(_, _, _)),
-    export_c_func!(CFReadStreamSetClient(_, _, _, _)),
-    export_c_func!(CFReadStreamGetStatus(_)),
+    // Other CFReadStream* helpers are exported from
+    // core_foundation::cf_stream; not duplicated here.
     export_c_func!(CFReadStreamCopyError(_)),
 ];
-

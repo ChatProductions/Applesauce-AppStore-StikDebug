@@ -37,7 +37,8 @@ pub struct pthread_attr_t {
     // ИСПРАВЛЕНИЕ: Добавляем реальные поля для политики и параметров
     sched_policy: i32,
     sched_param: sched_param,
-    // Уменьшаем _unused с 7 до 5, так как добавили два 4-байтовых поля (чтобы сохранить общий размер в 40 байт)
+    // Уменьшаем _unused с 7 до 5, так как добавили два 4-байтовых поля (чтобы
+    // сохранить общий размер в 40 байт)
     _unused: [u32; 5],
 }
 unsafe impl SafeRead for pthread_attr_t {}
@@ -71,11 +72,11 @@ unsafe impl SafeRead for OpaqueThread {}
 pub type pthread_t = MutPtr<OpaqueThread>;
 
 // Cancellation state constants
-const PTHREAD_CANCEL_ENABLE:       i32 = 0;
-const PTHREAD_CANCEL_DISABLE:      i32 = 1;
+const PTHREAD_CANCEL_ENABLE: i32 = 0;
+const PTHREAD_CANCEL_DISABLE: i32 = 1;
 
 // Cancellation type constants
-const PTHREAD_CANCEL_DEFERRED:     i32 = 0;
+const PTHREAD_CANCEL_DEFERRED: i32 = 0;
 const PTHREAD_CANCEL_ASYNCHRONOUS: i32 = 1;
 
 /// Sentinel return value for a cancelled thread (POSIX specifies this as
@@ -173,8 +174,7 @@ pub fn pthread_attr_setstacksize(
     attr: MutPtr<pthread_attr_t>,
     stacksize: GuestUSize,
 ) -> i32 {
-    if attr.is_null() ||
-        stacksize < PTHREAD_STACK_MIN || !stacksize.is_multiple_of(PAGE_SIZE) {
+    if attr.is_null() || stacksize < PTHREAD_STACK_MIN || !stacksize.is_multiple_of(PAGE_SIZE) {
         return EINVAL;
     }
     check_magic!(env, attr, MAGIC_ATTR);
@@ -190,7 +190,11 @@ fn pthread_attr_setinheritsched(
     inheritsched: i32,
 ) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    log!("TODO: pthread_attr_setinheritsched({:?}, {})", attr, inheritsched);
+    log!(
+        "TODO: pthread_attr_setinheritsched({:?}, {})",
+        attr,
+        inheritsched
+    );
     0
 }
 
@@ -204,7 +208,7 @@ fn pthread_attr_setschedpolicy(
     let mut attr_copy = env.mem.read(attr);
     attr_copy.sched_policy = policy;
     env.mem.write(attr, attr_copy);
-    
+
     log_dbg!("pthread_attr_setschedpolicy({:?}, {})", attr, policy);
     0
 }
@@ -215,27 +219,31 @@ fn pthread_attr_setschedparam(
     param: ConstPtr<sched_param>,
 ) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    // ИСПРАВЛЕНИЕ: Реально читаем параметры из гостевой памяти и сохраняем в структуру
+    // ИСПРАВЛЕНИЕ: Реально читаем параметры из гостевой памяти и сохраняем в
+    // структуру
     let new_param = env.mem.read(param);
-    
+
     let mut attr_copy = env.mem.read(attr);
     attr_copy.sched_param = new_param;
     env.mem.write(attr, attr_copy);
-    
+
     log_dbg!("pthread_attr_setschedparam({:?}, {:?})", attr, new_param);
     0
 }
 
 fn pthread_attr_destroy(env: &mut Environment, attr: MutPtr<pthread_attr_t>) -> i32 {
     check_magic!(env, attr, MAGIC_ATTR);
-    env.mem.write(attr, pthread_attr_t {
-        magic: 0,
-        detachstate: 0,
-        stacksize: 0,
-        sched_policy: 0,
-        sched_param: sched_param { sched_priority: 0 },
-        _unused: Default::default(),
-    });
+    env.mem.write(
+        attr,
+        pthread_attr_t {
+            magic: 0,
+            detachstate: 0,
+            stacksize: 0,
+            sched_policy: 0,
+            sched_param: sched_param { sched_priority: 0 },
+            _unused: Default::default(),
+        },
+    );
     0
 }
 
@@ -258,14 +266,23 @@ pub fn pthread_create(
     };
     let thread_id = env.new_thread(start_routine, user_data, attr.stacksize);
 
-    let opaque = env.mem.alloc_and_write(OpaqueThread { magic: MAGIC_THREAD });
+    let opaque = env.mem.alloc_and_write(OpaqueThread {
+        magic: MAGIC_THREAD,
+    });
     env.mem.write(thread, opaque);
 
     assert!(!State::get(env).threads.contains_key(&opaque));
-    State::get(env).threads.insert(opaque, ThreadHostObject::new(thread_id, attr));
+    State::get(env)
+        .threads
+        .insert(opaque, ThreadHostObject::new(thread_id, attr));
     log_dbg!(
         "pthread_create({:?}, {:?}, {:?}, {:?}) => 0, pthread_t={:?} thread_id={}",
-        thread, attr, start_routine, user_data, opaque, thread_id
+        thread,
+        attr,
+        start_routine,
+        user_data,
+        opaque,
+        thread_id
     );
     log_once!("First pthread_create (app spawned a worker thread via raw pthread)");
     0
@@ -285,10 +302,17 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     let current_thread = env.current_thread;
     if current_thread == 0 && !State::get(env).main_thread_object_created {
         State::get(env).main_thread_object_created = true;
-        let opaque = env.mem.alloc_and_write(OpaqueThread { magic: MAGIC_THREAD });
+        let opaque = env.mem.alloc_and_write(OpaqueThread {
+            magic: MAGIC_THREAD,
+        });
         assert!(!State::get(env).threads.contains_key(&opaque));
-        State::get(env).threads.insert(opaque, ThreadHostObject::new(0, DEFAULT_ATTR));
-        log_dbg!("pthread_self: created pthread object {:?} for main thread", opaque);
+        State::get(env)
+            .threads
+            .insert(opaque, ThreadHostObject::new(0, DEFAULT_ATTR));
+        log_dbg!(
+            "pthread_self: created pthread object {:?} for main thread",
+            opaque
+        );
     }
 
     let (&ptr, _) = State::get(env)
@@ -301,9 +325,9 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
 
 pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) {
     log_dbg!("pthread_exit({:?})", retval);
-    
-    // Поскольку в touchHLE пока нет встроенного механизма мягкого завершения 
-    // гостевого потока из хост-вызова, мы просто "паркуем" (усыпляем) 
+
+    // Поскольку в touchHLE пока нет встроенного механизма мягкого завершения
+    // гостевого потока из хост-вызова, мы просто "паркуем" (усыпляем)
     // текущий поток операционной системы навсегда.
     // Это безопасно "замораживает" гостевой поток и спасает эмулятор от краша.
     loop {
@@ -346,15 +370,15 @@ fn pthread_detach(env: &mut Environment, thread: pthread_t) -> i32 {
         log_dbg!("pthread_detach: thread doesn't exist, returning ESRCH");
         return ESRCH;
     };
-    
+
     if host_obj.attr.detachstate == PTHREAD_CREATE_DETACHED {
         log_dbg!("pthread_detach: thread already detached, returning EINVAL");
         return EINVAL;
     }
-    
+
     // ИСПРАВЛЕНИЕ: Реально меняем состояние потока на отсоединённое
     host_obj.attr.detachstate = PTHREAD_CREATE_DETACHED;
-    
+
     log_dbg!("pthread_detach({:?}) -> success", thread);
     0
 }
@@ -365,7 +389,10 @@ fn pthread_detach(env: &mut Environment, thread: pthread_t) -> i32 {
 
 fn pthread_cancel(env: &mut Environment, thread: pthread_t) -> i32 {
     let Some(host_obj) = State::get(env).threads.get_mut(&thread) else {
-        log_dbg!("pthread_cancel: unknown thread {:?}, returning ESRCH", thread);
+        log_dbg!(
+            "pthread_cancel: unknown thread {:?}, returning ESRCH",
+            thread
+        );
         return ESRCH;
     };
     if host_obj.cancel_requested {
@@ -373,7 +400,11 @@ fn pthread_cancel(env: &mut Environment, thread: pthread_t) -> i32 {
         return 0;
     }
     host_obj.cancel_requested = true;
-    log_dbg!("pthread_cancel({:?}): cancel pending on thread_id={}", thread, host_obj.thread_id);
+    log_dbg!(
+        "pthread_cancel({:?}): cancel pending on thread_id={}",
+        thread,
+        host_obj.thread_id
+    );
     0
 }
 
@@ -382,7 +413,7 @@ fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i3
         return EINVAL;
     }
     let self_t = pthread_self(env);
-    
+
     let prev = {
         let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
         if host_obj.cancel_disabled {
@@ -391,11 +422,11 @@ fn pthread_setcancelstate(env: &mut Environment, state: i32, oldstate: MutPtr<i3
             PTHREAD_CANCEL_ENABLE
         }
     };
-    
+
     if !oldstate.is_null() {
         env.mem.write(oldstate, prev);
     }
-    
+
     let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_disabled = state == PTHREAD_CANCEL_DISABLE;
     log_dbg!("pthread_setcancelstate({})", state);
@@ -407,7 +438,7 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
         return EINVAL;
     }
     let self_t = pthread_self(env);
-    
+
     let prev = {
         let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
         if host_obj.cancel_async {
@@ -416,11 +447,11 @@ fn pthread_setcanceltype(env: &mut Environment, cancel_type: i32, oldtype: MutPt
             PTHREAD_CANCEL_DEFERRED
         }
     };
-    
+
     if !oldtype.is_null() {
         env.mem.write(oldtype, prev);
     }
-    
+
     let host_obj = State::get(env).threads.get_mut(&self_t).unwrap();
     host_obj.cancel_async = cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS;
     if cancel_type == PTHREAD_CANCEL_ASYNCHRONOUS {
@@ -477,7 +508,12 @@ fn pthread_getschedparam(
     policy: i32,
     param: MutVoidPtr,
 ) -> i32 {
-    log_dbg!("TODO: pthread_getschedparam({:?}, {}, {:?})", thread, policy, param);
+    log_dbg!(
+        "TODO: pthread_getschedparam({:?}, {}, {:?})",
+        thread,
+        policy,
+        param
+    );
     0
 }
 
@@ -487,7 +523,12 @@ fn pthread_setschedparam(
     policy: i32,
     param: ConstVoidPtr,
 ) -> i32 {
-    log_dbg!("TODO: pthread_setschedparam({:?}, {}, {:?})", thread, policy, param);
+    log_dbg!(
+        "TODO: pthread_setschedparam({:?}, {}, {:?})",
+        thread,
+        policy,
+        param
+    );
     0
 }
 
@@ -521,4 +562,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_getschedparam(_, _, _)),
     export_c_func!(pthread_setschedparam(_, _, _)),
 ];
-

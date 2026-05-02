@@ -226,4 +226,4 @@ extern "C" {
     pub fn alDopplerFactor(dopplerFactor: ALfloat);
     pub fn alDopplerVelocity(dopplerVelocity: ALfloat);
     pub fn alSpeedOfSound(speed: ALfloat);
-        }
+}

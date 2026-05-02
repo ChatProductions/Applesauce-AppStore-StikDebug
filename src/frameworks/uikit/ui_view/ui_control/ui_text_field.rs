@@ -7,6 +7,7 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
+use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::frameworks::foundation::{ns_string, NSInteger, NSRange, NSUInteger};
 use crate::frameworks::uikit::ui_font::{UITextAlignment, UITextAlignmentLeft};
@@ -20,7 +21,6 @@ use crate::objc::{
     ClassExports, NSZonePtr, SEL,
 };
 use crate::Environment;
-use crate::frameworks::foundation::ns_string::get_static_str;
 
 type UIKeyboardAppearance = NSInteger;
 type UIKeyboardType = NSInteger;
@@ -31,7 +31,8 @@ type UITextBorderStyle = NSInteger;
 type UITextFieldViewMode = NSInteger;
 
 const UITextFieldTextDidChangeNotification: &str = "UITextFieldTextDidChangeNotification";
-const UITextFieldTextDidBeginEditingNotification: &str = "UITextFieldTextDidBeginEditingNotification";
+const UITextFieldTextDidBeginEditingNotification: &str =
+    "UITextFieldTextDidBeginEditingNotification";
 const UITextFieldTextDidEndEditingNotification: &str = "UITextFieldTextDidEndEditingNotification";
 
 pub const CONSTANTS: ConstantExports = &[
@@ -140,11 +141,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; this setBackgroundColor:bg_color];
 
     let text_label: id = msg_class![env; UILabel new];
-    
+
     // ВЫНЕСЕННАЯ ПЕРЕМЕННАЯ ДЛЯ ИЗБЕЖАНИЯ ОШИБОК КОМПИЛЯЦИИ E0283
     let clear_color: id = msg_class![env; UIColor clearColor];
     let _: () = msg![env; text_label setBackgroundColor:clear_color];
-    
+
     let _: () = msg![env; text_label setTextAlignment:UITextAlignmentLeft];
     let text_color: id = msg_class![env; UIColor blackColor];
     let _: () = msg![env; text_label setTextColor:text_color];
@@ -157,13 +158,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
-    
+
     let text_label: id = msg_class![env; UILabel new];
-    
+
     // ВЫНЕСЕННАЯ ПЕРЕМЕННАЯ ДЛЯ ИЗБЕЖАНИЯ ОШИБОК КОМПИЛЯЦИИ E0283
     let clear_color: id = msg_class![env; UIColor clearColor];
     let _: () = msg![env; text_label setBackgroundColor:clear_color];
-    
+
     env.objc.borrow_mut::<UITextFieldHostObject>(this).text_label = text_label;
     let _: () = msg![env; this addSubview:text_label];
 
@@ -525,19 +526,33 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
     let txt = ns_string::from_rust_string(env, text);
-    let text_label = env.objc.borrow::<UITextFieldHostObject>(text_field).text_label;
+    let text_label = env
+        .objc
+        .borrow::<UITextFieldHostObject>(text_field)
+        .text_label;
     let mut curr_text: id = msg![env; text_label text];
-    if curr_text == nil { curr_text = ns_string::get_static_str(env, ""); }
+    if curr_text == nil {
+        curr_text = ns_string::get_static_str(env, "");
+    }
 
     let len: NSUInteger = msg![env; curr_text length];
-    let range = NSRange { location: len, length: 0 };
-    let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
+    let range = NSRange {
+        location: len,
+        length: 0,
+    };
+    let delegate: id = env
+        .objc
+        .borrow::<UITextFieldHostObject>(text_field)
+        .delegate;
     let mut should = true;
-    
+
     if delegate != nil {
         let isa: u32 = env.mem.read(delegate.cast());
         if isa != 0 {
-            let sel: SEL = env.objc.register_host_selector("textField:shouldChangeCharactersInRange:replacementString:".to_string(), &mut env.mem);
+            let sel: SEL = env.objc.register_host_selector(
+                "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
+                &mut env.mem,
+            );
             if msg![env; delegate respondsToSelector:sel] {
                 should = msg![env; delegate textField:text_field shouldChangeCharactersInRange:range replacementString:txt];
             }
@@ -560,20 +575,34 @@ pub fn handle_text(env: &mut Environment, text_field: id, text: String) {
 }
 
 pub fn handle_backspace(env: &mut Environment, text_field: id) {
-    let text_label = env.objc.borrow::<UITextFieldHostObject>(text_field).text_label;
+    let text_label = env
+        .objc
+        .borrow::<UITextFieldHostObject>(text_field)
+        .text_label;
     let curr_text: id = msg![env; text_label text];
     let len: NSUInteger = msg![env; curr_text length];
-    if len == 0 { return; }
-    
-    let range = NSRange { location: len - 1, length: 1 };
+    if len == 0 {
+        return;
+    }
+
+    let range = NSRange {
+        location: len - 1,
+        length: 1,
+    };
     let empty = ns_string::get_static_str(env, "");
-    let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
+    let delegate: id = env
+        .objc
+        .borrow::<UITextFieldHostObject>(text_field)
+        .delegate;
     let mut should = true;
-    
+
     if delegate != nil {
         let isa: u32 = env.mem.read(delegate.cast());
         if isa != 0 {
-            let sel: SEL = env.objc.register_host_selector("textField:shouldChangeCharactersInRange:replacementString:".to_string(), &mut env.mem);
+            let sel: SEL = env.objc.register_host_selector(
+                "textField:shouldChangeCharactersInRange:replacementString:".to_string(),
+                &mut env.mem,
+            );
             if msg![env; delegate respondsToSelector:sel] {
                 should = msg![env; delegate textField:text_field shouldChangeCharactersInRange:range replacementString:empty];
             }
@@ -590,12 +619,19 @@ pub fn handle_backspace(env: &mut Environment, text_field: id) {
 }
 
 pub fn handle_return(env: &mut Environment, text_field: id) {
-    let delegate: id = env.objc.borrow::<UITextFieldHostObject>(text_field).delegate;
+    let delegate: id = env
+        .objc
+        .borrow::<UITextFieldHostObject>(text_field)
+        .delegate;
     if delegate != nil {
         let isa: u32 = env.mem.read(delegate.cast());
         if isa != 0 {
-            let sel: SEL = env.objc.register_host_selector("textFieldShouldReturn:".to_string(), &mut env.mem);
-            if msg![env; delegate respondsToSelector:sel] { let _: () = msg![env; delegate textFieldShouldReturn:text_field]; }
+            let sel: SEL = env
+                .objc
+                .register_host_selector("textFieldShouldReturn:".to_string(), &mut env.mem);
+            if msg![env; delegate respondsToSelector:sel] {
+                let _: () = msg![env; delegate textFieldShouldReturn:text_field];
+            }
         }
     }
-    }
+}

@@ -18,8 +18,8 @@ struct UITabBarHostObject {
     /// Currently selected `UITabBarItem*` (weak — owned by `items`)
     selected_item: id,
     delegate: id,
-    bar_tint_color: id,  // UIColor*
-    tint_color: id,      // UIColor*
+    bar_tint_color: id, // UIColor*
+    tint_color: id,     // UIColor*
     translucent: bool,
 }
 impl HostObject for UITabBarHostObject {}
@@ -125,8 +125,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     // В iOS можно передать nil, чтобы сбросить выделение
     if found || item == nil {
         env.objc.borrow_mut::<UITabBarHostObject>(this).selected_item = item;
-        
-        // Обязательно уведомляем делегата (контроллер), иначе логика игры не поймет, что вкладка сменилась
+
+        // Обязательно уведомляем делегата (контроллер), иначе логика игры не
+        // поймет, что вкладка сменилась
         let delegate = env.objc.borrow::<UITabBarHostObject>(this).delegate;
         if delegate != nil {
             let _: () = msg![env; delegate tabBar:this didSelectItem:item];
@@ -261,7 +262,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)moreNavigationController {
     // Проверяем, был ли уже создан UINavigationController
     let current_nav = env.objc.borrow::<UITabBarControllerHostObject>(this).more_navigation_controller;
-    
+
     if current_nav != nil {
         return current_nav;
     }
@@ -269,13 +270,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Честное создание реального UINavigationController, если его еще нет
     let nav_controller: id = msg_class![env; UINavigationController alloc];
     let nav_controller: id = msg![env; nav_controller init];
-    
+
     // Сохраняем в HostObject для последующих вызовов
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).more_navigation_controller = nav_controller;
-    
+
     nav_controller
 }
-    
+
 - (())dealloc {
     let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
     let (view_controllers, delegate, tab_bar, more_nav) =
@@ -299,12 +300,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, vcs);
     env.objc.borrow_mut::<UITabBarControllerHostObject>(this).view_controllers = vcs;
 
-    // 2. СИНХРОНИЗАЦИЯ: Извлекаем tabBarItem из каждого контроллера и отдаем их таббару
+    // 2. СИНХРОНИЗАЦИЯ: Извлекаем tabBarItem из каждого контроллера и отдаем их
+    // таббару
     let tab_bar = env.objc.borrow::<UITabBarControllerHostObject>(this).tab_bar;
     if tab_bar != nil && vcs != nil {
         let items_array: id = msg_class![env; NSMutableArray array];
         let count: NSUInteger = msg![env; vcs count];
-        
+
         for i in 0..count {
             let vc: id = msg![env; vcs objectAtIndex:i];
             let item: id = msg![env; vc tabBarItem]; // Берем итем контроллера
@@ -312,17 +314,13 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let _: () = msg![env; items_array addObject:item];
             }
         }
-        
+
         // Теперь у UITabBar будет актуальный список элементов
         let _: () = msg![env; tab_bar setItems:items_array animated:animated];
     }
-    
+
     // 3. Выбираем первую вкладку по умолчанию
     let _: () = msg![env; this setSelectedIndex:0];
-}
-
-- (())setViewControllers:(id)view_controllers animated:(bool)_animated {
-    let _: () = msg![env; this setViewControllers:view_controllers];
 }
 
 // MARK: - Selected index / controller
@@ -336,7 +334,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let host = env.objc.borrow::<UITabBarControllerHostObject>(this);
         (host.view_controllers, host.tab_bar)
     };
-    
+
     if vcs == nil { return; }
     let count: NSUInteger = msg![env; vcs count];
     if index >= count { return; }
@@ -347,7 +345,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if tab_bar != nil {
         let vc: id = msg![env; vcs objectAtIndex:index];
         let item: id = msg![env; vc tabBarItem];
-        // Теперь это не вызовет варнинг, так как мы наполнили массив в setViewControllers
+        // Теперь это не вызовет варнинг, так как мы наполнили массив в
+        // setViewControllers
         let _: () = msg![env; tab_bar setSelectedItem:item];
     }
 }

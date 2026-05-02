@@ -7,22 +7,21 @@
 #![allow(dead_code)]
 //! `GKLeaderboardViewController` and `GKAchievementViewController`.
 
-use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr,
-};
 use crate::frameworks::foundation::NSInteger;
+use crate::objc::{
+    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 
-type GKLeaderboardTimeScope  = NSInteger;
+type GKLeaderboardTimeScope = NSInteger;
 type GKLeaderboardPlayerScope = NSInteger;
 
 // GKLeaderboardTimeScope values
-const GKLeaderboardTimeScopeToday:   GKLeaderboardTimeScope = 0;
-const GKLeaderboardTimeScopeWeek:    GKLeaderboardTimeScope = 1;
+const GKLeaderboardTimeScopeToday: GKLeaderboardTimeScope = 0;
+const GKLeaderboardTimeScopeWeek: GKLeaderboardTimeScope = 1;
 const GKLeaderboardTimeScopeAllTime: GKLeaderboardTimeScope = 2;
 
 // GKLeaderboardPlayerScope values
-const GKLeaderboardPlayerScopeGlobal:      GKLeaderboardPlayerScope = 0;
+const GKLeaderboardPlayerScopeGlobal: GKLeaderboardPlayerScope = 0;
 const GKLeaderboardPlayerScopeFriendsOnly: GKLeaderboardPlayerScope = 1;
 
 // MARK: - GKLeaderboardViewController
@@ -225,7 +224,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: Add Recipients
 
 - (())addRecipientsWithPlayerIDs:(id)_playerIDs {
-    // В эмуляторе реальная отправка не происходит, поэтому мы просто принимаем данные
+    // В эмуляторе реальная отправка не происходит, поэтому мы просто принимаем
+    // данные
 }
 
 - (())addRecipientsWithEmailAddresses:(id)_emailAddresses {
@@ -242,7 +242,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())viewWillAppear:(bool)_animated {
     log!("GKFriendRequestComposeViewController viewWillAppear: stubbed");
-    
+
     // Эмуляция закрытия окна сразу после "открытия", чтобы игра не висела
     let delegate = env.objc
         .borrow::<GKFriendRequestComposeViewControllerHostObject>(this)
@@ -273,7 +273,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
-    
+
 // =========================================================================
 // GKAchievementViewController
 // =========================================================================
@@ -348,4 +348,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

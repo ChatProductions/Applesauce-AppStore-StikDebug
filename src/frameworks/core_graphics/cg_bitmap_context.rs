@@ -56,11 +56,14 @@ pub fn CGBitmapContextCreate(
         kCGColorSpaceGenericRGB => components_for_rgb(bitmap_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(bitmap_info).unwrap_or(1),
         _ => {
-            log!("Warning: unknown color space '{}' in CGBitmapContextCreate, falling back to RGB", color_space_name);
+            log!(
+                "Warning: unknown color space '{}' in CGBitmapContextCreate, falling back to RGB",
+                color_space_name
+            );
             components_for_rgb(bitmap_info).unwrap_or(4)
         }
     };
-    
+
     let color_space = color_space_name;
 
     let (data, data_is_owned, bytes_per_row) = if data.is_null() {
@@ -88,18 +91,18 @@ pub fn CGBitmapContextCreate(
             alpha_info: bitmap_info & kCGBitmapAlphaInfoMask,
         }),
         transform: CGAffineTransformIdentity,
-        rgb_fill_color:   (0.0, 0.0, 0.0, 1.0),
+        rgb_fill_color: (0.0, 0.0, 0.0, 1.0),
         rgb_stroke_color: (0.0, 0.0, 0.0, 1.0),
-        alpha:            1.0,
-        line_width:       1.0,
-        line_cap:         0,
-        line_join:        0,
-        miter_limit:      10.0,
-        flatness:         0.0,
-        blend_mode:       0,
+        alpha: 1.0,
+        line_width: 1.0,
+        line_cap: 0,
+        line_join: 0,
+        miter_limit: 10.0,
+        flatness: 0.0,
+        blend_mode: 0,
         interpolation_quality: 2,
-        state_stack:      Vec::new(),
-        path_points:      Vec::new(),
+        state_stack: Vec::new(),
+        path_points: Vec::new(),
     };
 
     let isa = env
@@ -144,11 +147,10 @@ pub fn CGBitmapContextCreateImage(env: &mut Environment, context: CGContextRef) 
     let bpp = bytes_per_pixel(&bitmap_data) as usize;
     let data_size = bitmap_data.bytes_per_row * bitmap_data.height;
 
-    let raw_pixels = env
-        .mem
-        .bytes_at(bitmap_data.data.cast(), data_size);
+    let raw_pixels = env.mem.bytes_at(bitmap_data.data.cast(), data_size);
 
-    let mut normalized_pixels = Vec::with_capacity((bitmap_data.width * bitmap_data.height * 4) as usize);
+    let mut normalized_pixels =
+        Vec::with_capacity((bitmap_data.width * bitmap_data.height * 4) as usize);
 
     let (r_offset, g_offset, b_offset, a_offset) = pixel_offsets(&bitmap_data);
 
@@ -196,15 +198,15 @@ fn components_for_rgb(bitmap_info: CGBitmapInfo) -> Result<GuestUSize, ()> {
         return Err(());
     }
     match alpha_info & kCGBitmapAlphaInfoMask {
-        kCGImageAlphaNone => Ok(3), 
+        kCGImageAlphaNone => Ok(3),
         kCGImageAlphaPremultipliedLast
         | kCGImageAlphaPremultipliedFirst
         | kCGImageAlphaLast
         | kCGImageAlphaFirst
         | kCGImageAlphaNoneSkipLast
-        | kCGImageAlphaNoneSkipFirst => Ok(4), 
-        kCGImageAlphaOnly => Ok(1), 
-        _ => Err(()),               
+        | kCGImageAlphaNoneSkipFirst => Ok(4),
+        kCGImageAlphaOnly => Ok(1),
+        _ => Err(()),
     }
 }
 
@@ -219,15 +221,15 @@ fn components_for_gray(bitmap_info: CGBitmapInfo) -> Result<GuestUSize, ()> {
         return Err(());
     }
     match alpha_info & kCGBitmapAlphaInfoMask {
-        kCGImageAlphaNone => Ok(1), 
+        kCGImageAlphaNone => Ok(1),
         kCGImageAlphaPremultipliedLast
         | kCGImageAlphaPremultipliedFirst
         | kCGImageAlphaLast
         | kCGImageAlphaFirst
         | kCGImageAlphaNoneSkipLast
-        | kCGImageAlphaNoneSkipFirst => Ok(2), 
-        kCGImageAlphaOnly => Ok(1), 
-        _ => Err(()),               
+        | kCGImageAlphaNoneSkipFirst => Ok(2),
+        kCGImageAlphaOnly => Ok(1),
+        _ => Err(()),
     }
 }
 
@@ -242,7 +244,7 @@ fn bytes_per_pixel(data: &CGBitmapContextData) -> GuestUSize {
     match color_space {
         kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap_or(1),
-        _ => components_for_rgb(alpha_info).unwrap_or(4), 
+        _ => components_for_rgb(alpha_info).unwrap_or(4),
     }
 }
 
@@ -279,7 +281,8 @@ fn blend_premultiplied(bg: (f32, f32, f32, f32), fg: (f32, f32, f32, f32)) -> (f
 }
 
 // ИСПРАВЛЕНИЕ: Убраны все `unreachable!()` и `unimplemented!()`
-// Теперь, если игра передает нестандартный формат, мы безопасно откатываемся на RGBA
+// Теперь, если игра передает нестандартный формат, мы безопасно откатываемся на
+// RGBA
 fn pixel_offsets(data: &CGBitmapContextData) -> (usize, usize, usize, Option<usize>) {
     if data.color_space == kCGColorSpaceGenericGray {
         match data.alpha_info {
@@ -424,7 +427,7 @@ impl CGBitmapContextDrawer<'_> {
             gamma_decode(self.rgb_fill_color.0 * multiply_by),
             gamma_decode(self.rgb_fill_color.1 * multiply_by),
             gamma_decode(self.rgb_fill_color.2 * multiply_by),
-            self.rgb_fill_color.3, 
+            self.rgb_fill_color.3,
         )
     }
     pub fn put_pixel(
@@ -502,7 +505,7 @@ pub(super) fn draw_image(
     }
 }
 
-#[allow(rustdoc::broken_intra_doc_links)] 
+#[allow(rustdoc::broken_intra_doc_links)]
 pub fn get_data(objc: &ObjC, context: CGContextRef) -> (GuestUSize, GuestUSize, MutVoidPtr) {
     let host_obj = objc.borrow::<CGContextHostObject>(context);
     let CGContextSubclass::CGBitmapContext(bitmap_data) = host_obj.subclass;

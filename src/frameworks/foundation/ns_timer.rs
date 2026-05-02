@@ -10,7 +10,7 @@ use super::NSTimeInterval;
 use super::{ns_run_loop, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
-    HostObject, SEL, NSZonePtr,
+    HostObject, NSZonePtr, SEL,
 };
 use crate::Environment;
 use std::time::{Duration, Instant};
@@ -83,34 +83,35 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(unsafe { std::mem::zeroed::<NSTimerHostObject>() });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
-    
+
 + (id)scheduledTimerWithTimeInterval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
     let timer: id = msg_class![env; NSTimer alloc];
     let timer: id = msg![env; timer initWithFireDate:nil interval:ti target:t selector:s userInfo:ui repeats:rep];
-    
+
     let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
-    
+
     // Получаем реальный гостевой NSString из системного пула эмулятора
     let mode_str = crate::frameworks::foundation::ns_string::get_static_str(env, "NSDefaultRunLoopMode");
     let _: () = msg![env; run_loop addTimer:timer forMode:mode_str];
-    
+
     autorelease(env, timer)
 }
 
 - (())dealloc {
     let _: () = msg![env; this invalidate];
-    
-    // ИСПРАВЛЕНИЕ: Используем блок для освобождения заимствования до вызова release
+
+    // ИСПРАВЛЕНИЕ: Используем блок для освобождения заимствования до вызова
+    // release
     let (target, user_info) = {
         let host = env.objc.borrow::<NSTimerHostObject>(this);
         (host.target, host.user_info)
     }; // Здесь заимствование уничтожается
-    
+
     release(env, target);
     release(env, user_info);
     env.objc.dealloc_object(this, &mut env.mem)
 }
-    
+
 - (NSTimeInterval)timeInterval {
     let host_object = env.objc.borrow::<NSTimerHostObject>(this);
     if host_object.repeats {
@@ -127,7 +128,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)target {
     env.objc.borrow::<NSTimerHostObject>(this).target
 }
-    
+
 - (bool)isValid {
     env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some()
 }
@@ -136,7 +137,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let is_valid = env.objc.borrow::<NSTimerHostObject>(this).due_by.is_some();
         !is_valid
 }
-    
+
 - (())invalidate {
     let run_loop_to_remove = {
         let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
@@ -145,7 +146,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.run_loop = crate::objc::nil;
         rl
     };
-    
+
     if run_loop_to_remove != crate::objc::nil {
         crate::frameworks::foundation::ns_run_loop::remove_timer(env, run_loop_to_remove, this);
     }
@@ -174,7 +175,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setFireDate:(id)date {
     // ВЫЧИСЛЯЕМ до borrow_mut
     let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceNow];
-        
+
     let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
     if timer.due_by.is_some() {
         if time_interval.is_nan() || time_interval <= 0.0 {
@@ -191,7 +192,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let due_by_opt = {
         env.objc.borrow::<NSTimerHostObject>(this).due_by
     };
-    
+
     if let Some(due) = due_by_opt {
         let now = Instant::now();
         let time_interval: NSTimeInterval = if due > now {
@@ -208,16 +209,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithFireDate:(id)_date interval:(f64)ti target:(id)t selector:(SEL)s userInfo:(id)ui repeats:(bool)rep {
     let this: id = crate::objc::msg_super![env; this init];
-    
+
     let retained_target = retain(env, t);
     let retained_user_info = retain(env, ui);
-    
+
     let safe_ti = ti.max(0.0001);
     let rust_interval = std::time::Duration::from_secs_f64(safe_ti);
-    
+
     // ИСПРАВЛЕНИЕ E0499: Вычисляем fire_time ДО того, как берём `borrow_mut`
     let fire_time = if _date != crate::objc::nil {
-        // Здесь безопасно использовать env, так как мы еще ничего не позаимствовали
+        // Здесь безопасно использовать env, так как мы еще ничего не
+        // позаимствовали
         let time_interval: NSTimeInterval = msg![env; _date timeIntervalSinceNow];
         if time_interval.is_nan() || time_interval <= 0.0 {
             std::time::Instant::now()
@@ -228,10 +230,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         std::time::Instant::now() + rust_interval
     };
-    
+
     // ТОЛЬКО ТЕПЕРЬ берём `borrow_mut` и записываем все данные
     let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
-    
+
     host.ns_interval = safe_ti;
     host.rust_interval = rust_interval;
     host.target = retained_target;
@@ -239,7 +241,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     host.user_info = retained_user_info;
     host.repeats = rep;
     host.due_by = Some(fire_time);
-    
+
     this
 }
 
@@ -248,7 +250,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // =========================================================================
 
 - (id)description {
-    // ИСПРАВЛЕНИЕ: Формируем строку внутри блока, освобождаем borrow, потом вызываем msg_class!
+    // ИСПРАВЛЕНИЕ: Формируем строку внутри блока, освобождаем borrow, потом
+    // вызываем msg_class!
     let s = {
         let host = env.objc.borrow::<NSTimerHostObject>(this);
         let validity = if host.due_by.is_some() { "valid" } else { "invalid" };
@@ -286,7 +289,8 @@ pub(super) fn set_run_loop(env: &mut Environment, timer: id, run_loop: id) {
     host_object.run_loop = run_loop;
 }
 
-/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if necessary.
+/// For use by `NSRunLoop`: check if a timer is due to fire and fire it if
+//necessary.
 /// Returns the next firing time, if any.
 pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> {
     let &NSTimerHostObject {
@@ -321,7 +325,9 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
         env.objc.borrow_mut::<NSTimerHostObject>(timer).due_by = Some(next_time);
     }
 
-    env.objc.borrow_mut::<NSTimerHostObject>(timer).is_running_callback = true;
+    env.objc
+        .borrow_mut::<NSTimerHostObject>(timer)
+        .is_running_callback = true;
 
     log_once!("First NSTimer fired (run loop is delivering scheduled events)");
 
@@ -336,7 +342,9 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
     let _: () = msg_send(env, (target, selector, timer));
     release(env, pool);
 
-    env.objc.borrow_mut::<NSTimerHostObject>(timer).is_running_callback = false;
+    env.objc
+        .borrow_mut::<NSTimerHostObject>(timer)
+        .is_running_callback = false;
 
     if !repeats {
         let _: () = msg![env; timer invalidate];
@@ -347,4 +355,3 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
 
     final_due_by
 }
-

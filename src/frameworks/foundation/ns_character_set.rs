@@ -8,21 +8,20 @@
 use super::{ns_string, unichar};
 use crate::frameworks::foundation::NSRange;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
-    ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 use std::collections::HashSet;
 
 // Unicode General Category Zs and CHARACTER TABULATION (U+0009).
 const WHITESPACE_CHARACTERS: [char; 18] = [
-    '\u{0020}', '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}',
-    '\u{2003}', '\u{2004}', '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}',
-    '\u{2009}', '\u{200A}', '\u{202F}', '\u{205F}', '\u{3000}', '\u{0009}',
+    '\u{0020}', '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+    '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}', '\u{205F}',
+    '\u{3000}', '\u{0009}',
 ];
 // The newline characters (U+000A - U+000D, U+0085, U+2028, and U+2029).
 const NEWLINE_CHARACTERS: [char; 7] = [
-    '\u{000A}', '\u{000B}', '\u{000C}', '\u{000D}', '\u{0085}', '\u{2028}',
-    '\u{2029}',
+    '\u{000A}', '\u{000B}', '\u{000C}', '\u{000D}', '\u{0085}', '\u{2028}', '\u{2029}',
 ];
 
 // =========================================================================
@@ -407,7 +406,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let self_host = env.objc.borrow::<CharacterSetHostObject>(this);
 
     if other_inverted {
-        // other is an inverted set — too large to iterate; log and return false.
+        // other is an inverted set — too large to iterate; log and return
+        // false.
         log_dbg!("isSupersetOfSet: other is inverted, returning false (not supported)");
         return false;
     }

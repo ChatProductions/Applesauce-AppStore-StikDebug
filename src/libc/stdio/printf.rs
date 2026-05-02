@@ -28,29 +28,14 @@ use std::io::Write;
 // Add b'A' which was missing from the original.
 const ALL_SPECIFIERS: [u8; 26] = [
     // IEEE printf specifiers
-    b'd', b'i', b'o', b'u', b'x', b'X',
-    b'f', b'F', b'e', b'E', b'g', b'G',
-    b'a', b'A',
-    b'c', b's', b'p', b'n',
-    b'C', b'S',
-    b'%',
-    // NSString formatting
-    b'@',
-    // Darwin long variants
-    b'D', b'U', b'O',
-    // Bracket set specifier for sscanf
+    b'd', b'i', b'o', b'u', b'x', b'X', b'f', b'F', b'e', b'E', b'g', b'G', b'a', b'A', b'c', b's',
+    b'p', b'n', b'C', b'S', b'%', // NSString formatting
+    b'@', // Darwin long variants
+    b'D', b'U', b'O', // Bracket set specifier for sscanf
     b'[',
 ];
-const INTEGER_SPECIFIERS: [u8; 9] = [
-    b'd', b'i', b'o', b'u', b'x', b'X',
-    b'D', b'U', b'O',
-];
-const FLOAT_SPECIFIERS: [u8; 8] = [
-    b'f', b'F',
-    b'e', b'E',
-    b'g', b'G',
-    b'a', b'A',
-];
+const INTEGER_SPECIFIERS: [u8; 9] = [b'd', b'i', b'o', b'u', b'x', b'X', b'D', b'U', b'O'];
+const FLOAT_SPECIFIERS: [u8; 8] = [b'f', b'F', b'e', b'E', b'g', b'G', b'a', b'A'];
 /// String formatting implementation for `printf` and `NSLog` function families.
 ///
 /// `NS_LOG` is [true] for the `NSLog` format string type, or [false] for the
@@ -85,7 +70,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             false
         };
         let alternative_form = if get_format_char(&env.mem, format_char_idx) == b'#' {
-            // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix for octal
+            // Alternative form handling: adds 0x/0X prefix for hex, 0 prefix
+            // for octal
             format_char_idx += 1;
             true
         } else {
@@ -155,7 +141,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     Some("l")
                 }
             }
-                        // q seems to be an equivalent of 'll'
+            // q seems to be an equivalent of 'll'
             // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Strings/Articles/formatSpecifiers.html#//apple_ref/doc/uid/TP40004265-SW1
             b'q' => {
                 format_char_idx += 1;
@@ -211,11 +197,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Integer specifiers
             b'c' => {
                 assert!(!prepend_sign);
-                
-                // Если передали %lc, обрабатываем как широкий символ (аналог %C)
+
+                // Если передали %lc, обрабатываем как широкий символ (аналог
+                // %C)
                 if length_modifier == Some("l") {
                     let c: wchar_t = args.next(env);
-                    // Безопасно парсим, если символ кривой - ставим '?' вместо краша
+                    // Безопасно парсим, если символ кривой - ставим '?' вместо
+                    // краша
                     let ch = char::from_u32(c as u32).unwrap_or('?');
                     write!(&mut res, "{ch}").unwrap();
                 } else {
@@ -227,14 +215,15 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             // Apple extension?
             // Seemingly works in both NSLog and printf.
-                        // Apple extension?
+            // Apple extension?
             // Seemingly works in both NSLog and printf.
             b'C' => {
                 assert!(!prepend_sign);
                 // Убрали assert!(length_modifier.is_none());
                 let c: unichar = args.next(env);
                 assert!(pad_char == ' ' && pad_width == 0);
-                // Заменяем .unwrap() на .unwrap_or('?'), чтобы не было паники на невалидном UTF-16!
+                // Заменяем .unwrap() на .unwrap_or('?'), чтобы не было паники
+                // на невалидном UTF-16!
                 let c = char::from_u32(c.into()).unwrap_or('?');
                 write!(&mut res, "{c}").unwrap();
             }
@@ -295,7 +284,14 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let int: i32 = args.next(env);
                     int.into()
                 };
-                let s = apply_int_pad(int, pad_width as usize, pad_char, left_justified, prepend_sign, precision);
+                let s = apply_int_pad(
+                    int,
+                    pad_width as usize,
+                    pad_char,
+                    left_justified,
+                    prepend_sign,
+                    precision,
+                );
                 res.extend_from_slice(s.as_bytes());
             }
             b'u' => {
@@ -311,7 +307,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint.into()
                 };
-                let s = apply_uint_pad(uint, pad_width as usize, pad_char, left_justified, precision);
+                let s = apply_uint_pad(
+                    uint,
+                    pad_width as usize,
+                    pad_char,
+                    left_justified,
+                    precision,
+                );
                 res.extend_from_slice(s.as_bytes());
             }
             b'@' if NS_LOG => {
@@ -344,12 +346,17 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint.into()
                 };
-                let prefix = if alternative_form && uint != 0 { "0" } else { "" };
+                let prefix = if alternative_form && uint != 0 {
+                    "0"
+                } else {
+                    ""
+                };
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     let formatted = format!("{}{:o}", prefix, uint);
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(1);
                             write!(&mut res, "0{:0>1$o}", uint, remaining_width).unwrap();
@@ -385,13 +392,18 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint.into()
                 };
-                let prefix = if alternative_form && uint != 0 { "0x" } else { "" };
+                let prefix = if alternative_form && uint != 0 {
+                    "0x"
+                } else {
+                    ""
+                };
                 if pad_width > 0 {
                     assert!(precision.is_none());
                     // TODO
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(2);
                             write!(&mut res, "0x{:0>1$x}", uint, remaining_width).unwrap();
@@ -435,11 +447,16 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     let uint: u32 = args.next(env);
                     uint.into()
                 };
-                let prefix = if alternative_form && uint != 0 { "0X" } else { "" };
+                let prefix = if alternative_form && uint != 0 {
+                    "0X"
+                } else {
+                    ""
+                };
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
                     if pad_char == '0' && precision.is_none() && !left_justified {
-                        // For zero padding with alternative form, prefix goes before zeros
+                        // For zero padding with alternative form, prefix goes
+                        // before zeros
                         if alternative_form && uint != 0 {
                             let remaining_width = pad_width.saturating_sub(2);
                             write!(&mut res, "0X{:0>1$X}", uint, remaining_width).unwrap();
@@ -503,7 +520,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     if precision == 0 {
                         1
                     } else {
-                         precision.try_into().unwrap()
+                        precision.try_into().unwrap()
                     }
                 } else {
                     6
@@ -535,10 +552,10 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         if left_justified {
                             format!("{trimmed_result:<pad_width$}")
                         } else if pad_char == '0' {
-                             format!("{trimmed_result:0>pad_width$}")
+                            format!("{trimmed_result:0>pad_width$}")
                         } else {
                             format!("{trimmed_result:>pad_width$}")
-                         }
+                        }
                     } else {
                         trimmed_result.to_string()
                     };
@@ -561,15 +578,21 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
-                let s = e_format(float, pad_width, pad_char, precision, left_justified)
-                    .to_uppercase();
+                let s =
+                    e_format(float, pad_width, pad_char, precision, left_justified).to_uppercase();
                 res.extend_from_slice(s.as_bytes());
             }
             b'G' => {
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
-                let p: i32 = precision.map(|p| if p == 0 { 1 } else { p as i32 }).unwrap_or(6);
-                let x: i32 = if float == 0.0 { 0 } else { float.abs().log10().floor() as i32 };
+                let p: i32 = precision
+                    .map(|p| if p == 0 { 1 } else { p as i32 })
+                    .unwrap_or(6);
+                let x: i32 = if float == 0.0 {
+                    0
+                } else {
+                    float.abs().log10().floor() as i32
+                };
                 let s = if p > x && x >= -4 {
                     let prec = (p - x - 1) as usize;
                     let raw = f_format(float, 0, ' ', prec, false);
@@ -600,17 +623,34 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'D' => {
                 let int: i32 = args.next(env);
-                let s = apply_int_pad(int as i64, pad_width as usize, pad_char, left_justified, prepend_sign, precision);
+                let s = apply_int_pad(
+                    int as i64,
+                    pad_width as usize,
+                    pad_char,
+                    left_justified,
+                    prepend_sign,
+                    precision,
+                );
                 res.extend_from_slice(s.as_bytes());
             }
             b'U' => {
                 let uint: u32 = args.next(env);
-                let s = apply_uint_pad(uint as u64, pad_width as usize, pad_char, left_justified, precision);
+                let s = apply_uint_pad(
+                    uint as u64,
+                    pad_width as usize,
+                    pad_char,
+                    left_justified,
+                    precision,
+                );
                 res.extend_from_slice(s.as_bytes());
             }
             b'O' => {
                 let uint: u32 = args.next(env);
-                let prefix = if alternative_form && uint != 0 { "0" } else { "" };
+                let prefix = if alternative_form && uint != 0 {
+                    "0"
+                } else {
+                    ""
+                };
                 let s = format!("{}{:o}", prefix, uint);
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
                 res.extend_from_slice(s.as_bytes());
@@ -618,7 +658,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             _ => {
                 log_dbg!(
                     "printf_inner: unhandled specifier '%{}' at index {} — skipping",
-                    specifier as char, format_char_idx
+                    specifier as char,
+                    format_char_idx
                 );
             }
         } // end match specifier
@@ -628,7 +669,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
     res
 } // end printf_inner — THIS is the only closing brace needed here
 
-fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left_justified: bool) -> String {
+fn f_format(
+    float: f64,
+    pad_width: usize,
+    pad_char: char,
+    precision: usize,
+    left_justified: bool,
+) -> String {
     if left_justified {
         format!("{float:<pad_width$.precision$}")
     } else if pad_char == '0' {
@@ -640,7 +687,13 @@ fn f_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left
     }
 }
 
-fn e_format(float: f64, pad_width: usize, pad_char: char, precision: usize, left_justified: bool) -> String {
+fn e_format(
+    float: f64,
+    pad_width: usize,
+    pad_char: char,
+    precision: usize,
+    left_justified: bool,
+) -> String {
     let exponent = if float == 0.0 {
         0.0
     } else {
@@ -955,6 +1008,35 @@ fn vswprintf(
     to_write as i32
 }
 
+fn wprintf(env: &mut Environment, format: ConstPtr<wchar_t>, args: DotDotDot) -> i32 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    // TODO: support other locales
+    let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
+    assert_eq!(env.mem.read(ctype_locale), b'C');
+
+    let wcstr_format = env.mem.wcstr_at(format);
+    log_dbg!("wprintf({:?} ({:?}), ...)", format, wcstr_format);
+
+    let wcstr_format_bytes = wcstr_format.as_bytes();
+    let len: GuestUSize = wcstr_format_bytes.len() as GuestUSize;
+    let res = printf_inner::<false, _>(
+        env,
+        |_mem, idx| {
+            if idx == len {
+                b'\0'
+            } else {
+                wcstr_format_bytes[idx as usize]
+            }
+        },
+        args.start(),
+    );
+
+    let _ = std::io::stdout().write_all(&res);
+    res.len().try_into().unwrap()
+}
+
 fn printf(env: &mut Environment, format: ConstPtr<u8>, args: DotDotDot) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -1033,7 +1115,9 @@ where
         }
         if c != b'%' {
             let x = getc_fn(env, subject, src_char_idx);
-            if x.is_err() { break 'outer; }
+            if x.is_err() {
+                break 'outer;
+            }
             let mut cc: u8 = x.unwrap().into();
 
             if isspace(env, format + format_char_idx - 1) {
@@ -1131,8 +1215,7 @@ where
         }
 
         match specifier {
-            b'd' |
-            b'i' => {
+            b'd' | b'i' => {
                 let base: u32 = if specifier == b'd' {
                     10
                 } else {
@@ -1168,7 +1251,12 @@ where
                             }
                             "hh" => {
                                 let res = str_to_int_inner_generic(
-                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
                                     if max_width > 0 { max_width } else { u32::MAX },
                                     |s, base| i8::from_str_radix(s, base).unwrap_or(i8::MAX) as i16,
                                     |num| num.checked_mul(-1).unwrap_or(i16::MIN),
@@ -1186,7 +1274,12 @@ where
                             }
                             "ll" => {
                                 let res = str_to_int_inner_generic(
-                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
                                     if max_width > 0 { max_width } else { u32::MAX },
                                     |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
                                     |num| num.checked_mul(-1).unwrap_or(i64::MIN),
@@ -1233,8 +1326,7 @@ where
                     }
                 }
             }
-            b'f' |
-            b'g' => {
+            b'f' | b'g' => {
                 assert_eq!(max_width, 0);
                 // TODO
                 let res = atof_inner_generic(env, &getc_fn, &ungetc_fn, subject, src_char_idx);
@@ -1263,11 +1355,9 @@ where
                     }
                 }
             }
-            b'x' |
-            b'X' | b'u' => {
+            b'x' | b'X' | b'u' => {
                 let base: u32 = match specifier {
-                    b'x' |
-                    b'X' => 16,
+                    b'x' | b'X' => 16,
                     b'u' => 10,
                     _ => unreachable!(),
                 };
@@ -1277,7 +1367,12 @@ where
                             "h" => { /* same as below generally */ }
                             "hh" => {
                                 let res = str_to_int_inner_generic(
-                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
                                     if max_width > 0 { max_width } else { u32::MAX },
                                     |s, base| u8::from_str_radix(s, base).unwrap_or(u8::MAX) as u16,
                                     |num| num.wrapping_neg(),
@@ -1295,7 +1390,12 @@ where
                             }
                             "ll" => {
                                 let res = str_to_int_inner_generic(
-                                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, base,
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
                                     if max_width > 0 { max_width } else { u32::MAX },
                                     |s, base| u64::from_str_radix(s, base).unwrap_or(u64::MAX),
                                     |num| num.wrapping_neg(),
@@ -1373,13 +1473,13 @@ where
                     c = env.mem.read(format + format_char_idx);
                     format_char_idx += 1;
                 }
-                
+
                 let mut dst_ptr: Option<MutPtr<u8>> = if !suppress_assignment {
                     Some(args.next(env))
                 } else {
                     None
                 };
-                
+
                 let mut matched = false;
                 loop {
                     let x = getc_fn(env, subject, src_char_idx);
@@ -1388,20 +1488,20 @@ where
                     }
                     let cc: u8 = x.unwrap().into();
                     src_char_idx += 1;
-                    
+
                     if cc == b'\0' || !(set.contains(&cc) ^ inverted) {
                         ungetc_fn(env, subject, cc);
                         src_char_idx -= 1;
                         break;
                     }
-                    
+
                     matched = true;
                     if let Some(ptr) = dst_ptr {
                         env.mem.write(ptr, cc);
                         dst_ptr = Some(ptr + 1);
                     }
                 }
-                
+
                 if matched {
                     if let Some(ptr) = dst_ptr {
                         env.mem.write(ptr, b'\0');
@@ -1414,7 +1514,9 @@ where
             }
             b'c' => {
                 let x = getc_fn(env, subject, src_char_idx);
-                if x.is_err() { break 'outer; }
+                if x.is_err() {
+                    break 'outer;
+                }
                 let cc: u8 = x.unwrap().into();
                 src_char_idx += 1;
                 if !suppress_assignment {
@@ -1424,7 +1526,12 @@ where
             }
             b'p' => {
                 let res = str_to_int_inner_generic(
-                    env, &getc_fn, &ungetc_fn, subject, src_char_idx, 16,
+                    env,
+                    &getc_fn,
+                    &ungetc_fn,
+                    subject,
+                    src_char_idx,
+                    16,
                     if max_width > 0 { max_width } else { u32::MAX },
                     |s, base| u32::from_str_radix(s, base).unwrap_or(0),
                     |num| num.wrapping_neg(),
@@ -1449,9 +1556,13 @@ where
             }
             b'%' => {
                 let x = getc_fn(env, subject, src_char_idx);
-                if x.is_err() { break 'outer; }
+                if x.is_err() {
+                    break 'outer;
+                }
                 let cc: u8 = x.unwrap().into();
-                if cc != b'%' { return matched_args; }
+                if cc != b'%' {
+                    return matched_args;
+                }
                 src_char_idx += 1;
                 continue;
             }
@@ -1484,7 +1595,7 @@ where
                         break;
                     }
                 }
-                
+
                 if let Some(ptr) = dst_ptr {
                     env.mem.write(ptr, b'\0');
                     log_dbg!(
@@ -1650,24 +1761,16 @@ fn vfprintf(env: &mut Environment, stream: MutPtr<FILE>, format: ConstPtr<u8>, a
     res.len().try_into().unwrap()
 }
 
-fn vwprintf(
-    env: &mut Environment,
-    format: ConstPtr<wchar_t>,
-    arg: VaList,
-) -> i32 {
+fn vwprintf(env: &mut Environment, format: ConstPtr<wchar_t>, arg: VaList) -> i32 {
     // Очищаем errno перед выполнением
     set_errno(env, 0);
-    // Используем 'C' локаль для корректной работы с широкими символами, 
+    // Используем 'C' локаль для корректной работы с широкими символами,
     // как это реализовано в vswprintf
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
     assert_eq!(env.mem.read(ctype_locale), b'C');
 
     let wcstr_format = env.mem.wcstr_at(format);
-    log_dbg!(
-        "vwprintf({:?} ({:?}), ...)",
-        format,
-        wcstr_format
-    );
+    log_dbg!("vwprintf({:?} ({:?}), ...)", format, wcstr_format);
     let wcstr_format_bytes = wcstr_format.as_bytes();
     let len: GuestUSize = wcstr_format_bytes.len() as GuestUSize;
     // Передаем байты формата в printf_inner
@@ -1685,19 +1788,6 @@ fn vwprintf(
     // Пишем результат напрямую в стандартный вывод (stdout)
     let _ = std::io::stdout().write_all(&res);
     res.len().try_into().unwrap()
-}
-
-fn wprintf(
-    env: &mut Environment,
-    format: ConstPtr<wchar_t>,
-    args: DotDotDot,
-) -> i32 {
-    // Очищаем errno
-    set_errno(env, 0);
-    log_dbg!("wprintf() implemented as a wrapper of vwprintf()");
-
-    // Оборачиваем вызов к vwprintf
-    vwprintf(env, format, args.start())
 }
 
 // Added NSLog/NSLogv per your documentation and requests
@@ -1721,7 +1811,7 @@ fn NSLogv(env: &mut Environment, format: id, arg: VaList) -> i32 {
             },
             arg,
         );
-        
+
         let msg_str = String::from_utf8_lossy(&res);
         log!("NSLog: {}", msg_str);
         let _ = std::io::stderr().write_all(format!("NSLog: {}\n", msg_str).as_bytes());
@@ -1748,13 +1838,12 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sprintf(_, _, _)),
     export_c_func!(swprintf(_, _, _, _)),
     export_c_func!(vswprintf(_, _, _, _)),
+    export_c_func!(wprintf(_, _)),
     export_c_func!(printf(_, _)),
     export_c_func!(fprintf(_, _, _)),
     export_c_func!(vfprintf(_, _, _)),
-    export_c_func!(wprintf(_, _)),
     export_c_func!(vwprintf(_, _)),
-    export_c_func!(NSLog(_, _)),
-    export_c_func!(NSLogv(_, _)),
+    // NSLog and NSLogv are exported from foundation::ns_log; not duplicated.
 ];
 
 // Helper function, not a part of printf family
@@ -1767,4 +1856,4 @@ pub fn isspace(env: &mut Environment, src: ConstPtr<u8>) -> bool {
 pub fn isspace_inner(c: u8) -> bool {
     // Rust's definition of whitespace excludes vertical tab, unlike C's
     c.is_ascii_whitespace() || c == b'\x0b'
-            }
+}

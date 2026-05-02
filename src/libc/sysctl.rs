@@ -25,13 +25,13 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 24] = [
     ((6,15), "hw.cpufrequency" , SysInfoType::Int64(412000000)),
     ((6,16), "hw.cpufrequency_max", SysInfoType::Int64(412000000)),
     ((6,14), "hw.busfrequency" , SysInfoType::Int64(103000000)),
-    
+
     // Честные параметры кэша для ARM1176JZF-S (iPhone 2G / 3G)
     ((0,0), "hw.cachelinesize", SysInfoType::Int32(32)),
     ((0,0), "hw.l1dcachesize", SysInfoType::Int32(16384)),
     ((0,0), "hw.l2cachesize", SysInfoType::Int32(0)),
     ((0,0), "hw.l3cachesize", SysInfoType::Int32(0)),
-    
+
     ((1, 14), "kern.osversion", String(b"5A347")),
     ((6,5), "hw.physmem" , SysInfoType::Int32(121634816)),
     ((6,6), "hw.usermem" , SysInfoType::Int32(93564928)),
@@ -92,16 +92,16 @@ fn sysctl(
         newp,
         newlen
     );
-    
+
     // MIB arrays with more than 2 components are valid (e.g. used by Mono).
     // We only key on the first two elements; extra elements are ignored.
     if name_len < 2 {
         log!("sysctl(): name_len {} < 2, returning -1", name_len);
         return -1;
     }
-    
+
     let (name0, name1) = (env.mem.read(name), env.mem.read(name + 1));
-	
+
     // hw.machine depends on the emulated device family
     // В SYSCTL_VALUES hw.machine соответствует ключу (6, 1)
     if name0 == 6 && name1 == 1 {
@@ -127,10 +127,16 @@ fn sysctl(
     sysctl_generic(
         env,
         |_env| {
-            // Используем INT_MAP для поиска по числовым идентификаторам (name0, name1)
+            // Используем INT_MAP для поиска по числовым идентификаторам (name0,
+            // name1)
             let Some((name_str, val)) = INT_MAP.get(&(name0, name1)) else {
-                // Убираем unimplemented!, чтобы избежать паники, просто логируем и возвращаем ошибку, как в sysctlbyname
-                log!("sysctl(): unknown parameter [{}, {}], returning -1", name0, name1);
+                // Убираем unimplemented!, чтобы избежать паники, просто
+                // логируем и возвращаем ошибку, как в sysctlbyname
+                log!(
+                    "sysctl(): unknown parameter [{}, {}], returning -1",
+                    name0,
+                    name1
+                );
                 return None;
             };
             Some((*name_str, val.clone()))
