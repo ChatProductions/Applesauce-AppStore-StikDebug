@@ -1716,19 +1716,6 @@ fn vwprintf(
     res.len().try_into().unwrap()
 }
 
-fn wprintf(
-    env: &mut Environment,
-    format: ConstPtr<wchar_t>,
-    args: DotDotDot,
-) -> i32 {
-    // Очищаем errno
-    set_errno(env, 0);
-    log_dbg!("wprintf() implemented as a wrapper of vwprintf()");
-
-    // Оборачиваем вызов к vwprintf
-    vwprintf(env, format, args.start())
-}
-
 // Added NSLog/NSLogv per your documentation and requests
 fn NSLog(env: &mut Environment, format: id, args: DotDotDot) -> i32 {
     NSLogv(env, format, args.start())
@@ -1781,7 +1768,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(printf(_, _)),
     export_c_func!(fprintf(_, _, _)),
     export_c_func!(vfprintf(_, _, _)),
-    export_c_func!(wprintf(_, _)),
     export_c_func!(vwprintf(_, _)),
     export_c_func!(NSLog(_, _)),
     export_c_func!(NSLogv(_, _)),
