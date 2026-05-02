@@ -145,7 +145,7 @@ const k3DMixerParam_Distance:  AudioUnitParameterID = 2;
 // =========================================================================
 
 fn AudioUnitInitialize(env: &mut Environment, in_unit: AudioUnit) -> OSStatus {
-    log!("AudioUnitInitialize({:?})", in_unit);
+    log_dbg!("AudioUnitInitialize({:?})", in_unit);
     let run_loop = CFRunLoopGetMain(env);
     ns_run_loop::add_audio_unit(env, run_loop, in_unit);
     0
@@ -172,7 +172,7 @@ fn AudioUnitSetProperty(
     in_data: ConstVoidPtr,
     in_data_size: u32,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitSetProperty(unit={:?}, prop={}, scope={}, element={}, \
          data={:?}, size={})",
         in_unit, in_id, in_scope, in_element, in_data, in_data_size
@@ -229,7 +229,7 @@ fn AudioUnitSetProperty(
                 }
                 let proc_copy    = render_callback.input_proc;
                 let ref_con_copy = render_callback.input_proc_ref_con;
-                log!(
+                log_dbg!(
                     "AudioUnitSetProperty(SetRenderCallback) \
                      unit={:?} scope={} element={} proc={:?} ref_con={:?}",
                     in_unit, in_scope, in_element, proc_copy, ref_con_copy
@@ -241,7 +241,7 @@ fn AudioUnitSetProperty(
                 host_object.render_callback = Some(cb);
                 let proc_copy    = cb.input_proc;
                 let ref_con_copy = cb.input_proc_ref_con;
-                log!(
+                log_dbg!(
                     "AudioUnitSetProperty(SetInputCallback) \
                      unit={:?} scope={} element={} proc={:?} ref_con={:?}",
                     in_unit, in_scope, in_element, proc_copy, ref_con_copy
@@ -259,7 +259,7 @@ fn AudioUnitSetProperty(
                     stream_format.bytes_per_frame,
                     stream_format.format_flags,
                 );
-                log!(
+                log_dbg!(
                     "AudioUnitSetProperty(StreamFormat) \
                      unit={:?} scope={} element={} \
                      format_id=0x{:x} sr={} ch={} bits={} bpf={} flags=0x{:x}",
@@ -306,7 +306,7 @@ fn AudioUnitSetProperty(
                 let src_unit = conn.source_audio_unit;
                 let src_out  = conn.source_output_number;
                 let dst_in   = conn.dest_input_number;
-                log!(
+                log_dbg!(
                     "AudioUnitSetProperty(MakeConnection) \
                      dest_unit={:?} dest_input={} \
                      src_unit={:?} src_output={}",
@@ -317,7 +317,7 @@ fn AudioUnitSetProperty(
                 // Ввод/Вывод включен по умолчанию. Игнорируем.
                 let enabled: u32 =
                     env.mem.read::<u32, false>(in_data.cast());
-                log!(
+                log_dbg!(
                     "AudioUnitSetProperty(EnableIO) \
                      unit={:?} scope={} element={} enabled={}",
                     in_unit, in_scope, in_element, enabled
@@ -377,7 +377,7 @@ fn AudioUnitGetProperty(
     out_data: MutVoidPtr,
     io_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitGetProperty(unit={:?}, prop={}, scope={}, element={})",
         in_unit, in_id, in_scope, in_element
     );
@@ -555,7 +555,7 @@ fn AudioUnitSetParameter(
     in_value: AudioUnitParameterValue,
     _in_offset: u32,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitSetParameter(unit={:?}, param={}, scope={}, \
          element={}, value={})",
         in_unit, in_id, in_scope, in_element, in_value
@@ -619,7 +619,7 @@ fn AudioUnitGetParameter(
     in_element: AudioUnitElement,
     out_value: MutPtr<AudioUnitParameterValue>,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitGetParameter(unit={:?}, param={}, scope={}, element={})",
         in_unit, in_id, in_scope, in_element
     );
@@ -663,7 +663,7 @@ fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
         .get(&ci)
         .map(|o| o.render_callback.is_some())
         .unwrap_or(false);
-    log!(
+    log_dbg!(
         "AudioOutputUnitStart({:?}) render_callback_set={}",
         ci, has_callback
     );
@@ -790,7 +790,7 @@ fn AudioUnitAddRenderNotify(
     p: ConstVoidPtr,
     r: ConstVoidPtr,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitAddRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
         u, p, r
     );
@@ -802,7 +802,7 @@ fn AudioUnitRemoveRenderNotify(
     p: ConstVoidPtr,
     r: ConstVoidPtr,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AudioUnitRemoveRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
         u, p, r
     );

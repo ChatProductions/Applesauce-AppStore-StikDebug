@@ -112,12 +112,12 @@ fn NewAUGraph(env: &mut Environment, out_graph: MutPtr<AUGraph>) -> OSStatus {
         .graphs
         .insert(g, GraphState::default());
     env.mem.write(out_graph, g);
-    log!("NewAUGraph() -> {:?}", g);
+    log_dbg!("NewAUGraph() -> {:?}", g);
     0
 }
 
 fn DisposeAUGraph(env: &mut Environment, graph: AUGraph) -> OSStatus {
-    log!("DisposeAUGraph({:?})", graph);
+    log_dbg!("DisposeAUGraph({:?})", graph);
     State::get(&mut env.framework_state).graphs.remove(&graph);
     if !graph.is_null() {
         env.mem.free(graph.cast());
@@ -165,7 +165,7 @@ fn AUGraphAddNode(
     let dt = desc.component_type;
     let ds = desc.component_sub_type;
     
-    log!(
+    log_dbg!(
         "AUGraphAddNode({:?}, type=0x{:08x} sub=0x{:08x}) -> node={} (output={})",
         graph, dt, ds, node_id, is_output
     );
@@ -245,7 +245,7 @@ fn AUGraphOpen(env: &mut Environment, graph: AUGraph) -> OSStatus {
         Some(s) => s.nodes.keys().copied().collect(),
         None => return paramErr,
     };
-    log!("AUGraphOpen({:?}) {} node(s)", graph, node_ids.len());
+    log_dbg!("AUGraphOpen({:?}) {} node(s)", graph, node_ids.len());
 
     for node_id in node_ids {
         let guest_instance: AudioComponentInstance =
@@ -299,7 +299,7 @@ fn AUGraphStart(env: &mut Environment, graph: AUGraph) -> OSStatus {
         Some(s) => s.nodes.values().filter_map(|n| n.audio_unit).collect(),
         None => return paramErr,
     };
-    log!("AUGraphStart({:?}) {} unit(s)", graph, units.len());
+    log_dbg!("AUGraphStart({:?}) {} unit(s)", graph, units.len());
 
     for unit in units {
         setup_audio_unit_for_render(env, unit);
@@ -362,7 +362,7 @@ fn AUGraphConnectNodeInput(
     dest_node: AUNode,
     dest_input_number: u32,
 ) -> OSStatus {
-    log!(
+    log_dbg!(
         "AUGraphConnectNodeInput({:?}): src_node={} out={} -> dest_node={} in={}",
         graph, src_node, src_output_number, dest_node, dest_input_number
     );
@@ -393,7 +393,7 @@ fn AUGraphDisconnectNodeInput(
     
     state.connections.retain(|c| !(c.dest_node == dest_node && c.dest_input_number == dest_input_number));
     
-    log!("AUGraphDisconnectNodeInput({:?}): dest_node={} in={}", graph, dest_node, dest_input_number);
+    log_dbg!("AUGraphDisconnectNodeInput({:?}): dest_node={} in={}", graph, dest_node, dest_input_number);
     0
 }
 
@@ -429,7 +429,7 @@ fn AUGraphSetNodeInputCallback(
         }
     }
     
-    log!(
+    log_dbg!(
         "AUGraphSetNodeInputCallback({:?}, dest_node={}, bus={}, proc={:?}, ref_con={:?}) -> unit={:?}",
         graph, dest_node, dest_input_number, proc_copy, ref_con_copy, dest_unit
     );
