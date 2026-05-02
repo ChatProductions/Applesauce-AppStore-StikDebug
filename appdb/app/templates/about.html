@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}About — touchHLE app compatibility database{% endblock %}
+{% block content %}
+<h1>About</h1>
+
+<p>
+  This is a community-run compatibility database for
+  <a href="https://github.com/j92580498-max/touchHLE">this fork of touchHLE</a>,
+  an emulator for early iPhone OS apps.
+</p>
+
+<p>
+  It tracks which apps work in touchHLE, at what rating, on which platforms
+  and with which touchHLE versions. Anyone can
+  <a href="/submit">submit a compatibility report</a> for an app they've
+  tested.
+</p>
+
+<h2>Rating scale</h2>
+<table class="legend-table">
+  <thead><tr><th>Rating</th><th>Description</th></tr></thead>
+  <tbody>
+    {% for value, desc in rating_legend %}
+    <tr><td class="stars">{{ value | stars }}</td><td>{{ desc }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Inspiration</h2>
+<p>
+  This site is modelled on the original
+  <a href="https://appdb.touchhle.org/">appdb.touchhle.org</a> by the upstream
+  touchHLE project. It is an independent community fork, not affiliated with
+  upstream.
+</p>
+
+<h2>House rules</h2>
+<ul>
+  <li>Only test apps you legally own.</li>
+  <li>No links to pirated content. “Abandonware” is still piracy.</li>
+  <li>Be precise — include the touchHLE version, your OS, your GPU.</li>
+</ul>
+{% endblock %}

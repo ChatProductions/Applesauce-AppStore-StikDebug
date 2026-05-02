@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% block title %}touchHLE app compatibility database{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="/">touchHLE app compatibility database</a>
+    <nav>
+      <a href="/">Apps</a>
+      <a href="/submit">Submit a report</a>
+      <a href="/about">About</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    Community-run compatibility database for
+    <a href="https://github.com/j92580498-max/touchHLE">touchHLE (this fork)</a>.
+    Inspired by <a href="https://appdb.touchhle.org/">appdb.touchhle.org</a>.
+  </div>
+</footer>
+</body>
+</html>
