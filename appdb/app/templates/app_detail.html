@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ app.name }} — touchHLE app compatibility database{% endblock %}
+{% block title %}{{ app.name }} — HyperHLE app compatibility database{% endblock %}
 {% block content %}
 <p><a href="/">← All apps</a></p>
 
@@ -53,7 +53,7 @@
   <thead>
     <tr>
       <th>Version</th>
-      <th>touchHLE version</th>
+      <th>HyperHLE version</th>
       <th>Operating system</th>
       <th>GPU</th>
       <th>Scale hack</th>
@@ -76,7 +76,15 @@
       <td>{{ r.reported_at | fmt_dt }}</td>
       <td>{{ r.reported_by or '' }}</td>
       <td>{{ r.remarks or '' }}</td>
-      <td>{% if r.screenshot_url %}<a href="{{ r.screenshot_url }}" target="_blank" rel="noopener">View</a>{% endif %}</td>
+      <td>
+        {% if r.screenshot_filename %}
+          <a href="/uploads/{{ r.screenshot_filename }}" target="_blank" rel="noopener">
+            <img class="thumb" src="/uploads/{{ r.screenshot_filename }}" alt="screenshot" />
+          </a>
+        {% elif r.screenshot_url %}
+          <a href="{{ r.screenshot_url }}" target="_blank" rel="noopener">View</a>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

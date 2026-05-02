@@ -1,13 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Submit a report — touchHLE app compatibility database{% endblock %}
+{% block title %}Submit a report — HyperHLE app compatibility database{% endblock %}
 {% block content %}
 <p><a href="/">← All apps</a></p>
 
 <h1>Submit a compatibility report</h1>
 
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if info %}<div class="info">{{ info }}</div>{% endif %}
 
-<form class="report-form" method="post" action="/submit">
+<section class="autofill">
+  <h2>Quick autofill from a HyperHLE log</h2>
+  <p class="muted">
+    Upload your <code>log.txt</code> (Android: <code>log.txt</code> in the
+    HyperHLE files folder; desktop: redirect the terminal output to a file)
+    and we'll fill in app name, version, bundle ID, GPU, OS and emulator
+    version automatically. You can edit any field afterwards.
+  </p>
+  <form class="autofill-form" method="post" action="/submit/parse-log" enctype="multipart/form-data">
+    <input type="file" name="log_file" accept=".txt,.log,text/plain" required />
+    <button type="submit">Autofill from log</button>
+  </form>
+</section>
+
+<form class="report-form" method="post" action="/submit" enctype="multipart/form-data">
   <fieldset>
     <legend>App</legend>
 
@@ -49,14 +64,14 @@
 
   <fieldset>
     <legend>Test environment</legend>
-    <label>touchHLE version <span class="req">*</span>
-      <input type="text" name="touchhle_version" required value="{{ form.get('touchhle_version', '') }}" placeholder="v0.2.3" />
+    <label>HyperHLE version <span class="req">*</span>
+      <input type="text" name="touchhle_version" required value="{{ form.get('touchhle_version', '') }}" placeholder="UNOFFICIAL 9424a29c / v0.2.3" />
     </label>
     <label>Operating system <span class="req">*</span>
-      <input type="text" name="operating_system" required value="{{ form.get('operating_system', '') }}" placeholder="Windows 11 / Android 14 / macOS 14" />
+      <input type="text" name="operating_system" required value="{{ form.get('operating_system', '') }}" placeholder="Android 14 / Windows 11 / macOS 14" />
     </label>
     <label>GPU
-      <input type="text" name="gpu" value="{{ form.get('gpu', '') }}" placeholder="NVIDIA GTX 1660 / Adreno 740" />
+      <input type="text" name="gpu" value="{{ form.get('gpu', '') }}" placeholder="ARM Mali-G57 MC2 / NVIDIA GTX 1660" />
     </label>
     <label>Scale hack supported?
       <select name="scale_hack">
@@ -88,7 +103,11 @@
     <label>Remarks
       <textarea name="remarks" rows="4" placeholder="What works, what doesn't, where it fails…">{{ form.get('remarks', '') }}</textarea>
     </label>
-    <label>Screenshot URL (optional)
+    <label>Screenshot (upload an image file)
+      <input type="file" name="screenshot_file" accept="image/png,image/jpeg,image/webp,image/gif" />
+      <span class="muted small">PNG, JPG, WEBP or GIF, up to 5 MB.</span>
+    </label>
+    <label>…or paste a screenshot URL
       <input type="url" name="screenshot_url" value="{{ form.get('screenshot_url', '') }}" placeholder="https://…/screenshot.png" />
     </label>
     <label>Reported by (your handle)

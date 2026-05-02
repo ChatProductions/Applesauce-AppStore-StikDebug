@@ -208,6 +208,66 @@ button.primary:hover { opacity: 0.9; }
   font-size: 14px;
 }
 
+.info {
+  background: #e8f0fa;
+  color: #1c4674;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.autofill {
+  border: 1px dashed var(--border);
+  background: #fdfdfb;
+  padding: 14px 18px;
+  border-radius: 8px;
+  margin: 16px 0 22px;
+}
+.autofill h2 { border: 0; margin: 0 0 6px; font-size: 17px; }
+.autofill-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.autofill-form input[type="file"] {
+  flex: 1;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+}
+.autofill-form button {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: var(--fg);
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.report-form input[type="file"] {
+  display: block;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+}
+.small { font-size: 12px; }
+
+.thumb {
+  max-width: 120px;
+  max-height: 90px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: block;
+}
+
 @media (max-width: 720px) {
   table { font-size: 13px; }
   .reports-table { font-size: 12px; }

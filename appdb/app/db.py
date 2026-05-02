@@ -75,6 +75,10 @@ class Report(Base):
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     screenshot_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Filename of an uploaded screenshot stored under the uploads directory
+    # (served at /uploads/{filename}). Either this or ``screenshot_url`` may
+    # be set; the form lets the user pick one.
+    screenshot_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     reported_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False, index=True
@@ -94,6 +98,18 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    # Lightweight migration: add columns that may be missing on databases
+    # created by an older version of the app.
+    if engine.url.drivername.startswith("sqlite"):
+        with engine.begin() as conn:
+            cols = {
+                row[1]
+                for row in conn.exec_driver_sql("PRAGMA table_info(reports)").all()
+            }
+            if "screenshot_filename" not in cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE reports ADD COLUMN screenshot_filename VARCHAR(255)"
+                )
 
 
 def get_db():

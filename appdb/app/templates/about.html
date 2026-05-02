@@ -1,19 +1,24 @@
 {% extends "base.html" %}
-{% block title %}About — touchHLE app compatibility database{% endblock %}
+{% block title %}About — HyperHLE app compatibility database{% endblock %}
 {% block content %}
 <h1>About</h1>
 
 <p>
-  This is a community-run compatibility database for
-  <a href="https://github.com/j92580498-max/touchHLE">this fork of touchHLE</a>,
-  an emulator for early iPhone OS apps.
+  <strong>HyperHLE</strong> is a community fork of the touchHLE iPhone OS
+  emulator, maintained at
+  <a href="https://github.com/j92580498-max/touchHLE">j92580498-max/touchHLE</a>.
+  This site is its compatibility database — anyone can
+  <a href="/submit">submit a report</a> for an app they've tested in
+  HyperHLE: app name, version, OS / device, GPU, rating, remarks, and a
+  screenshot.
 </p>
 
+<h2>Submitting a report</h2>
 <p>
-  It tracks which apps work in touchHLE, at what rating, on which platforms
-  and with which touchHLE versions. Anyone can
-  <a href="/submit">submit a compatibility report</a> for an app they've
-  tested.
+  The fastest way to submit a report is to upload your HyperHLE log file
+  on the submit page — the site will pull the app name, version, bundle
+  identifier, GPU, OS and emulator version straight out of the log so you
+  only need to add a rating, remarks and (optionally) a screenshot.
 </p>
 
 <h2>Rating scale</h2>
@@ -29,15 +34,15 @@
 <h2>Inspiration</h2>
 <p>
   This site is modelled on the original
-  <a href="https://appdb.touchhle.org/">appdb.touchhle.org</a> by the upstream
-  touchHLE project. It is an independent community fork, not affiliated with
-  upstream.
+  <a href="https://appdb.touchhle.org/">appdb.touchhle.org</a> by upstream
+  touchHLE. HyperHLE is an independent community fork; this database is
+  not affiliated with upstream.
 </p>
 
 <h2>House rules</h2>
 <ul>
   <li>Only test apps you legally own.</li>
   <li>No links to pirated content. “Abandonware” is still piracy.</li>
-  <li>Be precise — include the touchHLE version, your OS, your GPU.</li>
+  <li>Be precise — include the HyperHLE version, your OS, your GPU.</li>
 </ul>
 {% endblock %}
