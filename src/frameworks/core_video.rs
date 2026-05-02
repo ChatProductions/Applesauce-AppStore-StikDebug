@@ -393,116 +393,116 @@ pub fn CVPixelBufferCreate(
 pub const FUNCTIONS: &[(&str, HostFunction)] = &[
     // Основные функции pixel buffer
     (
-        "CVPixelBufferGetWidth",
+        "_CVPixelBufferGetWidth",
         &(CVPixelBufferGetWidth as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferGetHeight",
+        "_CVPixelBufferGetHeight",
         &(CVPixelBufferGetHeight as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferGetBaseAddress",
+        "_CVPixelBufferGetBaseAddress",
         &(CVPixelBufferGetBaseAddress as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferLockBaseAddress",
+        "_CVPixelBufferLockBaseAddress",
         &(CVPixelBufferLockBaseAddress as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferUnlockBaseAddress",
+        "_CVPixelBufferUnlockBaseAddress",
         &(CVPixelBufferUnlockBaseAddress as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferGetPixelFormatType",
+        "_CVPixelBufferGetPixelFormatType",
         &(CVPixelBufferGetPixelFormatType as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferGetBytesPerRow",
+        "_CVPixelBufferGetBytesPerRow",
         &(CVPixelBufferGetBytesPerRow as fn(&mut Environment, _) -> _),
     ),
     // Функции для работы с плоскостями
     (
-        "CVPixelBufferGetBytesPerRowOfPlane",
+        "_CVPixelBufferGetBytesPerRowOfPlane",
         &(CVPixelBufferGetBytesPerRowOfPlane as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferGetPlaneCount",
+        "_CVPixelBufferGetPlaneCount",
         &(CVPixelBufferGetPlaneCount as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferGetBaseAddressOfPlane",
+        "_CVPixelBufferGetBaseAddressOfPlane",
         &(CVPixelBufferGetBaseAddressOfPlane as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferGetWidthOfPlane",
+        "_CVPixelBufferGetWidthOfPlane",
         &(CVPixelBufferGetWidthOfPlane as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferGetHeightOfPlane",
+        "_CVPixelBufferGetHeightOfPlane",
         &(CVPixelBufferGetHeightOfPlane as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVPixelBufferIsPlanar",
+        "_CVPixelBufferIsPlanar",
         &(CVPixelBufferIsPlanar as fn(&mut Environment, _) -> _),
     ),
     // Reference counting
     (
-        "CVPixelBufferRelease",
+        "_CVPixelBufferRelease",
         &(CVPixelBufferRelease as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferRetain",
+        "_CVPixelBufferRetain",
         &(CVPixelBufferRetain as fn(&mut Environment, _) -> _),
     ),
     // Sample buffer функции
     (
-        "CMSampleBufferGetImageBuffer",
+        "_CMSampleBufferGetImageBuffer",
         &(CMSampleBufferGetImageBuffer as fn(&mut Environment, _) -> _),
     ),
     (
-        "CMSampleBufferGetNumSamples",
+        "_CMSampleBufferGetNumSamples",
         &(CMSampleBufferGetNumSamples as fn(&mut Environment, _) -> _),
     ),
     (
-        "CMSampleBufferDataIsReady",
+        "_CMSampleBufferDataIsReady",
         &(CMSampleBufferDataIsReady as fn(&mut Environment, _) -> _),
     ),
     (
-        "CMSampleBufferIsValid",
+        "_CMSampleBufferIsValid",
         &(CMSampleBufferIsValid as fn(&mut Environment, _) -> _),
     ),
     (
-        "CMSampleBufferInvalidate",
+        "_CMSampleBufferInvalidate",
         &(CMSampleBufferInvalidate as fn(&mut Environment, _) -> _),
     ),
     // Дополнительные функции
     (
-        "CVPixelBufferGetDataSize",
+        "_CVPixelBufferGetDataSize",
         &(CVPixelBufferGetDataSize as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferFillExtendedPixels",
+        "_CVPixelBufferFillExtendedPixels",
         &(CVPixelBufferFillExtendedPixels as fn(&mut Environment, _) -> _),
     ),
     (
-        "CVPixelBufferCreate",
+        "_CVPixelBufferCreate",
         &(CVPixelBufferCreate as fn(&mut Environment, _, _, _, _, _, _) -> _),
     ),
     // Buffer attachments
     (
-        "CVBufferGetAttachment",
+        "_CVBufferGetAttachment",
         &(CVBufferGetAttachment as fn(&mut Environment, _, _, _) -> _),
     ),
     (
-        "CVBufferSetAttachment",
+        "_CVBufferSetAttachment",
         &(CVBufferSetAttachment as fn(&mut Environment, _, _, _, _) -> _),
     ),
     (
-        "CVBufferRemoveAttachment",
+        "_CVBufferRemoveAttachment",
         &(CVBufferRemoveAttachment as fn(&mut Environment, _, _) -> _),
     ),
     (
-        "CVBufferRemoveAllAttachments",
+        "_CVBufferRemoveAllAttachments",
         &(CVBufferRemoveAllAttachments as fn(&mut Environment, _) -> _),
     ),
 ];
