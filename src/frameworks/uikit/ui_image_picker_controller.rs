@@ -7,8 +7,10 @@
 #![allow(dead_code)]
 //! `UIImagePickerController`
 
-use crate::frameworks::foundation::{NSInteger};
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::frameworks::foundation::NSInteger;
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 
 type UIImagePickerControllerSourceType = NSInteger;
 type UIImagePickerControllerQualityType = NSInteger;
@@ -17,28 +19,28 @@ type UIImagePickerControllerCameraDevice = NSInteger;
 type UIImagePickerControllerCameraFlashMode = NSInteger;
 
 // UIImagePickerControllerSourceType values
-const UIImagePickerControllerSourceTypePhotoLibrary:  NSInteger = 0;
-const UIImagePickerControllerSourceTypeCamera:        NSInteger = 1;
+const UIImagePickerControllerSourceTypePhotoLibrary: NSInteger = 0;
+const UIImagePickerControllerSourceTypeCamera: NSInteger = 1;
 const UIImagePickerControllerSourceTypeSavedPhotosAlbum: NSInteger = 2;
 
 // UIImagePickerControllerQualityType values
-const UIImagePickerControllerQualityTypeHigh:          NSInteger = 0;
-const UIImagePickerControllerQualityTypeMedium:        NSInteger = 1;
-const UIImagePickerControllerQualityTypeLow:           NSInteger = 2;
+const UIImagePickerControllerQualityTypeHigh: NSInteger = 0;
+const UIImagePickerControllerQualityTypeMedium: NSInteger = 1;
+const UIImagePickerControllerQualityTypeLow: NSInteger = 2;
 
 // UIImagePickerControllerCameraDevice values
-const UIImagePickerControllerCameraDeviceRear:  NSInteger = 0;
+const UIImagePickerControllerCameraDeviceRear: NSInteger = 0;
 const UIImagePickerControllerCameraDeviceFront: NSInteger = 1;
 
 // UIImagePickerControllerCameraFlashMode values
-const UIImagePickerControllerCameraFlashModeOff:  NSInteger = -1;
-const UIImagePickerControllerCameraFlashModeAuto: NSInteger =  0;
-const UIImagePickerControllerCameraFlashModeOn:   NSInteger =  1;
+const UIImagePickerControllerCameraFlashModeOff: NSInteger = -1;
+const UIImagePickerControllerCameraFlashModeAuto: NSInteger = 0;
+const UIImagePickerControllerCameraFlashModeOn: NSInteger = 1;
 
 struct UIImagePickerControllerHostObject {
     delegate: id,
     source_type: UIImagePickerControllerSourceType,
-    media_types: id,     // NSArray* of NSString*
+    media_types: id, // NSArray* of NSString*
     allows_editing: bool,
     video_quality: UIImagePickerControllerQualityType,
     camera_device: UIImagePickerControllerCameraDevice,

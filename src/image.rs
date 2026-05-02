@@ -73,7 +73,7 @@ impl Image {
         if bytes.starts_with(&PNG_MAGIC_NUMBER) {
             let len = width as usize * height as usize * 4;
             let pixels = unsafe { std::slice::from_raw_parts_mut(pixels, len) };
-            
+
             let mut i = 0;
             while i < pixels.len() {
                 let a = pixels[i + 3] as f32 / 255.0;
@@ -103,11 +103,11 @@ impl Image {
     pub fn from_pixels(width: u32, height: u32, pixels: Vec<u8>) -> Self {
         assert_eq!(pixels.len(), (width * height * 4) as usize);
         Image {
-             pixels: PixelStore::Vec(pixels),
-             dimensions: (width, height),
+            pixels: PixelStore::Vec(pixels),
+            dimensions: (width, height),
         }
     }
-    
+
     pub fn dimensions(&self) -> (u32, u32) {
         self.dimensions
     }
@@ -147,7 +147,7 @@ impl Image {
         let (x_usize, y_usize) = (x as usize, y as usize);
         let (width, height) = self.dimensions;
         let (width, height) = (width as usize, height as usize);
-        
+
         if x >= 0 && x_usize < width && y >= 0 && y_usize < height {
             let rgba = &self.pixels()[y_usize * width * 4 + x_usize * 4..][..4];
             let [r, g, b, a]: [u8; 4] = rgba.try_into().unwrap();
@@ -169,19 +169,19 @@ impl Image {
         let (width, height) = self.dimensions();
         let (w_usize, h_usize) = (width as usize, height as usize);
         let (w, h) = (width as f32, height as f32);
-        
+
         let (right_corners_begin, bottom_corners_begin) = if four_corners {
             (w - radius - 1.0, h - radius - 1.0)
         } else {
             (f32::INFINITY, f32::INFINITY)
         };
-        
+
         let (sheen_center_x, sheen_center_y, sheen_radius) = if add_sheen {
             (w / 2.0, -(h / 2.0), h)
         } else {
             (f32::INFINITY, f32::INFINITY, 0.0)
         };
-        
+
         for y_usize in 0..h_usize {
             for x_usize in 0..w_usize {
                 let x = x_usize as f32;
@@ -190,15 +190,15 @@ impl Image {
                 let corner_x = (radius - x).max(x - right_corners_begin);
                 let corner_y = (radius - y).max(y - bottom_corners_begin);
                 let corner_circle_distance = corner_x.hypot(corner_y);
-                
+
                 let x_edge_distance = (x).min(w - x - 1.0);
                 let y_edge_distance = (y).min(h - y - 1.0);
                 let actual_corner_distance = x_edge_distance.hypot(y_edge_distance);
-                
+
                 let rounded_edge_distance = x_edge_distance
                     .min(y_edge_distance)
                     .min((radius.max(actual_corner_distance) - corner_circle_distance).max(0.0));
-                    
+
                 let icon_opacity = if corner_x > 0.0 && corner_y > 0.0 {
                     // Bad approximation of the pixel coverage of a filled arc.
                     let distance = (corner_circle_distance - radius).clamp(0.0, 1.0);
@@ -207,7 +207,7 @@ impl Image {
                 } else {
                     1.0
                 };
-                
+
                 let sheen_opacity = {
                     let distance = (x - sheen_center_x).hypot(y - sheen_center_y);
                     // Bad approximation of the pixel coverage of a filled arc.
@@ -221,7 +221,7 @@ impl Image {
                     // There is also extra shinyness around the rim.
                     (1.0 - area) * taper
                 };
-                
+
                 let rgba = &mut self.pixels_mut()[y_usize * w_usize * 4 + x_usize * 4..][..4];
                 for channel in rgba.iter_mut() {
                     *channel = (*channel as f32 * icon_opacity * (1.0 - sheen_opacity)
@@ -231,7 +231,7 @@ impl Image {
             }
         }
     }
- 
+
     /// Writes an RGBA image to a PNG file using stb_image_write_png_to_func
     /// This is used by `UIImageWriteToSavedPhotosAlbum` to save images
     ///
@@ -337,4 +337,3 @@ pub fn decode_pvrtc(pvrtc_data: &[u8], is_2bit: bool, width: u32, height: u32) -
     };
     rgba8_data
 }
-

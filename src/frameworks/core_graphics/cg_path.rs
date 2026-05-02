@@ -29,8 +29,15 @@ const kCGPathElementCloseSubpath: CGPathElementType = 4;
 enum PathElement {
     MoveTo(CGPoint),
     LineTo(CGPoint),
-    QuadCurveTo { control: CGPoint, to: CGPoint },
-    CurveTo { c1: CGPoint, c2: CGPoint, to: CGPoint },
+    QuadCurveTo {
+        control: CGPoint,
+        to: CGPoint,
+    },
+    CurveTo {
+        c1: CGPoint,
+        c2: CGPoint,
+        to: CGPoint,
+    },
     Close,
 }
 
@@ -128,9 +135,18 @@ fn CGPathCreateWithRect(
     let path = alloc_path(env, false);
     let CGRect { origin, size } = rect;
     let tl = origin;
-    let tr = CGPoint { x: origin.x + size.width, y: origin.y };
-    let br = CGPoint { x: origin.x + size.width, y: origin.y + size.height };
-    let bl = CGPoint { x: origin.x,              y: origin.y + size.height };
+    let tr = CGPoint {
+        x: origin.x + size.width,
+        y: origin.y,
+    };
+    let br = CGPoint {
+        x: origin.x + size.width,
+        y: origin.y + size.height,
+    };
+    let bl = CGPoint {
+        x: origin.x,
+        y: origin.y + size.height,
+    };
 
     let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
     elems.push(PathElement::MoveTo(tl));
@@ -150,32 +166,56 @@ fn CGPathCreateWithEllipseInRect(
     // Approximate ellipse with four cubic Bézier curves (standard magic number).
     let path = alloc_path(env, false);
     let k: CGFloat = 0.5522848;
-    let cx = rect.origin.x + rect.size.width  * 0.5;
+    let cx = rect.origin.x + rect.size.width * 0.5;
     let cy = rect.origin.y + rect.size.height * 0.5;
-    let rx = rect.size.width  * 0.5;
+    let rx = rect.size.width * 0.5;
     let ry = rect.size.height * 0.5;
 
     let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
     elems.push(PathElement::MoveTo(CGPoint { x: cx + rx, y: cy }));
     elems.push(PathElement::CurveTo {
-        c1: CGPoint { x: cx + rx,      y: cy + ry * k },
-        c2: CGPoint { x: cx + rx * k,  y: cy + ry },
-        to: CGPoint { x: cx,           y: cy + ry },
+        c1: CGPoint {
+            x: cx + rx,
+            y: cy + ry * k,
+        },
+        c2: CGPoint {
+            x: cx + rx * k,
+            y: cy + ry,
+        },
+        to: CGPoint { x: cx, y: cy + ry },
     });
     elems.push(PathElement::CurveTo {
-        c1: CGPoint { x: cx - rx * k,  y: cy + ry },
-        c2: CGPoint { x: cx - rx,      y: cy + ry * k },
-        to: CGPoint { x: cx - rx,      y: cy },
+        c1: CGPoint {
+            x: cx - rx * k,
+            y: cy + ry,
+        },
+        c2: CGPoint {
+            x: cx - rx,
+            y: cy + ry * k,
+        },
+        to: CGPoint { x: cx - rx, y: cy },
     });
     elems.push(PathElement::CurveTo {
-        c1: CGPoint { x: cx - rx,      y: cy - ry * k },
-        c2: CGPoint { x: cx - rx * k,  y: cy - ry },
-        to: CGPoint { x: cx,           y: cy - ry },
+        c1: CGPoint {
+            x: cx - rx,
+            y: cy - ry * k,
+        },
+        c2: CGPoint {
+            x: cx - rx * k,
+            y: cy - ry,
+        },
+        to: CGPoint { x: cx, y: cy - ry },
     });
     elems.push(PathElement::CurveTo {
-        c1: CGPoint { x: cx + rx * k,  y: cy - ry },
-        c2: CGPoint { x: cx + rx,      y: cy - ry * k },
-        to: CGPoint { x: cx + rx,      y: cy },
+        c1: CGPoint {
+            x: cx + rx * k,
+            y: cy - ry,
+        },
+        c2: CGPoint {
+            x: cx + rx,
+            y: cy - ry * k,
+        },
+        to: CGPoint { x: cx + rx, y: cy },
     });
     elems.push(PathElement::Close);
 
@@ -224,7 +264,7 @@ fn CGPathAddQuadCurveToPoint(
         .elements
         .push(PathElement::QuadCurveTo {
             control: CGPoint { x: cpx, y: cpy },
-            to:      CGPoint { x,      y      },
+            to: CGPoint { x, y },
         });
 }
 
@@ -245,7 +285,7 @@ fn CGPathAddCurveToPoint(
         .push(PathElement::CurveTo {
             c1: CGPoint { x: cp1x, y: cp1y },
             c2: CGPoint { x: cp2x, y: cp2y },
-            to: CGPoint { x,       y       },
+            to: CGPoint { x, y },
         });
 }
 
@@ -264,9 +304,18 @@ fn CGPathAddRect(
 ) {
     let CGRect { origin, size } = rect;
     let tl = origin;
-    let tr = CGPoint { x: origin.x + size.width, y: origin.y };
-    let br = CGPoint { x: origin.x + size.width, y: origin.y + size.height };
-    let bl = CGPoint { x: origin.x,              y: origin.y + size.height };
+    let tr = CGPoint {
+        x: origin.x + size.width,
+        y: origin.y,
+    };
+    let br = CGPoint {
+        x: origin.x + size.width,
+        y: origin.y + size.height,
+    };
+    let bl = CGPoint {
+        x: origin.x,
+        y: origin.y + size.height,
+    };
 
     let elems = &mut env.objc.borrow_mut::<CGPathHostObject>(path).elements;
     elems.push(PathElement::MoveTo(tl));
@@ -298,19 +347,28 @@ fn CGPathIsEmpty(env: &mut Environment, path: CGPathRef) -> bool {
     if path.is_null() {
         return true;
     }
-    env.objc.borrow::<CGPathHostObject>(path).elements.is_empty()
+    env.objc
+        .borrow::<CGPathHostObject>(path)
+        .elements
+        .is_empty()
 }
 
 fn CGPathGetCurrentPoint(env: &mut Environment, path: CGPathRef) -> CGPoint {
     if path.is_null() {
         return CGPoint { x: 0.0, y: 0.0 };
     }
-    for elem in env.objc.borrow::<CGPathHostObject>(path).elements.iter().rev() {
+    for elem in env
+        .objc
+        .borrow::<CGPathHostObject>(path)
+        .elements
+        .iter()
+        .rev()
+    {
         match *elem {
-            PathElement::MoveTo(p)        => return p,
-            PathElement::LineTo(p)        => return p,
+            PathElement::MoveTo(p) => return p,
+            PathElement::LineTo(p) => return p,
             PathElement::QuadCurveTo { to, .. } => return to,
-            PathElement::CurveTo   { to, .. }   => return to,
+            PathElement::CurveTo { to, .. } => return to,
             PathElement::Close => {}
         }
     }
@@ -321,7 +379,10 @@ fn CGPathGetBoundingBox(env: &mut Environment, path: CGPathRef) -> CGRect {
     if path.is_null() {
         return CGRect {
             origin: CGPoint { x: 0.0, y: 0.0 },
-            size: crate::frameworks::core_graphics::CGSize { width: 0.0, height: 0.0 },
+            size: crate::frameworks::core_graphics::CGSize {
+                width: 0.0,
+                height: 0.0,
+            },
         };
     }
 
@@ -331,18 +392,32 @@ fn CGPathGetBoundingBox(env: &mut Environment, path: CGPathRef) -> CGRect {
     let mut max_y = CGFloat::MIN;
 
     let mut update = |p: CGPoint| {
-        if p.x < min_x { min_x = p.x; }
-        if p.y < min_y { min_y = p.y; }
-        if p.x > max_x { max_x = p.x; }
-        if p.y > max_y { max_y = p.y; }
+        if p.x < min_x {
+            min_x = p.x;
+        }
+        if p.y < min_y {
+            min_y = p.y;
+        }
+        if p.x > max_x {
+            max_x = p.x;
+        }
+        if p.y > max_y {
+            max_y = p.y;
+        }
     };
 
     for elem in env.objc.borrow::<CGPathHostObject>(path).elements.iter() {
         match *elem {
-            PathElement::MoveTo(p) |
-            PathElement::LineTo(p) => update(p),
-            PathElement::QuadCurveTo { control, to } => { update(control); update(to); }
-            PathElement::CurveTo { c1, c2, to } => { update(c1); update(c2); update(to); }
+            PathElement::MoveTo(p) | PathElement::LineTo(p) => update(p),
+            PathElement::QuadCurveTo { control, to } => {
+                update(control);
+                update(to);
+            }
+            PathElement::CurveTo { c1, c2, to } => {
+                update(c1);
+                update(c2);
+                update(to);
+            }
             PathElement::Close => {}
         }
     }
@@ -350,14 +425,17 @@ fn CGPathGetBoundingBox(env: &mut Environment, path: CGPathRef) -> CGRect {
     if min_x > max_x {
         return CGRect {
             origin: CGPoint { x: 0.0, y: 0.0 },
-            size: crate::frameworks::core_graphics::CGSize { width: 0.0, height: 0.0 },
+            size: crate::frameworks::core_graphics::CGSize {
+                width: 0.0,
+                height: 0.0,
+            },
         };
     }
 
     CGRect {
         origin: CGPoint { x: min_x, y: min_y },
         size: crate::frameworks::core_graphics::CGSize {
-            width:  max_x - min_x,
+            width: max_x - min_x,
             height: max_y - min_y,
         },
     }
@@ -378,11 +456,7 @@ fn CGPathContainsPoint(
         && point.y <= bbox.origin.y + bbox.size.height
 }
 
-fn CGPathEqualToPath(
-    env: &mut Environment,
-    path1: CGPathRef,
-    path2: CGPathRef,
-) -> bool {
+fn CGPathEqualToPath(env: &mut Environment, path1: CGPathRef, path2: CGPathRef) -> bool {
     if path1 == path2 {
         return true;
     }
@@ -415,4 +489,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGPathContainsPoint(_, _, _, _)),
     export_c_func!(CGPathEqualToPath(_, _)),
 ];
-

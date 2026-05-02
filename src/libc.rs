@@ -11,7 +11,6 @@
 //!
 //! - Apple's [iOS Manual Pages](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/) (contains what would be `man` pages if iOS had a command line)
 
-mod generic_char;
 pub mod arpa;
 pub mod asl;
 pub mod clocale;
@@ -24,6 +23,7 @@ pub mod dlfcn;
 pub mod dns_sd;
 pub mod errno;
 pub mod fnmatch;
+mod generic_char;
 pub mod glob;
 pub mod ifaddrs;
 pub mod keymgr;
@@ -54,7 +54,13 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/usr/lib/libSystem.B.dylib",
     aliases: &["/usr/lib/libSystem.dylib"],
     class_exports: &[],
-    constant_exports: &[ctype::CONSTANTS, dispatch::CONSTANTS, stdio::CONSTANTS, mach::init::CONSTANTS, ssp::CONSTANTS],
+    constant_exports: &[
+        ctype::CONSTANTS,
+        dispatch::CONSTANTS,
+        stdio::CONSTANTS,
+        mach::init::CONSTANTS,
+        ssp::CONSTANTS,
+    ],
     function_exports: &[
         arpa::inet::FUNCTIONS,
         asl::FUNCTIONS,

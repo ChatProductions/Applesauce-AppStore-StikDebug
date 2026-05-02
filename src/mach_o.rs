@@ -463,7 +463,7 @@ impl MachO {
                             &mut cursor,
                         );
                         indirect_undef_symbols.push(match sym {
-                            // Если имя есть (Some), оно превратится в Some(String). 
+                            // Если имя есть (Some), оно превратится в Some(String).
                             // Если имени нет (None), вернется None, и мы избежим паники.
                             Some(Symbol::Undefined { name, .. }) => name.map(String::from),
                             Some(Symbol::Prebound { name, .. }) => name.map(String::from),
@@ -718,4 +718,4 @@ impl MachO {
     pub fn get_section<P: SectionPredicate>(&self, by: P) -> Option<&Section> {
         self.sections.iter().find(|section| by.test(section))
     }
-            }
+}

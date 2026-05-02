@@ -307,7 +307,10 @@ fn OSSpinLockLock(env: &mut Environment, lock: MutPtr<i32>) {
     // If already locked this would spin forever in a real implementation;
     // log a warning instead of hanging.
     if env.mem.read(lock) != 0 {
-        log!("Warning: OSSpinLockLock called on already-locked spinlock {:?}", lock);
+        log!(
+            "Warning: OSSpinLockLock called on already-locked spinlock {:?}",
+            lock
+        );
     }
     env.mem.write(lock, 1);
 }

@@ -87,7 +87,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Мы возвращаем 0, чтобы игра корректно продолжила работу без спама в логах.
     0
 }
-    
+
 - (())drain {
     msg![env; this release]
 }

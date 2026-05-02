@@ -11,9 +11,7 @@
 //! where the user has opted out of ad tracking.
 
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
-};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 // =========================================================================
 // MARK: - ASIdentifierManager host object
@@ -34,10 +32,11 @@ impl HostObject for ATTrackingManagerHostObject {}
 
 // ATTrackingManager authorization status values (ATTrackingManagerAuthorizationStatus)
 pub type ATTrackingManagerAuthorizationStatus = u32;
-pub const ATTrackingManagerAuthorizationStatusNotDetermined: ATTrackingManagerAuthorizationStatus = 0;
-pub const ATTrackingManagerAuthorizationStatusRestricted:    ATTrackingManagerAuthorizationStatus = 1;
-pub const ATTrackingManagerAuthorizationStatusDenied:        ATTrackingManagerAuthorizationStatus = 2;
-pub const ATTrackingManagerAuthorizationStatusAuthorized:    ATTrackingManagerAuthorizationStatus = 3;
+pub const ATTrackingManagerAuthorizationStatusNotDetermined: ATTrackingManagerAuthorizationStatus =
+    0;
+pub const ATTrackingManagerAuthorizationStatusRestricted: ATTrackingManagerAuthorizationStatus = 1;
+pub const ATTrackingManagerAuthorizationStatusDenied: ATTrackingManagerAuthorizationStatus = 2;
+pub const ATTrackingManagerAuthorizationStatusAuthorized: ATTrackingManagerAuthorizationStatus = 3;
 
 pub const CLASSES: ClassExports = objc_classes! {
 

@@ -375,11 +375,7 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         dst_len + src_len
     }
 
-    pub(super) fn strspn(
-        env: &mut Environment,
-        s: ConstPtr<T>,
-        accept: ConstPtr<T>,
-    ) -> GuestUSize {
+    pub(super) fn strspn(env: &mut Environment, s: ConstPtr<T>, accept: ConstPtr<T>) -> GuestUSize {
         let mut i = 0;
         loop {
             let c = env.mem.read(s + i);
@@ -433,4 +429,3 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         }
     }
 }
-

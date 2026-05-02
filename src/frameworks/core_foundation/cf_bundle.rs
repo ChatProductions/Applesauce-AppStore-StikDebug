@@ -19,34 +19,73 @@ use crate::mem::MutVoidPtr;
 use crate::objc::{autorelease, id, msg, msg_class, nil, retain};
 use crate::Environment;
 
-const kCFBundleVersionKey:               &str = "CFBundleVersion";
-const kCFBundleNameKey:                  &str = "CFBundleName";
-const kCFBundleIdentifierKey:            &str = "CFBundleIdentifier";
-const kCFBundleExecutableKey:            &str = "CFBundleExecutable";
+const kCFBundleVersionKey: &str = "CFBundleVersion";
+const kCFBundleNameKey: &str = "CFBundleName";
+const kCFBundleIdentifierKey: &str = "CFBundleIdentifier";
+const kCFBundleExecutableKey: &str = "CFBundleExecutable";
 const kCFBundleInfoDictionaryVersionKey: &str = "CFBundleInfoDictionaryVersion";
-const kCFBundleLocalizationsKey:         &str = "CFBundleLocalizations";
-const kCFBundleDevelopmentRegionKey:     &str = "CFBundleDevelopmentRegion";
-const kCFBundleDisplayNameKey:           &str = "CFBundleDisplayName";
-const kCFBundleSpokenNameKey:            &str = "CFBundleSpokenName";
-const kCFBundleGetInfoStringKey:         &str = "CFBundleGetInfoString";
-const kCFBundleHelpBookNameKey:          &str = "CFBundleHelpBookName";
-const kCFBundleURLTypesKey:              &str = "CFBundleURLTypes";
-const kCFBundleDocumentTypesKey:         &str = "CFBundleDocumentTypes";
+const kCFBundleLocalizationsKey: &str = "CFBundleLocalizations";
+const kCFBundleDevelopmentRegionKey: &str = "CFBundleDevelopmentRegion";
+const kCFBundleDisplayNameKey: &str = "CFBundleDisplayName";
+const kCFBundleSpokenNameKey: &str = "CFBundleSpokenName";
+const kCFBundleGetInfoStringKey: &str = "CFBundleGetInfoString";
+const kCFBundleHelpBookNameKey: &str = "CFBundleHelpBookName";
+const kCFBundleURLTypesKey: &str = "CFBundleURLTypes";
+const kCFBundleDocumentTypesKey: &str = "CFBundleDocumentTypes";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_kCFBundleVersionKey",               HostConstant::NSString(kCFBundleVersionKey)),
-    ("_kCFBundleNameKey",                  HostConstant::NSString(kCFBundleNameKey)),
-    ("_kCFBundleIdentifierKey",            HostConstant::NSString(kCFBundleIdentifierKey)),
-    ("_kCFBundleExecutableKey",            HostConstant::NSString(kCFBundleExecutableKey)),
-    ("_kCFBundleInfoDictionaryVersionKey", HostConstant::NSString(kCFBundleInfoDictionaryVersionKey)),
-    ("_kCFBundleLocalizationsKey",         HostConstant::NSString(kCFBundleLocalizationsKey)),
-    ("_kCFBundleDevelopmentRegionKey",     HostConstant::NSString(kCFBundleDevelopmentRegionKey)),
-    ("_kCFBundleDisplayNameKey",           HostConstant::NSString(kCFBundleDisplayNameKey)),
-    ("_kCFBundleSpokenNameKey",            HostConstant::NSString(kCFBundleSpokenNameKey)),
-    ("_kCFBundleGetInfoStringKey",         HostConstant::NSString(kCFBundleGetInfoStringKey)),
-    ("_kCFBundleHelpBookNameKey",          HostConstant::NSString(kCFBundleHelpBookNameKey)),
-    ("_kCFBundleURLTypesKey",              HostConstant::NSString(kCFBundleURLTypesKey)),
-    ("_kCFBundleDocumentTypesKey",         HostConstant::NSString(kCFBundleDocumentTypesKey)),
+    (
+        "_kCFBundleVersionKey",
+        HostConstant::NSString(kCFBundleVersionKey),
+    ),
+    (
+        "_kCFBundleNameKey",
+        HostConstant::NSString(kCFBundleNameKey),
+    ),
+    (
+        "_kCFBundleIdentifierKey",
+        HostConstant::NSString(kCFBundleIdentifierKey),
+    ),
+    (
+        "_kCFBundleExecutableKey",
+        HostConstant::NSString(kCFBundleExecutableKey),
+    ),
+    (
+        "_kCFBundleInfoDictionaryVersionKey",
+        HostConstant::NSString(kCFBundleInfoDictionaryVersionKey),
+    ),
+    (
+        "_kCFBundleLocalizationsKey",
+        HostConstant::NSString(kCFBundleLocalizationsKey),
+    ),
+    (
+        "_kCFBundleDevelopmentRegionKey",
+        HostConstant::NSString(kCFBundleDevelopmentRegionKey),
+    ),
+    (
+        "_kCFBundleDisplayNameKey",
+        HostConstant::NSString(kCFBundleDisplayNameKey),
+    ),
+    (
+        "_kCFBundleSpokenNameKey",
+        HostConstant::NSString(kCFBundleSpokenNameKey),
+    ),
+    (
+        "_kCFBundleGetInfoStringKey",
+        HostConstant::NSString(kCFBundleGetInfoStringKey),
+    ),
+    (
+        "_kCFBundleHelpBookNameKey",
+        HostConstant::NSString(kCFBundleHelpBookNameKey),
+    ),
+    (
+        "_kCFBundleURLTypesKey",
+        HostConstant::NSString(kCFBundleURLTypesKey),
+    ),
+    (
+        "_kCFBundleDocumentTypesKey",
+        HostConstant::NSString(kCFBundleDocumentTypesKey),
+    ),
 ];
 
 pub type CFBundleRef = CFTypeRef;
@@ -63,10 +102,7 @@ fn CFBundleGetMainBundle(env: &mut Environment) -> CFBundleRef {
     main_bundle
 }
 
-fn CFBundleGetBundleWithIdentifier(
-    env: &mut Environment,
-    bundle_id: CFStringRef,
-) -> CFBundleRef {
+fn CFBundleGetBundleWithIdentifier(env: &mut Environment, bundle_id: CFStringRef) -> CFBundleRef {
     if bundle_id == nil {
         return nil;
     }
@@ -76,7 +112,11 @@ fn CFBundleGetBundleWithIdentifier(
         return nil;
     }
     let equal: bool = msg![env; main_id isEqualToString:bundle_id];
-    if equal { main } else { nil }
+    if equal {
+        main
+    } else {
+        nil
+    }
 }
 
 fn CFBundleGetAllBundles(env: &mut Environment) -> CFArrayRef {
@@ -97,7 +137,10 @@ fn CFBundleCreate(
     }
     let bundle: id = msg_class![env; NSBundle bundleWithURL:bundle_url];
     if bundle == nil {
-        log_dbg!("CFBundleCreate: failed to create NSBundle for URL {:?}", bundle_url);
+        log_dbg!(
+            "CFBundleCreate: failed to create NSBundle for URL {:?}",
+            bundle_url
+        );
         return nil;
     }
     // "Create" rule — caller owns a reference.
@@ -134,34 +177,40 @@ fn CFBundleGetValueForInfoDictionaryKey(
 }
 
 fn CFBundleGetInfoDictionary(env: &mut Environment, bundle: CFBundleRef) -> CFTypeRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     msg![env; bundle infoDictionary]
 }
 
 fn CFBundleGetLocalInfoDictionary(env: &mut Environment, bundle: CFBundleRef) -> CFTypeRef {
     // Return localizedInfoDictionary if available, fall back to plain dict.
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let loc: id = msg![env; bundle localizedInfoDictionary];
-    if loc != nil { return loc; }
+    if loc != nil {
+        return loc;
+    }
     msg![env; bundle infoDictionary]
 }
 
-fn CFBundleCopyInfoDictionaryForURL(
-    env: &mut Environment,
-    url: CFURLRef,
-) -> CFTypeRef {
-    if url == nil { return nil; }
+fn CFBundleCopyInfoDictionaryForURL(env: &mut Environment, url: CFURLRef) -> CFTypeRef {
+    if url == nil {
+        return nil;
+    }
     let bundle: id = msg_class![env; NSBundle bundleWithURL:url];
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let dict: id = msg![env; bundle infoDictionary];
-    if dict == nil { return nil; }
+    if dict == nil {
+        return nil;
+    }
     msg![env; dict copy]
 }
 
-fn CFBundleCopyInfoDictionaryInDirectory(
-    env: &mut Environment,
-    bundle_url: CFURLRef,
-) -> CFTypeRef {
+fn CFBundleCopyInfoDictionaryInDirectory(env: &mut Environment, bundle_url: CFURLRef) -> CFTypeRef {
     CFBundleCopyInfoDictionaryForURL(env, bundle_url)
 }
 
@@ -170,37 +219,51 @@ fn CFBundleCopyInfoDictionaryInDirectory(
 // =========================================================================
 
 fn CFBundleGetIdentifier(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let key: id = ns_string::get_static_str(env, kCFBundleIdentifierKey);
     CFBundleGetValueForInfoDictionaryKey(env, bundle, key)
 }
 
 fn CFBundleCopyBundleIdentifier(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
     let s = CFBundleGetIdentifier(env, bundle);
-    if s == nil { return nil; }
+    if s == nil {
+        return nil;
+    }
     msg![env; s copy]
 }
 
 fn CFBundleGetVersionNumber(env: &mut Environment, bundle: CFBundleRef) -> u32 {
     let version_key: id = ns_string::get_static_str(env, kCFBundleVersionKey);
     let vers: id = CFBundleGetValueForInfoDictionaryKey(env, bundle, version_key);
-    if vers == nil { return 0; }
+    if vers == nil {
+        return 0;
+    }
     let vers_str = ns_string::to_rust_string(env, vers);
     log_dbg!("CFBundleGetVersionNumber {}", vers_str);
     let parts: Vec<&str> = vers_str.split('.').collect();
-    if parts.is_empty() || parts.len() > 3 { return 0; }
+    if parts.is_empty() || parts.len() > 3 {
+        return 0;
+    }
     let mut result: u32 = 1 << 15;
     let major: u32 = parts[0].parse().unwrap_or(0);
-    if major > 99 { return 0; }
+    if major > 99 {
+        return 0;
+    }
     result |= (major / 10) << 28;
     result |= (major % 10) << 24;
     if parts.len() >= 2 {
         let minor: u32 = parts[1].parse().unwrap_or(0);
-        if minor <= 9 { result |= minor << 20; }
+        if minor <= 9 {
+            result |= minor << 20;
+        }
     }
     if parts.len() == 3 {
         let bug_fix: u32 = parts[2].parse().unwrap_or(0);
-        if bug_fix <= 9 { result |= bug_fix << 16; }
+        if bug_fix <= 9 {
+            result |= bug_fix << 16;
+        }
     }
     result
 }
@@ -208,14 +271,13 @@ fn CFBundleGetVersionNumber(env: &mut Environment, bundle: CFBundleRef) -> u32 {
 fn CFBundleCopyShortVersionString(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
     let key: id = ns_string::get_static_str(env, "CFBundleShortVersionString");
     let val: id = CFBundleGetValueForInfoDictionaryKey(env, bundle, key);
-    if val == nil { return nil; }
+    if val == nil {
+        return nil;
+    }
     msg![env; val copy]
 }
 
-fn CFBundleCopyBundleDevelopmentRegion(
-    env: &mut Environment,
-    bundle: CFBundleRef,
-) -> CFStringRef {
+fn CFBundleCopyBundleDevelopmentRegion(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
     let key: id = ns_string::get_static_str(env, kCFBundleDevelopmentRegionKey);
     let val: id = CFBundleGetValueForInfoDictionaryKey(env, bundle, key);
     if val != nil {
@@ -230,7 +292,11 @@ fn CFBundleCopyBundleDevelopmentRegion(
 /// Returns CFBundleDisplayName if present, falls back to CFBundleName, then
 /// CFBundleExecutable, then the empty string.
 fn CFBundleCopyDisplayName(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
-    for key in &[kCFBundleDisplayNameKey, kCFBundleNameKey, kCFBundleExecutableKey] {
+    for key in &[
+        kCFBundleDisplayNameKey,
+        kCFBundleNameKey,
+        kCFBundleExecutableKey,
+    ] {
         let k: id = ns_string::get_static_str(env, key);
         let val: id = CFBundleGetValueForInfoDictionaryKey(env, bundle, k);
         if val != nil {
@@ -245,7 +311,9 @@ fn CFBundleCopyDisplayName(env: &mut Environment, bundle: CFBundleRef) -> CFStri
 fn CFBundleCopyHelpBookName(env: &mut Environment, bundle: CFBundleRef) -> CFStringRef {
     let key: id = ns_string::get_static_str(env, kCFBundleHelpBookNameKey);
     let val: id = CFBundleGetValueForInfoDictionaryKey(env, bundle, key);
-    if val == nil { return nil; }
+    if val == nil {
+        return nil;
+    }
     msg![env; val copy]
 }
 
@@ -254,23 +322,35 @@ fn CFBundleCopyHelpBookName(env: &mut Environment, bundle: CFBundleRef) -> CFStr
 // =========================================================================
 
 fn CFBundleCopyBundleURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle bundleURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
 fn CFBundleCopyResourcesDirectoryURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle resourceURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
 fn CFBundleCopyExecutableURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle executableURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
@@ -281,36 +361,53 @@ fn CFBundleCopyAuxiliaryExecutableURL(
 ) -> CFURLRef {
     log_dbg!(
         "CFBundleCopyAuxiliaryExecutableURL({:?}, {:?}) — returning nil",
-        bundle, executable_name
+        bundle,
+        executable_name
     );
     nil
 }
 
 fn CFBundleCopyPrivateFrameworksURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle privateFrameworksURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
 fn CFBundleCopySharedFrameworksURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle sharedFrameworksURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
 fn CFBundleCopySharedSupportURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle sharedSupportURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
 fn CFBundleCopyBuiltInPlugInsURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle builtInPlugInsURL];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
@@ -321,11 +418,15 @@ fn CFBundleCopyResourceURL(
     resource_type: CFStringRef,
     sub_dir_name: CFStringRef,
 ) -> CFURLRef {
-    if bundle == nil || resource_name == nil { return nil; }
+    if bundle == nil || resource_name == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle URLForResource:resource_name
                                           withExtension:resource_type
                                            subdirectory:sub_dir_name];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
@@ -336,9 +437,13 @@ fn CFBundleCopyResourceURLInDirectory(
     resource_type: CFStringRef,
     sub_dir_name: CFStringRef,
 ) -> CFURLRef {
-    if bundle_url == nil { return nil; }
+    if bundle_url == nil {
+        return nil;
+    }
     let bundle: id = msg_class![env; NSBundle bundleWithURL:bundle_url];
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     CFBundleCopyResourceURL(env, bundle, resource_name, resource_type, sub_dir_name)
 }
 
@@ -348,7 +453,9 @@ fn CFBundleCopyResourceURLsOfType(
     resource_type: CFStringRef,
     sub_dir_name: CFStringRef,
 ) -> CFArrayRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     msg![env; bundle URLsForResourcesWithExtension:resource_type subdirectory:sub_dir_name]
 }
 
@@ -360,12 +467,16 @@ fn CFBundleCopyResourceURLForLocalization(
     sub_dir_name: CFStringRef,
     localization_name: CFStringRef,
 ) -> CFURLRef {
-    if bundle == nil || resource_name == nil { return nil; }
+    if bundle == nil || resource_name == nil {
+        return nil;
+    }
     let url: CFURLRef = msg![env; bundle URLForResource:resource_name
                                           withExtension:resource_type
                                            subdirectory:sub_dir_name
                                            localization:localization_name];
-    if url == nil { return nil; }
+    if url == nil {
+        return nil;
+    }
     msg![env; url copy]
 }
 
@@ -376,7 +487,9 @@ fn CFBundleCopyResourceURLsOfTypeForLocalization(
     sub_dir_name: CFStringRef,
     localization_name: CFStringRef,
 ) -> CFArrayRef {
-    if bundle == nil { return nil; }
+    if bundle == nil {
+        return nil;
+    }
     msg![env; bundle URLsForResourcesWithExtension:resource_type
                                       subdirectory:sub_dir_name
                                       localization:localization_name]
@@ -406,7 +519,9 @@ pub fn CFBundleCopyBundleLocalizations(env: &mut Environment, bundle: CFBundleRe
     let loc_array = ns_array::from_vec(env, guest_bundle_localizations);
     log_dbg!(
         "CFBundleCopyBundleLocalizations({:?}) => {:?} ({})",
-        bundle, loc_array, bundle_localizations.join(", ")
+        bundle,
+        loc_array,
+        bundle_localizations.join(", ")
     );
     loc_array
 }
@@ -446,7 +561,8 @@ pub fn CFBundleCopyPreferredLocalizationsFromArray(
     let result = ns_array::from_vec(env, result);
     log_dbg!(
         "CFBundleCopyPreferredLocalizationsFromArray({:?}) => {:?}",
-        loc_array, result
+        loc_array,
+        result
     );
     result
 }
@@ -458,7 +574,9 @@ fn CFBundleCopyLocalizedString(
     value: CFStringRef,
     table_name: CFStringRef,
 ) -> CFStringRef {
-    if bundle == nil || key == nil { return if value != nil { value } else { key }; }
+    if bundle == nil || key == nil {
+        return if value != nil { value } else { key };
+    }
     let res = msg![env; bundle localizedStringForKey:key value:value table:table_name];
     msg![env; res copy]
 }
@@ -493,7 +611,10 @@ fn CFBundlePreflightExecutable(
 }
 
 fn CFBundleLoadExecutable(_env: &mut Environment, bundle: CFBundleRef) -> bool {
-    log!("TODO: CFBundleLoadExecutable({:?}) — returning false", bundle);
+    log!(
+        "TODO: CFBundleLoadExecutable({:?}) — returning false",
+        bundle
+    );
     false
 }
 
@@ -518,11 +639,14 @@ fn CFBundleGetFunctionPointerForName(
     bundle: CFBundleRef,
     function_name: CFStringRef,
 ) -> CFTypeRef {
-    if function_name == nil { return nil; }
+    if function_name == nil {
+        return nil;
+    }
     let name = ns_string::to_rust_string(env, function_name);
     log!(
         "TODO: CFBundleGetFunctionPointerForName({:?}, \"{}\") — returning NULL",
-        bundle, name
+        bundle,
+        name
     );
     nil
 }
@@ -533,11 +657,14 @@ fn CFBundleGetFunctionPointersForNames(
     function_names: CFArrayRef,
     ftbl: MutVoidPtr,
 ) {
-    if ftbl.is_null() { return; }
+    if ftbl.is_null() {
+        return;
+    }
     let count: NSUInteger = msg![env; function_names count];
     log!(
         "CFBundleGetFunctionPointersForNames({:?}, count={}) — writing NULL for all",
-        bundle, count
+        bundle,
+        count
     );
     let null_ptr: crate::mem::MutPtr<MutVoidPtr> = ftbl.cast();
     for i in 0..count {
@@ -550,11 +677,14 @@ fn CFBundleGetDataPointerForName(
     bundle: CFBundleRef,
     symbol_name: CFStringRef,
 ) -> CFTypeRef {
-    if symbol_name == nil { return nil; }
+    if symbol_name == nil {
+        return nil;
+    }
     let name = ns_string::to_rust_string(env, symbol_name);
     log!(
         "TODO: CFBundleGetDataPointerForName({:?}, \"{}\") — returning NULL",
-        bundle, name
+        bundle,
+        name
     );
     nil
 }
@@ -565,11 +695,14 @@ fn CFBundleGetDataPointersForNames(
     symbol_names: CFArrayRef,
     stbl: MutVoidPtr,
 ) {
-    if stbl.is_null() { return; }
+    if stbl.is_null() {
+        return;
+    }
     let count: NSUInteger = msg![env; symbol_names count];
     log!(
         "CFBundleGetDataPointersForNames({:?}, count={}) — writing NULL for all",
-        bundle, count
+        bundle,
+        count
     );
     let null_ptr: crate::mem::MutPtr<MutVoidPtr> = stbl.cast();
     for i in 0..count {

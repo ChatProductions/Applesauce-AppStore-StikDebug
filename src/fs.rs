@@ -393,8 +393,7 @@ impl GuestFile {
     pub fn sync_all(&self) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.sync_all(),
-            GuestFile::IpaBundleFile(_) |
-            GuestFile::ResourceFile(_) => Ok(()),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Ok(()),
             GuestFile::Directory => {
                 log!("Warning: syncing directory as a guest file.");
                 Ok(())
@@ -635,7 +634,7 @@ impl Fs {
                 "libc++abi.dylib",
                 FsNode::resource_file(format!("{DYLIBS_DIR}/libc++abi.dylib")),
             );
-            
+
         let mut app_dir_children = HashMap::new();
         app_dir_children.insert(bundle_dir_name, app_bundle.into_fs_node());
         for (dir, host_path) in directories.iter().zip(host_path_directories.iter()) {
@@ -647,7 +646,7 @@ impl Fs {
             }
         }
 
-                let library_node = match &host_path_directories[1] {
+        let library_node = match &host_path_directories[1] {
             Some(host_path) => FsNode::from_host_dir(host_path, true),
             None => FsNode::dir(),
         };
@@ -861,9 +860,14 @@ impl Fs {
             FsNode::Directory { writeable, .. } => {
                 if let Some(host_path) = writeable {
                     fs::metadata(host_path)
-                        .and_then(|m|
-m.modified())
-                        .map(|t| t.duration_since(UNIX_EPOCH).unwrap().as_secs().try_into().unwrap())
+                        .and_then(|m| m.modified())
+                        .map(|t| {
+                            t.duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs()
+                                .try_into()
+                                .unwrap()
+                        })
                         .map_err(|_| ())
                 } else {
                     Ok(0)
@@ -885,7 +889,9 @@ m.modified())
             },
             FsNode::Directory { writeable, .. } => {
                 if let Some(host_path) = writeable {
-                    fs::metadata(host_path).map(|meta| meta.len()).map_err(|_| ())
+                    fs::metadata(host_path)
+                        .map(|meta| meta.len())
+                        .map_err(|_| ())
                 } else {
                     Ok(4096)
                 }
@@ -1212,8 +1218,7 @@ m.modified())
 
                 let host_path = match location {
                     FileLocation::Path(host_path) => host_path,
-                    FileLocation::IpaFileRef(_) |
-                    FileLocation::ResourceFilePath(_) => panic!(),
+                    FileLocation::IpaFileRef(_) | FileLocation::ResourceFilePath(_) => panic!(),
                 };
                 handle_open_err(std::fs::remove_file(host_path), host_path);
                 log_dbg!(
@@ -1250,26 +1255,26 @@ m.modified())
         Ok(())
     }
 
-            /// Like [std::fs::create_dir_all] but for the guest filesystem.
+    /// Like [std::fs::create_dir_all] but for the guest filesystem.
     pub fn create_dir_all<P: AsRef<GuestPath>>(&mut self, path: P) -> Result<(), FsError> {
         let path = path.as_ref();
-        
-        // 1. Получаем компоненты пути. 
+
+        // 1. Получаем компоненты пути.
         // .into_iter().map(|s| s.to_string()).collect() — КРИТИЧЕСКИ ВАЖНО.
         // Это превращает Vec<&str> в Vec<String>, освобождая self от заимствования.
         let components: Vec<String> = resolve_path(path, Some(&self.working_directory))
             .into_iter()
             .map(|s| s.to_string())
             .collect();
-        
+
         let mut current_path = String::new();
-        
+
         // 2. Теперь мы можем спокойно итерироваться и вызывать мутабельные методы self
         for component in components {
             // Собираем путь по кусочкам: /var -> /var/mobile -> /var/mobile/Applications...
             current_path.push('/');
             current_path.push_str(&component);
-            
+
             let res = self.create_dir(GuestPathBuf::from(current_path.clone()));
             match res {
                 Ok(_) | Err(FsError::AlreadyExist) => {
@@ -1328,4 +1333,4 @@ m.modified())
         );
         Ok(())
     }
-    }
+}

@@ -17,9 +17,9 @@ use crate::objc::{
 
 pub type MFMailComposeResult = i32;
 pub const MF_MAIL_COMPOSE_RESULT_CANCELLED: MFMailComposeResult = 0;
-pub const MF_MAIL_COMPOSE_RESULT_SAVED:     MFMailComposeResult = 1;
-pub const MF_MAIL_COMPOSE_RESULT_SENT:      MFMailComposeResult = 2;
-pub const MF_MAIL_COMPOSE_RESULT_FAILED:    MFMailComposeResult = 3;
+pub const MF_MAIL_COMPOSE_RESULT_SAVED: MFMailComposeResult = 1;
+pub const MF_MAIL_COMPOSE_RESULT_SENT: MFMailComposeResult = 2;
+pub const MF_MAIL_COMPOSE_RESULT_FAILED: MFMailComposeResult = 3;
 
 // =========================================================================
 // MARK: - MFMessageComposeResult constants
@@ -27,8 +27,8 @@ pub const MF_MAIL_COMPOSE_RESULT_FAILED:    MFMailComposeResult = 3;
 
 pub type MFMessageComposeResult = i32;
 pub const MF_MESSAGE_COMPOSE_RESULT_CANCELLED: MFMessageComposeResult = 0;
-pub const MF_MESSAGE_COMPOSE_RESULT_SENT:      MFMessageComposeResult = 1;
-pub const MF_MESSAGE_COMPOSE_RESULT_FAILED:    MFMessageComposeResult = 2;
+pub const MF_MESSAGE_COMPOSE_RESULT_SENT: MFMessageComposeResult = 1;
+pub const MF_MESSAGE_COMPOSE_RESULT_FAILED: MFMessageComposeResult = 2;
 
 // =========================================================================
 // MARK: - MFMailComposeViewController host object

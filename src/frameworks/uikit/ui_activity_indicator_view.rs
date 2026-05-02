@@ -51,11 +51,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())startAnimating {
     let mut host = env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this);
     host.animating = true;
-    
+
     // Если индикатор запускается, он должен стать видимым
     drop(host); // Освобождаем заимствование перед вызовом msg!
     let _: () = msg![env; this setHidden: false];
-    
+
     log!("UIActivityIndicatorView: started animating [{:?}]", this);
 }
 

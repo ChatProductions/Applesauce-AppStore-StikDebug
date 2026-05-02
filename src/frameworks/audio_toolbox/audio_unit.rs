@@ -26,7 +26,7 @@ use crate::frameworks::audio_toolbox::audio_queue::{
     is_supported_audio_format, log_if_broken_audio_format,
 };
 use crate::frameworks::carbon_core::{paramErr, OSStatus};
-use crate::frameworks::core_audio_types::{AudioStreamBasicDescription, fourcc};
+use crate::frameworks::core_audio_types::{fourcc, AudioStreamBasicDescription};
 use crate::frameworks::core_foundation::cf_run_loop::CFRunLoopGetMain;
 use crate::frameworks::foundation::ns_run_loop;
 use crate::mem::{guest_size_of, ConstVoidPtr, MutPtr, MutVoidPtr, SafeRead};
@@ -67,9 +67,9 @@ pub struct AudioBuffer {
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 struct AudioUnitConnection {
-    source_audio_unit:    AudioUnit,
+    source_audio_unit: AudioUnit,
     source_output_number: u32,
-    dest_input_number:    u32,
+    dest_input_number: u32,
 }
 unsafe impl SafeRead for AudioUnitConnection {}
 
@@ -78,67 +78,67 @@ unsafe impl SafeRead for AudioUnitConnection {}
 // =========================================================================
 
 const kAudioUnitScope_Global: AudioUnitScope = 0;
-const kAudioUnitScope_Input:  AudioUnitScope = 1;
+const kAudioUnitScope_Input: AudioUnitScope = 1;
 const kAudioUnitScope_Output: AudioUnitScope = 2;
-const kAudioUnitScope_Group:  AudioUnitScope = 3;
-const kAudioUnitScope_Part:   AudioUnitScope = 4;
-const kAudioUnitScope_Note:   AudioUnitScope = 5;
+const kAudioUnitScope_Group: AudioUnitScope = 3;
+const kAudioUnitScope_Part: AudioUnitScope = 4;
+const kAudioUnitScope_Note: AudioUnitScope = 5;
 
 // =========================================================================
 // MARK: - Константы Property ID
 // =========================================================================
 
-const kAudioUnitProperty_ClassInfo:              AudioUnitPropertyID = 0;
-const kAudioUnitProperty_MakeConnection:         AudioUnitPropertyID = 1;
-const kAudioUnitProperty_SampleRate:             AudioUnitPropertyID = 2;
-const kAudioUnitProperty_ParameterList:          AudioUnitPropertyID = 3;
-const kAudioUnitProperty_ParameterInfo:          AudioUnitPropertyID = 4;
-const kAudioUnitProperty_CPULoad:                AudioUnitPropertyID = 6;
-const kAudioUnitProperty_StreamFormat:           AudioUnitPropertyID = 8;
-const kAudioUnitProperty_ElementCount:           AudioUnitPropertyID = 11;
-const kAudioUnitProperty_Latency:                AudioUnitPropertyID = 12;
-const kAudioUnitProperty_SupportedNumChannels:   AudioUnitPropertyID = 13;
-const kAudioUnitProperty_MaximumFramesPerSlice:  AudioUnitPropertyID = 14;
-const kAudioUnitProperty_ParameterValueStrings:  AudioUnitPropertyID = 16;
-const kAudioUnitProperty_AudioChannelLayout:     AudioUnitPropertyID = 19;
-const kAudioUnitProperty_TailTime:               AudioUnitPropertyID = 20;
-const kAudioUnitProperty_BypassEffect:           AudioUnitPropertyID = 21;
-const kAudioUnitProperty_LastRenderError:        AudioUnitPropertyID = 22;
-const kAudioUnitProperty_SetRenderCallback:      AudioUnitPropertyID = 23;
-const kAudioUnitProperty_FactoryPresets:         AudioUnitPropertyID = 24;
-const kAudioUnitProperty_RenderQuality:          AudioUnitPropertyID = 26;
-const kAudioUnitProperty_HostCallbacks:          AudioUnitPropertyID = 27;
-const kAudioUnitProperty_InPlaceProcessing:      AudioUnitPropertyID = 29;
-const kAudioUnitProperty_ElementName:            AudioUnitPropertyID = 30;
+const kAudioUnitProperty_ClassInfo: AudioUnitPropertyID = 0;
+const kAudioUnitProperty_MakeConnection: AudioUnitPropertyID = 1;
+const kAudioUnitProperty_SampleRate: AudioUnitPropertyID = 2;
+const kAudioUnitProperty_ParameterList: AudioUnitPropertyID = 3;
+const kAudioUnitProperty_ParameterInfo: AudioUnitPropertyID = 4;
+const kAudioUnitProperty_CPULoad: AudioUnitPropertyID = 6;
+const kAudioUnitProperty_StreamFormat: AudioUnitPropertyID = 8;
+const kAudioUnitProperty_ElementCount: AudioUnitPropertyID = 11;
+const kAudioUnitProperty_Latency: AudioUnitPropertyID = 12;
+const kAudioUnitProperty_SupportedNumChannels: AudioUnitPropertyID = 13;
+const kAudioUnitProperty_MaximumFramesPerSlice: AudioUnitPropertyID = 14;
+const kAudioUnitProperty_ParameterValueStrings: AudioUnitPropertyID = 16;
+const kAudioUnitProperty_AudioChannelLayout: AudioUnitPropertyID = 19;
+const kAudioUnitProperty_TailTime: AudioUnitPropertyID = 20;
+const kAudioUnitProperty_BypassEffect: AudioUnitPropertyID = 21;
+const kAudioUnitProperty_LastRenderError: AudioUnitPropertyID = 22;
+const kAudioUnitProperty_SetRenderCallback: AudioUnitPropertyID = 23;
+const kAudioUnitProperty_FactoryPresets: AudioUnitPropertyID = 24;
+const kAudioUnitProperty_RenderQuality: AudioUnitPropertyID = 26;
+const kAudioUnitProperty_HostCallbacks: AudioUnitPropertyID = 27;
+const kAudioUnitProperty_InPlaceProcessing: AudioUnitPropertyID = 29;
+const kAudioUnitProperty_ElementName: AudioUnitPropertyID = 30;
 const kAudioUnitProperty_SupportedChannelLayoutTags: AudioUnitPropertyID = 32;
-const kAudioUnitProperty_PresentPreset:          AudioUnitPropertyID = 36;
-const kAudioUnitProperty_DependentParameters:    AudioUnitPropertyID = 45;
-const kAudioUnitProperty_InputSamplesInOutput:   AudioUnitPropertyID = 49;
-const kAudioUnitProperty_ShouldAllocateBuffer:   AudioUnitPropertyID = 51;
-const kAudioUnitProperty_FrequencyResponse:      AudioUnitPropertyID = 52;
-const kAudioUnitProperty_ParameterHistoryInfo:   AudioUnitPropertyID = 53;
-const kAudioUnitProperty_NickName:               AudioUnitPropertyID = 54;
-const kAudioUnitProperty_OfflineRender:          AudioUnitPropertyID = 37;
-const kAudioUnitProperty_ParameterIDName:        AudioUnitPropertyID = 34;
-const kAudioOutputUnitProperty_EnableIO:         AudioUnitPropertyID = 2003;
-const kAudioOutputUnitProperty_HasIO:            AudioUnitPropertyID = 2006;
-const kAudioOutputUnitProperty_StartTime:        AudioUnitPropertyID = 2004;
+const kAudioUnitProperty_PresentPreset: AudioUnitPropertyID = 36;
+const kAudioUnitProperty_DependentParameters: AudioUnitPropertyID = 45;
+const kAudioUnitProperty_InputSamplesInOutput: AudioUnitPropertyID = 49;
+const kAudioUnitProperty_ShouldAllocateBuffer: AudioUnitPropertyID = 51;
+const kAudioUnitProperty_FrequencyResponse: AudioUnitPropertyID = 52;
+const kAudioUnitProperty_ParameterHistoryInfo: AudioUnitPropertyID = 53;
+const kAudioUnitProperty_NickName: AudioUnitPropertyID = 54;
+const kAudioUnitProperty_OfflineRender: AudioUnitPropertyID = 37;
+const kAudioUnitProperty_ParameterIDName: AudioUnitPropertyID = 34;
+const kAudioOutputUnitProperty_EnableIO: AudioUnitPropertyID = 2003;
+const kAudioOutputUnitProperty_HasIO: AudioUnitPropertyID = 2006;
+const kAudioOutputUnitProperty_StartTime: AudioUnitPropertyID = 2004;
 const kAudioOutputUnitProperty_SetInputCallback: AudioUnitPropertyID = 2005;
-const kAudioOutputUnitProperty_IsRunning:        AudioUnitPropertyID = 2001;
-const kAudioMixerProperty_Volume:                AudioUnitPropertyID = 7;
-const kAudioMixerProperty_Metering:              AudioUnitPropertyID = 1003;
-const kAudioUnitProperty_MeteringMode:           AudioUnitPropertyID = 1003;
+const kAudioOutputUnitProperty_IsRunning: AudioUnitPropertyID = 2001;
+const kAudioMixerProperty_Volume: AudioUnitPropertyID = 7;
+const kAudioMixerProperty_Metering: AudioUnitPropertyID = 1003;
+const kAudioUnitProperty_MeteringMode: AudioUnitPropertyID = 1003;
 
 // 3D Mixer Property IDs
-const kAudioUnitProperty_3DMixerDistanceParams:  AudioUnitPropertyID = fourcc(b"3ddp");
-const kAudioUnitProperty_MatrixLevels:           AudioUnitPropertyID = fourcc(b"mxmv");
-const kAudioUnitProperty_SpatializationAlgorithm:AudioUnitPropertyID = fourcc(b"spat");
-const kAudioUnitProperty_3DMixerRenderingFlags:  AudioUnitPropertyID = fourcc(b"3drf");
+const kAudioUnitProperty_3DMixerDistanceParams: AudioUnitPropertyID = fourcc(b"3ddp");
+const kAudioUnitProperty_MatrixLevels: AudioUnitPropertyID = fourcc(b"mxmv");
+const kAudioUnitProperty_SpatializationAlgorithm: AudioUnitPropertyID = fourcc(b"spat");
+const kAudioUnitProperty_3DMixerRenderingFlags: AudioUnitPropertyID = fourcc(b"3drf");
 
 // 3D Mixer Parameter IDs
-const k3DMixerParam_Azimuth:   AudioUnitParameterID = 0;
+const k3DMixerParam_Azimuth: AudioUnitParameterID = 0;
 const k3DMixerParam_Elevation: AudioUnitParameterID = 1;
-const k3DMixerParam_Distance:  AudioUnitParameterID = 2;
+const k3DMixerParam_Distance: AudioUnitParameterID = 2;
 
 // =========================================================================
 // MARK: - Инициализация / Деинициализация AudioUnit
@@ -175,7 +175,12 @@ fn AudioUnitSetProperty(
     log_dbg!(
         "AudioUnitSetProperty(unit={:?}, prop={}, scope={}, element={}, \
          data={:?}, size={})",
-        in_unit, in_id, in_scope, in_element, in_data, in_data_size
+        in_unit,
+        in_id,
+        in_scope,
+        in_element,
+        in_data,
+        in_data_size
     );
     let mut update_al_distance = None;
 
@@ -190,10 +195,9 @@ fn AudioUnitSetProperty(
 
         match in_id {
             kAudioUnitProperty_3DMixerDistanceParams => {
-                let params = env.mem
-                    .read::<audio_components::MixerDistanceParams, false>(
-                        in_data.cast(),
-                    );
+                let params = env
+                    .mem
+                    .read::<audio_components::MixerDistanceParams, false>(in_data.cast());
                 let bus = host_object.mixer_buses.entry(in_element).or_default();
                 bus.distance_params = params;
 
@@ -210,45 +214,55 @@ fn AudioUnitSetProperty(
                     in_element
                 );
             }
-            kAudioUnitProperty_SpatializationAlgorithm |
-            kAudioUnitProperty_3DMixerRenderingFlags => {
+            kAudioUnitProperty_SpatializationAlgorithm
+            | kAudioUnitProperty_3DMixerRenderingFlags => {
                 log_dbg!(
                     "AudioUnitSetProperty: флаги \
                      spatialization/rendering проигнорированы"
                 );
             }
             kAudioUnitProperty_SetRenderCallback => {
-                let render_callback = env.mem
+                let render_callback = env
+                    .mem
                     .read::<AURenderCallbackStruct, false>(in_data.cast());
                 if in_scope == kAudioUnitScope_Input {
-                    let bus =
-                        host_object.mixer_buses.entry(in_element).or_default();
+                    let bus = host_object.mixer_buses.entry(in_element).or_default();
                     bus.render_callback = Some(render_callback);
                 } else {
                     host_object.render_callback = Some(render_callback);
                 }
-                let proc_copy    = render_callback.input_proc;
+                let proc_copy = render_callback.input_proc;
                 let ref_con_copy = render_callback.input_proc_ref_con;
                 log_dbg!(
                     "AudioUnitSetProperty(SetRenderCallback) \
                      unit={:?} scope={} element={} proc={:?} ref_con={:?}",
-                    in_unit, in_scope, in_element, proc_copy, ref_con_copy
+                    in_unit,
+                    in_scope,
+                    in_element,
+                    proc_copy,
+                    ref_con_copy
                 );
             }
             kAudioOutputUnitProperty_SetInputCallback => {
-                let cb = env.mem
+                let cb = env
+                    .mem
                     .read::<AURenderCallbackStruct, false>(in_data.cast());
                 host_object.render_callback = Some(cb);
-                let proc_copy    = cb.input_proc;
+                let proc_copy = cb.input_proc;
                 let ref_con_copy = cb.input_proc_ref_con;
                 log_dbg!(
                     "AudioUnitSetProperty(SetInputCallback) \
                      unit={:?} scope={} element={} proc={:?} ref_con={:?}",
-                    in_unit, in_scope, in_element, proc_copy, ref_con_copy
+                    in_unit,
+                    in_scope,
+                    in_element,
+                    proc_copy,
+                    ref_con_copy
                 );
             }
             kAudioUnitProperty_StreamFormat => {
-                let stream_format = env.mem
+                let stream_format = env
+                    .mem
                     .read::<AudioStreamBasicDescription, false>(in_data.cast());
                 log_if_broken_audio_format(&stream_format);
                 let (sf_id, sf_sr, sf_ch, sf_bc, sf_bpf, sf_flags) = (
@@ -263,8 +277,15 @@ fn AudioUnitSetProperty(
                     "AudioUnitSetProperty(StreamFormat) \
                      unit={:?} scope={} element={} \
                      format_id=0x{:x} sr={} ch={} bits={} bpf={} flags=0x{:x}",
-                    in_unit, in_scope, in_element,
-                    sf_id, sf_sr, sf_ch, sf_bc, sf_bpf, sf_flags
+                    in_unit,
+                    in_scope,
+                    in_element,
+                    sf_id,
+                    sf_sr,
+                    sf_ch,
+                    sf_bc,
+                    sf_bpf,
+                    sf_flags
                 );
                 match in_scope {
                     kAudioUnitScope_Global => {
@@ -277,10 +298,7 @@ fn AudioUnitSetProperty(
                         host_object.input_stream_format = Some(stream_format);
                         // Для 3D Mixer: формат шины N задаётся
                         // scope=Input, element=N.
-                        let bus = host_object
-                            .mixer_buses
-                            .entry(in_element)
-                            .or_default();
+                        let bus = host_object.mixer_buses.entry(in_element).or_default();
                         bus.stream_format = Some(stream_format);
                     }
                     _ => log_dbg!(
@@ -291,43 +309,49 @@ fn AudioUnitSetProperty(
                 }
             }
             kAudioUnitProperty_SampleRate => {
-                let rate: f64 =
-                    env.mem.read::<f64, false>(in_data.cast());
+                let rate: f64 = env.mem.read::<f64, false>(in_data.cast());
                 host_object.global_stream_format.sample_rate = rate;
             }
             kAudioUnitProperty_MaximumFramesPerSlice => {
-                let frames: u32 =
-                    env.mem.read::<u32, false>(in_data.cast());
+                let frames: u32 = env.mem.read::<u32, false>(in_data.cast());
                 host_object.maximum_frames_per_slice = frames;
             }
             kAudioUnitProperty_MakeConnection => {
-                let conn = env.mem
-                    .read::<AudioUnitConnection, false>(in_data.cast());
+                let conn = env.mem.read::<AudioUnitConnection, false>(in_data.cast());
                 let src_unit = conn.source_audio_unit;
-                let src_out  = conn.source_output_number;
-                let dst_in   = conn.dest_input_number;
+                let src_out = conn.source_output_number;
+                let dst_in = conn.dest_input_number;
                 log_dbg!(
                     "AudioUnitSetProperty(MakeConnection) \
                      dest_unit={:?} dest_input={} \
                      src_unit={:?} src_output={}",
-                    in_unit, dst_in, src_unit, src_out
+                    in_unit,
+                    dst_in,
+                    src_unit,
+                    src_out
                 );
             }
             kAudioOutputUnitProperty_EnableIO => {
                 // Ввод/Вывод включен по умолчанию. Игнорируем.
-                let enabled: u32 =
-                    env.mem.read::<u32, false>(in_data.cast());
+                let enabled: u32 = env.mem.read::<u32, false>(in_data.cast());
                 log_dbg!(
                     "AudioUnitSetProperty(EnableIO) \
                      unit={:?} scope={} element={} enabled={}",
-                    in_unit, in_scope, in_element, enabled
+                    in_unit,
+                    in_scope,
+                    in_element,
+                    enabled
                 );
             }
             _ => {
                 log!(
                     "AudioUnitSetProperty: UNHANDLED property {} \
                      (unit={:?}, scope={}, element={}, size={})",
-                    in_id, in_unit, in_scope, in_element, in_data_size
+                    in_id,
+                    in_unit,
+                    in_scope,
+                    in_element,
+                    in_data_size
                 );
             }
         }
@@ -340,12 +364,9 @@ fn AudioUnitSetProperty(
             .audio_toolbox
             .make_al_context_current(&mut env.openal_manager);
         unsafe {
-            context.Sourcef(source, AL_REFERENCE_DISTANCE,
-                            params.reference_distance);
-            context.Sourcef(source, AL_MAX_DISTANCE,
-                            params.maximum_distance);
-            context.Sourcef(source, AL_ROLLOFF_FACTOR,
-                            params.rolloff_factor);
+            context.Sourcef(source, AL_REFERENCE_DISTANCE, params.reference_distance);
+            context.Sourcef(source, AL_MAX_DISTANCE, params.maximum_distance);
+            context.Sourcef(source, AL_ROLLOFF_FACTOR, params.rolloff_factor);
         }
     }
 
@@ -358,11 +379,7 @@ fn AudioUnitSetProperty(
 
 /// Вспомогательная функция: безопасная запись значения в гостевую память.
 /// Если указатель нулевой — запись пропускается (API допускает NULL).
-fn write_if_nonnull<T: crate::mem::SafeWrite>(
-    env: &mut Environment,
-    ptr: MutPtr<T>,
-    value: T,
-) {
+fn write_if_nonnull<T: crate::mem::SafeWrite>(env: &mut Environment, ptr: MutPtr<T>, value: T) {
     if !ptr.is_null() {
         env.mem.write(ptr, value);
     }
@@ -379,7 +396,10 @@ fn AudioUnitGetProperty(
 ) -> OSStatus {
     log_dbg!(
         "AudioUnitGetProperty(unit={:?}, prop={}, scope={}, element={})",
-        in_unit, in_id, in_scope, in_element
+        in_unit,
+        in_id,
+        in_scope,
+        in_element
     );
     let Some(host_object) = audio_components::State::get(&mut env.framework_state)
         .audio_component_instances
@@ -392,8 +412,7 @@ fn AudioUnitGetProperty(
         kAudioUnitProperty_MaximumFramesPerSlice => {
             let v = host_object.maximum_frames_per_slice;
             write_if_nonnull(env, out_data.cast(), v);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
         kAudioUnitProperty_StreamFormat => {
             // Для scope=Input сначала смотрим per-bus формат
@@ -401,14 +420,12 @@ fn AudioUnitGetProperty(
             // затем input_stream_format, затем global_stream_format.
             // Для любых других scope — аналогично, но без bus-lookup.
             let fmt = match in_scope {
-                kAudioUnitScope_Input => {
-                    host_object
-                        .mixer_buses
-                        .get(&in_element)
-                        .and_then(|b| b.stream_format)
-                        .or(host_object.input_stream_format)
-                        .unwrap_or(host_object.global_stream_format)
-                }
+                kAudioUnitScope_Input => host_object
+                    .mixer_buses
+                    .get(&in_element)
+                    .and_then(|b| b.stream_format)
+                    .or(host_object.input_stream_format)
+                    .unwrap_or(host_object.global_stream_format),
                 kAudioUnitScope_Output => host_object
                     .output_stream_format
                     .unwrap_or(host_object.global_stream_format),
@@ -426,8 +443,7 @@ fn AudioUnitGetProperty(
         kAudioUnitProperty_SampleRate => {
             let rate = host_object.global_stream_format.sample_rate;
             write_if_nonnull(env, out_data.cast(), rate);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<f64>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<f64>());
         }
         kAudioUnitProperty_ElementCount => {
             // Возвращаем количество шин микшера или 1 как дефолт.
@@ -437,45 +453,42 @@ fn AudioUnitGetProperty(
                 1u32
             };
             write_if_nonnull(env, out_data.cast(), count);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
         kAudioOutputUnitProperty_IsRunning => {
             let running: u32 = if host_object.started { 1 } else { 0 };
             write_if_nonnull(env, out_data.cast(), running);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
         kAudioUnitProperty_Latency => {
             // Возвращаем нулевую задержку как заглушку.
             write_if_nonnull(env, out_data.cast(), 0.0f64);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<f64>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<f64>());
         }
         kAudioUnitProperty_LastRenderError => {
             write_if_nonnull(env, out_data.cast(), 0u32);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
-        kAudioUnitProperty_ShouldAllocateBuffer |
-        kAudioUnitProperty_InPlaceProcessing |
-        kAudioUnitProperty_BypassEffect => {
+        kAudioUnitProperty_ShouldAllocateBuffer
+        | kAudioUnitProperty_InPlaceProcessing
+        | kAudioUnitProperty_BypassEffect => {
             // Булевые свойства — возвращаем 1 (да/включено) как заглушку.
             write_if_nonnull(env, out_data.cast(), 1u32);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
         kAudioOutputUnitProperty_HasIO => {
             // IO активен по умолчанию.
             write_if_nonnull(env, out_data.cast(), 1u32);
-            write_if_nonnull(env, io_data_size,
-                             guest_size_of::<u32>());
+            write_if_nonnull(env, io_data_size, guest_size_of::<u32>());
         }
         _ => {
             log!(
                 "AudioUnitGetProperty: UNHANDLED property {} \
                  (unit={:?}, scope={}, element={})",
-                in_id, in_unit, in_scope, in_element
+                in_id,
+                in_unit,
+                in_scope,
+                in_element
             );
             // Записываем размер 0, чтобы гость не читал мусор.
             write_if_nonnull(env, io_data_size, 0u32);
@@ -495,40 +508,19 @@ fn AudioUnitGetPropertyInfo(
     out_writable: MutPtr<bool>,
 ) -> OSStatus {
     let (size, writable) = match in_id {
-        kAudioUnitProperty_StreamFormat => {
-            (guest_size_of::<AudioStreamBasicDescription>(), true)
-        }
-        kAudioUnitProperty_SampleRate => {
-            (guest_size_of::<f64>(), true)
-        }
-        kAudioUnitProperty_MaximumFramesPerSlice => {
-            (guest_size_of::<u32>(), true)
-        }
-        kAudioUnitProperty_ElementCount => {
-            (guest_size_of::<u32>(), true)
-        }
-        kAudioOutputUnitProperty_IsRunning => {
-            (guest_size_of::<u32>(), false)
-        }
-        kAudioOutputUnitProperty_HasIO => {
-            (guest_size_of::<u32>(), true)
-        }
-        kAudioUnitProperty_Latency => {
-            (guest_size_of::<f64>(), false)
-        }
-        kAudioUnitProperty_LastRenderError => {
-            (guest_size_of::<u32>(), false)
-        }
-        kAudioUnitProperty_ShouldAllocateBuffer |
-        kAudioUnitProperty_InPlaceProcessing |
-        kAudioUnitProperty_BypassEffect => {
-            (guest_size_of::<u32>(), true)
-        }
+        kAudioUnitProperty_StreamFormat => (guest_size_of::<AudioStreamBasicDescription>(), true),
+        kAudioUnitProperty_SampleRate => (guest_size_of::<f64>(), true),
+        kAudioUnitProperty_MaximumFramesPerSlice => (guest_size_of::<u32>(), true),
+        kAudioUnitProperty_ElementCount => (guest_size_of::<u32>(), true),
+        kAudioOutputUnitProperty_IsRunning => (guest_size_of::<u32>(), false),
+        kAudioOutputUnitProperty_HasIO => (guest_size_of::<u32>(), true),
+        kAudioUnitProperty_Latency => (guest_size_of::<f64>(), false),
+        kAudioUnitProperty_LastRenderError => (guest_size_of::<u32>(), false),
+        kAudioUnitProperty_ShouldAllocateBuffer
+        | kAudioUnitProperty_InPlaceProcessing
+        | kAudioUnitProperty_BypassEffect => (guest_size_of::<u32>(), true),
         _ => {
-            log_dbg!(
-                "AudioUnitGetPropertyInfo: unknown property {}",
-                in_id
-            );
+            log_dbg!("AudioUnitGetPropertyInfo: unknown property {}", in_id);
             return -1;
         }
     };
@@ -558,7 +550,11 @@ fn AudioUnitSetParameter(
     log_dbg!(
         "AudioUnitSetParameter(unit={:?}, param={}, scope={}, \
          element={}, value={})",
-        in_unit, in_id, in_scope, in_element, in_value
+        in_unit,
+        in_id,
+        in_scope,
+        in_element,
+        in_value
     );
     let mut update_al_pos = None;
 
@@ -572,13 +568,8 @@ fn AudioUnitSetParameter(
         };
 
         match in_id {
-            k3DMixerParam_Azimuth |
-            k3DMixerParam_Elevation |
-            k3DMixerParam_Distance => {
-                let bus = host_object
-                    .mixer_buses
-                    .entry(in_element)
-                    .or_default();
+            k3DMixerParam_Azimuth | k3DMixerParam_Elevation | k3DMixerParam_Distance => {
+                let bus = host_object.mixer_buses.entry(in_element).or_default();
                 if in_id == k3DMixerParam_Azimuth {
                     let radians = in_value.to_radians();
                     bus.position[0] = radians.sin();
@@ -621,7 +612,10 @@ fn AudioUnitGetParameter(
 ) -> OSStatus {
     log_dbg!(
         "AudioUnitGetParameter(unit={:?}, param={}, scope={}, element={})",
-        in_unit, in_id, in_scope, in_element
+        in_unit,
+        in_id,
+        in_scope,
+        in_element
     );
     if !out_value.is_null() {
         env.mem.write(out_value, 1.0);
@@ -665,7 +659,8 @@ fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
         .unwrap_or(false);
     log_dbg!(
         "AudioOutputUnitStart({:?}) render_callback_set={}",
-        ci, has_callback
+        ci,
+        has_callback
     );
     setup_audio_unit_for_render(env, ci);
     0
@@ -721,8 +716,7 @@ pub fn setup_audio_unit_for_render(env: &mut Environment, ci: AudioUnit) {
         None
     };
 
-    let mut bus_sources: Vec<(u32, ALuint)> =
-        Vec::with_capacity(bus_ids_needing_source.len());
+    let mut bus_sources: Vec<(u32, ALuint)> = Vec::with_capacity(bus_ids_needing_source.len());
     for bus_id in &bus_ids_needing_source {
         let mut s: ALuint = 0;
         unsafe {
@@ -755,10 +749,7 @@ pub fn setup_audio_unit_for_render(env: &mut Environment, ci: AudioUnit) {
     obj.started = true;
 }
 
-fn AudioOutputUnitStop(
-    env: &mut Environment,
-    ci: AudioUnit,
-) -> OSStatus {
+fn AudioOutputUnitStop(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     let at_state = &mut env.framework_state.audio_toolbox;
     let context = at_state
         .al_context
@@ -771,7 +762,9 @@ fn AudioOutputUnitStop(
     {
         audio_unit_state.started = false;
         if let Some(al_source) = audio_unit_state.al_source {
-            unsafe { context.DeleteSources(1, &al_source); }
+            unsafe {
+                context.DeleteSources(1, &al_source);
+            }
         }
         audio_unit_state.al_source = None;
         0
@@ -792,7 +785,9 @@ fn AudioUnitAddRenderNotify(
 ) -> OSStatus {
     log_dbg!(
         "AudioUnitAddRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
-        u, p, r
+        u,
+        p,
+        r
     );
     0
 }
@@ -804,7 +799,9 @@ fn AudioUnitRemoveRenderNotify(
 ) -> OSStatus {
     log_dbg!(
         "AudioUnitRemoveRenderNotify(unit={:?}, proc={:?}, ref_con={:?})",
-        u, p, r
+        u,
+        p,
+        r
     );
     0
 }
@@ -867,9 +864,7 @@ fn AudioUnitComplexRender(
 /// OpenAL Soft сам микширует все источники вместе.
 fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
     use crate::frameworks::core_audio_types::{
-        kAudioFormatFlagIsPacked,
-        kAudioFormatFlagIsSignedInteger,
-        kAudioFormatLinearPCM,
+        kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
     };
 
     // Готовим план: список
@@ -883,8 +878,10 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
     )> = {
         let at = &mut env.framework_state.audio_toolbox;
         let hardware_sr = at.audio_session.current_hardware_sample_rate;
-        let Some(obj) =
-            at.audio_components.audio_component_instances.get(&audio_unit)
+        let Some(obj) = at
+            .audio_components
+            .audio_component_instances
+            .get(&audio_unit)
         else {
             return;
         };
@@ -894,10 +891,13 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
         // Дефолтный формат шины 3D Mixer, если игра его явно не задавала:
         // 16-bit signed integer LE PCM, моно, текущая частота железа.
         let default_format = AudioStreamBasicDescription {
-            sample_rate: if hardware_sr > 0.0 { hardware_sr } else { 22050.0 },
+            sample_rate: if hardware_sr > 0.0 {
+                hardware_sr
+            } else {
+                22050.0
+            },
             format_id: kAudioFormatLinearPCM,
-            format_flags: kAudioFormatFlagIsSignedInteger
-                | kAudioFormatFlagIsPacked,
+            format_flags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
             bytes_per_packet: 2,
             frames_per_packet: 1,
             bytes_per_frame: 2,
@@ -929,11 +929,8 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
     let now = Instant::now();
     for (bus_id, callback, al_source, last_render_time, fmt) in plan {
         let elapsed = now.duration_since(last_render_time);
-        let frames =
-            ((elapsed.as_secs_f64() * fmt.sample_rate) as u32)
-                .clamp(64, 4096);
-        let buffer_size =
-            frames * fmt.channels_per_frame * (fmt.bits_per_channel / 8);
+        let frames = ((elapsed.as_secs_f64() * fmt.sample_rate) as u32).clamp(64, 4096);
+        let buffer_size = frames * fmt.channels_per_frame * (fmt.bits_per_channel / 8);
         if buffer_size == 0 {
             continue;
         }
@@ -948,37 +945,29 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
                 .make_al_context_current(&mut env.openal_manager);
             unsafe {
                 let mut processed = 0;
-                context.GetSourcei(
-                    al_source,
-                    AL_BUFFERS_PROCESSED,
-                    &mut processed,
-                );
+                context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
                 while processed > 0 {
                     let mut b = 0;
                     context.SourceUnqueueBuffers(al_source, 1, &mut b);
                     free_buffers.push(b);
-                    context.GetSourcei(
-                        al_source,
-                        AL_BUFFERS_PROCESSED,
-                        &mut processed,
-                    );
+                    context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
                 }
             }
         }
 
         // Готовим AudioBufferList<1> и вызываем гостевой callback.
         let action_flags = env.mem.alloc_and_write(0u32);
-        let buffer_data  = env.mem.alloc(buffer_size);
+        let buffer_data = env.mem.alloc(buffer_size);
         let abl = env.mem.alloc_and_write(AudioBufferList::<1> {
             number_buffers: 1,
             buffers: [AudioBuffer {
                 number_channels: fmt.channels_per_frame,
-                data_byte_size:  buffer_size,
-                data:            buffer_data,
+                data_byte_size: buffer_size,
+                data: buffer_data,
             }],
         });
 
-        let input_proc     = callback.input_proc;
+        let input_proc = callback.input_proc;
         let input_proc_ref = callback.input_proc_ref_con;
 
         let _: OSStatus = input_proc.call_from_host(
@@ -993,8 +982,7 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
             ),
         );
 
-        let (al_fmt, _, processed) =
-            decode_buffer(&env.mem, &fmt, buffer_data.cast(), buffer_size);
+        let (al_fmt, _, processed) = decode_buffer(&env.mem, &fmt, buffer_data.cast(), buffer_size);
 
         if !processed.is_empty() {
             let context = env
@@ -1022,10 +1010,7 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
                     context.SourcePlay(al_source);
                 }
                 if !free_buffers.is_empty() {
-                    context.DeleteBuffers(
-                        free_buffers.len() as i32,
-                        free_buffers.as_ptr(),
-                    );
+                    context.DeleteBuffers(free_buffers.len() as i32, free_buffers.as_ptr());
                 }
             }
         } else {
@@ -1038,10 +1023,7 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
                     .al_context
                     .make_al_context_current(&mut env.openal_manager);
                 unsafe {
-                    context.DeleteBuffers(
-                        free_buffers.len() as i32,
-                        free_buffers.as_ptr(),
-                    );
+                    context.DeleteBuffers(free_buffers.len() as i32, free_buffers.as_ptr());
                 }
             }
         }
@@ -1098,10 +1080,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             obj.started,
             obj.is_running_handler,
             obj.input_stream_format
-                .unwrap_or(
-                    obj.output_stream_format
-                        .unwrap_or(obj.global_stream_format),
-                ),
+                .unwrap_or(obj.output_stream_format.unwrap_or(obj.global_stream_format)),
             obj.input_stream_format.is_some(),
             obj.al_source,
             obj.last_render_time,
@@ -1169,9 +1148,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         }
         return;
     };
-    log_once!(
-        "render_audio_unit: entering callback for the first time"
-    );
+    log_once!("render_audio_unit: entering callback for the first time");
 
     let mut al_buffers = Vec::new();
     {
@@ -1182,31 +1159,21 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             .make_al_context_current(&mut env.openal_manager);
         unsafe {
             let mut processed = 0;
-            context.GetSourcei(
-                al_source,
-                AL_BUFFERS_PROCESSED,
-                &mut processed,
-            );
+            context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
             while processed > 0 {
                 let mut b = 0;
                 context.SourceUnqueueBuffers(al_source, 1, &mut b);
                 al_buffers.push(b);
-                context.GetSourcei(
-                    al_source,
-                    AL_BUFFERS_PROCESSED,
-                    &mut processed,
-                );
+                context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
             }
         }
     }
 
-    let now     = Instant::now();
+    let now = Instant::now();
     let elapsed = now.duration_since(last_render_time);
-    let frames  =
-        ((elapsed.as_secs_f64() * sample_rate) as u32).min(2048);
-    let buffer_size = frames
-        * stream_format.channels_per_frame
-        * (stream_format.bits_per_channel / 8);
+    let frames = ((elapsed.as_secs_f64() * sample_rate) as u32).min(2048);
+    let buffer_size =
+        frames * stream_format.channels_per_frame * (stream_format.bits_per_channel / 8);
 
     let action_flags = env.mem.alloc_and_write(0u32);
 
@@ -1221,33 +1188,33 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             number_buffers: 1,
             buffers: [AudioBuffer {
                 number_channels: stream_format.channels_per_frame,
-                data_byte_size:  buffer_size,
-                data:            buf,
+                data_byte_size: buffer_size,
+                data: buf,
             }],
         });
         (abl.cast(), buf, None)
     } else {
         let buf1 = env.mem.alloc(buffer_size);
         let buf2 = env.mem.alloc(buffer_size);
-        let abl  = env.mem.alloc_and_write(AudioBufferList::<2> {
+        let abl = env.mem.alloc_and_write(AudioBufferList::<2> {
             number_buffers: 2,
             buffers: [
                 AudioBuffer {
                     number_channels: stream_format.channels_per_frame,
-                    data_byte_size:  buffer_size,
-                    data:            buf1,
+                    data_byte_size: buffer_size,
+                    data: buf1,
                 },
                 AudioBuffer {
                     number_channels: stream_format.channels_per_frame,
-                    data_byte_size:  buffer_size,
-                    data:            buf2,
+                    data_byte_size: buffer_size,
+                    data: buf2,
                 },
             ],
         });
         (abl.cast(), buf1, Some(buf2))
     };
 
-    let input_proc     = callback.input_proc;
+    let input_proc = callback.input_proc;
     let input_proc_ref = callback.input_proc_ref_con;
 
     let _: OSStatus = input_proc.call_from_host(
@@ -1262,12 +1229,8 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         ),
     );
 
-    let (al_fmt, _, processed) = decode_buffer(
-        &env.mem,
-        &stream_format,
-        buffer1_data.cast(),
-        buffer_size,
-    );
+    let (al_fmt, _, processed) =
+        decode_buffer(&env.mem, &stream_format, buffer1_data.cast(), buffer_size);
     {
         let context = env
             .framework_state
@@ -1294,10 +1257,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
                 context.SourcePlay(al_source);
             }
             if !al_buffers.is_empty() {
-                context.DeleteBuffers(
-                    al_buffers.len() as i32,
-                    al_buffers.as_ptr(),
-                );
+                context.DeleteBuffers(al_buffers.len() as i32, al_buffers.as_ptr());
             }
         }
     }
@@ -1316,8 +1276,8 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         .audio_component_instances
         .get_mut(&audio_unit)
     {
-        obj.last_render_time    = Some(now);
-        obj.is_running_handler  = false;
+        obj.last_render_time = Some(now);
+        obj.is_running_handler = false;
     }
 }
 
@@ -1339,4 +1299,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioUnitProcess(_, _, _, _, _)),
     export_c_func!(AudioUnitProcessMultiple(_, _, _, _, _, _, _)),
 ];
-

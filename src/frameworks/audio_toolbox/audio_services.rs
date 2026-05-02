@@ -88,7 +88,7 @@ fn AudioServicesGetProperty(
     if in_property_id == 0xfff {
         return kAudioServicesUnsupportedPropertyError;
     }
-    
+
     // В форке используется мягкий подход без паники
     log!(
         "AudioServicesGetProperty: property {} is unimplemented",
@@ -119,26 +119,29 @@ fn AudioServicesCreateSystemSoundID(
 ) -> OSStatus {
     if in_file_url.is_null() {
         log!("Warning: AudioServicesCreateSystemSoundID called with NULL in_file_url");
-        if !out_system_sound_id.is_null() { env.mem.write(out_system_sound_id, 0); }
+        if !out_system_sound_id.is_null() {
+            env.mem.write(out_system_sound_id, 0);
+        }
         return paramErr;
     }
 
     let path = to_rust_path(env, in_file_url);
     log!("AudioServicesCreateSystemSoundID: opening {:?}", path);
-    
+
     let audio_file_result = audio::AudioFile::open_for_reading(&path, &env.fs);
-    
+
     // Подход из форка + декодирование из оригинала
     let sound_entry = match audio_file_result {
         Ok(mut audio_file) => {
             let mut data = vec![0; audio_file.byte_count().try_into().unwrap()];
-            let format = AudioStreamBasicDescription::from_audio_description(audio_file.audio_description());
+            let format =
+                AudioStreamBasicDescription::from_audio_description(audio_file.audio_description());
             let size = audio_file.read_bytes(0, data.as_mut_slice()).unwrap();
             let tmp = env.mem.alloc(size as GuestUSize);
             env.mem
                 .bytes_at_mut(tmp.cast(), size as GuestUSize)
                 .copy_from_slice(data.as_slice());
-                
+
             let (al_format, al_frequency, decoded_data) =
                 decode_buffer(&env.mem, &format, tmp.cast(), size as GuestUSize);
             env.mem.free(tmp.cast());
@@ -147,7 +150,8 @@ fn AudioServicesCreateSystemSoundID(
                 path, al_format, al_frequency, decoded_data.len()
             );
 
-            let (_, context) = State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
+            let (_, context) =
+                State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
             let mut al_source = 0;
             unsafe {
@@ -168,9 +172,12 @@ fn AudioServicesCreateSystemSoundID(
                 context.Sourcei(al_source, al::AL_BUFFER, al_buffer.try_into().unwrap());
                 assert!(context.GetError() == 0);
             }
-            
-            SoundEntry::Real(SystemSoundData { al_source, al_buffer })
-        },
+
+            SoundEntry::Real(SystemSoundData {
+                al_source,
+                al_buffer,
+            })
+        }
         Err(_) => {
             log!("Warning: AudioServicesCreateSystemSoundID failed to open file {:?}. Generating silent/dummy sound ID.", path);
             SoundEntry::Dummy
@@ -178,11 +185,11 @@ fn AudioServicesCreateSystemSoundID(
     };
 
     let state = State::get(&mut env.framework_state);
-    
+
     if state.next_sound_id <= kSystemSoundID_UserPreferredAlert {
         state.next_sound_id = kSystemSoundID_UserPreferredAlert + 1;
     }
-    
+
     let id = state.next_sound_id;
     state.next_sound_id += 1;
 
@@ -191,19 +198,24 @@ fn AudioServicesCreateSystemSoundID(
     if !out_system_sound_id.is_null() {
         env.mem.write(out_system_sound_id, id);
     }
-    
+
     log!("AudioServicesCreateSystemSoundID: id={} for {:?}", id, path);
-    0 
+    0
 }
 
 fn AudioServicesDisposeSystemSoundID(
     env: &mut Environment,
     in_system_sound_id: SystemSoundID,
 ) -> OSStatus {
-    let (state, context) = State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
+    let (state, context) =
+        State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
     if let Some(entry) = state.system_sounds.remove(&in_system_sound_id) {
-        if let SoundEntry::Real(SystemSoundData { al_source, al_buffer }) = entry {
+        if let SoundEntry::Real(SystemSoundData {
+            al_source,
+            al_buffer,
+        }) = entry
+        {
             unsafe {
                 context.SourceStop(al_source);
                 context.DeleteSources(1, &al_source as *const ALuint);
@@ -213,7 +225,10 @@ fn AudioServicesDisposeSystemSoundID(
         }
         0
     } else {
-        log!("Tried to dispose of invalid/unknown system sound {}!", in_system_sound_id);
+        log!(
+            "Tried to dispose of invalid/unknown system sound {}!",
+            in_system_sound_id
+        );
         kAudioServicesSystemSoundUnspecifiedError
     }
 }
@@ -228,12 +243,19 @@ fn AudioServicesPlaySystemSound(env: &mut Environment, in_system_sound_id: Syste
         return;
     }
 
-    let (state, context) = State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
-    
+    let (state, context) =
+        State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
+
     if let Some(entry) = state.system_sounds.get(&in_system_sound_id) {
         match entry {
-            SoundEntry::Real(SystemSoundData { al_source, al_buffer: _ }) => {
-                log_dbg!("AudioToolbox: Playing system sound ID: {}", in_system_sound_id);
+            SoundEntry::Real(SystemSoundData {
+                al_source,
+                al_buffer: _,
+            }) => {
+                log_dbg!(
+                    "AudioToolbox: Playing system sound ID: {}",
+                    in_system_sound_id
+                );
                 unsafe {
                     let al_source = *al_source;
                     context.SourcePlay(al_source);
@@ -247,13 +269,16 @@ fn AudioServicesPlaySystemSound(env: &mut Environment, in_system_sound_id: Syste
                         al_state
                     );
                 }
-            },
+            }
             SoundEntry::Dummy => {
                 log!("AudioToolbox: Attempted to play Dummy system sound ID: {} (Skipping gracefully)", in_system_sound_id);
             }
         }
     } else {
-        log!("AudioToolbox: Attempted to play unknown system sound ID: {} (Skipping gracefully)", in_system_sound_id);
+        log!(
+            "AudioToolbox: Attempted to play unknown system sound ID: {} (Skipping gracefully)",
+            in_system_sound_id
+        );
     }
 }
 

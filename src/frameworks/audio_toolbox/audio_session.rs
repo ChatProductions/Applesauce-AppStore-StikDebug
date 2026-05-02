@@ -44,8 +44,7 @@ const kAudioSessionProperty_CurrentHardwareIOBufferDuration: AudioSessionPropert
 const kAudioSessionProperty_OtherAudioIsPlaying: AudioSessionPropertyID = fourcc(b"othr");
 const kAudioSessionProperty_OverrideAudioRoute: AudioSessionPropertyID = fourcc(b"ovrd");
 const kAudioSessionProperty_AudioInputAvailable: AudioSessionPropertyID = fourcc(b"aiav");
-const kAudioSessionProperty_OverrideCategoryMixWithOthers: AudioSessionPropertyID =
-    fourcc(b"cmix");
+const kAudioSessionProperty_OverrideCategoryMixWithOthers: AudioSessionPropertyID = fourcc(b"cmix");
 const kAudioSessionProperty_OverrideCategoryDefaultToSpeaker: AudioSessionPropertyID =
     fourcc(b"cspk");
 const kAudioSessionProperty_OverrideCategoryEnableBluetoothInput: AudioSessionPropertyID =
@@ -231,14 +230,16 @@ pub fn AudioSessionGetProperty(
             env.mem.write(out_data.cast::<u32>(), 0);
         }
         kAudioSessionProperty_OverrideCategoryMixWithOthers => {
-            env.mem.write(out_data.cast::<u32>(), session.mix_with_others);
+            env.mem
+                .write(out_data.cast::<u32>(), session.mix_with_others);
         }
         kAudioSessionProperty_OverrideCategoryDefaultToSpeaker => {
             env.mem
                 .write(out_data.cast::<u32>(), session.default_to_speaker);
         }
         kAudioSessionProperty_OverrideCategoryEnableBluetoothInput => {
-            env.mem.write(out_data.cast::<u32>(), session.bluetooth_input);
+            env.mem
+                .write(out_data.cast::<u32>(), session.bluetooth_input);
         }
         _ => {
             log!(
@@ -290,7 +291,10 @@ pub fn AudioSessionSetProperty(
         }
         kAudioSessionProperty_PreferredHardwareSampleRate => {
             let rate = env.mem.read(in_data.cast::<f64>());
-            log_dbg!("AudioSessionSetProperty PreferredHardwareSampleRate -> {}", rate);
+            log_dbg!(
+                "AudioSessionSetProperty PreferredHardwareSampleRate -> {}",
+                rate
+            );
             session.preferred_hardware_sample_rate = rate;
         }
         kAudioSessionProperty_PreferredHardwareIOBufferDuration => {
@@ -330,7 +334,10 @@ pub fn AudioSessionAddPropertyListener(
     _in_proc: AudioSessionPropertyListener,
     _in_client_data: ConstVoidPtr,
 ) -> OSStatus {
-    log_dbg!("TODO: AudioSessionAddPropertyListener {}", debug_fourcc(in_id));
+    log_dbg!(
+        "TODO: AudioSessionAddPropertyListener {}",
+        debug_fourcc(in_id)
+    );
     kAudioSessionNoErr
 }
 
@@ -398,4 +405,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioSessionAddPropertyListenerWithUserData(_, _, _)),
     export_c_func!(AudioSessionRemovePropertyListenerWithUserData(_, _, _)),
 ];
-

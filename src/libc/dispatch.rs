@@ -48,23 +48,23 @@ pub type dispatch_data_t = MutVoidPtr;
 pub type dispatch_block_t = MutVoidPtr;
 
 /// Priority levels for `dispatch_get_global_queue`.
-const DISPATCH_QUEUE_PRIORITY_HIGH:       i32 =  2;
-const DISPATCH_QUEUE_PRIORITY_DEFAULT:    i32 =  0;
-const DISPATCH_QUEUE_PRIORITY_LOW:        i32 = -2;
+const DISPATCH_QUEUE_PRIORITY_HIGH: i32 = 2;
+const DISPATCH_QUEUE_PRIORITY_DEFAULT: i32 = 0;
+const DISPATCH_QUEUE_PRIORITY_LOW: i32 = -2;
 const DISPATCH_QUEUE_PRIORITY_BACKGROUND: i32 = i32::MIN;
 
 /// Queue attribute constants.
-const DISPATCH_QUEUE_SERIAL:     i32 = 0;
+const DISPATCH_QUEUE_SERIAL: i32 = 0;
 const DISPATCH_QUEUE_CONCURRENT: i32 = 1;
 
 /// `dispatch_time_t` constants.
-const DISPATCH_TIME_NOW:     u64 = 0;
+const DISPATCH_TIME_NOW: u64 = 0;
 const DISPATCH_TIME_FOREVER: u64 = u64::MAX;
 
 /// Sentinel pointer values we hand out as "queue" handles.
 /// We use small odd numbers so they're never confused with real allocations.
-const MAIN_QUEUE_PTR:       u32 = 0x0000_0001;
-const GLOBAL_QUEUE_PTR:     u32 = 0x0000_0003;
+const MAIN_QUEUE_PTR: u32 = 0x0000_0001;
+const GLOBAL_QUEUE_PTR: u32 = 0x0000_0003;
 
 // MARK: - Notification name constants
 
@@ -125,7 +125,10 @@ fn dispatch_get_global_queue(
     identifier: i32,
     _flags: u32,
 ) -> dispatch_queue_t {
-    log_dbg!("dispatch_get_global_queue(identifier={}) -> global queue stub", identifier);
+    log_dbg!(
+        "dispatch_get_global_queue(identifier={}) -> global queue stub",
+        identifier
+    );
     MutVoidPtr::from_bits(GLOBAL_QUEUE_PTR)
 }
 
@@ -137,9 +140,16 @@ fn dispatch_queue_create(
     let label_str = if label.is_null() {
         "<anonymous>".to_string()
     } else {
-        env.mem.cstr_at_utf8(label.cast()).unwrap_or_default().to_owned()
+        env.mem
+            .cstr_at_utf8(label.cast())
+            .unwrap_or_default()
+            .to_owned()
     };
-    log_dbg!("dispatch_queue_create({:?}, attr={}) -> stub", label_str, attr);
+    log_dbg!(
+        "dispatch_queue_create({:?}, attr={}) -> stub",
+        label_str,
+        attr
+    );
     let st = get_state(env);
     st.next_queue_handle += 2; // keep odd
     let handle = st.next_queue_handle | 0x0100_0000;
@@ -147,10 +157,7 @@ fn dispatch_queue_create(
     MutVoidPtr::from_bits(handle)
 }
 
-fn dispatch_queue_get_label(
-    env: &mut Environment,
-    queue: dispatch_queue_t,
-) -> ConstVoidPtr {
+fn dispatch_queue_get_label(env: &mut Environment, queue: dispatch_queue_t) -> ConstVoidPtr {
     // Return an empty string — label lookup not implemented.
     let empty = env.mem.alloc_and_write_cstr(b"");
     empty.cast_void().cast_const()
@@ -161,10 +168,7 @@ fn dispatch_get_current_queue(env: &mut Environment) -> dispatch_queue_t {
     MutVoidPtr::from_bits(MAIN_QUEUE_PTR)
 }
 
-fn dispatch_queue_retain(
-    _env: &mut Environment,
-    queue: dispatch_queue_t,
-) -> dispatch_queue_t {
+fn dispatch_queue_retain(_env: &mut Environment, queue: dispatch_queue_t) -> dispatch_queue_t {
     queue // no-op
 }
 
@@ -226,9 +230,13 @@ fn dispatch_apply(
     _queue: dispatch_queue_t,
     block: MutVoidPtr,
 ) {
-    if block.is_null() { return; }
+    if block.is_null() {
+        return;
+    }
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
-    if invoke_ptr == 0 { return; }
+    if invoke_ptr == 0 {
+        return;
+    }
     let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
     for i in 0..iterations {
         let _: () = invoke.call_from_host(env, (block, i));
@@ -242,7 +250,9 @@ fn dispatch_apply_f(
     context: MutVoidPtr,
     work: GuestFunction,
 ) {
-    if work == GuestFunction::null_ptr() { return; }
+    if work == GuestFunction::null_ptr() {
+        return;
+    }
     for i in 0..iterations {
         let _: () = work.call_from_host(env, (context, i));
     }
@@ -277,7 +287,9 @@ fn dispatch_after_f(
 // MARK: - dispatch_time
 
 fn dispatch_time(_env: &mut Environment, when: u64, delta: i64) -> u64 {
-    if when == DISPATCH_TIME_FOREVER { return DISPATCH_TIME_FOREVER; }
+    if when == DISPATCH_TIME_FOREVER {
+        return DISPATCH_TIME_FOREVER;
+    }
     when.saturating_add(delta as u64)
 }
 
@@ -319,11 +331,7 @@ fn dispatch_group_async_f(
 fn dispatch_group_enter(_env: &mut Environment, _group: dispatch_group_t) {}
 fn dispatch_group_leave(_env: &mut Environment, _group: dispatch_group_t) {}
 
-fn dispatch_group_wait(
-    _env: &mut Environment,
-    _group: dispatch_group_t,
-    _timeout: u64,
-) -> i32 {
+fn dispatch_group_wait(_env: &mut Environment, _group: dispatch_group_t, _timeout: u64) -> i32 {
     0 // success — all work completed immediately
 }
 
@@ -363,11 +371,7 @@ fn dispatch_semaphore_create(env: &mut Environment, value: i64) -> dispatch_sema
     MutVoidPtr::from_bits(handle)
 }
 
-fn dispatch_semaphore_wait(
-    env: &mut Environment,
-    sem: dispatch_semaphore_t,
-    _timeout: u64,
-) -> i32 {
+fn dispatch_semaphore_wait(env: &mut Environment, sem: dispatch_semaphore_t, _timeout: u64) -> i32 {
     let key = sem.to_bits();
     let st = get_state(env);
     if let Some(val) = st.semaphores.get_mut(&key) {
@@ -416,19 +420,22 @@ fn dispatch_source_set_event_handler_f(
     _env: &mut Environment,
     _source: dispatch_source_t,
     _handler: GuestFunction,
-) {}
+) {
+}
 
 fn dispatch_source_set_cancel_handler(
     _env: &mut Environment,
     _source: dispatch_source_t,
     _handler: dispatch_block_t,
-) {}
+) {
+}
 
 fn dispatch_source_set_cancel_handler_f(
     _env: &mut Environment,
     _source: dispatch_source_t,
     _handler: GuestFunction,
-) {}
+) {
+}
 
 fn dispatch_source_cancel(_env: &mut Environment, _source: dispatch_source_t) {}
 
@@ -448,11 +455,7 @@ fn dispatch_source_get_data(_env: &mut Environment, _source: dispatch_source_t) 
     0
 }
 
-fn dispatch_source_merge_data(
-    _env: &mut Environment,
-    _source: dispatch_source_t,
-    _value: usize,
-) {}
+fn dispatch_source_merge_data(_env: &mut Environment, _source: dispatch_source_t, _value: usize) {}
 
 fn dispatch_source_set_timer(
     _env: &mut Environment,
@@ -460,26 +463,19 @@ fn dispatch_source_set_timer(
     _start: u64,
     _interval: u64,
     _leeway: u64,
-) {}
+) {
+}
 
 fn dispatch_resume(_env: &mut Environment, _object: MutVoidPtr) {}
 fn dispatch_suspend(_env: &mut Environment, _object: MutVoidPtr) {}
 
 // MARK: - dispatch_barrier
 
-fn dispatch_barrier_async(
-    env: &mut Environment,
-    queue: dispatch_queue_t,
-    block: dispatch_block_t,
-) {
+fn dispatch_barrier_async(env: &mut Environment, queue: dispatch_queue_t, block: dispatch_block_t) {
     dispatch_async(env, queue, block);
 }
 
-fn dispatch_barrier_sync(
-    env: &mut Environment,
-    queue: dispatch_queue_t,
-    block: dispatch_block_t,
-) {
+fn dispatch_barrier_sync(env: &mut Environment, queue: dispatch_queue_t, block: dispatch_block_t) {
     dispatch_sync(env, queue, block);
 }
 
@@ -513,13 +509,15 @@ fn dispatch_set_finalizer_f(
     _env: &mut Environment,
     _object: MutVoidPtr,
     _finalizer: GuestFunction,
-) {}
+) {
+}
 
 fn dispatch_set_target_queue(
     _env: &mut Environment,
     _object: MutVoidPtr,
     _queue: dispatch_queue_t,
-) {}
+) {
+}
 
 // MARK: - dispatch_main
 
@@ -535,7 +533,9 @@ fn dispatch_main(_env: &mut Environment) {
 /// Layout: [isa, flags, reserved, invoke, descriptor, captures...]
 fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
     let invoke_ptr = env.mem.read(block.cast::<u32>() + 3u32);
-    if invoke_ptr == 0 { return; }
+    if invoke_ptr == 0 {
+        return;
+    }
     let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
     let _: () = invoke.call_from_host(env, (block,));
 }

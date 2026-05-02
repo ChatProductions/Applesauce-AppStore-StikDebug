@@ -15,17 +15,14 @@
 //! that view as the subview instead.
 
 use crate::abi::{GuestArg, GuestRet};
-use crate::frameworks::uikit::ui_view::ui_control::ui_bar_button_item::{
-    UIBarButtonSystemItem,
-};
+use crate::frameworks::uikit::ui_view::ui_control::ui_bar_button_item::UIBarButtonSystemItem;
 use crate::frameworks::{
     core_graphics::{CGFloat, CGPoint, CGRect, CGSize},
     foundation::{ns_array, NSUInteger},
 };
 use crate::objc::{
-    autorelease, id, impl_HostObject_with_superclass, msg, msg_class,
-    msg_super, nil, objc_classes, release, retain, ClassExports,
-    NSZonePtr,
+    autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
+    release, retain, ClassExports, NSZonePtr,
 };
 
 // ---------------------------------------------------------------------------
@@ -36,15 +33,14 @@ use crate::objc::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UIBarStyle {
     UIBarStyleDefault = 0,
-    UIBarStyleBlack   = 1,
+    UIBarStyleBlack = 1,
 }
 
 impl GuestArg for UIBarStyle {
     const REG_COUNT: usize = 1;
 
     fn from_regs(regs: &[u32]) -> Self {
-        UIBarStyle::try_from(regs[0] as i32)
-            .unwrap_or(UIBarStyle::UIBarStyleDefault)
+        UIBarStyle::try_from(regs[0] as i32).unwrap_or(UIBarStyle::UIBarStyleDefault)
     }
 
     fn to_regs(self, regs: &mut [u32]) {
@@ -54,8 +50,7 @@ impl GuestArg for UIBarStyle {
 
 impl GuestRet for UIBarStyle {
     fn from_regs(regs: &[u32]) -> Self {
-        UIBarStyle::try_from(regs[0] as i32)
-            .unwrap_or(UIBarStyle::UIBarStyleDefault)
+        UIBarStyle::try_from(regs[0] as i32).unwrap_or(UIBarStyle::UIBarStyleDefault)
     }
 
     fn to_regs(self, regs: &mut [u32]) {
@@ -101,12 +96,12 @@ impl_HostObject_with_superclass!(UIToolbarHostObject);
 impl Default for UIToolbarHostObject {
     fn default() -> Self {
         Self {
-            superclass:     Default::default(),
-            items:          Vec::new(),
-            button_views:   Vec::new(),
-            bar_style:      UIBarStyle::UIBarStyleDefault,
+            superclass: Default::default(),
+            items: Vec::new(),
+            button_views: Vec::new(),
+            bar_style: UIBarStyle::UIBarStyleDefault,
             is_translucent: true,
-            delegate:       nil,
+            delegate: nil,
         }
     }
 }
@@ -121,29 +116,36 @@ impl Default for UIToolbarHostObject {
 /// descends from `UIControl` in this emulator and renders itself).
 fn button_view_for_item(env: &mut crate::Environment, item: id) -> id {
     let custom: id = msg![env; item customView];
-    if custom != nil { custom } else { item }
+    if custom != nil {
+        custom
+    } else {
+        item
+    }
 }
 
 /// Apply a background color with the appropriate alpha for the given style
 /// and translucency flag.
 fn apply_toolbar_background(
-    env:           &mut crate::Environment,
-    this:          id,
-    style:         UIBarStyle,
+    env: &mut crate::Environment,
+    this: id,
+    style: UIBarStyle,
     is_translucent: bool,
 ) {
-    let (base_color, opaque_alpha, translucent_alpha): (id, CGFloat, CGFloat) =
-        match style {
-            UIBarStyle::UIBarStyleDefault => {
-                let c: id = msg_class![env; UIColor darkGrayColor];
-                (c, 1.0, 0.85)
-            }
-            UIBarStyle::UIBarStyleBlack => {
-                let c: id = msg_class![env; UIColor blackColor];
-                (c, 1.0, 0.90)
-            }
-        };
-    let alpha = if is_translucent { translucent_alpha } else { opaque_alpha };
+    let (base_color, opaque_alpha, translucent_alpha): (id, CGFloat, CGFloat) = match style {
+        UIBarStyle::UIBarStyleDefault => {
+            let c: id = msg_class![env; UIColor darkGrayColor];
+            (c, 1.0, 0.85)
+        }
+        UIBarStyle::UIBarStyleBlack => {
+            let c: id = msg_class![env; UIColor blackColor];
+            (c, 1.0, 0.90)
+        }
+    };
+    let alpha = if is_translucent {
+        translucent_alpha
+    } else {
+        opaque_alpha
+    };
     let colored: id = msg![env; base_color colorWithAlphaComponent:alpha];
     () = msg![env; this setBackgroundColor:colored];
 }
@@ -448,4 +450,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

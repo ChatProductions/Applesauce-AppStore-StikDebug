@@ -9,8 +9,8 @@
 use crate::audio;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::audio_toolbox::audio_file::{
-    AudioFileHostObject, AudioFileID, State as AudioFileState,
-    kAudioFilePropertyDataFormat, kAudioFilePropertyPacketSizeUpperBound,
+    kAudioFilePropertyDataFormat, kAudioFilePropertyPacketSizeUpperBound, AudioFileHostObject,
+    AudioFileID, State as AudioFileState,
 };
 use crate::frameworks::carbon_core::{eofErr, OSStatus};
 use crate::frameworks::core_audio_types::{
@@ -119,17 +119,12 @@ fn register_ext_audio_file(
         frame_position: 0,
         wrapped_audio_file_id: wrapped_id,
     };
-    let guest_ref = env
-        .mem
-        .alloc_and_write(OpaqueExtAudioFileID { _filler: 0 });
+    let guest_ref = env.mem.alloc_and_write(OpaqueExtAudioFileID { _filler: 0 });
     State::get(&mut env.framework_state)
         .ext_audio_files
         .insert(guest_ref, host_object);
     env.mem.write(out_ext_audio_file, guest_ref);
-    log_dbg!(
-        "ExtAudioFile registered, new handle: {:?}",
-        guest_ref
-    );
+    log_dbg!("ExtAudioFile registered, new handle: {:?}", guest_ref);
     0 // success
 }
 
@@ -149,7 +144,8 @@ pub fn ExtAudioFileOpenURL(
         Err(e) => {
             log!(
                 "Warning: ExtAudioFileOpenURL() failed for {:?}: {:?}. Returning Dummy.",
-                path, e
+                path,
+                e
             );
             AudioFileHostObject::Dummy {
                 format: AudioStreamBasicDescription {
@@ -180,22 +176,24 @@ pub fn ExtAudioFileWrapAudioFileID(
     out_ext_audio_file: MutPtr<ExtAudioFileRef>,
 ) -> OSStatus {
     return_if_null!(in_audio_file);
-    
+
     let audio_file = {
         let host_obj = AudioFileState::get(&mut env.framework_state)
             .audio_files
             .get(&in_audio_file)
             .expect("ExtAudioFileWrapAudioFileID: unknown AudioFileID");
-            
+
         match host_obj {
             AudioFileHostObject::Real(af) => AudioFileHostObject::Real(af.clone()),
-            AudioFileHostObject::Dummy { format, byte_count, packet_count } => {
-                AudioFileHostObject::Dummy {
-                    format: *format,
-                    byte_count: *byte_count,
-                    packet_count: *packet_count,
-                }
-            }
+            AudioFileHostObject::Dummy {
+                format,
+                byte_count,
+                packet_count,
+            } => AudioFileHostObject::Dummy {
+                format: *format,
+                byte_count: *byte_count,
+                packet_count: *packet_count,
+            },
         }
     };
 
@@ -203,18 +201,10 @@ pub fn ExtAudioFileWrapAudioFileID(
         "ExtAudioFileWrapAudioFileID() wrapping AudioFileID {:?}",
         in_audio_file
     );
-    register_ext_audio_file(
-        env,
-        audio_file,
-        Some(in_audio_file),
-        out_ext_audio_file,
-    )
+    register_ext_audio_file(env, audio_file, Some(in_audio_file), out_ext_audio_file)
 }
 
-pub fn ExtAudioFileDispose(
-    env: &mut Environment,
-    in_ext_audio_file: ExtAudioFileRef,
-) -> OSStatus {
+pub fn ExtAudioFileDispose(env: &mut Environment, in_ext_audio_file: ExtAudioFileRef) -> OSStatus {
     return_if_null!(in_ext_audio_file);
     let Some(host_object) = State::get(&mut env.framework_state)
         .ext_audio_files
@@ -271,8 +261,7 @@ pub fn ExtAudioFileGetPropertyInfo(
         env.mem.write(out_size, size);
     }
     if !out_writable.is_null() {
-        let writable: u32 =
-            (in_property_id == kExtAudioFileProperty_ClientDataFormat) as u32;
+        let writable: u32 = (in_property_id == kExtAudioFileProperty_ClientDataFormat) as u32;
         env.mem.write(out_writable, writable);
     }
     0 // success
@@ -302,7 +291,7 @@ pub fn ExtAudioFileGetProperty(
         .ext_audio_files
         .get(&in_ext_audio_file)
         .expect("ExtAudioFileGetProperty: unknown ExtAudioFileRef");
-        
+
     match in_property_id {
         kExtAudioFileProperty_FileDataFormat => {
             let desc = build_asbd(&host_object.audio_file);
@@ -319,14 +308,17 @@ pub fn ExtAudioFileGetProperty(
                 AudioFileHostObject::Real(af) => {
                     let desc = af.audio_description();
                     if desc.bytes_per_packet != 0 {
-                        (af.byte_count() as i64 * desc.frames_per_packet as i64) / desc.bytes_per_packet as i64
+                        (af.byte_count() as i64 * desc.frames_per_packet as i64)
+                            / desc.bytes_per_packet as i64
                     } else {
                         0
                     }
                 }
-                AudioFileHostObject::Dummy { format, packet_count, .. } => {
-                    (*packet_count * format.frames_per_packet as u64) as i64
-                }
+                AudioFileHostObject::Dummy {
+                    format,
+                    packet_count,
+                    ..
+                } => (*packet_count * format.frames_per_packet as u64) as i64,
             };
             env.mem.write(out_property_data.cast(), total_frames);
         }
@@ -358,8 +350,7 @@ pub fn ExtAudioFileSetProperty(
                 log!("Warning: ExtAudioFileSetProperty(ClientDataFormat) bad size");
                 return kExtAudioFileError_InvalidPropertySize;
             }
-            let new_format: AudioStreamBasicDescription =
-                env.mem.read(in_property_data.cast());
+            let new_format: AudioStreamBasicDescription = env.mem.read(in_property_data.cast());
             log_dbg!(
                 "ExtAudioFileSetProperty(ClientDataFormat): {:?}",
                 new_format
@@ -408,7 +399,6 @@ struct AudioBufferList {
 }
 unsafe impl SafeRead for AudioBufferList {}
 
-
 pub fn ExtAudioFileRead(
     env: &mut Environment,
     in_ext_audio_file: ExtAudioFileRef,
@@ -419,7 +409,7 @@ pub fn ExtAudioFileRead(
 
     let frames_requested = env.mem.read(io_num_frames);
     if frames_requested == 0 {
-        return 0; 
+        return 0;
     }
 
     let mut abl: AudioBufferList = env.mem.read(io_data);
@@ -435,12 +425,11 @@ pub fn ExtAudioFileRead(
     let (frames_per_packet, packet_size) = match &host.audio_file {
         AudioFileHostObject::Real(af) => (
             af.audio_description().frames_per_packet,
-            af.packet_size_fixed()
+            af.packet_size_fixed(),
         ),
-        AudioFileHostObject::Dummy { format, .. } => (
-            format.frames_per_packet,
-            format.bytes_per_packet
-        ),
+        AudioFileHostObject::Dummy { format, .. } => {
+            (format.frames_per_packet, format.bytes_per_packet)
+        }
     };
 
     if frames_per_packet == 0 || packet_size == 0 {
@@ -471,11 +460,11 @@ pub fn ExtAudioFileRead(
 
     // Read logic directly without using error-prone map ID transmutes
     let bytes_read = match &mut host.audio_file {
-        AudioFileHostObject::Real(af) => {
-            af.read_bytes(starting_byte, buffer_slice).unwrap_or(0)
-        }
+        AudioFileHostObject::Real(af) => af.read_bytes(starting_byte, buffer_slice).unwrap_or(0),
         AudioFileHostObject::Dummy { byte_count, .. } => {
-            for b in buffer_slice.iter_mut() { *b = 0; }
+            for b in buffer_slice.iter_mut() {
+                *b = 0;
+            }
             let max_read = byte_count.saturating_sub(starting_byte);
             std::cmp::min(bytes_to_read as u64, max_read) as usize
         }
@@ -556,7 +545,7 @@ fn build_asbd(audio_file: &AudioFileHostObject) -> AudioStreamBasicDescription {
         kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian, kAudioFormatFlagIsFloat,
         kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
     };
-    
+
     match audio_file {
         AudioFileHostObject::Real(af) => {
             let audio::AudioDescription {
@@ -567,7 +556,7 @@ fn build_asbd(audio_file: &AudioFileHostObject) -> AudioStreamBasicDescription {
                 channels_per_frame,
                 bits_per_channel,
             } = af.audio_description();
-            
+
             match format {
                 audio::AudioFormat::LinearPcm {
                     is_float,

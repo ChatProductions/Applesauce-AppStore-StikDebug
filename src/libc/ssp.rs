@@ -5,7 +5,7 @@
  */
 //! Stack Smashing Protection (SSP)
 
-use crate::dyld::{export_c_func, FunctionExports, ConstantExports, HostConstant};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::environment::Environment;
 
 // Если защита стека поймает переполнение (буфер оверфлоу), игра вызовет эту функцию.

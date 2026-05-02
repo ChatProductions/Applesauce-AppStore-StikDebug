@@ -27,17 +27,23 @@ use crate::mem::{ConstPtr, ConstVoidPtr, Mem, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
-pub type CFDictionaryRef        = CFTypeRef;
+pub type CFDictionaryRef = CFTypeRef;
 pub type CFMutableDictionaryRef = CFTypeRef;
 
 // MARK: - Retain / Release
 
 pub fn CFDictionaryRetain(env: &mut Environment, dict: CFDictionaryRef) -> CFDictionaryRef {
-    if !dict.is_null() { CFRetain(env, dict) } else { dict }
+    if !dict.is_null() {
+        CFRetain(env, dict)
+    } else {
+        dict
+    }
 }
 
 pub fn CFDictionaryRelease(env: &mut Environment, dict: CFDictionaryRef) {
-    if !dict.is_null() { CFRelease(env, dict); }
+    if !dict.is_null() {
+        CFRelease(env, dict);
+    }
 }
 
 // MARK: - Constructors
@@ -45,16 +51,16 @@ pub fn CFDictionaryRelease(env: &mut Environment, dict: CFDictionaryRef) {
 fn CFDictionaryCreate(
     env: &mut Environment,
     allocator: CFAllocatorRef,
-    keys:   ConstPtr<ConstVoidPtr>,
+    keys: ConstPtr<ConstVoidPtr>,
     values: ConstPtr<ConstVoidPtr>,
     count: CFIndex,
-    key_callbacks:   ConstPtr<CFDictionaryKeyCallBacks>,
+    key_callbacks: ConstPtr<CFDictionaryKeyCallBacks>,
     value_callbacks: ConstPtr<CFDictionaryValueCallBacks>,
 ) -> CFDictionaryRef {
     // Build a mutable dict then return it — immutability not enforced here.
     let dict = CFDictionaryCreateMutable(env, allocator, 0, key_callbacks, value_callbacks);
     for i in 0..count as u32 {
-        let key:   ConstVoidPtr = env.mem.read(keys   + i);
+        let key: ConstVoidPtr = env.mem.read(keys + i);
         let value: ConstVoidPtr = env.mem.read(values + i);
         CFDictionarySetValue(env, dict, key, value);
     }
@@ -65,7 +71,7 @@ fn CFDictionaryCreateMutable(
     env: &mut Environment,
     allocator: CFAllocatorRef,
     capacity: CFIndex,
-    key_callbacks:   ConstPtr<CFDictionaryKeyCallBacks>,
+    key_callbacks: ConstPtr<CFDictionaryKeyCallBacks>,
     value_callbacks: ConstPtr<CFDictionaryValueCallBacks>,
 ) -> CFMutableDictionaryRef {
     assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
@@ -101,12 +107,17 @@ fn CFDictionaryCreateMutableCopy(
 fn CFDictionaryAddValue(
     env: &mut Environment,
     dict: CFMutableDictionaryRef,
-    key:   ConstVoidPtr,
+    key: ConstVoidPtr,
     value: ConstVoidPtr,
 ) {
     let key_id: id = key.cast().cast_mut();
-    let res: id    = msg![env; dict objectForKey:key_id];
-    log_dbg!("CFDictionaryAddValue k {:?} v {:?}; exists={}", key, value, res != nil);
+    let res: id = msg![env; dict objectForKey:key_id];
+    log_dbg!(
+        "CFDictionaryAddValue k {:?} v {:?}; exists={}",
+        key,
+        value,
+        res != nil
+    );
     if res == nil {
         let value_id: id = value.cast().cast_mut();
         msg![env; dict setObject:value_id forKey:key_id]
@@ -116,11 +127,11 @@ fn CFDictionaryAddValue(
 fn CFDictionarySetValue(
     env: &mut Environment,
     dict: CFMutableDictionaryRef,
-    key:   ConstVoidPtr,
+    key: ConstVoidPtr,
     value: ConstVoidPtr,
 ) {
     log_dbg!("CFDictionarySetValue k {:?} v {:?}", key, value);
-    let key_id:   id = key.cast().cast_mut();
+    let key_id: id = key.cast().cast_mut();
     let value_id: id = value.cast().cast_mut();
     msg![env; dict setObject:value_id forKey:key_id]
 }
@@ -128,7 +139,7 @@ fn CFDictionarySetValue(
 fn CFDictionaryReplaceValue(
     env: &mut Environment,
     dict: CFMutableDictionaryRef,
-    key:   ConstVoidPtr,
+    key: ConstVoidPtr,
     value: ConstVoidPtr,
 ) {
     // Only replaces if the key already exists.
@@ -140,11 +151,7 @@ fn CFDictionaryReplaceValue(
     }
 }
 
-fn CFDictionaryRemoveValue(
-    env: &mut Environment,
-    dict: CFMutableDictionaryRef,
-    key: ConstVoidPtr,
-) {
+fn CFDictionaryRemoveValue(env: &mut Environment, dict: CFMutableDictionaryRef, key: ConstVoidPtr) {
     let key_id: id = key.cast().cast_mut();
     log_dbg!("CFDictionaryRemoveValue key {:?}", key);
     () = msg![env; dict removeObjectForKey:key_id];
@@ -155,7 +162,9 @@ fn CFDictionaryRemoveAllValues(env: &mut Environment, dict: CFMutableDictionaryR
     let enumerator: id = msg![env; keys_arr objectEnumerator];
     loop {
         let key: id = msg![env; enumerator nextObject];
-        if key == nil { break; }
+        if key == nil {
+            break;
+        }
         CFDictionaryRemoveValue(env, dict, key.cast().cast_const());
     }
 }
@@ -168,21 +177,22 @@ fn CFDictionaryGetValue(
     key: ConstVoidPtr,
 ) -> ConstVoidPtr {
     let key_id: id = key.cast().cast_mut();
-    let res: id    = msg![env; dict objectForKey:key_id];
+    let res: id = msg![env; dict objectForKey:key_id];
     res.cast().cast_const()
 }
 
 fn CFDictionaryGetValueIfPresent(
     env: &mut Environment,
     dict: CFDictionaryRef,
-    key:   ConstVoidPtr,
+    key: ConstVoidPtr,
     value: MutVoidPtr, // void** — out param
 ) -> bool {
     let key_id: id = key.cast().cast_mut();
-    let res: id    = msg![env; dict objectForKey:key_id];
+    let res: id = msg![env; dict objectForKey:key_id];
     if res != nil {
         if !value.is_null() {
-            env.mem.write(value.cast::<ConstVoidPtr>(), res.cast().cast_const());
+            env.mem
+                .write(value.cast::<ConstVoidPtr>(), res.cast().cast_const());
         }
         true
     } else {
@@ -196,7 +206,7 @@ fn CFDictionaryContainsKey(
     key: ConstVoidPtr,
 ) -> bool {
     let key_id: id = key.cast().cast_mut();
-    let res: id    = msg![env; dict objectForKey:key_id];
+    let res: id = msg![env; dict objectForKey:key_id];
     res != nil
 }
 
@@ -205,13 +215,15 @@ fn CFDictionaryContainsValue(
     dict: CFDictionaryRef,
     value: ConstVoidPtr,
 ) -> bool {
-    let value_id: id   = value.cast().cast_mut();
+    let value_id: id = value.cast().cast_mut();
     let values_arr: id = msg![env; dict allValues];
     let count: NSUInteger = msg![env; values_arr count];
     for i in 0..count {
         let v: id = msg![env; values_arr objectAtIndex:i];
         let eq: bool = msg![env; v isEqual:value_id];
-        if eq { return true; }
+        if eq {
+            return true;
+        }
     }
     false
 }
@@ -225,16 +237,18 @@ fn CFDictionaryGetCount(env: &mut Environment, dict: CFDictionaryRef) -> CFIndex
 fn CFDictionaryGetKeysAndValues(
     env: &mut Environment,
     dict: CFDictionaryRef,
-    keys:   ConstPtr<MutVoidPtr>,
+    keys: ConstPtr<MutVoidPtr>,
     values: ConstPtr<MutVoidPtr>,
 ) {
     let mut key_ptr = keys.cast_mut();
     let mut val_ptr = values.cast_mut();
-    let keys_arr: id   = msg![env; dict allKeys];
+    let keys_arr: id = msg![env; dict allKeys];
     let enumerator: id = msg![env; keys_arr objectEnumerator];
     loop {
         let key: id = msg![env; enumerator nextObject];
-        if key == nil { break; }
+        if key == nil {
+            break;
+        }
         if !key_ptr.is_null() {
             env.mem.write(key_ptr, key.cast());
             key_ptr += 1;
@@ -254,16 +268,13 @@ fn CFDictionaryApplyFunction(
     context: MutVoidPtr,
 ) {
     use crate::abi::CallFromHost;
-    let keys_arr: id   = msg![env; dict allKeys];
+    let keys_arr: id = msg![env; dict allKeys];
     let count: NSUInteger = msg![env; keys_arr count];
     for i in 0..count {
         let key: id = msg![env; keys_arr objectAtIndex:i];
         let val: id = msg![env; dict objectForKey:key];
-        let args: (ConstVoidPtr, ConstVoidPtr, MutVoidPtr) = (
-            key.cast().cast_const(),
-            val.cast().cast_const(),
-            context,
-        );
+        let args: (ConstVoidPtr, ConstVoidPtr, MutVoidPtr) =
+            (key.cast().cast_const(), val.cast().cast_const(), context);
         () = applier.call_from_host(env, args);
     }
 }
@@ -312,11 +323,11 @@ fn _touchHLE_CFDictionary_hash(env: &mut Environment, value: ConstVoidPtr) -> CF
 }
 
 struct DefaultCallbackFunctions {
-    retain:    GuestFunction,
-    release:   GuestFunction,
+    retain: GuestFunction,
+    release: GuestFunction,
     copy_desc: GuestFunction,
-    equal:     GuestFunction,
-    hash:      GuestFunction,
+    equal: GuestFunction,
+    hash: GuestFunction,
 }
 fn create_default_callback_functions(mem: &mut Mem, dyld: &mut Dyld) -> DefaultCallbackFunctions {
     macro_rules! make_gf {
@@ -326,21 +337,31 @@ fn create_default_callback_functions(mem: &mut Mem, dyld: &mut Dyld) -> DefaultC
         }};
     }
     DefaultCallbackFunctions {
-        retain:    make_gf!("__touchHLE_CFDictionary_retain",
-                            _touchHLE_CFDictionary_retain,
-                            fn(&mut Environment, _, _) -> _),
-        release:   make_gf!("__touchHLE_CFDictionary_release",
-                            _touchHLE_CFDictionary_release,
-                            fn(&mut Environment, _, _)),
-        copy_desc: make_gf!("__touchHLE_CFDictionary_copyDescription",
-                            _touchHLE_CFDictionary_copyDescription,
-                            fn(&mut Environment, _) -> _),
-        equal:     make_gf!("__touchHLE_CFDictionary_equal",
-                            _touchHLE_CFDictionary_equal,
-                            fn(&mut Environment, _, _) -> _),
-        hash:      make_gf!("__touchHLE_CFDictionary_hash",
-                            _touchHLE_CFDictionary_hash,
-                            fn(&mut Environment, _) -> _),
+        retain: make_gf!(
+            "__touchHLE_CFDictionary_retain",
+            _touchHLE_CFDictionary_retain,
+            fn(&mut Environment, _, _) -> _
+        ),
+        release: make_gf!(
+            "__touchHLE_CFDictionary_release",
+            _touchHLE_CFDictionary_release,
+            fn(&mut Environment, _, _)
+        ),
+        copy_desc: make_gf!(
+            "__touchHLE_CFDictionary_copyDescription",
+            _touchHLE_CFDictionary_copyDescription,
+            fn(&mut Environment, _) -> _
+        ),
+        equal: make_gf!(
+            "__touchHLE_CFDictionary_equal",
+            _touchHLE_CFDictionary_equal,
+            fn(&mut Environment, _, _) -> _
+        ),
+        hash: make_gf!(
+            "__touchHLE_CFDictionary_hash",
+            _touchHLE_CFDictionary_hash,
+            fn(&mut Environment, _) -> _
+        ),
     }
 }
 
@@ -350,12 +371,12 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::Custom(|env| {
             let common = create_default_callback_functions(&mut env.mem, &mut env.dyld);
             let callbacks = CFDictionaryKeyCallBacks {
-                version:   0,
-                retain:    common.retain,
-                release:   common.release,
+                version: 0,
+                retain: common.retain,
+                release: common.release,
                 copy_desc: common.copy_desc,
-                equal:     common.equal,
-                hash:      common.hash,
+                equal: common.equal,
+                hash: common.hash,
             };
             env.mem.alloc_and_write(callbacks).cast_void().cast_const()
         }),
@@ -365,11 +386,11 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::Custom(|env| {
             let common = create_default_callback_functions(&mut env.mem, &mut env.dyld);
             let callbacks = CFDictionaryValueCallBacks {
-                version:   0,
-                retain:    common.retain,
-                release:   common.release,
+                version: 0,
+                retain: common.retain,
+                release: common.release,
                 copy_desc: common.copy_desc,
-                equal:     common.equal,
+                equal: common.equal,
             };
             env.mem.alloc_and_write(callbacks).cast_void().cast_const()
         }),
@@ -380,12 +401,12 @@ pub const CONSTANTS: ConstantExports = &[
             // Same as kCFTypeDictionaryKeyCallBacks for our purposes.
             let common = create_default_callback_functions(&mut env.mem, &mut env.dyld);
             let callbacks = CFDictionaryKeyCallBacks {
-                version:   0,
-                retain:    common.retain,
-                release:   common.release,
+                version: 0,
+                retain: common.retain,
+                release: common.release,
                 copy_desc: common.copy_desc,
-                equal:     common.equal,
-                hash:      common.hash,
+                equal: common.equal,
+                hash: common.hash,
             };
             env.mem.alloc_and_write(callbacks).cast_void().cast_const()
         }),
@@ -413,4 +434,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFDictionaryGetKeysAndValues(_, _, _)),
     export_c_func!(CFDictionaryApplyFunction(_, _, _)),
 ];
-

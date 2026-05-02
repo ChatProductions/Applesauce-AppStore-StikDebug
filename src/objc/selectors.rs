@@ -89,11 +89,7 @@ impl ObjC {
     /// but because this function will allocate a new C string, this
     /// function is not the most efficient route if there's already a
     /// constant string in the app binary.
-    pub fn register_host_selector(
-        &mut self,
-        name: String,
-        mem: &mut Mem,
-    ) -> SEL {
+    pub fn register_host_selector(&mut self, name: String, mem: &mut Mem) -> SEL {
         if let Some(existing) = self.lookup_selector(&name) {
             return existing;
         }
@@ -116,17 +112,12 @@ impl ObjC {
             .copied()
             .flatten()
         {
-            for method_list in
-                [template.class_methods, template.instance_methods]
-            {
+            for method_list in [template.class_methods, template.instance_methods] {
                 for &(name, _imp) in method_list {
                     if self.selectors.contains_key(name) {
                         continue;
                     }
-                    let sel = SEL(
-                        mem.alloc_and_write_cstr(name.as_bytes())
-                            .cast_const(),
-                    );
+                    let sel = SEL(mem.alloc_and_write_cstr(name.as_bytes()).cast_const());
                     self.selectors.insert(name.to_string(), sel);
                 }
             }
@@ -209,10 +200,7 @@ impl ObjC {
     ) -> Result<(), std::io::Error> {
         use std::io::Write;
         let Some(selrefs) = bin.get_section("__objc_selrefs") else {
-            writeln!(
-                file,
-                "{{ \"object\": \"selectors\", \"selectors\": [] }}"
-            )?;
+            writeln!(file, "{{ \"object\": \"selectors\", \"selectors\": [] }}")?;
             log!("No selectors in binary!");
             return Ok(());
         };
@@ -228,8 +216,7 @@ impl ObjC {
         // Gather all selectors in all linked classes. The first
         // vector is for instance methods, the second for class
         // methods.
-        let mut impl_selectors: HashMap<SEL, (Vec<&str>, Vec<&str>)> =
-            HashMap::new();
+        let mut impl_selectors: HashMap<SEL, (Vec<&str>, Vec<&str>)> = HashMap::new();
         for class in self.classes.values() {
             let class_host_object = self.get_host_object(*class).unwrap();
             let Some(super::ClassHostObject { name, methods, .. }) =
@@ -243,8 +230,7 @@ impl ObjC {
             }
             let metaclass = Self::read_isa(*class, mem);
             // Also get class methods:
-            let metaclass_host_object =
-                self.get_host_object(metaclass).unwrap();
+            let metaclass_host_object = self.get_host_object(metaclass).unwrap();
             let super::ClassHostObject { methods, .. } =
                 metaclass_host_object.as_any().downcast_ref().unwrap();
             for sel in methods.keys() {
@@ -286,19 +272,13 @@ impl ObjC {
         )?;
         for (i, sel) in bin_sels.iter().enumerate() {
             // Why doesn't json allow trailing commas...
-            let comma =
-                if i == bin_sels.len() - 1 { "" } else { "," };
+            let comma = if i == bin_sels.len() - 1 { "" } else { "," };
 
             let name = sel.as_str(mem);
             write!(file, "        {{ \"selector\": \"{name}\"")?;
-            if let Some((instance_impls, class_impls)) =
-                impl_selectors.get(sel)
-            {
+            if let Some((instance_impls, class_impls)) = impl_selectors.get(sel) {
                 if !instance_impls.is_empty() {
-                    write!(
-                        file,
-                        ", \"instance_implementations\": [ "
-                    )?;
+                    write!(file, ", \"instance_implementations\": [ ")?;
                     for (j, class) in instance_impls.iter().enumerate() {
                         let comma = if j == instance_impls.len() - 1 {
                             ""
@@ -310,13 +290,9 @@ impl ObjC {
                     write!(file, "]")?;
                 }
                 if !class_impls.is_empty() {
-                    write!(
-                        file,
-                        ", \"class_implementations\": [ "
-                    )?;
+                    write!(file, ", \"class_implementations\": [ ")?;
                     for (j, class) in class_impls.iter().enumerate() {
-                        let comma =
-                            if j == class_impls.len() - 1 { "" } else { "," };
+                        let comma = if j == class_impls.len() - 1 { "" } else { "," };
                         write!(file, "\"{class}\"{comma} ")?;
                     }
                     write!(file, "]")?;
@@ -329,10 +305,7 @@ impl ObjC {
 }
 
 /// Standard Objective-C runtime function for selector registration.
-pub(super) fn sel_registerName(
-    env: &mut Environment,
-    name: ConstPtr<u8>,
-) -> SEL {
+pub(super) fn sel_registerName(env: &mut Environment, name: ConstPtr<u8>) -> SEL {
     // Guard against a null or invalid pointer being passed as the
     // selector name; return a null SEL rather than panicking.
     if name.is_null() {
@@ -359,4 +332,3 @@ pub(super) fn sel_registerName(
     let name_str = name_str.to_string();
     env.objc.register_host_selector(name_str, &mut env.mem)
 }
-

@@ -5,19 +5,17 @@
  */
 //! `UITabBarItem`.
 
-use crate::frameworks::foundation::NSInteger;
 use crate::frameworks::foundation::ns_string::get_static_str;
-use crate::objc::{
-    id, objc_classes, release, retain, nil, ClassExports, HostObject, NSZonePtr,
-};
+use crate::frameworks::foundation::NSInteger;
+use crate::objc::{id, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
 
 // MARK: - UITabBarItem host object
 
 struct UITabBarItemHostObject {
-    title: id,             // NSString* — retained
-    image: id,             // UIImage* — retained
-    selected_image: id,    // UIImage* — retained
-    badge_value: id,       // NSString* — retained
+    title: id,          // NSString* — retained
+    image: id,          // UIImage* — retained
+    selected_image: id, // UIImage* — retained
+    badge_value: id,    // NSString* — retained
     tag: NSInteger,
     enabled: bool,
 }

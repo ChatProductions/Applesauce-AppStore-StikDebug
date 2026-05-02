@@ -313,9 +313,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     host.target = target;
     host.action = Some(action);
     host.system_item = UIBarButtonSystemItem::Done;
-    
-    // ХАК АРХИТЕКТУРЫ: Пишем image_view в custom_view. 
-    // Твои методы sizeThatFits: и layoutSubviews: автоматически 
+
+    // ХАК АРХИТЕКТУРЫ: Пишем image_view в custom_view.
+    // Твои методы sizeThatFits: и layoutSubviews: автоматически
     // подхватят этот виджет, рассчитают размер и отрисуют его!
     host.custom_view = image_view;
 
@@ -331,13 +331,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let this: id = msg_super![env; this initWithFrame:frame];
-    
+
     if image_view != nil {
         () = msg![env; this addSubview:image_view];
     }
     this
 }
-    
+
 - (id)initWithBarButtonSystemItem:(UIBarButtonSystemItem)system_item
                             target:(id)target
                             action:(SEL)action
@@ -435,7 +435,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if custom_view != nil {
         () = msg![env; this addSubview:custom_view];
     }
-    
+
     this
 }
 
@@ -470,7 +470,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, image);
     env.objc.borrow_mut::<UIBarButtonItemHostObject>(this).image = image;
 }
-    
+
 - (())setTitle:(id)title {
     env.objc.borrow_mut::<UIBarButtonItemHostObject>(this).title = title;
 }
@@ -500,7 +500,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
-    // 1. Сначала извлекаем нужные переменные в отдельной области видимости 
+    // 1. Сначала извлекаем нужные переменные в отдельной области видимости
     //    чтобы сбросить неизменяемое заимствование (immutable borrow).
     let (custom_view, label) = {
         let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
@@ -533,11 +533,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         let host = env.objc.borrow::<UIBarButtonItemHostObject>(this);
         (host.custom_view, host.label)
     };
-    
+
     // 2. Теперь мы можем безопасно вызывать msg!, потому что
     //    borrow::<UIBarButtonItemHostObject> уже завершен.
     let bounds: CGRect = msg![env; this bounds];
-    
+
     // Устанавливаем фрейм для custom_view, если он есть
     if custom_view != nil {
         () = msg![env; custom_view setFrame:bounds];
@@ -580,18 +580,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = std::mem::take(env.objc.borrow_mut(this));
 
     log_dbg!("dealloc [(UIBarButtonItem*){:?} title {:?}, target {:?}, label {:?}, custom_view {:?}]", this, title, target, label, custom_view);
-    
+
     release(env, title);
     release(env, image);
     release(env, target);
     release(env, label);
     // Не забываем очистить кастомный виджет
     release(env, custom_view);
-    
+
     msg_super![env; this dealloc]
 }
 
 @end
 
 };
-

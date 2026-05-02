@@ -13,15 +13,16 @@ use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use super::{NSTimeInterval, NSUInteger};
 // ДОБАВЛЕНЫ ИМПОРТЫ ДЛЯ ЭКСПОРТА ФУНКЦИИ И ОКРУЖЕНИЯ
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::Environment;
 use crate::frameworks::foundation::ns_thread::detach_new_thread_inner;
 use crate::mem::MutVoidPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, msg_send_no_type_checking, nil, objc_classes,
     retain, Class, ClassExports, NSZonePtr, ObjC, TrivialHostObject, SEL,
 };
+use crate::Environment;
 // Хранилище для отмененных таймеров (target, имя селектора в виде строки)
-pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> = std::vec::Vec::new();
+pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::string::String>)> =
+    std::vec::Vec::new();
 // ДОБАВЛЕНА РЕАЛИЗАЦИЯ NSAllocateObject
 fn NSAllocateObject(
     env: &mut Environment,
@@ -30,18 +31,19 @@ fn NSAllocateObject(
     _zone: NSZonePtr,
 ) -> id {
     if extra_bytes > 0 {
-        log!("Warning: NSAllocateObject called with extra_bytes={}, which is currently unhandled!", extra_bytes);
+        log!(
+            "Warning: NSAllocateObject called with extra_bytes={}, which is currently unhandled!",
+            extra_bytes
+        );
     }
-    
+
     // Перенаправляем вызов в стандартный метод alloc данного класса
     msg![env;
 class alloc]
 }
 
 // ДОБАВЛЕН ЭКСПОРТ ФУНКЦИЙ ДЛЯ ДИНАМИЧЕСКОГО ЛИНКЕРА
-pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(NSAllocateObject(_, _, _)),
-];
+pub const FUNCTIONS: FunctionExports = &[export_c_func!(NSAllocateObject(_, _, _))];
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -52,7 +54,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env;
 this allocWithZone:(MutVoidPtr::null())]
 }
-+ (id)allocWithZone:(NSZonePtr)_zone { 
++ (id)allocWithZone:(NSZonePtr)_zone {
     log_dbg!("[{:?} allocWithZone:]", this);
 env.objc.alloc_object(this, Box::new(TrivialHostObject), &mut env.mem)
 }
@@ -71,7 +73,7 @@ new_object init]
 }
 
 + (id)retain {
-    this 
+    this
 }
 + (())release {
 }
@@ -105,7 +107,7 @@ let ptr: crate::mem::MutPtr<u16> = mem.alloc(2).cast();
 + (id)instanceMethodSignatureForSelector:(SEL)selector {
     let sig: id = msg_class![env;
 NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
-    
+
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
 let total_args = explicit_args + 2;
@@ -309,7 +311,7 @@ let undef_sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
 }
 
 
-- (())setValue:(id)_value forUndefinedKey:(id)key { 
+- (())setValue:(id)_value forUndefinedKey:(id)key {
     let class: Class = ObjC::read_isa(this, &env.mem);
     let class_name_string = env.objc.get_class_name(class).to_owned();
 let key_string = to_rust_string(env, key);
@@ -324,7 +326,7 @@ let key_string = to_rust_string(env, key);
 - (bool)conformsToProtocol:(id)_protocol {
     true
 }
-    
+
 // ИЗМЕНЕНО: Ищем _objc_msgSend через create_proc_address (без логов)
 - (u32)methodForSelector:(SEL)selector {
     // Разделяем заимствования (borrows) чтобы компилятор Rust был счастлив
@@ -345,14 +347,14 @@ let ptr: crate::mem::MutPtr<u16> = mem.alloc(2).cast();
 - (id)methodSignatureForSelector:(SEL)selector {
     let sig: id = msg_class![env;
 NSMethodSignature signatureWithObjCTypes:(MutVoidPtr::null())];
-    
+
     let sel_str = selector.as_str(&env.mem);
     let explicit_args = sel_str.chars().filter(|&c| c == ':').count() as NSUInteger;
 let total_args = explicit_args + 2;
     () = msg![env; sig _touchHLE_setNumberOfArguments:total_args];
 sig
 }
-    
+
 - (id)performSelector:(SEL)sel {
     assert!(!sel.is_null());
 msg_send_no_type_checking(env, (this, sel))
@@ -385,7 +387,7 @@ NSTimer timerWithTimeInterval:delay
                                target:this
                              selector:selector
                              userInfo:dict
-          
+
                      repeats:false
     ];
 let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
@@ -425,7 +427,7 @@ let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
             return;
         }
     }
-    
+
     if env.bundle.bundle_identifier().starts_with("com.gameloft.HOS2") && wait {
         if sel == env.objc.lookup_selector("sendGameInfo").unwrap() || sel == env.objc.lookup_selector("setStatusBar:").unwrap() {
             log!("Applying game-specific hack for HOS2: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel_name, env.current_thread);
@@ -449,7 +451,7 @@ let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     msg![env; this performSelector:sel withObject:arg afterDelay:0.0]
 }
 
-- (())_touchHLE_timerFireMethod:(id)which { 
+- (())_touchHLE_timerFireMethod:(id)which {
     let dict: id = msg![env; which userInfo];
 let sel_key: id = get_static_str(env, "SEL");
     let sel_str_id: id = msg![env; dict objectForKey:sel_key];
@@ -460,7 +462,7 @@ let sel = env.objc.lookup_selector(&sel_str).unwrap();
     let arg: id = msg![env; dict objectForKey:arg_key];
 let target_bits = this.to_bits();
     let mut cancelled = false;
-    
+
     unsafe {
         if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_ref())) {
             crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
@@ -524,14 +526,14 @@ this setValue:value forKey:key_path]
 // MARK: - Key-Value Observing (KVO)
 
 - (())willChangeValueForKey:(id)_key {
-    // Базовая реализация NSObject: если нет активных наблюдателей, 
+    // Базовая реализация NSObject: если нет активных наблюдателей,
     // методы willChange и didChange ничего не делают.
 }
 
 - (())didChangeValueForKey:(id)_key {
 }
 
-// Закомментировано: 'self' является зарезервированным словом в Rust и не может 
+// Закомментировано: 'self' является зарезервированным словом в Rust и не может
 // быть использовано как имя метода в этом макросе.
 // Рантайм Objective-C справится с ним сам.
 // - (id)self { ... }
@@ -559,4 +561,3 @@ this setValue:value forKey:key_path]
 @end
 
 };
-

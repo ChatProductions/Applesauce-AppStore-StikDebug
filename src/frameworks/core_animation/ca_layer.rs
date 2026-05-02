@@ -85,11 +85,7 @@ impl CALayerHostObject {
 
 /// Set a CGImage as the tiled background pattern for this layer.
 /// Called from UIView when a pattern-based UIColor is set as backgroundColor.
-pub fn set_background_pattern_cg_image(
-    env: &mut Environment,
-    layer: id,
-    cg_image: id,
-) {
+pub fn set_background_pattern_cg_image(env: &mut Environment, layer: id, cg_image: id) {
     use crate::objc::{release, retain};
     retain(env, cg_image);
     let old = env
@@ -108,9 +104,18 @@ pub const kCAFilterTrilinear: &str = "kCAFilterTrilinear";
 pub const kCAGravityCenter: &str = "center";
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
-    ("_kCAFilterNearest", HostConstant::NSString(kCAFilterNearest)),
-    ("_kCAFilterTrilinear", HostConstant::NSString(kCAFilterTrilinear)),
-    ("_kCAGravityCenter", HostConstant::NSString(kCAGravityCenter)),
+    (
+        "_kCAFilterNearest",
+        HostConstant::NSString(kCAFilterNearest),
+    ),
+    (
+        "_kCAFilterTrilinear",
+        HostConstant::NSString(kCAFilterTrilinear),
+    ),
+    (
+        "_kCAGravityCenter",
+        HostConstant::NSString(kCAGravityCenter),
+    ),
 ];
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -497,7 +502,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // --- ДОБАВЛЕННЫЙ МЕТОД: removeAllAnimations ---
 - (())removeAllAnimations {
     let host = env.objc.borrow_mut::<CALayerHostObject>(this);
-    
+
     // Забираем коллекции, оставляя пустые на их месте
     let named_animations = std::mem::take(&mut host.animations);
     let anonymous_animations = std::mem::take(&mut host.anonymous_animations);
@@ -506,7 +511,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     for (_, anim) in named_animations {
         release(env, anim);
     }
-    
+
     // Освобождаем память (release) для каждой анонимной анимации
     for anim in anonymous_animations {
         release(env, anim);
@@ -517,7 +522,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: id) {
-    let removed = env.objc.borrow_mut::<CALayerHostObject>(layer).anonymous_animations.remove(&animation);
+    let removed = env
+        .objc
+        .borrow_mut::<CALayerHostObject>(layer)
+        .anonymous_animations
+        .remove(&animation);
     assert!(removed);
     release(env, animation);
 }
@@ -536,9 +545,12 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
         if this_superlayer != nil {
             let this_hostobj: &CALayerHostObject = env.objc.borrow(this_superlayer);
             let next = this_hostobj.superlayer;
-            let next_transform = this_transform.concat(this_hostobj.superlayer_to_layer_transform());
+            let next_transform =
+                this_transform.concat(this_hostobj.superlayer_to_layer_transform());
             if need_common_ancestor && next != nil {
-                if let Some(&other_transform) = other_map.get(&next) { break (next, next_transform, other_transform); }
+                if let Some(&other_transform) = other_map.get(&next) {
+                    break (next, next_transform, other_transform);
+                }
                 this_map.insert(next, next_transform);
             }
             this_superlayer = next;
@@ -548,9 +560,12 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
         if other_superlayer != nil {
             let other_hostobj: &CALayerHostObject = env.objc.borrow(other_superlayer);
             let next = other_hostobj.superlayer;
-            let next_transform = other_transform.concat(other_hostobj.superlayer_to_layer_transform());
+            let next_transform =
+                other_transform.concat(other_hostobj.superlayer_to_layer_transform());
             if need_common_ancestor && next != nil {
-                if let Some(&this_transform) = this_map.get(&next) { break (next, this_transform, next_transform); }
+                if let Some(&this_transform) = this_map.get(&next) {
+                    break (next, this_transform, next_transform);
+                }
                 other_map.insert(next, next_transform);
             }
             other_superlayer = next;
@@ -558,8 +573,11 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
         }
 
         if this_superlayer == nil && other_superlayer == nil {
-            if need_common_ancestor { panic!("Layers {this:?} and {other:?} have no common ancestor!"); } 
-            else { break (nil, this_transform, other_transform); }
+            if need_common_ancestor {
+                panic!("Layers {this:?} and {other:?} have no common ancestor!");
+            } else {
+                break (nil, this_transform, other_transform);
+            }
         }
     };
 

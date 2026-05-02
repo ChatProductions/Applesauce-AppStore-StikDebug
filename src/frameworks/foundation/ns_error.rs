@@ -7,49 +7,51 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, NSInteger};
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 
 /// `NSString*`
 pub type NSErrorDomain = id;
 
-pub const NSCocoaErrorDomain:        &str = "NSCocoaErrorDomain";
-pub const NSOSStatusErrorDomain:     &str = "NSOSStatusErrorDomain";
-pub const NSURLErrorDomain:          &str = "NSURLErrorDomain";
-pub const NSPOSIXErrorDomain:        &str = "NSPOSIXErrorDomain";
-pub const NSMachErrorDomain:         &str = "NSMachErrorDomain";
+pub const NSCocoaErrorDomain: &str = "NSCocoaErrorDomain";
+pub const NSOSStatusErrorDomain: &str = "NSOSStatusErrorDomain";
+pub const NSURLErrorDomain: &str = "NSURLErrorDomain";
+pub const NSPOSIXErrorDomain: &str = "NSPOSIXErrorDomain";
+pub const NSMachErrorDomain: &str = "NSMachErrorDomain";
 
 // Common Cocoa error codes
-pub const NSFileReadNoSuchFileError:          NSInteger = 260;
-pub const NSFileReadUnknownError:             NSInteger = 256;
-pub const NSFileWriteUnknownError:            NSInteger = 512;
-pub const NSFileWriteNoPermissionError:       NSInteger = 513;
-pub const NSFileWriteOutOfSpaceError:         NSInteger = 640;
-pub const NSKeyValueValidationError:          NSInteger = 1024;
-pub const NSFormattingError:                  NSInteger = 2048;
-pub const NSUserCancelledError:               NSInteger = 3072;
-pub const NSFeatureUnsupportedError:          NSInteger = 3328;
-pub const NSExecutableNotLoadableError:       NSInteger = 3584;
-pub const NSPropertyListReadCorruptError:     NSInteger = 3840;
+pub const NSFileReadNoSuchFileError: NSInteger = 260;
+pub const NSFileReadUnknownError: NSInteger = 256;
+pub const NSFileWriteUnknownError: NSInteger = 512;
+pub const NSFileWriteNoPermissionError: NSInteger = 513;
+pub const NSFileWriteOutOfSpaceError: NSInteger = 640;
+pub const NSKeyValueValidationError: NSInteger = 1024;
+pub const NSFormattingError: NSInteger = 2048;
+pub const NSUserCancelledError: NSInteger = 3072;
+pub const NSFeatureUnsupportedError: NSInteger = 3328;
+pub const NSExecutableNotLoadableError: NSInteger = 3584;
+pub const NSPropertyListReadCorruptError: NSInteger = 3840;
 
 // Common URL error codes
-pub const NSURLErrorUnknown:                  NSInteger = -1;
-pub const NSURLErrorCancelled:                NSInteger = -999;
-pub const NSURLErrorBadURL:                   NSInteger = -1000;
-pub const NSURLErrorTimedOut:                 NSInteger = -1001;
-pub const NSURLErrorNotConnectedToInternet:   NSInteger = -1009;
+pub const NSURLErrorUnknown: NSInteger = -1;
+pub const NSURLErrorCancelled: NSInteger = -999;
+pub const NSURLErrorBadURL: NSInteger = -1000;
+pub const NSURLErrorTimedOut: NSInteger = -1001;
+pub const NSURLErrorNotConnectedToInternet: NSInteger = -1009;
 
 // UserInfo dictionary keys (as Rust string literals — exported as constants below)
-const KEY_LOCALIZED_DESCRIPTION:     &str = "NSLocalizedDescription";
-const KEY_LOCALIZED_FAILURE_REASON:  &str = "NSLocalizedFailureReason";
+const KEY_LOCALIZED_DESCRIPTION: &str = "NSLocalizedDescription";
+const KEY_LOCALIZED_FAILURE_REASON: &str = "NSLocalizedFailureReason";
 const KEY_LOCALIZED_RECOVERY_SUGGESTION: &str = "NSLocalizedRecoverySuggestion";
 const KEY_LOCALIZED_RECOVERY_OPTIONS: &str = "NSLocalizedRecoveryOptions";
-const KEY_UNDERLYING_ERROR:          &str = "NSUnderlyingError";
-const KEY_URL:                       &str = "NSURL";
-const KEY_FILE_PATH:                 &str = "NSFilePath";
-const KEY_STRING_ENCODING:           &str = "NSStringEncoding";
-const KEY_DEBUG_DESCRIPTION:         &str = "NSDebugDescription";
-const KEY_FAILING_URL_STRING:        &str = "NSErrorFailingURLStringKey";
-const KEY_FAILING_URL:               &str = "NSErrorFailingURLKey";
+const KEY_UNDERLYING_ERROR: &str = "NSUnderlyingError";
+const KEY_URL: &str = "NSURL";
+const KEY_FILE_PATH: &str = "NSFilePath";
+const KEY_STRING_ENCODING: &str = "NSStringEncoding";
+const KEY_DEBUG_DESCRIPTION: &str = "NSDebugDescription";
+const KEY_FAILING_URL_STRING: &str = "NSErrorFailingURLStringKey";
+const KEY_FAILING_URL: &str = "NSErrorFailingURLKey";
 
 struct ErrorHostObject {
     domain: NSErrorDomain,
@@ -240,21 +242,63 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 pub const CONSTANTS: ConstantExports = &[
     // UserInfo keys
-    ("_NSLocalizedDescriptionKey",          HostConstant::NSString(KEY_LOCALIZED_DESCRIPTION)),
-    ("_NSLocalizedFailureReasonErrorKey",    HostConstant::NSString(KEY_LOCALIZED_FAILURE_REASON)),
-    ("_NSLocalizedRecoverySuggestionErrorKey", HostConstant::NSString(KEY_LOCALIZED_RECOVERY_SUGGESTION)),
-    ("_NSLocalizedRecoveryOptionsErrorKey", HostConstant::NSString(KEY_LOCALIZED_RECOVERY_OPTIONS)),
-    ("_NSUnderlyingErrorKey",               HostConstant::NSString(KEY_UNDERLYING_ERROR)),
-    ("_NSURLErrorKey",                      HostConstant::NSString(KEY_URL)),
-    ("_NSFilePathErrorKey",                 HostConstant::NSString(KEY_FILE_PATH)),
-    ("_NSDebugDescriptionErrorKey",         HostConstant::NSString(KEY_DEBUG_DESCRIPTION)),
-    ("_NSStringEncodingErrorKey",           HostConstant::NSString(KEY_STRING_ENCODING)),
-    ("_NSErrorFailingURLStringKey",         HostConstant::NSString(KEY_FAILING_URL_STRING)),
-    ("_NSErrorFailingURLKey",               HostConstant::NSString(KEY_FAILING_URL)),
+    (
+        "_NSLocalizedDescriptionKey",
+        HostConstant::NSString(KEY_LOCALIZED_DESCRIPTION),
+    ),
+    (
+        "_NSLocalizedFailureReasonErrorKey",
+        HostConstant::NSString(KEY_LOCALIZED_FAILURE_REASON),
+    ),
+    (
+        "_NSLocalizedRecoverySuggestionErrorKey",
+        HostConstant::NSString(KEY_LOCALIZED_RECOVERY_SUGGESTION),
+    ),
+    (
+        "_NSLocalizedRecoveryOptionsErrorKey",
+        HostConstant::NSString(KEY_LOCALIZED_RECOVERY_OPTIONS),
+    ),
+    (
+        "_NSUnderlyingErrorKey",
+        HostConstant::NSString(KEY_UNDERLYING_ERROR),
+    ),
+    ("_NSURLErrorKey", HostConstant::NSString(KEY_URL)),
+    ("_NSFilePathErrorKey", HostConstant::NSString(KEY_FILE_PATH)),
+    (
+        "_NSDebugDescriptionErrorKey",
+        HostConstant::NSString(KEY_DEBUG_DESCRIPTION),
+    ),
+    (
+        "_NSStringEncodingErrorKey",
+        HostConstant::NSString(KEY_STRING_ENCODING),
+    ),
+    (
+        "_NSErrorFailingURLStringKey",
+        HostConstant::NSString(KEY_FAILING_URL_STRING),
+    ),
+    (
+        "_NSErrorFailingURLKey",
+        HostConstant::NSString(KEY_FAILING_URL),
+    ),
     // Error domains
-    ("_NSCocoaErrorDomain",     HostConstant::NSString(NSCocoaErrorDomain)),
-    ("_NSOSStatusErrorDomain",  HostConstant::NSString(NSOSStatusErrorDomain)),
-    ("_NSURLErrorDomain",       HostConstant::NSString(NSURLErrorDomain)),
-    ("_NSPOSIXErrorDomain",     HostConstant::NSString(NSPOSIXErrorDomain)),
-    ("_NSMachErrorDomain",      HostConstant::NSString(NSMachErrorDomain)),
+    (
+        "_NSCocoaErrorDomain",
+        HostConstant::NSString(NSCocoaErrorDomain),
+    ),
+    (
+        "_NSOSStatusErrorDomain",
+        HostConstant::NSString(NSOSStatusErrorDomain),
+    ),
+    (
+        "_NSURLErrorDomain",
+        HostConstant::NSString(NSURLErrorDomain),
+    ),
+    (
+        "_NSPOSIXErrorDomain",
+        HostConstant::NSString(NSPOSIXErrorDomain),
+    ),
+    (
+        "_NSMachErrorDomain",
+        HostConstant::NSString(NSMachErrorDomain),
+    ),
 ];

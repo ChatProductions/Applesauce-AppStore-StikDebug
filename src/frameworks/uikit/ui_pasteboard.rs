@@ -5,10 +5,10 @@
  */
 //! `UIPasteboard` and `UILocalNotification`.
 
+use crate::frameworks::foundation::ns_string;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
-use crate::frameworks::foundation::ns_string;
 use std::collections::HashMap;
 
 // MARK: - UIPasteboard host object
@@ -82,14 +82,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)generalPasteboard {
-    // В большинстве игр используется для быстрого копирования текста. 
+    // В большинстве игр используется для быстрого копирования текста.
     // Создаем базовый инстанс.
     let instance: id = msg_class![env; UIPasteboard alloc];
     let instance: id = msg![env; instance init];
-    
+
     // generalPasteboard по умолчанию persistent = YES в iOS
     env.objc.borrow_mut::<UIPasteboardHostObject>(instance).persistent = true;
-    
+
     instance
 }
 
@@ -124,13 +124,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             std::mem::take(&mut host.data_by_type),
         )
     };
-    
+
     release(env, name);
     release(env, string);
     for (_, data) in data_by_type {
         release(env, data);
     }
-    
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -147,11 +147,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setString:(id)string { // NSString*
     // Достаем старое значение, чтобы освободить его
     let old = env.objc.borrow::<UIPasteboardHostObject>(this).string;
-    
+
     // Выполняем операции управления памятью
     release(env, old);
     retain(env, string);
-    
+
     // Записываем новое значение
     env.objc.borrow_mut::<UIPasteboardHostObject>(this).string = string;
 }
@@ -170,10 +170,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     if pasteboard_type == nil {
         return nil;
     }
-    
+
     let type_str = ns_string::to_rust_string(env, pasteboard_type);
     let host = env.objc.borrow::<UIPasteboardHostObject>(this);
-    
+
     // Используем .as_ref() чтобы передать &str вместо &Cow
     if let Some(&data) = host.data_by_type.get(type_str.as_ref()) {
         data
@@ -186,13 +186,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     if pasteboard_type == nil {
         return;
     }
-    
+
     let type_str = ns_string::to_rust_string(env, pasteboard_type);
-    
+
     if data != nil {
         retain(env, data);
     }
-    
+
     // Безопасно обновляем HashMap и забираем старое значение
     let old_data = {
         let host = env.objc.borrow_mut::<UIPasteboardHostObject>(this);
@@ -204,7 +204,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.data_by_type.remove(type_str.as_ref())
         }
     };
-    
+
     // Освобождаем старое значение вне borrow_mut
     if let Some(old) = old_data {
         release(env, old);
@@ -251,7 +251,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     // Забираем все объекты для освобождения
-    let (fire_date, time_zone, repeat_calendar, alert_body, alert_title, 
+    let (fire_date, time_zone, repeat_calendar, alert_body, alert_title,
          alert_action, alert_launch_image, sound_name, user_info) = {
         let host = env.objc.borrow_mut::<UILocalNotificationHostObject>(this);
         (
@@ -266,7 +266,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.user_info,
         )
     };
-    
+
     release(env, fire_date);
     release(env, time_zone);
     release(env, repeat_calendar);
@@ -276,7 +276,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, alert_launch_image);
     release(env, sound_name);
     release(env, user_info);
-    
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 

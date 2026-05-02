@@ -18,22 +18,25 @@ fn ptrace(env: &mut Environment, request: i32, pid: pid_t, addr: MutPtr<u8>, dat
     match request {
         PT_DENY_ATTACH => {
             log_dbg!("ptrace(PT_DENY_ATTACH) called by app for anti-debugging.");
-            
+
             // Честная реализация: если в TouchHLE включен и подключен GDB-сервер,
             // мы должны завершить процесс, как это делает реальная iOS.
             if env.is_debugging_enabled() {
                 log!("PT_DENY_ATTACH triggered while GDB server is attached! Terminating process to accurately emulate iOS behavior.");
                 std::process::exit(45); // 45 = ENOTSUP
             }
-            
+
             // Если отладчика нет, вызов успешен. Возвращаем 0.
             // Это позволит игре пройти проверку безопасности и продолжить загрузку.
             0
-        },
+        }
         _ => {
             log!(
                 "Warning: unhandled ptrace({}, {}, {:?}, {}) called, returning -1",
-                request, pid, addr, data
+                request,
+                pid,
+                addr,
+                data
             );
             // По стандарту POSIX, если request неизвестен, нужно выставить errno в EINVAL
             set_errno(env, EINVAL);

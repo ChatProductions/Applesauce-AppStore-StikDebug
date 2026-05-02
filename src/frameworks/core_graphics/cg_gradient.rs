@@ -11,7 +11,7 @@ use crate::dyld::FunctionExports;
 use crate::export_c_func;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_color_space::CGColorSpaceRef;
-use crate::frameworks::core_graphics::{CGFloat};
+use crate::frameworks::core_graphics::CGFloat;
 use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
@@ -21,7 +21,7 @@ pub type CGGradientRef = CFTypeRef;
 /// Drawing options — can be combined.
 type CGGradientDrawingOptions = u32;
 const kCGGradientDrawsBeforeStartLocation: CGGradientDrawingOptions = 1 << 0;
-const kCGGradientDrawsAfterEndLocation:    CGGradientDrawingOptions = 1 << 1;
+const kCGGradientDrawsAfterEndLocation: CGGradientDrawingOptions = 1 << 1;
 
 /// One colour stop: a normalised location in [0, 1] plus RGBA components.
 #[derive(Clone, Debug)]
@@ -91,7 +91,11 @@ pub fn gradient_color_at(
 
         if t >= lo.location && t <= hi.location {
             let span = hi.location - lo.location;
-            let f = if span > 0.0 { (t - lo.location) / span } else { 0.0 };
+            let f = if span > 0.0 {
+                (t - lo.location) / span
+            } else {
+                0.0
+            };
             return (
                 lo.r + f * (hi.r - lo.r),
                 lo.g + f * (hi.g - lo.g),
@@ -139,21 +143,28 @@ fn CGGradientCreateWithColorComponents(
 
     // Determine components-per-colour from the colour space model.
     // We support RGB (4 components incl. alpha) and Grey (2 components).
-    let components_per_color: usize =
-        if color_space.is_null() { 4 }
-        else {
-            // CGColorSpaceGetNumberOfComponents returns the non-alpha count.
-            let n: GuestUSize = crate::frameworks::core_graphics::cg_color_space
-                ::CGColorSpaceGetNumberOfComponents(env, color_space);
-            (n + 1) as usize // +1 for alpha
-        };
+    let components_per_color: usize = if color_space.is_null() {
+        4
+    } else {
+        // CGColorSpaceGetNumberOfComponents returns the non-alpha count.
+        let n: GuestUSize =
+            crate::frameworks::core_graphics::cg_color_space::CGColorSpaceGetNumberOfComponents(
+                env,
+                color_space,
+            );
+        (n + 1) as usize // +1 for alpha
+    };
 
     let mut stops = Vec::with_capacity(count as usize);
 
     for i in 0..count as usize {
         let loc: CGFloat = if locations.is_null() {
             // Evenly spaced when no locations are provided.
-            if count == 1 { 0.0 } else { i as CGFloat / (count as CGFloat - 1.0) }
+            if count == 1 {
+                0.0
+            } else {
+                i as CGFloat / (count as CGFloat - 1.0)
+            }
         } else {
             env.mem.read(locations + i as u32)
         };
@@ -162,19 +173,25 @@ fn CGGradientCreateWithColorComponents(
 
         let (r, g, b, a) = if components_per_color >= 4 {
             (
-                env.mem.read(components + (base    ) as u32),
+                env.mem.read(components + (base) as u32),
                 env.mem.read(components + (base + 1) as u32),
                 env.mem.read(components + (base + 2) as u32),
                 env.mem.read(components + (base + 3) as u32),
             )
         } else {
             // Greyscale: w, a
-            let w = env.mem.read(components + (base    ) as u32);
+            let w = env.mem.read(components + (base) as u32);
             let a = env.mem.read(components + (base + 1) as u32);
             (w, w, w, a)
         };
 
-        stops.push(ColorStop { location: loc, r, g, b, a });
+        stops.push(ColorStop {
+            location: loc,
+            r,
+            g,
+            b,
+            a,
+        });
     }
 
     // Ensure stops are sorted by location.
@@ -188,7 +205,7 @@ fn CGGradientCreateWithColorComponents(
 fn CGGradientCreateWithColors(
     env: &mut Environment,
     _color_space: CGColorSpaceRef,
-    colors: crate::objc::id,  // CFArrayRef / NSArray* of CGColorRef
+    colors: crate::objc::id, // CFArrayRef / NSArray* of CGColorRef
     locations: ConstPtr<CGFloat>,
 ) -> CGGradientRef {
     use crate::frameworks::core_graphics::cg_color::CGColorGetComponents;
@@ -206,7 +223,11 @@ fn CGGradientCreateWithColors(
         let comps: ConstPtr<CGFloat> = CGColorGetComponents(env, color);
 
         let loc: CGFloat = if locations.is_null() {
-            if count == 1 { 0.0 } else { i as CGFloat / (count as CGFloat - 1.0) }
+            if count == 1 {
+                0.0
+            } else {
+                i as CGFloat / (count as CGFloat - 1.0)
+            }
         } else {
             env.mem.read(locations + i as u32)
         };
@@ -216,7 +237,13 @@ fn CGGradientCreateWithColors(
         let b = env.mem.read(comps + 2);
         let a = env.mem.read(comps + 3);
 
-        stops.push(ColorStop { location: loc, r, g, b, a });
+        stops.push(ColorStop {
+            location: loc,
+            r,
+            g,
+            b,
+            a,
+        });
     }
 
     stops.sort_by(|a, b| a.location.partial_cmp(&b.location).unwrap());
@@ -235,4 +262,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGGradientCreateWithColorComponents(_, _, _, _)),
     export_c_func!(CGGradientCreateWithColors(_, _, _)),
 ];
-

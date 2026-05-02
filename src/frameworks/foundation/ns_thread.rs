@@ -8,8 +8,8 @@
 use super::NSTimeInterval;
 use crate::dyld::HostFunction;
 use crate::frameworks::core_foundation::CFTypeRef;
-use crate::frameworks::foundation::NSUInteger;
 use crate::frameworks::foundation::ns_string;
+use crate::frameworks::foundation::NSUInteger;
 use crate::libc::pthread::thread::{
     pthread_attr_init, pthread_attr_setdetachstate, pthread_attr_setstacksize, pthread_attr_t,
     pthread_create, pthread_self, pthread_t, PTHREAD_CREATE_DETACHED,
@@ -59,10 +59,10 @@ impl HostObject for NSThreadHostObject {}
 
 // NSQualityOfService constants
 const QOS_CLASS_USER_INTERACTIVE: i32 = 0x21;
-const QOS_CLASS_USER_INITIATED:   i32 = 0x19;
-const QOS_CLASS_DEFAULT:          i32 = 0x15;
-const QOS_CLASS_UTILITY:          i32 = 0x11;
-const QOS_CLASS_BACKGROUND:       i32 = 0x09;
+const QOS_CLASS_USER_INITIATED: i32 = 0x19;
+const QOS_CLASS_DEFAULT: i32 = 0x15;
+const QOS_CLASS_UTILITY: i32 = 0x11;
+const QOS_CLASS_BACKGROUND: i32 = 0x09;
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -388,7 +388,9 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         return;
     }
 
-    env.objc.borrow_mut::<NSThreadHostObject>(ns_thread_obj).executing = true;
+    env.objc
+        .borrow_mut::<NSThreadHostObject>(ns_thread_obj)
+        .executing = true;
 
     let _: () = msg![env; ns_thread_obj main];
 
@@ -398,8 +400,12 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         host.executing = false;
     }
 
-    let &NSThreadHostObject { target, object, owned, .. } =
-        env.objc.borrow(ns_thread_obj);
+    let &NSThreadHostObject {
+        target,
+        object,
+        owned,
+        ..
+    } = env.objc.borrow(ns_thread_obj);
     release(env, object);
     release(env, target);
 

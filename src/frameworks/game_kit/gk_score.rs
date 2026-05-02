@@ -7,12 +7,11 @@
 #![allow(dead_code)]
 //! `GKScore`.
 
-use std::borrow::Cow;
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
+use std::borrow::Cow;
 
 type GKLeaderboardTimeScope = i32;
 type GKLeaderboardPlayerScope = i32;
@@ -202,4 +201,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

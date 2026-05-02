@@ -20,19 +20,19 @@
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
 use crate::mem::MutVoidPtr;
-use crate::{export_c_func, Environment};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
-    ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
+use crate::{export_c_func, Environment};
 
 // ---------------------------------------------------------------------------
 // Host object
 // ---------------------------------------------------------------------------
 
 struct NSExceptionHostObject {
-    name:      id, // NSString*
-    reason:    id, // NSString*
+    name: id,      // NSString*
+    reason: id,    // NSString*
     user_info: id, // NSDictionary*  (may be nil)
 }
 impl HostObject for NSExceptionHostObject {}
@@ -147,7 +147,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())raise {
     let name   = env.objc.borrow::<NSExceptionHostObject>(this).name;
     let reason = env.objc.borrow::<NSExceptionHostObject>(this).reason;
-    
+
     let name_s   = objc_str(env, name,   "<unnamed exception>");
     let reason_s = objc_str(env, reason, "<no reason>");
 
@@ -161,8 +161,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if user_info != nil {
         log!("  UserInfo: <present>");
     }
-    
-    // We return () to the guest. 
+
+    // We return () to the guest.
     // The guest will now continue execution.
 }
 
@@ -213,73 +213,271 @@ pub const CLASSES: ClassExports = objc_classes! {
 // ---------------------------------------------------------------------------
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_NSCharacterConversionException",           HostConstant::NSString("NSCharacterConversionException")),
-    ("_NSDecimalNumberDivideByZeroException",      HostConstant::NSString("NSDecimalNumberDivideByZeroException")),
-    ("_NSDecimalNumberExactnessException",         HostConstant::NSString("NSDecimalNumberExactnessException")),
-    ("_NSDecimalNumberOverflowException",          HostConstant::NSString("NSDecimalNumberOverflowException")),
-    ("_NSDecimalNumberUnderflowException",         HostConstant::NSString("NSDecimalNumberUnderflowException")),
-    ("_NSDestinationInvalidException",             HostConstant::NSString("NSDestinationInvalidException")),
-    ("_NSFileHandleOperationException",            HostConstant::NSString("NSFileHandleOperationException")),
-    ("_NSGenericException",                        HostConstant::NSString("NSGenericException")),
-    ("_NSInternalInconsistencyException",          HostConstant::NSString("NSInternalInconsistencyException")),
-    ("_NSInvalidArchiveOperationException",        HostConstant::NSString("NSInvalidArchiveOperationException")),
-    ("_NSInvalidArgumentException",                HostConstant::NSString("NSInvalidArgumentException")),
-    ("_NSInvalidReceivePortException",             HostConstant::NSString("NSInvalidReceivePortException")),
-    ("_NSInvalidSendPortException",                HostConstant::NSString("NSInvalidSendPortException")),
-    ("_NSInvalidUnarchiveOperationException",      HostConstant::NSString("NSInvalidUnarchiveOperationException")),
-    ("_NSInvocationOperationCancelledException",   HostConstant::NSString("NSInvocationOperationCancelledException")),
-    ("_NSInvocationOperationVoidResultException",  HostConstant::NSString("NSInvocationOperationVoidResultException")),
-    ("_NSMallocException",                         HostConstant::NSString("NSMallocException")),
-    ("_NSObjectInaccessibleException",             HostConstant::NSString("NSObjectInaccessibleException")),
-    ("_NSObjectNotAvailableException",             HostConstant::NSString("NSObjectNotAvailableException")),
-    ("_NSOldStyleException",                       HostConstant::NSString("NSOldStyleException")),
-    ("_NSParseErrorException",                     HostConstant::NSString("NSParseErrorException")),
-    ("_NSPortReceiveException",                    HostConstant::NSString("NSPortReceiveException")),
-    ("_NSPortSendException",                       HostConstant::NSString("NSPortSendException")),
-    ("_NSPortTimeoutException",                    HostConstant::NSString("NSPortTimeoutException")),
-    ("_NSRangeException",                          HostConstant::NSString("NSRangeException")),
-    ("_NSUndefinedKeyException",                   HostConstant::NSString("NSUndefinedKeyException")),
-    ("_NSInconsistentArchiveException",            HostConstant::NSString("NSInconsistentArchiveException")),
-    ("_NSPPDIncludeNotFoundException",             HostConstant::NSString("NSPPDIncludeNotFoundException")),
-    ("_NSPPDIncludeStackOverflowException",        HostConstant::NSString("NSPPDIncludeStackOverflowException")),
-    ("_NSPPDIncludeStackUnderflowException",       HostConstant::NSString("NSPPDIncludeStackUnderflowException")),
-    ("_NSPPDParseException",                       HostConstant::NSString("NSPPDParseException")),
-    ("_NSRTFPropertyStackOverflowException",       HostConstant::NSString("NSRTFPropertyStackOverflowException")),
-    ("_NSTIFFException",                           HostConstant::NSString("NSTIFFException")),
-    ("_NSAbortModalException",                     HostConstant::NSString("NSAbortModalException")),
-    ("_NSAbortPrintingException",                  HostConstant::NSString("NSAbortPrintingException")),
-    ("_NSAccessibilityException",                  HostConstant::NSString("NSAccessibilityException")),
-    ("_NSAppKitIgnoredException",                  HostConstant::NSString("NSAppKitIgnoredException")),
-    ("_NSAppKitVirtualMemoryException",            HostConstant::NSString("NSAppKitVirtualMemoryException")),
-    ("_NSBadBitmapParametersException",            HostConstant::NSString("NSBadBitmapParametersException")),
-    ("_NSBadComparisonException",                  HostConstant::NSString("NSBadComparisonException")),
-    ("_NSBadRTFColorTableException",               HostConstant::NSString("NSBadRTFColorTableException")),
-    ("_NSBadRTFDirectiveException",                HostConstant::NSString("NSBadRTFDirectiveException")),
-    ("_NSBadRTFFontTableException",                HostConstant::NSString("NSBadRTFFontTableException")),
-    ("_NSBadRTFStyleSheetException",               HostConstant::NSString("NSBadRTFStyleSheetException")),
-    ("_NSBrowserIllegalDelegateException",         HostConstant::NSString("NSBrowserIllegalDelegateException")),
-    ("_NSColorListIOException",                    HostConstant::NSString("NSColorListIOException")),
-    ("_NSColorListNotEditableException",           HostConstant::NSString("NSColorListNotEditableException")),
-    ("_NSDraggingException",                       HostConstant::NSString("NSDraggingException")),
-    ("_NSFontUnavailableException",                HostConstant::NSString("NSFontUnavailableException")),
-    ("_NSIllegalSelectorException",                HostConstant::NSString("NSIllegalSelectorException")),
-    ("_NSImageCacheException",                     HostConstant::NSString("NSImageCacheException")),
-    ("_NSNibLoadingException",                     HostConstant::NSString("NSNibLoadingException")),
-    ("_NSPasteboardCommunicationException",        HostConstant::NSString("NSPasteboardCommunicationException")),
-    ("_NSPrintOperationExistsException",           HostConstant::NSString("NSPrintOperationExistsException")),
-    ("_NSPrintPackageException",                   HostConstant::NSString("NSPrintPackageException")),
-    ("_NSPrintingCommunicationException",          HostConstant::NSString("NSPrintingCommunicationException")),
-    ("_NSTextLineTooLongException",                HostConstant::NSString("NSTextLineTooLongException")),
-    ("_NSTextNoSelectionException",                HostConstant::NSString("NSTextNoSelectionException")),
-    ("_NSTextReadException",                       HostConstant::NSString("NSTextReadException")),
-    ("_NSTextWriteException",                      HostConstant::NSString("NSTextWriteException")),
-    ("_NSTypedStreamVersionException",             HostConstant::NSString("NSTypedStreamVersionException")),
-    ("_NSWindowServerCommunicationException",      HostConstant::NSString("NSWindowServerCommunicationException")),
-    ("_NSWordTablesReadException",                 HostConstant::NSString("NSWordTablesReadException")),
-    ("_NSWordTablesWriteException",                HostConstant::NSString("NSWordTablesWriteException")),
+    (
+        "_NSCharacterConversionException",
+        HostConstant::NSString("NSCharacterConversionException"),
+    ),
+    (
+        "_NSDecimalNumberDivideByZeroException",
+        HostConstant::NSString("NSDecimalNumberDivideByZeroException"),
+    ),
+    (
+        "_NSDecimalNumberExactnessException",
+        HostConstant::NSString("NSDecimalNumberExactnessException"),
+    ),
+    (
+        "_NSDecimalNumberOverflowException",
+        HostConstant::NSString("NSDecimalNumberOverflowException"),
+    ),
+    (
+        "_NSDecimalNumberUnderflowException",
+        HostConstant::NSString("NSDecimalNumberUnderflowException"),
+    ),
+    (
+        "_NSDestinationInvalidException",
+        HostConstant::NSString("NSDestinationInvalidException"),
+    ),
+    (
+        "_NSFileHandleOperationException",
+        HostConstant::NSString("NSFileHandleOperationException"),
+    ),
+    (
+        "_NSGenericException",
+        HostConstant::NSString("NSGenericException"),
+    ),
+    (
+        "_NSInternalInconsistencyException",
+        HostConstant::NSString("NSInternalInconsistencyException"),
+    ),
+    (
+        "_NSInvalidArchiveOperationException",
+        HostConstant::NSString("NSInvalidArchiveOperationException"),
+    ),
+    (
+        "_NSInvalidArgumentException",
+        HostConstant::NSString("NSInvalidArgumentException"),
+    ),
+    (
+        "_NSInvalidReceivePortException",
+        HostConstant::NSString("NSInvalidReceivePortException"),
+    ),
+    (
+        "_NSInvalidSendPortException",
+        HostConstant::NSString("NSInvalidSendPortException"),
+    ),
+    (
+        "_NSInvalidUnarchiveOperationException",
+        HostConstant::NSString("NSInvalidUnarchiveOperationException"),
+    ),
+    (
+        "_NSInvocationOperationCancelledException",
+        HostConstant::NSString("NSInvocationOperationCancelledException"),
+    ),
+    (
+        "_NSInvocationOperationVoidResultException",
+        HostConstant::NSString("NSInvocationOperationVoidResultException"),
+    ),
+    (
+        "_NSMallocException",
+        HostConstant::NSString("NSMallocException"),
+    ),
+    (
+        "_NSObjectInaccessibleException",
+        HostConstant::NSString("NSObjectInaccessibleException"),
+    ),
+    (
+        "_NSObjectNotAvailableException",
+        HostConstant::NSString("NSObjectNotAvailableException"),
+    ),
+    (
+        "_NSOldStyleException",
+        HostConstant::NSString("NSOldStyleException"),
+    ),
+    (
+        "_NSParseErrorException",
+        HostConstant::NSString("NSParseErrorException"),
+    ),
+    (
+        "_NSPortReceiveException",
+        HostConstant::NSString("NSPortReceiveException"),
+    ),
+    (
+        "_NSPortSendException",
+        HostConstant::NSString("NSPortSendException"),
+    ),
+    (
+        "_NSPortTimeoutException",
+        HostConstant::NSString("NSPortTimeoutException"),
+    ),
+    (
+        "_NSRangeException",
+        HostConstant::NSString("NSRangeException"),
+    ),
+    (
+        "_NSUndefinedKeyException",
+        HostConstant::NSString("NSUndefinedKeyException"),
+    ),
+    (
+        "_NSInconsistentArchiveException",
+        HostConstant::NSString("NSInconsistentArchiveException"),
+    ),
+    (
+        "_NSPPDIncludeNotFoundException",
+        HostConstant::NSString("NSPPDIncludeNotFoundException"),
+    ),
+    (
+        "_NSPPDIncludeStackOverflowException",
+        HostConstant::NSString("NSPPDIncludeStackOverflowException"),
+    ),
+    (
+        "_NSPPDIncludeStackUnderflowException",
+        HostConstant::NSString("NSPPDIncludeStackUnderflowException"),
+    ),
+    (
+        "_NSPPDParseException",
+        HostConstant::NSString("NSPPDParseException"),
+    ),
+    (
+        "_NSRTFPropertyStackOverflowException",
+        HostConstant::NSString("NSRTFPropertyStackOverflowException"),
+    ),
+    (
+        "_NSTIFFException",
+        HostConstant::NSString("NSTIFFException"),
+    ),
+    (
+        "_NSAbortModalException",
+        HostConstant::NSString("NSAbortModalException"),
+    ),
+    (
+        "_NSAbortPrintingException",
+        HostConstant::NSString("NSAbortPrintingException"),
+    ),
+    (
+        "_NSAccessibilityException",
+        HostConstant::NSString("NSAccessibilityException"),
+    ),
+    (
+        "_NSAppKitIgnoredException",
+        HostConstant::NSString("NSAppKitIgnoredException"),
+    ),
+    (
+        "_NSAppKitVirtualMemoryException",
+        HostConstant::NSString("NSAppKitVirtualMemoryException"),
+    ),
+    (
+        "_NSBadBitmapParametersException",
+        HostConstant::NSString("NSBadBitmapParametersException"),
+    ),
+    (
+        "_NSBadComparisonException",
+        HostConstant::NSString("NSBadComparisonException"),
+    ),
+    (
+        "_NSBadRTFColorTableException",
+        HostConstant::NSString("NSBadRTFColorTableException"),
+    ),
+    (
+        "_NSBadRTFDirectiveException",
+        HostConstant::NSString("NSBadRTFDirectiveException"),
+    ),
+    (
+        "_NSBadRTFFontTableException",
+        HostConstant::NSString("NSBadRTFFontTableException"),
+    ),
+    (
+        "_NSBadRTFStyleSheetException",
+        HostConstant::NSString("NSBadRTFStyleSheetException"),
+    ),
+    (
+        "_NSBrowserIllegalDelegateException",
+        HostConstant::NSString("NSBrowserIllegalDelegateException"),
+    ),
+    (
+        "_NSColorListIOException",
+        HostConstant::NSString("NSColorListIOException"),
+    ),
+    (
+        "_NSColorListNotEditableException",
+        HostConstant::NSString("NSColorListNotEditableException"),
+    ),
+    (
+        "_NSDraggingException",
+        HostConstant::NSString("NSDraggingException"),
+    ),
+    (
+        "_NSFontUnavailableException",
+        HostConstant::NSString("NSFontUnavailableException"),
+    ),
+    (
+        "_NSIllegalSelectorException",
+        HostConstant::NSString("NSIllegalSelectorException"),
+    ),
+    (
+        "_NSImageCacheException",
+        HostConstant::NSString("NSImageCacheException"),
+    ),
+    (
+        "_NSNibLoadingException",
+        HostConstant::NSString("NSNibLoadingException"),
+    ),
+    (
+        "_NSPasteboardCommunicationException",
+        HostConstant::NSString("NSPasteboardCommunicationException"),
+    ),
+    (
+        "_NSPrintOperationExistsException",
+        HostConstant::NSString("NSPrintOperationExistsException"),
+    ),
+    (
+        "_NSPrintPackageException",
+        HostConstant::NSString("NSPrintPackageException"),
+    ),
+    (
+        "_NSPrintingCommunicationException",
+        HostConstant::NSString("NSPrintingCommunicationException"),
+    ),
+    (
+        "_NSTextLineTooLongException",
+        HostConstant::NSString("NSTextLineTooLongException"),
+    ),
+    (
+        "_NSTextNoSelectionException",
+        HostConstant::NSString("NSTextNoSelectionException"),
+    ),
+    (
+        "_NSTextReadException",
+        HostConstant::NSString("NSTextReadException"),
+    ),
+    (
+        "_NSTextWriteException",
+        HostConstant::NSString("NSTextWriteException"),
+    ),
+    (
+        "_NSTypedStreamVersionException",
+        HostConstant::NSString("NSTypedStreamVersionException"),
+    ),
+    (
+        "_NSWindowServerCommunicationException",
+        HostConstant::NSString("NSWindowServerCommunicationException"),
+    ),
+    (
+        "_NSWordTablesReadException",
+        HostConstant::NSString("NSWordTablesReadException"),
+    ),
+    (
+        "_NSWordTablesWriteException",
+        HostConstant::NSString("NSWordTablesWriteException"),
+    ),
     // UIKit exception names (placed here for proximity to Foundation exceptions)
-    ("_UIViewControllerHierarchyInconsistencyException",    HostConstant::NSString("UIViewControllerHierarchyInconsistencyException")),
-    ("_UIApplicationInvalidInterfaceOrientationException",  HostConstant::NSString("UIApplicationInvalidInterfaceOrientationException")),
+    (
+        "_UIViewControllerHierarchyInconsistencyException",
+        HostConstant::NSString("UIViewControllerHierarchyInconsistencyException"),
+    ),
+    (
+        "_UIApplicationInvalidInterfaceOrientationException",
+        HostConstant::NSString("UIApplicationInvalidInterfaceOrientationException"),
+    ),
 ];
 
 // ---------------------------------------------------------------------------
@@ -291,12 +489,15 @@ pub const CONSTANTS: ConstantExports = &[
 // ---------------------------------------------------------------------------
 
 /// Registers a last-chance exception handler. In touchHLE all unhandled
-/// exceptions are already converted to Rust panics or bypassed, but we 
+/// exceptions are already converted to Rust panics or bypassed, but we
 /// save the handler address to maintain accurate guest state.
 fn NSSetUncaughtExceptionHandler(env: &mut Environment, handler: MutVoidPtr) {
     // Сохраняем переданный гостевым приложением обработчик в состояние
-    env.framework_state.foundation.ns_exception.uncaught_exception_handler = handler;
-    
+    env.framework_state
+        .foundation
+        .ns_exception
+        .uncaught_exception_handler = handler;
+
     log!(
         "NSSetUncaughtExceptionHandler: registered handler at {:?}",
         handler

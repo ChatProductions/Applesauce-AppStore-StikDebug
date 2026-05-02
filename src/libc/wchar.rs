@@ -23,7 +23,11 @@ const WEOF: wint_t = -1;
 
 fn btowc(_env: &mut Environment, c: i32) -> wint_t {
     let c = c as u8;
-    if c.is_ascii() { c as wint_t } else { WEOF }
+    if c.is_ascii() {
+        c as wint_t
+    } else {
+        WEOF
+    }
 }
 
 fn wctob(_env: &mut Environment, c: wint_t) -> i32 {
@@ -38,25 +42,62 @@ fn wctob(_env: &mut Environment, c: wint_t) -> i32 {
     }
 }
 
-fn wmemset(env: &mut Environment, dest: MutPtr<wchar_t>, ch: wchar_t, count: GuestUSize) -> MutPtr<wchar_t> {
+fn wmemset(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    ch: wchar_t,
+    count: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::memset(env, dest, ch, count, GuestUSize::MAX)
 }
-fn wmemcpy(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize) -> MutPtr<wchar_t> {
+fn wmemcpy(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::memcpy(env, dest, src, size, GuestUSize::MAX)
 }
-fn __wmemcpy_chk(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize, dest_size: GuestUSize) -> MutPtr<wchar_t> {
+fn __wmemcpy_chk(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+    dest_size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::memcpy(env, dest, src, size, dest_size)
 }
-fn wmemmove(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize) -> MutPtr<wchar_t> {
+fn wmemmove(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::memmove(env, dest, src, size, GuestUSize::MAX)
 }
-fn __wmemmove_chk(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize, dest_size: GuestUSize) -> MutPtr<wchar_t> {
+fn __wmemmove_chk(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+    dest_size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::memmove(env, dest, src, size, dest_size)
 }
-fn wmemchr(env: &mut Environment, string: ConstPtr<wchar_t>, c: wchar_t, size: GuestUSize) -> ConstPtr<wchar_t> {
+fn wmemchr(
+    env: &mut Environment,
+    string: ConstPtr<wchar_t>,
+    c: wchar_t,
+    size: GuestUSize,
+) -> ConstPtr<wchar_t> {
     GenericChar::<wchar_t>::memchr(env, string, c, size)
 }
-fn wmemcmp(env: &mut Environment, a: ConstPtr<wchar_t>, b: ConstPtr<wchar_t>, size: GuestUSize) -> i32 {
+fn wmemcmp(
+    env: &mut Environment,
+    a: ConstPtr<wchar_t>,
+    b: ConstPtr<wchar_t>,
+    size: GuestUSize,
+) -> i32 {
     GenericChar::<wchar_t>::memcmp(env, a, b, size)
 }
 fn wcslen(env: &mut Environment, s: ConstPtr<wchar_t>) -> GuestUSize {
@@ -68,13 +109,28 @@ fn wcscpy(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>) 
 fn wcscat(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::strcat(env, dest, src, GuestUSize::MAX)
 }
-fn wcscspn(env: &mut Environment, str: ConstPtr<wchar_t>, charset: ConstPtr<wchar_t>) -> GuestUSize {
+fn wcscspn(
+    env: &mut Environment,
+    str: ConstPtr<wchar_t>,
+    charset: ConstPtr<wchar_t>,
+) -> GuestUSize {
     GenericChar::<wchar_t>::strcspn(env, str, charset)
 }
-fn wcsncpy(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize) -> MutPtr<wchar_t> {
+fn wcsncpy(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::strncpy(env, dest, src, size, GuestUSize::MAX)
 }
-fn __wcsncpy_chk(env: &mut Environment, dest: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize, dest_size: GuestUSize) -> MutPtr<wchar_t> {
+fn __wcsncpy_chk(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+    dest_size: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::strncpy(env, dest, src, size, dest_size)
 }
 fn wcsdup(env: &mut Environment, src: ConstPtr<wchar_t>) -> MutPtr<wchar_t> {
@@ -83,13 +139,27 @@ fn wcsdup(env: &mut Environment, src: ConstPtr<wchar_t>) -> MutPtr<wchar_t> {
 fn wcscmp(env: &mut Environment, a: ConstPtr<wchar_t>, b: ConstPtr<wchar_t>) -> i32 {
     GenericChar::<wchar_t>::strcmp(env, a, b)
 }
-fn wcsncmp(env: &mut Environment, a: ConstPtr<wchar_t>, b: ConstPtr<wchar_t>, n: GuestUSize) -> i32 {
+fn wcsncmp(
+    env: &mut Environment,
+    a: ConstPtr<wchar_t>,
+    b: ConstPtr<wchar_t>,
+    n: GuestUSize,
+) -> i32 {
     GenericChar::<wchar_t>::strncmp(env, a, b, n)
 }
-fn wcsncat(env: &mut Environment, s1: MutPtr<wchar_t>, s2: ConstPtr<wchar_t>, n: GuestUSize) -> MutPtr<wchar_t> {
+fn wcsncat(
+    env: &mut Environment,
+    s1: MutPtr<wchar_t>,
+    s2: ConstPtr<wchar_t>,
+    n: GuestUSize,
+) -> MutPtr<wchar_t> {
     GenericChar::<wchar_t>::strncat(env, s1, s2, n)
 }
-fn wcsstr(env: &mut Environment, wcsing: ConstPtr<wchar_t>, subwcsing: ConstPtr<wchar_t>) -> ConstPtr<wchar_t> {
+fn wcsstr(
+    env: &mut Environment,
+    wcsing: ConstPtr<wchar_t>,
+    subwcsing: ConstPtr<wchar_t>,
+) -> ConstPtr<wchar_t> {
     GenericChar::<wchar_t>::strstr(env, wcsing, subwcsing)
 }
 fn wcschr(env: &mut Environment, wcsing: ConstPtr<wchar_t>, wchar: wchar_t) -> ConstPtr<wchar_t> {
@@ -98,33 +168,41 @@ fn wcschr(env: &mut Environment, wcsing: ConstPtr<wchar_t>, wchar: wchar_t) -> C
 fn wcsrchr(env: &mut Environment, wcsing: ConstPtr<wchar_t>, wchar: wchar_t) -> ConstPtr<wchar_t> {
     GenericChar::<wchar_t>::strrchr(env, wcsing, wchar)
 }
-fn wcslcpy(env: &mut Environment, dst: MutPtr<wchar_t>, src: ConstPtr<wchar_t>, size: GuestUSize) -> GuestUSize {
+fn wcslcpy(
+    env: &mut Environment,
+    dst: MutPtr<wchar_t>,
+    src: ConstPtr<wchar_t>,
+    size: GuestUSize,
+) -> GuestUSize {
     GenericChar::<wchar_t>::strlcpy(env, dst, src, size)
 }
 
 // MARK: - New functions
 
 /// wcsspn — length of prefix consisting entirely of wchars in `accept`.
-fn wcsspn(
-    env: &mut Environment,
-    s: ConstPtr<wchar_t>,
-    accept: ConstPtr<wchar_t>,
-) -> GuestUSize {
+fn wcsspn(env: &mut Environment, s: ConstPtr<wchar_t>, accept: ConstPtr<wchar_t>) -> GuestUSize {
     let mut i: GuestUSize = 0;
     loop {
         let c = env.mem.read(s + i);
-        if c == 0 { break; }
+        if c == 0 {
+            break;
+        }
         // Check if c is in accept set.
         let mut j: GuestUSize = 0;
         let mut found = false;
         loop {
             let a = env.mem.read(accept + j);
-            if a == 0 { break; }
-            if a == c { found = true;
-            break; }
+            if a == 0 {
+                break;
+            }
+            if a == c {
+                found = true;
+                break;
+            }
             j += 1;
         }
-        if !found { break;
+        if !found {
+            break;
         }
         i += 1;
     }
@@ -140,12 +218,17 @@ fn wcspbrk(
     let mut i: GuestUSize = 0;
     loop {
         let c = env.mem.read(s + i);
-        if c == 0 { return ConstPtr::null(); }
+        if c == 0 {
+            return ConstPtr::null();
+        }
         let mut j: GuestUSize = 0;
         loop {
             let a = env.mem.read(accept + j);
-            if a == 0 { break; }
-            if a == c { return s + i;
+            if a == 0 {
+                break;
+            }
+            if a == c {
+                return s + i;
             }
             j += 1;
         }
@@ -182,12 +265,17 @@ fn wcstok(
         let mut is_delim = false;
         loop {
             let d = env.mem.read(delimiters + j);
-            if d == 0 { break; }
-            if d == c { is_delim = true;
-            break; }
+            if d == 0 {
+                break;
+            }
+            if d == c {
+                is_delim = true;
+                break;
+            }
             j += 1;
         }
-        if !is_delim { break;
+        if !is_delim {
+            break;
         }
         i += 1;
     }
@@ -205,9 +293,13 @@ fn wcstok(
         let mut is_delim = false;
         loop {
             let d = env.mem.read(delimiters + j);
-            if d == 0 { break; }
-            if d == c { is_delim = true;
-            break; }
+            if d == 0 {
+                break;
+            }
+            if d == c {
+                is_delim = true;
+                break;
+            }
             j += 1;
         }
         if is_delim {
@@ -231,21 +323,28 @@ fn wcsncasecmp(
         let ca = env.mem.read(a + i);
         let cb = env.mem.read(b + i);
         // Lowercase ASCII only — good enough for game use-cases.
-        let la = if ca >= 'A' as i32 && ca <= 'Z' as i32 { ca + 32 } else { ca };
-        let lb = if cb >= 'A' as i32 && cb <= 'Z' as i32 { cb + 32 } else { cb };
-        if la != lb { return la - lb; }
-        if la == 0  { return 0;
+        let la = if ca >= 'A' as i32 && ca <= 'Z' as i32 {
+            ca + 32
+        } else {
+            ca
+        };
+        let lb = if cb >= 'A' as i32 && cb <= 'Z' as i32 {
+            cb + 32
+        } else {
+            cb
+        };
+        if la != lb {
+            return la - lb;
+        }
+        if la == 0 {
+            return 0;
         }
     }
     0
 }
 
 /// wcscasecmp — case-insensitive wide string compare.
-fn wcscasecmp(
-    env: &mut Environment,
-    a: ConstPtr<wchar_t>,
-    b: ConstPtr<wchar_t>,
-) -> i32 {
+fn wcscasecmp(env: &mut Environment, a: ConstPtr<wchar_t>, b: ConstPtr<wchar_t>) -> i32 {
     wcsncasecmp(env, a, b, GuestUSize::MAX)
 }
 
@@ -277,17 +376,16 @@ fn wcslcat(
 
 /// wcswidth — number of columns needed to display n wide chars.
 /// We return 1 per printable char and -1 for non-printable.
-fn wcswidth(
-    env: &mut Environment,
-    s: ConstPtr<wchar_t>,
-    n: GuestUSize,
-) -> i32 {
+fn wcswidth(env: &mut Environment, s: ConstPtr<wchar_t>, n: GuestUSize) -> i32 {
     let mut width: i32 = 0;
     for i in 0..n {
         let c = env.mem.read(s + i);
-        if c == 0 { break; }
-        if c < 0x20 ||
-        c == 0x7F { return -1; }
+        if c == 0 {
+            break;
+        }
+        if c < 0x20 || c == 0x7F {
+            return -1;
+        }
         width += 1;
     }
     width
@@ -295,41 +393,42 @@ fn wcswidth(
 
 /// wcwidth — column width of a single wide character.
 fn wcwidth(_env: &mut Environment, c: wchar_t) -> i32 {
-    if c == 0 { return 0;
+    if c == 0 {
+        return 0;
     }
-    if c < 0x20 || c == 0x7F { return -1;
+    if c < 0x20 || c == 0x7F {
+        return -1;
     }
     1
 }
 
 /// mbtowc — convert multibyte char to wide char (ASCII locale stub).
-fn mbtowc(
-    env: &mut Environment,
-    pwc: MutPtr<wchar_t>,
-    s: ConstPtr<u8>,
-    n: GuestUSize,
-) -> i32 {
+fn mbtowc(env: &mut Environment, pwc: MutPtr<wchar_t>, s: ConstPtr<u8>, n: GuestUSize) -> i32 {
     if s.is_null() {
         // No shift state — return 0.
         return 0;
     }
-    if n == 0 { return -1; }
+    if n == 0 {
+        return -1;
+    }
     let byte = env.mem.read(s);
     if !pwc.is_null() {
         env.mem.write(pwc, byte as wchar_t);
     }
-    if byte == 0 { 0 } else { 1 }
+    if byte == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 /// wctomb — convert wide char to multibyte (ASCII locale stub).
-fn wctomb(
-    env: &mut Environment,
-    s: MutPtr<u8>,
-    wc: wchar_t,
-) -> i32 {
-    if s.is_null() { return 0;
+fn wctomb(env: &mut Environment, s: MutPtr<u8>, wc: wchar_t) -> i32 {
+    if s.is_null() {
+        return 0;
     }
-    if wc < 0 || wc > 0x7F { return -1;
+    if wc < 0 || wc > 0x7F {
+        return -1;
     }
     env.mem.write(s, wc as u8);
     1
@@ -345,11 +444,14 @@ fn mbstowcs(
     let mut i: GuestUSize = 0;
     loop {
         let byte = env.mem.read(src + i);
-        if i == n { break; }
+        if i == n {
+            break;
+        }
         if !dest.is_null() {
             env.mem.write(dest + i, byte as wchar_t);
         }
-        if byte == 0 { return i;
+        if byte == 0 {
+            return i;
         }
         i += 1;
     }
@@ -366,17 +468,19 @@ fn wcstombs(
     let mut i: GuestUSize = 0;
     loop {
         let wc = env.mem.read(src + i);
-        if i == n { break; }
-        if wc < 0 ||
-        wc > 0x7F {
+        if i == n {
+            break;
+        }
+        if wc < 0 || wc > 0x7F {
             return GuestUSize::MAX;
-// encoding error
+            // encoding error
         }
         let byte = wc as u8;
         if !dest.is_null() {
             env.mem.write(dest + i, byte);
         }
-        if byte == 0 { return i;
+        if byte == 0 {
+            return i;
         }
         i += 1;
     }
@@ -395,14 +499,14 @@ fn wcstol(
     let mut i: GuestUSize = 0;
     loop {
         let wc = env.mem.read(s + i);
-        if wc == 0 ||
-        wc > 0x7F { break; }
+        if wc == 0 || wc > 0x7F {
+            break;
+        }
         buf.push(wc as u8 as char);
         i += 1;
     }
     let buf = buf.trim();
-    let result = if base == 0 ||
-    base == 10 {
+    let result = if base == 0 || base == 10 {
         buf.parse::<i32>().unwrap_or(0)
     } else if base == 16 {
         i32::from_str_radix(buf.trim_start_matches("0x"), 16).unwrap_or(0)
@@ -426,16 +530,13 @@ fn wcstoul(
 }
 
 /// wcstod — wide string to double.
-fn wcstod(
-    env: &mut Environment,
-    s: ConstPtr<wchar_t>,
-    endptr: MutPtr<MutPtr<wchar_t>>,
-) -> f64 {
+fn wcstod(env: &mut Environment, s: ConstPtr<wchar_t>, endptr: MutPtr<MutPtr<wchar_t>>) -> f64 {
     let mut buf = String::new();
     let mut i: GuestUSize = 0;
     loop {
         let wc = env.mem.read(s + i);
-        if wc == 0 || wc > 0x7F { break;
+        if wc == 0 || wc > 0x7F {
+            break;
         }
         buf.push(wc as u8 as char);
         i += 1;
@@ -447,11 +548,7 @@ fn wcstod(
 }
 
 /// wcstof — wide string to float.
-fn wcstof(
-    env: &mut Environment,
-    s: ConstPtr<wchar_t>,
-    endptr: MutPtr<MutPtr<wchar_t>>,
-) -> f32 {
+fn wcstof(env: &mut Environment, s: ConstPtr<wchar_t>, endptr: MutPtr<MutPtr<wchar_t>>) -> f32 {
     wcstod(env, s, endptr) as f32
 }
 
@@ -472,8 +569,7 @@ fn iswalpha(_env: &mut Environment, c: wint_t) -> i32 {
 
 /// iswalnum — test if wide char is ASCII alphanumeric.
 fn iswalnum(_env: &mut Environment, c: wint_t) -> i32 {
-    let is_alpha = (c >= 'a' as i32 && c <= 'z' as i32) ||
-    (c >= 'A' as i32 && c <= 'Z' as i32);
+    let is_alpha = (c >= 'a' as i32 && c <= 'z' as i32) || (c >= 'A' as i32 && c <= 'Z' as i32);
     let is_digit = c >= '0' as i32 && c <= '9' as i32;
     (is_alpha || is_digit) as i32
 }
@@ -497,10 +593,8 @@ fn iswprint(_env: &mut Environment, c: wint_t) -> i32 {
 fn iswpunct(_env: &mut Environment, c: wint_t) -> i32 {
     let is_print = c >= 0x20 && c != 0x7F;
     let is_alnum = (c >= 'a' as i32 && c <= 'z' as i32)
-        ||
-    (c >= 'A' as i32 && c <= 'Z' as i32)
-        ||
-    (c >= '0' as i32 && c <= '9' as i32);
+        || (c >= 'A' as i32 && c <= 'Z' as i32)
+        || (c >= '0' as i32 && c <= '9' as i32);
     (is_print && !is_alnum && c != ' ' as i32) as i32
 }
 
@@ -511,12 +605,20 @@ fn iswcntrl(_env: &mut Environment, c: wint_t) -> i32 {
 
 /// towlower — convert wide char to lowercase.
 fn towlower(_env: &mut Environment, c: wint_t) -> wint_t {
-    if c >= 'A' as i32 && c <= 'Z' as i32 { c + 32 } else { c }
+    if c >= 'A' as i32 && c <= 'Z' as i32 {
+        c + 32
+    } else {
+        c
+    }
 }
 
 /// towupper — convert wide char to uppercase.
 fn towupper(_env: &mut Environment, c: wint_t) -> wint_t {
-    if c >= 'a' as i32 && c <= 'z' as i32 { c - 32 } else { c }
+    if c >= 'a' as i32 && c <= 'z' as i32 {
+        c - 32
+    } else {
+        c
+    }
 }
 
 /// putwchar — write wide char to stdout (stub).
@@ -563,7 +665,8 @@ fn mbsrtowcs(
     // Count or convert up to `len` wide chars.
     let mut i: GuestUSize = 0;
     loop {
-        if i == len { break;
+        if i == len {
+            break;
         }
         let byte = env.mem.read(src_ptr + i);
         if !dest.is_null() {
@@ -648,4 +751,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(ungetwc(_, _)),
     export_c_func!(mbsrtowcs(_, _, _, _)),
 ];
-

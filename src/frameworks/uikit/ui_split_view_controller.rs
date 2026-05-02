@@ -5,7 +5,7 @@
  */
 //! `UISplitViewController`.
 
-use crate::objc::{id, objc_classes, ClassExports, HostObject, NSZonePtr, nil};
+use crate::objc::{id, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 // Структура для хранения состояния нашего контроллера
 struct UISplitViewControllerHostObject {

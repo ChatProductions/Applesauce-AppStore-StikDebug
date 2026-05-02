@@ -61,7 +61,7 @@ unsafe impl SafeRead for stat {}
 
 fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
     set_errno(env, 0);
-    
+
     // Безопасное чтение пути, чтобы избежать panic через unwrap()
     let path_str = match env.mem.cstr_at_utf8(path) {
         Ok(s) => s.to_string(), // Отвязываем от заимствования env.mem (как в функции stat ниже)
@@ -89,7 +89,12 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
             // папках просто для гарантии их наличия (ожидая поведение EEXIST).
             match err {
                 FsError::AlreadyExist => {
-                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with AlreadyExist, returning -1 (EEXIST)", path, path_str, mode);
+                    log_dbg!(
+                        "mkdir({:?} {:?}, {:#x}) failed with AlreadyExist, returning -1 (EEXIST)",
+                        path,
+                        path_str,
+                        mode
+                    );
                     set_errno(env, EEXIST);
                 }
                 FsError::NonexistentParentDir => {
@@ -103,7 +108,13 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
                 _ => {
                     // ИСПРАВЛЕНИЕ: Убрана заглушка unimplemented!(), которая могла вызвать краш.
                     // Если произошла другая системная ошибка файловой системы, возвращаем ENOENT.
-                    log_dbg!("mkdir({:?} {:?}, {:#x}) failed with {:?}, returning -1 (ENOENT)", path, path_str, mode, err);
+                    log_dbg!(
+                        "mkdir({:?} {:?}, {:#x}) failed with {:?}, returning -1 (ENOENT)",
+                        path,
+                        path_str,
+                        mode,
+                        err
+                    );
                     set_errno(env, ENOENT);
                 }
             }
@@ -113,11 +124,7 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
 }
 
 /// Helper for [stat()] and [fstat()] that fills the data in the stat struct
-fn fstat_inner(
-    env: &mut Environment,
-    fd: FileDescriptor,
-    buf: MutPtr<stat>,
-) -> i32 {
+fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         set_errno(env, EBADF);
         return -1;
@@ -195,9 +202,18 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
 
     if let Ok(mtime) = env.fs.modified(guest_path) {
         let sec = mtime as i32;
-        st.st_mtimespec = timespec { tv_sec: sec, tv_nsec: 0 };
-        st.st_atimespec = timespec { tv_sec: sec, tv_nsec: 0 };
-        st.st_ctimespec = timespec { tv_sec: sec, tv_nsec: 0 };
+        st.st_mtimespec = timespec {
+            tv_sec: sec,
+            tv_nsec: 0,
+        };
+        st.st_atimespec = timespec {
+            tv_sec: sec,
+            tv_nsec: 0,
+        };
+        st.st_ctimespec = timespec {
+            tv_sec: sec,
+            tv_nsec: 0,
+        };
     }
 
     // env.mem свободен для записи: path_str — это String, а не ссылка.
@@ -222,4 +238,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(stat(_, _)),
     export_c_func!(lstat(_, _)),
 ];
-

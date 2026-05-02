@@ -14,7 +14,7 @@ use crate::objc::{
 };
 
 type ADAdType = NSInteger;
-const ADAdTypeBanner:       ADAdType = 0;
+const ADAdTypeBanner: ADAdType = 0;
 const ADAdTypeMediumRectangle: ADAdType = 1;
 
 type ADBannerContentSizeIdentifier = id; // NSString*

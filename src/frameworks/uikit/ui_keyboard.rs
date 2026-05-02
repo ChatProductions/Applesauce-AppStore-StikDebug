@@ -12,96 +12,138 @@ use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, TrivialHo
 
 // MARK: - Notification names
 
-pub const UIKeyboardWillShowNotification:    &str = "UIKeyboardWillShowNotification";
-pub const UIKeyboardDidShowNotification:     &str = "UIKeyboardDidShowNotification";
-pub const UIKeyboardWillHideNotification:    &str = "UIKeyboardWillHideNotification";
-pub const UIKeyboardDidHideNotification:     &str = "UIKeyboardDidHideNotification";
+pub const UIKeyboardWillShowNotification: &str = "UIKeyboardWillShowNotification";
+pub const UIKeyboardDidShowNotification: &str = "UIKeyboardDidShowNotification";
+pub const UIKeyboardWillHideNotification: &str = "UIKeyboardWillHideNotification";
+pub const UIKeyboardDidHideNotification: &str = "UIKeyboardDidHideNotification";
 pub const UIKeyboardWillChangeFrameNotification: &str = "UIKeyboardWillChangeFrameNotification";
-pub const UIKeyboardDidChangeFrameNotification:  &str = "UIKeyboardDidChangeFrameNotification";
+pub const UIKeyboardDidChangeFrameNotification: &str = "UIKeyboardDidChangeFrameNotification";
 
 // MARK: - UserInfo keys (iOS 3.2+)
 
-pub const UIKeyboardFrameBeginUserInfoKey:  &str = "UIKeyboardFrameBeginUserInfoKey";
-pub const UIKeyboardFrameEndUserInfoKey:    &str = "UIKeyboardFrameEndUserInfoKey";
+pub const UIKeyboardFrameBeginUserInfoKey: &str = "UIKeyboardFrameBeginUserInfoKey";
+pub const UIKeyboardFrameEndUserInfoKey: &str = "UIKeyboardFrameEndUserInfoKey";
 pub const UIKeyboardAnimationDurationUserInfoKey: &str = "UIKeyboardAnimationDurationUserInfoKey";
-pub const UIKeyboardAnimationCurveUserInfoKey:    &str = "UIKeyboardAnimationCurveUserInfoKey";
-pub const UIKeyboardIsLocalUserInfoKey:     &str = "UIKeyboardIsLocalUserInfoKey";
+pub const UIKeyboardAnimationCurveUserInfoKey: &str = "UIKeyboardAnimationCurveUserInfoKey";
+pub const UIKeyboardIsLocalUserInfoKey: &str = "UIKeyboardIsLocalUserInfoKey";
 
 // MARK: - Legacy userInfo keys (pre-iOS 3.2, still seen in old apps)
 
-pub const UIKeyboardBoundsUserInfoKey:      &str = "UIKeyboardBoundsUserInfoKey";
+pub const UIKeyboardBoundsUserInfoKey: &str = "UIKeyboardBoundsUserInfoKey";
 pub const UIKeyboardCenterBeginUserInfoKey: &str = "UIKeyboardCenterBeginUserInfoKey";
-pub const UIKeyboardCenterEndUserInfoKey:   &str = "UIKeyboardCenterEndUserInfoKey";
+pub const UIKeyboardCenterEndUserInfoKey: &str = "UIKeyboardCenterEndUserInfoKey";
 
 // MARK: - Keyboard type / appearance / return key
 
 type UIKeyboardType = NSInteger;
-const UIKeyboardTypeDefault:               UIKeyboardType = 0;
-const UIKeyboardTypeASCIICapable:          UIKeyboardType = 1;
+const UIKeyboardTypeDefault: UIKeyboardType = 0;
+const UIKeyboardTypeASCIICapable: UIKeyboardType = 1;
 const UIKeyboardTypeNumbersAndPunctuation: UIKeyboardType = 2;
-const UIKeyboardTypeURL:                   UIKeyboardType = 3;
-const UIKeyboardTypeNumberPad:             UIKeyboardType = 4;
-const UIKeyboardTypePhonePad:              UIKeyboardType = 5;
-const UIKeyboardTypeNamePhonePad:          UIKeyboardType = 6;
-const UIKeyboardTypeEmailAddress:          UIKeyboardType = 7;
-const UIKeyboardTypeDecimalPad:            UIKeyboardType = 8;
-const UIKeyboardTypeTwitter:               UIKeyboardType = 9;
-const UIKeyboardTypeWebSearch:             UIKeyboardType = 10;
+const UIKeyboardTypeURL: UIKeyboardType = 3;
+const UIKeyboardTypeNumberPad: UIKeyboardType = 4;
+const UIKeyboardTypePhonePad: UIKeyboardType = 5;
+const UIKeyboardTypeNamePhonePad: UIKeyboardType = 6;
+const UIKeyboardTypeEmailAddress: UIKeyboardType = 7;
+const UIKeyboardTypeDecimalPad: UIKeyboardType = 8;
+const UIKeyboardTypeTwitter: UIKeyboardType = 9;
+const UIKeyboardTypeWebSearch: UIKeyboardType = 10;
 
 type UIKeyboardAppearance = NSInteger;
-const UIKeyboardAppearanceDefault:         UIKeyboardAppearance = 0;
-const UIKeyboardAppearanceDark:            UIKeyboardAppearance = 1;
-const UIKeyboardAppearanceLight:           UIKeyboardAppearance = 2;
-const UIKeyboardAppearanceAlert:           UIKeyboardAppearance = UIKeyboardAppearanceDark;
+const UIKeyboardAppearanceDefault: UIKeyboardAppearance = 0;
+const UIKeyboardAppearanceDark: UIKeyboardAppearance = 1;
+const UIKeyboardAppearanceLight: UIKeyboardAppearance = 2;
+const UIKeyboardAppearanceAlert: UIKeyboardAppearance = UIKeyboardAppearanceDark;
 
 type UIReturnKeyType = NSInteger;
-const UIReturnKeyDefault:                  UIReturnKeyType = 0;
-const UIReturnKeyGo:                       UIReturnKeyType = 1;
-const UIReturnKeyGoogle:                   UIReturnKeyType = 2;
-const UIReturnKeyJoin:                     UIReturnKeyType = 3;
-const UIReturnKeyNext:                     UIReturnKeyType = 4;
-const UIReturnKeyRoute:                    UIReturnKeyType = 5;
-const UIReturnKeySearch:                   UIReturnKeyType = 6;
-const UIReturnKeySend:                     UIReturnKeyType = 7;
-const UIReturnKeyYahoo:                    UIReturnKeyType = 8;
-const UIReturnKeyDone:                     UIReturnKeyType = 9;
-const UIReturnKeyEmergencyCall:            UIReturnKeyType = 10;
-const UIReturnKeyContinue:                 UIReturnKeyType = 11;
+const UIReturnKeyDefault: UIReturnKeyType = 0;
+const UIReturnKeyGo: UIReturnKeyType = 1;
+const UIReturnKeyGoogle: UIReturnKeyType = 2;
+const UIReturnKeyJoin: UIReturnKeyType = 3;
+const UIReturnKeyNext: UIReturnKeyType = 4;
+const UIReturnKeyRoute: UIReturnKeyType = 5;
+const UIReturnKeySearch: UIReturnKeyType = 6;
+const UIReturnKeySend: UIReturnKeyType = 7;
+const UIReturnKeyYahoo: UIReturnKeyType = 8;
+const UIReturnKeyDone: UIReturnKeyType = 9;
+const UIReturnKeyEmergencyCall: UIReturnKeyType = 10;
+const UIReturnKeyContinue: UIReturnKeyType = 11;
 
 type UITextAutocapitalizationType = NSInteger;
-const UITextAutocapitalizationTypeNone:          UITextAutocapitalizationType = 0;
-const UITextAutocapitalizationTypeWords:         UITextAutocapitalizationType = 1;
-const UITextAutocapitalizationTypeSentences:     UITextAutocapitalizationType = 2;
+const UITextAutocapitalizationTypeNone: UITextAutocapitalizationType = 0;
+const UITextAutocapitalizationTypeWords: UITextAutocapitalizationType = 1;
+const UITextAutocapitalizationTypeSentences: UITextAutocapitalizationType = 2;
 const UITextAutocapitalizationTypeAllCharacters: UITextAutocapitalizationType = 3;
 
 type UITextAutocorrectionType = NSInteger;
 const UITextAutocorrectionTypeDefault: UITextAutocorrectionType = 0;
-const UITextAutocorrectionTypeNo:      UITextAutocorrectionType = 1;
-const UITextAutocorrectionTypeYes:     UITextAutocorrectionType = 2;
+const UITextAutocorrectionTypeNo: UITextAutocorrectionType = 1;
+const UITextAutocorrectionTypeYes: UITextAutocorrectionType = 2;
 
 type UITextSpellCheckingType = NSInteger;
 const UITextSpellCheckingTypeDefault: UITextSpellCheckingType = 0;
-const UITextSpellCheckingTypeNo:      UITextSpellCheckingType = 1;
-const UITextSpellCheckingTypeYes:     UITextSpellCheckingType = 2;
+const UITextSpellCheckingTypeNo: UITextSpellCheckingType = 1;
+const UITextSpellCheckingTypeYes: UITextSpellCheckingType = 2;
 
 pub const CONSTANTS: ConstantExports = &[
     // Notification names
-    ("_UIKeyboardWillShowNotification",    HostConstant::NSString(UIKeyboardWillShowNotification)),
-    ("_UIKeyboardDidShowNotification",     HostConstant::NSString(UIKeyboardDidShowNotification)),
-    ("_UIKeyboardWillHideNotification",    HostConstant::NSString(UIKeyboardWillHideNotification)),
-    ("_UIKeyboardDidHideNotification",     HostConstant::NSString(UIKeyboardDidHideNotification)),
-    ("_UIKeyboardWillChangeFrameNotification", HostConstant::NSString(UIKeyboardWillChangeFrameNotification)),
-    ("_UIKeyboardDidChangeFrameNotification",  HostConstant::NSString(UIKeyboardDidChangeFrameNotification)),
+    (
+        "_UIKeyboardWillShowNotification",
+        HostConstant::NSString(UIKeyboardWillShowNotification),
+    ),
+    (
+        "_UIKeyboardDidShowNotification",
+        HostConstant::NSString(UIKeyboardDidShowNotification),
+    ),
+    (
+        "_UIKeyboardWillHideNotification",
+        HostConstant::NSString(UIKeyboardWillHideNotification),
+    ),
+    (
+        "_UIKeyboardDidHideNotification",
+        HostConstant::NSString(UIKeyboardDidHideNotification),
+    ),
+    (
+        "_UIKeyboardWillChangeFrameNotification",
+        HostConstant::NSString(UIKeyboardWillChangeFrameNotification),
+    ),
+    (
+        "_UIKeyboardDidChangeFrameNotification",
+        HostConstant::NSString(UIKeyboardDidChangeFrameNotification),
+    ),
     // UserInfo keys
-    ("_UIKeyboardFrameBeginUserInfoKey",   HostConstant::NSString(UIKeyboardFrameBeginUserInfoKey)),
-    ("_UIKeyboardFrameEndUserInfoKey",     HostConstant::NSString(UIKeyboardFrameEndUserInfoKey)),
-    ("_UIKeyboardAnimationDurationUserInfoKey", HostConstant::NSString(UIKeyboardAnimationDurationUserInfoKey)),
-    ("_UIKeyboardAnimationCurveUserInfoKey",    HostConstant::NSString(UIKeyboardAnimationCurveUserInfoKey)),
-    ("_UIKeyboardIsLocalUserInfoKey",      HostConstant::NSString(UIKeyboardIsLocalUserInfoKey)),
+    (
+        "_UIKeyboardFrameBeginUserInfoKey",
+        HostConstant::NSString(UIKeyboardFrameBeginUserInfoKey),
+    ),
+    (
+        "_UIKeyboardFrameEndUserInfoKey",
+        HostConstant::NSString(UIKeyboardFrameEndUserInfoKey),
+    ),
+    (
+        "_UIKeyboardAnimationDurationUserInfoKey",
+        HostConstant::NSString(UIKeyboardAnimationDurationUserInfoKey),
+    ),
+    (
+        "_UIKeyboardAnimationCurveUserInfoKey",
+        HostConstant::NSString(UIKeyboardAnimationCurveUserInfoKey),
+    ),
+    (
+        "_UIKeyboardIsLocalUserInfoKey",
+        HostConstant::NSString(UIKeyboardIsLocalUserInfoKey),
+    ),
     // Legacy keys
-    ("_UIKeyboardBoundsUserInfoKey",       HostConstant::NSString(UIKeyboardBoundsUserInfoKey)),
-    ("_UIKeyboardCenterBeginUserInfoKey",  HostConstant::NSString(UIKeyboardCenterBeginUserInfoKey)),
-    ("_UIKeyboardCenterEndUserInfoKey",    HostConstant::NSString(UIKeyboardCenterEndUserInfoKey)),
+    (
+        "_UIKeyboardBoundsUserInfoKey",
+        HostConstant::NSString(UIKeyboardBoundsUserInfoKey),
+    ),
+    (
+        "_UIKeyboardCenterBeginUserInfoKey",
+        HostConstant::NSString(UIKeyboardCenterBeginUserInfoKey),
+    ),
+    (
+        "_UIKeyboardCenterEndUserInfoKey",
+        HostConstant::NSString(UIKeyboardCenterEndUserInfoKey),
+    ),
 ];
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -258,9 +300,15 @@ pub fn post_keyboard_notifications(env: &mut crate::Environment, will_show: bool
     use crate::objc::msg;
 
     let (will_name, did_name) = if will_show {
-        (UIKeyboardWillShowNotification, UIKeyboardDidShowNotification)
+        (
+            UIKeyboardWillShowNotification,
+            UIKeyboardDidShowNotification,
+        )
     } else {
-        (UIKeyboardWillHideNotification, UIKeyboardDidHideNotification)
+        (
+            UIKeyboardWillHideNotification,
+            UIKeyboardDidHideNotification,
+        )
     };
 
     let app: crate::objc::id = msg_class![env; UIApplication sharedApplication];
@@ -277,4 +325,3 @@ pub fn post_keyboard_notifications(env: &mut crate::Environment, will_show: bool
 
     crate::objc::release(env, user_info);
 }
-

@@ -24,7 +24,7 @@ const SIG_DFL: u32 = 0;
 
 fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: MutVoidPtr) -> i32 {
     set_errno(env, 0);
-    // Пока возвращаем 0 (успех), убрав TODO, так как sigaction сложнее в реализации 
+    // Пока возвращаем 0 (успех), убрав TODO, так как sigaction сложнее в реализации
     // и редко ломает логику игр, если просто рапортует об успехе.
     0
 }

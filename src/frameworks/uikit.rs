@@ -39,8 +39,8 @@ pub mod ui_responder;
 pub mod ui_screen;
 pub mod ui_screen_mode;
 pub mod ui_split_view_controller;
-pub mod ui_tab_bar_item;
 pub mod ui_tab_bar_controller;
+pub mod ui_tab_bar_item;
 pub mod ui_touch;
 pub mod ui_view;
 pub mod ui_view_controller;
@@ -257,22 +257,16 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
             Event::TextInput(text_event) => {
                 let responder = env.framework_state.uikit.ui_responder.first_responder;
                 let class = msg![env; responder class];
-                let ui_text_field_class =
-                    env.objc.get_known_class("UITextField", &mut env.mem);
+                let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
 
-                if !responder.is_null()
-                    && env.objc.class_is_subclass_of(class, ui_text_field_class)
+                if !responder.is_null() && env.objc.class_is_subclass_of(class, ui_text_field_class)
                 {
                     match text_event {
                         TextInputEvent::Text(text) => {
-                            ui_view::ui_control::ui_text_field::handle_text(
-                                env, responder, text,
-                            )
+                            ui_view::ui_control::ui_text_field::handle_text(env, responder, text)
                         }
                         TextInputEvent::Backspace => {
-                            ui_view::ui_control::ui_text_field::handle_backspace(
-                                env, responder,
-                            )
+                            ui_view::ui_control::ui_text_field::handle_backspace(env, responder)
                         }
                         TextInputEvent::Return => {
                             ui_view::ui_control::ui_text_field::handle_return(env, responder)
@@ -285,4 +279,3 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
 
     ui_accelerometer::handle_accelerometer(env)
 }
-

@@ -170,7 +170,10 @@ fn alcGetString(
         match State::get(env).devices.get(&device) {
             Some(&dev) => dev,
             None => {
-                log!("Предупреждение: alcGetString вызван с неизвестным устройством {:?}", device);
+                log!(
+                    "Предупреждение: alcGetString вызван с неизвестным устройством {:?}",
+                    device
+                );
                 std::ptr::null_mut()
             }
         }
@@ -178,7 +181,7 @@ fn alcGetString(
 
     // Передаем хостовое устройство (или NULL) в настоящую библиотеку OpenAL Soft
     let res = unsafe { al::alcGetString(host_device, param) };
-    
+
     // Защита от краша, если OpenAL ничего не вернул
     if res.is_null() {
         log_dbg!("alcGetString({:?}, {}) вернул NULL", device, param);
@@ -188,7 +191,7 @@ fn alcGetString(
     let s = unsafe { CStr::from_ptr(res) };
     log_dbg!("alcGetString({:?}, {}) => {:?}", device, param, s);
     log!("TODO: alcGetString({}) приводит к утечке памяти", param);
-    
+
     // Аллоцируем строку в памяти гостя
     env.mem.alloc_and_write_cstr(s.to_bytes()).cast_const()
 }
@@ -343,9 +346,7 @@ fn alcGetProcAddress(
             log!("Допускаем несуществующую функцию alcMacOSMixerOutputRate() в alcGetProcAddress(), возвращаем NULL.");
             return Ptr::null();
         }
-        panic!(
-            "Запрос адреса процедуры для нереализованной функции OpenAL {mangled_func_name}"
-        );
+        panic!("Запрос адреса процедуры для нереализованной функции OpenAL {mangled_func_name}");
     }
 }
 
@@ -544,7 +545,10 @@ fn alGenSources(env: &mut Environment, n: ALsizei, sources: MutPtr<ALuint>) {
     let n_usize: GuestUSize = match n.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alGenSources вызван с отрицательным количеством {}", n);
+            log!(
+                "Предупреждение: alGenSources вызван с отрицательным количеством {}",
+                n
+            );
             return;
         }
     };
@@ -556,7 +560,10 @@ fn alDeleteSources(env: &mut Environment, n: ALsizei, sources: ConstPtr<ALuint>)
     let n_usize: GuestUSize = match n.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alDeleteSources вызван с отрицательным количеством {}", n);
+            log!(
+                "Предупреждение: alDeleteSources вызван с отрицательным количеством {}",
+                n
+            );
             return;
         }
     };
@@ -693,7 +700,11 @@ fn alSourcePlay(env: &mut Environment, source: ALuint) {
         }
         log_dbg!(
             "alSourcePlay(source={}) -> state=0x{:x}, max_gain={}, buffer={}, err=0x{:x}",
-            source, state, max_gain, buffer, err
+            source,
+            state,
+            max_gain,
+            buffer,
+            err
         );
     }
 }
@@ -719,7 +730,10 @@ fn alSourceQueueBuffers(
     let nb_usize: GuestUSize = match nb.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alSourceQueueBuffers вызван с отрицательным количеством {}", nb);
+            log!(
+                "Предупреждение: alSourceQueueBuffers вызван с отрицательным количеством {}",
+                nb
+            );
             return;
         }
     };
@@ -739,14 +753,14 @@ fn alSourceUnqueueBuffers(
     //    alGetSourcei(source, AL_BUFFERS_QUEUED, &n);
     //    alSourceUnqueueBuffers(source, n, &buffers);
     //
-    // К сожалению, при некоторых обстоятельствах этот код некорректен: извлечение буферов из 
-    // очереди во время их воспроизведения не разрешено спецификацией OpenAL! Возможно, это по 
-    // какой-то причине работало с реализацией OpenAL от Apple, но OpenAL Soft этого не допускает, 
-    // поэтому многие приложения, использовавшие этот пример (например, Super Monkey Ball), 
+    // К сожалению, при некоторых обстоятельствах этот код некорректен: извлечение буферов из
+    // очереди во время их воспроизведения не разрешено спецификацией OpenAL! Возможно, это по
+    // какой-то причине работало с реализацией OpenAL от Apple, но OpenAL Soft этого не допускает,
+    // поэтому многие приложения, использовавшие этот пример (например, Super Monkey Ball),
     // сталкиваются с неожиданной ошибкой OpenAL.
     //
     // Ограничение количества извлекаемых буферов кажется эффективным обходным путем для
-    // протестированных приложений. Этот пример кода на самом деле не использует возвращаемые 
+    // протестированных приложений. Этот пример кода на самом деле не использует возвращаемые
     // идентификаторы буферов, поэтому нет проблемы в том, что мы запишем их меньше.
     try_get_context!(env, context);
     let buffers_processed = {
@@ -776,7 +790,10 @@ fn alGenBuffers(env: &mut Environment, n: ALsizei, buffers: MutPtr<ALuint>) {
     let n_usize: GuestUSize = match n.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alGenBuffers вызван с отрицательным количеством {}", n);
+            log!(
+                "Предупреждение: alGenBuffers вызван с отрицательным количеством {}",
+                n
+            );
             return;
         }
     };
@@ -788,7 +805,10 @@ fn alDeleteBuffers(env: &mut Environment, n: ALsizei, buffers: ConstPtr<ALuint>)
     let n_usize: GuestUSize = match n.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alDeleteBuffers вызван с отрицательным количеством {}", n);
+            log!(
+                "Предупреждение: alDeleteBuffers вызван с отрицательным количеством {}",
+                n
+            );
             return;
         }
     };
@@ -816,7 +836,10 @@ fn alBufferData(
     let size_usize: GuestUSize = match size.try_into() {
         Ok(val) => val,
         Err(_) => {
-            log!("Предупреждение: alBufferData вызван с отрицательным размером {}", size);
+            log!(
+                "Предупреждение: alBufferData вызван с отрицательным размером {}",
+                size
+            );
             return;
         }
     };
@@ -830,7 +853,10 @@ fn alBufferData(
     // log line is debug-only to avoid drowning out other diagnostics.
     log_dbg!(
         "alBufferData(buffer={}, format=0x{:x}, size={}, samplerate={})",
-        buffer, format, size, samplerate
+        buffer,
+        format,
+        size,
+        samplerate
     );
     try_get_context!(env, context);
     unsafe { context.BufferData(buffer, format, data_ptr, size, samplerate) };
@@ -853,7 +879,10 @@ fn alBufferDataStatic(
 
 // Специфичное расширение Apple для OpenAL
 fn alcMacOSXMixerOutputRate(_env: &mut Environment, value: ALdouble) {
-    log!("Приложение хочет установить частоту дискретизации микшера на {} Гц", value);
+    log!(
+        "Приложение хочет установить частоту дискретизации микшера на {} Гц",
+        value
+    );
 }
 fn alcMacOSXGetMixerOutputRate(_env: &mut Environment) -> ALdouble {
     // Значение по умолчанию было проверено на iPhone 3GS, iOS 4.0.1
@@ -869,7 +898,7 @@ fn alDopplerFactor(env: &mut Environment, value: ALfloat) {
 fn alDopplerVelocity(env: &mut Environment, value: ALfloat) {
     // По всей видимости, wolf3d устанавливает скорость Доплера в ноль, но это приводит
     // к приглушению всего звука в программной реализации Open AL 1.1!
-    // Дополнительную информацию см. в разделе "A note for OpenAL library implementors regarding OpenAL 1.0" 
+    // Дополнительную информацию см. в разделе "A note for OpenAL library implementors regarding OpenAL 1.0"
     // спецификации OpenAL 1.1.
     let bundle_id = env.bundle.bundle_identifier();
     if bundle_id.starts_with("com.zodttd.wolf3d")
@@ -883,7 +912,7 @@ fn alDopplerVelocity(env: &mut Environment, value: ALfloat) {
             return;
         }
     }
-    
+
     // Если передано нормальное значение (например, 1.0) или это другая игра — честно отдаем в OpenAL
     try_get_context!(env, context);
     unsafe { context.DopplerVelocity(value) };
@@ -967,7 +996,10 @@ fn alGetBooleanv(env: &mut Environment, param: ALenum, values: MutPtr<ALboolean>
     }
 }
 fn alGetDouble(_env: &mut Environment, param: ALenum) -> ALdouble {
-    log!("Warning: alGetDouble({:#x}) is a stub, returning 0.0", param);
+    log!(
+        "Warning: alGetDouble({:#x}) is a stub, returning 0.0",
+        param
+    );
     0.0
 }
 fn alGetDoublev(env: &mut Environment, param: ALenum, values: MutPtr<ALdouble>) {

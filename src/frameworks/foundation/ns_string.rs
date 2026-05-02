@@ -12,7 +12,7 @@
 
 mod path_algorithms;
 
-use super::{ns_array, unichar, NSInteger, _nib_archive_decoder};
+use super::{_nib_archive_decoder, ns_array, unichar, NSInteger};
 use super::{
     NSComparisonResult, NSNotFound, NSOrderedAscending, NSOrderedDescending, NSOrderedSame,
     NSRange, NSUInteger,
@@ -52,8 +52,8 @@ pub const NSNextStepLatinStringEncoding: NSUInteger = 0x422;
 pub const NSUTF16BigEndianStringEncoding: NSUInteger = 0x90000100;
 pub const NSUTF16LittleEndianStringEncoding: NSUInteger = 0x94000100;
 pub const NSUTF32LittleEndianStringEncoding: NSUInteger = 0x9c000100;
-pub const NSUTF32StringEncoding:              NSUInteger = 0x8c000100;
-pub const NSUTF32BigEndianStringEncoding:     NSUInteger = 0x98000100;
+pub const NSUTF32StringEncoding: NSUInteger = 0x8c000100;
+pub const NSUTF32BigEndianStringEncoding: NSUInteger = 0x98000100;
 
 pub type NSStringCompareOptions = NSUInteger;
 pub const NSCaseInsensitiveSearch: NSUInteger = 1;
@@ -111,7 +111,10 @@ impl StringHostObject {
 
         match encoding {
             NSASCIIStringEncoding => {
-                let string: String = bytes.iter().map(|&b| if b.is_ascii() { b as char } else { '?' }).collect();
+                let string: String = bytes
+                    .iter()
+                    .map(|&b| if b.is_ascii() { b as char } else { '?' })
+                    .collect();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSMacOSRomanStringEncoding => {
@@ -121,13 +124,16 @@ impl StringHostObject {
             NSISOLatin1StringEncoding => {
                 let string: String = bytes.iter().map(|&b| b as char).collect();
                 StringHostObject::Utf8(Cow::Owned(string))
-           }
+            }
             NSUTF8StringEncoding => {
                 let string = String::from_utf8_lossy(&bytes).into_owned();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSUTF32LittleEndianStringEncoding |
-            NSUTF32StringEncoding | NSUTF32BigEndianStringEncoding | NSNextStepLatinStringEncoding | NSWindowsCP1252StringEncoding => {
+            NSUTF32LittleEndianStringEncoding
+            | NSUTF32StringEncoding
+            | NSUTF32BigEndianStringEncoding
+            | NSNextStepLatinStringEncoding
+            | NSWindowsCP1252StringEncoding => {
                 let string = CP1252.decode(&bytes).to_string();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
@@ -420,7 +426,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (utf16, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { println!("[{:?} characterAtIndex:{:?}]: converted string to UTF-16", this, index); }
-    
+
     let idx = index as usize;
     if idx >= utf16.len() {
         println!("WARNING: characterAtIndex: index {} out of bounds (len {})", index, utf16.len());
@@ -466,7 +472,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     NSRange { location: NSNotFound as NSUInteger, length: 0 }
 }
-    
+
 - (NSRange)rangeOfString:(id)search_string {
     msg![env; this rangeOfString:search_string options:0u32]
 }
@@ -668,7 +674,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     assert!(to_rust_string(env, other).is_ascii());
     msg![env; this compare:other options:NSCaseInsensitiveSearch]
 }
-    
+
 - (id)copyWithZone:(NSZonePtr)_zone { retain(env, this) }
 
 - (id)mutableCopyWithZone:(NSZonePtr)_zone {
@@ -768,12 +774,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bytes_size = bytes.len() as GuestUSize;
     let total_size: GuestUSize = bytes_size + null_size;
     let c_string: MutPtr<u8> = env.mem.alloc(total_size).cast();
-    
+
     _ = env.mem.bytes_at_mut(c_string, bytes_size).write(&bytes).unwrap();
     for i in 0..null_size {
         env.mem.write(c_string + bytes_size + i, b'\0');
     }
-    
+
     let _: id = msg_class![env; NSData dataWithBytesNoCopy:(c_string.cast_void()) length:total_size];
     c_string.cast_const()
 }
@@ -783,7 +789,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (ConstPtr<u8>)UTF8String { msg![env; this cStringUsingEncoding:NSUTF8StringEncoding] }
 
 - (id)substringToIndex:(NSUInteger)to {
-    let cap = (to as usize).min(1024); 
+    let cap = (to as usize).min(1024);
     let mut res_utf16: Utf16String = Vec::with_capacity(cap);
     for_each_code_unit(env, this, |idx, c| { if idx < to { res_utf16.push(c); } });
     let res = msg_class![env; _touchHLE_NSString alloc];
@@ -880,7 +886,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)stringByAppendingString:(id)other {
-    // ЧЕСТНЫЙ ФИКС: Вместо жесткого assert, который убивает эмулятор, 
+    // ЧЕСТНЫЙ ФИКС: Вместо жесткого assert, который убивает эмулятор,
     // эмулируем обработку исключения NSInvalidArgumentException.
     if other == nil {
         log!("Warning: [NSString stringByAppendingString:nil] called. This would throw NSInvalidArgumentException on iOS. Returning original string to prevent crash.");
@@ -1041,7 +1047,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let size = CGSize { width, height: 99999.0 };
     ui_font::size_with_font(env, font, &text, Some((size, line_break_mode)))
 }
-    
+
 - (CGSize)sizeWithFont:(id)font constrainedToSize:(CGSize)size {
     msg![env; this sizeWithFont:font constrainedToSize:size lineBreakMode:UILineBreakModeWordWrap]
 }
@@ -1333,7 +1339,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
-- (id)initWithContentsOfFile:(id)path { 
+- (id)initWithContentsOfFile:(id)path {
     if path == nil {
         release(env, this);
         return nil;
@@ -1505,7 +1511,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         println!("Warning: _touchHLE_NSString encodeWithCoder: unsupported coder class, skipping");
     }
 }
-    
+
 - (bool)isAbsolutePath {
     let path = to_rust_string(env, this);
     path.starts_with('/') || path.starts_with('~')
@@ -1540,16 +1546,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (orig_string, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { println!("[{:?} substringWithRange]: converted string to UTF-16", this); }
-    
+
     let start = range.location as usize;
     let end = start.saturating_add(range.length as usize);
-    
+
     if start > orig_string.len() || end > orig_string.len() {
         println!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
         let res = from_u16_vec(env, Vec::new());
         return autorelease(env, res);
     }
-    
+
     let host_string = orig_string[start..end].to_vec();
     let res = from_u16_vec(env, host_string);
     autorelease(env, res)
@@ -1751,16 +1757,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (orig_string, did_convert) = host_object.convert_to_utf16_inplace();
     if did_convert { println!("[{:?} substringWithRange]: converted string to UTF-16", this); }
-    
+
     let start = range.location as usize;
     let end = start.saturating_add(range.length as usize);
-    
+
     if start > orig_string.len() || end > orig_string.len() {
         println!("WARNING: substringWithRange: range {start}..{end} out of bounds (len {})", orig_string.len());
         let res = from_u16_vec(env, Vec::new());
         return autorelease(env, res);
     }
-    
+
     let host_string = orig_string[start..end].to_vec();
     let res = from_u16_vec(env, host_string);
     autorelease(env, res)
@@ -1782,52 +1788,93 @@ fn data_using_encoding_lossy_inner(
     encoding: NSStringEncoding,
     lossy: bool,
 ) -> id {
-    if lossy { println!("Warning: lossy conversion requested for '{}'", to_rust_string(env, this)); }
+    if lossy {
+        println!(
+            "Warning: lossy conversion requested for '{}'",
+            to_rust_string(env, this)
+        );
+    }
     let string = to_rust_string(env, this);
 
     let bytes: Vec<u8> = match encoding {
-        NSUTF16LittleEndianStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
-        NSUTF16BigEndianStringEncoding => string.encode_utf16().flat_map(u16::to_be_bytes).collect(),
+        NSUTF16LittleEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
+        }
+        NSUTF16BigEndianStringEncoding => {
+            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
+        }
         NSUTF16StringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
-        NSUTF32LittleEndianStringEncoding => string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect(),
-        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect(),
+        NSUTF32LittleEndianStringEncoding => string
+            .chars()
+            .flat_map(|c| (c as u32).to_le_bytes())
+            .collect(),
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => string
+            .chars()
+            .flat_map(|c| (c as u32).to_be_bytes())
+            .collect(),
         NSShiftJISStringEncoding => {
             let (cow, _, _) = encoding_rs::SHIFT_JIS.encode(&string);
             cow.into_owned()
-        },
+        }
         NSASCIIStringEncoding | NSISOLatin1StringEncoding | NSMacOSRomanStringEncoding => {
             if lossy {
-                string.chars().map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' }).collect()
+                string
+                    .chars()
+                    .map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' })
+                    .collect()
             } else {
-                if string.chars().any(|c| (c as u32) > 0xFF) { return nil; }
+                if string.chars().any(|c| (c as u32) > 0xFF) {
+                    return nil;
+                }
                 string.chars().map(|c| c as u8).collect()
             }
-        },
+        }
         NSUTF8StringEncoding | _ => string.as_bytes().to_vec(),
     };
 
     let length: NSUInteger = bytes.len().try_into().unwrap();
     let alloc_size = if length > 0 { length } else { 1 };
     let buf_ptr: MutPtr<u8> = env.mem.alloc(alloc_size as u32).cast();
-    
-    if length > 0 { env.mem.bytes_at_mut(buf_ptr, length as u32).copy_from_slice(&bytes); }
+
+    if length > 0 {
+        env.mem
+            .bytes_at_mut(buf_ptr, length as u32)
+            .copy_from_slice(&bytes);
+    }
 
     msg_class![env; NSData dataWithBytesNoCopy:(buf_ptr.cast_void()) length:length]
 }
 
 pub fn register_constant_strings(bin: &MachO, mem: &mut Mem, objc: &mut ObjC) {
-    let Some(cfstrings) = bin.get_section("__cfstring") else { return; };
+    let Some(cfstrings) = bin.get_section("__cfstring") else {
+        return;
+    };
     assert!(cfstrings.size % guest_size_of::<cfstringStruct>() == 0);
     let base: ConstPtr<cfstringStruct> = Ptr::from_bits(cfstrings.addr);
     for i in 0..(cfstrings.size / guest_size_of::<cfstringStruct>()) {
         let cfstr_ptr = base + i;
-        let cfstringStruct { _isa, flags, bytes, length } = mem.read(cfstr_ptr);
+        let cfstringStruct {
+            _isa,
+            flags,
+            bytes,
+            length,
+        } = mem.read(cfstr_ptr);
         let (host_object, class_name) = if flags == 0x7C8 {
             let decoded = String::from_utf8_lossy(mem.bytes_at(bytes, length)).into_owned();
-            (StringHostObject::Utf8(Cow::Owned(decoded)), "_touchHLE_NSString_CFConstantString_UTF8")
+            (
+                StringHostObject::Utf8(Cow::Owned(decoded)),
+                "_touchHLE_NSString_CFConstantString_UTF8",
+            )
         } else if flags == 0x7D0 {
-            let decoded = mem.bytes_at(bytes, length * 2).chunks(2).map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap())).collect();
-            (StringHostObject::Utf16(decoded), "_touchHLE_NSString_CFConstantString_UTF16")
+            let decoded = mem
+                .bytes_at(bytes, length * 2)
+                .chunks(2)
+                .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
+                .collect();
+            (
+                StringHostObject::Utf16(decoded),
+                "_touchHLE_NSString_CFConstantString_UTF16",
+            )
         } else {
             panic!("Bad CFTypeID for constant string: {flags:#x}");
         };
@@ -1874,22 +1921,42 @@ pub fn to_rust_string(env: &mut Environment, string: id) -> Cow<'static, str> {
     if string == nil {
         return Cow::Borrowed("");
     }
-    env.objc.borrow_mut::<StringHostObject>(string).to_utf8().unwrap()
+    env.objc
+        .borrow_mut::<StringHostObject>(string)
+        .to_utf8()
+        .unwrap()
 }
 
-pub fn for_each_code_unit<F>(env: &mut Environment, string: id, mut f: F) where F: FnMut(NSUInteger, u16), {
-    if string == nil { return; }
+pub fn for_each_code_unit<F>(env: &mut Environment, string: id, mut f: F)
+where
+    F: FnMut(NSUInteger, u16),
+{
+    if string == nil {
+        return;
+    }
     let mut idx: NSUInteger = 0;
-    env.objc.borrow::<StringHostObject>(string).iter_code_units().for_each(|c| { f(idx, c); idx += 1; });
+    env.objc
+        .borrow::<StringHostObject>(string)
+        .iter_code_units()
+        .for_each(|c| {
+            f(idx, c);
+            idx += 1;
+        });
 }
 
 fn is_match_at_position<F: Fn(u16, u16) -> bool>(
-    env: &mut Environment, the_string: id, search_string: id, start: NSUInteger, len: NSUInteger, len_search: NSUInteger, compare_fn: F,
+    env: &mut Environment,
+    the_string: id,
+    search_string: id,
+    start: NSUInteger,
+    len: NSUInteger,
+    len_search: NSUInteger,
+    compare_fn: F,
 ) -> bool {
     (0..len_search).all(|j| {
         let curr: NSUInteger = start + j;
         if curr < len {
-            let a_c: u16  = msg![env; the_string characterAtIndex:curr];
+            let a_c: u16 = msg![env; the_string characterAtIndex:curr];
             let b_c: u16 = msg![env; search_string characterAtIndex:j];
             compare_fn(a_c, b_c)
         } else {
@@ -1911,8 +1978,16 @@ fn float_value_common<F: std::str::FromStr + Default>(env: &mut Environment, str
     st[..cutoff].parse().unwrap_or(Default::default())
 }
 
-fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_end: bool) -> (NSUInteger, NSUInteger, NSUInteger) {
-    let NSRange { location: r_start, length } = range;
+fn line_range_helper(
+    string: &Utf16String,
+    range: NSRange,
+    get_start: bool,
+    get_end: bool,
+) -> (NSUInteger, NSUInteger, NSUInteger) {
+    let NSRange {
+        location: r_start,
+        length,
+    } = range;
     let r_end: usize = r_start.checked_add(length).unwrap().try_into().unwrap();
     let r_start: usize = r_start.try_into().unwrap();
     let str_len = string.len();
@@ -1928,7 +2003,10 @@ fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_
                 0x000D => {
                     if start_pos == r_start && start_pos < str_len {
                         let after_cr: u16 = string[start_pos];
-                        if after_cr == 0x000A { start_pos -= 1; continue; }
+                        if after_cr == 0x000A {
+                            start_pos -= 1;
+                            continue;
+                        }
                     }
                     break;
                 }
@@ -1945,18 +2023,26 @@ fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_
         while cend_pos < str_len {
             let c: u16 = string[cend_pos];
             match c {
-                0x0085 | 0x2028 | 0x2029 => { end_pos = cend_pos + 1; break; }
+                0x0085 | 0x2028 | 0x2029 => {
+                    end_pos = cend_pos + 1;
+                    break;
+                }
                 0x000A => {
                     if cend_pos > 0 && string[cend_pos - 1] == 0x000D {
                         cend_pos -= 1;
                         end_pos = cend_pos + 2;
-                    } else { end_pos = cend_pos + 1; }
+                    } else {
+                        end_pos = cend_pos + 1;
+                    }
                     break;
                 }
                 0x000D => {
                     if cend_pos < str_len - 1 {
                         let after_cr: u16 = string[cend_pos + 1];
-                        if after_cr == 0x000A { end_pos = cend_pos + 2; break; }
+                        if after_cr == 0x000A {
+                            end_pos = cend_pos + 2;
+                            break;
+                        }
                     }
                     end_pos = cend_pos + 1;
                     break;
@@ -1965,9 +2051,15 @@ fn line_range_helper(string: &Utf16String, range: NSRange, get_start: bool, get_
             }
             cend_pos += 1;
         }
-        if cend_pos == str_len { end_pos = cend_pos }
+        if cend_pos == str_len {
+            end_pos = cend_pos
+        }
     }
-    (start_pos.try_into().unwrap(), end_pos.try_into().unwrap(), cend_pos.try_into().unwrap())
+    (
+        start_pos.try_into().unwrap(),
+        end_pos.try_into().unwrap(),
+        cend_pos.try_into().unwrap(),
+    )
 }
 
 #[cfg(test)]
@@ -1975,7 +2067,10 @@ mod ns_string_tests {
     use super::*;
     #[test]
     fn linerange_tests() {
-        let range = |x, y| NSRange { location: x, length: y };
+        let range = |x, y| NSRange {
+            location: x,
+            length: y,
+        };
         let str1: Utf16String = "abcd\nab".encode_utf16().collect();
         assert!(line_range_helper(&str1, range(5, 1), true, true) == (5, 7, 7));
         assert!(line_range_helper(&str1, range(4, 1), true, true) == (0, 5, 4));
@@ -1998,38 +2093,43 @@ mod ns_string_tests {
 }
 
 pub fn get_bytes_buffer_inner(
-    env: &mut Environment, 
-    str: id, 
-    buffer: MutPtr<u8>, 
-    buffer_size: NSUInteger, 
-    encoding: NSStringEncoding, 
+    env: &mut Environment,
+    str: id,
+    buffer: MutPtr<u8>,
+    buffer_size: NSUInteger,
+    encoding: NSStringEncoding,
     include_null_terminator: bool,
 ) -> bool {
     let string = to_rust_string(env, str);
     let mut bytes: Vec<u8> = match encoding {
-        NSASCIIStringEncoding | NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
-            if string.chars().any(|c| (c as u32) > 0xFF) { return false; }
+        NSASCIIStringEncoding
+        | NSMacOSRomanStringEncoding
+        | NSISOLatin1StringEncoding
+        | NSNextStepLatinStringEncoding => {
+            if string.chars().any(|c| (c as u32) > 0xFF) {
+                return false;
+            }
             string.as_bytes().to_vec()
-        },
-        NSUTF8StringEncoding | NSWindowsCP1252StringEncoding => {
-            string.as_bytes().to_vec()
-        },
+        }
+        NSUTF8StringEncoding | NSWindowsCP1252StringEncoding => string.as_bytes().to_vec(),
         NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
             string.encode_utf16().flat_map(u16::to_le_bytes).collect()
-        },
+        }
         NSUTF16BigEndianStringEncoding => {
             string.encode_utf16().flat_map(u16::to_be_bytes).collect()
-        },
-        NSUTF32LittleEndianStringEncoding => {
-            string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect()
-        },
-        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
-            string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect()
-        },
+        }
+        NSUTF32LittleEndianStringEncoding => string
+            .chars()
+            .flat_map(|c| (c as u32).to_le_bytes())
+            .collect(),
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => string
+            .chars()
+            .flat_map(|c| (c as u32).to_be_bytes())
+            .collect(),
         NSShiftJISStringEncoding => {
             let (cow, _, _) = encoding_rs::SHIFT_JIS.encode(&string);
             cow.into_owned()
-        },
+        }
         _ => {
             println!("Warning: get_bytes_buffer_inner requested with unknown encoding: {}, falling back to UTF-8", encoding);
             string.as_bytes().to_vec()
@@ -2038,16 +2138,21 @@ pub fn get_bytes_buffer_inner(
 
     if include_null_terminator {
         match encoding {
-            NSUTF16LittleEndianStringEncoding | NSUTF16BigEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
+            NSUTF16LittleEndianStringEncoding
+            | NSUTF16BigEndianStringEncoding
+            | NSUTF16StringEncoding
+            | NSUnicodeStringEncoding => {
                 bytes.push(0);
                 bytes.push(0);
-            },
-            NSUTF32LittleEndianStringEncoding | NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+            }
+            NSUTF32LittleEndianStringEncoding
+            | NSUTF32BigEndianStringEncoding
+            | NSUTF32StringEncoding => {
                 bytes.push(0);
                 bytes.push(0);
                 bytes.push(0);
                 bytes.push(0);
-            },
+            }
             _ => {
                 bytes.push(0);
             }
@@ -2061,21 +2166,36 @@ pub fn get_bytes_buffer_inner(
 
     let dest = env.mem.bytes_at_mut(buffer, buffer_size as u32);
     dest[..bytes.len()].copy_from_slice(&bytes);
-    
+
     true
 }
 
 fn string_by_replacing_occurrences_inner(
-    env: &mut Environment, source: id, target: id, replacement: id, options: NSStringCompareOptions,
+    env: &mut Environment,
+    source: id,
+    target: id,
+    replacement: id,
+    options: NSStringCompareOptions,
 ) -> id {
-    if source == nil { return nil; }
+    if source == nil {
+        return nil;
+    }
     if target == nil || replacement == nil {
         let res = msg![env; source copy];
         return autorelease(env, res);
     }
-    let mut main_iter = env.objc.borrow::<StringHostObject>(source).iter_code_units();
-    let target_iter = env.objc.borrow::<StringHostObject>(target).iter_code_units();
-    let replacement_iter = env.objc.borrow::<StringHostObject>(replacement).iter_code_units();
+    let mut main_iter = env
+        .objc
+        .borrow::<StringHostObject>(source)
+        .iter_code_units();
+    let target_iter = env
+        .objc
+        .borrow::<StringHostObject>(target)
+        .iter_code_units();
+    let replacement_iter = env
+        .objc
+        .borrow::<StringHostObject>(replacement)
+        .iter_code_units();
     if target_iter.clone().next().is_none() {
         let res = msg![env; source copy];
         return autorelease(env, res);
@@ -2084,7 +2204,10 @@ fn string_by_replacing_occurrences_inner(
         0 => false,
         NSCaseInsensitiveSearch => true,
         _ => {
-            println!("Warning: unhandled options {}, falling back to case-sensitive", options);
+            println!(
+                "Warning: unhandled options {}, falling back to case-sensitive",
+                options
+            );
             false
         }
     };
@@ -2106,9 +2229,20 @@ fn string_by_replacing_occurrences_inner(
 }
 
 fn size_with_font_min_font_size_actual_font_size_for_width_line_break_mode(
-    env: &mut Environment, this: id, font: id, min_font_size: CGFloat, actual_font_size: MutPtr<CGFloat>, for_width: CGFloat, _line_break_mode: UILineBreakMode,
+    env: &mut Environment,
+    this: id,
+    font: id,
+    min_font_size: CGFloat,
+    actual_font_size: MutPtr<CGFloat>,
+    for_width: CGFloat,
+    _line_break_mode: UILineBreakMode,
 ) -> CGSize {
-    if font == nil { return CGSize { width: 0.0, height: 0.0 }; }
+    if font == nil {
+        return CGSize {
+            width: 0.0,
+            height: 0.0,
+        };
+    }
     let unconstrained_size: CGSize = msg![env; this sizeWithFont:font];
     let orig_point_size: CGFloat = msg![env; font pointSize];
     let mut final_point_size = orig_point_size;
@@ -2120,18 +2254,24 @@ fn size_with_font_min_font_size_actual_font_size_for_width_line_break_mode(
         final_size.width = (unconstrained_size.width * actual_scale).min(for_width);
         final_size.height = unconstrained_size.height * actual_scale;
     }
-    if !actual_font_size.is_null() { env.mem.write(actual_font_size, final_point_size); }
+    if !actual_font_size.is_null() {
+        env.mem.write(actual_font_size, final_point_size);
+    }
     final_size
 }
 
 pub fn CFStringGetCharactersPtr(env: &mut Environment, the_string: id) -> ConstPtr<unichar> {
-    if the_string == nil { return Ptr::null(); }
+    if the_string == nil {
+        return Ptr::null();
+    }
     let class: Class = msg![env; the_string class];
-    let constant_utf16_class = env.objc.get_known_class("_touchHLE_NSString_CFConstantString_UTF16", &mut env.mem);
+    let constant_utf16_class = env
+        .objc
+        .get_known_class("_touchHLE_NSString_CFConstantString_UTF16", &mut env.mem);
     if class == constant_utf16_class {
         let cfstr: cfstringStruct = env.mem.read(the_string.cast());
         cfstr.bytes.cast()
-    } else { Ptr::null() }
+    } else {
+        Ptr::null()
+    }
 }
-
-

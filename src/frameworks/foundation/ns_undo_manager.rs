@@ -1,5 +1,5 @@
-use crate::objc_classes;
 use crate::objc::{id, SEL};
+use crate::objc_classes;
 use std::collections::HashMap;
 
 pub struct UndoAction {
@@ -48,7 +48,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
         if let Some(stack) = env.framework_state.foundation.ns_undo_manager.stacks.get_mut(&this) {
             if let Some(_action) = stack.pop() {
                 // ВАЖНО: Прямой вызов гостевого objc_msgSend из хоста требует настройки CPU.
-                // Пока мы просто извлекаем действие, чтобы эмулятор не паниковал, 
+                // Пока мы просто извлекаем действие, чтобы эмулятор не паниковал,
                 // и игра могла продолжить свою работу без вылета.
                 println!("NSUndoManager: Вызван метод undo! (Гостевой вызов пропущен)");
             }

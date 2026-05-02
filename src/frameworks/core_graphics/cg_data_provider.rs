@@ -210,12 +210,17 @@ fn CGDataProviderCreateWithFilename(
     let path_str = env.mem.cstr_at_utf8(filename).unwrap_or("").to_string();
     log_dbg!("CGDataProviderCreateWithFilename: {}", path_str);
     let Ok(bytes) = env.fs.read(GuestPath::new(&path_str)) else {
-        log!("Warning: CGDataProviderCreateWithFilename: couldn't read {:?}", path_str);
+        log!(
+            "Warning: CGDataProviderCreateWithFilename: couldn't read {:?}",
+            path_str
+        );
         return nil; // <- was std::ptr::null()
     };
     let len: GuestUSize = bytes.len().try_into().unwrap();
     let buf = env.mem.alloc(len);
-    env.mem.bytes_at_mut(buf.cast(), len).copy_from_slice(&bytes);
+    env.mem
+        .bytes_at_mut(buf.cast(), len)
+        .copy_from_slice(&bytes);
 
     CGDataProviderCreateWithData(
         env,
@@ -226,27 +231,19 @@ fn CGDataProviderCreateWithFilename(
     )
 }
 
-fn CGDataProviderGetInfo(
-    _env: &mut Environment,
-    _provider: CGDataProviderRef,
-) -> MutVoidPtr {
+fn CGDataProviderGetInfo(_env: &mut Environment, _provider: CGDataProviderRef) -> MutVoidPtr {
     // Real API returns the `info` pointer passed at creation time.
     // We don't expose it publicly; return null as a safe stub.
     MutVoidPtr::null()
 }
 
-fn CGDataProviderGetSize(
-    env: &mut Environment,
-    provider: CGDataProviderRef,
-) -> u64 {
+fn CGDataProviderGetSize(env: &mut Environment, provider: CGDataProviderRef) -> u64 {
     match *env.objc.borrow(provider) {
         CGDataProviderHostObject::DataWithSize { size, .. } => size as u64,
         CGDataProviderHostObject::CGImage(cg_image) => {
             cg_image::borrow_image(&env.objc, cg_image).pixels().len() as u64
         }
-        CGDataProviderHostObject::CFData(cf_data) => {
-            CFDataGetLength(env, cf_data) as u64
-        }
+        CGDataProviderHostObject::CFData(cf_data) => CFDataGetLength(env, cf_data) as u64,
     }
 }
 

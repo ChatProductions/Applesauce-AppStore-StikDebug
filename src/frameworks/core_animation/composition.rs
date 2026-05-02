@@ -202,8 +202,8 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
                 texture,
                 0,
             );
-            
-            // ХАК: Убраны вызовы assert_eq!, которые убивали приложение 
+
+            // ХАК: Убраны вызовы assert_eq!, которые убивали приложение
             // при ошибках GL (типа GL_OUT_OF_MEMORY = 1285)
             let _ = gles.GetError(); // Просто сбрасываем флаг текущей ошибки, чтобы он не висел
             let _ = gles.CheckFramebufferStatusOES(gles11::FRAMEBUFFER_OES); // Проверяем, но не крашимся
@@ -354,10 +354,10 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         gles.LoadIdentity();
         gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
         gles.BindBuffer(gles11::ELEMENT_ARRAY_BUFFER, 0);
-        
-        // ХАК: Снова убираем assert_eq!(gles.GetError(), 0); 
+
+        // ХАК: Снова убираем assert_eq!(gles.GetError(), 0);
         // Мы прощаем OpenGL за потерю фокуса!
-        let _ = gles.GetError(); 
+        let _ = gles.GetError();
     }
 
     // Present our rendered frame (bound to TEXTURE_2D). This copies it to the
@@ -548,11 +548,29 @@ unsafe fn composite_layer_recursive(
             gles.BindTexture(gles11::TEXTURE_2D, t);
             let pixels = image.pixels();
             upload_rgba8_pixels(gles.as_mut(), pixels, (img_w, img_h));
-            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
-            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
-            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_MIN_FILTER, gles11::NEAREST as _);
-            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_MAG_FILTER, gles11::NEAREST as _);
-            env.objc.borrow_mut::<CALayerHostObject>(layer).background_pattern_gles_texture = Some(t);
+            gles.TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_WRAP_S,
+                gles11::REPEAT as _,
+            );
+            gles.TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_WRAP_T,
+                gles11::REPEAT as _,
+            );
+            gles.TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_MIN_FILTER,
+                gles11::NEAREST as _,
+            );
+            gles.TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_MAG_FILTER,
+                gles11::NEAREST as _,
+            );
+            env.objc
+                .borrow_mut::<CALayerHostObject>(layer)
+                .background_pattern_gles_texture = Some(t);
             t
         };
         gles.BindTexture(gles11::TEXTURE_2D, tex);
@@ -560,12 +578,7 @@ unsafe fn composite_layer_recursive(
         // Compute tiled texture coordinates
         let tile_x = host_obj.bounds.size.width / img_w as f32;
         let tile_y = host_obj.bounds.size.height / img_h as f32;
-        let tiled_coords: [f32; 8] = [
-            0.0,    tile_y,
-            0.0,    0.0,
-            tile_x, tile_y,
-            tile_x, 0.0,
-        ];
+        let tiled_coords: [f32; 8] = [0.0, tile_y, 0.0, 0.0, tile_x, tile_y, tile_x, 0.0];
 
         let misc = env
             .framework_state
@@ -800,4 +813,4 @@ unsafe fn upload_rgba8_pixels(gles: &mut dyn GLES, pixels: &[u8], dimensions: (u
         gles11::TEXTURE_MAG_FILTER,
         gles11::LINEAR as _,
     );
-                    }
+}

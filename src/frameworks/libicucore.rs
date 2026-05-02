@@ -61,7 +61,10 @@ fn utf8_to_utf16_index(s: &str, utf8_index: usize) -> i32 {
     if utf8_index > s.len() {
         return -1;
     }
-    s[..utf8_index].chars().map(|c| c.len_utf16()).sum::<usize>() as i32
+    s[..utf8_index]
+        .chars()
+        .map(|c| c.len_utf16())
+        .sum::<usize>() as i32
 }
 
 fn utf16_to_utf8_index(s: &str, utf16_index: usize) -> usize {
@@ -89,15 +92,21 @@ pub fn uregex_open(
     let mut chars = Vec::new();
     let mut i = 0;
     loop {
-        if pattern_length != -1 && i >= pattern_length { break; }
+        if pattern_length != -1 && i >= pattern_length {
+            break;
+        }
         let c: u16 = env.mem.read(pattern + (i as u32));
-        if pattern_length == -1 && c == 0 { break; }
+        if pattern_length == -1 && c == 0 {
+            break;
+        }
         chars.push(c);
         i += 1;
     }
 
     let pattern_str = String::from_utf16_lossy(&chars).replace('\0', "");
-    if !status.is_null() { env.mem.write(status, U_ZERO_ERROR); }
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
 
     // Транслируем синтаксис и компилируем настоящую регулярку!
     let rust_pattern = convert_icu_to_rust_regex(&pattern_str);
@@ -120,13 +129,17 @@ pub fn uregex_close(_env: &mut Environment, regexp: u32) {
 
 #[allow(non_snake_case)]
 pub fn uregex_groupCount(env: &mut Environment, regexp: u32, status: MutPtr<i32>) -> i32 {
-    if !status.is_null() { env.mem.write(status, U_ZERO_ERROR); }
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
     let map = UREGEX_MAP.lock().unwrap();
     if let Some(state) = map.get(&regexp) {
         // Честно считаем группы, скомпилированные движком (без учета 0-й группы)
         state.re.captures_len().saturating_sub(1) as i32
     } else {
-        if !status.is_null() { env.mem.write(status, 1); }
+        if !status.is_null() {
+            env.mem.write(status, 1);
+        }
         0
     }
 }
@@ -139,14 +152,20 @@ pub fn uregex_setText(
     text_length: i32,
     status: MutPtr<i32>,
 ) {
-    if !status.is_null() { env.mem.write(status, U_ZERO_ERROR); }
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
 
     let mut chars = Vec::new();
     let mut i = 0;
     loop {
-        if text_length != -1 && i >= text_length { break; }
+        if text_length != -1 && i >= text_length {
+            break;
+        }
         let c: u16 = env.mem.read(text + (i as u32));
-        if text_length == -1 && c == 0 { break; }
+        if text_length == -1 && c == 0 {
+            break;
+        }
         chars.push(c);
         i += 1;
     }
@@ -172,7 +191,9 @@ pub fn uregex_find(
     start_index: i32,
     status: MutPtr<i32>,
 ) -> u32 {
-    if !status.is_null() { env.mem.write(status, U_ZERO_ERROR); }
+    if !status.is_null() {
+        env.mem.write(status, U_ZERO_ERROR);
+    }
 
     let map = UREGEX_MAP.lock().unwrap();
     let mut text_map = UREGEX_TEXT_MAP.lock().unwrap();
@@ -185,12 +206,14 @@ pub fn uregex_find(
         };
 
         let start_utf8 = utf16_to_utf8_index(&txt_state.text, start_utf16);
-        if start_utf8 > txt_state.text.len() { return 0; } // false
+        if start_utf8 > txt_state.text.len() {
+            return 0;
+        } // false
 
         let search_text = &txt_state.text[start_utf8..];
         if let Some(captures) = reg_state.re.captures(search_text) {
             txt_state.groups.clear();
-            
+
             // Сохраняем границы всех найденных групп (они понадобятся в uregex_start)
             for i in 0..reg_state.re.captures_len() {
                 if let Some(m) = captures.get(i) {
@@ -207,22 +230,32 @@ pub fn uregex_find(
 
             if let Some(full_match) = captures.get(0) {
                 let abs_end_utf8 = start_utf8 + full_match.end();
-                txt_state.last_match_end_utf16 = utf8_to_utf16_index(&txt_state.text, abs_end_utf8) as usize;
+                txt_state.last_match_end_utf16 =
+                    utf8_to_utf16_index(&txt_state.text, abs_end_utf8) as usize;
             }
-            
+
             1 // true (нашли совпадение)
         } else {
             0 // false (совпадений нет)
         }
     } else {
-        if !status.is_null() { env.mem.write(status, 1); }
+        if !status.is_null() {
+            env.mem.write(status, 1);
+        }
         0
     }
 }
 
 #[allow(non_snake_case)]
-pub fn uregex_start(_env: &mut Environment, regexp: u32, group_num: i32, status: MutPtr<i32>) -> i32 {
-    if !status.is_null() { _env.mem.write(status, U_ZERO_ERROR); }
+pub fn uregex_start(
+    _env: &mut Environment,
+    regexp: u32,
+    group_num: i32,
+    status: MutPtr<i32>,
+) -> i32 {
+    if !status.is_null() {
+        _env.mem.write(status, U_ZERO_ERROR);
+    }
     if let Some(txt_state) = UREGEX_TEXT_MAP.lock().unwrap().get(&regexp) {
         if group_num >= 0 && (group_num as usize) < txt_state.groups.len() {
             return txt_state.groups[group_num as usize].0;
@@ -233,7 +266,9 @@ pub fn uregex_start(_env: &mut Environment, regexp: u32, group_num: i32, status:
 
 #[allow(non_snake_case)]
 pub fn uregex_end(_env: &mut Environment, regexp: u32, group_num: i32, status: MutPtr<i32>) -> i32 {
-    if !status.is_null() { _env.mem.write(status, U_ZERO_ERROR); }
+    if !status.is_null() {
+        _env.mem.write(status, U_ZERO_ERROR);
+    }
     if let Some(txt_state) = UREGEX_TEXT_MAP.lock().unwrap().get(&regexp) {
         if group_num >= 0 && (group_num as usize) < txt_state.groups.len() {
             return txt_state.groups[group_num as usize].1;

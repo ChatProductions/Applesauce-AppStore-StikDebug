@@ -50,7 +50,6 @@ pub struct PosixFileHostObject {
     path: Option<String>,
 }
 
-
 // TODO: stdin/stdout/stderr handling somehow
 fn file_idx_to_fd(idx: usize) -> FileDescriptor {
     FileDescriptor::try_from(idx)
@@ -90,36 +89,36 @@ pub const O_NOCTTY: OpenFlag = 0x20000;
 /// File control command flags.
 /// This alias is for readability, POSIX just uses `int`.
 pub type FileControlCommand = i32;
-const F_DUPFD:               FileControlCommand = 0;
-const F_GETFD:               FileControlCommand = 1;
-const F_SETFD:               FileControlCommand = 2;
-const F_GETFL:               FileControlCommand = 3;
-const F_SETFL:               FileControlCommand = 4;
-const F_SETLK:               FileControlCommand = 8;
-const F_SETLKW:              FileControlCommand = 9;
-const F_GETLK:               FileControlCommand = 7;
-const F_CHKCLEAN:            FileControlCommand = 41;
-const F_PREALLOCATE:         FileControlCommand = 42;
-const F_SETSIZE:             FileControlCommand = 43;
-const F_RDADVISE:            FileControlCommand = 44;
-const F_RDAHEAD:             FileControlCommand = 45;
-const F_TRUNCATEOVERSIZE:    FileControlCommand = 46;
-const F_GETPATH:             FileControlCommand = 50;
-const F_FULLFSYNC:           FileControlCommand = 51;
-const F_PATHPKG_CHECK:       FileControlCommand = 52;
-const F_ADDSIGS:             FileControlCommand = 59;
-const F_ADDFILESIGS:         FileControlCommand = 61;
-const F_DUPFD_CLOEXEC:       FileControlCommand = 67;
-const F_SETNOSIGPIPE:        FileControlCommand = 73;
-const F_GETNOSIGPIPE:        FileControlCommand = 74;
+const F_DUPFD: FileControlCommand = 0;
+const F_GETFD: FileControlCommand = 1;
+const F_SETFD: FileControlCommand = 2;
+const F_GETFL: FileControlCommand = 3;
+const F_SETFL: FileControlCommand = 4;
+const F_SETLK: FileControlCommand = 8;
+const F_SETLKW: FileControlCommand = 9;
+const F_GETLK: FileControlCommand = 7;
+const F_CHKCLEAN: FileControlCommand = 41;
+const F_PREALLOCATE: FileControlCommand = 42;
+const F_SETSIZE: FileControlCommand = 43;
+const F_RDADVISE: FileControlCommand = 44;
+const F_RDAHEAD: FileControlCommand = 45;
+const F_TRUNCATEOVERSIZE: FileControlCommand = 46;
+const F_GETPATH: FileControlCommand = 50;
+const F_FULLFSYNC: FileControlCommand = 51;
+const F_PATHPKG_CHECK: FileControlCommand = 52;
+const F_ADDSIGS: FileControlCommand = 59;
+const F_ADDFILESIGS: FileControlCommand = 61;
+const F_DUPFD_CLOEXEC: FileControlCommand = 67;
+const F_SETNOSIGPIPE: FileControlCommand = 73;
+const F_GETNOSIGPIPE: FileControlCommand = 74;
 const F_ADDFILESIGS_FOR_DYLD_SIM: FileControlCommand = 83;
-const F_BARRIERFSYNC:        FileControlCommand = 85;
-const F_ADDFILESIGS_RETURN:  FileControlCommand = 97;
-const F_ADDFILESUPPL:        FileControlCommand = 99;
-const F_NOCACHE:             FileControlCommand = 48;
-const F_PEOFPOSMODE:         FileControlCommand = 3;
+const F_BARRIERFSYNC: FileControlCommand = 85;
+const F_ADDFILESIGS_RETURN: FileControlCommand = 97;
+const F_ADDFILESUPPL: FileControlCommand = 99;
+const F_NOCACHE: FileControlCommand = 48;
+const F_PEOFPOSMODE: FileControlCommand = 3;
 // used as seek whence, not fcntl cmd
-const F_VOLPOSMODE:          FileControlCommand = 4;
+const F_VOLPOSMODE: FileControlCommand = 4;
 // same
 
 /// File Descriptor flags.
@@ -162,12 +161,7 @@ struct iovec {
 }
 unsafe impl SafeRead for iovec {}
 
-fn open(
-    env: &mut Environment,
-    path: ConstPtr<u8>,
-    flags: i32,
-    _args: DotDotDot,
-) -> FileDescriptor {
+fn open(env: &mut Environment, path: ConstPtr<u8>, flags: i32, _args: DotDotDot) -> FileDescriptor {
     set_errno(env, 0);
     self::open_direct(env, path, flags)
 }
@@ -380,12 +374,7 @@ pub fn read(
             // поведение, не ошибка. Warning остаётся только для частичного чтения
             // (когда прочитано больше 0 байт, но меньше запрошенного).
             if bytes_read == 0 {
-                log_dbg!(
-                    "read({:?}, {:?}, {:#x}) => 0 (EOF)",
-                    fd,
-                    buffer,
-                    size
-                );
+                log_dbg!("read({:?}, {:?}, {:#x}) => 0 (EOF)", fd, buffer, size);
             } else if bytes_read < buffer_slice.len() {
                 log!(
                     "Warning: read({:?}, {:?}, {:#x}) read only {:#x} bytes",
@@ -453,7 +442,11 @@ pub(super) fn eof(env: &mut Environment, fd: FileDescriptor) -> i32 {
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         return 1;
     };
-    if file.reached_eof { 1 } else { 0 }
+    if file.reached_eof {
+        1
+    } else {
+        0
+    }
 }
 
 pub(super) fn clearerr(env: &mut Environment, fd: FileDescriptor) {
@@ -555,12 +548,7 @@ pub const SEEK_SET: i32 = 0;
 pub const SEEK_CUR: i32 = 1;
 pub const SEEK_END: i32 = 2;
 
-pub fn lseek(
-    env: &mut Environment,
-    fd: FileDescriptor,
-    offset: off_t,
-    whence: i32,
-) -> off_t {
+pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i32) -> off_t {
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         log!("lseek({:?}, {:#x}, {}) => {}", fd, offset, whence, -1);
         set_errno(env, EBADF);
@@ -674,7 +662,10 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
     let signed_fd = fd as i32;
 
     if signed_fd < 0 {
-        log_dbg!("close({}) failed: invalid fd (negative), returning -1 (EBADF)", signed_fd);
+        log_dbg!(
+            "close({}) failed: invalid fd (negative), returning -1 (EBADF)",
+            signed_fd
+        );
         set_errno(env, EBADF);
         return -1;
     }
@@ -689,11 +680,10 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
     if let Some(file_obj_slot) = env.libc_state.posix_io.files.get_mut(fd_to_file_idx(fd)) {
         // Честно извлекаем объект (take заменяет его на None в массиве, освобождая FD)
         if let Some(file_obj) = file_obj_slot.take() {
-            
             // Если это был сокет, ОБЯЗАТЕЛЬНО удаляем его из таблицы в socket.rs
             if matches!(file_obj.file, GuestFile::Socket) {
                 close_socket(env, fd);
-            } 
+            }
             // Если это обычный файл с правами на запись, честно сбрасываем буфер
             else if file_obj.needs_flush {
                 let _ = file_obj.file.sync_all();
@@ -704,7 +694,10 @@ pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
         }
     }
 
-    log_dbg!("close({}) failed: fd not open or doesn't exist, returning -1 (EBADF)", fd);
+    log_dbg!(
+        "close({}) failed: fd not open or doesn't exist, returning -1 (EBADF)",
+        fd
+    );
     set_errno(env, EBADF);
     -1
 }
@@ -724,11 +717,7 @@ fn rename(env: &mut Environment, old: ConstPtr<u8>, new: ConstPtr<u8>) -> i32 {
     res
 }
 
-pub fn getcwd(
-    env: &mut Environment,
-    buf_ptr: MutPtr<u8>,
-    buf_size: GuestUSize,
-) -> MutPtr<u8> {
+pub fn getcwd(env: &mut Environment, buf_ptr: MutPtr<u8>, buf_size: GuestUSize) -> MutPtr<u8> {
     let working_directory = env.fs.working_directory();
     if !env.fs.is_dir(working_directory) {
         log!(
@@ -743,16 +732,11 @@ pub fn getcwd(
 
     if buf_ptr.is_null() {
         let res = env.mem.alloc_and_write_cstr(working_directory);
-        log_dbg!(
-            "getcwd(NULL, _) => {:?} ({:?})",
-            res,
-            working_directory
-        );
+        log_dbg!("getcwd(NULL, _) => {:?} ({:?})", res, working_directory);
         return res;
     }
 
-    let res_size: GuestUSize =
-        u32::try_from(working_directory.len()).unwrap_or(0) + 1;
+    let res_size: GuestUSize = u32::try_from(working_directory.len()).unwrap_or(0) + 1;
     if buf_size < res_size {
         log!(
             "Warning: getcwd({:?}, {:#x}) failed, returning NULL",
@@ -900,11 +884,7 @@ fn fcntl(
                 set_errno(env, error_code);
                 return -1;
             }
-            log!(
-                "TODO: fcntl({}, F_SETLK, {:?}) — locking ignored",
-                fd,
-                lock
-            );
+            log!("TODO: fcntl({}, F_SETLK, {:?}) — locking ignored", fd, lock);
         }
         F_SETLKW => {
             let lock_ptr: MutPtr<flock> = args.start().next(env);
@@ -982,10 +962,7 @@ fn fcntl(
                 dst[..len].copy_from_slice(&bytes[..len]);
                 dst[len] = 0;
             } else {
-                log!(
-                    "fcntl({}, F_GETPATH) — path unknown, zeroing buffer",
-                    fd
-                );
+                log!("fcntl({}, F_GETPATH) — path unknown, zeroing buffer", fd);
                 env.mem.bytes_at_mut(buf, 1024).fill(0);
             }
         }
@@ -1000,19 +977,11 @@ fn fcntl(
         | F_ADDFILESIGS_FOR_DYLD_SIM
         | F_ADDFILESIGS_RETURN
         | F_ADDFILESUPPL => {
-            log_dbg!(
-                "fcntl({}, {:#x}) code-signing — ignored",
-                fd,
-                cmd
-            );
+            log_dbg!("fcntl({}, {:#x}) code-signing — ignored", fd, cmd);
         }
         F_SETNOSIGPIPE => {
             let arg: i32 = args.start().next(env);
-            log_dbg!(
-                "fcntl({}, F_SETNOSIGPIPE, {}) — ignored",
-                fd,
-                arg
-            );
+            log_dbg!("fcntl({}, F_SETNOSIGPIPE, {}) — ignored", fd, arg);
         }
         F_GETNOSIGPIPE => {
             return 0;
@@ -1111,12 +1080,7 @@ pub const PROT_READ: i32 = 0x01;
 pub const PROT_WRITE: i32 = 0x02;
 pub const PROT_EXEC: i32 = 0x04;
 
-fn mprotect(
-    env: &mut Environment,
-    addr: u32,
-    len: GuestUSize,
-    prot: i32,
-) -> i32 {
+fn mprotect(env: &mut Environment, addr: u32, len: GuestUSize, prot: i32) -> i32 {
     set_errno(env, 0);
 
     // ПОЛНОЦЕННАЯ РЕАЛИЗАЦИЯ POSIX:
@@ -1171,10 +1135,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mprotect(_, _, _)),
 ];
 
-fn find_or_create_fd(
-    env: &mut Environment,
-    host_object: PosixFileHostObject,
-) -> FileDescriptor {
+fn find_or_create_fd(env: &mut Environment, host_object: PosixFileHostObject) -> FileDescriptor {
     let idx = if let Some(free_idx) = env
         .libc_state
         .posix_io
@@ -1208,20 +1169,14 @@ pub fn is_socket(env: &mut Environment, fd: FileDescriptor) -> bool {
     if fd < NORMAL_FILENO_BASE {
         return false;
     }
-    if let Some(Some(file_obj)) =
-        env.libc_state.posix_io.files.get(fd_to_file_idx(fd))
-    {
+    if let Some(Some(file_obj)) = env.libc_state.posix_io.files.get(fd_to_file_idx(fd)) {
         matches!(file_obj.file, GuestFile::Socket)
     } else {
         false
     }
 }
 
-fn validate_lock(
-    env: &mut Environment,
-    fd: FileDescriptor,
-    lock: &flock,
-) -> Result<(), i32> {
+fn validate_lock(env: &mut Environment, fd: FileDescriptor, lock: &flock) -> Result<(), i32> {
     let lock_type = lock.lock_type;
     if !matches!(lock_type, F_RDLCK | F_UNLCK | F_WRLCK) {
         return Err(EINVAL);
@@ -1241,8 +1196,7 @@ fn validate_lock(
             let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
                 return Err(EBADF);
             };
-            let size: i64 =
-                file.file.stream_len().unwrap_or(0).try_into().unwrap_or(0);
+            let size: i64 = file.file.stream_len().unwrap_or(0).try_into().unwrap_or(0);
             size + lock.start
         }
         _ => {
@@ -1256,4 +1210,3 @@ fn validate_lock(
 
     Ok(())
 }
-

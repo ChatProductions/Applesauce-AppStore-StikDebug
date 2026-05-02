@@ -30,33 +30,33 @@ pub const DYLIB: HostDylib = HostDylib {
 
 // MARK: - Type aliases
 
-type CLLocationAccuracy  = f64;
-type CLLocationDegrees   = f64;
-type CLLocationDistance  = f64;
-type CLLocationSpeed     = f64;
+type CLLocationAccuracy = f64;
+type CLLocationDegrees = f64;
+type CLLocationDistance = f64;
+type CLLocationSpeed = f64;
 type CLLocationDirection = f64;
 type CLHeadingComponentValue = f64;
 type CLAuthorizationStatus = i32;
-type CLDeviceOrientation   = i32;
-type CLActivityType        = i32;
+type CLDeviceOrientation = i32;
+type CLActivityType = i32;
 
 // MARK: - CLAuthorizationStatus constants
-const CL_AUTHORIZATION_STATUS_NOT_DETERMINED:  CLAuthorizationStatus = 0;
-const CL_AUTHORIZATION_STATUS_RESTRICTED:      CLAuthorizationStatus = 1;
-const CL_AUTHORIZATION_STATUS_DENIED:          CLAuthorizationStatus = 2;
-const CL_AUTHORIZATION_STATUS_AUTHORIZED:      CLAuthorizationStatus = 3; // iOS <8 name
+const CL_AUTHORIZATION_STATUS_NOT_DETERMINED: CLAuthorizationStatus = 0;
+const CL_AUTHORIZATION_STATUS_RESTRICTED: CLAuthorizationStatus = 1;
+const CL_AUTHORIZATION_STATUS_DENIED: CLAuthorizationStatus = 2;
+const CL_AUTHORIZATION_STATUS_AUTHORIZED: CLAuthorizationStatus = 3; // iOS <8 name
 const CL_AUTHORIZATION_STATUS_AUTHORIZED_ALWAYS: CLAuthorizationStatus = 3;
 const CL_AUTHORIZATION_STATUS_AUTHORIZED_WHEN_IN_USE: CLAuthorizationStatus = 4;
 
 // MARK: - CLDeviceOrientation constants (same as UIDeviceOrientation)
-const CL_DEVICE_ORIENTATION_UNKNOWN:            CLDeviceOrientation = 0;
-const CL_DEVICE_ORIENTATION_PORTRAIT:           CLDeviceOrientation = 1;
+const CL_DEVICE_ORIENTATION_UNKNOWN: CLDeviceOrientation = 0;
+const CL_DEVICE_ORIENTATION_PORTRAIT: CLDeviceOrientation = 1;
 
 // MARK: - CLActivityType constants
-const CL_ACTIVITY_TYPE_OTHER:                   CLActivityType = 1;
-const CL_ACTIVITY_TYPE_AUTOMOTIVE_NAVIGATION:   CLActivityType = 2;
-const CL_ACTIVITY_TYPE_FITNESS:                 CLActivityType = 3;
-const CL_ACTIVITY_TYPE_OTHER_NAVIGATION:        CLActivityType = 4;
+const CL_ACTIVITY_TYPE_OTHER: CLActivityType = 1;
+const CL_ACTIVITY_TYPE_AUTOMOTIVE_NAVIGATION: CLActivityType = 2;
+const CL_ACTIVITY_TYPE_FITNESS: CLActivityType = 3;
+const CL_ACTIVITY_TYPE_OTHER_NAVIGATION: CLActivityType = 4;
 
 // MARK: - CLLocationManager host object
 
@@ -78,13 +78,13 @@ impl HostObject for CLLocationManagerHostObject {}
 // MARK: - CLLocation host object
 
 struct CLLocationHostObject {
-    latitude:  CLLocationDegrees,
+    latitude: CLLocationDegrees,
     longitude: CLLocationDegrees,
-    altitude:  CLLocationDistance,
+    altitude: CLLocationDistance,
     horizontal_accuracy: CLLocationAccuracy,
     vertical_accuracy: CLLocationAccuracy,
-    speed:     CLLocationSpeed,
-    course:    CLLocationDirection,
+    speed: CLLocationSpeed,
+    course: CLLocationDirection,
     // NSDate* timestamp
     timestamp: id,
 }
@@ -93,9 +93,9 @@ impl HostObject for CLLocationHostObject {}
 // MARK: - CLHeading host object
 
 struct CLHeadingHostObject {
-    magnetic_heading:   CLHeadingComponentValue,
-    true_heading:       CLHeadingComponentValue,
-    heading_accuracy:   CLHeadingComponentValue,
+    magnetic_heading: CLHeadingComponentValue,
+    true_heading: CLHeadingComponentValue,
+    heading_accuracy: CLHeadingComponentValue,
     x: CLHeadingComponentValue,
     y: CLHeadingComponentValue,
     z: CLHeadingComponentValue,
@@ -510,27 +510,42 @@ const CLASSES: ClassExports = objc_classes! {
 
 const CONSTANTS: ConstantExports = &[
     // Accuracy presets
-    ("_kCLLocationAccuracyBestForNavigation",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(-2f64).cast().cast_const())),
-    ("_kCLLocationAccuracyBest",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const())),
-    ("_kCLLocationAccuracyNearestTenMeters",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(10f64).cast().cast_const())),
-    ("_kCLLocationAccuracyHundredMeters",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(100f64).cast().cast_const())),
-    ("_kCLLocationAccuracyKilometer",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(1000f64).cast().cast_const())),
-    ("_kCLLocationAccuracyThreeKilometers",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(3000f64).cast().cast_const())),
+    (
+        "_kCLLocationAccuracyBestForNavigation",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(-2f64).cast().cast_const()),
+    ),
+    (
+        "_kCLLocationAccuracyBest",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const()),
+    ),
+    (
+        "_kCLLocationAccuracyNearestTenMeters",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(10f64).cast().cast_const()),
+    ),
+    (
+        "_kCLLocationAccuracyHundredMeters",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(100f64).cast().cast_const()),
+    ),
+    (
+        "_kCLLocationAccuracyKilometer",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(1000f64).cast().cast_const()),
+    ),
+    (
+        "_kCLLocationAccuracyThreeKilometers",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(3000f64).cast().cast_const()),
+    ),
     // Distance filter
-    ("_kCLDistanceFilterNone",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const())),
+    (
+        "_kCLDistanceFilterNone",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const()),
+    ),
     // Heading filter
-    ("_kCLHeadingFilterNone",
-        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const())),
+    (
+        "_kCLHeadingFilterNone",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(-1f64).cast().cast_const()),
+    ),
     // Error domain
-    ("_kCLErrorDomain",
-        HostConstant::NSString("kCLErrorDomain")),
+    ("_kCLErrorDomain", HostConstant::NSString("kCLErrorDomain")),
 ];
 
 // =========================================================================
@@ -555,7 +570,10 @@ pub extern "C" fn CLLocationManager_stopUpdatingLocation(_manager: *mut std::ffi
 }
 
 #[no_mangle]
-pub extern "C" fn CLLocationManager_setDelegate(_manager: *mut std::ffi::c_void, _delegate: *mut std::ffi::c_void) {
+pub extern "C" fn CLLocationManager_setDelegate(
+    _manager: *mut std::ffi::c_void,
+    _delegate: *mut std::ffi::c_void,
+) {
     log_dbg!("Warning: CLLocationManager_setDelegate: stub called");
 }
 
@@ -565,4 +583,3 @@ pub extern "C" fn CLAuthorizationStatus() -> i32 {
     log_dbg!("Warning: CLAuthorizationStatus: stub called");
     3 // Возвращаем CL_AUTHORIZATION_STATUS_AUTHORIZED
 }
-

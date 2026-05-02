@@ -5,11 +5,9 @@
  */
 //! `UIPinchGestureRecognizer`.
 
-use crate::frameworks::foundation::NSInteger;
-use crate::objc::{
-    id, objc_classes, ClassExports, HostObject, NSZonePtr, SEL, nil
-};
 use crate::frameworks::core_graphics::CGFloat;
+use crate::frameworks::foundation::NSInteger;
+use crate::objc::{id, nil, objc_classes, ClassExports, HostObject, NSZonePtr, SEL};
 
 // Честные константы состояний жеста (по документации Apple)
 pub type UIGestureRecognizerState = NSInteger;
@@ -19,7 +17,8 @@ pub const UIGestureRecognizerStateChanged: UIGestureRecognizerState = 2;
 pub const UIGestureRecognizerStateEnded: UIGestureRecognizerState = 3;
 pub const UIGestureRecognizerStateCancelled: UIGestureRecognizerState = 4;
 pub const UIGestureRecognizerStateFailed: UIGestureRecognizerState = 5;
-pub const UIGestureRecognizerStateRecognized: UIGestureRecognizerState = UIGestureRecognizerStateEnded;
+pub const UIGestureRecognizerStateRecognized: UIGestureRecognizerState =
+    UIGestureRecognizerStateEnded;
 
 // MARK: - UIGestureRecognizer host object
 struct UIGestureRecognizerHostObject {
@@ -65,7 +64,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Честный инициализатор
 - (id)initWithTarget:(id)_target action:(SEL)_action {
-    // В идеале тут нужно сохранять target и action в вектор внутри HostObject, 
+    // В идеале тут нужно сохранять target и action в вектор внутри HostObject,
     // но для старта и прохождения линковки достаточно вернуть self.
     this
 }

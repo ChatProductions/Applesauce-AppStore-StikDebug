@@ -92,7 +92,7 @@ pub struct AudioComponentInstanceHostObject {
     pub last_render_time: Option<Instant>,
     pub al_source: Option<ALuint>,
     pub is_running_handler: bool,
-    
+
     // --- 3D Mixer State ---
     pub is_3d_mixer: bool,
     pub mixer_buses: HashMap<u32, MixerBusState>,
@@ -197,13 +197,15 @@ fn AudioComponentFindNext(
 
     let state = State::get(&mut env.framework_state);
     if state.audio_component.is_null() {
-        state.audio_component =
-            env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
+        state.audio_component = env.mem.alloc_and_write(OpaqueAudioComponent { _pad: 0 });
     }
 
     log_dbg!(
         "AudioComponentFindNext: matched type=0x{:08x} sub_type=0x{:08x} manuf=0x{:08x} -> {:?}",
-        comp_type, comp_sub_type, comp_manufacturer, state.audio_component
+        comp_type,
+        comp_sub_type,
+        comp_manufacturer,
+        state.audio_component
     );
     state.audio_component
 }
@@ -223,16 +225,17 @@ fn AudioComponentInstanceNew(
     let guest_instance: AudioComponentInstance = env
         .mem
         .alloc_and_write(OpaqueAudioComponentInstance { _pad: 0 });
-        
+
     State::get(&mut env.framework_state)
         .audio_component_instances
         .insert(guest_instance, host_object);
-        
+
     env.mem.write(out_instance, guest_instance);
 
     log_dbg!(
         "AudioComponentInstanceNew(component={:?}) -> instance={:?}",
-        in_component, guest_instance
+        in_component,
+        guest_instance
     );
     0
 }
@@ -273,4 +276,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioComponentInstanceNew(_, _)),
     export_c_func!(AudioComponentInstanceDispose(_)),
 ];
-

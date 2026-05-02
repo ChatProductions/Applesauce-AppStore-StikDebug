@@ -20,7 +20,7 @@ struct UIActionSheetHostObject {
     /// Tag for app use
     tag: i32,
     visible: bool,
-    action_sheet_style: i32
+    action_sheet_style: i32,
 }
 impl HostObject for UIActionSheetHostObject {}
 

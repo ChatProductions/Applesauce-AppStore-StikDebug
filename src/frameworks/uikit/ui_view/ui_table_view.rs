@@ -118,15 +118,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithFrame:(CGRect)frame {
     let this: id = msg_super![env; this initWithFrame:frame];
-    
-    // Честно создаем внутренний content_view. 
+
+    // Честно создаем внутренний content_view.
     // Передаем имя класса напрямую в макрос msg_class!
     let content_view: id = msg_class![env; UITableViewCellContentView alloc];
     let content_view: id = msg![env; content_view initWithFrame:frame];
-    
+
     // Добавляем его как subview (как в iOS)
     () = msg![env; this addSubview:content_view];
-    
+
     env.objc.borrow_mut::<UITableViewCellHostObject>(this).content_view = content_view;
     this
 }
@@ -142,11 +142,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Мы можем просто инициализировать поле, если NIB его создал,
     // но для безопасности создадим пустой, если его нет.
     let frame = <CGRect as Default>::default();
-    
+
     // Исправлено здесь: убран get_known_class и переменная, имя класса передано напрямую
     let content_view: id = msg_class![env; UITableViewCellContentView alloc];
     let content_view: id = msg![env; content_view initWithFrame:frame];
-    
+
     () = msg![env; this addSubview:content_view];
     env.objc.borrow_mut::<UITableViewCellHostObject>(this).content_view = content_view;
     this
@@ -164,7 +164,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)imageView { nil }
 
 // Теперь возвращаем реальный contentView, а не this
-- (id)contentView { 
+- (id)contentView {
     env.objc.borrow::<UITableViewCellHostObject>(this).content_view
 }
 
@@ -491,10 +491,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())loadView {
     let frame = <CGRect as Default>::default();
     let table_view: id = msg_class![env; UITableView alloc];
-    
+
     // 0 = UITableViewStylePlain
     let table_view: id = msg![env; table_view initWithFrame:frame style:0];
-    
+
     // Устанавливаем таблицу как главную view этого контроллера
     () = msg![env; this setView:table_view];
     release(env, table_view);
@@ -513,5 +513,5 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setClearsSelectionOnViewWillAppear:(bool)_clears {}
 
 @end
-    
+
 };

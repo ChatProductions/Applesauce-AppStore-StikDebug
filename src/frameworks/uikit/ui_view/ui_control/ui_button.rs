@@ -33,25 +33,25 @@ const UIButtonTypeContactAdd: UIButtonType = 5;
 
 type UIControlContentHorizontalAlignment = NSInteger;
 const UIControlContentHorizontalAlignmentCenter: UIControlContentHorizontalAlignment = 0;
-const UIControlContentHorizontalAlignmentLeft:   UIControlContentHorizontalAlignment = 1;
-const UIControlContentHorizontalAlignmentRight:  UIControlContentHorizontalAlignment = 2;
-const UIControlContentHorizontalAlignmentFill:   UIControlContentHorizontalAlignment = 3;
+const UIControlContentHorizontalAlignmentLeft: UIControlContentHorizontalAlignment = 1;
+const UIControlContentHorizontalAlignmentRight: UIControlContentHorizontalAlignment = 2;
+const UIControlContentHorizontalAlignmentFill: UIControlContentHorizontalAlignment = 3;
 
 type UIControlContentVerticalAlignment = NSInteger;
 const UIControlContentVerticalAlignmentCenter: UIControlContentVerticalAlignment = 0;
-const UIControlContentVerticalAlignmentTop:    UIControlContentVerticalAlignment = 1;
+const UIControlContentVerticalAlignmentTop: UIControlContentVerticalAlignment = 1;
 const UIControlContentVerticalAlignmentBottom: UIControlContentVerticalAlignment = 2;
-const UIControlContentVerticalAlignmentFill:   UIControlContentVerticalAlignment = 3;
+const UIControlContentVerticalAlignmentFill: UIControlContentVerticalAlignment = 3;
 
 // MARK: - Edge insets
 
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct UIEdgeInsets {
-    pub top:    CGFloat,
-    pub left:   CGFloat,
+    pub top: CGFloat,
+    pub left: CGFloat,
     pub bottom: CGFloat,
-    pub right:  CGFloat,
+    pub right: CGFloat,
 }
 unsafe impl SafeRead for UIEdgeInsets {}
 
@@ -88,13 +88,13 @@ pub struct UIButtonHostObject {
     /// Values are `UIImage*`
     background_images_for_states: HashMap<UIControlState, id>,
     content_horizontal_alignment: UIControlContentHorizontalAlignment,
-    content_vertical_alignment:   UIControlContentVerticalAlignment,
+    content_vertical_alignment: UIControlContentVerticalAlignment,
     content_edge_insets: UIEdgeInsets,
-    title_edge_insets:   UIEdgeInsets,
-    image_edge_insets:   UIEdgeInsets,
+    title_edge_insets: UIEdgeInsets,
+    image_edge_insets: UIEdgeInsets,
     adjusts_image_when_highlighted: bool,
-    adjusts_image_when_disabled:    bool,
-    shows_touch_when_highlighted:   bool,
+    adjusts_image_when_disabled: bool,
+    shows_touch_when_highlighted: bool,
     reverses_title_shadow_when_highlighted: bool,
     tint_color: id,
 }
@@ -113,13 +113,13 @@ impl Default for UIButtonHostObject {
             images_for_states: HashMap::new(),
             background_images_for_states: HashMap::new(),
             content_horizontal_alignment: UIControlContentHorizontalAlignmentCenter,
-            content_vertical_alignment:   UIControlContentVerticalAlignmentCenter,
+            content_vertical_alignment: UIControlContentVerticalAlignmentCenter,
             content_edge_insets: UIEdgeInsets::default(),
-            title_edge_insets:   UIEdgeInsets::default(),
-            image_edge_insets:   UIEdgeInsets::default(),
+            title_edge_insets: UIEdgeInsets::default(),
+            image_edge_insets: UIEdgeInsets::default(),
             adjusts_image_when_highlighted: true,
-            adjusts_image_when_disabled:    true,
-            shows_touch_when_highlighted:   false,
+            adjusts_image_when_disabled: true,
+            shows_touch_when_highlighted: false,
             reverses_title_shadow_when_highlighted: false,
             tint_color: nil,
         }
@@ -167,9 +167,13 @@ fn init_common(env: &mut Environment, this: id) -> id {
     host_obj.image_view = image_view;
     host_obj.background_image_view = background_image_view;
     host_obj.titles_for_states.insert(UIControlStateNormal, nil);
-    host_obj.title_colors_for_states.insert(UIControlStateNormal, text_color);
+    host_obj
+        .title_colors_for_states
+        .insert(UIControlStateNormal, text_color);
     host_obj.images_for_states.insert(UIControlStateNormal, nil);
-    host_obj.background_images_for_states.insert(UIControlStateNormal, nil);
+    host_obj
+        .background_images_for_states
+        .insert(UIControlStateNormal, nil);
 
     () = msg![env; this addSubview:background_image_view];
     () = msg![env; this addSubview:image_view];
@@ -228,7 +232,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 size: CGSize { width: 18.0, height: 19.0 },
             };
             () = msg![env; button setBounds:bounds];
-            
+
             // У нас нет проприетарной графики Apple (UISystemInfoLight.png),
             // поэтому ставим букву "i", чтобы кнопку было видно визуально
             let title = get_static_str(env, "i");
@@ -241,7 +245,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                 size: CGSize { width: 29.0, height: 29.0 },
             };
             () = msg![env; button setBounds:bounds];
-            
+
             let title = get_static_str(env, "+");
             () = msg![env; button setTitle:title forState:UIControlStateNormal];
         }
@@ -680,4 +684,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

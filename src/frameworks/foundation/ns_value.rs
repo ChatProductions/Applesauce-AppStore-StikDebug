@@ -6,7 +6,7 @@
 //! The `NSValue` class cluster, including `NSNumber`.
 
 use super::ns_string::{from_rust_ordering, from_rust_string};
-use super::{NSComparisonResult, NSOrderedSame, NSUInteger, NSRange, _nib_archive_decoder};
+use super::{_nib_archive_decoder, NSComparisonResult, NSOrderedSame, NSRange, NSUInteger};
 use crate::frameworks::core_foundation::cf_number::{
     kCFNumberCharType, kCFNumberFloat32Type, kCFNumberFloat64Type, kCFNumberFloatType,
     kCFNumberIntType, kCFNumberSInt16Type, kCFNumberSInt32Type, kCFNumberSInt64Type,
@@ -137,7 +137,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
     autorelease(env, new)
 }
-    
+
 + (id)valueWithNonretainedObject:(id)object {
     // Store the pointer bits as an unsigned int.
     msg_class![env; NSNumber numberWithUnsignedInt:(object.to_bits())]
@@ -160,18 +160,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isEqual:(id)other {
     if this == other { return true; }
     if other == crate::objc::nil { return false; }
-    
+
     // Сначала вызываем функции, использующие env, ДО заимствования `this`
     let host_b_class: crate::objc::Class = msg![env; other class];
     let ns_value_class = env.objc.get_known_class("NSValue", &mut env.mem);
     if !env.objc.class_is_subclass_of(host_b_class, ns_value_class) {
         return false;
     }
-    
+
     // Теперь можно безопасно заимствовать оба объекта
     let host_a = env.objc.borrow::<NSValueHostObject>(this);
     let b = env.objc.borrow::<NSValueHostObject>(other);
-    
+
     match (host_a, b) {
         (NSValueHostObject::CGPoint(a), NSValueHostObject::CGPoint(b)) => {
             a.x == b.x && a.y == b.y
@@ -250,7 +250,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         _ => unimplemented!("Called rangeValue on non-range NSValue")
     }
 }
-    
+
 // NSCopying implementation
 - (id)copyWithZone:(NSZonePtr)_zone {
     retain(env, this)
@@ -441,7 +441,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // the incoming object wins.
     this
 }
-    
+
 // MARK: - Formatting helpers
 
 - (id)initWithBytes:(ConstVoidPtr)value objCType:(ConstVoidPtr)type_ptr {
@@ -590,7 +590,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedInt(value);
     this
 }
-    
+
 - (id)initWithUnsignedLongLong:(u64)value {
     *env.objc.borrow_mut(this) = NSNumberHostObject::UnsignedLongLong(value);
     this
@@ -783,4 +783,3 @@ pub fn is_conversion_lossless(env: &mut Environment, this: id, type_: CFNumberTy
     };
     msg![env; this isEqualToNumber:num2]
 }
-

@@ -120,7 +120,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())layoutIfNeeded {
     log_dbg!("[(UIWindow*){:?} layoutIfNeeded]", this);
-    // Честная реализация: немедленно форсируем пересчет layout'а, 
+    // Честная реализация: немедленно форсируем пересчет layout'а,
     // отправляя сообщение layoutSubviews самому себе (наследуется от UIView)
     () = msg![env; this layoutSubviews];
 }
@@ -160,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     this
 }
-    
+
 - (())setHidden:(bool)is_hidden {
     () = msg_super![env; this setHidden:is_hidden];
 
@@ -210,7 +210,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // Support for rootViewController (iOS 4+)
 - (())setRootViewController:(id)view_controller {
     log_dbg!("[(UIWindow*){:?} setRootViewController:{:?}]", this, view_controller);
-    
+
     // The default behavior in iOS is to add the view controller's view as a subview of the window.
     if view_controller != nil {
         let view: id = msg![env; view_controller view];

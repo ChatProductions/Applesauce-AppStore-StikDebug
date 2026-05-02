@@ -41,12 +41,15 @@ fn glob(
     let mut matched_paths: Vec<String> = Vec::new();
 
     // Базовая логика: если путь не содержит масок, мы просто возвращаем его.
-    // Полноценный поиск по VFS (Virtual File System) с учетом масок (*) можно 
+    // Полноценный поиск по VFS (Virtual File System) с учетом масок (*) можно
     // будет прикрутить позже, если игре не хватит прямых путей.
     if !pattern.contains('*') && !pattern.contains('?') {
         matched_paths.push(pattern.to_string());
     } else {
-        log!("glob: Wildcards not fully supported yet, returning GLOB_NOMATCH for {}", pattern);
+        log!(
+            "glob: Wildcards not fully supported yet, returning GLOB_NOMATCH for {}",
+            pattern
+        );
     }
 
     if matched_paths.is_empty() {
@@ -67,7 +70,8 @@ fn glob(
     }
 
     // Записываем NULL-терминатор в конец массива
-    env.mem.write(pathv_ptr + (matched_paths.len() as u32), MutPtr::null());
+    env.mem
+        .write(pathv_ptr + (matched_paths.len() as u32), MutPtr::null());
 
     pglob.gl_pathv = pathv_ptr;
     env.mem.write(pglob_ptr, pglob);
@@ -80,7 +84,7 @@ fn globfree(env: &mut Environment, pglob_ptr: MutPtr<GuestGlobT>) {
         return;
     }
     let pglob = env.mem.read(pglob_ptr);
-    
+
     // Честно освобождаем всю выделенную гостевую память
     if !pglob.gl_pathv.is_null() {
         for i in 0..pglob.gl_pathc {

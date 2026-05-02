@@ -12,11 +12,11 @@ use super::{NSComparisonResult, NSTimeInterval};
 use crate::frameworks::core_foundation::time::{
     apple_epoch, CFAbsoluteTimeGetGregorianDate, SECS_FROM_UNIX_TO_APPLE_EPOCHS,
 };
+use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_date;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
-use crate::frameworks::foundation::ns_keyed_unarchiver::decode_current_date;
 use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
 
@@ -176,7 +176,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         // If nil, return interval since reference date
         return env.objc.borrow::<NSDateHostObject>(this).time_interval;
     }
-    
+
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
     let another_date_host_object = env.objc.borrow::<NSDateHostObject>(anotherDate);
     let result = host_object.time_interval - another_date_host_object.time_interval;
@@ -230,7 +230,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return 1;
         // NSOrderedDescending - this is later than nil
     }
-    
+
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
     let another_date_host_object = env.objc.borrow::<NSDateHostObject>(anotherDate);
     from_rust_ordering(host_object.time_interval.total_cmp(&another_date_host_object.time_interval))
@@ -240,11 +240,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     if anotherDate.is_null() {
         return false;
     }
-    
+
     if this == anotherDate {
         return true;
     }
-    
+
     let host_object = env.objc.borrow::<NSDateHostObject>(this);
     let another_date_host_object = env.objc.borrow::<NSDateHostObject>(anotherDate);
     host_object.time_interval == another_date_host_object.time_interval
@@ -254,7 +254,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if anotherDate.is_null() {
         return this;
     }
-    
+
     let comparison: NSComparisonResult = msg![env; this compare:anotherDate];
     if comparison <= 0 {
         this
@@ -267,7 +267,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if anotherDate.is_null() {
         return this;
     }
-    
+
     let comparison: NSComparisonResult = msg![env; this compare:anotherDate];
     if comparison >= 0 {
         this
@@ -318,20 +318,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     if other.is_null() {
         return false;
     }
-    
+
     if this == other {
         return true;
     }
-    
+
     // Check if other is an NSDate. Выносим вызов msg_class! в отдельную переменную,
     // чтобы избежать ошибки парсинга макроса msg!.
     let nsdate_class: id = msg_class![env; NSDate class];
     let is_kind_of_class: bool = msg![env; other isKindOfClass:nsdate_class];
-    
+
     if !is_kind_of_class {
         return false;
     }
-    
+
     msg![env; this isEqualToDate:other]
 }
 
@@ -439,7 +439,7 @@ pub fn format_date_iso8601(env: &mut crate::Environment, date: id) -> String {
     if date.is_null() {
         return String::from("");
     }
-    
+
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
     // Copy packed struct fields to locals to avoid unaligned reference UB.
@@ -460,10 +460,10 @@ pub fn get_date_components(env: &mut crate::Environment, date: id) -> (i32, i8, 
     if date.is_null() {
         return (0, 0, 0, 0, 0, 0.0);
     }
-    
+
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
-    
+
     (
         greg_date.year,
         greg_date.month,
@@ -479,7 +479,7 @@ pub fn are_dates_on_same_day(env: &mut crate::Environment, date1: id, date2: id)
     if date1.is_null() || date2.is_null() {
         return false;
     }
-    
+
     let (year1, month1, day1, _, _, _) = get_date_components(env, date1);
     let (year2, month2, day2, _, _, _) = get_date_components(env, date2);
     year1 == year2 && month1 == month2 && day1 == day2
@@ -490,14 +490,14 @@ pub fn start_of_day(env: &mut crate::Environment, date: id) -> id {
     if date.is_null() {
         return nil;
     }
-    
+
     let time_interval = env.objc.borrow::<NSDateHostObject>(date).time_interval;
     let greg_date = CFAbsoluteTimeGetGregorianDate(env, time_interval, nil);
     // Calculate time interval for start of day (00:00:00)
-    let day_start_interval = time_interval - 
-        (greg_date.hours as f64 * SECS_PER_HOUR) -
-        (greg_date.minutes as f64 * SECS_PER_MINUTE) -
-        greg_date.seconds;
+    let day_start_interval = time_interval
+        - (greg_date.hours as f64 * SECS_PER_HOUR)
+        - (greg_date.minutes as f64 * SECS_PER_MINUTE)
+        - greg_date.seconds;
     msg_class![env; NSDate dateWithTimeIntervalSinceReferenceDate:day_start_interval]
 }
 
@@ -506,10 +506,9 @@ pub fn end_of_day(env: &mut crate::Environment, date: id) -> id {
     if date.is_null() {
         return nil;
     }
-    
+
     let start = start_of_day(env, date);
     let end_interval = SECS_PER_DAY - 0.001;
     // 23:59:59.999
     msg![env; start dateByAddingTimeInterval:end_interval]
 }
-

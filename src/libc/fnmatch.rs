@@ -18,7 +18,7 @@ const FNM_PATHNAME: i32 = 1 << 1; // slash must be matched by slash
 #[allow(dead_code)]
 const FNM_NOESCAPE: i32 = 1 << 2; // disable backslash escaping
 #[allow(dead_code)]
-const FNM_PERIOD:   i32 = 1 << 3; // leading dot must be matched explicitly
+const FNM_PERIOD: i32 = 1 << 3; // leading dot must be matched explicitly
 const FNM_CASEFOLD: i32 = 1 << 4; // case-insensitive matching (GNU extension)
 
 /// Pure-Rust fnmatch implementation.
@@ -133,12 +133,7 @@ fn fnmatch_impl(pattern: &[u8], string: &[u8], flags: i32) -> bool {
     }
 }
 
-fn fnmatch(
-    env: &mut Environment,
-    pattern: ConstPtr<u8>,
-    string: ConstPtr<u8>,
-    flags: i32,
-) -> i32 {
+fn fnmatch(env: &mut Environment, pattern: ConstPtr<u8>, string: ConstPtr<u8>, flags: i32) -> i32 {
     let pat = env.mem.cstr_at(pattern);
     let s = env.mem.cstr_at(string);
     log_dbg!(

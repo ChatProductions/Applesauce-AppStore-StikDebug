@@ -39,7 +39,10 @@ fn dlopen(env: &mut Environment, path: ConstPtr<u8>, _mode: i32) -> MutVoidPtr {
     let path_str = match env.mem.cstr_at_utf8(path) {
         Ok(s) => s,
         Err(e) => {
-            log!("Warning: dlopen() failed to safely read path string from guest memory: {:?}", e);
+            log!(
+                "Warning: dlopen() failed to safely read path string from guest memory: {:?}",
+                e
+            );
             return Ptr::null();
         }
     };
@@ -48,7 +51,10 @@ fn dlopen(env: &mut Environment, path: ConstPtr<u8>, _mode: i32) -> MutVoidPtr {
     // загрузить специфичный для другой платформы плагин), мы мягко отклоняем запрос, возвращая NULL.
     // Данное поведение ожидается гостевым приложением для "мягкой деградации" (graceful degradation).
     if !is_known_library(path_str) {
-        log!("Warning: dlopen() returning NULL for requested but unknown library: {}", path_str);
+        log!(
+            "Warning: dlopen() returning NULL for requested but unknown library: {}",
+            path_str
+        );
         return Ptr::null();
     }
 
@@ -75,7 +81,10 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
 
         // Если дескриптор указывает на строку, не являющуюся известной библиотекой, запрос отклоняется.
         if !is_known_library(handle_str) {
-            log!("Warning: dlsym() returning NULL due to an unknown library handle: {}", handle_str);
+            log!(
+                "Warning: dlsym() returning NULL due to an unknown library handle: {}",
+                handle_str
+            );
             return Ptr::null();
         }
     }
@@ -100,10 +109,16 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
 
     // Попытка разрешить адрес через подсистему динамического загрузчика эмулятора (dyld).
     // Функция create_proc_address безопасно вернет Err, если функция-заглушка еще не реализована в эмуляторе.
-    match env.dyld.create_proc_address(&mut env.mem, &mut env.cpu, &symbol_formatted) {
+    match env
+        .dyld
+        .create_proc_address(&mut env.mem, &mut env.cpu, &symbol_formatted)
+    {
         Ok(addr) => Ptr::from_bits(addr.addr_with_thumb_bit()),
         Err(_) => {
-            log!("Warning: dlsym() returning NULL for valid but unimplemented function {}", symbol_formatted);
+            log!(
+                "Warning: dlsym() returning NULL for valid but unimplemented function {}",
+                symbol_formatted
+            );
             Ptr::null()
         }
     }
@@ -117,12 +132,15 @@ fn dlclose(env: &mut Environment, handle: MutVoidPtr) -> i32 {
     }
 
     let handle_path_ptr: ConstPtr<u8> = handle.cast().cast_const();
-    
+
     // БЕЗОПАСНОСТЬ: Проверяем валидность переданного дескриптора перед возвратом кода статуса.
     match env.mem.cstr_at_utf8(handle_path_ptr) {
         Ok(handle_str) => {
             if !is_known_library(handle_str) {
-                log!("Warning: dlclose() called on unknown or already freed library handle: {}", handle_str);
+                log!(
+                    "Warning: dlclose() called on unknown or already freed library handle: {}",
+                    handle_str
+                );
                 return -1; // -1 стандартный код ошибки POSIX для dlclose
             }
             0 // Успех

@@ -11,8 +11,8 @@
 use crate::dyld::HostFunction;
 use crate::frameworks::audio_toolbox::audio_file::{
     self, kAudioFilePropertyDataFormat, kAudioFilePropertyPacketSizeUpperBound,
-    kAudioFileReadPermission, AudioFileClose, AudioFileGetProperty, AudioFileID, AudioFileOpenURL,
-    AudioFileReadPackets, AudioFileHostObject,
+    kAudioFileReadPermission, AudioFileClose, AudioFileGetProperty, AudioFileHostObject,
+    AudioFileID, AudioFileOpenURL, AudioFileReadPackets,
 };
 use crate::frameworks::audio_toolbox::audio_queue::{
     kAudioQueueParam_Volume, AudioQueueAllocateBuffer, AudioQueueBufferRef, AudioQueueDispose,
@@ -310,17 +310,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow_mut::<AVAudioPlayerHostObject>(this);
     host_object.set_current_time = currentTime;
     if let (Some(audio_desc), Some(audio_file_id)) = (host_object.audio_desc, host_object.audio_file_id) {
-        
+
         let target_host_obj = audio_file::State::get(&mut env.framework_state)
             .audio_files
             .get(&audio_file_id)
             .unwrap();
-            
+
         let total_packets = match target_host_obj {
             AudioFileHostObject::Real(af) => af.packet_count(),
             AudioFileHostObject::Dummy { packet_count, .. } => *packet_count,
         };
-        
+
         let total_frames = total_packets * audio_desc.frames_per_packet as u64;
         let new_current_frame = audio_desc.sample_rate * currentTime;
         if new_current_frame < 0.0 || new_current_frame > total_frames as f64 {
@@ -567,7 +567,7 @@ fn derive_buffer_size(
     } else if audio_desc.bytes_per_packet > 0 {
         audio_desc.bytes_per_packet
     } else {
-        1024 
+        1024
     };
 
     if audio_desc.frames_per_packet != 0 {
@@ -601,14 +601,14 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
 ) {
     let av_audio_player: id = in_user_data.cast();
     let class: Class = msg![env; av_audio_player class];
-    
-        log_dbg!(
+
+    log_dbg!(
         "_touchHLE_AVAudioPlayerOutputBufferHelper on object of class: {}",
         env.objc.get_class_name(class)
     );
-    
+
     // ЧЕСТНЫЙ ФИКС: Проверяем, является ли объект наследником AVAudioPlayer,
-    // а не требуем строгого совпадения адресов классов. Это легализует 
+    // а не требуем строгого совпадения адресов классов. Это легализует
     // кастомные плееры из игр и динамические сабклассы (например, от KVO).
     let expected_class = env.objc.get_known_class("AVAudioPlayer", &mut env.mem);
     assert!(
@@ -634,7 +634,7 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     let num_packets_ptr: MutPtr<u32> = env.mem.alloc(guest_size_of::<u32>()).cast();
     env.mem.write(num_packets_ptr, num_packets_to_read);
     let mut audio_queue_buffer = env.mem.read(in_buf);
-    
+
     let status = AudioFileReadPackets(
         env,
         audio_file_id.unwrap(),
@@ -651,16 +651,22 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
     env.mem.free(num_bytes_ptr.cast());
     if num_packets > 0 {
         if status != 0 && status != eofErr {
-            log!("Warning: AVAudioPlayer read error (status {}), ignoring to prevent crash.", status);
+            log!(
+                "Warning: AVAudioPlayer read error (status {}), ignoring to prevent crash.",
+                status
+            );
         }
         audio_queue_buffer.audio_data_byte_size = num_bytes;
         env.mem.write(in_buf, audio_queue_buffer);
         let enqueue_status = AudioQueueEnqueueBuffer(env, aq, in_buf, 0, Ptr::null());
-        
+
         if enqueue_status != 0 {
-             log!("Warning: AudioQueueEnqueueBuffer failed with status {}", enqueue_status);
+            log!(
+                "Warning: AudioQueueEnqueueBuffer failed with status {}",
+                enqueue_status
+            );
         }
-        
+
         env.objc
             .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
             .current_packet = current_packet + num_packets as i64;
@@ -683,10 +689,7 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
         if number_of_loops == 0 {
             let stop_status = AudioQueueStop(env, aq, false);
             if stop_status != 0 {
-                log!(
-                    "Warning: AudioQueueStop failed with status {}",
-                    stop_status
-                );
+                log!("Warning: AudioQueueStop failed with status {}", stop_status);
             }
             env.objc
                 .borrow_mut::<AVAudioPlayerHostObject>(av_audio_player)
@@ -720,14 +723,8 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
                 .borrow::<AVAudioPlayerHostObject>(av_audio_player)
                 .num_packets_to_read;
             if num_packets_to_read > 0 {
-                _touchHLE_AVAudioPlayerOutputBufferHelper(
-                    env,
-                    in_user_data,
-                    in_aq,
-                    in_buf,
-                );
+                _touchHLE_AVAudioPlayerOutputBufferHelper(env, in_user_data, in_aq, in_buf);
             }
         }
     }
 }
-

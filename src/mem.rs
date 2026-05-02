@@ -354,7 +354,8 @@ impl Drop for Mem {
             crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
             // Освобождаем страницу-заглушку
             if !self.null_stub_page.is_null() {
-                crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize).unwrap();
+                crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize)
+                    .unwrap();
             }
         }
     }
@@ -508,7 +509,10 @@ impl Mem {
             let offset = (addr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let stub_slice = unsafe {
-                std::slice::from_raw_parts(self.null_stub_page.add(offset), PAGE_SIZE as usize - offset)
+                std::slice::from_raw_parts(
+                    self.null_stub_page.add(offset),
+                    PAGE_SIZE as usize - offset,
+                )
             };
             return Some(&stub_slice[..count_usize.min(stub_slice.len())]);
         }
@@ -859,4 +863,3 @@ impl Mem {
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }
-

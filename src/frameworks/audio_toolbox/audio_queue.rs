@@ -295,26 +295,27 @@ pub fn AudioQueueAllocateBuffer(
     return_if_null!(in_aq);
 
     if in_buffer_byte_size > 16 * 1024 * 1024 {
-        log!("Error: AudioQueueAllocateBuffer requested ridiculously large buffer: {:#x} bytes", in_buffer_byte_size);
-        return -50; 
+        log!(
+            "Error: AudioQueueAllocateBuffer requested ridiculously large buffer: {:#x} bytes",
+            in_buffer_byte_size
+        );
+        return -50;
     }
 
     let host_object = match State::get(&mut env.framework_state)
         .audio_queues
-        .get_mut(&in_aq) {
-            Some(obj) => obj,
-            None => return 0,
+        .get_mut(&in_aq)
+    {
+        Some(obj) => obj,
+        None => return 0,
     };
 
-    let packet_description_capacity = if env
-        .bundle
-        .bundle_identifier()
-        .starts_with("com.ea.candcra")
-    {
-        1024
-    } else {
-        0
-    };
+    let packet_description_capacity =
+        if env.bundle.bundle_identifier().starts_with("com.ea.candcra") {
+            1024
+        } else {
+            0
+        };
 
     let audio_data = env.mem.alloc(in_buffer_byte_size);
     let buffer_ptr = env.mem.alloc_and_write(AudioQueueBuffer {
@@ -342,10 +343,12 @@ pub fn AudioQueueEnqueueBuffer(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    let host_object = match State::get(&mut env.framework_state).audio_queues
-        .get_mut(&in_aq) {
-            Some(obj) => obj,
-            None => return 0,
+    let host_object = match State::get(&mut env.framework_state)
+        .audio_queues
+        .get_mut(&in_aq)
+    {
+        Some(obj) => obj,
+        None => return 0,
     };
 
     if !host_object.buffers.contains(&in_buffer) {
@@ -379,11 +382,13 @@ fn AudioQueueAddPropertyListener(
     return_if_null!(in_aq);
 
     if in_id == kAudioQueueProperty_IsRunning {
-        let host_object = match State::get(&mut env.framework_state).audio_queues
-            .get_mut(&in_aq) {
-                Some(obj) => obj,
-                None => return 0,
-            };
+        let host_object = match State::get(&mut env.framework_state)
+            .audio_queues
+            .get_mut(&in_aq)
+        {
+            Some(obj) => obj,
+            None => return 0,
+        };
 
         host_object.aq_is_running_proc = Some(in_proc);
         host_object.aq_is_running_user_data = Some(in_user_data);
@@ -432,7 +437,9 @@ fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
     match property_id {
         kAudioQueueProperty_IsRunning => Some(guest_size_of::<u32>()),
         kAudioQueueProperty_MagicCookie => Some(0),
-        kAudioQueueProperty_StreamDescription => Some(guest_size_of::<AudioStreamBasicDescription>()),
+        kAudioQueueProperty_StreamDescription => {
+            Some(guest_size_of::<AudioStreamBasicDescription>())
+        }
         _ => None,
     }
 }
@@ -484,7 +491,11 @@ fn AudioQueueGetProperty(
     let provided_size = env.mem.read(io_data_size);
 
     if required_size != 0 && provided_size < required_size {
-        log!("Warning: AudioQueueGetProperty() failed: provided size {} < required size {}", provided_size, required_size);
+        log!(
+            "Warning: AudioQueueGetProperty() failed: provided size {} < required size {}",
+            provided_size,
+            required_size
+        );
         return kAudioQueueErr_InvalidPropertySize;
     }
 
@@ -668,7 +679,7 @@ pub fn decode_buffer(
                 processed_data
             };
 
-                        let f = match (actual_channels_per_frame, format.bits_per_channel) {
+            let f = match (actual_channels_per_frame, format.bits_per_channel) {
                 (1, 8) => al::AL_FORMAT_MONO8,
                 (1, 16) => al::AL_FORMAT_MONO16,
                 (2, 8) => al::AL_FORMAT_STEREO8,
@@ -678,7 +689,7 @@ pub fn decode_buffer(
                     assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
 
                     assert!(processed_data.len().is_multiple_of(4));
-                    let new_size = (processed_data.len() / 4) * 2; 
+                    let new_size = (processed_data.len() / 4) * 2;
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
                     for chunk in processed_data.chunks(4) {
@@ -697,7 +708,7 @@ pub fn decode_buffer(
                     assert!((format.format_flags & kAudioFormatFlagIsSignedInteger) != 0);
 
                     assert!(processed_data.len().is_multiple_of(4));
-                    let new_size = (processed_data.len() / 4) * 2; 
+                    let new_size = (processed_data.len() / 4) * 2;
                     let mut new_processed_data = Vec::<u8>::with_capacity(new_size);
 
                     for chunk in processed_data.chunks(4) {
@@ -711,14 +722,13 @@ pub fn decode_buffer(
                         new_processed_data,
                     );
                 }
-                                // ... предыдущие рабочие ветки (1, 32) и (2, 32) остаются как есть ...
+                // ... предыдущие рабочие ветки (1, 32) и (2, 32) остаются как есть ...
                 _ => {
                     // Копируем значение в локальную переменную, чтобы избежать создания ссылки на packed-поле
                     let bits = format.bits_per_channel;
                     unreachable!(
-                        "Unhandled audio format: {} channels, {} bits", 
-                        actual_channels_per_frame, 
-                        bits
+                        "Unhandled audio format: {} channels, {} bits",
+                        actual_channels_per_frame, bits
                     )
                 }
             };
@@ -939,37 +949,37 @@ fn AudioQueuePrime(
     out_number_of_frames_prepared: MutPtr<u32>,
 ) -> OSStatus {
     return_if_null!(in_aq);
-    
+
     prime_audio_queue(env, in_aq);
-    
+
     if !out_number_of_frames_prepared.is_null() {
         let host_object = State::get(&mut env.framework_state)
             .audio_queues
             .get(&in_aq)
             .unwrap();
-            
+
         let mut prepared_frames = 0;
         let format = &host_object.format;
-        
+
         for &buffer_ref in &host_object.buffer_queue {
             let buffer = env.mem.read(buffer_ref);
             let size = buffer.audio_data_byte_size;
-            
+
             if format.bytes_per_packet > 0 && format.frames_per_packet > 0 {
                 prepared_frames += (size / format.bytes_per_packet) * format.frames_per_packet;
-            } 
-            else if format.bytes_per_frame > 0 {
+            } else if format.bytes_per_frame > 0 {
                 prepared_frames += size / format.bytes_per_frame;
             }
         }
-        
+
         if in_number_of_frames_to_prepare > 0 && prepared_frames > in_number_of_frames_to_prepare {
             prepared_frames = in_number_of_frames_to_prepare;
         }
-        
-        env.mem.write(out_number_of_frames_prepared, prepared_frames);
+
+        env.mem
+            .write(out_number_of_frames_prepared, prepared_frames);
     }
-    
+
     0 // success
 }
 
@@ -993,7 +1003,7 @@ fn notify_aq_is_running(env: &mut Environment, in_aq: AudioQueueRef) {
 pub fn AudioQueueStart(
     env: &mut Environment,
     in_aq: AudioQueueRef,
-    in_device_start_time: ConstVoidPtr, 
+    in_device_start_time: ConstVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_aq);
 
@@ -1010,7 +1020,6 @@ pub fn AudioQueueStart(
         let al_source = host_object.al_source.unwrap();
         unsafe { context.SourcePlay(al_source) };
         assert!(unsafe { context.GetError() } == 0);
-
     } else {
         log!(
             "AudioQueueStart: Unsupported format {:?}, not starting",
@@ -1279,4 +1288,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioQueueDispose(_, _)),
     export_c_func!(AudioQueueNewInput(_, _, _, _, _, _, _)),
 ];
-

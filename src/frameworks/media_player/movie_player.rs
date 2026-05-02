@@ -74,7 +74,6 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",
         HostConstant::NSString(MPMoviePlayerPlaybackDidFinishReasonUserInfoKey),
-   
     ),
 ];
 
@@ -148,7 +147,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         source_type: 0,
         repeat_mode: 0,
         should_autoplay: true,
-    
+
         initial_playback_time: -1.0,
         playback_state: MPMoviePlaybackStateStopped,
     });
@@ -162,7 +161,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         url,
         ns_url::to_rust_path(env, url),
     );
-    
+
     // Инициализируем сам объект
     let this: id = msg![env; this init];
     retain(env, url);
@@ -175,7 +174,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Ensure views exist immediately
     ensure_view(env, this);
     ensure_background_view(env, this);
-    
+
     // Act as if loading immediately completed (Spore Origins waits for this).
     // Retain this so the object stays alive until handle_players fires.
     retain(env, this);
@@ -490,19 +489,16 @@ pub(super) fn handle_players(env: &mut Environment) {
             // Without it the game dereferences nil
             // at offset 0x10, causing a NULL-PAGE READ crash.
             // MPMovieFinishReasonPlaybackEnded = 0
-            let reason_num: id =
-                msg_class![env;
+            let reason_num: id = msg_class![env;
 NSNumber numberWithInt:0i32];
-            let reason_key = ns_string::get_static_str(
-                env,
-                MPMoviePlayerPlaybackDidFinishReasonUserInfoKey,
-            );
+            let reason_key =
+                ns_string::get_static_str(env, MPMoviePlayerPlaybackDidFinishReasonUserInfoKey);
             let user_info: id = msg_class![env; NSDictionary
                 dictionaryWithObject:reason_num
                 forKey:reason_key];
             let _: () = msg![env; center postNotificationName:name
                                                        object:object
-                                       
+
               userInfo:user_info];
         } else {
             let _: () = msg![env;
@@ -514,4 +510,3 @@ center postNotificationName:name
         release(env, object);
     }
 }
-

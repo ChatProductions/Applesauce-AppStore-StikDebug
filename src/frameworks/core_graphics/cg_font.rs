@@ -10,7 +10,7 @@ use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::core_foundation::CFTypeRef;
 use crate::frameworks::foundation::ns_string;
 use crate::mem::{MutVoidPtr, Ptr};
-use crate::objc::{id, msg, msg_class, nil, retain, release};
+use crate::objc::{id, msg, msg_class, nil, release, retain};
 use crate::Environment;
 
 // =========================================================================
@@ -23,14 +23,14 @@ pub type CGFontIndex = u16;
 pub type CGFontPostScriptFormat = i32;
 
 // CGFontPostScriptFormat constants
-pub const kCGFontPostScriptFormatType1:   CGFontPostScriptFormat = 1;
-pub const kCGFontPostScriptFormatType3:   CGFontPostScriptFormat = 3;
-pub const kCGFontPostScriptFormatType42:  CGFontPostScriptFormat = 42;
+pub const kCGFontPostScriptFormatType1: CGFontPostScriptFormat = 1;
+pub const kCGFontPostScriptFormatType3: CGFontPostScriptFormat = 3;
+pub const kCGFontPostScriptFormatType42: CGFontPostScriptFormat = 42;
 
 // Special glyph index
 pub const kCGFontIndexInvalid: CGFontIndex = 0xFFFF;
-pub const kCGFontIndexMax:     CGFontIndex = 0xFFFE;
-pub const kCGGlyphMax:         CGGlyph     = kCGFontIndexMax;
+pub const kCGFontIndexMax: CGFontIndex = 0xFFFE;
+pub const kCGGlyphMax: CGGlyph = kCGFontIndexMax;
 
 // =========================================================================
 // MARK: - Internal host object
@@ -59,13 +59,20 @@ fn font_from_name(env: &mut Environment, name: CFStringRef) -> id {
 fn CGFontCreateWithFontName(env: &mut Environment, name: CFStringRef) -> CGFontRef {
     let font = font_from_name(env, name);
     if font == nil {
-        log!("CGFontCreateWithFontName: could not create font for {:?}", name);
+        log!(
+            "CGFontCreateWithFontName: could not create font for {:?}",
+            name
+        );
         return Ptr::null();
     }
     retain(env, font);
     log_dbg!(
         "CGFontCreateWithFontName({}) => {:?}",
-        if name != nil { ns_string::to_rust_string(env, name).into_owned() } else { "(null)".into() },
+        if name != nil {
+            ns_string::to_rust_string(env, name).into_owned()
+        } else {
+            "(null)".into()
+        },
         font
     );
     font
@@ -89,11 +96,11 @@ fn CGFontCreateCopyWithVariations(
 }
 
 /// `CGFontRef CGFontCreateWithDataProvider(CGDataProviderRef provider)`
-fn CGFontCreateWithDataProvider(
-    _env: &mut Environment,
-    provider: CFTypeRef,
-) -> CGFontRef {
-    log!("TODO: CGFontCreateWithDataProvider({:?}) — returning NULL", provider);
+fn CGFontCreateWithDataProvider(_env: &mut Environment, provider: CFTypeRef) -> CGFontRef {
+    log!(
+        "TODO: CGFontCreateWithDataProvider({:?}) — returning NULL",
+        provider
+    );
     Ptr::null()
 }
 
@@ -102,13 +109,17 @@ fn CGFontCreateWithDataProvider(
 // =========================================================================
 
 fn CGFontRetain(env: &mut Environment, font: CGFontRef) -> CGFontRef {
-    if font.is_null() { return Ptr::null(); }
+    if font.is_null() {
+        return Ptr::null();
+    }
     retain(env, font);
     font
 }
 
 fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
-    if font.is_null() { return; }
+    if font.is_null() {
+        return;
+    }
     release(env, font);
 }
 
@@ -118,10 +129,14 @@ fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
 
 /// `CFStringRef CGFontCopyPostScriptName(CGFontRef font)`
 fn CGFontCopyPostScriptName(env: &mut Environment, font: CGFontRef) -> CFStringRef {
-    if font.is_null() { return nil; }
+    if font.is_null() {
+        return nil;
+    }
     // UIFont -fontName returns the PostScript name on iOS.
     let name: id = msg![env; font fontName];
-    if name == nil { return nil; }
+    if name == nil {
+        return nil;
+    }
     msg![env; name copy]
 }
 
@@ -137,51 +152,69 @@ fn CGFontCopyFullName(env: &mut Environment, font: CGFontRef) -> CFStringRef {
 
 /// `int CGFontGetUnitsPerEm(CGFontRef font)`
 fn CGFontGetUnitsPerEm(_env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     // Standard TrueType/OpenType value.
     2048
 }
 
 /// `int CGFontGetAscent(CGFontRef font)`
 fn CGFontGetAscent(env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     let ascender: f32 = msg![env; font ascender];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
     let point_size: f32 = msg![env; font pointSize];
-    if point_size == 0.0 { return 0; }
+    if point_size == 0.0 {
+        return 0;
+    }
     (ascender / point_size * upm).round() as i32
 }
 
 /// `int CGFontGetDescent(CGFontRef font)`
 fn CGFontGetDescent(env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     let descender: f32 = msg![env; font descender];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
     let point_size: f32 = msg![env; font pointSize];
-    if point_size == 0.0 { return 0; }
+    if point_size == 0.0 {
+        return 0;
+    }
     (descender / point_size * upm).round() as i32
 }
 
 /// `int CGFontGetLeading(CGFontRef font)`
 fn CGFontGetLeading(env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     let leading: f32 = msg![env; font leading];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
     let point_size: f32 = msg![env; font pointSize];
-    if point_size == 0.0 { return 0; }
+    if point_size == 0.0 {
+        return 0;
+    }
     (leading / point_size * upm).round() as i32
 }
 
 /// `int CGFontGetCapHeight(CGFontRef font)`
 fn CGFontGetCapHeight(env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     // Approximate cap height as 70% of ascent in design units.
     (CGFontGetAscent(env, font) as f32 * 0.70).round() as i32
 }
 
 /// `int CGFontGetXHeight(CGFontRef font)`
 fn CGFontGetXHeight(env: &mut Environment, font: CGFontRef) -> i32 {
-    if font.is_null() { return 0; }
+    if font.is_null() {
+        return 0;
+    }
     // Approximate x-height as 50% of ascent in design units.
     (CGFontGetAscent(env, font) as f32 * 0.50).round() as i32
 }
@@ -197,13 +230,18 @@ fn CGFontGetFontBBox(
     out: MutVoidPtr, // CGRect* in design units
 ) {
     use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
-    if font.is_null() || out.is_null() { return; }
+    if font.is_null() || out.is_null() {
+        return;
+    }
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
-    let asc  =  CGFontGetAscent(env, font)  as f32;
-    let desc =  CGFontGetDescent(env, font) as f32; // negative
+    let asc = CGFontGetAscent(env, font) as f32;
+    let desc = CGFontGetDescent(env, font) as f32; // negative
     let rect = CGRect {
         origin: CGPoint { x: 0.0, y: desc },
-        size:   CGSize  { width: upm, height: asc - desc },
+        size: CGSize {
+            width: upm,
+            height: asc - desc,
+        },
     };
     let p: crate::mem::MutPtr<CGRect> = out.cast();
     env.mem.write(p, rect);
@@ -225,7 +263,9 @@ fn CGFontGetGlyphAdvances(
     count: u32,
     advances: crate::mem::MutPtr<i32>,
 ) -> bool {
-    if font.is_null() { return false; }
+    if font.is_null() {
+        return false;
+    }
     let upm = CGFontGetUnitsPerEm(env, font);
     let avg_advance = (upm as f32 * 0.60).round() as i32;
     for i in 0..count {
@@ -248,13 +288,18 @@ fn CGFontGetGlyphBBoxes(
     bboxes: crate::mem::MutVoidPtr,
 ) -> bool {
     use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
-    if font.is_null() { return false; }
+    if font.is_null() {
+        return false;
+    }
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
-    let asc  = CGFontGetAscent(env, font)  as f32;
+    let asc = CGFontGetAscent(env, font) as f32;
     let desc = CGFontGetDescent(env, font) as f32;
     let rect = CGRect {
         origin: CGPoint { x: 0.0, y: desc },
-        size:   CGSize  { width: upm * 0.60, height: asc - desc },
+        size: CGSize {
+            width: upm * 0.60,
+            height: asc - desc,
+        },
     };
     let p: crate::mem::MutPtr<CGRect> = bboxes.cast();
     for i in 0..count {
@@ -275,7 +320,8 @@ fn CGFontGetGlyphWithGlyphName(
 ) -> CGGlyph {
     log_dbg!(
         "CGFontGetGlyphWithGlyphName({:?}, {:?}) — returning kCGFontIndexInvalid",
-        font, glyph_name
+        font,
+        glyph_name
     );
     kCGFontIndexInvalid
 }
@@ -288,7 +334,8 @@ fn CGFontCopyGlyphNameForGlyph(
 ) -> CFStringRef {
     log_dbg!(
         "CGFontCopyGlyphNameForGlyph({:?}, {}) — returning nil",
-        font, glyph
+        font,
+        glyph
     );
     nil
 }
@@ -304,12 +351,12 @@ fn CGFontCopyTableTags(_env: &mut Environment, font: CGFontRef) -> CFTypeRef {
 }
 
 /// `CFDataRef CGFontCopyTableForTag(CGFontRef font, uint32_t tag)`
-fn CGFontCopyTableForTag(
-    _env: &mut Environment,
-    font: CGFontRef,
-    tag: u32,
-) -> CFTypeRef {
-    log_dbg!("CGFontCopyTableForTag({:?}, {:#010x}) — returning nil", font, tag);
+fn CGFontCopyTableForTag(_env: &mut Environment, font: CGFontRef, tag: u32) -> CFTypeRef {
+    log_dbg!(
+        "CGFontCopyTableForTag({:?}, {:#010x}) — returning nil",
+        font,
+        tag
+    );
     nil
 }
 
@@ -324,7 +371,8 @@ fn CGFontCanCreatePostScriptSubset(
 ) -> bool {
     log_dbg!(
         "CGFontCanCreatePostScriptSubset({:?}, {}) — returning false",
-        font, format
+        font,
+        format
     );
     false
 }
@@ -340,7 +388,9 @@ fn CGFontCreatePostScriptSubset(
 ) -> CFTypeRef {
     log!(
         "TODO: CGFontCreatePostScriptSubset({:?}, {:?}, {}) — returning nil",
-        font, subset_name, format
+        font,
+        subset_name,
+        format
     );
     nil
 }
@@ -350,7 +400,10 @@ fn CGFontCreatePostScriptEncoding(
     font: CGFontRef,
     _encoding: crate::mem::ConstPtr<CGGlyph>,
 ) -> CFTypeRef {
-    log!("TODO: CGFontCreatePostScriptEncoding({:?}) — returning nil", font);
+    log!(
+        "TODO: CGFontCreatePostScriptEncoding({:?}) — returning nil",
+        font
+    );
     nil
 }
 

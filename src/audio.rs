@@ -225,8 +225,8 @@ impl AudioFile {
             AudioFileInner::Caf(ref reader) => AudioDescription {
                 sample_rate: reader.audio_desc.sample_rate,
                 format: AudioFormat::LinearPcm {
-                    is_float: false, 
-                    is_little_endian: true
+                    is_float: false,
+                    is_little_endian: true,
                 }, // Note: update format appropriately if you process CAF AAC
                 bytes_per_packet: reader.audio_desc.bytes_per_packet,
                 frames_per_packet: reader.audio_desc.frames_per_packet,
@@ -261,7 +261,10 @@ impl AudioFile {
                 ..
             }) => bytes.len() as u64,
             AudioFileInner::Aac(ref aac) => aac.byte_count(),
-            AudioFileInner::Caf(ref reader) => reader.audio_desc.bytes_per_packet as u64 * reader.get_packet_count().unwrap_or(0) as u64,
+            AudioFileInner::Caf(ref reader) => {
+                reader.audio_desc.bytes_per_packet as u64
+                    * reader.get_packet_count().unwrap_or(0) as u64
+            }
         }
     }
 
@@ -277,12 +280,14 @@ impl AudioFile {
     }
 
     pub fn packet_size_fixed(&self) -> u32 {
-        let AudioDescription { bytes_per_packet, .. } = self.audio_description();
+        let AudioDescription {
+            bytes_per_packet, ..
+        } = self.audio_description();
         bytes_per_packet
     }
 
     pub fn packet_size_upper_bound(&self) -> u32 {
-        self.packet_size_fixed() 
+        self.packet_size_fixed()
     }
 
     pub fn magic_cookie(&self) -> &[u8] {
@@ -357,13 +362,18 @@ impl AudioFile {
                         break;
                     }
 
-                    let start_idx = if bytes_read == 0 { offset_in_first_packet } else { 0 };
-                    
+                    let start_idx = if bytes_read == 0 {
+                        offset_in_first_packet
+                    } else {
+                        0
+                    };
+
                     if start_idx >= packet_data.len() {
                         continue;
                     }
 
-                    let bytes_to_copy = (packet_data.len() - start_idx).min(buffer.len() - bytes_read);
+                    let bytes_to_copy =
+                        (packet_data.len() - start_idx).min(buffer.len() - bytes_read);
 
                     buffer[bytes_read..bytes_read + bytes_to_copy]
                         .copy_from_slice(&packet_data[start_idx..start_idx + bytes_to_copy]);
@@ -410,9 +420,7 @@ fn try_parse_caf_aac(bytes: &[u8]) -> Option<AacPackets> {
         packet_offsets.push(packet_bytes.len());
         let start = packet_bytes.len();
         packet_bytes.resize(start + pkt_size as usize, 0u8);
-        reader
-            .read_packet_into(&mut packet_bytes[start..])
-            .ok()?;
+        reader.read_packet_into(&mut packet_bytes[start..]).ok()?;
     }
     packet_offsets.push(packet_bytes.len());
 
@@ -441,7 +449,7 @@ fn caf_read_format_id(bytes: &[u8]) -> Option<[u8; 4]> {
             let data = bytes.get(pos..pos + chunk_size as usize)?;
             return Some(data[8..12].try_into().ok()?);
         }
-        pos = pos.checked_add(chunk_size.try_into().ok()?)? ;
+        pos = pos.checked_add(chunk_size.try_into().ok()?)?;
     }
     None
 }
@@ -509,4 +517,3 @@ fn parse_adts_aac(bytes: Vec<u8>) -> Result<AacPackets, ()> {
         magic_cookie: Vec::new(),
     })
 }
-

@@ -7,17 +7,19 @@
 
 use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetGregorianDate;
 use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
-use crate::objc::{autorelease, id, msg, msg_class, nil, objc_classes, release, retain,
-todo_objc_setter, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter,
+    ClassExports, HostObject, NSZonePtr,
+};
 
 // MARK: - Style constants
 
 type NSDateFormatterStyle = NSUInteger;
-const NSDateFormatterNoStyle:     NSDateFormatterStyle = 0;
-const NSDateFormatterShortStyle:  NSDateFormatterStyle = 1;
+const NSDateFormatterNoStyle: NSDateFormatterStyle = 0;
+const NSDateFormatterShortStyle: NSDateFormatterStyle = 1;
 const NSDateFormatterMediumStyle: NSDateFormatterStyle = 2;
-const NSDateFormatterLongStyle:   NSDateFormatterStyle = 3;
-const NSDateFormatterFullStyle:   NSDateFormatterStyle = 4;
+const NSDateFormatterLongStyle: NSDateFormatterStyle = 3;
+const NSDateFormatterFullStyle: NSDateFormatterStyle = 4;
 
 struct NSDateFormatterHostObject {
     /// `NSString*` — custom format string, nil if using style
@@ -309,24 +311,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// Build a format string from date/time style constants.
 fn style_to_format(date_style: u64, time_style: u64) -> String {
     let date_part = match date_style {
-        1 => "M/d/yy",           // short
-        2 => "MMM d, yyyy",      // medium
-        3 => "MMMM d, yyyy",     // long
+        1 => "M/d/yy",             // short
+        2 => "MMM d, yyyy",        // medium
+        3 => "MMMM d, yyyy",       // long
         4 => "EEEE, MMMM d, yyyy", // full
         _ => "",
     };
     let time_part = match time_style {
-        1 => "h:mm a",           // short
-        2 => "h:mm:ss a",        // medium
-        3 => "h:mm:ss a z",      // long
-        4 => "h:mm:ss a zzzz",   // full
+        1 => "h:mm a",         // short
+        2 => "h:mm:ss a",      // medium
+        3 => "h:mm:ss a z",    // long
+        4 => "h:mm:ss a zzzz", // full
         _ => "",
     };
     match (date_part.is_empty(), time_part.is_empty()) {
         (false, false) => format!("{} {}", date_part, time_part),
-        (false, true)  => date_part.to_string(),
-        (true,  false) => time_part.to_string(),
-        (true,  true)  => String::new(),
+        (false, true) => date_part.to_string(),
+        (true, false) => time_part.to_string(),
+        (true, true) => String::new(),
     }
 }
 
@@ -334,17 +336,38 @@ fn style_to_format(date_style: u64, time_style: u64) -> String {
 /// We compute weekday from year/month/day using Tomohiko Sakamoto's algorithm.
 fn weekday(year: i32, month: i32, day: i32) -> u8 {
     // Returns 0=Sun, 1=Mon … 6=Sat
-    static T: [i32; 12] = [0,3,2,5,0,3,5,1,4,6,2,4];
+    static T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
     let y = if month < 3 { year - 1 } else { year };
-    ((y + y/4 - y/100 + y/400 + T[(month-1) as usize] + day) % 7) as u8
+    ((y + y / 4 - y / 100 + y / 400 + T[(month - 1) as usize] + day) % 7) as u8
 }
 
-const SHORT_DAYS: [&str; 7]  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const LONG_DAYS:  [&str; 7]  = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const SHORT_MONTHS: [&str; 12] = ["Jan","Feb","Mar","Apr","May","Jun",
-                                  "Jul","Aug","Sep","Oct","Nov","Dec"];
-const LONG_MONTHS:  [&str; 12] = ["January","February","March","April","May","June",
-                                  "July","August","September","October","November","December"];
+const SHORT_DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const LONG_DAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+const SHORT_MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const LONG_MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
 
 /// Apply a Unicode date format string to the given date components.
 pub fn apply_format(
@@ -356,16 +379,19 @@ pub fn apply_format(
     minutes: i32,
     seconds: i64,
 ) -> String {
-    let mut result    = String::new();
-    let mut chars     = fmt.chars().peekable();
+    let mut result = String::new();
+    let mut chars = fmt.chars().peekable();
     let mut in_quotes = false;
 
     // 12-hour clock
-    let hour12 = match hours % 12 { 0 => 12, h => h };
-    let ampm   = if hours < 12 { "AM" } else { "PM" };
+    let hour12 = match hours % 12 {
+        0 => 12,
+        h => h,
+    };
+    let ampm = if hours < 12 { "AM" } else { "PM" };
     let ampm_l = ampm.to_lowercase();
-    let wd     = weekday(year, month, day);
-    let m_idx  = ((month - 1).clamp(0, 11)) as usize;
+    let wd = weekday(year, month, day);
+    let m_idx = ((month - 1).clamp(0, 11)) as usize;
     let wd_idx = (wd as usize).clamp(0, 6);
 
     while let Some(c) = chars.next() {
@@ -390,82 +416,86 @@ pub fn apply_format(
             let s: String = match token.as_str() {
                 // Era
                 "G" | "GG" | "GGG" => "AD".into(),
-                "GGGG"             => "Anno Domini".into(),
-                "GGGGG"            => "A".into(),
+                "GGGG" => "Anno Domini".into(),
+                "GGGGG" => "A".into(),
                 // Year
-                "y" | "Y"          => format!("{}", year),
-                "yy" | "YY"        => format!("{:02}", year % 100),
-                "yyy" | "YYY"      => format!("{:03}", year),
-                "yyyy" | "YYYY"    => format!("{:04}", year),
+                "y" | "Y" => format!("{}", year),
+                "yy" | "YY" => format!("{:02}", year % 100),
+                "yyy" | "YYY" => format!("{:03}", year),
+                "yyyy" | "YYYY" => format!("{:04}", year),
                 // Quarter
-                "Q" | "q"          => format!("{}", (month - 1) / 3 + 1),
-                "QQ" | "qq"        => format!("{:02}", (month - 1) / 3 + 1),
-                "QQQ" | "qqq"      => format!("Q{}", (month - 1) / 3 + 1),
-                "QQQQ" | "qqqq"    => ["1st quarter","2nd quarter","3rd quarter","4th quarter"]
-                                       [((month-1)/3) as usize].into(),
+                "Q" | "q" => format!("{}", (month - 1) / 3 + 1),
+                "QQ" | "qq" => format!("{:02}", (month - 1) / 3 + 1),
+                "QQQ" | "qqq" => format!("Q{}", (month - 1) / 3 + 1),
+                "QQQQ" | "qqqq" => ["1st quarter", "2nd quarter", "3rd quarter", "4th quarter"]
+                    [((month - 1) / 3) as usize]
+                    .into(),
                 // Month
-                "M" | "L"          => format!("{}", month),
-                "MM" | "LL"        => format!("{:02}", month),
-                "MMM" | "LLL"      => SHORT_MONTHS[m_idx].into(),
-                "MMMM" | "LLLL"    => LONG_MONTHS[m_idx].into(),
-                "MMMMM" | "LLLLL"  => SHORT_MONTHS[m_idx].chars().next().unwrap().to_string(),
+                "M" | "L" => format!("{}", month),
+                "MM" | "LL" => format!("{:02}", month),
+                "MMM" | "LLL" => SHORT_MONTHS[m_idx].into(),
+                "MMMM" | "LLLL" => LONG_MONTHS[m_idx].into(),
+                "MMMMM" | "LLLLL" => SHORT_MONTHS[m_idx].chars().next().unwrap().to_string(),
                 // Week of year / month (approximate)
-                "w" | "ww"         => format!("{}", (day + 6) / 7),
-                "W"                => format!("{}", (day - 1) / 7 + 1),
+                "w" | "ww" => format!("{}", (day + 6) / 7),
+                "W" => format!("{}", (day - 1) / 7 + 1),
                 // Day
-                "d"                => format!("{}", day),
-                "dd"               => format!("{:02}", day),
-                "D"                => {
+                "d" => format!("{}", day),
+                "dd" => format!("{:02}", day),
+                "D" => {
                     // Day of year — approximate.
-                    let days_in_month = [31,28,31,30,31,30,31,31,30,31,30,31];
+                    let days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
                     let doy: i32 = days_in_month[..m_idx].iter().sum::<i32>() + day;
                     format!("{}", doy)
                 }
-                "F"                => format!("{}", (day - 1) / 7 + 1), // day of week in month
-                "g"                => format!("{}", year * 365 + day),   // Julian day approx
+                "F" => format!("{}", (day - 1) / 7 + 1), // day of week in month
+                "g" => format!("{}", year * 365 + day),  // Julian day approx
                 // Weekday
                 "E" | "EE" | "EEE" | "eee" | "ccc" => SHORT_DAYS[wd_idx].into(),
-                "EEEE" | "eeee" | "cccc"            => LONG_DAYS[wd_idx].into(),
-                "EEEEE" | "eeeee" | "ccccc"         => SHORT_DAYS[wd_idx].chars().next()
-                                                          .unwrap().to_string(),
-                "e" | "ee" | "c" | "cc"             => format!("{}", wd + 1),
+                "EEEE" | "eeee" | "cccc" => LONG_DAYS[wd_idx].into(),
+                "EEEEE" | "eeeee" | "ccccc" => {
+                    SHORT_DAYS[wd_idx].chars().next().unwrap().to_string()
+                }
+                "e" | "ee" | "c" | "cc" => format!("{}", wd + 1),
                 // Period
-                "a"                => ampm.into(),
-                "aa" | "aaa"       => ampm_l.clone(),
+                "a" => ampm.into(),
+                "aa" | "aaa" => ampm_l.clone(),
                 // Hour
-                "h"                => format!("{}", hour12),
-                "hh"               => format!("{:02}", hour12),
-                "H"                => format!("{}", hours),
-                "HH"               => format!("{:02}", hours),
-                "k"                => format!("{}", if hours == 0 { 24 } else { hours }),
-                "kk"               => format!("{:02}", if hours == 0 { 24 } else { hours }),
-                "K"                => format!("{}", hours % 12),
-                "KK"               => format!("{:02}", hours % 12),
+                "h" => format!("{}", hour12),
+                "hh" => format!("{:02}", hour12),
+                "H" => format!("{}", hours),
+                "HH" => format!("{:02}", hours),
+                "k" => format!("{}", if hours == 0 { 24 } else { hours }),
+                "kk" => format!("{:02}", if hours == 0 { 24 } else { hours }),
+                "K" => format!("{}", hours % 12),
+                "KK" => format!("{:02}", hours % 12),
                 // Minute
-                "m"                => format!("{}", minutes),
-                "mm"               => format!("{:02}", minutes),
+                "m" => format!("{}", minutes),
+                "mm" => format!("{:02}", minutes),
                 // Second
-                "s"                => format!("{}", seconds),
-                "ss"               => format!("{:02}", seconds),
+                "s" => format!("{}", seconds),
+                "ss" => format!("{:02}", seconds),
                 "S" | "SS" | "SSS" => "000".into(), // fractional seconds
-                "A"                => format!("{}", hours * 3600000 + minutes * 60000
-                                              + seconds as i32 * 1000),
+                "A" => format!(
+                    "{}",
+                    hours * 3600000 + minutes * 60000 + seconds as i32 * 1000
+                ),
                 // Timezone
                 "z" | "zz" | "zzz" | "zzzz" => "GMT".into(),
-                "Z" | "ZZ" | "ZZZ"           => "+0000".into(),
-                "ZZZZ"                        => "GMT+00:00".into(),
-                "ZZZZZ"                       => "+00:00".into(),
-                "O" | "OO" | "OOO"            => "GMT".into(),
-                "OOOO"                        => "GMT+00:00".into(),
-                "v" | "vv" | "vv" | "vvvv"   => "GMT".into(),
-                "V" | "VV"                    => "UTC".into(),
-                "VVV"                         => "Unknown City".into(),
-                "VVVV"                        => "Coordinated Universal Time".into(),
-                "X" | "x"                     => "+00".into(),
-                "XX" | "xx"                   => "+0000".into(),
-                "XXX" | "xxx"                 => "+00:00".into(),
-                "XXXX" | "xxxx"               => "+000000".into(),
-                "XXXXX" | "xxxxx"             => "+00:00:00".into(),
+                "Z" | "ZZ" | "ZZZ" => "+0000".into(),
+                "ZZZZ" => "GMT+00:00".into(),
+                "ZZZZZ" => "+00:00".into(),
+                "O" | "OO" | "OOO" => "GMT".into(),
+                "OOOO" => "GMT+00:00".into(),
+                "v" | "vv" | "vv" | "vvvv" => "GMT".into(),
+                "V" | "VV" => "UTC".into(),
+                "VVV" => "Unknown City".into(),
+                "VVVV" => "Coordinated Universal Time".into(),
+                "X" | "x" => "+00".into(),
+                "XX" | "xx" => "+0000".into(),
+                "XXX" | "xxx" => "+00:00".into(),
+                "XXXX" | "xxxx" => "+000000".into(),
+                "XXXXX" | "xxxxx" => "+00:00:00".into(),
                 other => {
                     log!("NSDateFormatter: unknown token {:?}", other);
                     other.to_string()
@@ -484,15 +514,15 @@ pub fn apply_format(
 fn parse_date(fmt: &str, s: &str) -> Option<f64> {
     // Build a regex-like extractor by walking the format.
     // Supports the most common patterns apps use for parsing.
-    let mut year    = 2001i32;
-    let mut month   = 1i32;
-    let mut day     = 1i32;
-    let mut hours   = 0i32;
+    let mut year = 2001i32;
+    let mut month = 1i32;
+    let mut day = 1i32;
+    let mut hours = 0i32;
     let mut minutes = 0i32;
     let mut seconds = 0i32;
 
     let mut fmt_chars = fmt.chars().peekable();
-    let mut s_chars   = s.chars().peekable();
+    let mut s_chars = s.chars().peekable();
 
     while let Some(fc) = fmt_chars.next() {
         if fc == '\'' {
@@ -503,7 +533,9 @@ fn parse_date(fmt: &str, s: &str) -> Option<f64> {
             } else {
                 // consume until closing quote
                 while let Some(qc) = fmt_chars.next() {
-                    if qc == '\'' { break; }
+                    if qc == '\'' {
+                        break;
+                    }
                     s_chars.next(); // skip corresponding char
                 }
             }
@@ -521,15 +553,23 @@ fn parse_date(fmt: &str, s: &str) -> Option<f64> {
             }
             let num: i32 = num_str.parse().unwrap_or(0);
             match token.chars().next().unwrap() {
-                'y' | 'Y' => year    = if token.len() == 2 {
-                    if num >= 70 { 1900 + num } else { 2000 + num }
-                } else { num },
-                'M' | 'L' => month   = num,
-                'd'        => day     = num,
-                'H' | 'h' | 'k' | 'K' => hours   = num,
-                'm'        => minutes = num,
-                's'        => seconds = num,
-                _          => {} // skip other tokens
+                'y' | 'Y' => {
+                    year = if token.len() == 2 {
+                        if num >= 70 {
+                            1900 + num
+                        } else {
+                            2000 + num
+                        }
+                    } else {
+                        num
+                    }
+                }
+                'M' | 'L' => month = num,
+                'd' => day = num,
+                'H' | 'h' | 'k' | 'K' => hours = num,
+                'm' => minutes = num,
+                's' => seconds = num,
+                _ => {} // skip other tokens
             }
         } else {
             // Literal — skip matching char in string.
@@ -542,18 +582,18 @@ fn parse_date(fmt: &str, s: &str) -> Option<f64> {
     let days_since_epoch: i64 = {
         let y = year as i64;
         let m = month as i64;
-        let d = day   as i64;
+        let d = day as i64;
         // Days from 2001-01-01 to year-month-day.
         let era_days = |yr: i64, mo: i64, dy: i64| -> i64 {
             let mo = if mo <= 2 { mo + 12 } else { mo };
-            let yr = if mo <= 2 { yr - 1  } else { yr };
-            let c  = yr / 100;
+            let yr = if mo <= 2 { yr - 1 } else { yr };
+            let c = yr / 100;
             365 * yr + yr / 4 - c + c / 4 + (153 * mo + 2) / 5 + dy
         };
         era_days(y, m, d) - era_days(2001, 1, 1)
     };
     let ti = days_since_epoch as f64 * 86400.0
-        + hours   as f64 * 3600.0
+        + hours as f64 * 3600.0
         + minutes as f64 * 60.0
         + seconds as f64;
     Some(ti)

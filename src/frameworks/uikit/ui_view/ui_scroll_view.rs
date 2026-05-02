@@ -20,9 +20,9 @@ type UIScrollViewIndicatorStyle = NSInteger;
 type UIScrollViewKeyboardDismissMode = NSInteger;
 
 // UIScrollViewKeyboardDismissMode values
-const UIScrollViewKeyboardDismissModeNone:          NSInteger = 0;
-const UIScrollViewKeyboardDismissModeOnDrag:        NSInteger = 1;
-const UIScrollViewKeyboardDismissModeInteractive:   NSInteger = 2;
+const UIScrollViewKeyboardDismissModeNone: NSInteger = 0;
+const UIScrollViewKeyboardDismissModeOnDrag: NSInteger = 1;
+const UIScrollViewKeyboardDismissModeInteractive: NSInteger = 2;
 
 pub struct UIScrollViewHostObject {
     superclass: super::UIViewHostObject,
@@ -44,7 +44,7 @@ pub struct UIScrollViewHostObject {
     zoom_scale: CGFloat,
     keyboard_dismiss_mode: UIScrollViewKeyboardDismissMode,
     decelerates: bool,
-    scrolls_to_top: bool, // (с прошлого фикса)
+    scrolls_to_top: bool,             // (с прошлого фикса)
     can_cancel_content_touches: bool, // <-- ДОБАВЛЕНО
 }
 impl_HostObject_with_superclass!(UIScrollViewHostObject);
@@ -64,7 +64,10 @@ impl Default for UIScrollViewHostObject {
             delegate: nil,
             scroll_enabled: true,
             content_offset: CGPoint { x: 0.0, y: 0.0 },
-            content_size: CGSize { width: 0.0, height: 0.0 },
+            content_size: CGSize {
+                width: 0.0,
+                height: 0.0,
+            },
             content_inset: UIEdgeInsets::default(),
             shows_horizontal_scroll_indicator: true,
             shows_vertical_scroll_indicator: true,
@@ -185,7 +188,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setCanCancelContentTouches:(bool)value {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).can_cancel_content_touches = value;
 }
-    
+
 // MARK: - Scroll to top
 
 - (bool)scrollsToTop {
@@ -433,4 +436,3 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-

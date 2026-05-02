@@ -16,7 +16,7 @@ pub type CFTypeRef = objc::id;
 pub type CFTypeID = CFIndex;
 
 pub fn CFRetain(env: &mut Environment, object: CFTypeRef) -> CFTypeRef {
-    // ИСПРАВЛЕНИЕ: Убираем жесткий assert. Из-за отсутствующих функций 
+    // ИСПРАВЛЕНИЕ: Убираем жесткий assert. Из-за отсутствующих функций
     // сюда может прилетать NULL. Игнорируем, чтобы не крашить эмулятор.
     if object.is_null() {
         log_dbg!("Warning: CFRetain called with NULL. Ignoring to prevent crash.");
@@ -43,11 +43,7 @@ pub fn CFGetRetainCount(env: &mut Environment, object: CFTypeRef) -> CFIndex {
     count as CFIndex
 }
 
-pub fn CFEqual(
-    env: &mut Environment,
-    object1: CFTypeRef,
-    object2: CFTypeRef,
-) -> bool {
+pub fn CFEqual(env: &mut Environment, object1: CFTypeRef, object2: CFTypeRef) -> bool {
     // Если оба NULL — они равны (уже обрабатывается здесь)
     if object1 == object2 {
         return true;
@@ -57,7 +53,7 @@ pub fn CFEqual(
     if object1.is_null() || object2.is_null() {
         return false;
     }
-    
+
     // TODO: other classes
     let str_class: Class = msg_class![env; NSString class];
     let object1_class: Class = msg![env; object1 class];

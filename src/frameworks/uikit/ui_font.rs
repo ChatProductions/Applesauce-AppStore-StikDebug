@@ -10,9 +10,9 @@ use super::ui_graphics::UIGraphicsGetCurrentContext;
 use crate::font::{Font, TextAlignment, WrapMode};
 use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::{to_rust_string, get_static_str};
+use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{autorelease, id, msg, objc_classes, ClassExports, HostObject, nil, NSZonePtr};
+use crate::objc::{autorelease, id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 use crate::Environment;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -324,13 +324,17 @@ fn draw_font_glyph(
         }
     };
     if let Some(clip_x) = clip_x {
-        if glyph_rect.origin.x >= clip_x.end { return; }
+        if glyph_rect.origin.x >= clip_x.end {
+            return;
+        }
         if glyph_rect.origin.x + glyph_rect.size.width > clip_x.end {
             glyph_rect.size.width = clip_x.end - glyph_rect.origin.x;
         }
     }
     if let Some(clip_y) = clip_y {
-        if glyph_rect.origin.y >= clip_y.end { return; }
+        if glyph_rect.origin.y >= clip_y.end {
+            return;
+        }
         if glyph_rect.origin.y + glyph_rect.size.height > clip_y.end {
             glyph_rect.size.height = clip_y.end - glyph_rect.origin.y;
         }
@@ -365,7 +369,8 @@ pub fn draw_at_point(
     let width_and_line_break_mode =
         width_and_line_break_mode.map(|(width, ui_mode)| (width, convert_line_break_mode(ui_mode)));
     let clip_x = width_and_line_break_mode.map(|(width, _)| point.x..(point.x + width));
-    let (width, height) = font.calculate_text_size(host_object.size, text, width_and_line_break_mode);
+    let (width, height) =
+        font.calculate_text_size(host_object.size, text, width_and_line_break_mode);
     let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
     let fill_color = drawer.rgb_fill_color();
     font.draw(
@@ -374,9 +379,7 @@ pub fn draw_at_point(
         (point.x, point.y),
         width_and_line_break_mode,
         TextAlignment::Left,
-        |raster_glyph| {
-            draw_font_glyph(&mut drawer, raster_glyph, fill_color, clip_x.clone(), None)
-        },
+        |raster_glyph| draw_font_glyph(&mut drawer, raster_glyph, fill_color, clip_x.clone(), None),
     );
     CGSize { width, height }
 }
@@ -533,7 +536,7 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
         "Thonburi"                         => Some(FontKind::SansRegular),
         "Thonburi-Bold"                    => Some(FontKind::SansBold),
         "soopafre.ttf"                     => Some(FontKind::SansRegular),
-        
+
         _ => None,
     }
 }

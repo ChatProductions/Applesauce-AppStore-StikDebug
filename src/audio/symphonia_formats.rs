@@ -27,8 +27,12 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
     // Пробуем определить формат. Если не вышло - логируем реальную причину.
-    let mut probed = match symphonia::default::get_probe()
-        .probe(&Default::default(), mss, Default::default(), Default::default()) {
+    let mut probed = match symphonia::default::get_probe().probe(
+        &Default::default(),
+        mss,
+        Default::default(),
+        Default::default(),
+    ) {
         Ok(p) => p,
         Err(e) => {
             log!("Symphonia probe failed: {:?}", e);
@@ -52,13 +56,14 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
         })?;
 
     let track_id = track.id;
-    
+
     // Получаем AudioCodecParameters, так как мы уже убедились, что они есть.
     let audio_codec_params = track.codec_params.as_ref().unwrap().audio().unwrap();
 
     // Создаем декодер
     let mut decoder = match symphonia::default::get_codecs()
-        .make_audio_decoder(audio_codec_params, &Default::default()) {
+        .make_audio_decoder(audio_codec_params, &Default::default())
+    {
         Ok(d) => d,
         Err(e) => {
             log!("Symphonia failed to create audio decoder: {:?}", e);

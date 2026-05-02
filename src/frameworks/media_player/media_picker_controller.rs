@@ -6,21 +6,23 @@
 //! `MPMediaPickerController` and `MPMediaPickerControllerDelegate`.
 
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 
 // MARK: - MPMediaType bitmask constants (used by allowedMediaTypes)
 pub type MPMediaType = u32;
-pub const MP_MEDIA_TYPE_MUSIC:         MPMediaType = 1 << 0;
-pub const MP_MEDIA_TYPE_PODCAST:       MPMediaType = 1 << 1;
-pub const MP_MEDIA_TYPE_AUDIO_BOOK:    MPMediaType = 1 << 2;
-pub const MP_MEDIA_TYPE_ANY_AUDIO:     MPMediaType = 0x00ff;
-pub const MP_MEDIA_TYPE_MOVIE:         MPMediaType = 1 << 8;
-pub const MP_MEDIA_TYPE_TV_SHOW:       MPMediaType = 1 << 9;
+pub const MP_MEDIA_TYPE_MUSIC: MPMediaType = 1 << 0;
+pub const MP_MEDIA_TYPE_PODCAST: MPMediaType = 1 << 1;
+pub const MP_MEDIA_TYPE_AUDIO_BOOK: MPMediaType = 1 << 2;
+pub const MP_MEDIA_TYPE_ANY_AUDIO: MPMediaType = 0x00ff;
+pub const MP_MEDIA_TYPE_MOVIE: MPMediaType = 1 << 8;
+pub const MP_MEDIA_TYPE_TV_SHOW: MPMediaType = 1 << 9;
 pub const MP_MEDIA_TYPE_VIDEO_PODCAST: MPMediaType = 1 << 10;
-pub const MP_MEDIA_TYPE_MUSIC_VIDEO:   MPMediaType = 1 << 11;
-pub const MP_MEDIA_TYPE_VIDEO_ITunes:  MPMediaType = 1 << 12;
-pub const MP_MEDIA_TYPE_ANY_VIDEO:     MPMediaType = 0xff00;
-pub const MP_MEDIA_TYPE_ANY:           MPMediaType = !0;
+pub const MP_MEDIA_TYPE_MUSIC_VIDEO: MPMediaType = 1 << 11;
+pub const MP_MEDIA_TYPE_VIDEO_ITunes: MPMediaType = 1 << 12;
+pub const MP_MEDIA_TYPE_ANY_VIDEO: MPMediaType = 0xff00;
+pub const MP_MEDIA_TYPE_ANY: MPMediaType = !0;
 
 struct MPMediaPickerControllerHostObject {
     /// `MPMediaType` bitmask

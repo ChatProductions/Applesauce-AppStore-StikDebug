@@ -570,23 +570,20 @@ fn app_picker_inner(
             }),
         );
     }
-	fn update_device_family_buttons(
-		env: &mut Environment,
-		buttons: &[id],
-		value: Option<&str>,
-	) {
-		update_quick_option_buttons(
-			env,
-			buttons,
-			value.map_or(0, |v| match v {
-				"iphone" => 0,
-				"ipad" => 1,
-				"iphone5" => 2,
-				_ => 0,
-			})
-			.min(buttons.len() - 1),
-		);
-	}
+    fn update_device_family_buttons(env: &mut Environment, buttons: &[id], value: Option<&str>) {
+        update_quick_option_buttons(
+            env,
+            buttons,
+            value
+                .map_or(0, |v| match v {
+                    "iphone" => 0,
+                    "ipad" => 1,
+                    "iphone5" => 2,
+                    _ => 0,
+                })
+                .min(buttons.len() - 1),
+        );
+    }
     update_scale_hack_buttons(
         env,
         &quick_options_stuff.scale_hack_buttons,

@@ -7,9 +7,9 @@
 
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
-use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
-use crate::frameworks::core_graphics::{CGRect, CGPoint, CGSize};
+use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
+use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string;
 use crate::mem::{ConstPtr, SafeRead};
 use crate::objc::{autorelease, nil, objc_classes, ClassExports, HostObject};
@@ -21,10 +21,22 @@ pub type CFUUIDRef = CFTypeRef;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(C, packed)]
 pub struct CFUUIDBytes {
-    pub byte0:  u8, pub byte1:  u8, pub byte2:  u8, pub byte3:  u8,
-    pub byte4:  u8, pub byte5:  u8, pub byte6:  u8, pub byte7:  u8,
-    pub byte8:  u8, pub byte9:  u8, pub byte10: u8, pub byte11: u8,
-    pub byte12: u8, pub byte13: u8, pub byte14: u8, pub byte15: u8,
+    pub byte0: u8,
+    pub byte1: u8,
+    pub byte2: u8,
+    pub byte3: u8,
+    pub byte4: u8,
+    pub byte5: u8,
+    pub byte6: u8,
+    pub byte7: u8,
+    pub byte8: u8,
+    pub byte9: u8,
+    pub byte10: u8,
+    pub byte11: u8,
+    pub byte12: u8,
+    pub byte13: u8,
+    pub byte14: u8,
+    pub byte15: u8,
 }
 unsafe impl SafeRead for CFUUIDBytes {}
 
@@ -49,11 +61,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 fn alloc_uuid(env: &mut Environment, bytes: CFUUIDBytes) -> CFUUIDRef {
     let class = env.objc.get_known_class("_touchHLE_CFUUID", &mut env.mem);
-    env.objc.alloc_object(
-        class,
-        Box::new(CFUUIDHostObject { bytes }),
-        &mut env.mem,
-    )
+    env.objc
+        .alloc_object(class, Box::new(CFUUIDHostObject { bytes }), &mut env.mem)
 }
 
 /// Generate a pseudo-random UUID using a simple LCG seeded from the system
@@ -62,14 +71,15 @@ fn generate_uuid_bytes(env: &mut Environment) -> CFUUIDBytes {
     use std::time::{SystemTime, UNIX_EPOCH};
     // Use a static counter combined with time to reduce collisions within
     // a single session.
-    static COUNTER: std::sync::atomic::AtomicU64 =
-        std::sync::atomic::AtomicU64::new(0);
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let seed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64
-        ^ (count.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407));
+        ^ (count
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407));
 
     // Fill 16 bytes from two LCG steps.
     let a = seed
@@ -88,10 +98,22 @@ fn generate_uuid_bytes(env: &mut Environment) -> CFUUIDBytes {
     raw[8] = (raw[8] & 0x3f) | 0x80; // variant 10xx
 
     CFUUIDBytes {
-        byte0:  raw[0],  byte1:  raw[1],  byte2:  raw[2],  byte3:  raw[3],
-        byte4:  raw[4],  byte5:  raw[5],  byte6:  raw[6],  byte7:  raw[7],
-        byte8:  raw[8],  byte9:  raw[9],  byte10: raw[10], byte11: raw[11],
-        byte12: raw[12], byte13: raw[13], byte14: raw[14], byte15: raw[15],
+        byte0: raw[0],
+        byte1: raw[1],
+        byte2: raw[2],
+        byte3: raw[3],
+        byte4: raw[4],
+        byte5: raw[5],
+        byte6: raw[6],
+        byte7: raw[7],
+        byte8: raw[8],
+        byte9: raw[9],
+        byte10: raw[10],
+        byte11: raw[11],
+        byte12: raw[12],
+        byte13: raw[13],
+        byte14: raw[14],
+        byte15: raw[15],
     }
 }
 
@@ -118,21 +140,39 @@ fn parse_uuid_string(s: &str) -> Option<CFUUIDBytes> {
         raw[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok()?;
     }
     Some(CFUUIDBytes {
-        byte0:  raw[0],  byte1:  raw[1],  byte2:  raw[2],  byte3:  raw[3],
-        byte4:  raw[4],  byte5:  raw[5],  byte6:  raw[6],  byte7:  raw[7],
-        byte8:  raw[8],  byte9:  raw[9],  byte10: raw[10], byte11: raw[11],
-        byte12: raw[12], byte13: raw[13], byte14: raw[14], byte15: raw[15],
+        byte0: raw[0],
+        byte1: raw[1],
+        byte2: raw[2],
+        byte3: raw[3],
+        byte4: raw[4],
+        byte5: raw[5],
+        byte6: raw[6],
+        byte7: raw[7],
+        byte8: raw[8],
+        byte9: raw[9],
+        byte10: raw[10],
+        byte11: raw[11],
+        byte12: raw[12],
+        byte13: raw[13],
+        byte14: raw[14],
+        byte15: raw[15],
     })
 }
 
 // MARK: - Lifecycle
 
 pub fn CFUUIDRetain(env: &mut Environment, uuid: CFUUIDRef) -> CFUUIDRef {
-    if !uuid.is_null() { CFRetain(env, uuid) } else { uuid }
+    if !uuid.is_null() {
+        CFRetain(env, uuid)
+    } else {
+        uuid
+    }
 }
 
 pub fn CFUUIDRelease(env: &mut Environment, uuid: CFUUIDRef) {
-    if !uuid.is_null() { CFRelease(env, uuid); }
+    if !uuid.is_null() {
+        CFRelease(env, uuid);
+    }
 }
 
 // MARK: - Constructors
@@ -175,7 +215,10 @@ fn CFUUIDCreateFromString(
 fn CFUUIDCreateFromUUIDBytes(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    w0: u32, w1: u32, w2: u32, w3: u32,
+    w0: u32,
+    w1: u32,
+    w2: u32,
+    w3: u32,
 ) -> CFUUIDRef {
     let mut raw = [0u8; 16];
     raw[0..4].copy_from_slice(&w0.to_le_bytes());
@@ -184,12 +227,24 @@ fn CFUUIDCreateFromUUIDBytes(
     raw[12..16].copy_from_slice(&w3.to_le_bytes());
 
     let bytes = CFUUIDBytes {
-        byte0: raw[0], byte1: raw[1], byte2: raw[2], byte3: raw[3],
-        byte4: raw[4], byte5: raw[5], byte6: raw[6], byte7: raw[7],
-        byte8: raw[8], byte9: raw[9], byte10: raw[10], byte11: raw[11],
-        byte12: raw[12], byte13: raw[13], byte14: raw[14], byte15: raw[15],
+        byte0: raw[0],
+        byte1: raw[1],
+        byte2: raw[2],
+        byte3: raw[3],
+        byte4: raw[4],
+        byte5: raw[5],
+        byte6: raw[6],
+        byte7: raw[7],
+        byte8: raw[8],
+        byte9: raw[9],
+        byte10: raw[10],
+        byte11: raw[11],
+        byte12: raw[12],
+        byte13: raw[13],
+        byte14: raw[14],
+        byte15: raw[15],
     };
-    
+
     alloc_uuid(env, bytes)
 }
 
@@ -213,10 +268,22 @@ fn CFUUIDCreateString(
 fn CFUUIDGetUUIDBytes(env: &mut Environment, uuid: CFUUIDRef) -> CGRect {
     let b = if uuid.is_null() {
         CFUUIDBytes {
-            byte0: 0, byte1: 0, byte2: 0, byte3: 0,
-            byte4: 0, byte5: 0, byte6: 0, byte7: 0,
-            byte8: 0, byte9: 0, byte10: 0, byte11: 0,
-            byte12: 0, byte13: 0, byte14: 0, byte15: 0,
+            byte0: 0,
+            byte1: 0,
+            byte2: 0,
+            byte3: 0,
+            byte4: 0,
+            byte5: 0,
+            byte6: 0,
+            byte7: 0,
+            byte8: 0,
+            byte9: 0,
+            byte10: 0,
+            byte11: 0,
+            byte12: 0,
+            byte13: 0,
+            byte14: 0,
+            byte15: 0,
         }
     } else {
         env.objc.borrow::<CFUUIDHostObject>(uuid).bytes
@@ -230,8 +297,14 @@ fn CFUUIDGetUUIDBytes(env: &mut Environment, uuid: CFUUIDRef) -> CGRect {
 
     // Disguise it as a CGRect to satisfy the GuestRet trait
     CGRect {
-        origin: CGPoint { x: f32::from_bits(w0), y: f32::from_bits(w1) },
-        size: CGSize { width: f32::from_bits(w2), height: f32::from_bits(w3) }
+        origin: CGPoint {
+            x: f32::from_bits(w0),
+            y: f32::from_bits(w1),
+        },
+        size: CGSize {
+            width: f32::from_bits(w2),
+            height: f32::from_bits(w3),
+        },
     }
 }
 

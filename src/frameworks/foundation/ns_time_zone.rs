@@ -11,40 +11,40 @@ use crate::{msg, objc_classes};
 /// Minimal IANA-zone → UTC-offset-seconds + abbreviation table.
 /// DST is not modelled; offsets are standard (winter) offsets.
 static ZONE_TABLE: &[(&str, i32, &str)] = &[
-    ("UTC",              0,       "UTC"),
-    ("GMT",              0,       "GMT"),
-    ("America/New_York", -18000,  "EST"),
-    ("America/Chicago",  -21600,  "CST"),
-    ("America/Denver",   -25200,  "MST"),
-    ("America/Phoenix",  -25200,  "MST"),
+    ("UTC", 0, "UTC"),
+    ("GMT", 0, "GMT"),
+    ("America/New_York", -18000, "EST"),
+    ("America/Chicago", -21600, "CST"),
+    ("America/Denver", -25200, "MST"),
+    ("America/Phoenix", -25200, "MST"),
     ("America/Los_Angeles", -28800, "PST"),
-    ("America/Anchorage",   -32400, "AKST"),
-    ("Pacific/Honolulu",    -36000, "HST"),
-    ("Canada/Eastern",   -18000,  "EST"),
-    ("Canada/Central",   -21600,  "CST"),
-    ("Canada/Mountain",  -25200,  "MST"),
-    ("Canada/Pacific",   -28800,  "PST"),
-    ("Europe/London",    0,       "GMT"),
-    ("Europe/Paris",     3600,    "CET"),
-    ("Europe/Berlin",    3600,    "CET"),
-    ("Europe/Warsaw",    3600,    "CET"),
-    ("Europe/Helsinki",  7200,    "EET"),
-    ("Europe/Moscow",    10800,   "MSK"),
-    ("Asia/Kolkata",     19800,   "IST"),
-    ("Asia/Shanghai",    28800,   "CST"),
-    ("Asia/Tokyo",       32400,   "JST"),
-    ("Asia/Seoul",       32400,   "KST"),
-    ("Australia/Sydney", 36000,   "AEST"),
+    ("America/Anchorage", -32400, "AKST"),
+    ("Pacific/Honolulu", -36000, "HST"),
+    ("Canada/Eastern", -18000, "EST"),
+    ("Canada/Central", -21600, "CST"),
+    ("Canada/Mountain", -25200, "MST"),
+    ("Canada/Pacific", -28800, "PST"),
+    ("Europe/London", 0, "GMT"),
+    ("Europe/Paris", 3600, "CET"),
+    ("Europe/Berlin", 3600, "CET"),
+    ("Europe/Warsaw", 3600, "CET"),
+    ("Europe/Helsinki", 7200, "EET"),
+    ("Europe/Moscow", 10800, "MSK"),
+    ("Asia/Kolkata", 19800, "IST"),
+    ("Asia/Shanghai", 28800, "CST"),
+    ("Asia/Tokyo", 32400, "JST"),
+    ("Asia/Seoul", 32400, "KST"),
+    ("Australia/Sydney", 36000, "AEST"),
     // Abbreviation aliases (looked up by abbreviation key)
-    ("EST",  -18000, "EST"),
-    ("CST",  -21600, "CST"),
-    ("MST",  -25200, "MST"),
-    ("PST",  -28800, "PST"),
-    ("JST",   32400, "JST"),
-    ("IST",   19800, "IST"),
-    ("CET",   3600,  "CET"),
-    ("EET",   7200,  "EET"),
-    ("MSK",   10800, "MSK"),
+    ("EST", -18000, "EST"),
+    ("CST", -21600, "CST"),
+    ("MST", -25200, "MST"),
+    ("PST", -28800, "PST"),
+    ("JST", 32400, "JST"),
+    ("IST", 19800, "IST"),
+    ("CET", 3600, "CET"),
+    ("EET", 7200, "EET"),
+    ("MSK", 10800, "MSK"),
 ];
 
 fn offset_for_name(name: &str) -> Option<i32> {
@@ -72,8 +72,7 @@ struct NSTimeZoneHostObject {
 }
 impl HostObject for NSTimeZoneHostObject {}
 
-pub const CLASSES: ClassExports = objc_classes!
-{
+pub const CLASSES: ClassExports = objc_classes! {
 (env, this, _cmd);
 
 @implementation NSTimeZone: NSObject
@@ -161,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes!
 + (id)abbreviationDictionary {
     // ИЗМЕНЕНО: Используем один вектор пар (ключ, значение)
     let mut keys_and_vals: Vec<(id, id)> = Vec::new();
-    
+
     // Collect unique abbreviations (first occurrence wins).
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for &(iana, _, abbr) in ZONE_TABLE {
@@ -172,7 +171,7 @@ pub const CLASSES: ClassExports = objc_classes!
             ));
         }
     }
-    
+
     let dict = ns_dictionary::dict_from_keys_and_objects(env, &keys_and_vals);
     autorelease(env, dict)
 }
@@ -255,4 +254,3 @@ pub const CLASSES: ClassExports = objc_classes!
 @end
 
 };
-

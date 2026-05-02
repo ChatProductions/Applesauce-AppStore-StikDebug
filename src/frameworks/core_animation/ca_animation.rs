@@ -383,4 +383,3 @@ pub fn get_animation_start_time(
         .borrow_mut::<CAAnimationHostObject>(animation)
         .started_at
 }
-

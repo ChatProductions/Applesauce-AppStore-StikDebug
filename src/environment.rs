@@ -293,55 +293,55 @@ impl Environment {
                     // This appears to be an older way set the orientation.
                     // From testing, it seems to correspond to left.
                     "UIInterfaceOrientationLandscape" => window::DeviceOrientation::LandscapeLeft,
-                    
+
                     // ДОБАВЛЯЕМ СЮДА ПРИВЯЗКУ К ОБЫЧНОМУ ПОРТРЕТУ:
                     "UIInterfaceOrientationPortraitUpsideDown" => {
                         window::DeviceOrientation::Portrait
                     }
-                    
+
                     other => unimplemented!("Unsupported startup orientation: {:?}", other),
                 };
                 log!("App needs non-portrait user interface orientation {:?}, applying device orientation {:?}.", non_portrait_orientation, options.initial_orientation);
             }
         }
 
-let device_family_override = options.device_family;
-let device_family_array = bundle.device_family_array();
-let device_family = match device_family_array.len() {
-    // iPhone only or iPad only
-    1 => {
-        let only_supported = device_family_array[0];
-        let mut result = only_supported;  // ← mutable variable for flexible return
-        
-        if let Some(dfo) = device_family_override {
-            // Allow iPhone5 override unconditionally when explicitly requested
-            if dfo == DeviceFamily::iPhone5 {
-                result = DeviceFamily::iPhone5;  // ← assign, don't return
-            } else if dfo != only_supported {
-                log!("Warning: User-defined {:?} device family override is not supported by the app! ignoring", dfo);
+        let device_family_override = options.device_family;
+        let device_family_array = bundle.device_family_array();
+        let device_family = match device_family_array.len() {
+            // iPhone only or iPad only
+            1 => {
+                let only_supported = device_family_array[0];
+                let mut result = only_supported; // ← mutable variable for flexible return
+
+                if let Some(dfo) = device_family_override {
+                    // Allow iPhone5 override unconditionally when explicitly requested
+                    if dfo == DeviceFamily::iPhone5 {
+                        result = DeviceFamily::iPhone5; // ← assign, don't return
+                    } else if dfo != only_supported {
+                        log!("Warning: User-defined {:?} device family override is not supported by the app! ignoring", dfo);
+                    }
+                }
+                result // ← return the final value
             }
-        }
-        result  // ← return the final value
-    }
-    // iPhone and iPad
-    2 => {
-        if let Some(dfo) = device_family_override {
-            // Allow iPhone5 override unconditionally when explicitly requested
-            if dfo == DeviceFamily::iPhone5 {
-                DeviceFamily::iPhone5  // ← direct return works here (last expr in branch)
-            } else {
-                assert!(device_family_array.contains(&dfo));
-                dfo
+            // iPhone and iPad
+            2 => {
+                if let Some(dfo) = device_family_override {
+                    // Allow iPhone5 override unconditionally when explicitly requested
+                    if dfo == DeviceFamily::iPhone5 {
+                        DeviceFamily::iPhone5 // ← direct return works here (last expr in branch)
+                    } else {
+                        assert!(device_family_array.contains(&dfo));
+                        dfo
+                    }
+                } else {
+                    assert!(device_family_array.contains(&DeviceFamily::iPhone));
+                    DeviceFamily::iPhone
+                }
             }
-        } else {
-            assert!(device_family_array.contains(&DeviceFamily::iPhone));
-            DeviceFamily::iPhone
-        }
-    }
-    _ => unreachable!(),
-};
-	log!("{:?} device family is chosen.", device_family);
-	options.device_family = Some(device_family);
+            _ => unreachable!(),
+        };
+        log!("{:?} device family is chosen.", device_family);
+        options.device_family = Some(device_family);
 
         let window = if options.headless {
             None
@@ -414,18 +414,16 @@ let device_family = match device_family_array.len() {
 
                 let name = dylib_path.file_name().unwrap();
                 let dylib_slide = match name {
-                    "libstdc++.6.dylib" |
-                    "libstdc++.6.0.9.dylib" => 0x3748a000,
-                    
+                    "libstdc++.6.dylib" | "libstdc++.6.0.9.dylib" => 0x3748a000,
+
                     // ДОБАВИТЬ ЭТО: Честный базовый адрес для libc++ (iOS 5.0+)
                     "libc++.1.dylib" => 0x38000000,
                     // На случай, если игра также потянет за собой libc++abi
-                    "libc++abi.dylib" => 0x38100000, 
-					"libiconv.2.dylib" => 0x32000000,
-                    
+                    "libc++abi.dylib" => 0x38100000,
+                    "libiconv.2.dylib" => 0x32000000,
+
                     "libgcc_s.1.dylib" => 0x30000000,
-                    "libz.1.dylib" |
-                    "libz.1.2.3.dylib" | "libz.dylib" | "libz.1.1.3.dylib" => {
+                    "libz.1.dylib" | "libz.1.2.3.dylib" | "libz.dylib" | "libz.1.1.3.dylib" => {
                         // We build `libz` from sources with our OSS toolchain,
                         // the base address is already set and sliding is not
                         // needed.
@@ -1377,8 +1375,7 @@ let device_family = match device_family_array.len() {
                         );
                     }
                     match self.threads[self.current_thread].blocked_by {
-                        ThreadBlock::NotBlocked |
-                        ThreadBlock::WaitingForDebugger(_) => {}
+                        ThreadBlock::NotBlocked | ThreadBlock::WaitingForDebugger(_) => {}
                         _ => {
                             let old_thread = self.current_thread;
                             let next_thread = self.schedule_next_thread();
@@ -1499,11 +1496,11 @@ let device_family = match device_family_array.len() {
         self.current_thread = new_thread;
     }
 
-        #[cold]
+    #[cold]
     /// Let the debugger handle a CPU error, or panic if there's no debugger
     /// connected. Returns [true] if the CPU should step and then resume
     /// debugging, or [false] if it should resume normal execution.
-   fn debug_cpu_error(&mut self, error: cpu::CpuError) {
+    fn debug_cpu_error(&mut self, error: cpu::CpuError) {
         let instruction_len = if (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
             2
         } else {
@@ -1518,9 +1515,9 @@ let device_family = match device_family_array.len() {
             // GDB to detect its software breakpoints. For some reason this
             // isn't correct for memory errors however.
             self.cpu.regs_mut()[cpu::Cpu::PC] -= instruction_len;
-		}
-	   
-            if self.gdb_server.is_none() {
+        }
+
+        if self.gdb_server.is_none() {
             // Bypass crashes without implementing stubs for every framework.
             // Games often trigger UndefinedInstruction (abort/__builtin_trap)
             // when an API returns nil or an otherwise unexpected value.
@@ -1632,7 +1629,7 @@ let device_family = match device_family_array.len() {
                             svc,
                         ) {
                             f.call_from_guest(self);
-                            
+
                             // ORIGINAL LOGIC MERGED: Stack zeroing
                             if svc & dyld::Dyld::SVC_LAZY_LINK_RET_FLAG == 0 {
                                 if let Some(len) = self.options.zero_stack_after_guest_to_host_call
@@ -1659,22 +1656,22 @@ let device_family = match device_family_array.len() {
                             ThreadNextAction::Continue
                         }
                     }
-                                        dyld::Dyld::SVC_THREAD_EXIT => {
+                    dyld::Dyld::SVC_THREAD_EXIT => {
                         if self.current_thread == 0 {
                             log_no_panic!("Main thread exited normally (or crashed early). Returning to host.");
                             return ThreadNextAction::ReturnToHost;
                         } else {
                             log_dbg!("Thread {} has completed execution.", self.current_thread);
                             self.threads[self.current_thread].active = false;
-                            
+
                             // Мы должны сменить поток, так как текущий завершился
                             let next_thread = self.schedule_next_thread();
                             if next_thread == self.current_thread {
                                 log_no_panic!("All threads exited. Returning to host.");
                                 return ThreadNextAction::ReturnToHost;
                             }
-                            
-                            // Возвращаемся в цикл (run_inner вызовет yield_thread, 
+
+                            // Возвращаемся в цикл (run_inner вызовет yield_thread,
                             // а потом run переключит поток)
                             return ThreadNextAction::Continue;
                         }
@@ -1861,15 +1858,10 @@ let device_family = match device_family_array.len() {
                                         thread_id,
                                         cond
                                     );
-                                    self.threads[thread_id].blocked_by =
-                                        ThreadBlock::Mutex(mutex);
+                                    self.threads[thread_id].blocked_by = ThreadBlock::Mutex(mutex);
                                 } else {
-                                    self.threads[thread_id].blocked_by =
-                                        ThreadBlock::NotBlocked;
-                                    self.relock_unblocked_mutex_for_thread(
-                                        thread_id,
-                                        mutex,
-                                    );
+                                    self.threads[thread_id].blocked_by = ThreadBlock::NotBlocked;
+                                    self.relock_unblocked_mutex_for_thread(thread_id, mutex);
                                     return thread_id;
                                 }
                             } else {
@@ -2194,5 +2186,3 @@ mod dylib_sorting_tests {
         );
     }
 }
-
-

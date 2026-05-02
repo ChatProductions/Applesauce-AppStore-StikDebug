@@ -497,16 +497,32 @@ fn sqlite3_bind_parameter_index(_env: &mut Environment, arg1: f64, arg2: f64) ->
 fn sqlite3_bind_null(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
     arg1.min(arg2)
 }
-fn _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+fn _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm(
+    _env: &mut Environment,
+    arg1: f64,
+    arg2: f64,
+) -> f64 {
     arg1.min(arg2)
 }
-fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE7reserveEm(
+    _env: &mut Environment,
+    arg1: f64,
+    arg2: f64,
+) -> f64 {
     arg1.min(arg2)
 }
-fn _ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+fn _ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(
+    _env: &mut Environment,
+    arg1: f64,
+    arg2: f64,
+) -> f64 {
     arg1.min(arg2)
 }
-fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(_env: &mut Environment, arg1: f64, arg2: f64) -> f64 {
+fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(
+    _env: &mut Environment,
+    arg1: f64,
+    arg2: f64,
+) -> f64 {
     arg1.min(arg2)
 }
 
@@ -655,14 +671,14 @@ fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
     // Проверяем, создавали ли мы уже этот объект
     if env.libc_state.math.timer_manager_instance == 0 {
         // Выделяем память под объект TimerManager (1024 байта с запасом).
-        // Используем calloc, чтобы вся память была заполнена нулями — 
+        // Используем calloc, чтобы вся память была заполнена нулями —
         // это предотвратит краш, если игра попытается прочитать внутренние поля класса.
         let ptr = env.mem.calloc(1024);
         env.libc_state.math.timer_manager_instance = ptr.to_bits();
-        
+
         log_dbg!("Allocated TimerManager singleton at {:#x}", ptr.to_bits());
     }
-    
+
     // Возвращаем один и тот же валидный указатель при каждом вызове
     env.libc_state.math.timer_manager_instance
 }

@@ -38,7 +38,7 @@ struct NSConditionLockHostObject {
     condition: NSInteger,
     /// Whether the lock is currently held.
     locked: bool,
-    /// Потоки, ожидающие захвата. Option<NSInteger> указывает, ждет ли поток 
+    /// Потоки, ожидающие захвата. Option<NSInteger> указывает, ждет ли поток
     /// конкретного состояния (Some) или просто освобождения блокировки (None).
     waiting_threads: VecDeque<(crate::environment::ThreadId, Option<NSInteger>)>,
 }
@@ -108,7 +108,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())unlock {
     let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
     host.locked = false;
-    
+
     // Будим первый поток в очереди
     if let Some(thread) = host.lock_waiting_threads.pop_front() {
         env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
@@ -125,14 +125,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         if let Some(thread) = host.lock_waiting_threads.pop_front() {
             env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
         }
-        
+
         let current_thread = env.current_thread;
         host.waiting_threads.push_back(current_thread);
     }
-    
+
     // 2. Засыпаем, пока нас не разбудит `signal` или `broadcast`
     env.suspend_thread(env.current_thread);
-    
+
     // 3. По правилам POSIX, после пробуждения необходимо снова захватить мьютекс
     () = msg![env; this lock];
 }
@@ -142,7 +142,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if ti <= 0.0 {
         return false;
     }
-    
+
     // 1. Освобождаем блокировку
     {
         let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
@@ -150,15 +150,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         if let Some(thread) = host.lock_waiting_threads.pop_front() {
             env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
         }
-        
+
         let current_thread = env.current_thread;
         host.waiting_threads.push_back(current_thread);
     }
-    
+
     // 2. Засыпаем с таймаутом
     let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
     env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
-    
+
     // 3. Проверяем, проснулись ли мы сами (таймаут) или нас разбудили
     let mut timed_out = false;
     {
@@ -169,10 +169,10 @@ pub const CLASSES: ClassExports = objc_classes! {
             timed_out = true;
         }
     }
-    
+
     // 4. Захватываем блокировку обратно
     () = msg![env; this lock];
-    
+
     !timed_out
 }
 
@@ -283,7 +283,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())unlock {
     let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     host.locked = false;
-    
+
     // Ищем первый поток, который ждет освобождения или ждет текущего condition
     let mut to_wake = None;
     for (i, &(_, cond)) in host.waiting_threads.iter().enumerate() {
@@ -292,7 +292,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             break;
         }
     }
-    
+
     if let Some(i) = to_wake {
         let (thread, _) = host.waiting_threads.remove(i).unwrap();
         env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
@@ -326,22 +326,22 @@ pub const CLASSES: ClassExports = objc_classes! {
                 return true;
             }
         }
-        
+
         let ti: f64 = msg![env; limit_date timeIntervalSinceNow];
         if ti <= 0.0 {
             return false;
         }
-        
+
         {
             let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             let current_thread = env.current_thread;
             host.waiting_threads.push_back((current_thread, Some(condition)));
         }
-        
+
         let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
         env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
-        
-        // Удаляем себя из очереди, если мы проснулись по таймауту 
+
+        // Удаляем себя из очереди, если мы проснулись по таймауту
         // (если разбудили — следующая итерация захватит блокировку)
         {
             let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
@@ -375,7 +375,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     host.locked = false;
     host.condition = condition;
-    
+
     // Ищем первый поток, который ждет нового condition
     let mut to_wake = None;
     for (i, &(_, cond)) in host.waiting_threads.iter().enumerate() {
@@ -384,7 +384,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             break;
         }
     }
-    
+
     if let Some(i) = to_wake {
         let (thread, _) = host.waiting_threads.remove(i).unwrap();
         env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;

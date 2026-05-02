@@ -8,8 +8,8 @@
 //! AddressBook.framework stub
 
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
-use crate::frameworks::core_foundation::CFIndex;
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
+use crate::frameworks::core_foundation::CFIndex;
 use crate::mem::{MutVoidPtr, Ptr};
 use crate::Environment;
 
@@ -49,10 +49,7 @@ fn ABAddressBookSave(
     false
 }
 
-fn ABAddressBookHasUnsavedChanges(
-    _env: &mut Environment,
-    _address_book: ABAddressBookRef,
-) -> bool {
+fn ABAddressBookHasUnsavedChanges(_env: &mut Environment, _address_book: ABAddressBookRef) -> bool {
     false
 }
 
@@ -75,10 +72,7 @@ fn ABAddressBookGetAuthorizationStatus(_env: &mut Environment) -> i32 {
 
 // MARK: - Person count / lookup
 
-fn ABAddressBookGetPersonCount(
-    _env: &mut Environment,
-    _address_book: ABAddressBookRef,
-) -> i32 {
+fn ABAddressBookGetPersonCount(_env: &mut Environment, _address_book: ABAddressBookRef) -> i32 {
     0
 }
 
@@ -187,18 +181,12 @@ fn ABPersonCreate(_env: &mut Environment) -> ABRecordRef {
     Ptr::null()
 }
 
-fn ABPersonCreateInSource(
-    _env: &mut Environment,
-    _source: ABRecordRef,
-) -> ABRecordRef {
+fn ABPersonCreateInSource(_env: &mut Environment, _source: ABRecordRef) -> ABRecordRef {
     log!("ABPersonCreateInSource stubbed, returning NULL");
     Ptr::null()
 }
 
-fn ABPersonGetTypeOfProperty(
-    _env: &mut Environment,
-    _property: ABPropertyID,
-) -> i32 {
+fn ABPersonGetTypeOfProperty(_env: &mut Environment, _property: ABPropertyID) -> i32 {
     0
 }
 
@@ -372,7 +360,10 @@ pub const CONSTANTS: ConstantExports = &[
     ("_kABPersonNicknameProperty", HostConstant::NullPtr),
     ("_kABPersonFirstNamePhoneticProperty", HostConstant::NullPtr),
     ("_kABPersonLastNamePhoneticProperty", HostConstant::NullPtr),
-    ("_kABPersonMiddleNamePhoneticProperty", HostConstant::NullPtr),
+    (
+        "_kABPersonMiddleNamePhoneticProperty",
+        HostConstant::NullPtr,
+    ),
     ("_kABPersonOrganizationProperty", HostConstant::NullPtr),
     ("_kABPersonJobTitleProperty", HostConstant::NullPtr),
     ("_kABPersonDepartmentProperty", HostConstant::NullPtr),

@@ -21,17 +21,17 @@ struct NSOperationHostObject {
     // State tracking
     state: OperationState,
     cancelled: bool,
-    
+
     // Dependencies
     dependencies: id,
-    
+
     // Completion block
     completion_block: id,
-    
+
     // Properties
     name: id,
     queue_priority: i32,
-    
+
     // NSInvocationOperation specific fields
     target: id,
     selector: Option<SEL>,
@@ -83,13 +83,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             host_object.arg,
         )
     };
-    
+
     release(env, deps);
     release(env, completion);
     release(env, name);
     release(env, target);
     release(env, arg);
-    
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -101,20 +101,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     if state != OperationState::Ready {
         return;
     }
-    
+
     // Check if cancelled before starting
     let cancelled = env.objc.borrow::<NSOperationHostObject>(this).cancelled;
     if cancelled {
         let is_finished_key = "isFinished\0".as_ptr() as u32;
         // Извлекаем в переменную с явным указанием типа
         let finished_str: id = msg_class![env; NSString stringWithUTF8String:is_finished_key];
-        
+
         () = msg![env; this willChangeValueForKey:finished_str];
         env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
         () = msg![env; this didChangeValueForKey:finished_str];
         return;
     }
-    
+
     // Wait for dependencies
     let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
     if deps != nil {
@@ -129,22 +129,22 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
         }
     }
-    
+
     // Transition to executing
     let is_executing_key = "isExecuting\0".as_ptr() as u32;
     let executing_str: id = msg_class![env; NSString stringWithUTF8String:is_executing_key];
-    
+
     () = msg![env; this willChangeValueForKey:executing_str];
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Executing;
     () = msg![env; this didChangeValueForKey:executing_str];
-    
+
     // Execute main
     () = msg![env; this main];
-    
+
     // Transition to finished
     let is_finished_key = "isFinished\0".as_ptr() as u32;
     let finished_str: id = msg_class![env; NSString stringWithUTF8String:is_finished_key];
-    
+
     // Re-create the executing string for the finished transition
     let is_executing_key_2 = "isExecuting\0".as_ptr() as u32;
     let executing_str_2: id = msg_class![env; NSString stringWithUTF8String:is_executing_key_2];
@@ -154,7 +154,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSOperationHostObject>(this).state = OperationState::Finished;
     () = msg![env; this didChangeValueForKey:executing_str_2];
     () = msg![env; this didChangeValueForKey:finished_str];
-    
+
     // Call completion block if present
     let completion = env.objc.borrow::<NSOperationHostObject>(this).completion_block;
     if completion != nil {
@@ -174,7 +174,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if !was_cancelled {
         let is_cancelled_key = "isCancelled\0".as_ptr() as u32;
         let cancelled_str: id = msg_class![env; NSString stringWithUTF8String:is_cancelled_key];
-        
+
         () = msg![env; this willChangeValueForKey:cancelled_str];
         env.objc.borrow_mut::<NSOperationHostObject>(this).cancelled = true;
         () = msg![env; this didChangeValueForKey:cancelled_str];
@@ -192,7 +192,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if state != OperationState::Ready {
         return false;
     }
-    
+
     // Check if all dependencies are finished
     let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
     if deps != nil {
@@ -207,7 +207,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
         }
     }
-    
+
     true
 }
 
@@ -233,16 +233,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     if op == nil {
         return;
     }
-    
+
     // Don't add dependency if already executing or finished
     let state = env.objc.borrow::<NSOperationHostObject>(this).state;
     if state != OperationState::Ready {
         log!("Warning: Attempting to add dependency to operation that is not ready");
         return;
     }
-    
+
     let deps = env.objc.borrow::<NSOperationHostObject>(this).dependencies;
-    
+
     let deps_arr = if deps == nil {
         let new_arr: id = msg_class![env; NSMutableArray alloc];
         let new_arr: id = msg![env; new_arr init];
@@ -251,7 +251,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         deps
     };
-    
+
     // Check if dependency already exists
     let contains: bool = msg![env; deps_arr containsObject:op];
     if !contains {
@@ -284,7 +284,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setCompletionBlock:(id)block {
     let old_block = env.objc.borrow::<NSOperationHostObject>(this).completion_block;
     release(env, old_block);
-    
+
     if block != nil {
         retain(env, block);
     }
@@ -301,7 +301,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setName:(id)name {
     let old_name = env.objc.borrow::<NSOperationHostObject>(this).name;
     release(env, old_name);
-    
+
     if name != nil {
         retain(env, name);
     }
@@ -340,7 +340,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if arg != nil {
             retain(env, arg);
         }
-        
+
         let host_object = env.objc.borrow_mut::<NSOperationHostObject>(this);
         host_object.target = target;
         host_object.selector = Some(sel);
@@ -431,10 +431,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         let host_object = env.objc.borrow::<NSOperationQueueHostObject>(this);
         (host_object.operations, host_object.name)
     };
-    
+
     release(env, operations);
     release(env, name);
-    
+
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -444,12 +444,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     if op == nil {
         return;
     }
-    
+
     retain(env, op);
-    
+
     let operations = env.objc.borrow::<NSOperationQueueHostObject>(this).operations;
     () = msg![env; operations addObject:op];
-    
+
     // Execute immediately if not suspended
     let suspended = env.objc.borrow::<NSOperationQueueHostObject>(this).suspended;
     if !suspended {
@@ -458,7 +458,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             () = msg![env; op start];
         }
     }
-    
+
     // Remove from queue after execution
     () = msg![env; operations removeObject:op];
     release(env, op);
@@ -468,13 +468,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     if ops == nil {
         return;
     }
-    
+
     let count: usize = msg![env; ops count];
     for i in 0..count {
         let op: id = msg![env; ops objectAtIndex:i];
         () = msg![env; this addOperation:op];
     }
-    
+
     if wait {
         () = msg![env; this waitUntilAllOperationsAreFinished];
     }
@@ -484,7 +484,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if block == nil {
         return;
     }
-    
+
     log!("Warning: NSOperationQueue addOperationWithBlock: requires NSBlockOperation support");
     // Would create an NSBlockOperation and add it
 }
@@ -493,19 +493,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setSuspended:(bool)suspended {
     env.objc.borrow_mut::<NSOperationQueueHostObject>(this).suspended = suspended;
-    
+
     // If resuming, start ready operations
     if !suspended {
         let operations = env.objc.borrow::<NSOperationQueueHostObject>(this).operations;
         let count: usize = msg![env; operations count];
-        
+
         for i in 0..count {
             let op: id = msg![env; operations objectAtIndex:i];
             if op != nil {
                 let is_ready: bool = msg![env; op isReady];
                 let is_executing: bool = msg![env; op isExecuting];
                 let is_finished: bool = msg![env; op isFinished];
-                
+
                 if is_ready && !is_executing && !is_finished {
                     () = msg![env; op start];
                 }
@@ -531,7 +531,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())cancelAllOperations {
     let operations = env.objc.borrow::<NSOperationQueueHostObject>(this).operations;
     let count: usize = msg![env; operations count];
-    
+
     for i in 0..count {
         let op: id = msg![env; operations objectAtIndex:i];
         if op != nil {
@@ -563,7 +563,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setName:(id)name {
     let old_name = env.objc.borrow::<NSOperationQueueHostObject>(this).name;
     release(env, old_name);
-    
+
     if name != nil {
         retain(env, name);
     }

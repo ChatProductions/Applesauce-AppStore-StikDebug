@@ -171,7 +171,8 @@ impl super::ObjC {
         host_object: Box<dyn AnyHostObject>,
         mem: &mut Mem,
     ) -> id {
-        let instance_size = self.get_host_object(isa)
+        let instance_size = self
+            .get_host_object(isa)
             .and_then(|h| h.as_any().downcast_ref::<ClassHostObject>())
             .map(|c| c.instance_size)
             .unwrap_or(guest_size_of::<objc_object>());
@@ -200,7 +201,9 @@ impl super::ObjC {
         guest_object: id,
         host_object: Box<dyn AnyHostObject>,
     ) {
-        if guest_object == nil { return; }
+        if guest_object == nil {
+            return;
+        }
         self.objects.insert(
             guest_object,
             HostObjectEntry {
@@ -211,7 +214,9 @@ impl super::ObjC {
     }
 
     pub fn get_host_object(&self, object: id) -> Option<&dyn AnyHostObject> {
-        if object == nil { return None; }
+        if object == nil {
+            return None;
+        }
         self.objects.get(&object).map(|entry| &*entry.host_object)
     }
 
@@ -282,15 +287,20 @@ impl super::ObjC {
 
     pub fn get_refcount(&mut self, object: id) -> NonZeroU32 {
         let default_rc = NonZeroU32::new(1).unwrap();
-        if object == nil { return default_rc; }
-        
-        self.objects.get(&object)
+        if object == nil {
+            return default_rc;
+        }
+
+        self.objects
+            .get(&object)
             .and_then(|e| e.refcount)
             .unwrap_or(default_rc)
     }
 
     pub fn increment_refcount(&mut self, object: id) {
-        if object == nil { return; }
+        if object == nil {
+            return;
+        }
         if let Some(entry) = self.objects.get_mut(&object) {
             if let Some(refcount) = entry.refcount.as_mut() {
                 if let Some(new_rc) = refcount.get().checked_add(1) {
@@ -302,7 +312,9 @@ impl super::ObjC {
 
     #[must_use]
     pub fn decrement_refcount(&mut self, object: id) -> bool {
-        if object == nil { return false; }
+        if object == nil {
+            return false;
+        }
         if let Some(entry) = self.objects.get_mut(&object) {
             if let Some(refcount) = entry.refcount.as_mut() {
                 if refcount.get() == 1 {
@@ -317,8 +329,10 @@ impl super::ObjC {
     }
 
     pub fn dealloc_object(&mut self, object: id, mem: &mut Mem) {
-        if object == nil { return; }
-        
+        if object == nil {
+            return;
+        }
+
         if let Some(entry) = self.objects.remove(&object) {
             std::mem::drop(entry.host_object);
             mem.free(object.cast());

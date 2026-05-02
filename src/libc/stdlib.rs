@@ -52,7 +52,10 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     // Твой стандартный лимит TouchHLE (обычно 128 МБ - 0x0800_0000)
     // Если в твоем файле лимит другой - оставь свою цифру.
     if size > 0x0800_0000 {
-        log!("TouchHLE::libc::stdlib: malloc({:#x}) refused as out of range — returning NULL", size);
+        log!(
+            "TouchHLE::libc::stdlib: malloc({:#x}) refused as out of range — returning NULL",
+            size
+        );
         set_errno(env, crate::libc::errno::ENOMEM);
         return MutVoidPtr::null();
     }
@@ -85,7 +88,12 @@ fn NSZoneMalloc(env: &mut Environment, _zone: id, mut size: GuestUSize) -> MutVo
     env.mem.alloc(size)
 }
 
-fn NSZoneRealloc(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr, mut size: GuestUSize) -> MutVoidPtr {
+fn NSZoneRealloc(
+    env: &mut Environment,
+    _zone: MutVoidPtr,
+    ptr: MutVoidPtr,
+    mut size: GuestUSize,
+) -> MutVoidPtr {
     if size == 0 {
         size = 1;
     }
@@ -115,15 +123,15 @@ fn reallocf(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> Mut
     if size == 0 {
         size = 1;
     }
-    
+
     // Пытаемся выделить новую память
     let new_ptr = env.mem.realloc(ptr, size);
-    // Главная фишка reallocf: если realloc вернул NULL (не удалось выделить), 
+    // Главная фишка reallocf: если realloc вернул NULL (не удалось выделить),
     // старый указатель должен быть освобожден.
     if new_ptr.is_null() {
         env.mem.free(ptr);
     }
-    
+
     new_ptr
 }
 
@@ -297,7 +305,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
         // MMGC_HEAP_LIMIT и MMGC_HEAP_SOFT_LIMIT ищет Adobe AIR / Flash (Macromedia GC).
         // Возвращать NULL для них — это правильное и честное поведение,
         // так как движок сам подставит нужные дефолтные лимиты для iOS.
-        if name_str != "LUA_PATH" 
+        if name_str != "LUA_PATH"
             && name_str != "LUA_CPATH"
             && name_str != "MMGC_HEAP_LIMIT"
             && name_str != "MMGC_HEAP_SOFT_LIMIT"
@@ -353,11 +361,11 @@ fn unsetenv(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
 
 fn exit(env: &mut Environment, exit_code: i32) {
     set_errno(env, 0);
-    
+
     // Забираем список функций через mem::take, чтобы избежать проблем с borrow checker,
     // так как вызов call_from_host требует мутабельного доступа к env.
     let handlers = std::mem::take(&mut env.libc_state.stdlib.atexit_handlers);
-    
+
     // По стандарту atexit вызывает функции в обратном порядке (LIFO), поэтому делаем .rev()
     for func in handlers.into_iter().rev() {
         log_dbg!("Executing atexit handler: {:?}", func);
@@ -365,7 +373,7 @@ fn exit(env: &mut Environment, exit_code: i32) {
         let _: () = func.call_from_host(env, ());
     }
 
-    // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться, 
+    // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться,
     // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
     // echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
     std::process::exit(exit_code);
@@ -374,7 +382,7 @@ fn exit(env: &mut Environment, exit_code: i32) {
 fn abort(_env: &mut Environment) {
     // ИСПРАВЛЕНИЕ ДЛЯ BOX2D: Отключаем краш эмулятора при вызове abort()
     // echo!("App called abort()! The guest application encountered a fatal error. Ignoring to bypass Box2D crash!");
-    std::process::exit(1); 
+    std::process::exit(1);
 }
 
 fn bsearch(
@@ -490,12 +498,7 @@ fn strtoull(
     }
 }
 
-fn strtol(
-    env: &mut Environment,
-    str: ConstPtr<u8>,
-    endptr: MutPtr<MutPtr<u8>>,
-    base: i32,
-) -> i32 {
+fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
     set_errno(env, 0);
     match strtol_inner(env, str, base as u32) {
         Ok((res, len)) => {
@@ -520,7 +523,10 @@ fn realpath(
 ) -> MutPtr<u8> {
     assert!(!resolve_name.is_null());
     let file_name_str = env.mem.cstr_at_utf8(file_name).unwrap();
-    let resolved = resolve_path(GuestPath::new(file_name_str), Some(env.fs.working_directory()));
+    let resolved = resolve_path(
+        GuestPath::new(file_name_str),
+        Some(env.fs.working_directory()),
+    );
     let result = format!("/{}", resolved.join("/"));
     env.mem
         .bytes_at_mut(resolve_name, result.len() as GuestUSize)
@@ -640,11 +646,7 @@ fn kqueue(_env: &mut Environment) -> i32 {
 /// stub that returned 999 (and didn't even take the right argument types)
 /// caused real-world apps such as Farm Frenzy to mis-construct paths and
 /// then `chdir("")` / fail every resource lookup.
-fn _NSGetExecutablePath(
-    env: &mut Environment,
-    buf: MutPtr<u8>,
-    bufsize: MutPtr<u32>,
-) -> i32 {
+fn _NSGetExecutablePath(env: &mut Environment, buf: MutPtr<u8>, bufsize: MutPtr<u32>) -> i32 {
     if bufsize.is_null() {
         return -1;
     }
@@ -698,21 +700,21 @@ fn __assert_rtn(
     let expr_str = read_cstr_safe(env, expr);
     log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
-        expr_str, func_str, file_str, line
+        expr_str,
+        func_str,
+        file_str,
+        line
     );
 }
 
-fn __assert(
-    env: &mut Environment,
-    expr: ConstPtr<u8>,
-    file: ConstPtr<u8>,
-    line: i32,
-) {
+fn __assert(env: &mut Environment, expr: ConstPtr<u8>, file: ConstPtr<u8>, line: i32) {
     let expr_str = read_cstr_safe(env, expr);
     let file_str = read_cstr_safe(env, file);
     log!(
         "Assertion failed: ({}) in file {}, line {}.",
-        expr_str, file_str, line
+        expr_str,
+        file_str,
+        line
     );
 }
 
@@ -728,7 +730,10 @@ fn __assert_fail(
     let func_str = read_cstr_safe(env, func);
     log!(
         "Assertion failed: ({}) in function {}, file {}, line {}.",
-        expr_str, func_str, file_str, line
+        expr_str,
+        func_str,
+        file_str,
+        line
     );
 }
 
@@ -798,33 +803,30 @@ fn _fcvt(
 
     // Allocate in guest memory and CAST to a u8 pointer
     let buf_len = (digits.len() + 1) as GuestUSize;
-    let buf: MutPtr<u8> = env.mem.alloc(buf_len).cast(); 
-    
-    env.mem.bytes_at_mut(buf, digits.len() as GuestUSize).copy_from_slice(digits.as_bytes());
+    let buf: MutPtr<u8> = env.mem.alloc(buf_len).cast();
+
+    env.mem
+        .bytes_at_mut(buf, digits.len() as GuestUSize)
+        .copy_from_slice(digits.as_bytes());
     env.mem.write(buf + digits.len() as GuestUSize, b'\0');
     buf
 }
 
 #[allow(non_snake_case)]
-fn _gcvt(
-    env: &mut Environment,
-    value: f64,
-    ndigit: i32,
-    buf: MutPtr<u8>,
-) -> MutPtr<u8> {
+fn _gcvt(env: &mut Environment, value: f64, ndigit: i32, buf: MutPtr<u8>) -> MutPtr<u8> {
     set_errno(env, 0);
     let ndigit = ndigit.max(0) as usize;
     // В Rust нет точного аналога "g", поэтому мы используем стандартный трейт Display
     // с указанием точности (количества знаков после запятой).
     let s = format!("{:.*}", ndigit, value);
-    
+
     let bytes = s.as_bytes();
     let len = bytes.len() as GuestUSize;
     if !buf.is_null() {
         env.mem.bytes_at_mut(buf, len).copy_from_slice(bytes);
         env.mem.write(buf + len, b'\0');
     }
-    
+
     buf
 }
 
@@ -832,7 +834,7 @@ fn mbtowc_l(
     env: &mut Environment,
     pwc: MutPtr<u32>, // wchar_t на iOS/ARM32 — это 32-битный int
     s: ConstVoidPtr,
-    n: GuestUSize, // size_t
+    n: GuestUSize,      // size_t
     _loc: ConstVoidPtr, // locale_t (игнорируем, так как используем стандартный UTF-8)
 ) -> i32 {
     if s.is_null() {
@@ -943,7 +945,11 @@ fn setxattr(
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "setxattr({:?}, {:?}, size={}, position={}, options={:#x}) — ignored",
-        path_str, name_str, size, position, options
+        path_str,
+        name_str,
+        size,
+        position,
+        options
     );
     // Return 0 (success). touchHLE has no extended attribute storage;
     // returning success prevents apps from treating missing xattr support
@@ -963,7 +969,11 @@ fn fsetxattr(
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "fsetxattr(fd={}, {:?}, size={}, position={}, options={:#x}) — ignored",
-        fd, name_str, size, position, options
+        fd,
+        name_str,
+        size,
+        position,
+        options
     );
     0
 }
@@ -981,7 +991,11 @@ fn getxattr(
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "getxattr({:?}, {:?}, size={}, position={}, options={:#x}) — returning ENOATTR",
-        path_str, name_str, size, position, options
+        path_str,
+        name_str,
+        size,
+        position,
+        options
     );
     // ENOATTR = 93 on Darwin. Return -1 and set errno.
     set_errno(env, 93);
@@ -1000,23 +1014,24 @@ fn fgetxattr(
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "fgetxattr(fd={}, {:?}, size={}, position={}, options={:#x}) — returning ENOATTR",
-        fd, name_str, size, position, options
+        fd,
+        name_str,
+        size,
+        position,
+        options
     );
     set_errno(env, 93);
     -1
 }
 
-fn removexattr(
-    env: &mut Environment,
-    path: ConstPtr<u8>,
-    name: ConstPtr<u8>,
-    options: i32,
-) -> i32 {
+fn removexattr(env: &mut Environment, path: ConstPtr<u8>, name: ConstPtr<u8>, options: i32) -> i32 {
     let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "removexattr({:?}, {:?}, options={:#x}) — returning ENOATTR",
-        path_str, name_str, options
+        path_str,
+        name_str,
+        options
     );
     set_errno(env, 93);
     -1
@@ -1031,7 +1046,9 @@ fn fremovexattr(
     let name_str = env.mem.cstr_at_utf8(name).unwrap_or_default().to_owned();
     log_dbg!(
         "fremovexattr(fd={}, {:?}, options={:#x}) — returning ENOATTR",
-        fd, name_str, options
+        fd,
+        name_str,
+        options
     );
     set_errno(env, 93);
     -1
@@ -1047,7 +1064,9 @@ fn listxattr(
     let path_str = env.mem.cstr_at_utf8(path).unwrap_or_default().to_owned();
     log_dbg!(
         "listxattr({:?}, size={}, options={:#x}) — returning 0 (empty list)",
-        path_str, size, options
+        path_str,
+        size,
+        options
     );
     // Zero-length list means no attributes. Return 0 (success, 0 bytes needed).
     if !namebuf.is_null() && size > 0 {
@@ -1065,7 +1084,9 @@ fn flistxattr(
 ) -> i32 {
     log_dbg!(
         "flistxattr(fd={}, size={}, options={:#x}) — returning 0 (empty list)",
-        fd, size, options
+        fd,
+        size,
+        options
     );
     if !namebuf.is_null() && size > 0 {
         env.mem.write(namebuf, 0u8);
@@ -1094,7 +1115,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(arc4random_stir()),
     export_c_func!(arc4random_addrandom()),
     export_c_func!(getenv(_)),
-    export_c_func!(setenv(_, _, _)), 
+    export_c_func!(setenv(_, _, _)),
     // <--- ИСПРАВЛЕНИЕ НА 3 АРГУМЕНТА ГОСТЯ
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
@@ -1153,7 +1174,7 @@ pub fn atof_inner_generic<
     T,
     U,
     F1: Fn(&mut Environment, MutPtr<U>, GuestUSize) -> Result<T, ()>,
-    F2: Fn(&mut Environment, MutPtr<U>, u8), 
+    F2: Fn(&mut Environment, MutPtr<U>, u8),
 >(
     env: &mut Environment,
     getc_fn: F1,
@@ -1219,17 +1240,13 @@ where
         assert_eq!(chars.len() as u32, len);
         Ok(())
     }();
-    
+
     let s = std::str::from_utf8(&chars).unwrap();
     log_dbg!("atof_inner_generic('{}')", s);
     s.parse().map(|result| (result, whitespace_len + len))
 }
 
-fn strtol_inner(
-    env: &mut Environment,
-    str: ConstPtr<u8>,
-    base: u32,
-) -> Result<(i32, u32), ()> {
+fn strtol_inner(env: &mut Environment, str: ConstPtr<u8>, base: u32) -> Result<(i32, u32), ()> {
     str_to_int_inner_generic(
         env,
         |env, s, idx| Ok(env.mem.read(s + idx)),
@@ -1290,8 +1307,7 @@ where
         if base == 0 {
             let curr: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
             base = if curr == b'0' {
-                let next: u8 =
-                    getc_fn(env, subject, offset + whitespace_len + len + 1)?.into();
+                let next: u8 = getc_fn(env, subject, offset + whitespace_len + len + 1)?.into();
                 ungetc_fn(env, subject, next);
                 ungetc_fn(env, subject, curr);
                 if next == b'x' || next == b'X' {
@@ -1300,8 +1316,8 @@ where
                     8
                 }
             } else {
-               ungetc_fn(env, subject, curr);
-               10
+                ungetc_fn(env, subject, curr);
+                10
             }
         }
         if base == 8 || base == 16 {
@@ -1313,8 +1329,7 @@ where
                 }
                 prefix_length += 1;
                 if base == 16 {
-                    let next: u8 =
-                        getc_fn(env, subject, offset + whitespace_len + len)?.into();
+                    let next: u8 = getc_fn(env, subject, offset + whitespace_len + len)?.into();
                     if next == b'x' || next == b'X' {
                         len += 1;
                         if len == max_length {
@@ -1344,7 +1359,7 @@ where
         assert_eq!(chars.len() as u32, len - prefix_length);
         Ok(())
     }();
-    
+
     let s = std::str::from_utf8(&chars).unwrap();
     log_dbg!("strtol_inner_generic('{}', {})", s, base);
 
@@ -1364,4 +1379,3 @@ where
     };
     Ok((res, whitespace_len + len))
 }
-

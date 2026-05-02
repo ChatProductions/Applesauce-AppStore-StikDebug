@@ -238,7 +238,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } = env.objc.borrow_mut(this);
 
     if text == nil || font == nil || text_color == nil { return; }
-    
+
     let len: NSUInteger = msg![env; text length];
     if len == 0 { return; }
 

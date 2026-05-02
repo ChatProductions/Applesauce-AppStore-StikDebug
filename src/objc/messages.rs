@@ -182,7 +182,11 @@ fn objc_msgSend_inner(
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
     // Мягкий выход, если isa равен nil
     if orig_class == nil {
-        log!("Warning: receiver {:?} has nil isa! Ignoring message \"{}\".", receiver, selector.as_str(&env.mem));
+        log!(
+            "Warning: receiver {:?} has nil isa! Ignoring message \"{}\".",
+            receiver,
+            selector.as_str(&env.mem)
+        );
         env.cpu.regs_mut()[0..2].fill(0);
         return;
     }
@@ -226,7 +230,7 @@ fn objc_msgSend_inner(
                 is_metaclass,
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
-            
+
             // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! (мягкий фейл форка) ---
             log!(
                 "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
@@ -242,7 +246,7 @@ fn objc_msgSend_inner(
                 },
                 selector.as_str(&env.mem),
             );
-            
+
             // Имитируем возврат nil/0, чтобы приложение продолжило работу
             env.cpu.regs_mut()[0..2].fill(0);
             return;
@@ -320,7 +324,7 @@ Type mismatch when sending message {} to {:?}!
         {
             log!(
                 "Class \"{}\" ({:?}) is unimplemented. Call to {} method \"{}\".",
-                 name,
+                name,
                 class,
                 if is_metaclass { "class" } else { "instance" },
                 selector.as_str(&env.mem),
@@ -480,9 +484,45 @@ pub trait MsgSendSignature: 'static {
 }
 
 // --- Extended implementations for higher number of arguments (7, 8, 9 parameters) ---
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static> MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7)) {}
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static, P8: 'static> MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8)) {}
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static, P8: 'static, P9: 'static> MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8, P9)) {}
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+    > MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7))
+{
+}
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+        P8: 'static,
+    > MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8))
+{
+}
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+        P8: 'static,
+        P9: 'static,
+    > MsgSendSignature for (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8, P9))
+{
+}
 
 /// Wrapper around [objc_msgSend] which, together with [msg], makes it easy to
 /// send messages in host code.
@@ -526,13 +566,66 @@ pub trait MsgSendSuperSignature: 'static {
 }
 
 // --- Extended super-call implementations for higher number of arguments ---
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static> MsgSendSuperSignature for (R, (ConstPtr<objc_super>, SEL, P1, P2, P3, P4, P5, P6, P7)) {
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+    > MsgSendSuperSignature for (R, (ConstPtr<objc_super>, SEL, P1, P2, P3, P4, P5, P6, P7))
+{
     type WithoutSuper = (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7));
 }
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static, P8: 'static> MsgSendSuperSignature for (R, (ConstPtr<objc_super>, SEL, P1, P2, P3, P4, P5, P6, P7, P8)) {
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+        P8: 'static,
+    > MsgSendSuperSignature
+    for (
+        R,
+        (ConstPtr<objc_super>, SEL, P1, P2, P3, P4, P5, P6, P7, P8),
+    )
+{
     type WithoutSuper = (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8));
 }
-impl<R: 'static, P1: 'static, P2: 'static, P3: 'static, P4: 'static, P5: 'static, P6: 'static, P7: 'static, P8: 'static, P9: 'static> MsgSendSuperSignature for (R, (ConstPtr<objc_super>, SEL, P1, P2, P3, P4, P5, P6, P7, P8, P9)) {
+impl<
+        R: 'static,
+        P1: 'static,
+        P2: 'static,
+        P3: 'static,
+        P4: 'static,
+        P5: 'static,
+        P6: 'static,
+        P7: 'static,
+        P8: 'static,
+        P9: 'static,
+    > MsgSendSuperSignature
+    for (
+        R,
+        (
+            ConstPtr<objc_super>,
+            SEL,
+            P1,
+            P2,
+            P3,
+            P4,
+            P5,
+            P6,
+            P7,
+            P8,
+            P9,
+        ),
+    )
+{
     type WithoutSuper = (R, (id, SEL, P1, P2, P3, P4, P5, P6, P7, P8, P9));
 }
 

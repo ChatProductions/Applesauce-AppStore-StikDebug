@@ -6,8 +6,8 @@
 //! `Mach-O` related functions.
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::Environment;
 use crate::mem::{MutPtr, SafeRead};
+use crate::Environment;
 
 // --- ДОБАВЛЯЕМ СТРУКТУРЫ И КОНСТАНТЫ ДЛЯ host_info ---
 const HOST_BASIC_INFO: i32 = 1;
@@ -39,17 +39,17 @@ fn host_info(
     match flavor {
         HOST_BASIC_INFO => {
             let mut info = host_basic_info::default();
-            
+
             // Эмулируем железо iPad/iPhone
             info.max_cpus = 1;
             info.avail_cpus = 1;
             info.physical_cpu = 1;
             info.logical_cpu = 1;
-            
+
             // CPU_TYPE_ARM = 12, CPU_SUBTYPE_ARM_V7 = 9
             info.cpu_type = 12;
             info.cpu_subtype = 9;
-            
+
             // 256MB RAM (безопасное значение для старых игр)
             let mem_bytes = 256 * 1024 * 1024;
             info.memory_size = mem_bytes as u32;
@@ -64,12 +64,12 @@ fn host_info(
 
             env.mem.write(info_out.cast(), info);
             env.mem.write(info_cnt, struct_size);
-            
+
             0 // KERN_SUCCESS
         }
         _ => {
             // Если запрашивают другой flavor, просто рапортуем об успехе без паники
-            0 
+            0
         }
     }
 }
@@ -102,7 +102,7 @@ fn get_etext(env: &mut Environment) -> u32 {
 }
 
 pub const FUNCTIONS: FunctionExports = &[
-    export_c_func!(get_end()), 
+    export_c_func!(get_end()),
     export_c_func!(get_etext()),
     export_c_func!(host_info(_, _, _, _)),
 ];

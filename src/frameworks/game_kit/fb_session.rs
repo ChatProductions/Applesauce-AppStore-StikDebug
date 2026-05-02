@@ -2,9 +2,7 @@
  * FBSession stub for touchHLE
  */
 
-use crate::objc::{
-    id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
-};
+use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 struct FBSessionHostObject {
     delegate: id,
@@ -27,7 +25,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // Тот самый метод инициализации из твоего лога
 + (id)sessionForApplication:(id)app_key getSessionProxy:(bool)proxy delegate:(id)delegate {
     log!("FBSession sessionForApplication:getSessionProxy:delegate: stubbed");
-    
+
     let session: id = msg![env; this alloc];
     let session: id = msg![env; session init];
 
@@ -37,7 +35,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if delegate != nil {
         // В старом Facebook Connect SDK для iOS ошибка логина обычно обрабатывалась этим методом
         let sel = env.objc.register_host_selector(
-            "sessionDidNotLogin:".to_string(), 
+            "sessionDidNotLogin:".to_string(),
             &mut env.mem
         );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
@@ -69,10 +67,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)resume {
     log!("FBSession resume: stubbed");
     // Возвращаем false, сообщая игре, что активной сессии нет
-    false 
+    false
 }
 
 @end
 
 };
-

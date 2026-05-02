@@ -5,11 +5,9 @@
 //!
 //! `NSNumberFormatter` - formats numbers into strings and parses strings into numbers.
 
-use crate::frameworks::foundation::NSUInteger;
 use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
-use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
-};
+use crate::frameworks::foundation::NSUInteger;
+use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 struct NSNumberFormatterHostObject {
     number_style: NSUInteger,
@@ -113,7 +111,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let style = host_obj.number_style;
 
     let rust_string: String;
-    
+
     // 0 = NoStyle, 1 = DecimalStyle, 2 = CurrencyStyle, 3 = PercentStyle, 4 = ScientificStyle
     if style == 2 {
         rust_string = format!("${:.2}", val);
@@ -134,7 +132,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     let rust_str = to_rust_string(env, string);
-    
+
     // Clean string from currency and percentage signs
     let clean_str = rust_str.replace('$', "").replace(',', "").replace('%', "");
     let trimmed = clean_str.trim();

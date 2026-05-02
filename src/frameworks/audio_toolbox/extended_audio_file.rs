@@ -192,12 +192,12 @@ fn ExtAudioFileSetProperty(
         .audio_files
         .get(&host_object.guest_audio_file)
         .unwrap();
-        
+
     let audio_desc = match other_host_object {
         AudioFileHostObject::Real(file) => AudioStreamBasicDescription::from_audio_description(file.audio_description()),
         AudioFileHostObject::Dummy { format, .. } => *format,
     };
-    
+
     // TODO: Поддержка конвертации аудио форматов
     // assert_eq!(audio_desc, client_audio_desc);
 
@@ -231,7 +231,7 @@ fn ExtAudioFileRead(
     let bytes_per_frame = host_object.client_data_format.unwrap().bytes_per_frame;
     let number_of_bytes = number_frames.checked_mul(bytes_per_frame).unwrap();
     let number_of_bytes_ptr = env.mem.alloc_and_write(number_of_bytes);
-    
+
     let res = AudioFileReadBytes(
         env,
         host_object.guest_audio_file,
@@ -240,10 +240,10 @@ fn ExtAudioFileRead(
         number_of_bytes_ptr,
         audio_buffer_list.buffers[0].data,
     );
-    
+
     let number_of_bytes_read = env.mem.read(number_of_bytes_ptr);
     env.mem.free(number_of_bytes_ptr.cast());
-    
+
     if res != 0 {
         if res == eofErr {
             env.mem.write(io_number_frames, 0);
@@ -258,7 +258,7 @@ fn ExtAudioFileRead(
         );
         return res;
     }
-    
+
     env.mem.write(
         io_number_frames,
         number_of_bytes_read.checked_div(bytes_per_frame).unwrap(),

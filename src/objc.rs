@@ -31,7 +31,15 @@ mod properties;
 mod selectors;
 mod synchronization;
 
-pub use classes::{objc_classes, objc_getClass, object_getClassName, objc_getMetaClass, object_getClass, objc_setProperty_nonatomic, objc_autoreleaseReturnValue, objc_retainAutoreleasedReturnValue, objc_retainAutoreleaseReturnValue, objc_autoreleasePoolPush, objc_autoreleasePoolPop, objc_release, objc_exception_throw, objc_begin_catch, objc_end_catch, class_getSuperclass, class_getInstanceSize, class_getInstanceMethod, class_replaceMethod, method_getImplementation, method_setImplementation, method_getTypeEncoding, Class, ClassExports, ClassTemplate, objc_retain};
+pub use classes::{
+    class_getInstanceMethod, class_getInstanceSize, class_getSuperclass, class_replaceMethod,
+    method_getImplementation, method_getTypeEncoding, method_setImplementation,
+    objc_autoreleasePoolPop, objc_autoreleasePoolPush, objc_autoreleaseReturnValue,
+    objc_begin_catch, objc_classes, objc_end_catch, objc_exception_throw, objc_getClass,
+    objc_getMetaClass, objc_release, objc_retain, objc_retainAutoreleaseReturnValue,
+    objc_retainAutoreleasedReturnValue, objc_setProperty_nonatomic, object_getClass,
+    object_getClassName, Class, ClassExports, ClassTemplate,
+};
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
     objc_super, release, retain,
@@ -44,17 +52,18 @@ pub use properties::todo_objc_setter;
 pub use selectors::{selector, SEL};
 
 use crate::mem::ConstVoidPtr;
+use crate::objc::classes::___objc_personality_v0;
 use crate::Environment;
 use classes::{ClassHostObject, FakeClass, UnimplementedClass};
 use messages::{
-    objc_msgSendSuper2, objc_msgSend_stret, objc_msgSendSuper2_stret, MsgSendSignature, MsgSendSuperSignature,
+    objc_msgSendSuper2, objc_msgSendSuper2_stret, objc_msgSend_stret, MsgSendSignature,
+    MsgSendSuperSignature,
 };
 use methods::method_list_t;
 use objects::{objc_object, HostObjectEntry};
 use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty};
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
-use crate::objc::classes::___objc_personality_v0;
 
 /// Публичная обёртка над `messages::objc_msgSend` (которая `pub(super)`),
 /// экспортируемая внутри крейта.
@@ -137,10 +146,22 @@ const CONSTANTS: ConstantExports = &[
     ("_OBJC_EHTYPE_$_NSException", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_id", HostConstant::NullPtr),
     ("_kCFTypeArrayCallBacks", HostConstant::NullPtr),
-    ("_NSHTTPCookieDomain", HostConstant::NSString("NSHTTPCookieDomain")),
-    ("_NSHTTPCookieValue", HostConstant::NSString("NSHTTPCookieValue")),
-    ("_NSHTTPCookieName", HostConstant::NSString("NSHTTPCookieName")),
-    ("_NSHTTPCookiePath", HostConstant::NSString("NSHTTPCookiePath")),
+    (
+        "_NSHTTPCookieDomain",
+        HostConstant::NSString("NSHTTPCookieDomain"),
+    ),
+    (
+        "_NSHTTPCookieValue",
+        HostConstant::NSString("NSHTTPCookieValue"),
+    ),
+    (
+        "_NSHTTPCookieName",
+        HostConstant::NSString("NSHTTPCookieName"),
+    ),
+    (
+        "_NSHTTPCookiePath",
+        HostConstant::NSString("NSHTTPCookiePath"),
+    ),
     ("_NSKeyValueChangeNewKey", HostConstant::NSString("new")),
 ];
 

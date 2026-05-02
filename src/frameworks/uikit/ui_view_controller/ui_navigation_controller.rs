@@ -7,8 +7,8 @@
 
 use crate::frameworks::foundation::{ns_array, NSUInteger};
 use crate::objc::{
-    autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil,
-    objc_classes, release, retain, ClassExports, NSZonePtr, SEL,
+    autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
+    release, retain, ClassExports, NSZonePtr, SEL,
 };
 
 #[derive(Default)]

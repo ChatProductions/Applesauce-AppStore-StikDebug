@@ -6,7 +6,7 @@
  */
 //! `SKPaymentQueue` — StoreKit in-app purchase queue stub.
 
-use crate::frameworks::foundation::{NSInteger, ns_string};
+use crate::frameworks::foundation::{ns_string, NSInteger};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -123,7 +123,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Убрали .unwrap()
     let host_obj = env.objc.borrow::<SKPaymentQueueHostObject>(this);
     let observer = host_obj.observer;
-    
+
     if observer != nil {
         // Вызываем метод делегата, сообщая, что "восстановление" успешно завершено
         let _: () = msg![env; observer paymentQueueRestoreCompletedTransactionsFinished:this];

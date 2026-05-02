@@ -1,6 +1,6 @@
+use crate::dyld::{HostDylib, HostFunction};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr};
 use crate::Environment;
-use crate::mem::{MutVoidPtr, MutPtr, ConstPtr, GuestUSize};
-use crate::dyld::{HostFunction, HostDylib};
 use std::sync::Mutex;
 
 // Структура для управления pixel buffer в памяти гостя
@@ -57,25 +57,25 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
     if let Some(ref info) = *buffers {
         return info.guest_ptr;
     }
-    
+
     // Создаем новый буфер
     let width = 640u32;
     let height = 480u32;
     let bytes_per_pixel = 4u32; // BGRA
     let bytes_per_row = width * bytes_per_pixel;
     let size: GuestUSize = (bytes_per_row * height) as GuestUSize;
-    
+
     // Выделяем память в гостевой системе
     let ptr = env.mem.alloc(size);
     // Безопасное преобразование указателя в u32
     // Используем .cast().to_bits() для получения сырого значения адреса
     let guest_ptr = ptr.cast::<u8>().to_bits();
-    
+
     // Инициализируем буфер черным цветом (опционально)
     for offset in 0..size {
         env.mem.write(ptr.cast::<u8>() + offset, 0u8);
     }
-    
+
     *buffers = Some(PixelBufferInfo {
         guest_ptr,
         width,
@@ -85,7 +85,7 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
         plane_count: 1,
         is_locked: false,
     });
-    
+
     guest_ptr
 }
 
@@ -188,7 +188,7 @@ pub fn CVPixelBufferGetBaseAddressOfPlane(
                 // В реальной реализации здесь было бы смещение
                 info.guest_ptr
             } else {
-                 0
+                0
             }
         } else {
             0
@@ -213,7 +213,7 @@ pub fn CVPixelBufferGetWidthOfPlane(
                 0
             }
         } else {
-             0
+            0
         }
     }
 }
@@ -234,7 +234,7 @@ pub fn CVPixelBufferGetHeightOfPlane(
                 0
             }
         } else {
-             0
+            0
         }
     }
 }
@@ -242,7 +242,11 @@ pub fn CVPixelBufferGetHeightOfPlane(
 pub fn CVPixelBufferIsPlanar(_env: &mut Environment, _pixel_buffer: MutVoidPtr) -> u32 {
     let buffers = PIXEL_BUFFERS.lock().unwrap();
     if let Some(ref info) = *buffers {
-        if info.plane_count > 1 { 1 } else { 0 }
+        if info.plane_count > 1 {
+            1
+        } else {
+            0
+        }
     } else {
         0
     }
@@ -327,11 +331,7 @@ pub fn CVBufferSetAttachment(
     // Ничего не делаем
 }
 
-pub fn CVBufferRemoveAttachment(
-    _env: &mut Environment,
-    _buffer: MutVoidPtr,
-    _key: ConstPtr<u8>,
-) {
+pub fn CVBufferRemoveAttachment(_env: &mut Environment, _buffer: MutVoidPtr, _key: ConstPtr<u8>) {
     // Ничего не делаем
 }
 
@@ -351,24 +351,23 @@ pub fn CVPixelBufferCreate(
     pixel_buffer_out: MutPtr<u32>,
 ) -> i32 {
     let bytes_per_pixel = match pixel_format_type {
-        K_CV_PIXEL_FORMAT_TYPE_32BGRA |
-        K_CV_PIXEL_FORMAT_TYPE_32ARGB => 4,
-        K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarFullRange |
-        K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarVideoRange => 1, // Y plane
+        K_CV_PIXEL_FORMAT_TYPE_32BGRA | K_CV_PIXEL_FORMAT_TYPE_32ARGB => 4,
+        K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarFullRange
+        | K_CV_PIXEL_FORMAT_TYPE_420YpCbCr8BiPlanarVideoRange => 1, // Y plane
         _ => 4, // По умолчанию
     };
-    
+
     let bytes_per_row = width * bytes_per_pixel;
     let size: GuestUSize = (bytes_per_row * height) as GuestUSize;
-    
+
     let ptr = env.mem.alloc(size);
     let guest_ptr = ptr.cast::<u8>().to_bits();
-    
+
     // Инициализируем буфер
     for offset in 0..size {
         env.mem.write(ptr.cast::<u8>() + offset, 0u8);
     }
-    
+
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
     *buffers = Some(PixelBufferInfo {
         guest_ptr,
@@ -376,10 +375,14 @@ pub fn CVPixelBufferCreate(
         height,
         bytes_per_row,
         pixel_format: pixel_format_type,
-        plane_count: if pixel_format_type == K_CV_PIXEL_FORMAT_TYPE_32BGRA { 1 } else { 2 },
+        plane_count: if pixel_format_type == K_CV_PIXEL_FORMAT_TYPE_32BGRA {
+            1
+        } else {
+            2
+        },
         is_locked: false,
     });
-    
+
     // Записываем указатель в выходной параметр
     env.mem.write(pixel_buffer_out, guest_ptr);
     K_CV_RETURN_SUCCESS
@@ -389,43 +392,119 @@ pub fn CVPixelBufferCreate(
 
 pub const FUNCTIONS: &[(&str, HostFunction)] = &[
     // Основные функции pixel buffer
-    ("CVPixelBufferGetWidth", &(CVPixelBufferGetWidth as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferGetHeight", &(CVPixelBufferGetHeight as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferGetBaseAddress", &(CVPixelBufferGetBaseAddress as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferLockBaseAddress", &(CVPixelBufferLockBaseAddress as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferUnlockBaseAddress", &(CVPixelBufferUnlockBaseAddress as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferGetPixelFormatType", &(CVPixelBufferGetPixelFormatType as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferGetBytesPerRow", &(CVPixelBufferGetBytesPerRow as fn(&mut Environment, _) -> _)),
-    
+    (
+        "CVPixelBufferGetWidth",
+        &(CVPixelBufferGetWidth as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetHeight",
+        &(CVPixelBufferGetHeight as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetBaseAddress",
+        &(CVPixelBufferGetBaseAddress as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferLockBaseAddress",
+        &(CVPixelBufferLockBaseAddress as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferUnlockBaseAddress",
+        &(CVPixelBufferUnlockBaseAddress as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetPixelFormatType",
+        &(CVPixelBufferGetPixelFormatType as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetBytesPerRow",
+        &(CVPixelBufferGetBytesPerRow as fn(&mut Environment, _) -> _),
+    ),
     // Функции для работы с плоскостями
-    ("CVPixelBufferGetBytesPerRowOfPlane", &(CVPixelBufferGetBytesPerRowOfPlane as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferGetPlaneCount", &(CVPixelBufferGetPlaneCount as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferGetBaseAddressOfPlane", &(CVPixelBufferGetBaseAddressOfPlane as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferGetWidthOfPlane", &(CVPixelBufferGetWidthOfPlane as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferGetHeightOfPlane", &(CVPixelBufferGetHeightOfPlane as fn(&mut Environment, _, _) -> _)),
-    ("CVPixelBufferIsPlanar", &(CVPixelBufferIsPlanar as fn(&mut Environment, _) -> _)),
-    
+    (
+        "CVPixelBufferGetBytesPerRowOfPlane",
+        &(CVPixelBufferGetBytesPerRowOfPlane as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetPlaneCount",
+        &(CVPixelBufferGetPlaneCount as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetBaseAddressOfPlane",
+        &(CVPixelBufferGetBaseAddressOfPlane as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetWidthOfPlane",
+        &(CVPixelBufferGetWidthOfPlane as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferGetHeightOfPlane",
+        &(CVPixelBufferGetHeightOfPlane as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVPixelBufferIsPlanar",
+        &(CVPixelBufferIsPlanar as fn(&mut Environment, _) -> _),
+    ),
     // Reference counting
-    ("CVPixelBufferRelease", &(CVPixelBufferRelease as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferRetain", &(CVPixelBufferRetain as fn(&mut Environment, _) -> _)),
-    
+    (
+        "CVPixelBufferRelease",
+        &(CVPixelBufferRelease as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferRetain",
+        &(CVPixelBufferRetain as fn(&mut Environment, _) -> _),
+    ),
     // Sample buffer функции
-    ("CMSampleBufferGetImageBuffer", &(CMSampleBufferGetImageBuffer as fn(&mut Environment, _) -> _)),
-    ("CMSampleBufferGetNumSamples", &(CMSampleBufferGetNumSamples as fn(&mut Environment, _) -> _)),
-    ("CMSampleBufferDataIsReady", &(CMSampleBufferDataIsReady as fn(&mut Environment, _) -> _)),
-    ("CMSampleBufferIsValid", &(CMSampleBufferIsValid as fn(&mut Environment, _) -> _)),
-    ("CMSampleBufferInvalidate", &(CMSampleBufferInvalidate as fn(&mut Environment, _) -> _)),
-    
+    (
+        "CMSampleBufferGetImageBuffer",
+        &(CMSampleBufferGetImageBuffer as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CMSampleBufferGetNumSamples",
+        &(CMSampleBufferGetNumSamples as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CMSampleBufferDataIsReady",
+        &(CMSampleBufferDataIsReady as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CMSampleBufferIsValid",
+        &(CMSampleBufferIsValid as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CMSampleBufferInvalidate",
+        &(CMSampleBufferInvalidate as fn(&mut Environment, _) -> _),
+    ),
     // Дополнительные функции
-    ("CVPixelBufferGetDataSize", &(CVPixelBufferGetDataSize as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferFillExtendedPixels", &(CVPixelBufferFillExtendedPixels as fn(&mut Environment, _) -> _)),
-    ("CVPixelBufferCreate", &(CVPixelBufferCreate as fn(&mut Environment, _, _, _, _, _, _) -> _)),
-    
+    (
+        "CVPixelBufferGetDataSize",
+        &(CVPixelBufferGetDataSize as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferFillExtendedPixels",
+        &(CVPixelBufferFillExtendedPixels as fn(&mut Environment, _) -> _),
+    ),
+    (
+        "CVPixelBufferCreate",
+        &(CVPixelBufferCreate as fn(&mut Environment, _, _, _, _, _, _) -> _),
+    ),
     // Buffer attachments
-    ("CVBufferGetAttachment", &(CVBufferGetAttachment as fn(&mut Environment, _, _, _) -> _)),
-    ("CVBufferSetAttachment", &(CVBufferSetAttachment as fn(&mut Environment, _, _, _, _) -> _)),
-    ("CVBufferRemoveAttachment", &(CVBufferRemoveAttachment as fn(&mut Environment, _, _) -> _)),
-    ("CVBufferRemoveAllAttachments", &(CVBufferRemoveAllAttachments as fn(&mut Environment, _) -> _)),
+    (
+        "CVBufferGetAttachment",
+        &(CVBufferGetAttachment as fn(&mut Environment, _, _, _) -> _),
+    ),
+    (
+        "CVBufferSetAttachment",
+        &(CVBufferSetAttachment as fn(&mut Environment, _, _, _, _) -> _),
+    ),
+    (
+        "CVBufferRemoveAttachment",
+        &(CVBufferRemoveAttachment as fn(&mut Environment, _, _) -> _),
+    ),
+    (
+        "CVBufferRemoveAllAttachments",
+        &(CVBufferRemoveAllAttachments as fn(&mut Environment, _) -> _),
+    ),
 ];
 
 // ===== РЕГИСТРАЦИЯ ФРЕЙМВОРКА =====
@@ -437,4 +516,3 @@ pub const DYLIB: HostDylib = HostDylib {
     class_exports: &[],
     constant_exports: &[],
 };
-

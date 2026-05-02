@@ -36,9 +36,7 @@ fn clock(env: &mut Environment) -> clock_t {
     // ИСПРАВЛЕНИЕ: Возвращаем точное время в микросекундах (а не усекаем до секунд).
     // Это критически важно для игр (Cocos2D и др.), которые считают дельту времени.
     // Иначе delta time = 0.0, что ведет к делению на ноль -> NaN -> отрицательный sleep -> Crash.
-    Instant::now()
-        .duration_since(env.startup_time)
-        .as_micros() as clock_t
+    Instant::now().duration_since(env.startup_time).as_micros() as clock_t
 }
 
 fn time(env: &mut Environment, out: MutPtr<time_t>) -> time_t {
@@ -523,34 +521,33 @@ fn strftime(
                 let formatted_minute = format!("{:02}", minute);
                 res.extend_from_slice(formatted_minute.as_bytes());
             }
-            b'b' | b'h' => { 
+            b'b' | b'h' => {
                 let month = time_val.tm_mon;
                 assert!((0..12).contains(&month));
                 const MONTH_ABBRS: [&[u8]; 12] = [
-                    b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun",
-                    b"Jul", b"Aug", b"Sep", b"Oct", b"Nov", b"Dec",
+                    b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun", b"Jul", b"Aug", b"Sep", b"Oct",
+                    b"Nov", b"Dec",
                 ];
                 res.extend_from_slice(MONTH_ABBRS[month as usize]);
             }
-            b'a' => { 
+            b'a' => {
                 let wday = time_val.tm_wday;
                 assert!((0..7).contains(&wday));
-                const WDAY_ABBRS: [&[u8]; 7] = [
-                    b"Sun", b"Mon", b"Tue", b"Wed", b"Thu", b"Fri", b"Sat",
-                ];
+                const WDAY_ABBRS: [&[u8]; 7] =
+                    [b"Sun", b"Mon", b"Tue", b"Wed", b"Thu", b"Fri", b"Sat"];
                 res.extend_from_slice(WDAY_ABBRS[wday as usize]);
             }
-            b'Y' => { 
+            b'Y' => {
                 let year = time_val.tm_year + 1900;
                 let formatted_year = format!("{:04}", year);
                 res.extend_from_slice(formatted_year.as_bytes());
             }
-            b'y' => { 
+            b'y' => {
                 let year = (time_val.tm_year + 1900) % 100;
                 let formatted_year = format!("{:02}", year);
                 res.extend_from_slice(formatted_year.as_bytes());
             }
-            b'Z' => { 
+            b'Z' => {
                 let tz_ptr = time_val.tm_zone;
                 if tz_ptr.is_null() {
                     // Эмулятор считает время от UNIX_EPOCH без смещения (tm_gmtoff = 0),
@@ -563,7 +560,7 @@ fn strftime(
                     res.extend_from_slice(b"GMT");
                 }
             }
-            b'S' => { 
+            b'S' => {
                 let second = time_val.tm_sec;
                 assert!((0..=60).contains(&second));
                 let formatted_second = format!("{:02}", second);
@@ -612,4 +609,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strftime(_, _, _, _)),
     export_c_func!(difftime(_, _)),
 ];
-                       

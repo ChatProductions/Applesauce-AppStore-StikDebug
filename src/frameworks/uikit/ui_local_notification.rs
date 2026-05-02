@@ -6,7 +6,9 @@
 //! `UILocalNotification`.
 
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::objc::{id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{
+    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+};
 use crate::Environment;
 
 pub(super) struct UILocalNotificationHostObject {
@@ -59,7 +61,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, aa);
     release(env, sn);
     release(env, ui);
-    
+
     env.objc.dealloc_object(this, &mut env.mem);
 }
 
@@ -122,9 +124,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 };
 
 // ЭКСПОРТ КОНСТАНТЫ (Решает ошибку линковщика)
-pub const CONSTANTS: ConstantExports = &[
-    (
-        "_UILocalNotificationDefaultSoundName",
-        HostConstant::NSString("UILocalNotificationDefaultSoundName"),
-    ),
-];
+pub const CONSTANTS: ConstantExports = &[(
+    "_UILocalNotificationDefaultSoundName",
+    HostConstant::NSString("UILocalNotificationDefaultSoundName"),
+)];

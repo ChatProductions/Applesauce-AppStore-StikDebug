@@ -17,7 +17,9 @@ use super::{
 };
 use crate::bundle;
 use crate::mach_o::MachO;
-use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, Ptr, SafeRead, MutVoidPtr};
+use crate::mem::{
+    guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutVoidPtr, Ptr, SafeRead,
+};
 use std::collections::{HashMap, VecDeque};
 
 /// Generic pointer to an Objective-C class or metaclass.
@@ -205,7 +207,7 @@ macro_rules! objc_classes {
             $( + ($cm_type:ty) $cm_name:ident $(:($cm_type1:ty) $cm_arg1:ident $($($cm_namen:ident)?:($cm_typen:ty) $cm_argn:ident)*)?
                               $(, ...$cm_va_arg:ident)?
                  $cm_block:block )*
-            $( - ($im_type:ty) $im_name:ident $(:($im_type1:ty) 
+            $( - ($im_type:ty) $im_name:ident $(:($im_type1:ty)
 $im_arg1:ident $($($im_namen:ident)?:($im_typen:ty) $im_argn:ident)*)?
                               $(, ...$im_va_arg:ident)?
                  $im_block:block )*
@@ -354,7 +356,7 @@ fn substitute_classes(
     let class_t { data, .. } = mem.read(class.cast());
     let class_rw_t { name, .. } = mem.read(data);
     let name = mem.cstr_at_utf8(name).unwrap();
-    // Substitute classes that seem to be from various third-party advertising 
+    // Substitute classes that seem to be from various third-party advertising
     // or social network SDKs.
     if !(name.starts_with("AdMob")
         || name.starts_with("AltAds")
@@ -365,7 +367,8 @@ fn substitute_classes(
         || name.starts_with("Tapjoy")
         || name.starts_with("UA")
         || name.starts_with("GAD")
-        || name.starts_with("iSimulate")) // <-- ДОБАВЛЕНО ЗДЕСЬ
+        || name.starts_with("iSimulate"))
+    // <-- ДОБАВЛЕНО ЗДЕСЬ
     {
         // TODO : try to remove when sqlite3 is supported.
         if (bundle.bundle_identifier() == "com.chillingo.defenderchronicles")
@@ -447,7 +450,7 @@ impl ObjC {
 
         let class_host_object: Box<dyn AnyHostObject>;
         let metaclass_host_object: Box<dyn AnyHostObject>;
-            if let Some(template) = Self::find_template(name) {
+        if let Some(template) = Self::find_template(name) {
             // We have a template (host implementation) for this class, use it.
             if let Some(superclass_name) = template.superclass {
                 // В реальном Objective-C рантайме классы могут загружаться динамически.
@@ -483,7 +486,7 @@ impl ObjC {
                     })
                     .unwrap_or(nil),
                 self,
-             ));
+            ));
         } else {
             // ЗДЕСЬ ДОБАВЛЕНА ЛОГИКА ДЛЯ ДИНАМИЧЕСКИХ КЛАССОВ (GAD и др.)
             let is_fake = name.starts_with("AdMob")
@@ -496,7 +499,7 @@ impl ObjC {
                 || name.starts_with("UA")
                 || name.starts_with("GAD")
                 || name.starts_with("iSimulate"); // <-- ДОБАВЛЕНО ЗДЕСЬ
-                
+
             if !use_placeholder && !is_fake {
                 panic!("Missing implementation for class {name}!");
             }
@@ -889,7 +892,7 @@ impl ObjC {
         } else if let Some(FakeClass { name, .. }) = host_object.as_any().downcast_ref() {
             Some(name)
         } else {
-             None
+            None
         }
     }
 }
@@ -898,7 +901,7 @@ pub fn objc_getClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class 
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -918,7 +921,7 @@ pub fn objc_begin_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Cla
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -938,7 +941,7 @@ pub fn objc_end_catch(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -958,7 +961,7 @@ pub fn objc_exception_throw(env: &mut crate::Environment, name: ConstPtr<u8>) ->
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -978,7 +981,7 @@ pub fn object_getClassName(env: &mut crate::Environment, obj: id) -> Class {
     if obj.is_null() {
         return nil;
     }
-    
+
     let objc_obj: objc_object = env.mem.read(obj.cast());
     objc_obj.isa
 }
@@ -987,16 +990,19 @@ pub fn object_getClass(env: &mut crate::Environment, obj: id) -> Class {
     if obj.is_null() {
         return nil;
     }
-    
+
     let objc_obj: objc_object = env.mem.read(obj.cast());
     objc_obj.isa
 }
 
-pub fn objc_retainAutoreleasedReturnValue(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+pub fn objc_retainAutoreleasedReturnValue(
+    env: &mut crate::Environment,
+    name: ConstPtr<u8>,
+) -> Class {
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -1016,7 +1022,7 @@ pub fn objc_autoreleaseReturnValue(env: &mut crate::Environment, name: ConstPtr<
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -1032,11 +1038,14 @@ pub fn objc_autoreleaseReturnValue(env: &mut crate::Environment, name: ConstPtr<
     nil
 }
 
-pub fn objc_retainAutoreleaseReturnValue(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+pub fn objc_retainAutoreleaseReturnValue(
+    env: &mut crate::Environment,
+    name: ConstPtr<u8>,
+) -> Class {
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -1056,7 +1065,7 @@ pub fn objc_autoreleasePoolPush(env: &mut crate::Environment, name: ConstPtr<u8>
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -1083,7 +1092,7 @@ pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u
     if name.is_null() {
         return nil;
     }
-    
+
     let name_str = match env.mem.cstr_at_utf8(name) {
         Ok(s) => s.to_string(),
         Err(_) => return nil,
@@ -1129,7 +1138,11 @@ pub fn class_getInstanceSize(env: &mut crate::Environment, cls: Class, name: SEL
     ConstVoidPtr::null()
 }
 
-pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: SEL) -> ConstVoidPtr {
+pub fn class_getInstanceMethod(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: SEL,
+) -> ConstVoidPtr {
     if cls.is_null() {
         return ConstVoidPtr::null();
     }
@@ -1152,7 +1165,11 @@ pub fn class_getInstanceMethod(env: &mut crate::Environment, cls: Class, name: S
     ConstVoidPtr::null()
 }
 
-pub fn method_getImplementation(env: &mut crate::Environment, cls: Class, name: SEL) -> ConstVoidPtr {
+pub fn method_getImplementation(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: SEL,
+) -> ConstVoidPtr {
     if cls.is_null() {
         return ConstVoidPtr::null();
     }
@@ -1175,7 +1192,11 @@ pub fn method_getImplementation(env: &mut crate::Environment, cls: Class, name: 
     ConstVoidPtr::null()
 }
 
-pub fn method_setImplementation(env: &mut crate::Environment, cls: Class, name: SEL) -> ConstVoidPtr {
+pub fn method_setImplementation(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: SEL,
+) -> ConstVoidPtr {
     if cls.is_null() {
         return ConstVoidPtr::null();
     }
@@ -1292,9 +1313,12 @@ pub fn ___objc_personality_v0(
     log!(
         "___objc_personality_v0 called! Exception handling is not fully implemented in touchHLE.\n\
         version: {}, actions: {}, class: {:x}, object: {:?}, context: {:?}",
-        version, actions, exception_class, exception_object, context
+        version,
+        actions,
+        exception_class,
+        exception_object,
+        context
     );
     // _URC_FATAL_PHASE1_ERROR
     3
 }
-

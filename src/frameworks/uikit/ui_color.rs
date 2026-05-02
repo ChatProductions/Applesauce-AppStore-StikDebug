@@ -525,35 +525,40 @@ fn hsb_to_rgb(h: CGFloat, s: CGFloat, v: CGFloat) -> (CGFloat, CGFloat, CGFloat)
 /// Unknown names fall back to (0, 0, 0, alpha).
 fn system_color_rgba(name: &str, alpha: CGFloat) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
     match name {
-        "systemRedColor"        | "redColor"        => (1.0, 0.235, 0.188, alpha),
-        "systemGreenColor"      | "greenColor"      => (0.204, 0.78,  0.349, alpha),
-        "systemBlueColor"       | "blueColor"       => (0.0,  0.478, 1.0,   alpha),
-        "systemOrangeColor"     | "orangeColor"     => (1.0,  0.584, 0.0,   alpha),
-        "systemYellowColor"     | "yellowColor"     => (1.0,  0.8,   0.0,   alpha),
-        "systemPinkColor"                           => (1.0,  0.176, 0.333, alpha),
-        "systemPurpleColor"     | "purpleColor"     => (0.686,0.322, 0.871, alpha),
-        "systemTealColor"                           => (0.353,0.784, 0.98,  alpha),
-        "systemIndigoColor"                         => (0.345,0.337, 0.839, alpha),
-        "systemBrownColor"      | "brownColor"      => (0.635,0.518, 0.369, alpha),
-        "systemMintColor"                           => (0.0,  0.78,  0.745, alpha),
-        "systemCyanColor"       | "cyanColor"       => (0.196,0.678, 0.902, alpha),
-        "whiteColor"            | "systemWhiteColor"=> (1.0,  1.0,   1.0,   alpha),
-        "blackColor"            | "systemBlackColor"=> (0.0,  0.0,   0.0,   alpha),
-        "grayColor"             | "systemGrayColor" => (0.557,0.557, 0.576, alpha),
-        "lightGrayColor"                            => (0.667,0.667, 0.667, alpha),
-        "darkGrayColor"                             => (0.333,0.333, 0.333, alpha),
-        "clearColor"                                => (0.0,  0.0,   0.0,   0.0),
-        "labelColor"            | "darkTextColor"   => (0.0,  0.0,   0.0,   alpha),
-        "secondaryLabelColor"                       => (0.235,0.235, 0.263, alpha * 0.6),
-        "placeholderTextColor"                      => (0.235,0.235, 0.263, alpha * 0.3),
-        "linkColor"                                 => (0.0,  0.478, 1.0,   alpha),
-        "separatorColor"                            => (0.235,0.235, 0.263, alpha * 0.29),
-        "groupTableViewBackgroundColor"
-        | "systemGroupedBackgroundColor"            => (0.949,0.949, 0.969, alpha),
-        "tableCellGroupedBackgroundColor"
-        | "secondarySystemGroupedBackgroundColor"   => (1.0,  1.0,   1.0,   alpha),
+        "systemRedColor" | "redColor" => (1.0, 0.235, 0.188, alpha),
+        "systemGreenColor" | "greenColor" => (0.204, 0.78, 0.349, alpha),
+        "systemBlueColor" | "blueColor" => (0.0, 0.478, 1.0, alpha),
+        "systemOrangeColor" | "orangeColor" => (1.0, 0.584, 0.0, alpha),
+        "systemYellowColor" | "yellowColor" => (1.0, 0.8, 0.0, alpha),
+        "systemPinkColor" => (1.0, 0.176, 0.333, alpha),
+        "systemPurpleColor" | "purpleColor" => (0.686, 0.322, 0.871, alpha),
+        "systemTealColor" => (0.353, 0.784, 0.98, alpha),
+        "systemIndigoColor" => (0.345, 0.337, 0.839, alpha),
+        "systemBrownColor" | "brownColor" => (0.635, 0.518, 0.369, alpha),
+        "systemMintColor" => (0.0, 0.78, 0.745, alpha),
+        "systemCyanColor" | "cyanColor" => (0.196, 0.678, 0.902, alpha),
+        "whiteColor" | "systemWhiteColor" => (1.0, 1.0, 1.0, alpha),
+        "blackColor" | "systemBlackColor" => (0.0, 0.0, 0.0, alpha),
+        "grayColor" | "systemGrayColor" => (0.557, 0.557, 0.576, alpha),
+        "lightGrayColor" => (0.667, 0.667, 0.667, alpha),
+        "darkGrayColor" => (0.333, 0.333, 0.333, alpha),
+        "clearColor" => (0.0, 0.0, 0.0, 0.0),
+        "labelColor" | "darkTextColor" => (0.0, 0.0, 0.0, alpha),
+        "secondaryLabelColor" => (0.235, 0.235, 0.263, alpha * 0.6),
+        "placeholderTextColor" => (0.235, 0.235, 0.263, alpha * 0.3),
+        "linkColor" => (0.0, 0.478, 1.0, alpha),
+        "separatorColor" => (0.235, 0.235, 0.263, alpha * 0.29),
+        "groupTableViewBackgroundColor" | "systemGroupedBackgroundColor" => {
+            (0.949, 0.949, 0.969, alpha)
+        }
+        "tableCellGroupedBackgroundColor" | "secondarySystemGroupedBackgroundColor" => {
+            (1.0, 1.0, 1.0, alpha)
+        }
         _ => {
-            log_dbg!("UIColor system color name {:?} not recognised — using black", name);
+            log_dbg!(
+                "UIColor system color name {:?} not recognised — using black",
+                name
+            );
             (0.0, 0.0, 0.0, alpha)
         }
     }

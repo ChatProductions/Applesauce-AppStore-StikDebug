@@ -14,7 +14,6 @@ pub struct State {
     pub av_audio_session: av_audio_session::State,
 }
 
-
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/System/Library/Frameworks/AVFoundation.framework/AVFoundation",
     aliases: &[],

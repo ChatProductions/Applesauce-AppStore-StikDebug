@@ -18,10 +18,22 @@ type CGFloat = f32;
 #[repr(C, packed)]
 /// CATransform3D представляет собой матрицу 4x4 для 3D-преобразований.
 pub struct CATransform3D {
-    pub m11: CGFloat, pub m12: CGFloat, pub m13: CGFloat, pub m14: CGFloat,
-    pub m21: CGFloat, pub m22: CGFloat, pub m23: CGFloat, pub m24: CGFloat,
-    pub m31: CGFloat, pub m32: CGFloat, pub m33: CGFloat, pub m34: CGFloat,
-    pub m41: CGFloat, pub m42: CGFloat, pub m43: CGFloat, pub m44: CGFloat,
+    pub m11: CGFloat,
+    pub m12: CGFloat,
+    pub m13: CGFloat,
+    pub m14: CGFloat,
+    pub m21: CGFloat,
+    pub m22: CGFloat,
+    pub m23: CGFloat,
+    pub m24: CGFloat,
+    pub m31: CGFloat,
+    pub m32: CGFloat,
+    pub m33: CGFloat,
+    pub m34: CGFloat,
+    pub m41: CGFloat,
+    pub m42: CGFloat,
+    pub m43: CGFloat,
+    pub m44: CGFloat,
 }
 
 unsafe impl SafeRead for CATransform3D {}
@@ -87,10 +99,22 @@ impl From<Matrix<4>> for CATransform3D {
     fn from(matrix: Matrix<4>) -> Self {
         let columns = matrix.columns();
         CATransform3D {
-            m11: columns[0][0], m12: columns[0][1], m13: columns[0][2], m14: columns[0][3],
-            m21: columns[1][0], m22: columns[1][1], m23: columns[1][2], m24: columns[1][3],
-            m31: columns[2][0], m32: columns[2][1], m33: columns[2][2], m34: columns[2][3],
-            m41: columns[3][0], m42: columns[3][1], m43: columns[3][2], m44: columns[3][3],
+            m11: columns[0][0],
+            m12: columns[0][1],
+            m13: columns[0][2],
+            m14: columns[0][3],
+            m21: columns[1][0],
+            m22: columns[1][1],
+            m23: columns[1][2],
+            m24: columns[1][3],
+            m31: columns[2][0],
+            m32: columns[2][1],
+            m33: columns[2][2],
+            m34: columns[2][3],
+            m41: columns[3][0],
+            m42: columns[3][1],
+            m43: columns[3][2],
+            m44: columns[3][3],
         }
     }
 }
@@ -177,30 +201,59 @@ impl CATransform3D {
         let rot_mat = Self::make_rotation(angle, x, y, z);
         rot_mat.concat(self)
     }
-    
+
     pub fn scale(self, sx: CGFloat, sy: CGFloat, sz: CGFloat) -> Self {
         let scale_mat = Self::make_scale(sx, sy, sz);
         scale_mat.concat(self)
     }
 }
 
-fn CATransform3DMakeTranslation(_env: &mut Environment, tx: CGFloat, ty: CGFloat, tz: CGFloat) -> CATransform3D {
+fn CATransform3DMakeTranslation(
+    _env: &mut Environment,
+    tx: CGFloat,
+    ty: CGFloat,
+    tz: CGFloat,
+) -> CATransform3D {
     CATransform3D::make_translation(tx, ty, tz)
 }
 
-fn CATransform3DMakeScale(_env: &mut Environment, sx: CGFloat, sy: CGFloat, sz: CGFloat) -> CATransform3D {
+fn CATransform3DMakeScale(
+    _env: &mut Environment,
+    sx: CGFloat,
+    sy: CGFloat,
+    sz: CGFloat,
+) -> CATransform3D {
     CATransform3D::make_scale(sx, sy, sz)
 }
 
-fn CATransform3DMakeRotation(_env: &mut Environment, angle: CGFloat, x: CGFloat, y: CGFloat, z: CGFloat) -> CATransform3D {
+fn CATransform3DMakeRotation(
+    _env: &mut Environment,
+    angle: CGFloat,
+    x: CGFloat,
+    y: CGFloat,
+    z: CGFloat,
+) -> CATransform3D {
     CATransform3D::make_rotation(angle, x, y, z)
 }
 
-fn CATransform3DScale(_env: &mut Environment, t: CATransform3D, sx: CGFloat, sy: CGFloat, sz: CGFloat) -> CATransform3D {
+fn CATransform3DScale(
+    _env: &mut Environment,
+    t: CATransform3D,
+    sx: CGFloat,
+    sy: CGFloat,
+    sz: CGFloat,
+) -> CATransform3D {
     t.scale(sx, sy, sz)
 }
 
-fn CATransform3DRotate(_env: &mut Environment, t: CATransform3D, angle: CGFloat, x: CGFloat, y: CGFloat, z: CGFloat) -> CATransform3D {
+fn CATransform3DRotate(
+    _env: &mut Environment,
+    t: CATransform3D,
+    angle: CGFloat,
+    x: CGFloat,
+    y: CGFloat,
+    z: CGFloat,
+) -> CATransform3D {
     t.rotate(angle, x, y, z)
 }
 

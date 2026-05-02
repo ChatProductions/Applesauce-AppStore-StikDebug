@@ -1,5 +1,5 @@
+use crate::objc::{autorelease, id, msg, nil, release, retain, HostObject};
 use crate::objc_classes;
-use crate::objc::{id, msg, nil, HostObject, retain, release, autorelease};
 use crate::Environment;
 
 // =====================================================================
@@ -17,13 +17,13 @@ pub(super) struct CABasicAnimationHostObject {
     delegate: id,
     removed_on_completion: bool,
     timing_function: id,
-    
+
     // CAPropertyAnimation
     key_path: id,
     is_cumulative: bool,
     is_additive: bool,
     value_function: id,
-    
+
     // CABasicAnimation
     from_value: id,
     to_value: id,
@@ -37,13 +37,13 @@ pub(super) struct CASpringAnimationHostObject {
     delegate: id,
     removed_on_completion: bool,
     timing_function: id,
-    
+
     // CAPropertyAnimation
     key_path: id,
     is_cumulative: bool,
     is_additive: bool,
     value_function: id,
-    
+
     // CABasicAnimation
     from_value: id,
     to_value: id,
@@ -67,13 +67,13 @@ pub(super) struct CAKeyframeAnimationHostObject {
     delegate: id,
     removed_on_completion: bool,
     timing_function: id,
-    
+
     // CAPropertyAnimation
     key_path: id,
     is_cumulative: bool,
     is_additive: bool,
     value_function: id,
-    
+
     // CAKeyframeAnimation
     values: id,
     path: id,
@@ -93,7 +93,7 @@ pub(super) struct CATransitionHostObject {
     delegate: id,
     removed_on_completion: bool,
     timing_function: id,
-    
+
     // CATransition
     type_val: id,
     subtype: id,
@@ -112,8 +112,7 @@ impl HostObject for CATransitionHostObject {}
 // CLASSES EXPORT
 // =====================================================================
 
-pub const CLASSES: crate::objc::ClassExports = objc_classes!
-{
+pub const CLASSES: crate::objc::ClassExports = objc_classes! {
     (env, this, _cmd);
 
     // -----------------------------------------------------------------
@@ -184,7 +183,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
                 host.from_value, host.to_value, host.by_value
             )
         };
-        
+
         if fill_mode != nil { release(env, fill_mode); }
         if delegate != nil { release(env, delegate); }
         if timing_function != nil { release(env, timing_function); }
@@ -193,14 +192,14 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if from_value != nil { release(env, from_value); }
         if to_value != nil { release(env, to_value); }
         if by_value != nil { release(env, by_value); }
-        
+
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
     // CAAnimation
     - (f64)duration { env.objc.borrow::<CABasicAnimationHostObject>(this).duration }
     - (())setDuration:(f64)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).duration = val; }
-    
+
     - (bool)isRemovedOnCompletion { env.objc.borrow::<CABasicAnimationHostObject>(this).removed_on_completion }
     - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CABasicAnimationHostObject>(this).removed_on_completion = val; }
 
@@ -312,7 +311,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
                 host.from_value, host.to_value, host.by_value
             )
         };
-        
+
         if fill_mode != nil { release(env, fill_mode); }
         if delegate != nil { release(env, delegate); }
         if timing_function != nil { release(env, timing_function); }
@@ -321,7 +320,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if from_value != nil { release(env, from_value); }
         if to_value != nil { release(env, to_value); }
         if by_value != nil { release(env, by_value); }
-        
+
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
@@ -329,7 +328,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
     // (Повторяем базовые геттеры/сеттеры для CASpringAnimation)
     - (f64)duration { env.objc.borrow::<CASpringAnimationHostObject>(this).duration }
     - (())setDuration:(f64)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).duration = val; }
-    
+
     - (bool)isRemovedOnCompletion { env.objc.borrow::<CASpringAnimationHostObject>(this).removed_on_completion }
     - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CASpringAnimationHostObject>(this).removed_on_completion = val; }
 
@@ -464,7 +463,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
                 host.rotation_mode, host.tension_values, host.continuity_values, host.bias_values
             )
         };
-        
+
         if fill_mode != nil { release(env, fill_mode); }
         if delegate != nil { release(env, delegate); }
         if timing_function != nil { release(env, timing_function); }
@@ -479,7 +478,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
         if tension_values != nil { release(env, tension_values); }
         if continuity_values != nil { release(env, continuity_values); }
         if bias_values != nil { release(env, bias_values); }
-        
+
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
@@ -635,21 +634,21 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes!
                 host.type_val, host.subtype, host.filter
             )
         };
-        
+
         if fill_mode != nil { release(env, fill_mode); }
         if delegate != nil { release(env, delegate); }
         if timing_function != nil { release(env, timing_function); }
         if type_val != nil { release(env, type_val); }
         if subtype != nil { release(env, subtype); }
         if filter != nil { release(env, filter); }
-        
+
         env.objc.dealloc_object(this, &mut env.mem)
     }
 
     // CAAnimation properties
     - (f64)duration { env.objc.borrow::<CATransitionHostObject>(this).duration }
     - (())setDuration:(f64)val { env.objc.borrow_mut::<CATransitionHostObject>(this).duration = val; }
-    
+
     - (bool)isRemovedOnCompletion { env.objc.borrow::<CATransitionHostObject>(this).removed_on_completion }
     - (())setRemovedOnCompletion:(bool)val { env.objc.borrow_mut::<CATransitionHostObject>(this).removed_on_completion = val; }
 

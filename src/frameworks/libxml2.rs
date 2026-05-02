@@ -283,13 +283,8 @@ fn xml_decode_entities(s: &[u8]) -> Vec<u8> {
             }
             if ent.starts_with(b"#") {
                 let digits = &ent[1..];
-                let cp = if digits.starts_with(b"x") || digits.starts_with(b"X")
-                {
-                    u32::from_str_radix(
-                        std::str::from_utf8(&digits[1..]).unwrap_or(""),
-                        16,
-                    )
-                    .ok()
+                let cp = if digits.starts_with(b"x") || digits.starts_with(b"X") {
+                    u32::from_str_radix(std::str::from_utf8(&digits[1..]).unwrap_or(""), 16).ok()
                 } else {
                     std::str::from_utf8(digits)
                         .ok()
@@ -342,10 +337,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
             }
             let text = xml_decode_entities(&data[start..i]);
             if !xml_trim(&text).is_empty() {
-                out.push(ReaderEvent::Text {
-                    value: text,
-                    depth,
-                });
+                out.push(ReaderEvent::Text { value: text, depth });
             }
             continue;
         }
@@ -356,9 +348,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
 
         // Processing instruction / XML declaration
         if data[i] == b'?' {
-            while i + 1 < data.len()
-                && !(data[i] == b'?' && data[i + 1] == b'>')
-            {
+            while i + 1 < data.len() && !(data[i] == b'?' && data[i + 1] == b'>') {
                 i += 1;
             }
             i += 2;
@@ -368,9 +358,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
         if data[i..].starts_with(b"!--") {
             i += 3;
             while i + 2 < data.len()
-                && !(data[i] == b'-'
-                    && data[i + 1] == b'-'
-                    && data[i + 2] == b'>')
+                && !(data[i] == b'-' && data[i + 1] == b'-' && data[i + 2] == b'>')
             {
                 i += 1;
             }
@@ -378,9 +366,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
             continue;
         }
         // DOCTYPE
-        if data[i..].starts_with(b"!DOCTYPE")
-            || data[i..].starts_with(b"!doctype")
-        {
+        if data[i..].starts_with(b"!DOCTYPE") || data[i..].starts_with(b"!doctype") {
             while i < data.len() && data[i] != b'>' {
                 i += 1;
             }
@@ -394,9 +380,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
             i += 8;
             let start = i;
             while i + 2 < data.len()
-                && !(data[i] == b']'
-                    && data[i + 1] == b']'
-                    && data[i + 2] == b'>')
+                && !(data[i] == b']' && data[i + 1] == b']' && data[i + 2] == b'>')
             {
                 i += 1;
             }
@@ -427,11 +411,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
         }
         // Start element <tag ...>
         let ns = i;
-        while i < data.len()
-            && !xml_is_ws(data[i])
-            && data[i] != b'>'
-            && data[i] != b'/'
-        {
+        while i < data.len() && !xml_is_ws(data[i]) && data[i] != b'>' && data[i] != b'/' {
             i += 1;
         }
         let tag = data[ns..i].to_vec();
@@ -444,9 +424,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
             }
             if i >= data.len()
                 || data[i] == b'>'
-                || (data[i] == b'/'
-                    && i + 1 < data.len()
-                    && data[i + 1] == b'>')
+                || (data[i] == b'/' && i + 1 < data.len() && data[i + 1] == b'>')
             {
                 break;
             }
@@ -487,7 +465,10 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
                 if i < data.len() {
                     i += 1;
                 }
-                attrs.push(XmlAttr { name: aname, value: val });
+                attrs.push(XmlAttr {
+                    name: aname,
+                    value: val,
+                });
             }
         }
 
@@ -506,10 +487,7 @@ fn xml_parse_events(data: &[u8]) -> Vec<ReaderEvent> {
             is_empty: self_close,
         });
         if self_close {
-            out.push(ReaderEvent::End {
-                name: tag,
-                depth,
-            });
+            out.push(ReaderEvent::End { name: tag, depth });
         } else {
             depth += 1;
         }
@@ -661,9 +639,7 @@ fn event_depth(ev: &ReaderEvent) -> i32 {
 
 fn event_name(ev: &ReaderEvent) -> &[u8] {
     match ev {
-        ReaderEvent::Start { name, .. } | ReaderEvent::End { name, .. } => {
-            name
-        }
+        ReaderEvent::Start { name, .. } | ReaderEvent::End { name, .. } => name,
         ReaderEvent::Text { .. } => b"#text",
     }
 }
@@ -730,12 +706,7 @@ fn xmlCtxtReadMemory(
 }
 
 #[allow(non_snake_case)]
-fn xmlReadFile(
-    env: &mut Environment,
-    filename: u32,
-    _encoding: u32,
-    _options: u32,
-) -> u32 {
+fn xmlReadFile(env: &mut Environment, filename: u32, _encoding: u32, _options: u32) -> u32 {
     let path = read_cstr_str(env, filename);
     log!("xmlReadFile(\"{}\")", path);
     let data = read_xml_file(env, &path);
@@ -801,24 +772,19 @@ fn xmlDocGetRootElement(_env: &mut Environment, doc: u32) -> u32 {
 
 #[allow(non_snake_case)]
 fn xmlChildrenNode(_env: &mut Environment, node: u32) -> u32 {
-    with_xml(|s| {
-        s.nodes.get(&node).map(|n| n.first_child).unwrap_or(0)
-    })
+    with_xml(|s| s.nodes.get(&node).map(|n| n.first_child).unwrap_or(0))
 }
 
 #[allow(non_snake_case)]
 fn xmlGetLastChild(_env: &mut Environment, node: u32) -> u32 {
-    with_xml(|s| {
-        s.nodes.get(&node).map(|n| n.last_child).unwrap_or(0)
-    })
+    with_xml(|s| s.nodes.get(&node).map(|n| n.last_child).unwrap_or(0))
 }
 
 /// Walk next_sib links until an element node is found.
 #[allow(non_snake_case)]
 fn xmlNextElementSibling(_env: &mut Environment, node: u32) -> u32 {
     with_xml(|s| {
-        let mut cur =
-            s.nodes.get(&node).map(|n| n.next_sib).unwrap_or(0);
+        let mut cur = s.nodes.get(&node).map(|n| n.next_sib).unwrap_or(0);
         while cur != 0 {
             match s.nodes.get(&cur) {
                 Some(n) if !n.name.is_empty() => return cur,
@@ -834,8 +800,7 @@ fn xmlNextElementSibling(_env: &mut Environment, node: u32) -> u32 {
 #[allow(non_snake_case)]
 fn xmlFirstElementChild(_env: &mut Environment, node: u32) -> u32 {
     with_xml(|s| {
-        let mut cur =
-            s.nodes.get(&node).map(|n| n.first_child).unwrap_or(0);
+        let mut cur = s.nodes.get(&node).map(|n| n.first_child).unwrap_or(0);
         while cur != 0 {
             match s.nodes.get(&cur) {
                 Some(n) if !n.name.is_empty() => return cur,
@@ -848,12 +813,7 @@ fn xmlFirstElementChild(_env: &mut Environment, node: u32) -> u32 {
 }
 
 #[allow(non_snake_case)]
-fn xmlNodeListGetString(
-    env: &mut Environment,
-    _doc: u32,
-    list: u32,
-    _inln: u32,
-) -> u32 {
+fn xmlNodeListGetString(env: &mut Environment, _doc: u32, list: u32, _inln: u32) -> u32 {
     let content = with_xml(|s| {
         s.nodes
             .get(&list)
@@ -957,12 +917,7 @@ fn xmlStrsub(env: &mut Environment, str_ptr: u32, start: u32, len: u32) -> u32 {
 // ============================================================
 
 #[allow(non_snake_case)]
-fn xmlReaderForFile(
-    env: &mut Environment,
-    filename: u32,
-    _encoding: u32,
-    _options: u32,
-) -> u32 {
+fn xmlReaderForFile(env: &mut Environment, filename: u32, _encoding: u32, _options: u32) -> u32 {
     let path = read_cstr_str(env, filename);
     log!("xmlReaderForFile(\"{}\")", path);
     let data = read_xml_file(env, &path);
@@ -1055,11 +1010,7 @@ fn xmlTextReaderReadOuterXml(env: &mut Environment, _reader: u32) -> u32 {
 }
 
 #[allow(non_snake_case)]
-fn xmlTextReaderGetAttribute(
-    env: &mut Environment,
-    reader: u32,
-    name: u32,
-) -> u32 {
+fn xmlTextReaderGetAttribute(env: &mut Environment, reader: u32, name: u32) -> u32 {
     let attr_name = read_cstr(env, name);
     let val = with_xml(|s| {
         s.readers
@@ -1138,9 +1089,7 @@ fn xmlTextReaderNext(_env: &mut Environment, reader: u32) -> i32 {
                 return 0;
             }
             let ev = &rd.events[rd.pos as usize];
-            if matches!(ev, ReaderEvent::Start { .. })
-                && event_depth(ev) <= cur_depth
-            {
+            if matches!(ev, ReaderEvent::Start { .. }) && event_depth(ev) <= cur_depth {
                 return 1;
             }
         }
@@ -1218,7 +1167,7 @@ fn xmlTextReaderNamespaceUri(env: &mut Environment, _reader: u32) -> u32 {
 
 #[allow(non_snake_case)]
 fn xmlNewDoc(env: &mut Environment, version_ptr: u32) -> u32 {
-    // Читаем версию (обычно "1.0"), но для нашей внутренней структуры 
+    // Читаем версию (обычно "1.0"), но для нашей внутренней структуры
     // она пока не требуется. Просто логируем для отладки.
     let version = read_cstr_str(env, version_ptr);
     log!("xmlNewDoc(version: {:?})", version);
@@ -1228,7 +1177,7 @@ fn xmlNewDoc(env: &mut Environment, version_ptr: u32) -> u32 {
         let doc_h = s.alloc();
         // Создаем пустой документ без корневого элемента (root: 0)
         s.docs.insert(doc_h, XmlDocData { root: 0 });
-        
+
         doc_h
     })
 }
@@ -1237,7 +1186,10 @@ fn xmlNewDoc(env: &mut Environment, version_ptr: u32) -> u32 {
 fn xmlNewNode(env: &mut Environment, _ns: u32, name: u32) -> u32 {
     // Читаем имя создаваемого тега из памяти гостя
     let name_bytes = read_cstr(env, name);
-    log!("xmlNewNode(name: {:?})", String::from_utf8_lossy(&name_bytes));
+    log!(
+        "xmlNewNode(name: {:?})",
+        String::from_utf8_lossy(&name_bytes)
+    );
 
     with_xml(|s| {
         let node_h = s.alloc();
@@ -1263,22 +1215,22 @@ fn xmlNewNode(env: &mut Environment, _ns: u32, name: u32) -> u32 {
 fn xmlDocSetRootElement(_env: &mut Environment, doc: u32, root: u32) -> u32 {
     with_xml(|s| {
         let mut old_root = 0;
-        
+
         // Привязываем корень к документу
         if let Some(d) = s.docs.get_mut(&doc) {
             old_root = d.root;
             d.root = root;
         }
-        
+
         // Обновляем ссылку на документ внутри самой ноды
         if root != 0 {
             if let Some(n) = s.nodes.get_mut(&root) {
                 n.doc_handle = doc;
             }
         }
-        
+
         // По стандарту libxml2 возвращается старый корень (или 0)
-        old_root 
+        old_root
     })
 }
 
@@ -1336,7 +1288,11 @@ fn serialize_node(state: &XmlState, node_h: u32, out: &mut Vec<u8>) {
             let mut curr_child = node.first_child;
             while curr_child != 0 {
                 serialize_node(state, curr_child, out);
-                curr_child = state.nodes.get(&curr_child).map(|n| n.next_sib).unwrap_or(0);
+                curr_child = state
+                    .nodes
+                    .get(&curr_child)
+                    .map(|n| n.next_sib)
+                    .unwrap_or(0);
             }
 
             out.extend_from_slice(b"</");
@@ -1373,12 +1329,15 @@ fn xmlSaveFile(env: &mut Environment, filename_ptr: u32, doc: u32) -> i32 {
         Err(e) => {
             // ИСПРАВЛЕНО: используем {:?} для вывода (), если запись не удалась
             log!("xmlSaveFile: failed to write using env.fs.write: {:?}", e);
-            
+
             // Фолбэк для Android
             let safe_name = filename.replace("/", "_");
-            let fallback_path = format!("/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/{}", safe_name);
+            let fallback_path = format!(
+                "/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/{}",
+                safe_name
+            );
             log!("xmlSaveFile: trying fallback path: {}", fallback_path);
-            
+
             match std::fs::write(&fallback_path, &out) {
                 Ok(_) => out.len() as i32,
                 Err(e2) => {
@@ -1407,14 +1366,14 @@ fn xmlAddChild(_env: &mut Environment, parent: u32, cur: u32) -> u32 {
                 p.first_child = cur;
             }
             let doc_h = p.doc_handle;
-            
+
             if let Some(c) = s.nodes.get_mut(&cur) {
                 c.parent = parent;
                 c.prev_sib = last;
                 c.next_sib = 0;
                 c.doc_handle = doc_h;
             }
-            
+
             if last != 0 {
                 if let Some(l) = s.nodes.get_mut(&last) {
                     l.next_sib = cur;
@@ -1429,7 +1388,7 @@ fn xmlAddChild(_env: &mut Environment, parent: u32, cur: u32) -> u32 {
 fn xmlNewProp(env: &mut Environment, node: u32, name: u32, value: u32) -> u32 {
     let name_bytes = read_cstr(env, name);
     let value_bytes = read_cstr(env, value);
-    
+
     with_xml(|s| {
         if let Some(n) = s.nodes.get_mut(&node) {
             n.attrs.push(XmlAttr {

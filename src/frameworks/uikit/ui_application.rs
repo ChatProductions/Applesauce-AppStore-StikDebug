@@ -50,10 +50,9 @@ type UIRemoteNotificationType = NSUInteger;
 type UIStatusBarAnimation = NSInteger;
 type UIStatusBarStyle = NSInteger;
 pub type UIApplicationState = NSInteger;
-pub const UIApplicationStateActive:     UIApplicationState = 0;
-pub const UIApplicationStateInactive:   UIApplicationState = 1;
+pub const UIApplicationStateActive: UIApplicationState = 0;
+pub const UIApplicationStateInactive: UIApplicationState = 1;
 pub const UIApplicationStateBackground: UIApplicationState = 2;
-
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -473,10 +472,18 @@ pub(super) fn UIApplicationMain(
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        if env.objc.object_has_method_named(&env.mem, delegate, "application:didFinishLaunchingWithOptions:") {
+        if env.objc.object_has_method_named(
+            &env.mem,
+            delegate,
+            "application:didFinishLaunchingWithOptions:",
+        ) {
             let empty_dict: id = msg_class![env; NSDictionary dictionary];
             () = msg![env; delegate application:ui_application didFinishLaunchingWithOptions:empty_dict];
-        } else if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidFinishLaunching:") {
+        } else if env.objc.object_has_method_named(
+            &env.mem,
+            delegate,
+            "applicationDidFinishLaunching:",
+        ) {
             () = msg![env; delegate applicationDidFinishLaunching:ui_application];
         }
 
@@ -495,7 +502,10 @@ pub(super) fn UIApplicationMain(
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:") {
+        if env
+            .objc
+            .object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:")
+        {
             () = msg![env; delegate applicationDidBecomeActive:ui_application];
         }
         let center: id = msg_class![env; NSNotificationCenter defaultCenter];
@@ -519,7 +529,10 @@ pub(super) fn exit(env: &mut Environment) {
             let _: bool = msg![env; user_defaults synchronize];
         }
         let delegate: id = msg![env; ui_application delegate];
-        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillResignActive:") {
+        if env
+            .objc
+            .object_has_method_named(&env.mem, delegate, "applicationWillResignActive:")
+        {
             () = msg![env; delegate applicationWillResignActive:ui_application];
         }
         let notif_name = get_static_str(env, UIApplicationWillResignActiveNotification);
@@ -529,7 +542,10 @@ pub(super) fn exit(env: &mut Environment) {
     {
         let pool: id = msg_class![env; NSAutoreleasePool new];
         let delegate: id = msg![env; ui_application delegate];
-        if env.objc.object_has_method_named(&env.mem, delegate, "applicationWillTerminate:") {
+        if env
+            .objc
+            .object_has_method_named(&env.mem, delegate, "applicationWillTerminate:")
+        {
             () = msg![env; delegate applicationWillTerminate:ui_application];
         }
         let notif_name = get_static_str(env, UIApplicationWillTerminateNotification);
@@ -537,26 +553,54 @@ pub(super) fn exit(env: &mut Environment) {
         let _: () = msg![env; pool drain];
     };
 
-    std::process::exit(0); 
+    std::process::exit(0);
 }
 
-const UIApplicationDidFinishLaunchingNotification: &str = "UIApplicationDidFinishLaunchingNotification";
+const UIApplicationDidFinishLaunchingNotification: &str =
+    "UIApplicationDidFinishLaunchingNotification";
 const UIApplicationDidBecomeActiveNotification: &str = "UIApplicationDidBecomeActiveNotification";
-const UIApplicationDidEnterBackgroundNotification: &str = "UIApplicationDidEnterBackgroundNotification";
-const UIApplicationWillEnterForegroundNotification: &str = "UIApplicationWillEnterForegroundNotification";
+const UIApplicationDidEnterBackgroundNotification: &str =
+    "UIApplicationDidEnterBackgroundNotification";
+const UIApplicationWillEnterForegroundNotification: &str =
+    "UIApplicationWillEnterForegroundNotification";
 const UIApplicationWillResignActiveNotification: &str = "UIApplicationWillResignActiveNotification";
 const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminateNotification";
-const UIApplicationLaunchOptionsRemoteNotificationKey: &str = "UIApplicationLaunchOptionsRemoteNotificationKey";
-const UIApplicationDidReceiveMemoryWarningNotification: &str = "UIApplicationDidReceiveMemoryWarningNotification";
+const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
+    "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationDidReceiveMemoryWarningNotification: &str =
+    "UIApplicationDidReceiveMemoryWarningNotification";
 pub const CONSTANTS: ConstantExports = &[
-    ("_UIApplicationDidFinishLaunchingNotification", HostConstant::NSString(UIApplicationDidFinishLaunchingNotification)),
-    ("_UIApplicationDidBecomeActiveNotification", HostConstant::NSString(UIApplicationDidBecomeActiveNotification)),
-    ("_UIApplicationDidEnterBackgroundNotification", HostConstant::NSString(UIApplicationDidEnterBackgroundNotification)),
-    ("_UIApplicationWillEnterForegroundNotification", HostConstant::NSString(UIApplicationWillEnterForegroundNotification)),
-    ("_UIApplicationWillResignActiveNotification", HostConstant::NSString(UIApplicationWillResignActiveNotification)),
-    ("_UIApplicationWillTerminateNotification", HostConstant::NSString(UIApplicationWillTerminateNotification)),
-    ("_UIApplicationDidReceiveMemoryWarningNotification", HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification)),
-    ("_UIApplicationLaunchOptionsRemoteNotificationKey", HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey)),
+    (
+        "_UIApplicationDidFinishLaunchingNotification",
+        HostConstant::NSString(UIApplicationDidFinishLaunchingNotification),
+    ),
+    (
+        "_UIApplicationDidBecomeActiveNotification",
+        HostConstant::NSString(UIApplicationDidBecomeActiveNotification),
+    ),
+    (
+        "_UIApplicationDidEnterBackgroundNotification",
+        HostConstant::NSString(UIApplicationDidEnterBackgroundNotification),
+    ),
+    (
+        "_UIApplicationWillEnterForegroundNotification",
+        HostConstant::NSString(UIApplicationWillEnterForegroundNotification),
+    ),
+    (
+        "_UIApplicationWillResignActiveNotification",
+        HostConstant::NSString(UIApplicationWillResignActiveNotification),
+    ),
+    (
+        "_UIApplicationWillTerminateNotification",
+        HostConstant::NSString(UIApplicationWillTerminateNotification),
+    ),
+    (
+        "_UIApplicationDidReceiveMemoryWarningNotification",
+        HostConstant::NSString(UIApplicationDidReceiveMemoryWarningNotification),
+    ),
+    (
+        "_UIApplicationLaunchOptionsRemoteNotificationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
+    ),
 ];
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];
-

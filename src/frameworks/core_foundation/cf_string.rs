@@ -16,7 +16,10 @@ use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::cf_array::CFArrayRef;
 use super::cf_dictionary::CFDictionaryRef;
 use super::cf_locale::CFLocaleRef;
-use super::{kCFNotFound, CFComparisonResult, CFIndex, CFOptionFlags, CFRange, CFRelease, CFRetain, CFTypeRef};
+use super::{
+    kCFNotFound, CFComparisonResult, CFIndex, CFOptionFlags, CFRange, CFRelease, CFRetain,
+    CFTypeRef,
+};
 use crate::abi::{DotDotDot, VaList};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::{ns_string, unichar, NSNotFound, NSRange, NSUInteger};
@@ -82,13 +85,13 @@ type StringPtr = MutPtr<u8>;
 // MARK: - Helper functions
 
 fn validate_allocator(env: &mut Environment, allocator: CFAllocatorRef) -> bool {
-    allocator == kCFAllocatorDefault ||
-    allocator.is_null() || env.mem.read(allocator).is_system_default()
+    allocator == kCFAllocatorDefault
+        || allocator.is_null()
+        || env.mem.read(allocator).is_system_default()
 }
 
 fn safe_cf_range_to_ns_range(range: CFRange) -> Option<NSRange> {
-    if range.location < 0 ||
-    range.length < 0 {
+    if range.location < 0 || range.length < 0 {
         return None;
     }
     Some(NSRange {
@@ -123,8 +126,7 @@ pub fn CFStringConvertEncodingToNSStringEncoding(
         kCFStringEncodingMacRoman => ns_string::NSMacOSRomanStringEncoding,
         kCFStringEncodingASCII => ns_string::NSASCIIStringEncoding,
         kCFStringEncodingUTF8 => ns_string::NSUTF8StringEncoding,
-        kCFStringEncodingUTF16 |
-        kCFStringEncodingUnicode => ns_string::NSUTF16StringEncoding,
+        kCFStringEncodingUTF16 | kCFStringEncodingUnicode => ns_string::NSUTF16StringEncoding,
         kCFStringEncodingUTF16BE => ns_string::NSUTF16BigEndianStringEncoding,
         kCFStringEncodingUTF16LE => ns_string::NSUTF16LittleEndianStringEncoding,
         kCFStringEncodingISOLatin1 => ns_string::NSISOLatin1StringEncoding,
@@ -134,7 +136,10 @@ pub fn CFStringConvertEncodingToNSStringEncoding(
         kCFStringEncodingUTF32BE => ns_string::NSUTF32BigEndianStringEncoding,
         kCFStringEncodingUTF32LE => ns_string::NSUTF32LittleEndianStringEncoding,
         _ => {
-            log!("Warning: Unhandled CFStringEncoding {:#x}, defaulting to UTF-8", encoding);
+            log!(
+                "Warning: Unhandled CFStringEncoding {:#x}, defaulting to UTF-8",
+                encoding
+            );
             ns_string::NSUTF8StringEncoding
         }
     }
@@ -158,7 +163,10 @@ fn CFStringConvertNSStringEncodingToEncoding(
         ns_string::NSUTF32BigEndianStringEncoding => kCFStringEncodingUTF32BE,
         ns_string::NSUTF32LittleEndianStringEncoding => kCFStringEncodingUTF32LE,
         _ => {
-            log!("Warning: Unhandled NSStringEncoding {:#x}, defaulting to UTF-8", encoding);
+            log!(
+                "Warning: Unhandled NSStringEncoding {:#x}, defaulting to UTF-8",
+                encoding
+            );
             kCFStringEncodingUTF8
         }
     }
@@ -194,10 +202,10 @@ fn CFStringGetMostCompatibleMacStringEncoding(
 ) -> CFStringEncoding {
     // Return closest Mac encoding
     match encoding {
-        kCFStringEncodingUTF8 |
-        kCFStringEncodingUTF16 | kCFStringEncodingUTF16BE
-        |
-        kCFStringEncodingUTF16LE => kCFStringEncodingUTF8,
+        kCFStringEncodingUTF8
+        | kCFStringEncodingUTF16
+        | kCFStringEncodingUTF16BE
+        | kCFStringEncodingUTF16LE => kCFStringEncodingUTF8,
         kCFStringEncodingASCII => kCFStringEncodingASCII,
         _ => kCFStringEncodingMacRoman,
     }
@@ -213,11 +221,11 @@ fn CFStringCreateCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if the_string.is_null() {
         return nil;
     }
-    
+
     msg![env; the_string copy]
 }
 
@@ -232,22 +240,21 @@ fn CFStringCreateWithBytes(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
-    if bytes.is_null() ||
-    num_bytes < 0 {
+
+    if bytes.is_null() || num_bytes < 0 {
         return nil;
     }
-    
+
     if num_bytes == 0 {
         return msg_class![env;
         NSString string];
     }
-    
+
     // is_external representation not currently supported
     if is_external {
         log!("Warning: CFStringCreateWithBytes with is_external=true not fully supported");
     }
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let length: NSUInteger = num_bytes.try_into().unwrap_or(0);
     let ns_string: id = msg_class![env; NSString alloc];
@@ -266,7 +273,7 @@ fn CFStringCreateWithBytesNoCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     // For simplicity, we copy the bytes anyway
     // In a real implementation, this would avoid copying
     let _ = contents_deallocator;
@@ -282,11 +289,11 @@ fn CFStringCreateWithCString(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if c_string.is_null() {
         return nil;
     }
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let ns_string: id = msg_class![env; NSString alloc];
     msg![env; ns_string initWithCString:c_string encoding:encoding]
@@ -302,7 +309,7 @@ fn CFStringCreateWithCStringNoCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     // For simplicity, we copy anyway
     let _ = contents_deallocator;
     CFStringCreateWithCString(env, allocator, c_string, encoding)
@@ -317,17 +324,16 @@ fn CFStringCreateWithCharacters(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
-    if chars.is_null() ||
-    num_chars < 0 {
+
+    if chars.is_null() || num_chars < 0 {
         return nil;
     }
-    
+
     if num_chars == 0 {
         return msg_class![env;
         NSString string];
     }
-    
+
     let length: NSUInteger = num_chars.try_into().unwrap_or(0);
     let ns_string: id = msg_class![env;
     NSString alloc];
@@ -344,7 +350,7 @@ fn CFStringCreateWithCharactersNoCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     // For simplicity, we copy anyway
     let _ = contents_deallocator;
     CFStringCreateWithCharacters(env, allocator, chars, num_chars)
@@ -371,11 +377,11 @@ fn CFStringCreateWithFormatAndArguments(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if format.is_null() {
         return nil;
     }
-    
+
     let res = ns_string::with_format(env, format, args);
     ns_string::from_rust_string(env, res)
 }
@@ -389,17 +395,16 @@ fn CFStringCreateWithPascalString(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if p_str.is_null() {
         return nil;
     }
-    
+
     let len: CFIndex = env.mem.read(p_str).into();
-    if len < 0 ||
-    len > 255 {
+    if len < 0 || len > 255 {
         return nil;
     }
-    
+
     let res = CFStringCreateWithBytes(env, allocator, p_str + 1, len, encoding, false);
     log_dbg!(
         "CFStringCreateWithPascalString(len={}, '{}')",
@@ -422,11 +427,11 @@ fn CFStringCreateWithSubstring(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if string.is_null() {
         return nil;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return nil,
@@ -443,12 +448,11 @@ fn CFStringCreateArrayBySeparatingStrings(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
-    if string.is_null() ||
-    separator.is_null() {
+
+    if string.is_null() || separator.is_null() {
         return nil;
     }
-    
+
     msg![env;
     string componentsSeparatedByString:separator]
 }
@@ -462,12 +466,11 @@ fn CFStringCreateByCombiningStrings(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
-    if array.is_null() ||
-    separator.is_null() {
+
+    if array.is_null() || separator.is_null() {
         return nil;
     }
-    
+
     msg![env;
     array componentsJoinedByString:separator]
 }
@@ -482,7 +485,7 @@ fn CFStringCreateMutable(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     // max_length is typically ignored (0 means unlimited)
     let _ = max_length;
     msg_class![env; NSMutableString new]
@@ -497,11 +500,11 @@ fn CFStringCreateMutableCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     if the_string.is_null() {
         return CFStringCreateMutable(env, allocator, max_length);
     }
-    
+
     // max_length typically ignored
     let _ = max_length;
     msg![env;
@@ -519,11 +522,11 @@ fn CFStringCreateMutableWithExternalCharactersNoCopy(
     if !validate_allocator(env, allocator) {
         return nil;
     }
-    
+
     // Not fully supported - create a regular mutable copy
     let _ = (chars, external_characters_allocator);
     let string = CFStringCreateMutable(env, allocator, capacity);
-    
+
     if !string.is_null() && !chars.is_null() && num_chars > 0 {
         let temp = CFStringCreateWithCharacters(env, allocator, chars.cast_const(), num_chars);
         if !temp.is_null() {
@@ -531,7 +534,7 @@ fn CFStringCreateMutableWithExternalCharactersNoCopy(
             CFRelease(env, temp);
         }
     }
-    
+
     string
 }
 
@@ -541,7 +544,7 @@ fn CFStringGetLength(env: &mut Environment, the_string: CFStringRef) -> CFIndex 
     if the_string.is_null() {
         return 0;
     }
-    
+
     let length: NSUInteger = msg![env; the_string length];
     length.try_into().unwrap_or(0)
 }
@@ -551,16 +554,15 @@ fn CFStringGetCharacterAtIndex(
     the_string: CFStringRef,
     idx: CFIndex,
 ) -> unichar {
-    if the_string.is_null() ||
-    idx < 0 {
+    if the_string.is_null() || idx < 0 {
         return 0;
     }
-    
+
     let length = CFStringGetLength(env, the_string);
     if idx >= length {
         return 0;
     }
-    
+
     let idx_u: NSUInteger = idx.try_into().unwrap();
     msg![env;
     the_string characterAtIndex:idx_u]
@@ -572,11 +574,10 @@ fn CFStringGetCharacters(
     range: CFRange,
     buffer: MutPtr<unichar>,
 ) {
-    if string.is_null() ||
-    buffer.is_null() {
+    if string.is_null() || buffer.is_null() {
         return;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return,
@@ -585,7 +586,7 @@ fn CFStringGetCharacters(
     if range.location + range.length > length {
         return;
     }
-    
+
     msg![env; string getCharacters:buffer range:ns_range]
 }
 
@@ -597,11 +598,10 @@ fn CFStringGetCharacterFromInlineBuffer(
     // This would normally use an inline buffer cache
     // For simplicity, we extract the string and get the character
     // In real implementation, this would be optimized
-    if buf.is_null() ||
-    idx < 0 {
+    if buf.is_null() || idx < 0 {
         return 0;
     }
-    
+
     // The inline buffer structure would contain the string pointer
     // For now, we just return 0 as this is an optimization function
     log!("TODO: CFStringGetCharacterFromInlineBuffer not fully implemented");
@@ -615,11 +615,10 @@ fn CFStringGetCString(
     buffer_size: CFIndex,
     encoding: CFStringEncoding,
 ) -> bool {
-    if the_string.is_null() ||
-    buffer.is_null() || buffer_size <= 0 {
+    if the_string.is_null() || buffer.is_null() || buffer_size <= 0 {
         return false;
     }
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let buffer_size_u = buffer_size as NSUInteger;
     msg![env;
@@ -634,7 +633,7 @@ fn CFStringGetCStringPtr(
     if the_string.is_null() {
         return ConstPtr::null();
     }
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     msg![env;
     the_string cStringUsingEncoding:encoding]
@@ -647,35 +646,26 @@ fn CFStringGetPascalString(
     buffer_size: CFIndex,
     encoding: CFStringEncoding,
 ) -> bool {
-    if the_string.is_null() ||
-    buffer.is_null() || buffer_size < 1 {
+    if the_string.is_null() || buffer.is_null() || buffer_size < 1 {
         return false;
     }
-    
+
     log_dbg!(
         "CFStringGetPascalString('{}')",
         ns_string::to_rust_string(env, the_string)
     );
     let len = CFStringGetLength(env, the_string);
-    
+
     // Pascal string needs length byte + content
-    if (len + 1) > buffer_size ||
-    len > 255 {
+    if (len + 1) > buffer_size || len > 255 {
         return false;
     }
-    
+
     let len_u8: u8 = len.try_into().unwrap_or(0);
     env.mem.write(buffer, len_u8);
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
-    ns_string::get_bytes_buffer_inner(
-        env,
-        the_string,
-        buffer + 1,
-        len_u8.into(),
-        encoding,
-        false,
-    )
+    ns_string::get_bytes_buffer_inner(env, the_string, buffer + 1, len_u8.into(), encoding, false)
 }
 
 fn CFStringGetBytes(
@@ -689,11 +679,10 @@ fn CFStringGetBytes(
     max_buf_len: CFIndex,
     used_buf_len: MutPtr<CFIndex>,
 ) -> CFIndex {
-    if the_string.is_null() ||
-    max_buf_len < 0 {
+    if the_string.is_null() || max_buf_len < 0 {
         return 0;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return 0,
@@ -702,7 +691,7 @@ fn CFStringGetBytes(
     if range.location + range.length > length {
         return 0;
     }
-    
+
     let encoding_ns = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let range_length = ns_range.length;
     let substring: id = msg![env; the_string substringWithRange:ns_range];
@@ -711,9 +700,9 @@ fn CFStringGetBytes(
     if bytes.is_none() && !lossy {
         return 0;
     }
-    let bytes = bytes
-        .take()
-        .unwrap_or_else(|| cf_string_bytes_for_encoding(env, substring, encoding_ns, true, b'?').unwrap());
+    let bytes = bytes.take().unwrap_or_else(|| {
+        cf_string_bytes_for_encoding(env, substring, encoding_ns, true, b'?').unwrap()
+    });
     let total_bytes: NSUInteger = bytes.len().try_into().unwrap_or(0);
 
     if !used_buf_len.is_null() {
@@ -727,17 +716,21 @@ fn CFStringGetBytes(
 
     if buffer.is_null() {
         if !used_buf_len.is_null() {
-            env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
+            env.mem
+                .write(used_buf_len, total_bytes.try_into().unwrap_or(0));
         }
         return range.length;
     }
-    
+
     let max_len_u: NSUInteger = max_buf_len.try_into().unwrap_or(0);
     if total_bytes <= max_len_u {
-        let dest = env.mem.bytes_at_mut(buffer, total_bytes.try_into().unwrap_or(0));
+        let dest = env
+            .mem
+            .bytes_at_mut(buffer, total_bytes.try_into().unwrap_or(0));
         dest.copy_from_slice(&bytes);
         if !used_buf_len.is_null() {
-            env.mem.write(used_buf_len, total_bytes.try_into().unwrap_or(0));
+            env.mem
+                .write(used_buf_len, total_bytes.try_into().unwrap_or(0));
         }
         return range.length;
     }
@@ -771,15 +764,19 @@ fn CFStringGetBytes(
         location: 0,
         length: converted_chars,
     })];
-    let Some(prefix_bytes) = cf_string_bytes_for_encoding(env, prefix, encoding_ns, lossy, loss_byte)
+    let Some(prefix_bytes) =
+        cf_string_bytes_for_encoding(env, prefix, encoding_ns, lossy, loss_byte)
     else {
         return 0;
     };
-    let dest = env.mem.bytes_at_mut(buffer, converted_bytes.try_into().unwrap_or(0));
+    let dest = env
+        .mem
+        .bytes_at_mut(buffer, converted_bytes.try_into().unwrap_or(0));
     dest.copy_from_slice(&prefix_bytes);
 
     if !used_buf_len.is_null() {
-        env.mem.write(used_buf_len, converted_bytes.try_into().unwrap_or(0));
+        env.mem
+            .write(used_buf_len, converted_bytes.try_into().unwrap_or(0));
     }
     converted_chars.try_into().unwrap_or(0)
 }
@@ -819,12 +816,14 @@ fn cf_string_bytes_for_encoding(
         }
         ns_string::NSUTF16LittleEndianStringEncoding
         | ns_string::NSUTF16StringEncoding
-        | ns_string::NSUnicodeStringEncoding => {
-            rust_string.encode_utf16().flat_map(u16::to_le_bytes).collect()
-        }
-        ns_string::NSUTF16BigEndianStringEncoding => {
-            rust_string.encode_utf16().flat_map(u16::to_be_bytes).collect()
-        }
+        | ns_string::NSUnicodeStringEncoding => rust_string
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect(),
+        ns_string::NSUTF16BigEndianStringEncoding => rust_string
+            .encode_utf16()
+            .flat_map(u16::to_be_bytes)
+            .collect(),
         ns_string::NSUTF32LittleEndianStringEncoding => rust_string
             .chars()
             .flat_map(|c| (c as u32).to_le_bytes())
@@ -846,7 +845,7 @@ fn CFStringGetIntValue(env: &mut Environment, string: CFStringRef) -> i32 {
     if string.is_null() {
         return 0;
     }
-    
+
     msg![env; string intValue]
 }
 
@@ -854,7 +853,7 @@ fn CFStringGetDoubleValue(env: &mut Environment, string: CFStringRef) -> f64 {
     if string.is_null() {
         return 0.0;
     }
-    
+
     msg![env; string doubleValue]
 }
 
@@ -866,14 +865,13 @@ fn CFStringFind(
     to_find: CFStringRef,
     options: CFStringCompareFlags,
 ) -> CFRange {
-    if string.is_null() ||
-    to_find.is_null() {
+    if string.is_null() || to_find.is_null() {
         return CFRange {
             location: kCFNotFound,
             length: 0,
         };
     }
-    
+
     let range: NSRange = msg![env; string rangeOfString:to_find options:options];
     let location: CFIndex = if range.location == NSNotFound as NSUInteger {
         kCFNotFound
@@ -894,21 +892,21 @@ fn CFStringFindWithOptions(
     options: CFStringCompareFlags,
     result: MutPtr<CFRange>,
 ) -> bool {
-    if string.is_null() ||
-    to_find.is_null() {
+    if string.is_null() || to_find.is_null() {
         return false;
     }
-    
+
     let search_range = match safe_cf_range_to_ns_range(range_to_search) {
         Some(r) => r,
         None => return false,
     };
-    let found_range: NSRange = msg![env; string rangeOfString:to_find options:options range:search_range];
-    
+    let found_range: NSRange =
+        msg![env; string rangeOfString:to_find options:options range:search_range];
+
     if found_range.location == NSNotFound as NSUInteger {
         return false;
     }
-    
+
     if !result.is_null() {
         let cf_range = CFRange {
             location: found_range.location.try_into().unwrap_or(kCFNotFound),
@@ -916,7 +914,7 @@ fn CFStringFindWithOptions(
         };
         env.mem.write(result, cf_range);
     }
-    
+
     true
 }
 
@@ -928,21 +926,21 @@ fn CFStringFindCharacterFromSet(
     options: CFStringCompareFlags,
     result: MutPtr<CFRange>,
 ) -> bool {
-    if string.is_null() ||
-    set.is_null() {
+    if string.is_null() || set.is_null() {
         return false;
     }
-    
+
     let search_range = match safe_cf_range_to_ns_range(range_to_search) {
         Some(r) => r,
         None => return false,
     };
-    let found_range: NSRange = msg![env; string rangeOfCharacterFromSet:set options:options range:search_range];
-    
+    let found_range: NSRange =
+        msg![env; string rangeOfCharacterFromSet:set options:options range:search_range];
+
     if found_range.location == NSNotFound as NSUInteger {
         return false;
     }
-    
+
     if !result.is_null() {
         let cf_range = CFRange {
             location: found_range.location.try_into().unwrap_or(kCFNotFound),
@@ -950,7 +948,7 @@ fn CFStringFindCharacterFromSet(
         };
         env.mem.write(result, cf_range);
     }
-    
+
     true
 }
 
@@ -975,7 +973,7 @@ fn CFStringCompare(
         return 1;
         // kCFCompareGreaterThan
     }
-    
+
     msg![env;
     a compare:b options:flags]
 }
@@ -987,8 +985,7 @@ fn CFStringCompareWithOptions(
     range: CFRange,
     flags: CFStringCompareFlags,
 ) -> CFComparisonResult {
-    if a.is_null() ||
-    b.is_null() {
+    if a.is_null() || b.is_null() {
         return if a.is_null() && b.is_null() {
             0
         } else if a.is_null() {
@@ -997,7 +994,7 @@ fn CFStringCompareWithOptions(
             1
         };
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return 0,
@@ -1016,8 +1013,7 @@ fn CFStringCompareWithOptionsAndLocale(
     flags: CFStringCompareFlags,
     locale: CFLocaleRef,
 ) -> CFComparisonResult {
-    if a.is_null() ||
-    b.is_null() {
+    if a.is_null() || b.is_null() {
         return if a.is_null() && b.is_null() {
             0
         } else if a.is_null() {
@@ -1026,13 +1022,13 @@ fn CFStringCompareWithOptionsAndLocale(
             1
         };
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return 0,
     };
     let a_sub: id = msg![env; a substringWithRange:ns_range];
-    
+
     if locale.is_null() {
         msg![env;
         a_sub compare:b options:flags]
@@ -1043,21 +1039,19 @@ fn CFStringCompareWithOptionsAndLocale(
 }
 
 fn CFStringHasPrefix(env: &mut Environment, the_string: CFStringRef, prefix: CFStringRef) -> bool {
-    if the_string.is_null() ||
-    prefix.is_null() {
+    if the_string.is_null() || prefix.is_null() {
         return false;
     }
-    
+
     msg![env;
     the_string hasPrefix:prefix]
 }
 
 fn CFStringHasSuffix(env: &mut Environment, the_string: CFStringRef, suffix: CFStringRef) -> bool {
-    if the_string.is_null() ||
-    suffix.is_null() {
+    if the_string.is_null() || suffix.is_null() {
         return false;
     }
-    
+
     msg![env;
     the_string hasSuffix:suffix]
 }
@@ -1069,11 +1063,10 @@ fn CFStringAppend(
     the_string: CFMutableStringRef,
     appended_string: CFStringRef,
 ) {
-    if the_string.is_null() ||
-    appended_string.is_null() {
+    if the_string.is_null() || appended_string.is_null() {
         return;
     }
-    
+
     () = msg![env;
     the_string appendString:appended_string]
 }
@@ -1084,15 +1077,14 @@ fn CFStringAppendCString(
     c_string: ConstPtr<u8>,
     encoding: CFStringEncoding,
 ) {
-    if string.is_null() ||
-    c_string.is_null() {
+    if string.is_null() || c_string.is_null() {
         return;
     }
-    
+
     let encoding = CFStringConvertEncodingToNSStringEncoding(env, encoding);
     let to_append: id = msg_class![env;
     NSString stringWithCString:c_string encoding:encoding];
-    
+
     if !to_append.is_null() {
         () = msg![env; string appendString:to_append];
     }
@@ -1104,11 +1096,10 @@ fn CFStringAppendCharacters(
     chars: ConstPtr<unichar>,
     num_chars: CFIndex,
 ) {
-    if the_string.is_null() ||
-    chars.is_null() || num_chars <= 0 {
+    if the_string.is_null() || chars.is_null() || num_chars <= 0 {
         return;
     }
-    
+
     let temp = CFStringCreateWithCharacters(env, kCFAllocatorDefault, chars, num_chars);
     if !temp.is_null() {
         () = msg![env; the_string appendString:temp];
@@ -1123,11 +1114,10 @@ fn CFStringAppendFormat(
     format: CFStringRef,
     dots: DotDotDot,
 ) {
-    if string.is_null() ||
-    format.is_null() {
+    if string.is_null() || format.is_null() {
         return;
     }
-    
+
     let res = ns_string::with_format(env, format, dots.start());
     let to_append: id = ns_string::from_rust_string(env, res);
     if !to_append.is_null() {
@@ -1141,29 +1131,24 @@ fn CFStringInsert(
     idx: CFIndex,
     inserted_str: CFStringRef,
 ) {
-    if string.is_null() ||
-    inserted_str.is_null() || idx < 0 {
+    if string.is_null() || inserted_str.is_null() || idx < 0 {
         return;
     }
-    
+
     let length = CFStringGetLength(env, string);
     if idx > length {
         return;
     }
-    
+
     let idx_u: NSUInteger = idx.try_into().unwrap();
     () = msg![env; string insertString:inserted_str atIndex:idx_u];
 }
 
-fn CFStringDelete(
-    env: &mut Environment, 
-    string: CFMutableStringRef, 
-    range: CFRange,
-) {
+fn CFStringDelete(env: &mut Environment, string: CFMutableStringRef, range: CFRange) {
     if string.is_null() {
         return;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return,
@@ -1172,7 +1157,7 @@ fn CFStringDelete(
     if range.location + range.length > length {
         return;
     }
-    
+
     () = msg![env; string deleteCharactersInRange:ns_range];
 }
 
@@ -1182,11 +1167,10 @@ fn CFStringReplace(
     range: CFRange,
     replacement: CFStringRef,
 ) {
-    if string.is_null() ||
-    replacement.is_null() {
+    if string.is_null() || replacement.is_null() {
         return;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range) {
         Some(r) => r,
         None => return,
@@ -1195,20 +1179,15 @@ fn CFStringReplace(
     if range.location + range.length > length {
         return;
     }
-    
+
     () = msg![env; string replaceCharactersInRange:ns_range withString:replacement];
 }
 
-fn CFStringReplaceAll(
-    env: &mut Environment,
-    string: CFMutableStringRef,
-    replacement: CFStringRef,
-) {
-    if string.is_null() ||
-    replacement.is_null() {
+fn CFStringReplaceAll(env: &mut Environment, string: CFMutableStringRef, replacement: CFStringRef) {
+    if string.is_null() || replacement.is_null() {
         return;
     }
-    
+
     () = msg![env; string setString:replacement];
 }
 
@@ -1220,11 +1199,10 @@ fn CFStringFindAndReplace(
     range_to_search: CFRange,
     compare_options: CFStringCompareFlags,
 ) -> CFIndex {
-    if string.is_null() ||
-    string_to_find.is_null() || replacement_string.is_null() {
+    if string.is_null() || string_to_find.is_null() || replacement_string.is_null() {
         return 0;
     }
-    
+
     let ns_range = match safe_cf_range_to_ns_range(range_to_search) {
         Some(r) => r,
         None => return 0,
@@ -1233,12 +1211,12 @@ fn CFStringFindAndReplace(
     if range_to_search.location + range_to_search.length > length {
         return 0;
     }
-    
+
     let count: NSUInteger = msg![env;
-    string 
-        replaceOccurrencesOfString:string_to_find 
-        withString:replacement_string 
-        options:compare_options 
+    string
+        replaceOccurrencesOfString:string_to_find
+        withString:replacement_string
+        options:compare_options
         range:ns_range];
     count.try_into().unwrap_or(0)
 }
@@ -1250,49 +1228,44 @@ fn CFStringPad(
     length: CFIndex,
     index_into_pad: CFIndex,
 ) {
-    if string.is_null() ||
-    pad_string.is_null() || length < 0 || index_into_pad < 0 {
+    if string.is_null() || pad_string.is_null() || length < 0 || index_into_pad < 0 {
         return;
     }
-    
+
     let current_len = CFStringGetLength(env, string);
     if current_len >= length {
         return;
         // Already long enough
     }
-    
+
     let pad_len = CFStringGetLength(env, pad_string);
     if pad_len == 0 {
         return;
     }
-    
+
     let needed = length - current_len;
     let mut padded = 0;
     while padded < needed {
         let start_idx = index_into_pad % pad_len;
         let chars_to_add = (needed - padded).min(pad_len - start_idx);
-        
+
         let range = CFRange {
             location: start_idx,
             length: chars_to_add,
         };
-        let substring: id = msg![env; pad_string substringWithRange:(safe_cf_range_to_ns_range(range).unwrap())];
+        let substring: id =
+            msg![env; pad_string substringWithRange:(safe_cf_range_to_ns_range(range).unwrap())];
         () = msg![env; string appendString:substring];
-        
+
         padded += chars_to_add;
     }
 }
 
-fn CFStringTrim(
-    env: &mut Environment,
-    string: CFMutableStringRef,
-    trim_string: CFStringRef,
-) {
-    if string.is_null() ||
-    trim_string.is_null() {
+fn CFStringTrim(env: &mut Environment, string: CFMutableStringRef, trim_string: CFStringRef) {
+    if string.is_null() || trim_string.is_null() {
         return;
     }
-    
+
     // Create character set first, then use it
     let char_set: id = msg_class![env;
     NSCharacterSet characterSetWithCharactersInString:trim_string];
@@ -1304,7 +1277,7 @@ fn CFStringTrimWhitespace(env: &mut Environment, string: CFMutableStringRef) {
     if string.is_null() {
         return;
     }
-    
+
     let whitespace_set: id = msg_class![env; NSCharacterSet whitespaceAndNewlineCharacterSet];
     let trimmed: id = msg![env;
     string stringByTrimmingCharactersInSet:whitespace_set];
@@ -1313,45 +1286,33 @@ fn CFStringTrimWhitespace(env: &mut Environment, string: CFMutableStringRef) {
 
 // MARK: - Case transformations
 
-fn CFStringLowercase(
-    env: &mut Environment,
-    string: CFMutableStringRef,
-    _locale: CFLocaleRef,
-) {
+fn CFStringLowercase(env: &mut Environment, string: CFMutableStringRef, _locale: CFLocaleRef) {
     if string.is_null() {
         return;
     }
-    
+
     // TODO: account for locale
     let lowercase: id = msg![env;
     string lowercaseString];
     () = msg![env; string setString:lowercase];
 }
 
-fn CFStringUppercase(
-    env: &mut Environment,
-    string: CFMutableStringRef,
-    _locale: CFLocaleRef,
-) {
+fn CFStringUppercase(env: &mut Environment, string: CFMutableStringRef, _locale: CFLocaleRef) {
     if string.is_null() {
         return;
     }
-    
+
     // TODO: account for locale
     let uppercase: id = msg![env;
     string uppercaseString];
     () = msg![env; string setString:uppercase];
 }
 
-fn CFStringCapitalize(
-    env: &mut Environment,
-    string: CFMutableStringRef,
-    _locale: CFLocaleRef,
-) {
+fn CFStringCapitalize(env: &mut Environment, string: CFMutableStringRef, _locale: CFLocaleRef) {
     if string.is_null() {
         return;
     }
-    
+
     // TODO: account for locale
     let capitalized: id = msg![env;
     string capitalizedString];
@@ -1368,7 +1329,7 @@ fn CFStringNormalize(
     if the_string.is_null() {
         return;
     }
-    
+
     let str_content = ns_string::to_rust_string(env, the_string);
     // Basic normalization forms
     match the_form {
@@ -1402,20 +1363,22 @@ fn CFStringTransform(
     transform: CFStringRef,
     reverse: bool,
 ) -> bool {
-    if string.is_null() ||
-    transform.is_null() {
+    if string.is_null() || transform.is_null() {
         return false;
     }
-    
+
     let transform_name = ns_string::to_rust_string(env, transform);
-    log!("TODO: CFStringTransform('{}', reverse={})", transform_name, reverse);
+    log!(
+        "TODO: CFStringTransform('{}', reverse={})",
+        transform_name,
+        reverse
+    );
     // For now, basic implementation of common transforms
     match transform_name.as_ref() {
-        kCFStringTransformStripDiacritics |
-        kCFStringTransformStripCombiningMarks => {
+        kCFStringTransformStripDiacritics | kCFStringTransformStripCombiningMarks => {
             // Strip accents/diacritics - approximate implementation
             let folded: id = msg![env;
-            string 
+            string
                 stringByFoldingWithOptions:128 // NSCaseInsensitiveSearch + NSDiacriticInsensitiveSearch
                 locale:nil];
             () = msg![env; string setString:folded];
@@ -1426,10 +1389,7 @@ fn CFStringTransform(
             // This is very complex - just log for now
             false
         }
-        _ => {
-        
-            false
-        }
+        _ => false,
     }
 }
 
@@ -1489,16 +1449,12 @@ pub const FUNCTIONS: FunctionExports = &[
     // Lifecycle
     export_c_func!(CFStringRetain(_)),
     export_c_func!(CFStringRelease(_)),
-    
     // Encoding
     export_c_func!(CFStringConvertEncodingToNSStringEncoding(_)),
     export_c_func!(CFStringConvertNSStringEncodingToEncoding(_)),
     export_c_func!(CFStringIsEncodingAvailable(_)),
     export_c_func!(CFStringGetSystemEncoding()),
-  
     export_c_func!(CFStringGetMostCompatibleMacStringEncoding(_)),
-    
-  
     // Immutable constructors
     export_c_func!(CFStringCreateCopy(_, _)),
     export_c_func!(CFStringCreateWithBytes(_, _, _, _, _)),
@@ -1513,12 +1469,16 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringCreateWithSubstring(_, _, _)),
     export_c_func!(CFStringCreateArrayBySeparatingStrings(_, _, _)),
     export_c_func!(CFStringCreateByCombiningStrings(_, _, _)),
-    
     // Mutable constructors
     export_c_func!(CFStringCreateMutable(_, _)),
     export_c_func!(CFStringCreateMutableCopy(_, _, _)),
-    export_c_func!(CFStringCreateMutableWithExternalCharactersNoCopy(_, _, _, _, _)),
-    
+    export_c_func!(CFStringCreateMutableWithExternalCharactersNoCopy(
+        _,
+        _,
+        _,
+        _,
+        _
+    )),
     // Queries
     export_c_func!(CFStringGetLength(_)),
     export_c_func!(CFStringGetCharacterAtIndex(_, _)),
@@ -1530,19 +1490,16 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringGetBytes(_, _, _, _, _, _, _, _)),
     export_c_func!(CFStringGetIntValue(_)),
     export_c_func!(CFStringGetDoubleValue(_)),
-    
     // Searching
     export_c_func!(CFStringFind(_, _, _)),
     export_c_func!(CFStringFindWithOptions(_, _, _, _, _)),
     export_c_func!(CFStringFindCharacterFromSet(_, _, _, _, _)),
-    
     // Comparison
     export_c_func!(CFStringCompare(_, _, _)),
     export_c_func!(CFStringCompareWithOptions(_, _, _, _)),
     export_c_func!(CFStringCompareWithOptionsAndLocale(_, _, _, _, _)),
     export_c_func!(CFStringHasPrefix(_, _)),
     export_c_func!(CFStringHasSuffix(_, _)),
-    
     // Mutation
     export_c_func!(CFStringAppend(_, _)),
     export_c_func!(CFStringAppendCString(_, _, _)),
@@ -1556,19 +1513,14 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringPad(_, _, _, _)),
     export_c_func!(CFStringTrim(_, _)),
     export_c_func!(CFStringTrimWhitespace(_)),
-    
     // Case transformations
     export_c_func!(CFStringLowercase(_, _)),
     export_c_func!(CFStringUppercase(_, _)),
     export_c_func!(CFStringCapitalize(_, _)),
-    
     // Normalization and transformation
     export_c_func!(CFStringNormalize(_, _)),
     export_c_func!(CFStringTransform(_, _, _, _)),
-    
-  
     // Type info
     export_c_func!(CFStringGetTypeID()),
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
-

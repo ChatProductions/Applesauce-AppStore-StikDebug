@@ -20,7 +20,7 @@ use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
-pub type CFDataRef        = CFTypeRef;
+pub type CFDataRef = CFTypeRef;
 pub type CFMutableDataRef = CFTypeRef;
 
 // MARK: - CFData (immutable)
@@ -33,7 +33,7 @@ pub fn CFDataCreate(
 ) -> CFDataRef {
     assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let bytes: ConstVoidPtr = bytes.cast();
-    let length: NSUInteger  = length.try_into().unwrap();
+    let length: NSUInteger = length.try_into().unwrap();
     let new: id = msg_class![env; NSData alloc];
     msg![env; new initWithBytes:bytes length:length]
 }
@@ -45,7 +45,7 @@ pub fn CFDataCreateCopy(
 ) -> CFDataRef {
     assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
     let bytes: ConstVoidPtr = msg![env; data bytes];
-    let length: NSUInteger  = msg![env; data length];
+    let length: NSUInteger = msg![env; data length];
     let new: id = msg_class![env; NSData alloc];
     msg![env; new initWithBytes:bytes length:length]
 }
@@ -72,15 +72,10 @@ pub fn CFDataGetBytePtr(env: &mut Environment, data: CFDataRef) -> ConstPtr<u8> 
     ptr.cast()
 }
 
-fn CFDataGetBytes(
-    env: &mut Environment,
-    data: CFDataRef,
-    range: CFRange,
-    buffer: MutPtr<u8>,
-) {
+fn CFDataGetBytes(env: &mut Environment, data: CFDataRef, range: CFRange, buffer: MutPtr<u8>) {
     let range = NSRange {
         location: range.location.try_into().unwrap(),
-        length:   range.length.try_into().unwrap(),
+        length: range.length.try_into().unwrap(),
     };
     msg![env; data getBytes:buffer range:range]
 }
@@ -93,19 +88,31 @@ fn CFDataGetMutableBytePtr(env: &mut Environment, data: CFMutableDataRef) -> Mut
 // MARK: - CFData retain / release
 
 pub fn CFDataRetain(env: &mut Environment, data: CFDataRef) -> CFDataRef {
-    if !data.is_null() { CFRetain(env, data) } else { data }
+    if !data.is_null() {
+        CFRetain(env, data)
+    } else {
+        data
+    }
 }
 
 pub fn CFDataRelease(env: &mut Environment, data: CFDataRef) {
-    if !data.is_null() { CFRelease(env, data); }
+    if !data.is_null() {
+        CFRelease(env, data);
+    }
 }
 
 fn CFDataIsEqual(env: &mut Environment, a: CFDataRef, b: CFDataRef) -> bool {
-    if a == b { return true; }
-    if a.is_null() || b.is_null() { return false; }
+    if a == b {
+        return true;
+    }
+    if a.is_null() || b.is_null() {
+        return false;
+    }
     let len_a: NSUInteger = msg![env; a length];
     let len_b: NSUInteger = msg![env; b length];
-    if len_a != len_b { return false; }
+    if len_a != len_b {
+        return false;
+    }
     msg![env; a isEqualToData:b]
 }
 
@@ -137,23 +144,15 @@ fn CFDataCreateMutableCopy(
     msg![env; new initWithData:data]
 }
 
-fn CFDataSetLength(
-    env: &mut Environment,
-    data: CFMutableDataRef,
-    length: CFIndex,
-) {
+fn CFDataSetLength(env: &mut Environment, data: CFMutableDataRef, length: CFIndex) {
     let len: NSUInteger = length.try_into().unwrap();
     msg![env; data setLength:len]
 }
 
-fn CFDataIncreaseLength(
-    env: &mut Environment,
-    data: CFMutableDataRef,
-    extra_length: CFIndex,
-) {
+fn CFDataIncreaseLength(env: &mut Environment, data: CFMutableDataRef, extra_length: CFIndex) {
     let current: NSUInteger = msg![env; data length];
-    let extra: NSUInteger   = extra_length.try_into().unwrap();
-    let new_len             = current + extra;
+    let extra: NSUInteger = extra_length.try_into().unwrap();
+    let new_len = current + extra;
     msg![env; data setLength:new_len]
 }
 
@@ -167,14 +166,10 @@ fn CFDataAppendBytes(
     msg![env; data appendBytes:(bytes.cast::<std::ffi::c_void>()) length:len]
 }
 
-fn CFDataDeleteBytes(
-    env: &mut Environment,
-    data: CFMutableDataRef,
-    range: CFRange,
-) {
+fn CFDataDeleteBytes(env: &mut Environment, data: CFMutableDataRef, range: CFRange) {
     let ns_range = NSRange {
         location: range.location.try_into().unwrap(),
-        length:   range.length.try_into().unwrap(),
+        length: range.length.try_into().unwrap(),
     };
     msg![env; data replaceBytesInRange:ns_range withBytes:(nil) length:0u32]
 }
@@ -188,7 +183,7 @@ fn CFDataReplaceBytes(
 ) {
     let ns_range = NSRange {
         location: range.location.try_into().unwrap(),
-        length:   range.length.try_into().unwrap(),
+        length: range.length.try_into().unwrap(),
     };
     let new_len: NSUInteger = new_length.try_into().unwrap();
     msg![env; data replaceBytesInRange:ns_range
@@ -217,4 +212,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFDataDeleteBytes(_, _)),
     export_c_func!(CFDataReplaceBytes(_, _, _, _)),
 ];
-

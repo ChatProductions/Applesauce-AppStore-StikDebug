@@ -22,7 +22,9 @@ enum NSURLHostObject {
         ns_string: id,
         working_directory: GuestPathBuf,
     },
-    OtherURL { ns_string: id },
+    OtherURL {
+        ns_string: id,
+    },
 }
 impl HostObject for NSURLHostObject {}
 
@@ -129,7 +131,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let path_str = to_rust_string(env, path);
 
     // Собираем полный URL в формате scheme://host/path
-    // NSURL обычно ожидает, что path уже содержит ведущий слеш, 
+    // NSURL обычно ожидает, что path уже содержит ведущий слеш,
     // но мы можем добавить проверку, если это необходимо.
     let full_url = if path_str.starts_with('/') {
         format!("{}://{}{}", scheme_str, host_str, path_str)
@@ -148,7 +150,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Возвращаем инициализированный объект
     this
 }
-    
+
 // MARK: - Init
 
 - (id)initFileURLWithPath:(id)path { // NSString*
@@ -159,14 +161,14 @@ pub const CLASSES: ClassExports = objc_classes! {
               isDirectory:(bool)_is_dir {
     let path_str = to_rust_string(env, path);
     let mut safe_path = path;
-    
+
     // Если игра передала путь вместе с префиксом file:, очищаем его
     if path_str.starts_with("file:") {
         let stripped = path_str
             .replacen("file://localhost", "", 1)
             .replacen("file://", "", 1)
             .replacen("file:", "", 1);
-            
+
         // Выделяем создание строки в отдельный шаг, чтобы порадовать borrow checker
         let new_ns_string = from_rust_string(env, stripped);
         safe_path = autorelease(env, new_ns_string);
@@ -185,7 +187,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if url == nil {
         return nil;
     }
-    
+
     let url_str = to_rust_string(env, url);
     // Если это локальный файл, перенаправляем инициализацию в правильный метод
     if url_str.starts_with("file:") {
@@ -193,19 +195,19 @@ pub const CLASSES: ClassExports = objc_classes! {
             .replacen("file://localhost", "", 1)
             .replacen("file://", "", 1)
             .replacen("file:", "", 1);
-            
+
         // То же самое: разбиваем на два шага
         let new_ns_string = from_rust_string(env, stripped);
         let safe_path = autorelease(env, new_ns_string);
-        
+
         return msg![env; this initFileURLWithPath:safe_path isDirectory:false];
     }
-    
+
     let url: id = msg![env; url copy];
     *env.objc.borrow_mut(this) = NSURLHostObject::OtherURL { ns_string: url };
     this
 }
-    
+
 - (id)initWithString:(id)url // NSString*
        relativeToURL:(id)base_url { // NSURL*
     if url == nil {
@@ -575,7 +577,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_str = to_rust_string(env, key);
     if key_str == "NSURLIsDirectoryKey" {
         // ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлена явная аннотация типа `: bool`
-        let is_dir: bool = msg![env; this hasDirectoryPath]; 
+        let is_dir: bool = msg![env; this hasDirectoryPath];
         let ns_bool = msg_class![env; NSNumber numberWithBool:is_dir];
         env.mem.write(value, ns_bool);
         return true;
@@ -596,7 +598,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)getFileSystemRepresentation:(MutPtr<u8>)buffer
                           maxLength:(NSUInteger)buffer_size {
-   
+
     let &NSURLHostObject::FileURL { ns_string, .. } = env.objc.borrow(this) else {
         return false;
     };
@@ -675,4 +677,3 @@ pub fn to_rust_path(env: &mut Environment, url: id) -> Cow<'static, GuestPath> {
         Cow::Owned(path_buf) => Cow::Owned(path_buf.into()),
     }
 }
-

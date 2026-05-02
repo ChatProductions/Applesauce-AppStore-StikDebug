@@ -8,13 +8,14 @@
 use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 
 type UIBarStyle = NSInteger;
-const UIBarStyleDefault:      UIBarStyle = 0;
-const UIBarStyleBlack:        UIBarStyle = 1;
-const UIBarStyleBlackOpaque:  UIBarStyle = 2;
+const UIBarStyleDefault: UIBarStyle = 0;
+const UIBarStyleBlack: UIBarStyle = 1;
+const UIBarStyleBlackOpaque: UIBarStyle = 2;
 const UIBarStyleBlackTranslucent: UIBarStyle = 3;
 
 struct UINavigationBarHostObject {
@@ -22,8 +23,8 @@ struct UINavigationBarHostObject {
     delegate: id,
     bar_style: UIBarStyle,
     translucent: bool,
-    tint_color: id,       // UIColor* — retained
-    bar_tint_color: id,   // UIColor* — retained
+    tint_color: id,            // UIColor* — retained
+    bar_tint_color: id,        // UIColor* — retained
     title_text_attributes: id, // NSDictionary* — retained
     /// NSMutableArray* of UINavigationItem* — retained
     items: id,
@@ -37,14 +38,14 @@ impl HostObject for UINavigationBarHostObject {}
 // MARK: - UINavigationItem
 
 struct UINavigationItemHostObject {
-    title: id,            // NSString* — retained
-    title_view: id,       // UIView* — retained
-    prompt: id,           // NSString* — retained
-    back_button: id,      // UIBarButtonItem* — retained
-    left_button: id,      // UIBarButtonItem* — retained
-    right_button: id,     // UIBarButtonItem* — retained
-    left_items: id,       // NSArray* — retained
-    right_items: id,      // NSArray* — retained
+    title: id,        // NSString* — retained
+    title_view: id,   // UIView* — retained
+    prompt: id,       // NSString* — retained
+    back_button: id,  // UIBarButtonItem* — retained
+    left_button: id,  // UIBarButtonItem* — retained
+    right_button: id, // UIBarButtonItem* — retained
+    left_items: id,   // NSArray* — retained
+    right_items: id,  // NSArray* — retained
     hides_back_button: bool,
     left_items_supplemented: bool,
 }

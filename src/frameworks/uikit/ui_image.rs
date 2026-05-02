@@ -47,10 +47,9 @@ impl HostObject for UIImageHostObject {}
 
 fn get_dummy_cg_image(env: &mut Environment) -> CGImageRef {
     const DUMMY_PNG: &[u8] = &[
-        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
-        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0,
-        0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0, 1,
-        226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0, 2, 0, 0, 5, 0,
+        1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
     ];
     let image = Image::from_bytes(DUMMY_PNG).unwrap();
     cg_image::from_image(env, image)
@@ -89,7 +88,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if path != nil {
             img = msg![env; this imageWithContentsOfFile:path];
         }
-        
+
         let final_img = if img != nil {
             retain(env, img);
             img
@@ -148,7 +147,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.objc.borrow_mut::<UIImageHostObject>(this).cg_image = get_dummy_cg_image(env);
         return this;
     };
-    
+
     env.objc.borrow_mut::<UIImageHostObject>(this).cg_image = cg_image::from_image(env, image);
     this
 }
@@ -190,17 +189,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)stretchableImageWithLeftCapWidth:(NSInteger)leftCapWidth topCapHeight:(NSInteger)topCapHeight {
     let cg_image = env.objc.borrow::<UIImageHostObject>(this).cg_image;
-    
+
     // Создаем новый объект UIImage на основе того же CGImage.
     // ИСПОЛЬЗУЕМ msg_class! для отправки сообщения alloc классу
     let new_img: id = msg_class![env; UIImage alloc];
     let new_img: id = msg![env; new_img initWithCGImage:cg_image];
-    
+
     // Но прописываем ему параметры растяжения
     let host = env.objc.borrow_mut::<UIImageHostObject>(new_img);
     host.left_cap_width = leftCapWidth;
     host.top_cap_height = topCapHeight;
-    
+
     autorelease(env, new_img)
 }
 
@@ -304,24 +303,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
-    
+
 @implementation UIImageNibPlaceholder: NSObject
 
 - (id)initWithCoder:(id)coder {
     // В NIB-файлах плейсхолдеры картинок хранят имя ресурса под ключом UIResourceName
     let key = get_static_str(env, "UIResourceName");
     let name: id = msg![env; coder decodeObjectForKey:key];
-    
+
     // Плейсхолдер был выделен через alloc, но мы не будем его использовать.
     // Сразу деаллоцируем этот временный объект, чтобы не было утечек памяти.
     () = msg![env; this dealloc];
-    
+
     if name != nil {
         // Запрашиваем настоящую картинку (твой метод imageNamed: сам проверит кэш или загрузит)
         let image: id = msg_class![env; UIImage imageNamed:name];
-        
+
         // Важный момент (без заглушек и утечек):
-        // Вызов [UIImageNibPlaceholder alloc] initWithCoder:] подразумевает, 
+        // Вызов [UIImageNibPlaceholder alloc] initWithCoder:] подразумевает,
         // что возвращенный объект будет иметь retain count +1 (владение).
         // Но [UIImage imageNamed:] возвращает закэшированный/autorelease объект!
         // Поэтому мы ОБЯЗАНЫ сделать retain возвращаемой картинке, иначе она удалится раньше времени.
@@ -330,10 +329,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return image;
     }
-    
+
     nil
 }
-    
+
 @end
 
 };
@@ -341,23 +340,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - C Functions (Exporting formats like mentioned in the doc)
 
 fn UIImagePNGRepresentation(env: &mut Environment, image: id) -> id {
-    if image == nil { return nil; }
+    if image == nil {
+        return nil;
+    }
     let cg_image: CGImageRef = msg![env; image CGImage];
-    if cg_image.is_null() { return nil; }
-    
+    if cg_image.is_null() {
+        return nil;
+    }
+
     let img = cg_image::borrow_image(&env.objc, cg_image);
     let (w, h) = img.dimensions();
     let rgba = img.pixels();
     let stride = w as usize * 4;
-    
+
     let mut png_data: Vec<u8> = Vec::new();
     let ctx_ptr: *mut std::ffi::c_void = (&mut png_data as *mut Vec<u8>).cast();
     let ok = img.write_png_image(ctx_ptr, w as i32, h as i32, rgba, stride as i32);
-    if ok == 0 { return nil; }
+    if ok == 0 {
+        return nil;
+    }
 
     let len = png_data.len() as crate::frameworks::foundation::NSUInteger;
     let buf: crate::mem::MutVoidPtr = env.mem.alloc(len as u32).cast();
-    env.mem.bytes_at_mut(buf.cast(), len as u32).copy_from_slice(&png_data);
+    env.mem
+        .bytes_at_mut(buf.cast(), len as u32)
+        .copy_from_slice(&png_data);
     msg_class![env; NSData dataWithBytesNoCopy:buf length:len]
 }
 
@@ -374,4 +381,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(UIImagePNGRepresentation(_)),
     export_c_func!(UIImageJPEGRepresentation(_, _)),
 ];
-

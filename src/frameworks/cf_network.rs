@@ -24,11 +24,7 @@ use crate::Environment;
 
 const DUMMY_STREAM: u32 = 0xC0F0_0001;
 
-fn CFReadStreamCreateForHTTPRequest(
-    _env: &mut Environment,
-    _alloc: u32,
-    _request: u32,
-) -> u32 {
+fn CFReadStreamCreateForHTTPRequest(_env: &mut Environment, _alloc: u32, _request: u32) -> u32 {
     // Return a non-null dummy handle so callers that only check for null
     // continue past the nil check.
     DUMMY_STREAM
@@ -62,11 +58,7 @@ fn CFReadStreamSetProperty(
     true
 }
 
-fn CFReadStreamCopyProperty(
-    _env: &mut Environment,
-    _stream: u32,
-    _property: u32,
-) -> u32 {
+fn CFReadStreamCopyProperty(_env: &mut Environment, _stream: u32, _property: u32) -> u32 {
     0
 }
 
@@ -119,4 +111,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamGetStatus(_)),
     export_c_func!(CFReadStreamCopyError(_)),
 ];
-

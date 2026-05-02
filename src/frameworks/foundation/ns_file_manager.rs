@@ -13,7 +13,8 @@ use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::fs::{FsError, GuestPath, GuestPathBuf};
 use crate::mem::{ConstPtr, MutPtr, Ptr};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject,
+    NSZonePtr,
 };
 use crate::Environment;
 
@@ -93,7 +94,8 @@ pub const NSURLVolumeAvailableCapacityKey: &str = "NSURLVolumeAvailableCapacityK
 // Item replacement options
 type NSFileManagerItemReplacementOptions = NSUInteger;
 const NSFileManagerItemReplacementUsingNewMetadataOnly: NSFileManagerItemReplacementOptions = 1;
-const NSFileManagerItemReplacementWithoutDeletingBackupItem: NSFileManagerItemReplacementOptions = 2;
+const NSFileManagerItemReplacementWithoutDeletingBackupItem: NSFileManagerItemReplacementOptions =
+    2;
 
 // Directory enumeration options
 type NSDirectoryEnumerationOptions = NSUInteger;
@@ -102,27 +104,81 @@ const NSDirectoryEnumerationSkipsPackageDescendants: NSDirectoryEnumerationOptio
 const NSDirectoryEnumerationSkipsHiddenFiles: NSDirectoryEnumerationOptions = 4;
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_NSFileModificationDate", HostConstant::NSString(NSFileModificationDate)),
-    ("_NSFileCreationDate", HostConstant::NSString(NSFileCreationDate)),
+    (
+        "_NSFileModificationDate",
+        HostConstant::NSString(NSFileModificationDate),
+    ),
+    (
+        "_NSFileCreationDate",
+        HostConstant::NSString(NSFileCreationDate),
+    ),
     ("_NSFileSize", HostConstant::NSString(NSFileSize)),
-    ("_NSFileSystemFreeSize", HostConstant::NSString(NSFileSystemFreeSize)),
-    ("_NSFileSystemSize", HostConstant::NSString(NSFileSystemSize)),
+    (
+        "_NSFileSystemFreeSize",
+        HostConstant::NSString(NSFileSystemFreeSize),
+    ),
+    (
+        "_NSFileSystemSize",
+        HostConstant::NSString(NSFileSystemSize),
+    ),
     ("_NSFileType", HostConstant::NSString(NSFileType)),
-    ("_NSFileTypeDirectory", HostConstant::NSString(NSFileTypeDirectory)),
-    ("_NSFileTypeRegular", HostConstant::NSString(NSFileTypeRegular)),
-    ("_NSFileTypeSymbolicLink", HostConstant::NSString(NSFileTypeSymbolicLink)),
-    ("_NSFileTypeSocket", HostConstant::NSString(NSFileTypeSocket)),
-    ("_NSFileTypeCharacterSpecial", HostConstant::NSString(NSFileTypeCharacterSpecial)),
-    ("_NSFileTypeBlockSpecial", HostConstant::NSString(NSFileTypeBlockSpecial)),
-    ("_NSFileTypeUnknown", HostConstant::NSString(NSFileTypeUnknown)),
-    ("_NSFileOwnerAccountName", HostConstant::NSString(NSFileOwnerAccountName)),
-    ("_NSFileGroupOwnerAccountName", HostConstant::NSString(NSFileGroupOwnerAccountName)),
-    ("_NSFilePosixPermissions", HostConstant::NSString(NSFilePosixPermissions)),
-    ("_NSFileReferenceCount", HostConstant::NSString(NSFileReferenceCount)),
-    ("_NSFileDeviceIdentifier", HostConstant::NSString(NSFileDeviceIdentifier)),
-    ("_NSFileExtensionHidden", HostConstant::NSString(NSFileExtensionHidden)),
+    (
+        "_NSFileTypeDirectory",
+        HostConstant::NSString(NSFileTypeDirectory),
+    ),
+    (
+        "_NSFileTypeRegular",
+        HostConstant::NSString(NSFileTypeRegular),
+    ),
+    (
+        "_NSFileTypeSymbolicLink",
+        HostConstant::NSString(NSFileTypeSymbolicLink),
+    ),
+    (
+        "_NSFileTypeSocket",
+        HostConstant::NSString(NSFileTypeSocket),
+    ),
+    (
+        "_NSFileTypeCharacterSpecial",
+        HostConstant::NSString(NSFileTypeCharacterSpecial),
+    ),
+    (
+        "_NSFileTypeBlockSpecial",
+        HostConstant::NSString(NSFileTypeBlockSpecial),
+    ),
+    (
+        "_NSFileTypeUnknown",
+        HostConstant::NSString(NSFileTypeUnknown),
+    ),
+    (
+        "_NSFileOwnerAccountName",
+        HostConstant::NSString(NSFileOwnerAccountName),
+    ),
+    (
+        "_NSFileGroupOwnerAccountName",
+        HostConstant::NSString(NSFileGroupOwnerAccountName),
+    ),
+    (
+        "_NSFilePosixPermissions",
+        HostConstant::NSString(NSFilePosixPermissions),
+    ),
+    (
+        "_NSFileReferenceCount",
+        HostConstant::NSString(NSFileReferenceCount),
+    ),
+    (
+        "_NSFileDeviceIdentifier",
+        HostConstant::NSString(NSFileDeviceIdentifier),
+    ),
+    (
+        "_NSFileExtensionHidden",
+        HostConstant::NSString(NSFileExtensionHidden),
+    ),
     ("_NSFileImmutable", HostConstant::NSString(NSFileImmutable)),
-    ("_NSFileAppendOnly", HostConstant::NSString(NSFileAppendOnly)),
+    (
+        "_NSFileAppendOnly",
+        HostConstant::NSString(NSFileAppendOnly),
+    ),
     ("_NSFileBusy", HostConstant::NSString(NSFileBusy)),
 ];
 
@@ -134,19 +190,22 @@ fn NSSearchPathForDirectoriesInDomains(
 ) -> id {
     // Only user domain supported for now
     if domain_mask != NSUserDomainMask && domain_mask != NSAllDomainsMask {
-        log!("Warning: NSSearchPathForDirectoriesInDomains called with unsupported domain_mask: {}", domain_mask);
+        log!(
+            "Warning: NSSearchPathForDirectoriesInDomains called with unsupported domain_mask: {}",
+            domain_mask
+        );
     }
 
     let _ = expand_tilde; // Always expand for simplicity
 
     let dir = match directory {
-        NSApplicationDirectory => {
-            GuestPath::new(crate::fs::APPLICATIONS).to_owned()
-        }
+        NSApplicationDirectory => GuestPath::new(crate::fs::APPLICATIONS).to_owned(),
         NSDocumentDirectory => env.fs.home_directory().join("Documents"),
         NSLibraryDirectory => env.fs.home_directory().join("Library"),
         NSCachesDirectory => env.fs.home_directory().join("Library/Caches"),
-        NSApplicationSupportDirectory => env.fs.home_directory().join("Library/Application Support"),
+        NSApplicationSupportDirectory => {
+            env.fs.home_directory().join("Library/Application Support")
+        }
         NSDesktopDirectory => env.fs.home_directory().join("Desktop"),
         NSDownloadsDirectory => env.fs.home_directory().join("Downloads"),
         NSMoviesDirectory => env.fs.home_directory().join("Movies"),
@@ -154,9 +213,14 @@ fn NSSearchPathForDirectoriesInDomains(
         NSPicturesDirectory => env.fs.home_directory().join("Pictures"),
         NSUserDirectory => env.fs.home_directory().to_owned(),
         NSPreferencePanesDirectory => env.fs.home_directory().join("Library/PreferencePanes"),
-        NSAutosavedInformationDirectory => env.fs.home_directory().join("Library/Autosave Information"),
+        NSAutosavedInformationDirectory => {
+            env.fs.home_directory().join("Library/Autosave Information")
+        }
         _ => {
-            log!("Warning: Unimplemented NSSearchPathDirectory {}, returning home directory", directory);
+            log!(
+                "Warning: Unimplemented NSSearchPathDirectory {}, returning home directory",
+                directory
+            );
             env.fs.home_directory().to_owned()
         }
     };
@@ -204,9 +268,12 @@ fn NSAllocateObject(
     _zone: NSZonePtr,
 ) -> id {
     if extra_bytes > 0 {
-        log!("Warning: NSAllocateObject called with extra_bytes={}, which is currently unhandled!", extra_bytes);
+        log!(
+            "Warning: NSAllocateObject called with extra_bytes={}, which is currently unhandled!",
+            extra_bytes
+        );
     }
-    
+
     msg![env; class alloc]
 }
 
@@ -264,7 +331,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return false;
     }
-    
+
     let path = ns_string::to_rust_string(env, path);
     let path = GuestPath::new(&path);
     match env.fs.change_working_directory(path) {
@@ -285,18 +352,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     if str.is_null() {
         return nil;
     }
-    
+
     if len == 0 {
         let empty = ns_string::from_rust_string(env, String::new());
         return autorelease(env, empty);
     }
-    
+
     let mut bytes = Vec::with_capacity(len as usize);
     for i in 0..len {
         let byte: u8 = env.mem.read(str + i);
         bytes.push(byte);
     }
-    
+
     let s = String::from_utf8_lossy(&bytes).into_owned();
     let ns_str = ns_string::from_rust_string(env, s);
     autorelease(env, ns_str)
@@ -320,7 +387,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return nil;
     }
-    
+
     let path = ns_string::to_rust_string(env, path);
     let Ok(paths) = env.fs.enumerate(GuestPath::new(&path)) else {
         return nil;
@@ -344,7 +411,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return nil;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
 
@@ -374,7 +441,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return nil;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
 
@@ -410,9 +477,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path.is_null() {
         return false;
     }
-    
+
     let _ = attributes; // Ignore for now
-    
+
     if data.is_null() {
         let empty: id = msg_class![env; NSData new];
         let res: bool = msg![env; empty writeToFile:path atomically:false];
@@ -445,12 +512,12 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
 
     // --- ЧЕСТНАЯ РЕАЛИЗАЦИЯ (Без заглушек) ---
-    // По документации Apple: если withIntermediateDirectories == YES и папка уже существует, 
+    // По документации Apple: если withIntermediateDirectories == YES и папка уже существует,
     // метод обязан вернуть YES. Эмулятор больше не будет биться о Read-Only защиту бандла.
     if env.fs.exists(guest_path) {
         if env.fs.is_dir(guest_path) {
@@ -491,8 +558,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             true
         }
         Err(err) => {
-            // Мягкий фоллбэк: если папки нет, но игра все равно в наглую лезет 
-            // писать в свой Read-Only бандл (частая ошибка в старых играх Gameloft), 
+            // Мягкий фоллбэк: если папки нет, но игра все равно в наглую лезет
+            // писать в свой Read-Only бандл (частая ошибка в старых играх Gameloft),
             // перехватываем эту ошибку VFS, чтобы избежать краша.
             if let FsError::ReadonlyParentDir = err {
                 log!("Warning: createDirectoryAtPath {} intercepted ReadonlyParentDir, pretending success", path_str);
@@ -501,12 +568,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
             if let FsError::NonexistentParentDir = err {
                 log!("Note: createDirectoryAtPath {} encountered NonexistentParentDir. Forcing create_dir_all to build missing lazy sandbox structures.", path_str);
-                
+
                 if env.fs.create_dir_all(guest_path).is_ok() {
                     return true;
                 }
             }
-            
+
             log!(
                 "Warning: createDirectoryAtPath {} failed with {:?}, returning false",
                 path_str,
@@ -564,9 +631,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
 
-    // 2. В виртуальной ФС touchHLE реальных симлинков нет (они либо резолвятся при распаковке, 
-    // либо не поддерживаются). По документации Apple, если файл существует, 
-    // но НЕ является симлинком, метод возвращает nil и ошибку (обычно код 256 - NSFileReadUnknownError 
+    // 2. В виртуальной ФС touchHLE реальных симлинков нет (они либо резолвятся при распаковке,
+    // либо не поддерживаются). По документации Apple, если файл существует,
+    // но НЕ является симлинком, метод возвращает nil и ошибку (обычно код 256 - NSFileReadUnknownError
     // или POSIX EINVAL 22). Эмулируем этот легальный отказ:
     if !error.is_null() {
         let domain = get_static_str(env, NSCocoaErrorDomain);
@@ -574,10 +641,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         let ns_error = msg![env; ns_error initWithDomain:domain code:256 userInfo:nil];
         env.mem.write(error, ns_error);
     }
-    
+
     return nil;
 }
-    
+
 - (bool)removeItemAtPath:(id)path
                    error:(MutPtr<id>)out_error {
     if path.is_null() {
@@ -589,7 +656,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
 
     match env.fs.remove(GuestPath::new(&path_str)) {
@@ -630,7 +697,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     let src_str = ns_string::to_rust_string(env, src);
     let dst_str = ns_string::to_rust_string(env, dst);
 
@@ -656,7 +723,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     true
 }
 
@@ -672,7 +739,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let to_path_str = ns_string::to_rust_string(env, toPath);
 
@@ -741,7 +808,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return false;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
 
@@ -805,7 +872,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return nil;
     }
-    
+
     let path_str = ns_string::to_rust_string(env, path);
     let guest_path = GuestPath::new(&path_str);
 
@@ -818,17 +885,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return nil;
     }
-    
+
     let is_dir = env.fs.is_dir(guest_path);
     let file_size = if is_dir { 0 } else { env.fs.read(guest_path).map(|d| d.len()).unwrap_or(0) };
-    
+
     let dict: id = msg_class![env; NSMutableDictionary dictionary];
 
     let type_val = if is_dir { NSFileTypeDirectory } else { NSFileTypeRegular };
     let type_str = get_static_str(env, type_val);
     let type_key = get_static_str(env, NSFileType);
     () = msg![env; dict setObject:type_str forKey:type_key];
-    
+
     let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(file_size as u64)];
     let size_key = get_static_str(env, NSFileSize);
     () = msg![env; dict setObject:size_num forKey:size_key];
@@ -850,7 +917,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let error: MutPtr<id> = Ptr::null();
     msg![env; this attributesOfItemAtPath:path error:error]
 }
-    
+
 - (id)attributesOfFileSystemForPath:(id)path
                               error:(MutPtr<id>)error {
     if path.is_null() {
@@ -862,10 +929,10 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         return nil;
     }
-    
+
     // Return dummy file system attributes
     let dict: id = msg_class![env; NSMutableDictionary dictionary];
-    
+
     let size_num: id = msg_class![env; NSNumber numberWithUnsignedLongLong:(1024 * 1024 * 1024 * 16_u64)];
     // 16GB
     let size_key = get_static_str(env, NSFileSystemSize);
@@ -875,7 +942,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // 8GB
     let free_key = get_static_str(env, NSFileSystemFreeSize);
     () = msg![env; dict setObject:free_num forKey:free_key];
-    
+
     let dict_imm = msg![env; dict copy];
     autorelease(env, dict_imm)
 }
@@ -913,21 +980,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     if path1.is_null() || path2.is_null() {
         return false;
     }
-    
+
     if path1 == path2 {
         return true;
     }
-    
+
     let p1 = ns_string::to_rust_string(env, path1);
     let p2 = ns_string::to_rust_string(env, path2);
 
     if p1 == p2 {
         return true;
     }
-    
+
     let Ok(d1) = env.fs.read(GuestPath::new(&p1)) else { return false };
     let Ok(d2) = env.fs.read(GuestPath::new(&p2)) else { return false };
-    
+
     d1 == d2
 }
 
@@ -955,7 +1022,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(path) = host.iterator.next() {
         let path_str = path.as_str();
         let base_str = host.base_path.as_str();
-        
+
         // По документации Apple, NSDirectoryEnumerator возвращает пути относительно базовой директории.
         // Поэтому мы честно отрезаем base_path от начала строки.
         let rel_path = if path_str.starts_with(base_str) {
@@ -986,7 +1053,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 @end
-    
+
 };
 
 // Helper functions for path manipulation
@@ -1009,7 +1076,7 @@ pub fn is_directory(env: &mut Environment, path: id) -> bool {
     env.mem.write(is_dir_ptr, false);
 
     let exists: bool = msg![env; manager fileExistsAtPath:path isDirectory:is_dir_ptr];
-    
+
     let is_dir = env.mem.read(is_dir_ptr);
     env.mem.free(is_dir_ptr.cast());
 
@@ -1020,15 +1087,15 @@ pub fn create_directory_if_needed(env: &mut Environment, path: id) -> bool {
     if path.is_null() {
         return false;
     }
-    
+
     if is_directory(env, path) {
         return true; // Already exists
     }
-    
+
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let attributes: id = nil;
     let error: MutPtr<id> = Ptr::null();
-    
+
     msg![env; manager createDirectoryAtPath:path withIntermediateDirectories:true attributes:attributes error:error]
 }
 
@@ -1036,7 +1103,7 @@ pub fn remove_item(env: &mut Environment, path: id) -> bool {
     if path.is_null() {
         return false;
     }
-    
+
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
 
@@ -1047,7 +1114,7 @@ pub fn copy_item(env: &mut Environment, src: id, dst: id) -> bool {
     if src.is_null() || dst.is_null() {
         return false;
     }
-    
+
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
 
@@ -1058,10 +1125,9 @@ pub fn move_item(env: &mut Environment, src: id, dst: id) -> bool {
     if src.is_null() || dst.is_null() {
         return false;
     }
-    
+
     let manager: id = msg_class![env; NSFileManager defaultManager];
     let error: MutPtr<id> = Ptr::null();
 
     msg![env; manager moveItemAtPath:src toPath:dst error:error]
 }
-

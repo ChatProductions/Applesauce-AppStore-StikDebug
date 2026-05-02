@@ -311,4 +311,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(perror(_)),
     export_c_func!(strerror(_)),
 ];
-

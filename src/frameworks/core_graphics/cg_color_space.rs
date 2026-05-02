@@ -36,19 +36,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 pub type CGColorSpaceModel = i32;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelUnknown:    CGColorSpaceModel = -1;
-pub const kCGColorSpaceModelMonochrome: CGColorSpaceModel =  0;
-pub const kCGColorSpaceModelRGB:        CGColorSpaceModel =  1;
+pub const kCGColorSpaceModelUnknown: CGColorSpaceModel = -1;
+pub const kCGColorSpaceModelMonochrome: CGColorSpaceModel = 0;
+pub const kCGColorSpaceModelRGB: CGColorSpaceModel = 1;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelCMYK:       CGColorSpaceModel =  2;
+pub const kCGColorSpaceModelCMYK: CGColorSpaceModel = 2;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelLab:        CGColorSpaceModel =  3;
+pub const kCGColorSpaceModelLab: CGColorSpaceModel = 3;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelDeviceN:    CGColorSpaceModel =  4;
+pub const kCGColorSpaceModelDeviceN: CGColorSpaceModel = 4;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelIndexed:    CGColorSpaceModel =  5;
+pub const kCGColorSpaceModelIndexed: CGColorSpaceModel = 5;
 #[allow(dead_code)]
-pub const kCGColorSpaceModelPattern:    CGColorSpaceModel =  6;
+pub const kCGColorSpaceModelPattern: CGColorSpaceModel = 6;
 
 pub(super) struct CGColorSpaceHostObject {
     pub(super) name: &'static str,
@@ -63,22 +63,19 @@ fn alloc_color_space(env: &mut Environment, name: &'static str) -> CGColorSpaceR
     let isa = env
         .objc
         .get_known_class("_touchHLE_CGColorSpace", &mut env.mem);
-    env.objc.alloc_object(
-        isa,
-        Box::new(CGColorSpaceHostObject { name }),
-        &mut env.mem,
-    )
+    env.objc
+        .alloc_object(isa, Box::new(CGColorSpaceHostObject { name }), &mut env.mem)
 }
 
 // MARK: - Constructors
 
 pub fn CGColorSpaceCreateWithName(env: &mut Environment, name: CFStringRef) -> CGColorSpaceRef {
-    let generic_rgb  = ns_string::get_static_str(env, kCGColorSpaceGenericRGB);
+    let generic_rgb = ns_string::get_static_str(env, kCGColorSpaceGenericRGB);
     let generic_gray = ns_string::get_static_str(env, kCGColorSpaceGenericGray);
-    let srgb         = ns_string::get_static_str(env, kCGColorSpaceSRGB);
-    let device_cmyk  = ns_string::get_static_str(env, kCGColorSpaceGenericCMYK);
-    let linear_gray  = ns_string::get_static_str(env, kCGColorSpaceLinearGray);
-    let linear_srgb  = ns_string::get_static_str(env, kCGColorSpaceLinearSRGB);
+    let srgb = ns_string::get_static_str(env, kCGColorSpaceSRGB);
+    let device_cmyk = ns_string::get_static_str(env, kCGColorSpaceGenericCMYK);
+    let linear_gray = ns_string::get_static_str(env, kCGColorSpaceLinearGray);
+    let linear_srgb = ns_string::get_static_str(env, kCGColorSpaceLinearSRGB);
 
     if msg![env; name isEqualToString:generic_rgb]
         || msg![env; name isEqualToString:srgb]
@@ -116,8 +113,10 @@ fn CGColorSpaceCreateWithICCProfile(
     env: &mut Environment,
     _data: crate::objc::id, // CFDataRef
 ) -> CGColorSpaceRef {
-    log!("Warning: CGColorSpaceCreateWithICCProfile: ICC profiles not supported, \
-          falling back to GenericRGB");
+    log!(
+        "Warning: CGColorSpaceCreateWithICCProfile: ICC profiles not supported, \
+          falling back to GenericRGB"
+    );
     alloc_color_space(env, kCGColorSpaceGenericRGB)
 }
 
@@ -146,8 +145,10 @@ fn CGColorSpaceCreateIndexed(
     _last_index: NSUInteger,
     _color_table: crate::mem::ConstPtr<u8>,
 ) -> CGColorSpaceRef {
-    log!("Warning: CGColorSpaceCreateIndexed: indexed color spaces not supported, \
-          falling back to GenericRGB");
+    log!(
+        "Warning: CGColorSpaceCreateIndexed: indexed color spaces not supported, \
+          falling back to GenericRGB"
+    );
     alloc_color_space(env, kCGColorSpaceGenericRGB)
 }
 
@@ -155,8 +156,10 @@ fn CGColorSpaceCreatePattern(
     env: &mut Environment,
     _base_space: CGColorSpaceRef,
 ) -> CGColorSpaceRef {
-    log!("Warning: CGColorSpaceCreatePattern: pattern color spaces not supported, \
-          falling back to GenericRGB");
+    log!(
+        "Warning: CGColorSpaceCreatePattern: pattern color spaces not supported, \
+          falling back to GenericRGB"
+    );
     alloc_color_space(env, kCGColorSpaceGenericRGB)
 }
 
@@ -184,25 +187,22 @@ pub fn CGColorSpaceGetModel(env: &mut Environment, cs: CGColorSpaceRef) -> CGCol
     }
     match env.objc.borrow::<CGColorSpaceHostObject>(cs).name {
         kCGColorSpaceGenericGray => kCGColorSpaceModelMonochrome,
-        kCGColorSpaceGenericRGB  => kCGColorSpaceModelRGB,
+        kCGColorSpaceGenericRGB => kCGColorSpaceModelRGB,
         kCGColorSpaceGenericCMYK => kCGColorSpaceModelCMYK,
-        _                        => kCGColorSpaceModelUnknown,
+        _ => kCGColorSpaceModelUnknown,
     }
 }
 
 /// Returns the number of colour components *excluding* alpha.
-pub fn CGColorSpaceGetNumberOfComponents(
-    env: &mut Environment,
-    cs: CGColorSpaceRef,
-) -> NSUInteger {
+pub fn CGColorSpaceGetNumberOfComponents(env: &mut Environment, cs: CGColorSpaceRef) -> NSUInteger {
     if cs.is_null() {
         return 0;
     }
     match env.objc.borrow::<CGColorSpaceHostObject>(cs).name {
         kCGColorSpaceGenericGray => 1,
-        kCGColorSpaceGenericRGB  => 3,
+        kCGColorSpaceGenericRGB => 3,
         kCGColorSpaceGenericCMYK => 4,
-        _                        => 3,
+        _ => 3,
     }
 }
 
@@ -229,12 +229,12 @@ fn CGColorSpaceSupportsOutput(_env: &mut Environment, cs: CGColorSpaceRef) -> bo
 
 // MARK: - Constants
 
-pub const kCGColorSpaceGenericRGB:  &str = "kCGColorSpaceGenericRGB";
+pub const kCGColorSpaceGenericRGB: &str = "kCGColorSpaceGenericRGB";
 pub const kCGColorSpaceGenericGray: &str = "kCGColorSpaceGenericGray";
 pub const kCGColorSpaceGenericCMYK: &str = "kCGColorSpaceGenericCMYK";
-pub const kCGColorSpaceSRGB:        &str = "kCGColorSpaceSRGB";
-pub const kCGColorSpaceLinearSRGB:  &str = "kCGColorSpaceLinearSRGB";
-pub const kCGColorSpaceLinearGray:  &str = "kCGColorSpaceLinearGray";
+pub const kCGColorSpaceSRGB: &str = "kCGColorSpaceSRGB";
+pub const kCGColorSpaceLinearSRGB: &str = "kCGColorSpaceLinearSRGB";
+pub const kCGColorSpaceLinearGray: &str = "kCGColorSpaceLinearGray";
 
 pub const CONSTANTS: ConstantExports = &[
     (
@@ -280,4 +280,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGColorSpaceIsWideGamutRGB(_)),
     export_c_func!(CGColorSpaceSupportsOutput(_)),
 ];
-

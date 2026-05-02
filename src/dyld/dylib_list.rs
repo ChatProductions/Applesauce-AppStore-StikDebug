@@ -120,8 +120,7 @@ mod tests {
                 }
             }
 
-            let mut seen_instance_methods =
-                HashSet::with_capacity(instance_methods.len());                
+            let mut seen_instance_methods = HashSet::with_capacity(instance_methods.len());
 
             for (method_name, _) in *instance_methods {
                 if !seen_instance_methods.insert(method_name) {
@@ -166,4 +165,3 @@ mod tests {
         }
     }
 }
-                                                                                

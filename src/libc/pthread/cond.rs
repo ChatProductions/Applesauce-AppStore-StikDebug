@@ -20,7 +20,7 @@ use crate::libc::time::timespec;
 
 #[repr(C, packed)]
 pub struct pthread_condattr_t {
-    _pad: [u8; 4],  // Apple's pthread_condattr_t = 4 bytes
+    _pad: [u8; 4], // Apple's pthread_condattr_t = 4 bytes
 }
 unsafe impl SafeRead for pthread_condattr_t {}
 
@@ -76,12 +76,15 @@ pub fn pthread_cond_init(
 
     // ЧЕСТНЫЙ ФИКС: Убираем жесткий assert!(!State::get(env).condition_variables.contains_key(&cond));
     // Если игра (например, Minecraft PE) переиспользует память без вызова pthread_cond_destroy,
-    // мы не крашим эмулятор, а просто логируем предупреждение и штатно заменяем объект, 
+    // мы не крашим эмулятор, а просто логируем предупреждение и штатно заменяем объект,
     // как это сделала бы настоящая iOS.
     if State::get(env).condition_variables.contains_key(&cond) {
-        log_dbg!("Warning: pthread_cond_init called on already initialized condition variable {:?}", cond);
+        log_dbg!(
+            "Warning: pthread_cond_init called on already initialized condition variable {:?}",
+            cond
+        );
     }
-    
+
     State::get_mut(env).condition_variables.insert(
         cond,
         CondHostObject {
@@ -183,7 +186,10 @@ pub fn pthread_cond_wait(
     let res = pthread_mutex_unlock(env, mutex);
     // ЧЕСТНЫЙ ФИКС: Аналогичная обработка для обычного wait без таймаута
     if res != 0 {
-        log_dbg!("Warning: pthread_cond_wait called with unlocked/invalid mutex, returning error {}", res);
+        log_dbg!(
+            "Warning: pthread_cond_wait called with unlocked/invalid mutex, returning error {}",
+            res
+        );
         return res;
     }
 
@@ -290,17 +296,15 @@ pub fn pthread_cond_timedwait_relative_np(
         let nsec = ts.tv_nsec;
         log_dbg!(
             "pthread_cond_timedwait_relative_np: relative timeout tv_sec={} tv_nsec={} (ignored)",
-            sec, nsec
+            sec,
+            nsec
         );
     }
     pthread_cond_wait(env, cond, mutex)
 }
 
 /// pthread_condattr_init — initialise a cond attr object (always default).
-pub fn pthread_condattr_init(
-    env: &mut Environment,
-    attr: MutPtr<pthread_condattr_t>,
-) -> i32 {
+pub fn pthread_condattr_init(env: &mut Environment, attr: MutPtr<pthread_condattr_t>) -> i32 {
     if !attr.is_null() {
         env.mem.write(attr, pthread_condattr_t { _pad: [0; 4] });
     }
@@ -308,10 +312,7 @@ pub fn pthread_condattr_init(
 }
 
 /// pthread_condattr_destroy — destroy a cond attr object (no-op).
-pub fn pthread_condattr_destroy(
-    _env: &mut Environment,
-    _attr: MutPtr<pthread_condattr_t>,
-) -> i32 {
+pub fn pthread_condattr_destroy(_env: &mut Environment, _attr: MutPtr<pthread_condattr_t>) -> i32 {
     0
 }
 
@@ -372,4 +373,3 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_condattr_setclock(_, _)),
     export_c_func!(pthread_condattr_getclock(_, _)),
 ];
-

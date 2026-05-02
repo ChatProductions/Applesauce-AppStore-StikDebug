@@ -109,12 +109,12 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
         _ => unreachable!(),
     };
 
-        match posix_io::open_direct(env, filename, flags) {
+    match posix_io::open_direct(env, filename, flags) {
         -1 => Ptr::null(),
         fd => {
             let res = env.mem.alloc_and_write(FILE { fd });
-            // Без заглушек: игры часто грешат тем, что вызывают free() на указатель FILE*, 
-            // минуя вызов fclose(). В результате память освобождается, аллокатор выдает 
+            // Без заглушек: игры часто грешат тем, что вызывают free() на указатель FILE*,
+            // минуя вызов fclose(). В результате память освобождается, аллокатор выдает
             // этот же адрес при следующем fopen, но в нашей мапе остаётся старый "призрак".
             // Мы просто перезаписываем его новым состоянием, так как память уже легально наша.
             State::get_mut(env).file_streams.insert(
@@ -147,7 +147,10 @@ fn freopen(
     let _ = posix_io::close(env, old_fd);
 
     // Очищаем состояние в хост-объекте (ошибки и возвращенные символы ungetc)
-    let host_obj = env.libc_state.stdio.get_file_host_obj_mut(&mut env.mem, stream);
+    let host_obj = env
+        .libc_state
+        .stdio
+        .get_file_host_obj_mut(&mut env.mem, stream);
     host_obj.pushbacks.clear();
     host_obj.error = false;
 
@@ -159,10 +162,13 @@ fn freopen(
     // 2. Парсим режим открытия (точно так же, как в fopen)
     let mode_str = env.mem.cstr_at(mode);
     let [basic_mode @ (b'r' | b'w' | b'a'), flags @ ..] = mode_str else {
-        log!("freopen(): Unexpected or missing mode first character: {:?}", mode_str.first());
+        log!(
+            "freopen(): Unexpected or missing mode first character: {:?}",
+            mode_str.first()
+        );
         return Ptr::null();
     };
-    
+
     let mut plus = false;
     for &flag in flags {
         match flag {
@@ -176,11 +182,11 @@ fn freopen(
 
     let open_flags = match (basic_mode, plus) {
         (b'r', false) => O_RDONLY,
-        (b'r', true)  => O_RDWR,
+        (b'r', true) => O_RDWR,
         (b'w', false) => O_WRONLY | O_CREAT | O_TRUNC,
-        (b'w', true)  => O_RDWR | O_CREAT | O_TRUNC,
+        (b'w', true) => O_RDWR | O_CREAT | O_TRUNC,
         (b'a', false) => O_WRONLY | O_APPEND | O_CREAT,
-        (b'a', true)  => O_RDWR | O_APPEND | O_CREAT,
+        (b'a', true) => O_RDWR | O_APPEND | O_CREAT,
         _ => unreachable!(),
     };
 
@@ -224,7 +230,9 @@ fn fread(
     // really does expect you to just multiply and divide like this, with no
     // attempt being made to ensure a whole number are read or written!
     let mut total_size = item_size.checked_mul(n_items).unwrap();
-    let FILEHostObject { ref mut pushbacks, .. } = env
+    let FILEHostObject {
+        ref mut pushbacks, ..
+    } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -270,7 +278,9 @@ fn fgetc(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     set_errno(env, 0);
 
     let FILE { fd } = env.mem.read(file_ptr);
-    let FILEHostObject { ref mut pushbacks, .. } = env
+    let FILEHostObject {
+        ref mut pushbacks, ..
+    } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -315,7 +325,9 @@ fn ungetc(env: &mut Environment, c: i32, file_ptr: MutPtr<FILE>) -> i32 {
     // Note: successful seeking clears EOF indicator
     let new_offset = posix_io::lseek(env, fd, -1, SEEK_CUR);
     assert!(new_offset >= 0); // TODO: handle error
-    let FILEHostObject { ref mut pushbacks, .. } = env
+    let FILEHostObject {
+        ref mut pushbacks, ..
+    } = env
         .libc_state
         .stdio
         .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -453,7 +465,9 @@ fn fseek(env: &mut Environment, file_ptr: MutPtr<FILE>, offset: i32, whence: i32
     match posix_io::lseek(env, fd, offset.into(), whence) {
         -1 => -1,
         _cur_pos => {
-            let FILEHostObject { ref mut pushbacks, .. } = env
+            let FILEHostObject {
+                ref mut pushbacks, ..
+            } = env
                 .libc_state
                 .stdio
                 .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -513,12 +527,15 @@ fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
             fd
         );
     }
-    
+
     // Честное поведение C-рантайма: защита от double-close или закрытия невалидного потока.
     // Если игра вызывает fclose два раза для одного адреса, не крашим эмулятор assert-ом,
     // а легально возвращаем EOF (ошибку), как и делают реальные ОС.
     if State::get_mut(env).file_streams.remove(&file_ptr).is_none() {
-        log!("Warning: fclose called on unknown or already closed stream {:?}", file_ptr);
+        log!(
+            "Warning: fclose called on unknown or already closed stream {:?}",
+            file_ptr
+        );
         return EOF;
     }
 
@@ -558,7 +575,9 @@ fn fsetpos(env: &mut Environment, file_ptr: MutPtr<FILE>, pos: ConstPtr<fpos_t>)
     if res == -1 {
         -1
     } else {
-        let FILEHostObject { ref mut pushbacks, .. } = env
+        let FILEHostObject {
+            ref mut pushbacks, ..
+        } = env
             .libc_state
             .stdio
             .get_file_host_obj_mut(&mut env.mem, file_ptr);
@@ -661,14 +680,9 @@ fn tmpfile(env: &mut Environment) -> MutPtr<FILE> {
 
     // Generate a unique path under /tmp using a process-wide counter and the
     // host PID, making collisions extremely unlikely.
-    static TMPFILE_COUNTER: std::sync::atomic::AtomicU32 =
-        std::sync::atomic::AtomicU32::new(0);
+    static TMPFILE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let count = TMPFILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let tmp_path = format!(
-        "/tmp/touchHLE_tmp_{}_{}\0",
-        std::process::id(),
-        count
-    );
+    let tmp_path = format!("/tmp/touchHLE_tmp_{}_{}\0", std::process::id(), count);
 
     // Write the path string into guest memory so fopen/remove can use it.
     let path_len = tmp_path.len() as GuestUSize;
@@ -721,8 +735,8 @@ fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
 
 fn setvbuf(
     _env: &mut Environment,
-    _stream: MutVoidPtr,  // FILE*
-    _buf: MutVoidPtr,     // char*
+    _stream: MutVoidPtr, // FILE*
+    _buf: MutVoidPtr,    // char*
     mode: i32,
     _size: GuestUSize,
 ) -> i32 {
@@ -794,8 +808,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(tmpfile()),
     export_c_func!(setbuf(_, _)),
     export_c_func!(setvbuf(_, _, _, _)),
-
     // POSIX-specific functions
     export_c_func!(fileno(_)),
 ];
-

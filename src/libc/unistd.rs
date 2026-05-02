@@ -28,38 +28,38 @@ const C_OK: i32 = 9;
 const D_OK: i32 = 10;
 
 type SysConfName = i32;
-const _SC_ARG_MAX:           SysConfName = 1;
-const _SC_CHILD_MAX:         SysConfName = 2;
-const _SC_CLK_TCK:           SysConfName = 3;
-const _SC_NGROUPS_MAX:       SysConfName = 4;
-const _SC_OPEN_MAX:          SysConfName = 5;
-const _SC_JOB_CONTROL:       SysConfName = 6;
-const _SC_SAVED_IDS:         SysConfName = 7;
-const _SC_VERSION:           SysConfName = 8;
-const _SC_BC_BASE_MAX:       SysConfName = 9;
-const _SC_BC_DIM_MAX:        SysConfName = 10;
-const _SC_BC_SCALE_MAX:      SysConfName = 11;
-const _SC_BC_STRING_MAX:     SysConfName = 12;
-const _SC_COLL_WEIGHTS_MAX:  SysConfName = 13;
-const _SC_EXPR_NEST_MAX:     SysConfName = 14;
-const _SC_LINE_MAX:          SysConfName = 15;
-const _SC_RE_DUP_MAX:        SysConfName = 16;
-const _SC_2_VERSION:         SysConfName = 17;
-const _SC_2_C_BIND:          SysConfName = 18;
-const _SC_2_C_DEV:           SysConfName = 19;
-const _SC_2_CHAR_TERM:       SysConfName = 20;
-const _SC_2_FORT_DEV:        SysConfName = 21;
-const _SC_2_FORT_RUN:        SysConfName = 22;
-const _SC_2_LOCALEDEF:       SysConfName = 23;
-const _SC_2_SW_DEV:          SysConfName = 24;
-const _SC_2_UPE:             SysConfName = 25;
-const _SC_STREAM_MAX:        SysConfName = 26;
-const _SC_TZNAME_MAX:        SysConfName = 27;
-const _SC_PAGESIZE:          SysConfName = 29;
-const _SC_NPROCESSORS_CONF:  SysConfName = 57;
-const _SC_NPROCESSORS_ONLN:  SysConfName = 58;
-const _SC_PHYS_PAGES:        SysConfName = 200;
-const _SC_MONOTONIC_CLOCK:   SysConfName = 201;
+const _SC_ARG_MAX: SysConfName = 1;
+const _SC_CHILD_MAX: SysConfName = 2;
+const _SC_CLK_TCK: SysConfName = 3;
+const _SC_NGROUPS_MAX: SysConfName = 4;
+const _SC_OPEN_MAX: SysConfName = 5;
+const _SC_JOB_CONTROL: SysConfName = 6;
+const _SC_SAVED_IDS: SysConfName = 7;
+const _SC_VERSION: SysConfName = 8;
+const _SC_BC_BASE_MAX: SysConfName = 9;
+const _SC_BC_DIM_MAX: SysConfName = 10;
+const _SC_BC_SCALE_MAX: SysConfName = 11;
+const _SC_BC_STRING_MAX: SysConfName = 12;
+const _SC_COLL_WEIGHTS_MAX: SysConfName = 13;
+const _SC_EXPR_NEST_MAX: SysConfName = 14;
+const _SC_LINE_MAX: SysConfName = 15;
+const _SC_RE_DUP_MAX: SysConfName = 16;
+const _SC_2_VERSION: SysConfName = 17;
+const _SC_2_C_BIND: SysConfName = 18;
+const _SC_2_C_DEV: SysConfName = 19;
+const _SC_2_CHAR_TERM: SysConfName = 20;
+const _SC_2_FORT_DEV: SysConfName = 21;
+const _SC_2_FORT_RUN: SysConfName = 22;
+const _SC_2_LOCALEDEF: SysConfName = 23;
+const _SC_2_SW_DEV: SysConfName = 24;
+const _SC_2_UPE: SysConfName = 25;
+const _SC_STREAM_MAX: SysConfName = 26;
+const _SC_TZNAME_MAX: SysConfName = 27;
+const _SC_PAGESIZE: SysConfName = 29;
+const _SC_NPROCESSORS_CONF: SysConfName = 57;
+const _SC_NPROCESSORS_ONLN: SysConfName = 58;
+const _SC_PHYS_PAGES: SysConfName = 200;
+const _SC_MONOTONIC_CLOCK: SysConfName = 201;
 const _SC_THREAD_SAFE_FUNCTIONS: SysConfName = 202;
 
 fn sleep(env: &mut Environment, seconds: u32) -> u32 {
@@ -178,7 +178,7 @@ fn access(env: &mut Environment, path: ConstPtr<u8>, mode: i32) -> i32 {
                 set_errno(env, EACCES);
                 -1
             }
-        }      
+        }
         P_OK => {
             if read {
                 0
@@ -292,27 +292,24 @@ fn getdtablesize(_env: &mut Environment) -> i32 {
 
 fn sysconf(_env: &mut Environment, name: SysConfName) -> i32 {
     match name {
-        _SC_PAGESIZE             => PAGE_SIZE.try_into().unwrap(),
-        _SC_NPROCESSORS_CONF |
-        _SC_NPROCESSORS_ONLN     => 1,
-        _SC_PHYS_PAGES           => 131072,   // ~512 MiB / 4 KiB pages
-        _SC_CLK_TCK              => 100,
-        _SC_OPEN_MAX             => 256,
-        _SC_ARG_MAX              => 262144,
-        _SC_CHILD_MAX            => -1,       // no limit
-        _SC_NGROUPS_MAX          => 16,
-        _SC_STREAM_MAX           => 20,
-        _SC_TZNAME_MAX           => 255,
-        _SC_LINE_MAX             => 2048,
-        _SC_RE_DUP_MAX           => 255,
-        _SC_JOB_CONTROL          => 1,
-        _SC_SAVED_IDS            => 1,
-        _SC_VERSION              => 200112,   // POSIX.1-2001
-        _SC_2_VERSION            => 200112,
-        _SC_2_C_BIND |
-        _SC_2_C_DEV  |
-        _SC_2_SW_DEV             => 1,
-        _SC_MONOTONIC_CLOCK      => 1,
+        _SC_PAGESIZE => PAGE_SIZE.try_into().unwrap(),
+        _SC_NPROCESSORS_CONF | _SC_NPROCESSORS_ONLN => 1,
+        _SC_PHYS_PAGES => 131072, // ~512 MiB / 4 KiB pages
+        _SC_CLK_TCK => 100,
+        _SC_OPEN_MAX => 256,
+        _SC_ARG_MAX => 262144,
+        _SC_CHILD_MAX => -1, // no limit
+        _SC_NGROUPS_MAX => 16,
+        _SC_STREAM_MAX => 20,
+        _SC_TZNAME_MAX => 255,
+        _SC_LINE_MAX => 2048,
+        _SC_RE_DUP_MAX => 255,
+        _SC_JOB_CONTROL => 1,
+        _SC_SAVED_IDS => 1,
+        _SC_VERSION => 200112, // POSIX.1-2001
+        _SC_2_VERSION => 200112,
+        _SC_2_C_BIND | _SC_2_C_DEV | _SC_2_SW_DEV => 1,
+        _SC_MONOTONIC_CLOCK => 1,
         _SC_THREAD_SAFE_FUNCTIONS => 1,
         _ => {
             log!("sysconf({}): unknown name, returning -1", name);
@@ -321,11 +318,11 @@ fn sysconf(_env: &mut Environment, name: SysConfName) -> i32 {
     }
 }
 
-fn pipe(env: &mut Environment, _fds: MutPtr<FileDescriptor>) -> i32 { 
-    log!("pipe(): stubbed, returning -1"); 
-    set_errno(env, ENOSYS); -1 
+fn pipe(env: &mut Environment, _fds: MutPtr<FileDescriptor>) -> i32 {
+    log!("pipe(): stubbed, returning -1");
+    set_errno(env, ENOSYS);
+    -1
 }
-
 
 fn sbrk(env: &mut Environment, increment: GuestISize) -> GuestISize {
     // sbrk() is used by legacy malloc implementations to grow the heap.
@@ -339,8 +336,10 @@ fn sbrk(env: &mut Environment, increment: GuestISize) -> GuestISize {
 fn chmod(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
     // touchHLE guest filesystem is read-only for bundle files.
     // chmod is a no-op — return success to keep apps happy.
-    log_dbg!("chmod('{}', ...) -> 0 (stubbed)",
-        env.mem.cstr_at_utf8(path).unwrap_or_default());
+    log_dbg!(
+        "chmod('{}', ...) -> 0 (stubbed)",
+        env.mem.cstr_at_utf8(path).unwrap_or_default()
+    );
     0
 }
 

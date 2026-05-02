@@ -15,11 +15,11 @@
 //! Being aware of this concept will make common types like `NSArray` and
 //! `NSString` easier to understand.
 
-use crate::dyld::{export_c_func, FunctionExports, HostConstant, ConstantExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::foundation::ns_string::CFStringGetCharactersPtr;
+use crate::mem::{ConstPtr, MutPtr};
 use crate::objc::id;
 use crate::Environment;
-use crate::mem::{ConstPtr, MutPtr};
 
 pub mod _nib_archive_decoder;
 pub mod ab_people_picker_navigation_controller;
@@ -98,7 +98,7 @@ pub fn NSGetSizeAndAlignment(
     if !align_out.is_null() {
         env.mem.write(align_out, align as NSUInteger);
     }
-    
+
     next_ptr
 }
 
@@ -108,8 +108,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
         let c = env.mem.read(ptr) as char;
 
         match c {
-            'r' | 'n' | 'N' |
-            'o' | 'O' | 'R' | 'V' => {
+            'r' | 'n' | 'N' | 'o' | 'O' | 'R' | 'V' => {
                 ptr = ptr + 1;
             }
             _ => break,
@@ -122,27 +121,22 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
     match c {
         // Базовые типы
-        'c' |
-        'C' | 'B' => (ptr, 1, 1),
-        's' |
-        'S' => (ptr, 2, 2),
-        'i' | 'I' | 'l' | 'L' |
-        'f' | 'W' => (ptr, 4, 4),
-        'q' | 'Q' |
-        'd' => (ptr, 8, 8),
+        'c' | 'C' | 'B' => (ptr, 1, 1),
+        's' | 'S' => (ptr, 2, 2),
+        'i' | 'I' | 'l' | 'L' | 'f' | 'W' => (ptr, 4, 4),
+        'q' | 'Q' | 'd' => (ptr, 8, 8),
         'v' => (ptr, 0, 1), // void
-        
+
         // Указатели, объекты (id), классы (Class), селекторы (SEL), неизвестные указатели (?)
-        '*' |
-        '@' | '#' | ':' | '?' => (ptr, 4, 4),
-        
+        '*' | '@' | '#' | ':' | '?' => (ptr, 4, 4),
+
         // Указатель на другой тип: размер всегда 4, но нужно "проглотить" тип, на который он указывает
         '^' => {
             let (next_ptr, _, _) = parse_objc_type(env, ptr);
 
             (next_ptr, 4, 4)
         }
-        
+
         // Массивы: [len+type]
         '[' => {
             let mut len = 0;
@@ -165,16 +159,16 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             }
             (next_ptr, len * elem_size, elem_align)
         }
-        
+
         // Структуры: {name=types}
         '{' => {
             loop {
                 let c = env.mem.read(ptr) as char;
 
                 ptr = ptr + 1;
-                if c == '=' ||
-                c == '}' {
-                    if c == '}' { return (ptr, 0, 1);
+                if c == '=' || c == '}' {
+                    if c == '}' {
+                        return (ptr, 0, 1);
                     } // Opaque
                     break;
                 }
@@ -190,24 +184,26 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
                     break;
                 }
-                if c == '\0' { break;
+                if c == '\0' {
+                    break;
                 }
-                
+
                 // Пропускаем имена полей (например: "x"f)
                 if c == '"' {
                     ptr = ptr + 1;
-                   
+
                     loop {
                         let nc = env.mem.read(ptr) as char;
                         ptr = ptr + 1;
-                        if nc == '"' { break;
+                        if nc == '"' {
+                            break;
                         }
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
 
                     ptr = next_ptr;
-                    
+
                     if elem_align > 0 {
                         let rem = total_size % elem_align;
 
@@ -230,15 +226,16 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             }
             (ptr, total_size, max_align)
         }
-        
+
         // Объединения: (name=types)
         '(' => {
             loop {
                 let c = env.mem.read(ptr) as char;
-    
+
                 ptr = ptr + 1;
                 if c == '=' || c == ')' {
-                    if c == ')' { return (ptr, 0, 1);
+                    if c == ')' {
+                        return (ptr, 0, 1);
                     }
                     break;
                 }
@@ -254,31 +251,34 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
                     break;
                 }
-                if c == '\0' { break;
+                if c == '\0' {
+                    break;
                 }
-                
+
                 if c == '"' {
                     ptr = ptr + 1;
                     loop {
-                   
                         let nc = env.mem.read(ptr) as char;
                         ptr = ptr + 1;
-                        if nc == '"' { break;
+                        if nc == '"' {
+                            break;
                         }
                     }
                 } else {
                     let (next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
 
                     ptr = next_ptr;
-                    if elem_size > max_size { max_size = elem_size;
+                    if elem_size > max_size {
+                        max_size = elem_size;
                     }
-                    if elem_align > max_align { max_align = elem_align;
+                    if elem_align > max_align {
+                        max_align = elem_align;
                     }
                 }
             }
             (ptr, max_size, max_align)
         }
-        
+
         // Битовые поля: bNUM
         'b' => {
             let mut bits = 0;
@@ -298,14 +298,20 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
             (ptr, bytes, 1)
         }
-        
+
         _ => (ptr, 0, 1),
     }
 }
-                
+
 pub const STUB_CONSTANTS: ConstantExports = &[
-    ("_NSLocalizedFailureReasonErrorKey", HostConstant::NSString("NSLocalizedFailureReasonErrorKey")),
-    ("_NSURLErrorDomain", HostConstant::NSString("NSURLErrorDomain")),
+    (
+        "_NSLocalizedFailureReasonErrorKey",
+        HostConstant::NSString("NSLocalizedFailureReasonErrorKey"),
+    ),
+    (
+        "_NSURLErrorDomain",
+        HostConstant::NSString("NSURLErrorDomain"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
