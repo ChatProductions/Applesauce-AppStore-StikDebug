@@ -365,16 +365,20 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     } else {
         if fullscreen_layer != nil {
-            // Another opaque CAEAGLLayer covers the screen but isn't ours.
-            // Fall through to the slow path instead of skipping entirely,
-            // because the fullscreen-layer heuristic can be wrong when overlay
-            // SDKs (e.g. Crystal) add views.
-            log_dbg!(
-                "Layer {:?} is not the fullscreen layer {:?}, presenting renderbuffer {:?} via slow path anyway.",
+            // If there's a single layer that covers the screen, and this isn't
+            // it, there's no point in presenting the output because it won't be
+            // seen. Using a noisy log because it's a weird scenario and might
+            // indicate a bug.
+            log!(
+                "Layer {:?} is not the fullscreen layer {:?}, skipping presentation of renderbuffer {:?}!",
                 drawable,
                 fullscreen_layer,
                 renderbuffer,
             );
+            if let Some(sleep_for) = sleep_for {
+                env.sleep(sleep_for);
+            }
+            return true;
         }
 
         // The very slow and inefficient path: not only does glReadPixels()
@@ -383,7 +387,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         // again during composition. find_fullscreen_eagl_layer() exists to
         // avoid this.
         log_dbg!(
-            "Presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path).",
+            "There is no fullscreen layer, presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path).",
             renderbuffer,
             drawable,
         );
