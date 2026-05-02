@@ -341,10 +341,12 @@ pub struct Mem {
     /// See [crate::Environment] for more info.
     pub(super) zero_memory_on_free: bool,
 
-    /// ХАК: Страница-заглушка для null-page доступов.
-    /// Использует технику NOP-sled: страница заполнена нулями (безопасно для чтения данных/указателей),
-    /// а в самом конце находится инструкция BX LR (0x4770 в Thumb) для безопасного возврата при прямом вызове NULL.
-    /// Это позволяет играм продолжить работу вместо краша на UndefinedInstruction.
+    /// HACK: stub page for null-page accesses.
+    /// Uses NOP-sled: page is filled with zeros (safe for reading
+    /// data/pointers), and at the end has a BX LR instruction
+    /// (0x4770 in Thumb) for a safe return on direct NULL calls.
+    /// This lets games keep running instead of crashing on
+    /// UndefinedInstruction.
     null_stub_page: *mut u8,
 }
 
@@ -388,10 +390,11 @@ impl Mem {
         let bytes = ptr as *mut Bytes;
 
         // ХАК: Создаём страницу-заглушку для null-page (4KB)
-        // Используем технику NOP-sled (салазки).
-        // Заполняем страницу нулями, чтобы чтение *(void**)0 возвращало NULL.
-        // Если игра делает прямой вызов NULL: ((void(*)())0)(), процессор выполнит NOP-ы (MOVS R0,R0)
-        // и доскользит до конца страницы, где встретит BX LR и вернется назад.
+        // Use a NOP-sled technique.
+        // Fill the page with zeros so that reading *(void**)0 returns NULL.
+        // If the game calls NULL directly: ((void(*)())0)(), the CPU will
+        // execute NOPs (MOVS R0,R0) and slide to the end of the page, where
+        // it hits BX LR and returns.
         let null_stub_page = unsafe {
             let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
             let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
@@ -586,7 +589,8 @@ impl Mem {
         // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
-            // Для записи в null-page - возвращаем stub-страницу (запись будет проигнорирована)
+            // For writes to null-page, return the stub page (the write
+            // will be silently ignored).
             let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let available = PAGE_SIZE as usize - offset;
