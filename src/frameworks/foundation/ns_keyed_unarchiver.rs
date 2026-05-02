@@ -461,10 +461,24 @@ pub fn decode_current_data(env: &mut Environment, unarchiver: id, is_mutable: bo
 
 fn keys_for_key(env: &mut Environment, unarchiver: id, key: &str) -> Vec<Uid> {
     let host_obj = borrow_host_obj(env, unarchiver);
-    let objects = host_obj.plist["$objects"].as_array().unwrap();
-    let item = &objects[host_obj.current_key.unwrap().get() as usize];
-    let keys = item.as_dictionary().unwrap()[key].as_array().unwrap();
-    keys.iter()
-        .map(|value| value.as_uid().copied().unwrap())
+    let Some(objects) = host_obj.plist.get("$objects").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let Some(current_key) = host_obj.current_key else {
+        return Vec::new();
+    };
+    let idx = current_key.get() as usize;
+    if idx >= objects.len() {
+        return Vec::new();
+    }
+    let item = &objects[idx];
+    let Some(dict) = item.as_dictionary() else {
+        return Vec::new();
+    };
+    let Some(arr) = dict.get(key).and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|value| value.as_uid().copied())
         .collect()
 }

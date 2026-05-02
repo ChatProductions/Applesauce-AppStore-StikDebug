@@ -205,45 +205,57 @@ pub fn find_fullscreen_eagl_layer(env: &mut Environment) -> id {
         msg![env; screen bounds]
     };
 
-    let mut layer: id = msg![env; top_window layer];
+    let ca_eagl_layer_class: Class = msg_class![env; CAEAGLLayer class];
 
-    loop {
-        // assert!(layer != nil);
+    // Recursively search the layer tree for a fullscreen opaque CAEAGLLayer.
+    // The original algorithm only followed sublayers.last(), which missed the
+    // game's layer when an SDK overlay (e.g. Crystal) was added as the last
+    // sublayer.  We now check *every* sublayer so that the fast presentation
+    // path is used whenever there is a qualifying layer anywhere in the tree.
+    fn find_recursive(
+        env: &mut Environment,
+        layer: id,
+        screen_bounds: &CGRect,
+        ca_eagl_layer_class: Class,
+    ) -> id {
+        // Extract all needed fields before any mutable borrow of `env`.
+        let (is_fullscreen, is_opaque, sublayers) = {
+            let host: &CALayerHostObject = env.objc.borrow(layer);
+            let ok = host.bounds.size == screen_bounds.size
+                && host.bounds.origin == (CGPoint { x: 0.0, y: 0.0 })
+                && host.anchor_point == (CGPoint { x: 0.5, y: 0.5 })
+                && host.position
+                    == (CGPoint {
+                        x: screen_bounds.size.width / 2.0,
+                        y: screen_bounds.size.height / 2.0,
+                    })
+                && !host.hidden
+                && host.opacity == 1.0
+                && host.affine_transform.is_identity();
+            (ok, host.opaque, host.sublayers.clone())
+        };
 
-        let layer_host_obj: &CALayerHostObject = env.objc.borrow(layer);
-
-        if layer_host_obj.bounds.size != screen_bounds.size
-            || layer_host_obj.bounds.origin != (CGPoint { x: 0.0, y: 0.0 })
-            || layer_host_obj.anchor_point != (CGPoint { x: 0.5, y: 0.5 })
-            || layer_host_obj.position
-                != (CGPoint {
-                    x: screen_bounds.size.width / 2.0,
-                    y: screen_bounds.size.height / 2.0,
-                })
-            || layer_host_obj.hidden
-            || layer_host_obj.opacity != 1.0
-            || !layer_host_obj.affine_transform.is_identity()
-        {
+        if !is_fullscreen {
             return nil;
         }
 
-        if let Some(&next) = layer_host_obj.sublayers.last() {
-            layer = next;
-        } else {
-            break;
+        // Is *this* layer an opaque CAEAGLLayer?
+        if is_opaque && msg![env; layer isKindOfClass:ca_eagl_layer_class] {
+            return layer;
         }
+
+        // Otherwise, search sublayers (iterate all, not just last).
+        for &child in sublayers.iter().rev() {
+            let found = find_recursive(env, child, screen_bounds, ca_eagl_layer_class);
+            if found != nil {
+                return found;
+            }
+        }
+        nil
     }
 
-    if !env.objc.borrow::<CALayerHostObject>(layer).opaque {
-        return nil;
-    }
-
-    let ca_eagl_layer_class: Class = msg_class![env; CAEAGLLayer class];
-    if !msg![env; layer isKindOfClass:ca_eagl_layer_class] {
-        return nil;
-    }
-
-    layer
+    let root_layer: id = msg![env; top_window layer];
+    find_recursive(env, root_layer, &screen_bounds, ca_eagl_layer_class)
 }
 
 // =========================================================================
