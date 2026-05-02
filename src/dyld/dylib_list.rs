@@ -37,6 +37,15 @@ pub const MOBILE_CORE_SERVICES: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::mobile_core_services::FUNCTIONS],
 };
 
+// CoreMedia (stub — function exports are currently registered with CoreVideo)
+pub const CORE_MEDIA: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/CoreMedia.framework/CoreMedia",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::core_media::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -70,6 +79,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &CORE_AUDIO,
     &CF_NETWORK,
     &MOBILE_CORE_SERVICES,
+    &CORE_MEDIA,
 ];
 
 #[cfg(test)]
@@ -111,7 +121,7 @@ mod tests {
             }
 
             let mut seen_instance_methods =
-                HashSet::with_capacity(instance_methods.len());
+                HashSet::with_capacity(instance_methods.len());                
 
             for (method_name, _) in *instance_methods {
                 if !seen_instance_methods.insert(method_name) {
@@ -156,4 +166,4 @@ mod tests {
         }
     }
 }
-
+                                                                                

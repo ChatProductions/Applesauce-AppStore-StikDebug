@@ -34,6 +34,7 @@ pub mod core_audio_types;
 pub mod core_foundation;
 pub mod core_graphics;
 pub mod core_location;
+pub mod core_media;
 pub mod core_motion;
 pub mod core_video;
 pub mod foundation;
