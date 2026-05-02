@@ -20,7 +20,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 # Hardcoded admin GitHub logins. Kept lowercase for case-insensitive comparison.
 ADMIN_GITHUB_LOGINS: frozenset[str] = frozenset(
-    {"timofeylednev", "j92580498-max", "whyineedname"}
+    {"timofeylednev", "j92580498-max", "makaherpasswordlostmedia"}
 )
 
 
