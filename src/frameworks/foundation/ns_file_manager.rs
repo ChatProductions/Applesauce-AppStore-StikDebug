@@ -499,6 +499,14 @@ pub const CLASSES: ClassExports = objc_classes! {
                 return true;
             }
 
+            if let FsError::NonexistentParentDir = err {
+                log!("Note: createDirectoryAtPath {} encountered NonexistentParentDir. Forcing create_dir_all to build missing lazy sandbox structures.", path_str);
+                
+                if env.fs.create_dir_all(guest_path).is_ok() {
+                    return true;
+                }
+            }
+            
             log!(
                 "Warning: createDirectoryAtPath {} failed with {:?}, returning false",
                 path_str,
