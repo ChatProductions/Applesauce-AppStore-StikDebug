@@ -7,3 +7,5 @@ __pycache__/
 build/
 dist/
 uploads/
+# Deploy-time secrets bootstrap (never commit OAuth / session secrets).
+app/_runtime_env.py

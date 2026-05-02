@@ -268,6 +268,178 @@ button.primary:hover { opacity: 0.9; }
   display: block;
 }
 
+/* Auth / nav user */
+.site-header nav { display: flex; align-items: center; flex-wrap: wrap; }
+.nav-user {
+  color: #fff;
+  margin-left: 16px;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.95;
+}
+.nav-user .avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #444;
+}
+.nav-login.disabled {
+  color: #aaa;
+  margin-left: 16px;
+  font-size: 14px;
+  cursor: not-allowed;
+}
+.logout-form {
+  display: inline;
+  margin: 0 0 0 12px;
+}
+.link-button {
+  background: transparent;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.link-button:hover { opacity: 1; }
+
+.nav-admin {
+  background: var(--accent);
+  padding: 3px 9px;
+  border-radius: 4px;
+  margin-left: 12px !important;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.nav-admin .badge {
+  background: #fff;
+  color: var(--accent);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.status-pending {
+  background: #fff5d8;
+  color: #8a6a00;
+  border: 1px solid #e7c64a;
+}
+.status-approved {
+  background: #e0f5db;
+  color: #2c6b1e;
+  border: 1px solid #93c780;
+}
+.status-rejected {
+  background: #fde8e6;
+  color: var(--error-fg);
+  border: 1px solid #d99a93;
+}
+
+.report-pending td { background: #fffceb; }
+.report-rejected td { background: #fdf3f2; opacity: 0.75; }
+
+/* Status tabs (admin) */
+.status-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.status-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-tab.active {
+  background: var(--fg);
+  color: #fff;
+  border-color: var(--fg);
+}
+.status-tab .badge {
+  background: #efefec;
+  color: var(--muted);
+  padding: 0 7px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.status-tab.active .badge { background: #fff; color: var(--fg); }
+
+/* Admin report cards */
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.admin-report {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.admin-report header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.admin-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.admin-actions form { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+.admin-actions button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.admin-actions button.primary {
+  background: #2c6b1e;
+  color: #fff;
+  border-color: #2c6b1e;
+}
+.admin-actions button.danger {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.admin-actions .reject-form input {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  min-width: 200px;
+  font-size: 13px;
+}
+
 @media (max-width: 720px) {
   table { font-size: 13px; }
   .reports-table { font-size: 12px; }

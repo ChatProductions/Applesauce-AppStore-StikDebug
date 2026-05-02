@@ -8,6 +8,16 @@
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if info %}<div class="info">{{ info }}</div>{% endif %}
 
+<p class="muted">
+  You're signed in as <strong>{{ current_user.display_name }}</strong>.
+  {% if current_user.is_admin %}
+    As an admin your reports will be auto-approved.
+  {% else %}
+    Submitted reports go into the moderation queue and are reviewed by
+    the site admins before they appear publicly.
+  {% endif %}
+</p>
+
 <section class="autofill">
   <h2>Quick autofill from a HyperHLE log</h2>
   <p class="muted">
@@ -109,9 +119,6 @@
     </label>
     <label>…or paste a screenshot URL
       <input type="url" name="screenshot_url" value="{{ form.get('screenshot_url', '') }}" placeholder="https://…/screenshot.png" />
-    </label>
-    <label>Reported by (your handle)
-      <input type="text" name="reported_by" value="{{ form.get('reported_by', '') }}" placeholder="@yourname" />
     </label>
   </fieldset>
 

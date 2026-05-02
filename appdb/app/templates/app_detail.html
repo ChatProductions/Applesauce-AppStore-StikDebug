@@ -66,8 +66,13 @@
   </thead>
   <tbody>
     {% for r in reports %}
-    <tr>
-      <td>{{ r.version_number }}</td>
+    <tr class="report-row report-{{ r.status }}">
+      <td>
+        {{ r.version_number }}
+        {% if r.status != 'approved' %}
+          <span class="status-badge status-{{ r.status }}">{{ r.status }}</span>
+        {% endif %}
+      </td>
       <td>{{ r.touchhle_version }}</td>
       <td>{{ r.operating_system }}</td>
       <td>{{ r.gpu or '' }}</td>

@@ -1,8 +1,9 @@
 """FastAPI server for the HyperHLE app compatibility database."""
 from __future__ import annotations
 
+import os
 import re
-import secrets
+import secrets as py_secrets
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -14,9 +15,29 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from .db import App, Report, get_db, init_db
+from . import auth as auth_module
+from .auth import (
+    CurrentUserDep,
+    RequireAdminDep,
+    RequireLoginDep,
+    handle_callback,
+    logout as auth_logout,
+    oauth_config,
+    start_login,
+)
+from .db import (
+    STATUS_APPROVED,
+    STATUS_PENDING,
+    STATUS_REJECTED,
+    App,
+    Report,
+    User,
+    get_db,
+    init_db,
+)
 from .log_parser import parse_log
 from .seed import seed
 
@@ -74,8 +95,19 @@ app = FastAPI(title="HyperHLE app compatibility database")
 # absolute URLs we emit are blocked by browsers as mixed content.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
+# Signed session cookies. ``SESSION_SECRET`` must be set in production;
+# in development we fall back to a per-process random value (sessions
+# don't survive a restart, which is fine locally).
+_session_secret = os.environ.get("SESSION_SECRET") or py_secrets.token_urlsafe(48)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    session_cookie="hyperhle_session",
+    https_only=False,  # Fly terminates TLS in front of us; cookie is still flagged Secure when behind https.
+    same_site="lax",
+)
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-# Mounted lazily on first startup once the directory exists.
 
 
 @app.on_event("startup")
@@ -85,13 +117,47 @@ def _startup() -> None:
     # Ensure uploads dir exists, then mount it for serving previously-uploaded
     # screenshots. Mounting happens once on startup.
     uploads = _uploads_dir()
-    if not any(r.path == "/uploads" for r in app.routes if hasattr(r, "path")):
+    if not any(getattr(r, "path", None) == "/uploads" for r in app.routes):
         app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
+
+
+# ---------------------------------------------------------------------------
+# Template globals: every template needs ``current_user`` and a few flags.
+# ---------------------------------------------------------------------------
+
+
+def _common_context(request: Request, db: Session) -> dict:
+    user = auth_module.get_current_user(request, db)
+    pending_count = 0
+    if user is not None and user.is_admin:
+        pending_count = db.query(Report).filter(Report.status == STATUS_PENDING).count()
+    return {
+        "current_user": user,
+        "pending_count": pending_count,
+        "oauth_configured": oauth_config.configured,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Public routes.
+# ---------------------------------------------------------------------------
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _approved_filter(query, user: User | None):
+    """Restrict reports query: public sees only approved; the report's
+    author also sees their own pending; admins see everything."""
+    if user is None:
+        return query.filter(Report.status == STATUS_APPROVED)
+    if user.is_admin:
+        return query
+    return query.filter(
+        (Report.status == STATUS_APPROVED) | (Report.reporter_user_id == user.id)
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -100,15 +166,31 @@ def home(
     q: str | None = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
-    apps = db.query(App).order_by(App.name).all()
+    ctx = _common_context(request, db)
+    user = ctx["current_user"]
 
+    # Apps to show: those that have at least one visible report.
+    visible_reports_q = _approved_filter(db.query(Report.app_id).distinct(), user)
+    visible_app_ids = {row[0] for row in visible_reports_q.all()}
+
+    apps = (
+        db.query(App)
+        .filter(App.id.in_(visible_app_ids) if visible_app_ids else False)
+        .order_by(App.name)
+        .all()
+    )
+
+    # Aggregate best-rating / last-updated using only visible reports.
     best_rating: dict[int, int | None] = {}
     last_updated: dict[int, datetime | None] = {}
     rows = (
-        db.query(
-            Report.app_id,
-            func.max(Report.rating).label("best"),
-            func.max(Report.reported_at).label("last_at"),
+        _approved_filter(
+            db.query(
+                Report.app_id,
+                func.max(Report.rating).label("best"),
+                func.max(Report.reported_at).label("last_at"),
+            ),
+            user,
         )
         .group_by(Report.app_id)
         .all()
@@ -117,7 +199,7 @@ def home(
         best_rating[app_id] = best
         last_updated[app_id] = last_at
 
-    rating_counts = defaultdict(int)
+    rating_counts: dict[int, int] = defaultdict(int)
     for app_id, best in best_rating.items():
         if best is not None:
             rating_counts[best] += 1
@@ -135,6 +217,7 @@ def home(
         request,
         "index.html",
         {
+            **ctx,
             "apps": apps,
             "best_rating": best_rating,
             "last_updated": last_updated,
@@ -152,19 +235,29 @@ def app_detail(
     request: Request,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
+    ctx = _common_context(request, db)
+    user = ctx["current_user"]
+
     a = db.query(App).filter(App.id == app_id).first()
     if a is None:
         raise HTTPException(404, "App not found")
 
     reports = (
-        db.query(Report)
-        .filter(Report.app_id == app_id)
+        _approved_filter(db.query(Report).filter(Report.app_id == app_id), user)
         .order_by(Report.reported_at.desc())
         .all()
     )
 
+    # Hide apps with no visible reports from non-admins (404).
+    if not reports and (user is None or not user.is_admin):
+        raise HTTPException(404, "App not found")
+
     versions: dict[str, dict] = {}
     for r in reports:
+        if r.status != STATUS_APPROVED:
+            # Pending / rejected reports shouldn't influence the
+            # aggregated "best rating" the public sees.
+            continue
         v = versions.setdefault(
             r.version_number,
             {
@@ -198,12 +291,57 @@ def app_detail(
         request,
         "app_detail.html",
         {
+            **ctx,
             "app": a,
             "reports": reports,
             "versions": versions_sorted,
             "rating_legend": RATING_LEGEND,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Auth routes.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/auth/github/login")
+def github_login(request: Request, next: str | None = None):
+    return start_login(request, next_path=next)
+
+
+@app.get("/auth/github/callback", name="github_callback")
+async def github_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    if error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"GitHub returned an error: {error} ({error_description or 'no description'}).",
+        )
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing 'code' or 'state' parameter.")
+    return await handle_callback(request, code, state, db)
+
+
+@app.post("/auth/logout")
+def logout_post(request: Request):
+    return auth_logout(request)
+
+
+@app.get("/auth/logout")
+def logout_get(request: Request):
+    return auth_logout(request)
+
+
+# ---------------------------------------------------------------------------
+# Submission flow.
+# ---------------------------------------------------------------------------
 
 
 def _empty_form_data() -> dict:
@@ -223,7 +361,6 @@ def _empty_form_data() -> dict:
         "rating": "",
         "remarks": "",
         "screenshot_url": "",
-        "reported_by": "",
     }
 
 
@@ -237,6 +374,7 @@ def _render_submit_form(
     info: str | None = None,
     status_code: int = 200,
 ) -> HTMLResponse:
+    ctx = _common_context(request, db)
     apps = db.query(App).order_by(App.name).all()
     selected = None
     if selected_app_id is not None:
@@ -245,6 +383,7 @@ def _render_submit_form(
         request,
         "submit_report.html",
         {
+            **ctx,
             "apps": apps,
             "selected_app": selected,
             "rating_legend": RATING_LEGEND,
@@ -257,12 +396,27 @@ def _render_submit_form(
     )
 
 
+def _render_login_required(
+    request: Request, db: Session, *, status_code: int = 200,
+) -> HTMLResponse:
+    ctx = _common_context(request, db)
+    return templates.TemplateResponse(
+        request,
+        "login_required.html",
+        {**ctx, "next_path": "/submit"},
+        status_code=status_code,
+    )
+
+
 @app.get("/submit", response_class=HTMLResponse)
 def submit_form(
     request: Request,
     app_id: int | None = None,
     db: Annotated[Session, Depends(get_db)] = None,
+    user: CurrentUserDep = None,
 ):
+    if user is None:
+        return _render_login_required(request, db)
     form = _empty_form_data()
     if app_id is not None:
         form["app_id"] = str(app_id)
@@ -276,9 +430,12 @@ async def submit_parse_log(
     request: Request,
     log_file: Annotated[UploadFile, File()],
     db: Annotated[Session, Depends(get_db)] = None,
+    user: CurrentUserDep = None,
 ):
     """Parse an uploaded HyperHLE / touchHLE log and re-render the submit form
     with the extracted fields pre-filled."""
+    if user is None:
+        return _render_login_required(request, db, status_code=401)
     if not log_file or not log_file.filename:
         return _render_submit_form(
             request, db, error="Please choose a log file to parse.", status_code=400,
@@ -299,7 +456,6 @@ async def submit_parse_log(
 
     parsed = parse_log(text)
 
-    # Try to match an existing app by name; otherwise prefill the "new app" fields.
     form = _empty_form_data()
     selected_app_id: int | None = None
     if parsed.app_name:
@@ -357,7 +513,6 @@ def _clean(s: str | None) -> str | None:
     return s or None
 
 
-_USERNAME_RE = re.compile(r"^@?[A-Za-z0-9_\-]{1,40}$")
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -381,7 +536,7 @@ async def _save_uploaded_screenshot(upload: UploadFile | None) -> tuple[str | No
     if len(blob) > MAX_SCREENSHOT_BYTES:
         return None, f"Screenshot too large (max {MAX_SCREENSHOT_BYTES // (1024 * 1024)} MB)."
     safe_stem = _SAFE_FILENAME_RE.sub("_", Path(upload.filename).stem)[:60] or "screenshot"
-    filename = f"{secrets.token_hex(8)}-{safe_stem}{ext}"
+    filename = f"{py_secrets.token_hex(8)}-{safe_stem}{ext}"
     out_path = _uploads_dir() / filename
     out_path.write_bytes(blob)
     return filename, None
@@ -391,6 +546,7 @@ async def _save_uploaded_screenshot(upload: UploadFile | None) -> tuple[str | No
 async def submit_post(
     request: Request,
     app_id: Annotated[str, Form()],
+    user: RequireLoginDep,
     new_app_name: Annotated[str, Form()] = "",
     new_app_year: Annotated[str, Form()] = "",
     new_app_publisher: Annotated[str, Form()] = "",
@@ -405,7 +561,6 @@ async def submit_post(
     rating: Annotated[str, Form()] = "",
     remarks: Annotated[str, Form()] = "",
     screenshot_url: Annotated[str, Form()] = "",
-    reported_by: Annotated[str, Form()] = "",
     screenshot_file: Annotated[UploadFile | None, File()] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
@@ -425,7 +580,6 @@ async def submit_post(
         "rating": rating,
         "remarks": remarks,
         "screenshot_url": screenshot_url,
-        "reported_by": reported_by,
     }
 
     def _err(msg: str) -> HTMLResponse:
@@ -440,7 +594,6 @@ async def submit_post(
             selected_app_id=sel, form_data=form_data, error=msg, status_code=400,
         )
 
-    # Resolve / create app.
     if app_id == "__new__":
         name = _clean(new_app_name)
         if not name:
@@ -459,7 +612,7 @@ async def submit_post(
                 name=name,
                 release_year=year_val,
                 developer_publisher=_clean(new_app_publisher),
-                first_reported_by=_clean(reported_by),
+                first_reported_by=user.display_name,
             )
             db.add(target_app)
             db.flush()
@@ -469,7 +622,7 @@ async def submit_post(
         except ValueError:
             target_app = None
         if target_app is None:
-            return _err("Please choose an existing app or pick “Add a new app”.")
+            return _err("Please choose an existing app or pick \u201cAdd a new app\u201d.")
 
     if not _clean(version_number):
         return _err("Version number is required.")
@@ -484,12 +637,6 @@ async def submit_post(
     if rating_val < 1 or rating_val > 5:
         return _err("Rating must be 1–5.")
 
-    reporter = _clean(reported_by)
-    if reporter and not _USERNAME_RE.match(reporter):
-        return _err("“Reported by” should be a username (letters, digits, _ or -, optionally prefixed with @).")
-    if reporter and not reporter.startswith("@"):
-        reporter = "@" + reporter
-
     sh = _clean(scale_hack)
     if sh and sh not in SCALE_HACK_CHOICES:
         return _err("Invalid scale-hack value.")
@@ -497,6 +644,16 @@ async def submit_post(
     screenshot_filename, screenshot_err = await _save_uploaded_screenshot(screenshot_file)
     if screenshot_err:
         return _err(screenshot_err)
+
+    # Auto-approve admins' submissions; everything else lands in the queue.
+    if user.is_admin:
+        report_status = STATUS_APPROVED
+        reviewed_by_id = user.id
+        reviewed_at = datetime.utcnow()
+    else:
+        report_status = STATUS_PENDING
+        reviewed_by_id = None
+        reviewed_at = None
 
     report = Report(
         app_id=target_app.id,
@@ -512,18 +669,125 @@ async def submit_post(
         remarks=_clean(remarks),
         screenshot_url=_clean(screenshot_url),
         screenshot_filename=screenshot_filename,
-        reported_by=reporter,
+        reported_by=user.display_name,
+        reporter_user_id=user.id,
+        status=report_status,
+        reviewed_by_id=reviewed_by_id,
+        reviewed_at=reviewed_at,
     )
     db.add(report)
     db.commit()
 
+    if report_status == STATUS_PENDING:
+        return RedirectResponse(url="/submit/thanks", status_code=303)
     return RedirectResponse(url=f"/apps/{target_app.id}", status_code=303)
 
 
+@app.get("/submit/thanks", response_class=HTMLResponse)
+def submit_thanks(
+    request: Request, db: Annotated[Session, Depends(get_db)] = None,
+):
+    ctx = _common_context(request, db)
+    return templates.TemplateResponse(request, "thanks.html", ctx)
+
+
+# ---------------------------------------------------------------------------
+# Admin moderation queue.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_home(
+    request: Request,
+    admin: RequireAdminDep,
+    status: str = "pending",
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    ctx = _common_context(request, db)
+    if status not in (STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, "all"):
+        status = STATUS_PENDING
+    q = db.query(Report).order_by(Report.reported_at.desc())
+    if status != "all":
+        q = q.filter(Report.status == status)
+    reports = q.limit(200).all()
+    counts = {
+        STATUS_PENDING: db.query(Report).filter(Report.status == STATUS_PENDING).count(),
+        STATUS_APPROVED: db.query(Report).filter(Report.status == STATUS_APPROVED).count(),
+        STATUS_REJECTED: db.query(Report).filter(Report.status == STATUS_REJECTED).count(),
+    }
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {
+            **ctx,
+            "reports": reports,
+            "selected_status": status,
+            "counts": counts,
+        },
+    )
+
+
+@app.post("/admin/reports/{report_id}/approve")
+def admin_approve(
+    report_id: int,
+    request: Request,
+    admin: RequireAdminDep,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None:
+        raise HTTPException(404, "Report not found")
+    r.status = STATUS_APPROVED
+    r.reviewed_by_id = admin.id
+    r.reviewed_at = datetime.utcnow()
+    r.rejection_reason = None
+    db.commit()
+    return RedirectResponse(url=request.headers.get("referer") or "/admin", status_code=303)
+
+
+@app.post("/admin/reports/{report_id}/reject")
+def admin_reject(
+    report_id: int,
+    request: Request,
+    admin: RequireAdminDep,
+    reason: Annotated[str, Form()] = "",
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None:
+        raise HTTPException(404, "Report not found")
+    r.status = STATUS_REJECTED
+    r.reviewed_by_id = admin.id
+    r.reviewed_at = datetime.utcnow()
+    r.rejection_reason = _clean(reason)
+    db.commit()
+    return RedirectResponse(url=request.headers.get("referer") or "/admin", status_code=303)
+
+
+@app.post("/admin/reports/{report_id}/delete")
+def admin_delete(
+    report_id: int,
+    request: Request,
+    admin: RequireAdminDep,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    r = db.query(Report).filter(Report.id == report_id).first()
+    if r is None:
+        raise HTTPException(404, "Report not found")
+    db.delete(r)
+    db.commit()
+    return RedirectResponse(url=request.headers.get("referer") or "/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Static info pages.
+# ---------------------------------------------------------------------------
+
+
 @app.get("/about", response_class=HTMLResponse)
-def about(request: Request):
+def about(request: Request, db: Annotated[Session, Depends(get_db)] = None):
     return templates.TemplateResponse(
         request,
         "about.html",
-        {"rating_legend": RATING_LEGEND},
+        {**_common_context(request, db), "rating_legend": RATING_LEGEND},
     )

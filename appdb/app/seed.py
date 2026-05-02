@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from .db import App, Report, SessionLocal, init_db
+from .db import STATUS_APPROVED, App, Report, SessionLocal, init_db
 
 
 def _now_minus(days: int) -> datetime:
@@ -192,7 +192,9 @@ def seed() -> None:
             db.add(app)
             db.flush()
             for r in entry["reports"]:
-                db.add(Report(app_id=app.id, **r))
+                # Seed reports are pre-approved so a fresh deployment is not
+                # empty (without a logged-in admin to approve them).
+                db.add(Report(app_id=app.id, status=STATUS_APPROVED, **r))
         db.commit()
         print(f"Seeded {len(SEED_APPS)} apps with reports.")
     finally:
