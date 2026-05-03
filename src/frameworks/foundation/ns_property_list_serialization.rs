@@ -22,7 +22,7 @@ use crate::Environment;
 use plist::Value;
 use std::io::Cursor;
 use std::ops::Add;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 pub type NSPropertyListMutabilityOptions = NSUInteger;
 pub const NSPropertyListImmutable: NSPropertyListMutabilityOptions = 0;
