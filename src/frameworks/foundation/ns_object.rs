@@ -344,7 +344,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
         }
         if !found {
-            DYNAMIC_KVC_STORAGE.push((target_bits, key_string, value.to_bits()));
+            DYNAMIC_KVC_STORAGE.push((target_bits, key_string.to_string(), value.to_bits()));
         }
     }
 }
