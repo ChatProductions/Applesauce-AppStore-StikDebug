@@ -675,6 +675,32 @@ fn __floatundidf(_env: &mut Environment, a: u64) -> f64 {
     a as f64
 }
 
+// Compiler-rt float-to-int conversion builtins. ARM has no single-instruction
+// path for converting an IEEE 754 float / double to a 64-bit integer, so the
+// older Apple toolchains lower these casts to library calls. Rust's `as` cast
+// matches the LLVM compiler-rt semantics: NaN converts to 0, values outside
+// the destination range saturate.
+
+// __fixsfdi: float -> signed long long
+fn __fixsfdi(_env: &mut Environment, a: f32) -> i64 {
+    a as i64
+}
+
+// __fixunssfdi: float -> unsigned long long
+fn __fixunssfdi(_env: &mut Environment, a: f32) -> u64 {
+    a as u64
+}
+
+// __fixdfdi: double -> signed long long
+fn __fixdfdi(_env: &mut Environment, a: f64) -> i64 {
+    a as i64
+}
+
+// __fixunsdfdi: double -> unsigned long long
+fn __fixunsdfdi(_env: &mut Environment, a: f64) -> u64 {
+    a as u64
+}
+
 // Честная реализация C++ Singleton<TimerManager>::getInstance()
 fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
     // Проверяем, создавали ли мы уже этот объект
@@ -803,5 +829,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__floatundisf(_)),
     export_c_func!(__floatdidf(_)),
     export_c_func!(__floatundidf(_)),
+    export_c_func!(__fixsfdi(_)),
+    export_c_func!(__fixunssfdi(_)),
+    export_c_func!(__fixdfdi(_)),
+    export_c_func!(__fixunsdfdi(_)),
     export_c_func!(_ZN9SingletonI12TimerManagerE11getInstanceEv()),
 ];
