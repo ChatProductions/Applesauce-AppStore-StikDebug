@@ -937,7 +937,39 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
 unsafe fn present_renderbuffer(env: &mut Environment) {
     // Save these for when we need to draw the frame
     let viewport = env.window.as_mut().unwrap().viewport();
-    let rotation_matrix = env.window.as_mut().unwrap().rotation_matrix();
+    let device_family = env.window.as_mut().unwrap().device_family();
+    let device_orientation = env.window.as_mut().unwrap().current_rotation();
+    // For iPad apps in a non-portrait orientation, the UIKit auto-rotation
+    // path (`UIWindow addSubview:` in ui_window.rs) applies a rotation
+    // transform to the rootViewController's view so that the app, which
+    // typically draws content "upright" inside the EAGL layer's portrait
+    // bounds, ends up rotated for landscape display when Core Animation
+    // composites it. touchHLE bypasses CA composition for EAGL apps that
+    // call `presentRenderbuffer:` directly, so we have to replicate that
+    // additional rotation here. Without it, iPad landscape games (e.g.
+    // Plants vs. Zombies HD) render upside-down. iPhone-only landscape
+    // games (e.g. Plants vs. Zombies, the iPhone version) typically rotate
+    // their drawing themselves, so we must NOT apply the extra rotation
+    // for them.
+    // FIXME: A cleaner solution would be to read the actual transform from
+    //        the EAGL layer's view hierarchy and apply it here, instead of
+    //        using a device-family heuristic.
+    let needs_autorotation_compensation = matches!(
+        device_family,
+        crate::window::DeviceFamily::iPad
+    ) && !matches!(
+        device_orientation,
+        crate::window::DeviceOrientation::Portrait
+    );
+    let rotation_matrix = if needs_autorotation_compensation {
+        env.window
+            .as_mut()
+            .unwrap()
+            .rotation_matrix()
+            .multiply(&crate::matrix::Matrix::z_rotation(std::f32::consts::PI))
+    } else {
+        env.window.as_mut().unwrap().rotation_matrix()
+    };
     let virtual_cursor_visible_at = env.window.as_mut().unwrap().virtual_cursor_visible_at();
 
     let gles_ctx = super::get_thread_context(
