@@ -2,12 +2,25 @@
 //!
 //! See also [crate::frameworks::core_graphics::cg_geometry].
 
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string;
-use crate::mem::MutVoidPtr;
+use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
 use crate::objc::{autorelease, id};
 use crate::Environment;
+
+/// Allocate a 16-byte block of zeros and return a pointer to it. This matches
+/// the in-memory layout of `UIEdgeInsets { top, left, bottom, right }` where
+/// each field is a 4-byte CGFloat. The block is leaked once at first lookup,
+/// matching how Apple's UIKit exposes it.
+fn ui_edge_insets_zero(env: &mut Environment) -> ConstVoidPtr {
+    let ptr = env.mem.alloc(16);
+    // Memory from `alloc` is uninitialized; explicitly zero it.
+    for i in 0..16 {
+        env.mem.write(ptr.cast::<u8>() + i, 0u8);
+    }
+    Ptr::from_bits(ptr.to_bits())
+}
 
 #[derive(Default)]
 pub struct State {
@@ -67,3 +80,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(NSStringFromCGRect(_)),
     export_c_func!(NSDefaultMallocZone()),
 ];
+
+pub const CONSTANTS: ConstantExports = &[(
+    "_UIEdgeInsetsZero",
+    HostConstant::Custom(ui_edge_insets_zero),
+)];

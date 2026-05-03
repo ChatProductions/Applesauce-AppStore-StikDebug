@@ -95,6 +95,12 @@ pub(super) struct UIViewHostObject {
     is_animating: bool,
     clips_to_bounds: bool,
     is_uncontrolled: bool,
+    /// Strong refs to attached `UIGestureRecognizer*` instances. Used by
+    /// `addGestureRecognizer:` / `removeGestureRecognizer:` /
+    /// `gestureRecognizers`. We don't dispatch real gesture recognition;
+    /// keeping a list is enough to avoid `Unknown selector` panics in
+    /// games that wire pinch/pan/tap recognizers up at startup.
+    gesture_recognizers: Vec<id>,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -117,6 +123,7 @@ impl Default for UIViewHostObject {
             is_animating: false,
             clips_to_bounds: false,
             is_uncontrolled: false,
+            gesture_recognizers: Vec::new(),
         }
     }
 }
@@ -496,6 +503,57 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())layoutSubviews { }
 
+// MARK: - Gesture recognizers
+//
+// These methods just track recognizers in a `Vec<id>`. Gesture recognition is
+// not dispatched; this is enough to keep games from crashing on startup when
+// they wire up `UIPinchGestureRecognizer` / `UITapGestureRecognizer` etc.
+
+- (())addGestureRecognizer:(id)recognizer {
+    if recognizer == nil { return; }
+    retain(env, recognizer);
+    env.objc.borrow_mut::<UIViewHostObject>(this).gesture_recognizers.push(recognizer);
+}
+
+- (())removeGestureRecognizer:(id)recognizer {
+    if recognizer == nil { return; }
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    if let Some(pos) = host.gesture_recognizers.iter().position(|&r| r == recognizer) {
+        host.gesture_recognizers.remove(pos);
+        release(env, recognizer);
+    }
+}
+
+- (id)gestureRecognizers {
+    let recognizers = env
+        .objc
+        .borrow::<UIViewHostObject>(this)
+        .gesture_recognizers
+        .clone();
+    for r in &recognizers {
+        retain(env, *r);
+    }
+    let array = ns_array::from_vec(env, recognizers);
+    autorelease(env, array)
+}
+
+- (())setGestureRecognizers:(id)recognizers { // NSArray*
+    // Per Apple docs: replaces the current set of recognizers. Iterate the
+    // existing list, release each, replace, retain new ones.
+    let old: Vec<id> =
+        env.objc.borrow::<UIViewHostObject>(this).gesture_recognizers.clone();
+    for r in old { release(env, r); }
+    let mut new_list: Vec<id> = Vec::new();
+    if recognizers != nil {
+        let count: NSUInteger = msg![env; recognizers count];
+        for i in 0..count {
+            let r: id = msg![env; recognizers objectAtIndex:i];
+            if r != nil { retain(env, r); new_list.push(r); }
+        }
+    }
+    env.objc.borrow_mut::<UIViewHostObject>(this).gesture_recognizers = new_list;
+}
+
 - (id)superview { env.objc.borrow::<UIViewHostObject>(this).superview }
 
 - (id)window {
@@ -635,13 +693,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let UIViewHostObject { layer, subviews, .. } = std::mem::take(env.objc.borrow_mut(this));
+    let UIViewHostObject { layer, subviews, gesture_recognizers, .. } =
+        std::mem::take(env.objc.borrow_mut(this));
     release(env, layer);
 
     for subview in subviews {
         env.objc.borrow_mut::<UIViewHostObject>(subview).superview = nil;
         release(env, subview);
     }
+
+    for r in gesture_recognizers { release(env, r); }
 
     let state = &mut env.framework_state.uikit.ui_view.views;
     if let Some(pos) = state.iter().position(|&v| v == this) {

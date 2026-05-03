@@ -183,8 +183,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 pub const GKPlayerAuthenticationDidChangeNotificationName: &str =
     "GKPlayerAuthenticationDidChangeNotificationName";
+pub const GKPlayerDidChangeNotificationName: &str = "GKPlayerDidChangeNotificationName";
 
-pub const CONSTANTS: ConstantExports = &[(
-    "_GKPlayerAuthenticationDidChangeNotificationName",
-    HostConstant::NSString(GKPlayerAuthenticationDidChangeNotificationName),
-)];
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_GKPlayerAuthenticationDidChangeNotificationName",
+        HostConstant::NSString(GKPlayerAuthenticationDidChangeNotificationName),
+    ),
+    (
+        "_GKPlayerDidChangeNotificationName",
+        HostConstant::NSString(GKPlayerDidChangeNotificationName),
+    ),
+];

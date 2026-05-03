@@ -24,7 +24,7 @@ pub const CF_NETWORK: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/CFNetwork.framework/CFNetwork",
     aliases: &[],
     class_exports: &[],
-    constant_exports: &[],
+    constant_exports: &[frameworks::cf_network::CONSTANTS],
     function_exports: &[frameworks::cf_network::FUNCTIONS],
 };
 
@@ -33,7 +33,7 @@ pub const MOBILE_CORE_SERVICES: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices",
     aliases: &[],
     class_exports: &[],
-    constant_exports: &[],
+    constant_exports: &[frameworks::mobile_core_services::CONSTANTS],
     function_exports: &[frameworks::mobile_core_services::FUNCTIONS],
 };
 

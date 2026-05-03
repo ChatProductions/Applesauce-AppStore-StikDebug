@@ -7,11 +7,46 @@
 //! Apps that use iAd will never show real ads in touchHLE, but we need
 //! to stub the class so they don't crash on startup.
 
+use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
+
+// `ADBannerContentSizeIdentifier*` CFString constants. iAd-using apps export
+// these in `__nl_symbol_ptr` even when they never actually display a banner;
+// without them the app sees a NULL CFStringRef and crashes when comparing it
+// with `[banner currentContentSizeIdentifier]`. Values are the documented
+// content-size strings from the iAd headers.
+pub const ADBannerContentSizeIdentifier320x50: &str = "ADBannerContentSizeIdentifier320x50";
+pub const ADBannerContentSizeIdentifier480x32: &str = "ADBannerContentSizeIdentifier480x32";
+pub const ADBannerContentSizeIdentifierPortrait: &str = "ADBannerContentSizeIdentifierPortrait";
+pub const ADBannerContentSizeIdentifierLandscape: &str = "ADBannerContentSizeIdentifierLandscape";
+
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_ADBannerContentSizeIdentifier320x50",
+        HostConstant::NSString(ADBannerContentSizeIdentifier320x50),
+    ),
+    (
+        "_ADBannerContentSizeIdentifier480x32",
+        HostConstant::NSString(ADBannerContentSizeIdentifier480x32),
+    ),
+    (
+        "_ADBannerContentSizeIdentifierPortrait",
+        HostConstant::NSString(ADBannerContentSizeIdentifierPortrait),
+    ),
+    (
+        "_ADBannerContentSizeIdentifierLandscape",
+        HostConstant::NSString(ADBannerContentSizeIdentifierLandscape),
+    ),
+    // ADErrorDomain — apps that bind to iAd at link time pull this in.
+    (
+        "_ADErrorDomain",
+        HostConstant::NSString("ADErrorDomain"),
+    ),
+];
 
 type ADAdType = NSInteger;
 const ADAdTypeBanner: ADAdType = 0;

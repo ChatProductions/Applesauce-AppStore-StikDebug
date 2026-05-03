@@ -55,6 +55,18 @@ pub const MPMoviePlayerScalingModeDidChangeNotification: &str =
     "MPMoviePlayerScalingModeDidChangeNotification";
 pub const MPMoviePlayerPlaybackStateDidChangeNotification: &str =
     "MPMoviePlayerPlaybackStateDidChangeNotification";
+pub const MPMoviePlayerLoadStateDidChangeNotification: &str =
+    "MPMoviePlayerLoadStateDidChangeNotification";
+pub const MPMoviePlayerNowPlayingMovieDidChangeNotification: &str =
+    "MPMoviePlayerNowPlayingMovieDidChangeNotification";
+pub const MPMoviePlayerWillEnterFullscreenNotification: &str =
+    "MPMoviePlayerWillEnterFullscreenNotification";
+pub const MPMoviePlayerDidEnterFullscreenNotification: &str =
+    "MPMoviePlayerDidEnterFullscreenNotification";
+pub const MPMoviePlayerWillExitFullscreenNotification: &str =
+    "MPMoviePlayerWillExitFullscreenNotification";
+pub const MPMoviePlayerDidExitFullscreenNotification: &str =
+    "MPMoviePlayerDidExitFullscreenNotification";
 // TODO: More notifications?
 const MPMoviePlayerPlaybackDidFinishReasonUserInfoKey: &str =
     "MPMoviePlayerPlaybackDidFinishReasonUserInfoKey";
@@ -76,6 +88,30 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMoviePlayerPlaybackStateDidChangeNotification",
         HostConstant::NSString(MPMoviePlayerPlaybackStateDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerLoadStateDidChangeNotification",
+        HostConstant::NSString(MPMoviePlayerLoadStateDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerNowPlayingMovieDidChangeNotification",
+        HostConstant::NSString(MPMoviePlayerNowPlayingMovieDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerWillEnterFullscreenNotification",
+        HostConstant::NSString(MPMoviePlayerWillEnterFullscreenNotification),
+    ),
+    (
+        "_MPMoviePlayerDidEnterFullscreenNotification",
+        HostConstant::NSString(MPMoviePlayerDidEnterFullscreenNotification),
+    ),
+    (
+        "_MPMoviePlayerWillExitFullscreenNotification",
+        HostConstant::NSString(MPMoviePlayerWillExitFullscreenNotification),
+    ),
+    (
+        "_MPMoviePlayerDidExitFullscreenNotification",
+        HostConstant::NSString(MPMoviePlayerDidExitFullscreenNotification),
     ),
     (
         "_MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",

@@ -688,6 +688,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     get_bytes_buffer_inner(env, this, buffer, buffer_size, encoding, true)
 }
 
+- (())getCString:(MutPtr<u8>)buffer maxLength:(NSUInteger)max_length {
+    // Two-argument variant: encoding defaults to the default C-string encoding.
+    let encoding: NSStringEncoding = msg_class![env; NSString defaultCStringEncoding];
+    let _: bool = msg![env; this getCString:buffer maxLength:max_length encoding:encoding];
+}
+
 - (())getCString:(MutPtr<u8>)buffer {
     let encoding: NSStringEncoding = msg_class![env; NSString defaultCStringEncoding];
     let length = (u32::MAX - buffer.to_bits()).min(NSMaximumStringLength);
@@ -1130,6 +1136,34 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)uppercaseString {
     let str = to_rust_string(env, this).to_uppercase();
     let res = from_rust_string(env, str);
+    autorelease(env, res)
+}
+
+- (id)capitalizedString {
+    // Per Apple docs: "first character of each word changed to its
+    // corresponding uppercase value, and all remaining characters set to
+    // their corresponding lowercase values." Words are delimited by
+    // whitespace; we treat ASCII whitespace as the delimiter set, matching
+    // Cocoa's `[NSCharacterSet whitespaceAndNewlineCharacterSet]`.
+    let src = to_rust_string(env, this);
+    let mut out = String::with_capacity(src.len());
+    let mut start_of_word = true;
+    for c in src.chars() {
+        if c.is_whitespace() {
+            out.push(c);
+            start_of_word = true;
+        } else if start_of_word {
+            for u in c.to_uppercase() {
+                out.push(u);
+            }
+            start_of_word = false;
+        } else {
+            for u in c.to_lowercase() {
+                out.push(u);
+            }
+        }
+    }
+    let res = from_rust_string(env, out);
     autorelease(env, res)
 }
 

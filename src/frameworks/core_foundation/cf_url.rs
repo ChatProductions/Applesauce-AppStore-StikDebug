@@ -11,7 +11,7 @@
 //! the same type.
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::{CFIndex, CFRelease, CFRetain, CFTypeRef};
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_foundation::cf_string::{
     kCFStringEncodingASCII, kCFStringEncodingUTF8, CFStringConvertEncodingToNSStringEncoding,
     CFStringEncoding, CFStringRef,
@@ -1117,4 +1117,40 @@ pub const FUNCTIONS: FunctionExports = &[
     )),
     export_c_func!(CFURLCreateStringByAddingPercentEscapes(_, _, _, _, _)),
     // Type Info — CFURLGetTypeID is exported from cf_type; not duplicated.
+];
+
+// Resource-property keys exposed by `CFURLCopyResourcePropertyForKey`.
+// We don't actually implement the property accessor APIs; exporting these
+// CFStringRef constants merely silences the non-lazy-symbol warning so apps
+// that link with `-framework CoreFoundation` and reference (but don't call)
+// the keys can load.
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_kCFURLFileLength",
+        HostConstant::NSString("NSURLFileSize"),
+    ),
+    (
+        "_kCFURLFileSize",
+        HostConstant::NSString("NSURLFileSize"),
+    ),
+    (
+        "_kCFURLFileSizeKey",
+        HostConstant::NSString("NSURLFileSizeKey"),
+    ),
+    (
+        "_kCFURLIsDirectoryKey",
+        HostConstant::NSString("NSURLIsDirectoryKey"),
+    ),
+    (
+        "_kCFURLIsRegularFileKey",
+        HostConstant::NSString("NSURLIsRegularFileKey"),
+    ),
+    (
+        "_kCFURLNameKey",
+        HostConstant::NSString("NSURLNameKey"),
+    ),
+    (
+        "_kCFURLLocalizedNameKey",
+        HostConstant::NSString("NSURLLocalizedNameKey"),
+    ),
 ];

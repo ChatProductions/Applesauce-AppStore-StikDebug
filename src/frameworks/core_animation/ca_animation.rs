@@ -23,6 +23,12 @@ const kCATransitionMoveIn: &str = "moveIn";
 const kCATransitionPush: &str = "push";
 const kCATransitionReveal: &str = "reveal";
 
+// CATransitionSubtype values: directions for the transition animation.
+const kCATransitionFromTop: &str = "fromTop";
+const kCATransitionFromBottom: &str = "fromBottom";
+const kCATransitionFromLeft: &str = "fromLeft";
+const kCATransitionFromRight: &str = "fromRight";
+
 pub type CAMediaTimingFillMode = id; // NSString*
 pub const kCAFillModeBackwards: &str = "backwards";
 pub const kCAFillModeBoth: &str = "both";
@@ -50,6 +56,23 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCATransitionReveal",
         HostConstant::NSString(kCATransitionReveal),
+    ),
+    // `CATransitionSubtype` values.
+    (
+        "_kCATransitionFromTop",
+        HostConstant::NSString(kCATransitionFromTop),
+    ),
+    (
+        "_kCATransitionFromBottom",
+        HostConstant::NSString(kCATransitionFromBottom),
+    ),
+    (
+        "_kCATransitionFromLeft",
+        HostConstant::NSString(kCATransitionFromLeft),
+    ),
+    (
+        "_kCATransitionFromRight",
+        HostConstant::NSString(kCATransitionFromRight),
     ),
     // `CAMediaTimingFillMode` values.
     (

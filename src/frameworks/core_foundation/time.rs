@@ -130,7 +130,7 @@ pub fn CFAbsoluteTimeGetGregorianDate(
     }
 }
 
-fn CFGregorianDateGetAbsoluteTime(
+pub fn CFGregorianDateGetAbsoluteTime(
     env: &mut Environment,
     gd: crate::mem::ConstPtr<CFGregorianDate>,
     tz: CFTimeZoneRef,
