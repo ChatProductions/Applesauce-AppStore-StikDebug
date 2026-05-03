@@ -543,24 +543,57 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())encodeWithCoder:(id)coder {
-    // Получаем сигнатуру типа значения (например, "i" для int, "d" для double)
+    // 1. Проверяем, поддерживает ли кодер Keyed Archiving (как это делает реальная iOS)
+    let sel_allows: SEL = env.objc.register_host_selector("allowsKeyedCoding".to_string(), &mut env.mem);
+    let allows_keyed: bool = if msg![env; coder respondsToSelector:sel_allows] {
+        msg![env; coder allowsKeyedCoding]
+    } else {
+        false
+    };
+
+    // 2. Если это NSKeyedArchiver, мы ОБЯЗАНЫ использовать кодирование по ключу, 
+    // так как он не поддерживает сырое кодирование байтов (encodeValueOfObjCType:at:)
+    if allows_keyed {
+        let key = from_rust_string(env, "NS.numbervalue".to_string());
+        let key = autorelease(env, key);
+        
+        let num_obj = env.objc.borrow::<NSNumberHostObject>(this);
+        if num_obj.is_float() {
+            let val: f64 = num_obj.as_double();
+            let sel: SEL = env.objc.register_host_selector("encodeDouble:forKey:".to_string(), &mut env.mem);
+            if msg![env; coder respondsToSelector:sel] {
+                () = msg![env; coder encodeDouble:val forKey:key];
+            } else {
+                // Фолбек на строку, если эмулятор пока не реализовал encodeDouble:forKey:
+                let str: id = msg![env; this stringValue];
+                () = msg![env; coder encodeObject:str forKey:key];
+            }
+        } else {
+            let val: i64 = num_obj.as_long_long();
+            let sel: SEL = env.objc.register_host_selector("encodeInt64:forKey:".to_string(), &mut env.mem);
+            if msg![env; coder respondsToSelector:sel] {
+                () = msg![env; coder encodeInt64:val forKey:key];
+            } else {
+                // Фолбек на строку
+                let str: id = msg![env; this stringValue];
+                () = msg![env; coder encodeObject:str forKey:key];
+            }
+        }
+        return;
+    }
+
+    // 3. Для старых не-keyed архиваторов (например NSArchiver) используем сырые байты.
+    // Обязательно проверяем наличие селектора перед вызовом, чтобы защититься от паники эмулятора.
+    let sel_encode_val: SEL = env.objc.register_host_selector("encodeValueOfObjCType:at:".to_string(), &mut env.mem);
+    if !msg![env; coder respondsToSelector:sel_encode_val] {
+        log!("Warning: Coder does not support encodeValueOfObjCType:at:. Cannot encode NSNumber!");
+        return;
+    }
+
     let type_ptr: ConstPtr<u8> = msg![env; this objCType];
-    
-    // Выделяем 8 байт памяти в гостевой куче. 
-    // 8 байт — это максимум, который может занимать NSNumber (для Double или Long Long).
-    // alloc_and_write(0u64) инициализирует память нулями и возвращает MutPtr, который мы кастим в void.
     let buffer_ptr = env.mem.alloc_and_write(0u64).cast_void();
-    
-    // Просим сам NSNumber выгрузить своё сырое значение в наш выделенный
-    // буфер. Явно указываем `()` как тип возврата — иначе компилятор не
-    // может выбрать `R: GuestRet` для `msg_send` (rustc E0283).
     () = msg![env; this getValue:buffer_ptr];
-    
-    // Передаём в кодер тип значения и указатель на сырые данные — это
-    // стандартный паттерн NSCoder. См. комментарий выше про `() =`.
     () = msg![env; coder encodeValueOfObjCType:type_ptr at:buffer_ptr];
-    
-    // Обязательно подчищаем за собой гостевую память
     env.mem.free(buffer_ptr);
 }
 
