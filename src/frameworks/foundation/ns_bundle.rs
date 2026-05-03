@@ -950,23 +950,44 @@ fn path_for_resource_helper(
     // path останется директорией ресурсов (напр. .../ZumaHD.app), что является
     // легальным путем.
     let name_str = ns_string::to_rust_string(env, name);
-    if !name_str.is_empty() {
-        path = msg![env; path stringByAppendingPathComponent:name];
+    if name_str.is_empty() {
+        // Empty-name compatibility shim for SexyAppBase-derived games such as
+        // Plants vs. Zombies 1.x / Bejeweled 2 / Zuma's Revenge. Those games
+        // call `[[NSBundle mainBundle] pathForResource:@"" ofType:nil]` and
+        // then run the result through `SexyAppBase::GetFileDir()`, which
+        // *strips the last path component*. On real iOS 2.x the value
+        // returned points at a file inside the bundle (effectively the
+        // executable), so stripping its last component yields the bundle
+        // directory and resource lookups like
+        // `<bundleDir>/resources.xml` succeed.
+        //
+        // Returning the bundle directory itself (the strict "modern iOS"
+        // behaviour) breaks this idiom: GetFileDir() then strips one level
+        // too many and the games look for their assets in the parent of the
+        // .app bundle, where nothing exists. That presented as a black
+        // screen because asset loading aborted before any UI was drawn.
+        //
+        // Pointing at the executable path mirrors the layout SexyAppBase
+        // games actually expect and is harmless for callers that just use
+        // the value as a directory hint.
+        let exec_path_str = env.bundle.executable_path().as_str().to_string();
+        return ns_string::from_rust_string(env, exec_path_str);
     }
-
+    path = msg![env; path stringByAppendingPathComponent:name];
+ 
     if extension != nil {
         let ext_str = ns_string::to_rust_string(env, extension);
         if !ext_str.is_empty() {
             path = msg![env; path stringByAppendingPathExtension:extension];
         }
     }
-
+ 
     let file_manager: id = msg_class![env; NSFileManager defaultManager];
     let file_exists: bool = msg![env; file_manager fileExistsAtPath:path];
     if file_exists {
         return path;
     }
-
+ 
     // Case-insensitive fallback: scan the parent directory.
     let path_str = ns_string::to_rust_string(env, path);
     let rust_path = std::path::Path::new(path_str.as_ref());
