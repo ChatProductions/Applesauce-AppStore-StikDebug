@@ -100,6 +100,18 @@ fn CFNumberGetValue(
             env.mem.write(value_ptr.cast(), val);
             is_conversion_lossless(env, num, type_)
         }
+        // ИСПРАВЛЕНИЕ: Добавлена полноценная обработка 64-битных целых чисел (Type 4 и 11)
+        kCFNumberSInt64Type | kCFNumberLongLongType => {
+            let val: i64 = msg![env; num longLongValue];
+            env.mem.write(value_ptr.cast(), val);
+            is_conversion_lossless(env, num, type_)
+        }
+        // ИСПРАВЛЕНИЕ: Добавлена полноценная обработка 64-битных чисел с плавающей точкой (Type 6 и 13)
+        kCFNumberFloat64Type | kCFNumberDoubleType => {
+            let val: f64 = msg![env; num doubleValue];
+            env.mem.write(value_ptr.cast(), val);
+            is_conversion_lossless(env, num, type_)
+        }
         _ => unimplemented!("type {}", type_),
     }
 }
