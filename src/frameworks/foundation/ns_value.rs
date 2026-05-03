@@ -17,7 +17,7 @@ use crate::frameworks::foundation::NSInteger;
 use crate::mem::{ConstVoidPtr, MutVoidPtr, ConstPtr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
-    HostObject, NSZonePtr,
+    HostObject, NSZonePtr, SEL,
 };
 use crate::Environment;
 use std::cmp::Ordering;
