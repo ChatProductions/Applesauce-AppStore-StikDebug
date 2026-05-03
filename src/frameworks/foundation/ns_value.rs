@@ -542,10 +542,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     new_num
 }
 
-// ИЗМЕНЕНО: Добавлена заглушка для сохранения числа, предотвращающая вылет
-// (Panic)
-- (())encodeWithCoder:(id)_coder {
-    log!("Warning: stubbed NSNumber encodeWithCoder:");
+- (())encodeWithCoder:(id)coder {
+    // Получаем сигнатуру типа значения (например, "i" для int, "d" для double)
+    let type_ptr: ConstPtr<u8> = msg![env; this objCType];
+    
+    // Выделяем 8 байт памяти в гостевой куче. 
+    // 8 байт — это максимум, который может занимать NSNumber (для Double или Long Long).
+    // alloc_and_write(0u64) инициализирует память нулями и возвращает MutPtr, который мы кастим в void.
+    let buffer_ptr = env.mem.alloc_and_write(0u64).cast_void();
+    
+    // Просим сам NSNumber выгрузить своё сырое значение в наш выделенный буфер
+    msg![env; this getValue:buffer_ptr];
+    
+    // Передаём в кодер тип значения и указатель на сырые данные — это стандартный паттерн NSCoder
+    msg![env; coder encodeValueOfObjCType:type_ptr at:buffer_ptr];
+    
+    // Обязательно подчищаем за собой гостевую память
+    env.mem.free(buffer_ptr);
 }
 
 - (id)initWithBool:(bool)value {
