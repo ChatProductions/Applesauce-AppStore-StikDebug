@@ -928,6 +928,52 @@ fn __sprintf_chk(
     sprintf(env, dest, format, args)
 }
 
+// Locale-aware printf variants from `xlocale.h`. touchHLE only supports a
+// single (C / system default) locale, so we ignore the `locale_t` argument
+// and dispatch to the locale-less implementation.
+
+fn sprintf_l(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    _loc: MutVoidPtr,
+    format: ConstPtr<u8>,
+    args: DotDotDot,
+) -> i32 {
+    sprintf(env, dest, format, args)
+}
+
+fn snprintf_l(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    n: GuestUSize,
+    _loc: MutVoidPtr,
+    format: ConstPtr<u8>,
+    args: DotDotDot,
+) -> i32 {
+    vsnprintf(env, dest, n, format, args.start())
+}
+
+fn vsprintf_l(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    _loc: MutVoidPtr,
+    format: ConstPtr<u8>,
+    arg: VaList,
+) -> i32 {
+    vsprintf(env, dest, format, arg)
+}
+
+fn vsnprintf_l(
+    env: &mut Environment,
+    dest: MutPtr<u8>,
+    n: GuestUSize,
+    _loc: MutVoidPtr,
+    format: ConstPtr<u8>,
+    arg: VaList,
+) -> i32 {
+    vsnprintf(env, dest, n, format, arg)
+}
+
 fn sprintf(env: &mut Environment, dest: MutPtr<u8>, format: ConstPtr<u8>, args: DotDotDot) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -1836,6 +1882,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__vsprintf_chk(_, _, _, _, _, _)),
     export_c_func!(__sprintf_chk(_, _, _, _, _)),
     export_c_func!(sprintf(_, _, _)),
+    export_c_func!(sprintf_l(_, _, _, _)),
+    export_c_func!(snprintf_l(_, _, _, _, _)),
+    export_c_func!(vsprintf_l(_, _, _, _)),
+    export_c_func!(vsnprintf_l(_, _, _, _, _)),
     export_c_func!(swprintf(_, _, _, _)),
     export_c_func!(vswprintf(_, _, _, _)),
     export_c_func!(wprintf(_, _)),

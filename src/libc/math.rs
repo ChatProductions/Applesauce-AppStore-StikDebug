@@ -590,6 +590,91 @@ fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
     }
 }
 
+// compiler-rt builtins for signed 32-bit integer division and modulo. These
+// are emitted by older Apple compilers when no native ARM `sdiv`/`udiv`
+// instruction is available (e.g. armv6 or armv7 without `idiv`).
+
+// __divsi3: signed int / signed int
+fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        log!("Warning: __divsi3 division by zero!");
+        0
+    } else {
+        // Use wrapping_div so that i32::MIN / -1 doesn't panic in debug
+        // builds; compiler-rt itself defines this case as undefined.
+        a.wrapping_div(b)
+    }
+}
+
+// __modsi3: signed int % signed int
+fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        log!("Warning: __modsi3 modulo by zero!");
+        0
+    } else {
+        a.wrapping_rem(b)
+    }
+}
+
+// __divmodsi4: signed int / signed int, with remainder. Returns the quotient
+// and stores the remainder at `*rem`.
+fn __divmodsi4(env: &mut Environment, a: i32, b: i32, rem: MutPtr<i32>) -> i32 {
+    if b == 0 {
+        log!("Warning: __divmodsi4 division by zero!");
+        if !rem.is_null() {
+            env.mem.write(rem, 0);
+        }
+        0
+    } else {
+        let q = a.wrapping_div(b);
+        let r = a.wrapping_rem(b);
+        if !rem.is_null() {
+            env.mem.write(rem, r);
+        }
+        q
+    }
+}
+
+// __udivmodsi4: unsigned int / unsigned int, with remainder.
+fn __udivmodsi4(env: &mut Environment, a: u32, b: u32, rem: MutPtr<u32>) -> u32 {
+    if b == 0 {
+        log!("Warning: __udivmodsi4 division by zero!");
+        if !rem.is_null() {
+            env.mem.write(rem, 0);
+        }
+        0
+    } else {
+        if !rem.is_null() {
+            env.mem.write(rem, a % b);
+        }
+        a / b
+    }
+}
+
+// compiler-rt builtins for 64-bit integer to floating-point conversion. These
+// are emitted by ARM compilers because the hardware has no instruction that
+// converts a 64-bit integer to a float in one step.
+
+// __floatdisf: signed long long -> float
+fn __floatdisf(_env: &mut Environment, a: i64) -> f32 {
+    a as f32
+}
+
+// __floatundisf: unsigned long long -> float
+fn __floatundisf(_env: &mut Environment, a: u64) -> f32 {
+    a as f32
+}
+
+// __floatdidf: signed long long -> double
+fn __floatdidf(_env: &mut Environment, a: i64) -> f64 {
+    a as f64
+}
+
+// __floatundidf: unsigned long long -> double
+fn __floatundidf(_env: &mut Environment, a: u64) -> f64 {
+    a as f64
+}
+
 // Честная реализация C++ Singleton<TimerManager>::getInstance()
 fn _ZN9SingletonI12TimerManagerE11getInstanceEv(env: &mut Environment) -> u32 {
     // Проверяем, создавали ли мы уже этот объект
@@ -710,5 +795,13 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__moddi3(_, _)),  // <--- 2 подчеркивания
     export_c_func!(__udivsi3(_, _)),
     export_c_func!(__umodsi3(_, _)),
+    export_c_func!(__divsi3(_, _)),
+    export_c_func!(__modsi3(_, _)),
+    export_c_func!(__divmodsi4(_, _, _)),
+    export_c_func!(__udivmodsi4(_, _, _)),
+    export_c_func!(__floatdisf(_)),
+    export_c_func!(__floatundisf(_)),
+    export_c_func!(__floatdidf(_)),
+    export_c_func!(__floatundidf(_)),
     export_c_func!(_ZN9SingletonI12TimerManagerE11getInstanceEv()),
 ];
