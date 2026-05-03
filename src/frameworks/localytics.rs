@@ -6,28 +6,33 @@
 //! `LocalyticsAmpSession` full implementation.
 
 use crate::objc::{
-    id, msg, nil, objc_classes, ClassExports, HostObject
+    id, objc_classes, ClassExports, HostObject, NSZonePtr
 };
+use crate::Environment;
 
 struct LocalyticsAmpSessionHostObject {}
 impl HostObject for LocalyticsAmpSessionHostObject {}
 
-pub const CLASSES: ClassExports = &objc_classes! {
-    @class LocalyticsAmpSession : NSObject {
-        @host_object LocalyticsAmpSessionHostObject;
-    }
+pub const CLASSES: ClassExports = objc_classes! {
 
-    @implementation LocalyticsAmpSession
+    // Обязательная строка для макроса в TouchHLE!
+    (env, this, _cmd);
+
+    @implementation LocalyticsAmpSession: NSObject
+
+    // Именно здесь мы связываем Rust-структуру с Objective-C объектом
+    + (id)allocWithZone:(NSZonePtr)_zone {
+        let host_object = Box::new(LocalyticsAmpSessionHostObject {});
+        env.objc.alloc_object(this, host_object, &mut env.mem)
+    }
 
     // Инициализация
     - (id)init {
-        env.objc.set_host_object(this, LocalyticsAmpSessionHostObject {});
         this
     }
 
     // Инициализация с ключом приложения
     - (id)LocalyticsSession:(id)_app_key {
-        env.objc.set_host_object(this, LocalyticsAmpSessionHostObject {});
         this
     }
 
