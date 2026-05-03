@@ -244,6 +244,9 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
     let dict_class = env.objc.get_known_class("NSDictionary", &mut env.mem);
     let arr_class = env.objc.get_known_class("NSArray", &mut env.mem);
     let str_class = env.objc.get_known_class("NSString", &mut env.mem);
+    let num_class = env.objc.get_known_class("NSNumber", &mut env.mem);
+    let data_class = env.objc.get_known_class("NSData", &mut env.mem);
+    let date_class = env.objc.get_known_class("NSDate", &mut env.mem);
 
     if env.objc.class_is_subclass_of(class, dict_class) {
         // only our internal implementation is supported
@@ -291,7 +294,7 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
 
         let s = ns_string::to_rust_string(env, plist);
         Value::String(s.to_string())
-    } else if class == env.objc.get_known_class("NSNumber", &mut env.mem) {
+    } else if env.objc.class_is_subclass_of(class, num_class) {
         let num = env.objc.borrow::<NSNumberHostObject>(plist);
         match num {
             NSNumberHostObject::Bool(b) => Value::Boolean(*b),
@@ -305,13 +308,13 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
             NSNumberHostObject::UnsignedLongLong(ull) => Value::from(*ull),
             NSNumberHostObject::UnsignedShort(us) => Value::from(*us),
         }
-    } else if class == env.objc.get_known_class("NSData", &mut env.mem) {
+    } else if env.objc.class_is_subclass_of(class, data_class) {
         let data = env.objc.borrow::<NSDataHostObject>(plist);
         let buffer_slice = env.mem.bytes_at(data.bytes.cast(), data.length);
         Value::Data(buffer_slice.to_vec())
-    } else if class == env.objc.get_known_class("NSDate", &mut env.mem) {
+    } else if env.objc.class_is_subclass_of(class, date_class) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = apple_epoch().add(duration_from_secs_f64_saturating(date.time_interval));
+        let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
         Value::Date(time.into())
     } else {
         unimplemented!("class {}", env.objc.get_class_name(class))
