@@ -275,6 +275,22 @@ Other options:
         Enabling this option may solve some rendering issues, but implies
         a performance hit which is undesirable in most of the cases.
 
+    --prefer-gles2-context
+        Force EAGL initWithAPI: to create an OpenGL ES 2.0 context even when
+        the app requested an OpenGL ES 1.1 context.
+
+        Some apps (e.g. Lego Ninjago Spinjitzu Scavenger Hunt) ask EAGL for an
+        ES 1.1 context but actually drive rendering with shader entry points
+        such as glUseProgram and glCreateShader. Without this flag, on real
+        ES drivers (e.g. Adreno / Mali on Android) those calls fall through
+        to the GLES 1.1-only stubs and the app renders an empty (black)
+        frame even though its render loop is alive.
+
+        Apps that legitimately rely on the ES 1.1 fixed-function pipeline
+        (glMatrixMode, glColor4f, glEnableClientState, glVertexPointer, …)
+        should NOT enable this flag, because real ES 2.0 has no fixed-function
+        pipeline.
+
     --allow-network-access
         Allow apps running in touchHLE to access the Internet and the local network.
 

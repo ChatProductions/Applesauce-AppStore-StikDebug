@@ -56,6 +56,18 @@ pub struct Options {
     pub print_fps: bool,
     pub fps_limit: Option<f64>,
     pub force_composition: bool,
+    /// Force EAGL `initWithAPI:` to create an OpenGL ES 2.0 context even when
+    /// the app requested an OpenGL ES 1.1 context.
+    ///
+    /// This unblocks apps that ask EAGL for an ES 1.1 context but actually
+    /// drive rendering with shader entry points (`glUseProgram`,
+    /// `glCreateShader`, …). Without this flag those calls fall through to
+    /// the GLES 1.1-only backend on Android, get silently stubbed, and the
+    /// resulting frames are empty (black screen). Enable it per app via the
+    /// per-app default options file or with `--prefer-gles2-context` on the
+    /// command line. Apps that legitimately rely on the ES 1.1 fixed-function
+    /// pipeline should NOT enable this flag.
+    pub prefer_gles2_context: bool,
     pub network_access: bool,
     pub popup_errors: bool,
     pub dumping_options: DumpingOptions,
@@ -89,6 +101,7 @@ impl Default for Options {
             print_fps: false,
             fps_limit: Some(60.0), // Original iPhone is 60Hz and uses v-sync,
             force_composition: false,
+            prefer_gles2_context: false,
             network_access: false,
             popup_errors: true,
             dumping_options: Default::default(),
@@ -240,6 +253,8 @@ impl Options {
             }
         } else if arg == "--force-composition" {
             self.force_composition = true;
+        } else if arg == "--prefer-gles2-context" {
+            self.prefer_gles2_context = true;
         } else if arg == "--allow-network-access" {
             self.network_access = true;
         } else if arg == "--no-error-popup" {

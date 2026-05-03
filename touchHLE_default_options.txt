@@ -224,3 +224,10 @@ com.indiagames.brucelee:  --force-composition --ignore-gl-errors
 
 # Red Ball 3
 com.chillingo.redball3hd: --landscape-left
+
+# LEGO Ninjago: Spinjitzu Scavenger Hunt
+# Asks EAGL for an ES 1.1 context but renders with shader entry points,
+# so on real ES drivers (Adreno / Mali on Android) the GLES 1.1-only stubs
+# silently drop glUseProgram and friends and the screen stays black.
+# Force EAGL to hand it a real ES 2.0 context.
+com.lego.NinjagoSpinjitzuScavengerHunt: --landscape-left --prefer-gles2-context

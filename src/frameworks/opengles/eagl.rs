@@ -59,6 +59,24 @@ const kEAGLRenderingAPIOpenGLES2: EAGLRenderingAPI = 2;
 #[allow(dead_code)]
 const kEAGLRenderingAPIOpenGLES3: EAGLRenderingAPI = 3;
 
+/// Resolve the EAGL rendering API the host should actually create a context
+/// for. When `prefer_gles2_context` is set and the app requested ES 1.1, we
+/// transparently upgrade to ES 2.0 so apps that ask for ES 1.1 but drive
+/// rendering with shader entry points (`glUseProgram`, `glCreateShader`, …)
+/// route through the real native ES 2.0 backend instead of falling through
+/// to the GLES 1.1-only stubs in `gles_generic`.
+fn effective_eagl_api(requested: EAGLRenderingAPI, prefer_gles2_context: bool) -> EAGLRenderingAPI {
+    if prefer_gles2_context && requested == kEAGLRenderingAPIOpenGLES1 {
+        log!(
+            "EAGL: --prefer-gles2-context active, upgrading initWithAPI:{} \
+             (kEAGLRenderingAPIOpenGLES1) to kEAGLRenderingAPIOpenGLES2",
+            requested
+        );
+        return kEAGLRenderingAPIOpenGLES2;
+    }
+    requested
+}
+
 pub(super) struct EAGLContextHostObject {
     pub(super) gles_ctx: Option<Box<dyn GLESContext>>,
     /// Which EAGL rendering API was requested. This influences how
@@ -140,7 +158,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.window.as_mut().unwrap().set_share_with_current_context(true);
 
-    let mut gles_ins = if api == kEAGLRenderingAPIOpenGLES2 {
+    let effective_api = effective_eagl_api(api, env.options.prefer_gles2_context);
+
+    let mut gles_ins = if effective_api == kEAGLRenderingAPIOpenGLES2 {
         create_gles2_ctx(env)
     } else {
         create_gles1_ctx(env)
@@ -153,7 +173,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = api;
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = effective_api;
 
     env.window.as_mut().unwrap().set_share_with_current_context(false);
 
@@ -170,7 +190,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
 
-    let mut gles_ins = if api == kEAGLRenderingAPIOpenGLES2 {
+    let effective_api = effective_eagl_api(api, env.options.prefer_gles2_context);
+
+    let mut gles_ins = if effective_api == kEAGLRenderingAPIOpenGLES2 {
         create_gles2_ctx(env)
     } else {
         create_gles1_ctx(env)
@@ -183,7 +205,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = api;
+    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = effective_api;
 
     this
 }
