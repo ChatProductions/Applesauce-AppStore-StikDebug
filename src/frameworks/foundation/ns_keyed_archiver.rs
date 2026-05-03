@@ -205,12 +205,12 @@ fn normalize_key(env: &mut Environment, key: id) -> Option<String> {
     let key_str = to_rust_string(env, key);
     
     if key_str.starts_with('$') {
-        // Выполняем TODO: Манглим ключи пользователя, начинающиеся с '$', 
-        // чтобы они не пересекались с внутренними ключами архиватора.
+        // Если ключ начинается с $, добавляем еще один $, чтобы избежать конфликтов с системными ключами
         log!("Warning: NSKeyedArchiver mangling key starting with '$': {}", key_str);
         Some(format!("${}", key_str))
     } else {
-        Some(key_str)
+        // Конвертируем Cow в String
+        Some(key_str.into_owned())
     }
 }
 
