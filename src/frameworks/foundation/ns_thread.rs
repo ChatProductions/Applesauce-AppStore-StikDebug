@@ -24,6 +24,20 @@ use crate::{msg, msg_class};
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Convert an `NSTimeInterval` (a `double` measured in seconds) into a
+/// [`Duration`] without ever panicking. `Duration::from_secs_f64` aborts on
+/// NaN, infinities, or values that exceed `u64::MAX` seconds — and apps
+/// (e.g. HyperHLE appdb report #115, 10 PinShuffle) have been observed
+/// passing junk floats to `[NSThread sleepForTimeInterval:]` after a UI
+/// transition. Returning `None` lets the caller log and skip the sleep
+/// instead of crashing the whole emulator.
+fn ns_time_interval_to_duration(ti: NSTimeInterval) -> Option<Duration> {
+    if !ti.is_finite() || ti < 0.0 {
+        return None;
+    }
+    Duration::try_from_secs_f64(ti).ok()
+}
+
 #[derive(Default)]
 pub struct State {
     is_multi_threaded: bool,
@@ -151,13 +165,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (())sleepForTimeInterval:(NSTimeInterval)ti {
     log_dbg!("[NSThread sleepForTimeInterval:{:?}]", ti);
-    env.sleep(Duration::from_secs_f64(ti));
+    if let Some(d) = ns_time_interval_to_duration(ti) {
+        env.sleep(d);
+    } else {
+        log!(
+            "Warning: [NSThread sleepForTimeInterval:{:?}] given an out-of-range \
+             value (NaN/inf/negative); not sleeping.",
+            ti
+        );
+    }
 }
 
 + (())sleepUntilDate:(id)date { // NSDate*
     let ti: NSTimeInterval = msg![env; date timeIntervalSinceNow];
-    if ti > 0.0 {
-        env.sleep(Duration::from_secs_f64(ti));
+    if let Some(d) = ns_time_interval_to_duration(ti) {
+        if !d.is_zero() {
+            env.sleep(d);
+        }
+    } else {
+        log!(
+            "Warning: [NSThread sleepUntilDate:] computed an out-of-range \
+             interval ({:?}); not sleeping.",
+            ti
+        );
     }
 }
 

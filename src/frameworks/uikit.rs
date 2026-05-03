@@ -90,6 +90,22 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         HostConstant::NSString("UIImagePickerControllerEditedImage"),
     ),
     (
+        "_UIImagePickerControllerCropRect",
+        HostConstant::NSString("UIImagePickerControllerCropRect"),
+    ),
+    (
+        "_UIImagePickerControllerMediaType",
+        HostConstant::NSString("UIImagePickerControllerMediaType"),
+    ),
+    (
+        "_UIImagePickerControllerMediaURL",
+        HostConstant::NSString("UIImagePickerControllerMediaURL"),
+    ),
+    (
+        "_UIImagePickerControllerReferenceURL",
+        HostConstant::NSString("UIImagePickerControllerReferenceURL"),
+    ),
+    (
         "_UIScreenDidConnectNotification",
         HostConstant::NSString("UIScreenDidConnectNotification"),
     ),
@@ -182,6 +198,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_geometry::FUNCTIONS,
         ui_graphics::FUNCTIONS,
         ui_image::FUNCTIONS,
+        ui_image_picker_controller::FUNCTIONS,
     ],
 };
 

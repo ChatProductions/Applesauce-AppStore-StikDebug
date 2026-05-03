@@ -17,7 +17,7 @@
 
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::foundation::ns_string::CFStringGetCharactersPtr;
-use crate::mem::{ConstPtr, MutPtr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr};
 use crate::objc::id;
 use crate::Environment;
 
@@ -306,9 +306,24 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
     }
 }
 
+/// `NSFoundationVersionNumber` is a global `double` exported by Foundation
+/// that apps use as a runtime OS-version probe (`if (NSFoundationVersionNumber
+/// >= NSFoundationVersionNumber_iPhoneOS_4_0)`). We expose touchHLE's
+/// nominal "iOS 4.0" identity (build 8A293, see `libc/sys/utsname`) — the
+/// constant `751.32` is the documented Foundation version for iOS 4.0.
+fn ns_foundation_version_number(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
+    env.mem.write(ptr, 751.32f64.to_bits());
+    ptr.cast().cast_const()
+}
+
 pub const STUB_CONSTANTS: ConstantExports = &[
     // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
     // from foundation::ns_error::CONSTANTS; not duplicated here.
+    (
+        "_NSFoundationVersionNumber",
+        HostConstant::Custom(ns_foundation_version_number),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

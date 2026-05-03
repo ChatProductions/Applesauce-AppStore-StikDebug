@@ -55,6 +55,15 @@ pub const MAP_KIT: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::map_kit::FUNCTIONS],
 };
 
+// MessageUI (stub — no real compose-sheet implementation yet)
+pub const MESSAGE_UI: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/MessageUI.framework/MessageUI",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::message_ui::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -90,6 +99,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &MOBILE_CORE_SERVICES,
     &CORE_MEDIA,
     &MAP_KIT,
+    &MESSAGE_UI,
 ];
 
 #[cfg(test)]
