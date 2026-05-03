@@ -64,7 +64,6 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::media_player::DYLIB,
     &frameworks::openal::DYLIB,
     &frameworks::opengles::DYLIB,
-    &frameworks::raknet::DYLIB,
     &frameworks::security::DYLIB,
     &frameworks::store_kit::DYLIB,
     &frameworks::system_configuration::DYLIB,
