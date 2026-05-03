@@ -8,6 +8,7 @@
 //! `CALayer`.
 
 use crate::dyld::{ConstantExports, HostConstant};
+use crate::frameworks::core_animation::ca_transform3d::{CATransform3D, CATransform3DIdentity};
 use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::core_graphics::cg_affine_transform::{
     CGAffineTransform, CGAffineTransformIdentity,
@@ -43,6 +44,13 @@ pub(super) struct CALayerHostObject {
     pub(super) z_position: CGFloat, // <-- ДОБАВЛЕНО СВОЙСТВО Z-POSITION
     pub(super) anchor_point: CGPoint,
     pub(super) affine_transform: CGAffineTransform,
+    /// Full 3D transform set via `-[CALayer setTransform:]`. touchHLE's
+    /// renderer is 2D-only, so we extract the 2x3 affine submatrix from
+    /// the assigned `CATransform3D` and store it in `affine_transform`
+    /// (used by the existing `frame`/`bounds` machinery). The full 4x4
+    /// matrix is kept here so `-[CALayer transform]` can roundtrip the
+    /// value the app assigned.
+    pub(super) transform_3d: CATransform3D,
     pub(super) hidden: bool,
     pub(super) opaque: bool,
     pub(super) opacity: f32,
@@ -136,6 +144,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         z_position: 0.0, // <-- ИНИЦИАЛИЗАЦИЯ Z-POSITION
         anchor_point: CGPoint { x: 0.5, y: 0.5 },
         affine_transform: CGAffineTransformIdentity,
+        transform_3d: CATransform3DIdentity,
         hidden: false,
         opaque: false,
         opacity: 1.0,
@@ -281,7 +290,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setAnchorPoint:(CGPoint)anchor_point { env.objc.borrow_mut::<CALayerHostObject>(this).anchor_point = anchor_point; }
 
 - (CGAffineTransform)affineTransform { env.objc.borrow::<CALayerHostObject>(this).affine_transform }
-- (())setAffineTransform:(CGAffineTransform)affine_transform { env.objc.borrow_mut::<CALayerHostObject>(this).affine_transform = affine_transform; }
+- (())setAffineTransform:(CGAffineTransform)affine_transform {
+    let host_obj = env.objc.borrow_mut::<CALayerHostObject>(this);
+    host_obj.affine_transform = affine_transform;
+    // Keep transform_3d in sync so a subsequent -transform read returns
+    // the equivalent CATransform3D, matching iOS behaviour.
+    host_obj.transform_3d = affine_transform_to_catransform3d(affine_transform);
+}
+
+// `-[CALayer transform]` is a CATransform3D (4x4 matrix). touchHLE's
+// renderer is 2D, so a CATransform3D assigned here is collapsed to its 2x3
+// affine submatrix for the existing frame/bounds pipeline; the full 4x4
+// is kept for roundtrip reads. iMilk (HyperHLE appdb report #70) was the
+// motivating case — without these the app crashed with "CALayer does not
+// respond to setTransform:".
+- (CATransform3D)transform { env.objc.borrow::<CALayerHostObject>(this).transform_3d }
+- (())setTransform:(CATransform3D)transform {
+    let host_obj = env.objc.borrow_mut::<CALayerHostObject>(this);
+    host_obj.transform_3d = transform;
+    host_obj.affine_transform = catransform3d_to_affine(transform);
+}
 
 - (CGRect)frame {
     let host_obj @ &CALayerHostObject { bounds, .. } = env.objc.borrow(this);
@@ -521,6 +549,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+/// Project a `CGAffineTransform` (2x3 matrix used by `setAffineTransform:`)
+/// up into the equivalent `CATransform3D` used by `setTransform:`. This is
+/// the documented `CATransform3DMakeAffineTransform(t)` mapping.
+fn affine_transform_to_catransform3d(t: CGAffineTransform) -> CATransform3D {
+    let mut out = CATransform3DIdentity;
+    out.m11 = t.a;
+    out.m12 = t.b;
+    out.m21 = t.c;
+    out.m22 = t.d;
+    out.m41 = t.tx;
+    out.m42 = t.ty;
+    out
+}
+
+/// Collapse a `CATransform3D` to its 2x3 affine submatrix, the way the
+/// system's `CATransform3DGetAffineTransform` does. The 3D-only entries
+/// (m13/m14/m23/m24/m31..m34/m43/m44) are dropped — touchHLE's renderer
+/// is 2D so layers with non-trivial 3D content just get their projected
+/// 2D shadow.
+fn catransform3d_to_affine(t: CATransform3D) -> CGAffineTransform {
+    CGAffineTransform {
+        a: t.m11,
+        b: t.m12,
+        c: t.m21,
+        d: t.m22,
+        tx: t.m41,
+        ty: t.m42,
+    }
+}
+
 pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: id) {
     let removed = env
         .objc

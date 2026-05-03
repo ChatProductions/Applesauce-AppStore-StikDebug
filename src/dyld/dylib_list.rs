@@ -64,6 +64,15 @@ pub const MESSAGE_UI: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::message_ui::FUNCTIONS],
 };
 
+// AddressBookUI (stub — no real contacts-picker implementation yet)
+pub const ADDRESS_BOOK_UI: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/AddressBookUI.framework/AddressBookUI",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::address_book_ui::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -100,6 +109,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &CORE_MEDIA,
     &MAP_KIT,
     &MESSAGE_UI,
+    &ADDRESS_BOOK_UI,
 ];
 
 #[cfg(test)]

@@ -23,6 +23,7 @@
 #![allow(clippy::too_many_arguments)] // It's not our fault!
 
 pub mod address_book;
+pub mod address_book_ui;
 pub mod audio_toolbox;
 pub mod avfoundation;
 pub mod carbon_core;
