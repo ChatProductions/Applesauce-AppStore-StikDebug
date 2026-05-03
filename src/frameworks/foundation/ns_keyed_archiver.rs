@@ -85,69 +85,82 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())encodeObject:(id)object // NSCoding *
             forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     encode_object_for_key(env, this, object, key);
 }
 
-// --- ИЗМЕНЕНО: Изменен тип i32 на u32 для решения проблемы Type mismatch ---
 - (())encodeInt:(u32)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
 
 - (())encodeInt32:(i32)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
 
 - (())encodeInt64:(i64)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
 
 - (())encodeInteger:(NSInteger)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
 
 - (())encodeBool:(bool)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
 
 - (())encodeFloat:(f32)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
-    // plist сохраняет дробные числа как f64
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, (value as f64).into());
 }
 
 - (())encodeDouble:(f64)value forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, value.into());
 }
-// ---------------------------------------------------------------
 
 - (())encodeBytes:(ConstPtr<u8>)bytes
            length:(NSUInteger)length
            forKey:(id)key { // NSString *
-    let key = normalize_key(env, key);
+    let Some(key) = normalize_key(env, key) else { return; };
     let data = env.mem.bytes_at(bytes.cast(), length).to_vec();
     let scope = get_value_to_encode_for_current_key(env, this);
-    assert!(!scope.contains_key(&key));
+    if scope.contains_key(&key) {
+        log!("Warning: NSKeyedArchiver overwriting existing value for key '{}'", key);
+    }
     scope.insert(key, Value::Data(data));
 }
 
@@ -183,11 +196,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-fn normalize_key(env: &mut Environment, key: id) -> String {
-    assert_ne!(key, nil);
-    let key = to_rust_string(env, key);
-    assert!(!key.starts_with('$')); // TODO: Mangle keys with $ prefix
-    key.to_string()
+fn normalize_key(env: &mut Environment, key: id) -> Option<String> {
+    if key == nil {
+        log!("Warning: NSKeyedArchiver received nil key. Ignoring to prevent crash.");
+        return None;
+    }
+    
+    let key_str = to_rust_string(env, key);
+    
+    if key_str.starts_with('$') {
+        // Выполняем TODO: Манглим ключи пользователя, начинающиеся с '$', 
+        // чтобы они не пересекались с внутренними ключами архиватора.
+        log!("Warning: NSKeyedArchiver mangling key starting with '$': {}", key_str);
+        Some(format!("${}", key_str))
+    } else {
+        Some(key_str)
+    }
 }
 
 fn get_value_to_encode_for_current_key(env: &mut Environment, archiver: id) -> &mut Dictionary {
@@ -278,6 +302,11 @@ fn encode_object(env: &mut Environment, archiver: id, object: id) -> Uid {
 fn encode_object_for_key(env: &mut Environment, archiver: id, object: id, normalized_key: String) {
     let uid = encode_object(env, archiver, object);
     let scope = get_value_to_encode_for_current_key(env, archiver);
-    assert!(!scope.contains_key(&normalized_key));
+    
+    if scope.contains_key(&normalized_key) {
+        log!("Warning: NSKeyedArchiver overwriting existing object for key '{}'", normalized_key);
+    }
+    
     scope.insert(normalized_key, Value::Uid(uid));
 }
+
