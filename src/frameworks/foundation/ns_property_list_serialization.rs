@@ -17,11 +17,12 @@ use crate::mem::{MutPtr, MutVoidPtr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, Class, ClassExports,
 };
+use crate::time_util::duration_from_secs_f64_saturating;
 use crate::Environment;
 use plist::Value;
 use std::io::Cursor;
 use std::ops::Add;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 pub type NSPropertyListMutabilityOptions = NSUInteger;
 pub const NSPropertyListImmutable: NSPropertyListMutabilityOptions = 0;
@@ -310,7 +311,7 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         Value::Data(buffer_slice.to_vec())
     } else if class == env.objc.get_known_class("NSDate", &mut env.mem) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
+        let time = apple_epoch().add(duration_from_secs_f64_saturating(date.time_interval));
         Value::Date(time.into())
     } else {
         unimplemented!("class {}", env.objc.get_class_name(class))
