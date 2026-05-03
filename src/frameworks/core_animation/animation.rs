@@ -249,7 +249,10 @@ impl State {
                     );
                     presentation.position = from_value + by_value * interpolation_amount;
                 }
-                _ => panic!("Attempted to animate on key {}", key_path),
+                _ => {
+                    log_dbg!("Warning: Skipping animation on unsupported key path {:?}", key_path);
+                    continue;
+                }
             }
         }
 
