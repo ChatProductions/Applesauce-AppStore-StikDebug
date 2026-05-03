@@ -46,6 +46,15 @@ pub const CORE_MEDIA: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::core_media::FUNCTIONS],
 };
 
+// MapKit (stub — no real map rendering yet, just satisfies the dependency)
+pub const MAP_KIT: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/MapKit.framework/MapKit",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::map_kit::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -80,6 +89,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &CF_NETWORK,
     &MOBILE_CORE_SERVICES,
     &CORE_MEDIA,
+    &MAP_KIT,
 ];
 
 #[cfg(test)]
