@@ -551,11 +551,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     // alloc_and_write(0u64) инициализирует память нулями и возвращает MutPtr, который мы кастим в void.
     let buffer_ptr = env.mem.alloc_and_write(0u64).cast_void();
     
-    // Просим сам NSNumber выгрузить своё сырое значение в наш выделенный буфер
-    msg![env; this getValue:buffer_ptr];
+    // Просим сам NSNumber выгрузить своё сырое значение в наш выделенный
+    // буфер. Явно указываем `()` как тип возврата — иначе компилятор не
+    // может выбрать `R: GuestRet` для `msg_send` (rustc E0283).
+    () = msg![env; this getValue:buffer_ptr];
     
-    // Передаём в кодер тип значения и указатель на сырые данные — это стандартный паттерн NSCoder
-    msg![env; coder encodeValueOfObjCType:type_ptr at:buffer_ptr];
+    // Передаём в кодер тип значения и указатель на сырые данные — это
+    // стандартный паттерн NSCoder. См. комментарий выше про `() =`.
+    () = msg![env; coder encodeValueOfObjCType:type_ptr at:buffer_ptr];
     
     // Обязательно подчищаем за собой гостевую память
     env.mem.free(buffer_ptr);
