@@ -13,7 +13,7 @@
 
 use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
-use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr};
+use crate::mem::{ConstVoidPtr, MutPtr, MutVoidPtr, Ptr};
 use crate::Environment;
 use std::collections::HashMap;
 
@@ -70,7 +70,24 @@ const GLOBAL_QUEUE_PTR: u32 = 0x0000_0003;
 
 pub const DISPATCH_APPLY_AUTO: &str = "DISPATCH_APPLY_AUTO";
 
-pub const CONSTANTS: ConstantExports = &[];
+/// Apple's libdispatch exports `_dispatch_main_q` as a global symbol whose
+/// address is the main queue's handle (the SDK header
+/// `dispatch/queue.h` defines the macro
+/// `dispatch_get_main_queue() (&_dispatch_main_q)`). Some compilers/linkers
+/// emit a non-lazy binding to `_dispatch_main_q` directly instead of going
+/// through `dispatch_get_main_queue()`.
+///
+/// On touchHLE the main queue is represented by the sentinel value
+/// [MAIN_QUEUE_PTR] (`0x1`). Resolving the constant to that sentinel makes
+/// `dispatch_async(_dispatch_main_q, …)` and similar binary-direct uses go
+/// through the same code path as `dispatch_get_main_queue()`.
+pub const CONSTANTS: ConstantExports = &[(
+    "__dispatch_main_q",
+    HostConstant::Custom(|_env| -> ConstVoidPtr {
+        let p: MutVoidPtr = Ptr::from_bits(MAIN_QUEUE_PTR);
+        p.cast_const()
+    }),
+)];
 
 // MARK: - State
 

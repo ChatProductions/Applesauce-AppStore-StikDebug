@@ -145,6 +145,11 @@ const CONSTANTS: ConstantExports = &[
     ("__objc_empty_cache", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_$_NSException", HostConstant::NullPtr),
     ("_OBJC_EHTYPE_id", HostConstant::NullPtr),
+    // `NSObject`'s only ivar (`isa`) lives at offset 0 in the object layout
+    // on 32-bit iOS, so resolving the ivar-offset symbol to a 4-byte zero
+    // gives any binary that does `obj + _OBJC_IVAR_$_NSObject.isa` the
+    // correct address (i.e. the object base).
+    ("_OBJC_IVAR_$_NSObject.isa", HostConstant::NullPtr),
     ("_kCFTypeArrayCallBacks", HostConstant::NullPtr),
     (
         "_NSHTTPCookieDomain",
