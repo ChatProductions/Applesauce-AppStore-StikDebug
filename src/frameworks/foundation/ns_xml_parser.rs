@@ -23,6 +23,7 @@ struct NSXMLParserHostObject {
     data: id,
     delegate: id,
     error: id, // NSError*
+    should_resolve_external_entities: bool,
 }
 impl HostObject for NSXMLParserHostObject {}
 
@@ -37,6 +38,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         data: nil,
         delegate: nil,
         error: nil,
+        should_resolve_external_entities: false,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -59,6 +61,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSXMLParserHostObject>(this).delegate
 }
 
+- (())setShouldResolveExternalEntities:(bool)should_resolve {
+        env.objc.borrow_mut::<NSXMLParserHostObject>(this).should_resolve_external_entities = should_resolve;
+}
+    
 - (())setShouldResolveExternalEntities:(bool)should {
     todo_objc_setter!(this, should);
 }
@@ -320,6 +326,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     true
 }
 
+- (bool)shouldResolveExternalEntities {
+        env.objc.borrow::<NSXMLParserHostObject>(this).should_resolve_external_entities
+}
+    
 - (())dealloc {
     let &NSXMLParserHostObject { data, error, .. } = env.objc.borrow(this);
     release(env, data);
