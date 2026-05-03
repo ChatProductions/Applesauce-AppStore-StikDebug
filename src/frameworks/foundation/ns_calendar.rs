@@ -6,10 +6,13 @@
 //! `NSCalendar`.
 
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetGregorianDate;
+use crate::frameworks::core_foundation::time::{
+    CFAbsoluteTimeGetGregorianDate, CFGregorianDate, CFGregorianDateGetAbsoluteTime,
+};
 use crate::frameworks::foundation::ns_date_components::NSDateComponentsHostObject;
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::{NSInteger, NSTimeInterval, NSUInteger};
+use crate::mem::Ptr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
 };
@@ -126,6 +129,57 @@ pub const CLASSES: ClassExports = objc_classes! {
         comp.weekday = weekday;
     }
     autorelease(env, components)
+}
+
+- (id)dateFromComponents:(id)comps { // NSDateComponents *
+    if comps == nil {
+        return nil;
+    }
+
+    // Per Apple docs: "If [the calendar of `comps`] is nil, [the receiver]
+    // is used; if [time_zone of `comps`] is nil, GMT is used."
+    let comp = env.objc.borrow::<NSDateComponentsHostObject>(comps);
+
+    // NSDateComponentUndefined sentinel comes from NSIntegerMax. Treat any
+    // value > 100_000 as undefined (years far beyond supported range), and
+    // fall back to a reasonable default. This matches Apple's behaviour of
+    // using the current Gregorian "epoch" for unspecified components.
+    fn val(v: NSInteger, default_: i32) -> i32 {
+        if v == NSInteger::MAX || v < -100_000 {
+            default_
+        } else {
+            v as i32
+        }
+    }
+
+    let year = val(comp.year, 1970);
+    let month = val(comp.month, 1).clamp(1, 12) as i8;
+    let day = val(comp.day, 1).clamp(1, 31) as i8;
+    let hours = val(comp.hour, 0).clamp(0, 23) as i8;
+    let minutes = val(comp.minute, 0).clamp(0, 59) as i8;
+    let seconds = val(comp.second, 0).clamp(0, 60) as f64;
+
+    let gd = CFGregorianDate {
+        year,
+        month,
+        day,
+        hours,
+        minutes,
+        seconds,
+    };
+
+    // CFGregorianDateGetAbsoluteTime expects a guest-memory pointer, so we
+    // allocate a temporary, write the struct, call, then free.
+    let ptr = env
+        .mem
+        .alloc(std::mem::size_of::<CFGregorianDate>() as u32)
+        .cast::<CFGregorianDate>();
+    env.mem.write(ptr, gd);
+    let abs = CFGregorianDateGetAbsoluteTime(env, Ptr::from_bits(ptr.to_bits()), nil);
+    env.mem.free(ptr.cast());
+
+    let date: id = msg_class![env; NSDate dateWithTimeIntervalSinceReferenceDate:abs];
+    date
 }
 
 - (id)dateByAddingComponents:(id)comps // NSDateComponents *

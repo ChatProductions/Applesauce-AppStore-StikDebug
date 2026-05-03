@@ -53,6 +53,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         cf_preferences::CONSTANTS,
         cf_run_loop::CONSTANTS,
         cf_stream::CONSTANTS,
+        cf_url::CONSTANTS,
         time::CONSTANTS,
     ],
     function_exports: &[

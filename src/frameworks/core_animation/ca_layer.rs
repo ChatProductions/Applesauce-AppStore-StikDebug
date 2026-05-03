@@ -233,7 +233,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; layer removeFromSuperlayer];
     env.objc.borrow_mut::<CALayerHostObject>(layer).superlayer = this;
     let CALayerHostObject { ref mut sublayers, .. } = env.objc.borrow_mut(this);
-    let idx = sublayers.iter().position(|&sublayer| sublayer == sibling).unwrap();
+    let idx = sublayers.iter().position(|&sublayer| sublayer == sibling).unwrap_or(0);
+    sublayers.insert(idx, layer);
+}
+
+- (())insertSublayer:(id)layer above:(id)sibling {
+    if layer == nil { return; }
+    retain(env, layer);
+    () = msg![env; layer removeFromSuperlayer];
+    env.objc.borrow_mut::<CALayerHostObject>(layer).superlayer = this;
+    let CALayerHostObject { ref mut sublayers, .. } = env.objc.borrow_mut(this);
+    let idx = sublayers
+        .iter()
+        .position(|&sublayer| sublayer == sibling)
+        .map(|i| i + 1)
+        .unwrap_or(sublayers.len());
     sublayers.insert(idx, layer);
 }
 

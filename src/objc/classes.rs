@@ -501,7 +501,15 @@ impl ObjC {
                 || name.starts_with("Tapjoy")
                 || name.starts_with("UA")
                 || name.starts_with("GAD")
-                || name.starts_with("iSimulate"); // <-- ДОБАВЛЕНО ЗДЕСЬ
+                || name.starts_with("iSimulate")
+                // SpringBoard private classes (e.g. "SBSceneFor%@" → "SBSceneFor(null)").
+                // Apps probing for jailbroken-device features look these up
+                // via NSClassFromString and only act if they exist; returning
+                // a fake class lets the probe fail gracefully instead of
+                // panicking. Restricted to the known SBScene prefix to avoid
+                // accidentally swallowing real third-party SB-prefixed libs.
+                || name.starts_with("SBScene")
+                || name.starts_with("SBSystem"); // <-- ДОБАВЛЕНО ЗДЕСЬ
 
             if !use_placeholder && !is_fake {
                 panic!("Missing implementation for class {name}!");

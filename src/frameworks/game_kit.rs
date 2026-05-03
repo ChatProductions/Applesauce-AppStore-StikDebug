@@ -36,6 +36,6 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         gk_score::CLASSES,
         gk_session::CLASSES,
     ],
-    constant_exports: &[gk_local_player::CONSTANTS],
+    constant_exports: &[gk_local_player::CONSTANTS, ad_banner_view::CONSTANTS],
     function_exports: &[],
 };
