@@ -758,6 +758,34 @@ fn fileno(env: &mut Environment, file_ptr: MutPtr<FILE>) -> posix_io::FileDescri
     fd
 }
 
+fn remove(env: &mut Environment, filename_ptr: ConstPtr<u8>) -> i32 {
+    // 1. Читаем строку с путем из памяти гостя
+    let filename_str = match env.mem.cstr_at_utf8(filename_ptr) {
+        Ok(s) => s,
+        Err(_) => {
+            // Если путь кривой (не валидный UTF-8)
+            set_errno(env, 22); // EINVAL
+            return -1;
+        }
+    };
+
+    // 2. Преобразуем гостевой путь в путь на хосте (на твоем ПК)
+    let guest_path = crate::fs::GuestPath::new(filename_str);
+    let host_path = crate::fs::resolve_path(env, guest_path);
+
+    // 3. Пытаемся удалить.
+    // По стандарту C функция remove() может удалять как файлы, так и пустые директории.
+    if std::fs::remove_file(&host_path).is_ok() {
+        0 // Успех, файл удален
+    } else if std::fs::remove_dir(&host_path).is_ok() {
+        0 // Успех, пустая директория удалена
+    } else {
+        // Не удалось удалить (файла нет, нет прав или папка не пуста)
+        set_errno(env, 2); // ENOENT (No such file or directory)
+        -1
+    }
+}
+          
 pub const CONSTANTS: ConstantExports = &[
     (
         "___stdinp",
@@ -816,4 +844,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(setvbuf(_, _, _, _)),
     // POSIX-specific functions
     export_c_func!(fileno(_)),
+    export_c_func!(remove(_)),
 ];
