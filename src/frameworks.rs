@@ -48,6 +48,7 @@ pub mod media_player;
 pub mod mobile_core_services;
 pub mod openal;
 pub mod opengles;
+pub mod raknet;
 pub mod security;
 pub mod store_kit;
 pub mod system_configuration;
