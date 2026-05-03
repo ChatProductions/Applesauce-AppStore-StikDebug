@@ -85,9 +85,26 @@ unsafe impl SafeRead for tm {}
 
 impl tm {
     pub fn from(year: u16, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> Self {
+        // Some sources of `tm` (e.g. ZIP-archive `DateTime` defaults read
+        // by [crate::fs::bundle::IpaFile]) hand us year=0 / month=0 when
+        // the archive entry has no recorded date. The previous u16/u8
+        // arithmetic `year - 1900` / `month - 1` would overflow in
+        // release builds, producing a wildly out-of-range `tm_year`
+        // that later panicked the `i64` -> `time_t` (`i32`) cast in
+        // [calendar_date_to_timestamp] — which crashed the whole app
+        // picker on startup.
+        //
+        // Clamp to representable values so callers always get a sane
+        // timestamp back instead of a panic.
+        let year = year.max(1970);
+        let month = month.clamp(1, 12);
+        let day = day.clamp(1, 31);
+        let hour = hour.min(23);
+        let minute = minute.min(59);
+        let second = second.min(60); // POSIX leap seconds
         tm {
-            tm_year: (year - 1900).into(),
-            tm_mon: (month - 1).into(),
+            tm_year: i32::from(year) - 1900,
+            tm_mon: i32::from(month) - 1,
             tm_mday: day.into(),
             tm_hour: hour.into(),
             tm_min: minute.into(),
@@ -229,7 +246,18 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
         seconds -= days_before_year * 86400;
     }
 
-    seconds.try_into().unwrap()
+    // Saturate `i64` -> `time_t` (`i32`) instead of panicking on
+    // out-of-range timestamps. This is reached for any year before
+    // ~1901 or after ~2038, including the year=0 / year=65636-after-
+    // u16-wrap nonsense that flowed in here from ZIP DateTime defaults
+    // and crashed the app picker on startup.
+    seconds.try_into().unwrap_or({
+        if seconds > 0 {
+            time_t::MAX
+        } else {
+            time_t::MIN
+        }
+    })
 }
 
 fn gmtime_r(env: &mut Environment, timestamp: ConstPtr<time_t>, res: MutPtr<tm>) -> MutPtr<tm> {
