@@ -99,6 +99,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::libsqlite3::DYLIB,
     &frameworks::libxml2::DYLIB,
     &frameworks::libbz2::DYLIB,
+    &frameworks::localytics::DYLIB,
     &frameworks::common_crypto::DYLIB,
     &frameworks::core_video::DYLIB,
     &frameworks::address_book::DYLIB,
