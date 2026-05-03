@@ -11,6 +11,7 @@ use crate::export_c_func;
 use crate::libc::sys::socket::{sockaddr, AF_INET, SOCK_DGRAM, SOCK_STREAM};
 use crate::mem::{guest_size_of, ConstPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
+use std::net::ToSocketAddrs;
 use std::ops::Add;
 
 const AI_PASSIVE: i32 = 0x1;
@@ -226,6 +227,21 @@ fn alloc_hostent(env: &mut Environment, ip_octets: [u8; 4], canonical_name: &str
 
 // MARK: - gethostbyname / gethostbyaddr
 
+/// Resolve a hostname to an IPv4 address by asking the host OS's resolver.
+///
+/// Used by `gethostbyname` and `getaddrinfo`. Returns `None` when the lookup
+/// fails or when the hostname has no IPv4 record. This is a blocking call.
+fn resolve_hostname_ipv4(hostname: &str) -> Option<[u8; 4]> {
+    // Port 0 is just a placeholder; we only care about the resolved address.
+    let addrs = (hostname, 0u16).to_socket_addrs().ok()?;
+    for addr in addrs {
+        if let std::net::SocketAddr::V4(v4) = addr {
+            return Some(v4.ip().octets());
+        }
+    }
+    None
+}
+
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
     let hostname = if name.is_null() {
@@ -235,7 +251,7 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     };
     log_dbg!("gethostbyname(\"{}\")", hostname);
 
-    // Resolve: try dotted-decimal first, then well-known names.
+    // Resolve: try dotted-decimal first, then well-known names, then real DNS.
     let ip_octets: [u8; 4] = if let Some(octets) = parse_ipv4(&hostname) {
         octets
     } else {
@@ -251,13 +267,28 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
                     env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
                     return MutPtr::null();
                 }
-                // No real DNS — return failure for unknown names.
-                log!(
-                    "gethostbyname(\"{}\"): cannot resolve (no DNS) -> HOST_NOT_FOUND",
-                    hostname
-                );
-                env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
-                return MutPtr::null();
+                // Ask the host OS resolver for an A record.
+                match resolve_hostname_ipv4(&hostname) {
+                    Some(octets) => {
+                        log!(
+                            "gethostbyname(\"{}\"): host resolver -> {}.{}.{}.{}",
+                            hostname,
+                            octets[0],
+                            octets[1],
+                            octets[2],
+                            octets[3]
+                        );
+                        octets
+                    }
+                    None => {
+                        log!(
+                            "gethostbyname(\"{}\"): host resolver failed -> HOST_NOT_FOUND",
+                            hostname
+                        );
+                        env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
+                        return MutPtr::null();
+                    }
+                }
             }
         }
     };
@@ -477,11 +508,33 @@ fn getaddrinfo(
             match hostname.as_str() {
                 "localhost" | "loopback" | "touchHLE" => [127, 0, 0, 1],
                 _ => {
-                    log!(
-                        "getaddrinfo: hostname \"{}\" not resolvable -> EAI_FAIL",
-                        hostname
-                    );
-                    return EAI_FAIL;
+                    if !env.options.network_access {
+                        log!(
+                            "getaddrinfo: network disabled (node={}) -> EAI_FAIL",
+                            hostname
+                        );
+                        return EAI_FAIL;
+                    }
+                    match resolve_hostname_ipv4(&hostname) {
+                        Some(octets) => {
+                            log!(
+                                "getaddrinfo(\"{}\"): host resolver -> {}.{}.{}.{}",
+                                hostname,
+                                octets[0],
+                                octets[1],
+                                octets[2],
+                                octets[3]
+                            );
+                            octets
+                        }
+                        None => {
+                            log!(
+                                "getaddrinfo: hostname \"{}\" not resolvable -> EAI_FAIL",
+                                hostname
+                            );
+                            return EAI_FAIL;
+                        }
+                    }
                 }
             }
         }

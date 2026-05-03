@@ -5,7 +5,8 @@
  */
 //! Image decoding.
 //!
-//! Currently, supports PNG (treated as 8-bit sRGB), JPEG, BMP and GIF files.
+//! Currently, supports PNG (treated as 8-bit sRGB), JPEG, BMP, GIF, and TGA
+//! files.
 //!
 //! Implemented as a wrapper around the C library stb_image, since it supports
 //! "CgBI" PNG files (an Apple proprietary extension used in iPhone OS apps).

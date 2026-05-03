@@ -178,10 +178,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.loading = true;
     }
 
-    // Fire webViewDidStartLoad: delegate callback.
+    // Fire webViewDidStartLoad: delegate callback. Use `register_host_selector`
+    // rather than `lookup_selector(...).unwrap()` so that we don't panic if the
+    // app never references this delegate selector (e.g. Minecraft PE 0.8.0
+    // doesn't implement the UIWebViewDelegate protocol callbacks).
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidStartLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidStartLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidStartLoad:this];
@@ -192,7 +198,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIWebViewHostObject>(this).loading = false;
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidFinishLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidFinishLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidFinishLoad:this];
@@ -210,7 +219,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidFinishLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidFinishLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidFinishLoad:this];
@@ -228,7 +240,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidFinishLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidFinishLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidFinishLoad:this];
@@ -279,7 +294,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webView:didFailLoadWithError:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webView:didFailLoadWithError:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let error: id = nil;
@@ -324,7 +342,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidFinishLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidFinishLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidFinishLoad:this];
@@ -351,7 +372,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let delegate = env.objc.borrow::<UIWebViewHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector("webViewDidFinishLoad:").unwrap();
+        let sel = env.objc.register_host_selector(
+            "webViewDidFinishLoad:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate webViewDidFinishLoad:this];

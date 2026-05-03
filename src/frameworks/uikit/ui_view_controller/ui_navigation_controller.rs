@@ -8,7 +8,7 @@
 use crate::frameworks::foundation::{ns_array, NSUInteger};
 use crate::objc::{
     autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
-    release, retain, ClassExports, NSZonePtr, SEL,
+    release, retain, ClassExports, NSZonePtr,
 };
 
 #[derive(Default)]
@@ -99,12 +99,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, view_controller);
     let _: () = msg![env; view_controller setNavigationController:this];
 
-    // Delegate: willShow
+    // Delegate: willShow. Use `register_host_selector` so we don't panic when
+    // the app's delegate doesn't implement (and therefore never references)
+    // this selector — some apps simply skip the optional UINavigationController
+    // delegate callbacks.
     let delegate = env.objc.borrow::<UINavigationControllerHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector(
-            "navigationController:willShowViewController:animated:"
-        ).unwrap();
+        let sel = env.objc.register_host_selector(
+            "navigationController:willShowViewController:animated:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate navigationController:this
@@ -120,12 +124,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; self_view addSubview:vc_view];
     let _: () = msg![env; view_controller viewDidAppear:false];
 
-    // Delegate: didShow
+    // Delegate: didShow.
     let delegate = env.objc.borrow::<UINavigationControllerHostObject>(this).delegate;
     if delegate != nil {
-        let sel = env.objc.lookup_selector(
-            "navigationController:didShowViewController:animated:"
-        ).unwrap();
+        let sel = env.objc.register_host_selector(
+            "navigationController:didShowViewController:animated:".to_string(),
+            &mut env.mem,
+        );
         let responds: bool = msg![env; delegate respondsToSelector:sel];
         if responds {
             let _: () = msg![env; delegate navigationController:this
@@ -169,12 +174,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     if new_top != nil {
         let _: () = msg![env; new_top viewWillAppear:animated];
         let _: () = msg![env; new_top viewDidAppear:animated];
-        // Delegate: didShow new top
+        // Delegate: didShow new top.
         let delegate = env.objc.borrow::<UINavigationControllerHostObject>(this).delegate;
         if delegate != nil {
-            let sel = env.objc.lookup_selector(
-                "navigationController:didShowViewController:animated:"
-            ).unwrap();
+            let sel = env.objc.register_host_selector(
+                "navigationController:didShowViewController:animated:".to_string(),
+                &mut env.mem,
+            );
             let responds: bool = msg![env; delegate respondsToSelector:sel];
             if responds {
                 let _: () = msg![env; delegate navigationController:this
