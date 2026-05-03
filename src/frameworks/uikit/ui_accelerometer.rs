@@ -13,8 +13,9 @@ use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject,
     NSZonePtr, TrivialHostObject, SEL,
 };
+use crate::time_util::duration_from_secs_f64_saturating;
 use crate::Environment;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Default)]
 pub struct State {
@@ -128,7 +129,7 @@ pub(super) fn handle_accelerometer(env: &mut Environment) -> Option<Instant> {
     let delegate = state.delegate?;
 
     let ns_interval = state.update_interval.unwrap_or(DEFAULT_UPDATE_INTERVAL);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    let rust_interval = duration_from_secs_f64_saturating(ns_interval);
 
     let now = Instant::now();
     if let Some(due_by) = state.due_by {

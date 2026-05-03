@@ -11,6 +11,7 @@ use crate::frameworks::foundation::NSTimeInterval;
 use crate::libc::time::{time_t, timestamp_to_calendar_date};
 use crate::mem::SafeRead;
 use crate::objc::nil;
+use crate::time_util::duration_from_secs_f64_saturating;
 use crate::{impl_GuestRet_for_large_struct, Environment};
 use std::ops::Add;
 use std::time::{Duration, SystemTime};
@@ -115,7 +116,7 @@ pub fn CFAbsoluteTimeGetGregorianDate(
         log!("Warning: CFAbsoluteTimeGetGregorianDate: non-GMT timezone ignored");
     }
     let time64 = apple_epoch()
-        .add(Duration::from_secs_f64(at))
+        .add(duration_from_secs_f64_saturating(at))
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();

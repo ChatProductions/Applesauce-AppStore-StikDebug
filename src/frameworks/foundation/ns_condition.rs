@@ -11,6 +11,7 @@ use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
     id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
+use crate::time_util::duration_from_secs_f64_saturating;
 
 // =========================================================================
 // MARK: - NSCondition host object
@@ -158,7 +159,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // 2. Засыпаем с таймаутом
-    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+    let until = std::time::Instant::now() + duration_from_secs_f64_saturating(ti);
     env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
     // 3. Проверяем, проснулись ли мы сами (таймаут) или нас разбудили
@@ -340,7 +341,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.waiting_threads.push_back((current_thread, Some(condition)));
         }
 
-        let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+        let until = std::time::Instant::now() + duration_from_secs_f64_saturating(ti);
         env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
         // Удаляем себя из очереди, если мы проснулись по таймауту
