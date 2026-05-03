@@ -831,6 +831,16 @@ pub fn is_conversion_lossless(env: &mut Environment, this: id, type_: CFNumberTy
             let val: i8 = num.as_char();
             msg_class![env; NSNumber numberWithChar:val]
         }
+        // ИСПРАВЛЕНИЕ: Добавляем проверку для 64-битных целых чисел (Type 4 и 11)
+        kCFNumberSInt64Type | kCFNumberLongLongType => {
+            let val: i64 = num.as_long_long();
+            msg_class![env; NSNumber numberWithLongLong:val]
+        }
+        // ИСПРАВЛЕНИЕ: Добавляем проверку для 64-битных чисел с плавающей точкой (Type 6 и 13)
+        kCFNumberFloat64Type | kCFNumberDoubleType => {
+            let val: f64 = num.as_double();
+            msg_class![env; NSNumber numberWithDouble:val]
+        }
         _ => unimplemented!("is_conversion_lossless for {}", type_),
     };
     msg![env; this isEqualToNumber:num2]
