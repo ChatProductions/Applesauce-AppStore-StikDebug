@@ -1180,6 +1180,92 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
 
         present_check(gles, trace_gl_errors, &SEEN, "after CopyTexImage2D");
     }
+    // Diagnostic probe: read a small region of the renderbuffer the guest just
+    // rendered into, so we can tell apart "renderbuffer is empty / all-black"
+    // (a guest-side or attach-side bug) from "renderbuffer has content but
+    // present_frame is mis-displaying it" (a present-side bug). The
+    // src_framebuffer is still bound for reading at this point; ReadPixels
+    // reads from GL_READ_FRAMEBUFFER which on ES 1.1 is just the bound FBO.
+    // Gated on --trace-gl-errors and logged once per app run.
+    if trace_gl_errors {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            // Sample 4 corners (1px each) of the renderbuffer we just copied.
+            // If all four are (0,0,0,*) the renderbuffer is empty, which
+            // means the guest's draws never reached this attachment.
+            let mut tl: [u8; 4] = [0; 4];
+            let mut tr: [u8; 4] = [0; 4];
+            let mut bl: [u8; 4] = [0; 4];
+            let mut br: [u8; 4] = [0; 4];
+            let xmax = (width as i32).saturating_sub(1).max(0);
+            let ymax = (height as i32).saturating_sub(1).max(0);
+            gles.ReadPixels(
+                0,
+                0,
+                1,
+                1,
+                gles11::RGBA,
+                gles11::UNSIGNED_BYTE,
+                bl.as_mut_ptr() as *mut _,
+            );
+            gles.ReadPixels(
+                xmax,
+                0,
+                1,
+                1,
+                gles11::RGBA,
+                gles11::UNSIGNED_BYTE,
+                br.as_mut_ptr() as *mut _,
+            );
+            gles.ReadPixels(
+                0,
+                ymax,
+                1,
+                1,
+                gles11::RGBA,
+                gles11::UNSIGNED_BYTE,
+                tl.as_mut_ptr() as *mut _,
+            );
+            gles.ReadPixels(
+                xmax,
+                ymax,
+                1,
+                1,
+                gles11::RGBA,
+                gles11::UNSIGNED_BYTE,
+                tr.as_mut_ptr() as *mut _,
+            );
+            // Drain any GL error this probe may have generated; it must not
+            // leak into the guest-visible error queue.
+            while gles.GetError() != 0 {}
+            log!(
+                "[--trace-gl-errors] present_renderbuffer renderbuffer-content probe: \
+                 viewport={:?} renderbuffer={}x{} \
+                 BL=({},{},{},{}) BR=({},{},{},{}) TL=({},{},{},{}) TR=({},{},{},{}) \
+                 [this log will only be shown once]",
+                viewport,
+                width,
+                height,
+                bl[0],
+                bl[1],
+                bl[2],
+                bl[3],
+                br[0],
+                br[1],
+                br[2],
+                br[3],
+                tl[0],
+                tl[1],
+                tl[2],
+                tl[3],
+                tr[0],
+                tr[1],
+                tr[2],
+                tr[3],
+            );
+        }
+    }
     // The texture will not have any mip levels so we must ensure the filter
     // does not use them, else rendering will fail. Also force
     // GL_CLAMP_TO_EDGE wrap because the renderbuffer is typically a
