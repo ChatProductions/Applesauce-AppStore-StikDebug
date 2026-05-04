@@ -300,6 +300,16 @@ Other options:
         and nothing else. Should be enabled only for apps which really
         need this behaviour.
 
+    --trace-gl-errors
+        For diagnostic builds. After every guest GL call dispatched through
+        the GLES wrapper, also log the host driver's glGetError() value when
+        non-zero. The log line includes the name of the offending entry
+        point so that constant 0x500 (GL_INVALID_ENUM) / 0x501
+        (GL_INVALID_VALUE) noise can be traced back to a specific call.
+        This option exists for debugging black-screen / wrong-render bugs
+        and adds a glGetError() round-trip per call, so it should not be
+        left on for normal use.
+
     --zero-stack-after-guest-to-host-call=<bytes>
         After a guest-to-host call returns, zero out the given number of
         bytes immediately below the current stack pointer (i.e. the unused
