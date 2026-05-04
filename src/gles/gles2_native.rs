@@ -468,6 +468,33 @@ impl GLES for GLES2Native<'_> {
     unsafe fn GetBufferParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
         gles2::GetBufferParameteriv(target, pname, params)
     }
+    // Buffer mapping (`GL_OES_mapbuffer`).
+    //
+    // On real ES 2.0+ drivers (Adreno, Mali, …) the `GL_OES_mapbuffer`
+    // extension is widely supported, so we can route the OES entry points
+    // straight to the extension functions loaded via `gles2::load_with`. Some
+    // games (e.g. LEGO Ninjago Spinjitzu Scavenger Hunt) call these even when
+    // they asked EAGL for an ES 1.1 context — combined with
+    // `--prefer-gles2-context`, they end up here.
+    unsafe fn MapBufferOES(&mut self, target: GLenum, access: GLenum) -> *mut GLvoid {
+        if gles2::MapBufferOES::is_loaded() {
+            gles2::MapBufferOES(target, access)
+        } else {
+            log!(
+                "Warning: glMapBufferOES called but GL_OES_mapbuffer is not \
+                 available on this ES 2.0 driver; returning NULL"
+            );
+            std::ptr::null_mut()
+        }
+    }
+    unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean {
+        if gles2::UnmapBufferOES::is_loaded() {
+            gles2::UnmapBufferOES(target)
+        } else {
+            // Caller will fall back to its own write-through copy.
+            gles2::FALSE
+        }
+    }
 
     // Framebuffers / renderbuffers (mapped via OES naming → core ES 2 calls)
     unsafe fn GenFramebuffersOES(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
