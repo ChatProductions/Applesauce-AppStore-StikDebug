@@ -88,10 +88,19 @@ pub const AVMetadataObjectTypePDF417Code: &str = "org.iso.PDF417";
 pub const AVMetadataObjectTypeUPCECode: &str = "org.gs1.UPC-E";
 
 pub const CONSTANTS: ConstantExports = &[
-    ("_AVMediaTypeVideo", HostConstant::NSString(AVMediaTypeVideo)),
-    ("_AVMediaTypeAudio", HostConstant::NSString(AVMediaTypeAudio)),
+    (
+        "_AVMediaTypeVideo",
+        HostConstant::NSString(AVMediaTypeVideo),
+    ),
+    (
+        "_AVMediaTypeAudio",
+        HostConstant::NSString(AVMediaTypeAudio),
+    ),
     ("_AVMediaTypeText", HostConstant::NSString(AVMediaTypeText)),
-    ("_AVMediaTypeMuxed", HostConstant::NSString(AVMediaTypeMuxed)),
+    (
+        "_AVMediaTypeMuxed",
+        HostConstant::NSString(AVMediaTypeMuxed),
+    ),
     (
         "_AVCaptureSessionPresetPhoto",
         HostConstant::NSString(AVCaptureSessionPresetPhoto),
@@ -779,7 +788,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-
 // ============================================================================
 // MARK: - Helpers
 // ============================================================================
@@ -807,7 +815,9 @@ fn make_default_video_device(env: &mut crate::Environment) -> id {
 // Stored on the framework state because the base CALayer host object can't
 // be subclassed after the fact.
 use std::collections::HashMap;
-fn preview_layer_extras(env: &mut crate::Environment) -> &mut HashMap<id, AVCapturePreviewLayerExtra> {
+fn preview_layer_extras(
+    env: &mut crate::Environment,
+) -> &mut HashMap<id, AVCapturePreviewLayerExtra> {
     &mut env.framework_state.avfoundation.av_capture_preview_extras
 }
 
@@ -830,12 +840,13 @@ fn set_preview_layer_session(env: &mut crate::Environment, layer: id, session: i
         .get(&layer)
         .map(|e| e.session)
         .unwrap_or(nil);
-    if session != nil { retain(env, session); }
-    if old != nil { release(env, old); }
-    preview_layer_extras(env)
-        .entry(layer)
-        .or_default()
-        .session = session;
+    if session != nil {
+        retain(env, session);
+    }
+    if old != nil {
+        release(env, old);
+    }
+    preview_layer_extras(env).entry(layer).or_default().session = session;
 }
 
 fn set_preview_layer_gravity(env: &mut crate::Environment, layer: id, gravity: id) {
@@ -843,12 +854,14 @@ fn set_preview_layer_gravity(env: &mut crate::Environment, layer: id, gravity: i
         .get(&layer)
         .map(|e| e.video_gravity)
         .unwrap_or(nil);
-    if gravity != nil { retain(env, gravity); }
-    if old != nil { release(env, old); }
+    if gravity != nil {
+        retain(env, gravity);
+    }
+    if old != nil {
+        release(env, old);
+    }
     preview_layer_extras(env)
         .entry(layer)
         .or_default()
         .video_gravity = gravity;
 }
-
-

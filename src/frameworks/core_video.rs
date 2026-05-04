@@ -10,8 +10,7 @@ pub const kCVPixelBufferWidthKey: &str = "Width";
 pub const kCVPixelBufferHeightKey: &str = "Height";
 pub const kCVPixelBufferBytesPerRowAlignmentKey: &str = "BytesPerRowAlignment";
 pub const kCVPixelBufferCGImageCompatibilityKey: &str = "CGImageCompatibility";
-pub const kCVPixelBufferCGBitmapContextCompatibilityKey: &str =
-    "CGBitmapContextCompatibility";
+pub const kCVPixelBufferCGBitmapContextCompatibilityKey: &str = "CGBitmapContextCompatibility";
 pub const kCVPixelBufferOpenGLESCompatibilityKey: &str = "OpenGLESCompatibility";
 pub const kCVPixelBufferIOSurfacePropertiesKey: &str = "IOSurfaceProperties";
 pub const kCVPixelBufferPlaneAlignmentKey: &str = "PlaneAlignment";
