@@ -1210,73 +1210,72 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
 
         present_check(gles, trace_gl_errors, &SEEN, "after CopyTexImage2D");
     }
-    // Diagnostic probe: read a small region of the renderbuffer the guest just
-    // rendered into, so we can tell apart "renderbuffer is empty / all-black"
-    // (a guest-side or attach-side bug) from "renderbuffer has content but
-    // present_frame is mis-displaying it" (a present-side bug). At this
-    // point the read source FBO is whichever copy source we used above:
-    // either the app's own FBO (used_app_fbo, normal iOS pattern) or the
-    // throwaway src_framebuffer (fallback for old_framebuffer == 0).
-    // Either way, ReadPixels reads from FRAMEBUFFER_BINDING, so the values
-    // logged here describe the pixels CopyTexImage2D just copied.
-    // Gated on --trace-gl-errors and logged once per app run.
+    // Diagnostic probe: read a few pixels of the renderbuffer the guest
+    // just rendered into, so we can tell apart "renderbuffer is empty /
+    // all-black" (a guest-side or attach-side / tile-resolve bug) from
+    // "renderbuffer has content but present_frame is mis-displaying it"
+    // (a present-side bug). At this point the read source FBO is
+    // whichever copy source we used above: the app's own FBO
+    // (used_app_fbo, normal iOS pattern) or the throwaway src_framebuffer
+    // (fallback for old_framebuffer == 0). Either way, ReadPixels reads
+    // from FRAMEBUFFER_BINDING, so the values logged here describe the
+    // pixels CopyTexImage2D just copied.
+    //
+    // We sample several frames (the very first frame is often just a
+    // glClear and shows zeros even on healthy drivers — we need to also
+    // see what later "real game" frames look like) and we sample the
+    // image centre as well as the corners (the corners on UI screens
+    // are often legitimately black, while the centre is where the
+    // actual artwork lives, so that's a much better "did anything
+    // render?" signal). Gated on --trace-gl-errors.
     if trace_gl_errors {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static SEEN: AtomicBool = AtomicBool::new(false);
-        if !SEEN.swap(true, Ordering::Relaxed) {
-            // Sample 4 corners (1px each) of the renderbuffer we just copied.
-            // If all four are (0,0,0,*) the renderbuffer is empty, which
-            // means the guest's draws never reached this attachment.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static PROBE_COUNT: AtomicUsize = AtomicUsize::new(0);
+        let count = PROBE_COUNT.fetch_add(1, Ordering::Relaxed);
+        // Probe at frames 0, 1, 5, 30, 120, 600 — covers "first frame
+        // before app drew anything", "second frame", a couple of early
+        // splash frames, ~half-second-in, ~2s-in, ~10s-in. After that
+        // every 600 frames so a long-running session still gives us
+        // periodic snapshots without flooding the log.
+        let should_log = matches!(count, 0 | 1 | 5 | 30 | 120 | 600) || count.is_multiple_of(600);
+        if should_log {
+            // 5 single-pixel reads: 4 corners + centre.
             let mut tl: [u8; 4] = [0; 4];
             let mut tr: [u8; 4] = [0; 4];
             let mut bl: [u8; 4] = [0; 4];
             let mut br: [u8; 4] = [0; 4];
+            let mut cc: [u8; 4] = [0; 4];
             let xmax = (width as i32).saturating_sub(1).max(0);
             let ymax = (height as i32).saturating_sub(1).max(0);
-            gles.ReadPixels(
-                0,
-                0,
-                1,
-                1,
-                gles11::RGBA,
-                gles11::UNSIGNED_BYTE,
-                bl.as_mut_ptr() as *mut _,
-            );
-            gles.ReadPixels(
-                xmax,
-                0,
-                1,
-                1,
-                gles11::RGBA,
-                gles11::UNSIGNED_BYTE,
-                br.as_mut_ptr() as *mut _,
-            );
-            gles.ReadPixels(
-                0,
-                ymax,
-                1,
-                1,
-                gles11::RGBA,
-                gles11::UNSIGNED_BYTE,
-                tl.as_mut_ptr() as *mut _,
-            );
-            gles.ReadPixels(
-                xmax,
-                ymax,
-                1,
-                1,
-                gles11::RGBA,
-                gles11::UNSIGNED_BYTE,
-                tr.as_mut_ptr() as *mut _,
-            );
-            // Drain any GL error this probe may have generated; it must not
-            // leak into the guest-visible error queue.
+            let xmid = (width as i32) / 2;
+            let ymid = (height as i32) / 2;
+            for (x, y, buf) in [
+                (0, 0, &mut bl),
+                (xmax, 0, &mut br),
+                (0, ymax, &mut tl),
+                (xmax, ymax, &mut tr),
+                (xmid, ymid, &mut cc),
+            ] {
+                gles.ReadPixels(
+                    x,
+                    y,
+                    1,
+                    1,
+                    gles11::RGBA,
+                    gles11::UNSIGNED_BYTE,
+                    buf.as_mut_ptr() as *mut _,
+                );
+            }
+            // Drain any GL error this probe may have generated; it must
+            // not leak into the guest-visible error queue.
             while gles.GetError() != 0 {}
             log!(
-                "[--trace-gl-errors] present_renderbuffer renderbuffer-content probe: \
-                 viewport={:?} renderbuffer={}x{} \
+                "[--trace-gl-errors] present_renderbuffer renderbuffer-content probe \
+                 (frame={}, used_app_fbo={}, viewport={:?}, renderbuffer={}x{}): \
                  BL=({},{},{},{}) BR=({},{},{},{}) TL=({},{},{},{}) TR=({},{},{},{}) \
-                 [this log will only be shown once]",
+                 CENTER=({},{},{},{})",
+                count,
+                used_app_fbo,
                 viewport,
                 width,
                 height,
@@ -1296,6 +1295,10 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
                 tr[1],
                 tr[2],
                 tr[3],
+                cc[0],
+                cc[1],
+                cc[2],
+                cc[3],
             );
         }
     }
