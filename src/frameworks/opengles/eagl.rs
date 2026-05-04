@@ -1195,6 +1195,24 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     let mut texture: GLuint = 0;
     gles.GenTextures(1, &mut texture);
     gles.BindTexture(gles11::TEXTURE_2D, texture);
+    // Force completion of any pending draws targeting the renderbuffer
+    // BEFORE we copy from it. On a spec-conformant driver glCopyTexImage2D
+    // implicitly syncs, but on ARM Mali r32p1 (Mali-G57 MC2 OpenGL ES-CM
+    // 1.1) we have evidence that it doesn't always: the LEGO Ninjago
+    // splash logo (frames 0..30) renders fine — its few draws are
+    // already tile-resolved by the time we Copy — but the title menu
+    // (~frame 120, many more draws per frame) reads back as a uniform
+    // colour from the renderbuffer probe even though every guest GL
+    // state field is identical to the working logo frame. The simplest
+    // explanation that fits all the evidence is that the title menu's
+    // tile cache hasn't been resolved to main memory when CopyTexImage2D
+    // runs, so the copy reads stale or uninitialised pixels. glFinish()
+    // is the heaviest possible sync but the safest one — any present
+    // path that needs to display a renderbuffer is *already* on the
+    // critical path of the frame, so spending a few hundred microseconds
+    // ensuring correctness is fine. (And on lenient drivers glFinish on
+    // an already-flushed pipeline is essentially free.)
+    gles.Finish();
     gles.CopyTexImage2D(
         gles11::TEXTURE_2D,
         0,
@@ -1208,7 +1226,12 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     {
         static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-        present_check(gles, trace_gl_errors, &SEEN, "after CopyTexImage2D");
+        present_check(
+            gles,
+            trace_gl_errors,
+            &SEEN,
+            "after Finish + CopyTexImage2D",
+        );
     }
     // Diagnostic probe: read a few pixels of the renderbuffer the guest
     // just rendered into, so we can tell apart "renderbuffer is empty /
