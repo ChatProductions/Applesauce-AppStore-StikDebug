@@ -226,8 +226,14 @@ com.indiagames.brucelee:  --force-composition --ignore-gl-errors
 com.chillingo.redball3hd: --landscape-left
 
 # LEGO Ninjago: Spinjitzu Scavenger Hunt
-# Asks EAGL for an ES 1.1 context but renders with shader entry points,
-# so on real ES drivers (Adreno / Mali on Android) the GLES 1.1-only stubs
-# silently drop glUseProgram and friends and the screen stays black.
-# Force EAGL to hand it a real ES 2.0 context.
-com.lego.NinjagoSpinjitzuScavengerHunt: --landscape-left --prefer-gles2-context --trace-gl-errors
+# This is a pure ES 1.1 fixed-function game (uses only glColor4f, glMatrixMode,
+# glVertexPointer, glLoadMatrixf etc., no shaders). On Adreno-class drivers
+# the previous black-screen symptom was caused by HyperHLE's internal present
+# path trying to clear a non-zero GL_CURRENT_PROGRAM (which the underlying
+# ES 3.2 driver returns even on an ES 1.1 context) via glUseProgram(0), which
+# was a no-op stub on GLES1Native, so the leftover internal program
+# interfered with the fixed-function quad. That dance has been removed from
+# the ES 1.1 present path, so this app no longer needs --prefer-gles2-context.
+# --trace-gl-errors stays so any remaining 0x500 noise is logged with a
+# pointer to the calling host site.
+com.lego.NinjagoSpinjitzuScavengerHunt: --landscape-left --trace-gl-errors

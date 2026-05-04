@@ -976,13 +976,12 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // FIXME: A cleaner solution would be to read the actual transform from
     //        the EAGL layer's view hierarchy and apply it here, instead of
     //        using a device-family heuristic.
-    let needs_autorotation_compensation = matches!(
-        device_family,
-        crate::window::DeviceFamily::iPad
-    ) && !matches!(
-        device_orientation,
-        crate::window::DeviceOrientation::Portrait
-    );
+    let needs_autorotation_compensation =
+        matches!(device_family, crate::window::DeviceFamily::iPad)
+            && !matches!(
+                device_orientation,
+                crate::window::DeviceOrientation::Portrait
+            );
     let rotation_matrix = if needs_autorotation_compensation {
         env.window
             .as_mut()
@@ -1071,15 +1070,27 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // restored later. The app's subsequent drawing will be messed up if we
     // don't restore it.
 
-    // GL_CURRENT_PROGRAM (0x8B8D) is an ES 2.0 / GL 2.0 piece of state. ES 1.x
-    // contexts won't have any program bound, in which case this is a harmless
-    // no-op. ES 2.0 apps do have one bound and we must clear it so our
-    // fixed-function quad-drawing code below works.
-    const CURRENT_PROGRAM: GLenum = 0x8B8D;
-    let old_program: GLuint = get_int(gles, CURRENT_PROGRAM) as _;
-    if old_program != 0 {
-        gles.UseProgram(0);
-    }
+    // We *used* to query GL_CURRENT_PROGRAM (0x8B8D) here and call
+    // glUseProgram(0) to clear any program before drawing the fixed-function
+    // present quad. The original assumption was: "ES 1.x contexts won't have
+    // any program bound, so this is a harmless no-op on ES 1.1 backends; ES
+    // 2.0 apps that nevertheless landed in this path needed the clear so the
+    // fixed-function quad would work."
+    //
+    // That assumption is wrong on real-world Android ES 1.1 drivers. On
+    // Adreno (and similar GPUs whose ES 1.1 surface is implemented on top of
+    // an underlying ES 3.x engine), querying GL_CURRENT_PROGRAM returns a
+    // non-zero handle pointing at the driver's own internal program (used
+    // for fixed-function emulation). Calling our generic gles.UseProgram(0)
+    // on a GLES1Native backend then no-ops (gles_generic stub) — the program
+    // is *not* actually unbound, but our fixed-function quad below now runs
+    // with that internal program intercepting the draws, which produces a
+    // black screen.
+    //
+    // The reverse path (a GLES2 app that somehow landed here) is now
+    // impossible: the `if gles.is_es2()` branch above returns early for any
+    // ES 2.0 backend. So just drop the clear/restore entirely on the
+    // remaining (non-ES2) path. See LEGO Ninjago: Spinjitzu Scavenger Hunt.
 
     let old_arrays = {
         let mut old_arrays = [gles11::FALSE; gles1_on_gl2::ARRAYS.len()];
@@ -1222,10 +1233,8 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     gles.BindTexture(gles11::TEXTURE_2D, old_texture_2d);
     gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, old_framebuffer);
 
-    // Restore the previously bound shader program (ES 2.0).
-    if old_program != 0 {
-        gles.UseProgram(old_program);
-    }
+    // (See the long comment above for why we no longer save/restore
+    // GL_CURRENT_PROGRAM on this ES 1.1 present path.)
 
     // { let err = gles.GetError(); if err != 0 { panic!("{:#x}", err); } }
 }
