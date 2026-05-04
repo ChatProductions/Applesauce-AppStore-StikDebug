@@ -1275,12 +1275,21 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             "after old_arrays save+disable",
         );
     }
+    // On a strict native ES 1.1 driver (e.g. ARM Mali on Android), some
+    // entries in CAPABILITIES are spec-invalid for ES 1.1 even though they
+    // are valid in desktop GL 2.1 (where the gles1_on_gl2 emulator runs).
+    // Querying / disabling those would yield GL_INVALID_ENUM. Skip them on
+    // those backends. See gles1_on_gl2::CAPABILITIES_GL21_ONLY.
+    let is_native_es1 = gles.is_native_es1();
     let old_capabilities = {
         let mut old_capabilities = [gles11::FALSE; gles1_on_gl2::CAPABILITIES.len()];
         for (is_enabled, &name) in old_capabilities
             .iter_mut()
             .zip(gles1_on_gl2::CAPABILITIES.iter())
         {
+            if is_native_es1 && gles1_on_gl2::CAPABILITIES_GL21_ONLY.contains(&name) {
+                continue;
+            }
             gles.GetBooleanv(name, is_enabled);
             gles.Disable(name);
         }
@@ -1405,6 +1414,9 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         .iter()
         .zip(gles1_on_gl2::CAPABILITIES.iter())
     {
+        if is_native_es1 && gles1_on_gl2::CAPABILITIES_GL21_ONLY.contains(&name) {
+            continue;
+        }
         match is_enabled {
             gles11::TRUE => gles.Enable(name),
             gles11::FALSE => gles.Disable(name),
