@@ -1022,6 +1022,21 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     let renderbuffer: GLuint = get_int(gles, gles11::RENDERBUFFER_BINDING_OES) as _;
     let (width, height) = get_renderbuffer_size(gles);
 
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First present_renderbuffer ES1.1 path: renderbuffer={} size={}x{} (npot_w={} npot_h={}) [this log will only be shown once]",
+                renderbuffer,
+                width,
+                height,
+                !(width as u32).is_power_of_two(),
+                !(height as u32).is_power_of_two(),
+            );
+        }
+    }
+
     // To avoid confusing the guest app, we need to be able to undo any
     // state changes we make.
     let old_framebuffer: GLuint = get_int(gles, gles11::FRAMEBUFFER_BINDING_OES) as _;
@@ -1038,6 +1053,13 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         renderbuffer,
     );
 
+    // Tile-based GPUs (e.g. Qualcomm Adreno) defer rasterisation: pending
+    // draws into the renderbuffer may not have hit memory yet by the time
+    // we issue CopyTexImage2D from this newly-bound FBO. Flush so the
+    // copy reads the frame the app actually rendered, not stale tile
+    // contents.
+    gles.Flush();
+
     // Create a texture with a copy of the pixels in the framebuffer
     let mut texture: GLuint = 0;
     gles.GenTextures(1, &mut texture);
@@ -1053,11 +1075,33 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         0,
     );
     // The texture will not have any mip levels so we must ensure the filter
-    // does not use them, else rendering will fail.
+    // does not use them, else rendering will fail. Also force
+    // GL_CLAMP_TO_EDGE wrap because the renderbuffer is typically a
+    // non-power-of-two size (e.g. 480x320 for an iPhone landscape app)
+    // and many ES 1.1 implementations only allow GL_CLAMP_TO_EDGE for
+    // NPOT textures; without an explicit wrap the texture would inherit
+    // GL_REPEAT and render as black on strict drivers. Set both
+    // MIN_FILTER and MAG_FILTER explicitly so neither falls back to a
+    // mipmap-using default.
     gles.TexParameteri(
         gles11::TEXTURE_2D,
         gles11::TEXTURE_MIN_FILTER,
         gles11::LINEAR as _,
+    );
+    gles.TexParameteri(
+        gles11::TEXTURE_2D,
+        gles11::TEXTURE_MAG_FILTER,
+        gles11::LINEAR as _,
+    );
+    gles.TexParameteri(
+        gles11::TEXTURE_2D,
+        gles11::TEXTURE_WRAP_S,
+        gles11::CLAMP_TO_EDGE as _,
+    );
+    gles.TexParameteri(
+        gles11::TEXTURE_2D,
+        gles11::TEXTURE_WRAP_T,
+        gles11::CLAMP_TO_EDGE as _,
     );
 
     // Clean up the framebuffer object since we no longer need it.
