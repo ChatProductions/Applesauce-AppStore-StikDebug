@@ -84,6 +84,26 @@ pub struct Options {
     /// `glGetError()` clears the error queue, so guest `glGetError()` calls
     /// will see 0 instead of the real error. Diagnostic only.
     pub trace_gl_errors: bool,
+    /// After a `glTexImage2D(level=0, …)` upload, if the bound texture's
+    /// `GL_TEXTURE_MIN_FILTER` is still the ES 1.1 default
+    /// `GL_NEAREST_MIPMAP_LINEAR` (which makes the texture incomplete
+    /// because no mipmaps have been uploaded), force it to
+    /// `GL_LINEAR`. This mirrors the behaviour of lenient drivers like
+    /// Mesa and Apple's PowerVR ES 1.1 driver — strict drivers like
+    /// Qualcomm Adreno's native ES 1.1 driver instead sample
+    /// incomplete textures as opaque black, which produces a black
+    /// screen for games that never bother to set
+    /// `GL_TEXTURE_MIN_FILTER` themselves. The host driver's behaviour
+    /// is otherwise spec-compliant on either side.
+    ///
+    /// The fix-up only fires for `level == 0` uploads that find the
+    /// default mipmap filter still active; once the guest sets any
+    /// non-default filter (mipmap or not) we leave it alone, and any
+    /// subsequent `glTexParameteri(GL_TEXTURE_MIN_FILTER, …)` from the
+    /// guest will override our `GL_LINEAR` write. Multi-level uploads
+    /// (`level > 0`) do not trigger the fix-up so games that actually
+    /// use mipmaps are unaffected.
+    pub fix_texture_min_filter: bool,
     pub zero_stack_after_guest_to_host_call: Option<u32>,
 }
 
@@ -119,6 +139,7 @@ impl Default for Options {
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
             trace_gl_errors: false,
+            fix_texture_min_filter: false,
             zero_stack_after_guest_to_host_call: None,
         }
     }
@@ -279,6 +300,8 @@ impl Options {
             self.ignore_gl_errors = true;
         } else if arg == "--trace-gl-errors" {
             self.trace_gl_errors = true;
+        } else if arg == "--fix-texture-min-filter" {
+            self.fix_texture_min_filter = true;
         } else if let Some(value) = arg.strip_prefix("--zero-stack-after-guest-to-host-call=") {
             self.zero_stack_after_guest_to_host_call = Some(value.parse().map_err(|_| {
                 "Invalid value for --zero-stack-after-guest-to-host-call=".to_string()

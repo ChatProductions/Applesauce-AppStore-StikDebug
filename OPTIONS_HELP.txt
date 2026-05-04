@@ -310,6 +310,18 @@ Other options:
         and adds a glGetError() round-trip per call, so it should not be
         left on for normal use.
 
+    --fix-texture-min-filter
+        Workaround for apps that rely on the default ES 1.1
+        GL_TEXTURE_MIN_FILTER (GL_NEAREST_MIPMAP_LINEAR) being usable
+        on a level-0-only texture. With this flag, after every
+        glTexImage2D(level=0) call HyperHLE issues an extra
+        glTexParameteri(GL_TEXTURE_MIN_FILTER, GL_LINEAR) so that
+        strict drivers (notably Qualcomm Adreno's native ES 1.1 path)
+        don't sample the texture as opaque black just because no
+        mipmaps were uploaded. The guest's own glTexParameteri calls
+        still override this. Apps that legitimately upload mipmaps
+        should NOT enable this flag.
+
     --zero-stack-after-guest-to-host-call=<bytes>
         After a guest-to-host call returns, zero out the given number of
         bytes immediately below the current stack pointer (i.e. the unused

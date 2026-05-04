@@ -1079,6 +1079,16 @@ fn glBindTexture(env: &mut Environment, target: GLenum, texture: GLuint) {
     })
 }
 fn glTexParameteri(env: &mut Environment, target: GLenum, pname: GLenum, param: GLint) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glTexParameteri(target=0x{:x}, pname=0x{:x}, param=0x{:x}) [this log will only be shown once]",
+                target, pname, param as u32
+            );
+        }
+    }
     if pname == gles11::TEXTURE_CROP_RECT_OES {
         return;
     }
@@ -1177,6 +1187,7 @@ fn glTexImage2D(
             );
         }
     }
+    let fix_filter = env.options.fix_texture_min_filter && level == 0;
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pixels = if pixels.is_null() {
             std::ptr::null()
@@ -1195,7 +1206,23 @@ fn glTexImage2D(
             format,
             type_,
             pixels,
-        )
+        );
+        if fix_filter {
+            // Set GL_TEXTURE_MIN_FILTER to GL_LINEAR for the bound
+            // texture so it isn't sampled as opaque black on strict
+            // ES 1.1 drivers (notably Qualcomm Adreno) just because
+            // the guest never bothered to override the default
+            // GL_NEAREST_MIPMAP_LINEAR. The guest's own
+            // glTexParameteri(GL_TEXTURE_MIN_FILTER, …) will override
+            // this on subsequent calls — see Options::fix_texture_min_filter.
+            static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!(
+                    "First fix_texture_min_filter override: forcing GL_TEXTURE_MIN_FILTER=GL_LINEAR after glTexImage2D(level=0) [this log will only be shown once]"
+                );
+            }
+            gles.TexParameteri(target, gles11::TEXTURE_MIN_FILTER, gles11::LINEAR as GLint);
+        }
     })
 }
 fn glTexSubImage2D(
@@ -1240,6 +1267,7 @@ fn glCompressedTexImage2D(
             );
         }
     }
+    let fix_filter = env.options.fix_texture_min_filter && level == 0;
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let data = mem
             .ptr_at(data.cast::<u8>(), image_size.try_into().unwrap())
@@ -1253,7 +1281,10 @@ fn glCompressedTexImage2D(
             border,
             image_size,
             data,
-        )
+        );
+        if fix_filter {
+            gles.TexParameteri(target, gles11::TEXTURE_MIN_FILTER, gles11::LINEAR as GLint);
+        }
     })
 }
 fn glCopyTexImage2D(
