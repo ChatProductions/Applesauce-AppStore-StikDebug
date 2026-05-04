@@ -579,6 +579,14 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
         renderbuffer,
     );
 
+    // On tile-based GPUs (Mali, Adreno, PowerVR) the per-tile color buffer
+    // isn't guaranteed to be resolved to the renderbuffer's main memory
+    // until the driver decides to flush. glReadPixels is supposed to imply
+    // a flush, but some drivers don't kick off the resolve aggressively
+    // enough and we end up reading uninitialized (black) pixels. Force the
+    // tile resolve here so the slow-path composite gets the actual frame.
+    gles.Finish();
+
     // Read the pixels
     let size = (width_u32 as usize)
         .checked_mul(height_u32 as usize)
