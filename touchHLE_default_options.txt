@@ -230,4 +230,4 @@ com.chillingo.redball3hd: --landscape-left
 # so on real ES drivers (Adreno / Mali on Android) the GLES 1.1-only stubs
 # silently drop glUseProgram and friends and the screen stays black.
 # Force EAGL to hand it a real ES 2.0 context.
-com.lego.NinjagoSpinjitzuScavengerHunt: --landscape-left --prefer-gles2-context
+com.lego.NinjagoSpinjitzuScavengerHunt: --landscape-left --prefer-gles2-context --trace-gl-errors
