@@ -1269,11 +1269,63 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             // Drain any GL error this probe may have generated; it must
             // not leak into the guest-visible error queue.
             while gles.GetError() != 0 {}
+            // Snapshot the guest's current GL state — this tells us how
+            // the *app* was set up at presentRenderbuffer entry, which
+            // is the moment the previous frame's draws were issued.
+            // Useful for diagnosing "renderbuffer is uniform colour"
+            // bugs that look like draws no-op'd: does the app even
+            // have a vertex array enabled? Was a texture bound? Is
+            // alpha-test or depth-test rejecting fragments? etc.
+            //
+            // Each query is wrapped with an error-drain so a strict
+            // driver that rejects an enum just shows up as 0 in the
+            // log without poisoning the queue for the next query.
+            let qb = |gles: &mut dyn GLES, name: GLenum| -> GLboolean {
+                while gles.GetError() != 0 {}
+                let mut v: GLboolean = gles11::FALSE;
+                gles.GetBooleanv(name, &mut v);
+                while gles.GetError() != 0 {}
+                v
+            };
+            let qi = |gles: &mut dyn GLES, name: GLenum| -> GLint {
+                while gles.GetError() != 0 {}
+                let mut v: GLint = 0;
+                gles.GetIntegerv(name, &mut v);
+                while gles.GetError() != 0 {}
+                v
+            };
+            let qf4 = |gles: &mut dyn GLES, name: GLenum| -> [GLfloat; 4] {
+                while gles.GetError() != 0 {}
+                let mut v: [GLfloat; 4] = [0.0; 4];
+                gles.GetFloatv(name, v.as_mut_ptr());
+                while gles.GetError() != 0 {}
+                v
+            };
+            let blend_on = qb(gles, gles11::BLEND);
+            let blend_src = qi(gles, gles11::BLEND_SRC) as u32;
+            let blend_dst = qi(gles, gles11::BLEND_DST) as u32;
+            let depth_on = qb(gles, gles11::DEPTH_TEST);
+            let alpha_on = qb(gles, gles11::ALPHA_TEST);
+            let cull_on = qb(gles, gles11::CULL_FACE);
+            let texture_2d_on = qb(gles, gles11::TEXTURE_2D);
+            let varr_on = qb(gles, gles11::VERTEX_ARRAY);
+            let carr_on = qb(gles, gles11::COLOR_ARRAY);
+            let tarr_on = qb(gles, gles11::TEXTURE_COORD_ARRAY);
+            let array_buffer = qi(gles, gles11::ARRAY_BUFFER_BINDING);
+            let elem_buffer = qi(gles, gles11::ELEMENT_ARRAY_BUFFER_BINDING);
+            let clear_color = qf4(gles, gles11::COLOR_CLEAR_VALUE);
+            let current_color = qf4(gles, gles11::CURRENT_COLOR);
             log!(
                 "[--trace-gl-errors] present_renderbuffer renderbuffer-content probe \
                  (frame={}, used_app_fbo={}, viewport={:?}, renderbuffer={}x{}): \
                  BL=({},{},{},{}) BR=({},{},{},{}) TL=({},{},{},{}) TR=({},{},{},{}) \
-                 CENTER=({},{},{},{})",
+                 CENTER=({},{},{},{}) \
+                 | guest GL state: app_fbo={} app_tex2d={} \
+                 array_buffer={} element_buffer={} \
+                 BLEND={} (src=0x{:04x} dst=0x{:04x}) DEPTH_TEST={} ALPHA_TEST={} \
+                 CULL_FACE={} TEXTURE_2D={} \
+                 vertex_arr={} color_arr={} texcoord_arr={} \
+                 clear_color=({:.3},{:.3},{:.3},{:.3}) current_color=({:.3},{:.3},{:.3},{:.3})",
                 count,
                 used_app_fbo,
                 viewport,
@@ -1299,6 +1351,28 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
                 cc[1],
                 cc[2],
                 cc[3],
+                old_framebuffer,
+                old_texture_2d,
+                array_buffer,
+                elem_buffer,
+                blend_on,
+                blend_src,
+                blend_dst,
+                depth_on,
+                alpha_on,
+                cull_on,
+                texture_2d_on,
+                varr_on,
+                carr_on,
+                tarr_on,
+                clear_color[0],
+                clear_color[1],
+                clear_color[2],
+                clear_color[3],
+                current_color[0],
+                current_color[1],
+                current_color[2],
+                current_color[3],
             );
         }
     }
@@ -1432,6 +1506,16 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     let old_capabilities: [Option<GLboolean>; gles1_on_gl2::CAPABILITIES.len()] = {
         let mut old_capabilities: [Option<GLboolean>; gles1_on_gl2::CAPABILITIES.len()] =
             [None; gles1_on_gl2::CAPABILITIES.len()];
+        // Collect rejected caps so we can log them as a single line the
+        // first time present runs. Useful for diagnosing "title menu
+        // black on Mali but logo works" style bugs: maybe Mali rejected
+        // the very cap the title menu relies on (e.g. ALPHA_TEST,
+        // POINT_SPRITE_OES, ...).
+        static FIRST_PRESENT: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(true);
+        let log_rejects =
+            trace_gl_errors && FIRST_PRESENT.swap(false, std::sync::atomic::Ordering::Relaxed);
+        let mut rejected_caps: Vec<GLenum> = Vec::new();
         for (slot, &name) in old_capabilities
             .iter_mut()
             .zip(gles1_on_gl2::CAPABILITIES.iter())
@@ -1451,6 +1535,9 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             if probe_failed {
                 // Driver doesn't accept this cap. Leave slot as None so we
                 // also skip it on restore, and don't try to Disable it.
+                if log_rejects {
+                    rejected_caps.push(name);
+                }
                 continue;
             }
             *slot = Some(value);
@@ -1458,6 +1545,21 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             // Disable on a valid cap shouldn't error, but a few drivers are
             // looser on Get than on Enable/Disable; drain to be safe.
             while gles.GetError() != 0 {}
+        }
+        if log_rejects && !rejected_caps.is_empty() {
+            let names: Vec<String> = rejected_caps
+                .iter()
+                .map(|c| format!("0x{:04x}", c))
+                .collect();
+            log!(
+                "[--trace-gl-errors] present_renderbuffer driver rejected {} ES1.1 caps \
+                 (will be skipped on save/restore): [{}]. \
+                 Hard-coded CAPABILITIES_GL21_ONLY allow-list missed these — they \
+                 may also be rejected when the *guest* tries to use them, which \
+                 could explain why some screens render black.",
+                rejected_caps.len(),
+                names.join(", "),
+            );
         }
         old_capabilities
     };
