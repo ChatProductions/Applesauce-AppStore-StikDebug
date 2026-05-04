@@ -304,6 +304,83 @@ impl Dyld {
         objc.register_bin_categories(&bins[0], mem);
 
         ns_string::register_constant_strings(&bins[0], mem, objc);
+
+        // The `std::__throw_*` helpers in the bundled libstdc++ dylib are
+        // `noreturn` — they construct and throw a C++ exception. touchHLE
+        // has no real unwinder, so a thrown exception inside libstdc++
+        // calls `__cxa_terminate()`, which aborts the host process. The
+        // user-visible message is something like:
+        //
+        //   terminate called after throwing an instance of 'std::logic_error'
+        //     what():  basic_string::_S_construct NULL not valid
+        //
+        // To allow games to recover from "soft" failures (e.g. Geometry
+        // Dash 1.0 hitting `std::string(const char*)` with a NULL argument
+        // during Cocos2d initialization), we splice an immediate `BX LR` at
+        // the entry of each `__throw_*` helper. Callers in libstdc++
+        // already check the failure condition before calling the helper —
+        // making the helper a no-op causes them to continue with the
+        // failed state (e.g. `_S_construct` continues with NULL/zero
+        // iterators and produces an empty string).
+        //
+        // This is undefined behaviour in strict ISO C++, but in practice
+        // the caller paths in libstdc++ degrade to a no-op or empty
+        // result, which is far less disruptive than aborting the entire
+        // emulator. iOS dyld did roughly the same thing for these games:
+        // historically `std::string(NULL)` would yield an empty string on
+        // Apple's libstdc++ as well (and Geometry Dash 1.0 launched on
+        // Adreno devices that hit this code path).
+        for dylib in bins.iter().skip(1) {
+            let mut patch_count = 0;
+            for sym in [
+                "__ZSt19__throw_logic_errorPKc",
+                "__ZSt20__throw_length_errorPKc",
+                "__ZSt20__throw_out_of_rangePKc",
+                "__ZSt17__throw_bad_allocv",
+                "__ZSt16__throw_bad_castv",
+                "__ZSt19__throw_range_errorPKc",
+                "__ZSt22__throw_overflow_errorPKc",
+                "__ZSt23__throw_underflow_errorPKc",
+                "__ZSt21__throw_runtime_errorPKc",
+                "__ZSt24__throw_invalid_argumentPKc",
+                "__ZSt23__throw_ios_failurePKc",
+                "__ZSt18__throw_bad_typeidv",
+                "__ZSt19__throw_bad_exceptionv",
+                "__ZSt25__throw_bad_function_callv",
+            ] {
+                let Some(&entry_with_thumb_bit) = dylib.exported_symbols.get(sym) else {
+                    continue;
+                };
+                let entry = entry_with_thumb_bit & !1;
+                let is_thumb = (entry_with_thumb_bit & 1) != 0;
+                if is_thumb {
+                    // Thumb-1 BX LR = 0x4770. Pad the 32-bit word with a NOP
+                    // (0x46C0 = mov r8, r8) so the surrounding code stays
+                    // valid if execution somehow falls through.
+                    let function_ptr: MutPtr<u32> = Ptr::from_bits(entry);
+                    mem.write(function_ptr, 0x46C0_4770);
+                } else {
+                    // ARM `BX LR` = 0xE12FFF1E.
+                    let function_ptr: MutPtr<u32> = Ptr::from_bits(entry);
+                    mem.write(function_ptr, 0xE12FFF1E);
+                }
+                patch_count += 1;
+                log_dbg!(
+                    "Patched libstdc++ {} at {:#x} (thumb={}) -> bx lr",
+                    sym,
+                    entry_with_thumb_bit,
+                    is_thumb
+                );
+            }
+            if patch_count > 0 {
+                log!(
+                    "Patched {} libstdc++ std::__throw_* helpers to return \
+                     instead of throwing (avoids host-process abort when \
+                     guest C++ code hits soft failures like std::string(NULL)).",
+                    patch_count
+                );
+            }
+        }
     }
 
     /// Dumps all lazy symbols (functions) referenced by the binary
