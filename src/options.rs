@@ -73,6 +73,17 @@ pub struct Options {
     pub dumping_options: DumpingOptions,
     pub dumping_file: PathBuf,
     pub ignore_gl_errors: bool,
+    /// Wrap every guest GL entry point with a `glGetError()` check after the
+    /// call and log the source location (in `gles_guest.rs`) of any non-zero
+    /// error. Useful when an app silently misrenders (e.g. a black screen
+    /// despite an alive render loop) because earlier calls are emitting
+    /// `GL_INVALID_ENUM` / `GL_INVALID_VALUE` etc. that the app never polls
+    /// for.
+    ///
+    /// Note: enabling this changes guest-visible state because the host
+    /// `glGetError()` clears the error queue, so guest `glGetError()` calls
+    /// will see 0 instead of the real error. Diagnostic only.
+    pub trace_gl_errors: bool,
     pub zero_stack_after_guest_to_host_call: Option<u32>,
 }
 
@@ -107,6 +118,7 @@ impl Default for Options {
             dumping_options: Default::default(),
             dumping_file: crate::paths::user_data_base_path().join("DUMP.txt"),
             ignore_gl_errors: false,
+            trace_gl_errors: false,
             zero_stack_after_guest_to_host_call: None,
         }
     }
@@ -265,6 +277,8 @@ impl Options {
             self.dumping_file = crate::paths::user_data_base_path().join(path);
         } else if arg == "--ignore-gl-errors" {
             self.ignore_gl_errors = true;
+        } else if arg == "--trace-gl-errors" {
+            self.trace_gl_errors = true;
         } else if let Some(value) = arg.strip_prefix("--zero-stack-after-guest-to-host-call=") {
             self.zero_stack_after_guest_to_host_call = Some(value.parse().map_err(|_| {
                 "Invalid value for --zero-stack-after-guest-to-host-call=".to_string()

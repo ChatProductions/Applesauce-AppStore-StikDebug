@@ -58,6 +58,8 @@ where
         );
         return U::default();
     }
+    let trace = env.options.trace_gl_errors;
+    let caller = std::panic::Location::caller();
     let mut gles = super::sync_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
@@ -67,6 +69,18 @@ where
         env.current_thread,
     );
     let res = f(gles.as_mut(), &mut env.mem);
+    if trace {
+        let err = unsafe { gles.GetError() };
+        if err != 0 {
+            log!(
+                "[--trace-gl-errors] glGetError() = {:#x} after host GLES call \
+                 dispatched from {}:{}",
+                err,
+                caller.file(),
+                caller.line()
+            );
+        }
+    }
     #[allow(clippy::let_and_return)]
     res
 }
@@ -76,6 +90,8 @@ fn with_ctx_and_mem_no_skip<T, U>(env: &mut Environment, f: T) -> U
 where
     T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
 {
+    let trace = env.options.trace_gl_errors;
+    let caller = std::panic::Location::caller();
     let mut gles = super::sync_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
@@ -85,6 +101,18 @@ where
         env.current_thread,
     );
     let res = f(gles.as_mut(), &mut env.mem);
+    if trace {
+        let err = unsafe { gles.GetError() };
+        if err != 0 {
+            log!(
+                "[--trace-gl-errors] glGetError() = {:#x} after host GLES call \
+                 dispatched from {}:{}",
+                err,
+                caller.file(),
+                caller.line()
+            );
+        }
+    }
     #[allow(clippy::let_and_return)]
     res
 }
