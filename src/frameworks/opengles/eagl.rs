@@ -1124,51 +1124,58 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     }
 
     // Tile-based GPUs (e.g. Qualcomm Adreno, ARM Mali) defer rasterisation:
-    // pending draws into the renderbuffer may not have hit memory yet at
-    // the moment the app calls -presentRenderbuffer:. They keep tile data
-    // in fast tile-local memory, and that data is only "resolved" to the
-    // renderbuffer's main memory storage at well-defined points. The
-    // tricky part is that on at least some Mali drivers (verified on
-    // r32p1 / Mali-G57 MC2 with this LEGO Ninjago title) the *act of
-    // unbinding the framebuffer the app was drawing into* — which is
-    // what BindFramebufferOES(.., src_framebuffer) below does — can
-    // *discard* tile data instead of resolving it. After that, even
-    // glFinish() can no longer recover the lost frame, and our
-    // CopyTexImage2D below sees an all-zero (black) renderbuffer.
+    // the draws the app issued into the renderbuffer may still live in
+    // fast tile-local memory at the moment the app calls
+    // -presentRenderbuffer:. They are only "resolved" to the
+    // renderbuffer's actual main-memory storage at well-defined points,
+    // typically eglSwapBuffers, FBO unbinding, glReadPixels, or
+    // CopyTexImage2D from the bound FBO.
     //
-    // The reliable cross-driver workaround is therefore to force the
-    // resolve while the app's own FBO is still bound, *before* we
-    // switch. glFinish() alone is sometimes insufficient on Mali
-    // because the driver's "do I actually need to resolve?" check is
-    // tied to whether *somebody is going to read from this FBO*. A
-    // 1-pixel glReadPixels of the app's currently-bound framebuffer is
-    // a much harder hint: the driver has to produce a real pixel value,
-    // which forces the resolve. We then issue glFinish() to block
-    // until that resolve has actually completed in main memory. Only
-    // *then* do we switch to our own FBO for CopyTexImage2D.
+    // We *used* to create our own throwaway FBO (`src_framebuffer`),
+    // attach the app's renderbuffer to it, and CopyTexImage2D from
+    // there. That worked on lenient drivers (Mesa / llvmpipe / Apple
+    // PowerVR / Adreno ES 3.x layer) but failed on ARM Mali r32p1
+    // (Mali-G57 MC2 in OpenGL ES-CM 1.1 mode), which on this code path
+    // produces an all-zero renderbuffer. The renderbuffer-content probe
+    // we added in the previous PR confirms this on real hardware:
+    // BL=BR=TL=TR=(0,0,0,255) at every first frame.
     //
-    // This is also a no-op on lenient drivers (Mesa / llvmpipe / Apple
-    // PowerVR / Adreno's ES 3.x layer): the read returns the same
-    // pixel value the FBO already has, glFinish is a small hit, and
-    // the rest of the path proceeds unchanged.
-    if old_framebuffer != 0 {
-        let mut tile_resolve_probe: [u8; 4] = [0; 4];
-        gles.ReadPixels(
-            0,
-            0,
-            1,
-            1,
-            gles11::RGBA,
-            gles11::UNSIGNED_BYTE,
-            tile_resolve_probe.as_mut_ptr() as *mut _,
+    // Why did it fail on Mali? The act of `BindFramebufferOES(..,
+    // src_framebuffer)` unbinds the FBO the app rendered into, and on
+    // Mali r32p1 that unbind *discards* the tile data instead of
+    // resolving it to the renderbuffer's main memory. By the time
+    // CopyTexImage2D runs against `src_framebuffer`, the renderbuffer
+    // is empty. Forcing a 1-pixel glReadPixels + glFinish *before* the
+    // unbind also turned out not to be enough — the driver's resolve
+    // heuristics on that path still produce zeros (verified by user
+    // log on Mali-G57 MC2 with the previous attempt).
+    //
+    // The robust fix is to skip the FBO switch entirely: the app's own
+    // FBO already has the renderbuffer attached at color attachment 0
+    // (that's how the app rendered into it in the first place), so we
+    // can CopyTexImage2D directly from the currently-bound FBO. That
+    // way Mali never has a reason to discard the tile data: the same
+    // FBO that the draws went into is the FBO we're now reading from.
+    //
+    // The standard iPhone EAGL pattern guarantees old_framebuffer != 0
+    // at this point (the app must bind its own FBO before drawing into
+    // a renderbuffer-attached attachment, since FBO 0 has no such
+    // attachment). Out of paranoia we still keep a fallback for
+    // old_framebuffer == 0 that creates a temporary FBO and attaches
+    // the renderbuffer to it — this matches the pre-fix behaviour and
+    // lets weird non-iOS-pattern apps still present *something*.
+    let mut src_framebuffer: GLuint = 0;
+    let used_app_fbo = old_framebuffer != 0;
+    if !used_app_fbo {
+        gles.GenFramebuffersOES(1, &mut src_framebuffer);
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, src_framebuffer);
+        gles.FramebufferRenderbufferOES(
+            gles11::FRAMEBUFFER_OES,
+            gles11::COLOR_ATTACHMENT0_OES,
+            gles11::RENDERBUFFER_OES,
+            renderbuffer,
         );
-        // We don't care about the value; we only needed the read to
-        // force a tile resolve. Drain any GL error this probe may
-        // have generated (e.g. on an FBO with an unusual attachment
-        // format) so it doesn't leak into the per-section checks below.
-        while gles.GetError() != 0 {}
     }
-    gles.Finish();
     {
         static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -1176,24 +1183,12 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             gles,
             trace_gl_errors,
             &SEEN,
-            "after pre-FBO-switch tile resolve (ReadPixels+Finish on app's FBO)",
+            if used_app_fbo {
+                "after using app's bound FBO as copy source (no FBO switch)"
+            } else {
+                "after fallback FBO create+bind+attach (old_framebuffer==0)"
+            },
         );
-    }
-
-    // Create a framebuffer we can use to read from the renderbuffer
-    let mut src_framebuffer = 0;
-    gles.GenFramebuffersOES(1, &mut src_framebuffer);
-    gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, src_framebuffer);
-    gles.FramebufferRenderbufferOES(
-        gles11::FRAMEBUFFER_OES,
-        gles11::COLOR_ATTACHMENT0_OES,
-        gles11::RENDERBUFFER_OES,
-        renderbuffer,
-    );
-    {
-        static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-        present_check(gles, trace_gl_errors, &SEEN, "after FBO create+bind+attach");
     }
 
     // Create a texture with a copy of the pixels in the framebuffer
@@ -1218,9 +1213,12 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // Diagnostic probe: read a small region of the renderbuffer the guest just
     // rendered into, so we can tell apart "renderbuffer is empty / all-black"
     // (a guest-side or attach-side bug) from "renderbuffer has content but
-    // present_frame is mis-displaying it" (a present-side bug). The
-    // src_framebuffer is still bound for reading at this point; ReadPixels
-    // reads from GL_READ_FRAMEBUFFER which on ES 1.1 is just the bound FBO.
+    // present_frame is mis-displaying it" (a present-side bug). At this
+    // point the read source FBO is whichever copy source we used above:
+    // either the app's own FBO (used_app_fbo, normal iOS pattern) or the
+    // throwaway src_framebuffer (fallback for old_framebuffer == 0).
+    // Either way, ReadPixels reads from FRAMEBUFFER_BINDING, so the values
+    // logged here describe the pixels CopyTexImage2D just copied.
     // Gated on --trace-gl-errors and logged once per app run.
     if trace_gl_errors {
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -1341,14 +1339,30 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         );
     }
 
-    // Clean up the framebuffer object since we no longer need it.
-    // This also sets the framebuffer bindings back to zero, so rendering
-    // will go to the default framebuffer (the window).
-    gles.DeleteFramebuffersOES(1, &src_framebuffer);
+    // Stop using the source FBO so the present_frame quad below renders
+    // to the default framebuffer (the SDL window) instead of the
+    // renderbuffer / our throwaway FBO. In the no-FBO-switch path we
+    // simply unbind the app's FBO; we'll restore it again at the end of
+    // this function. In the fallback path, deleting the throwaway FBO
+    // also implicitly unbinds it, leaving FRAMEBUFFER_BINDING == 0.
+    if used_app_fbo {
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, 0);
+    } else {
+        gles.DeleteFramebuffersOES(1, &src_framebuffer);
+    }
     {
         static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-        present_check(gles, trace_gl_errors, &SEEN, "after DeleteFramebuffersOES");
+        present_check(
+            gles,
+            trace_gl_errors,
+            &SEEN,
+            if used_app_fbo {
+                "after BindFramebufferOES(0) (release app's FBO for present)"
+            } else {
+                "after DeleteFramebuffersOES (fallback path)"
+            },
+        );
     }
 
     // Reset various things that could affect the quad or virtual cursor we're
