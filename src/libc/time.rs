@@ -551,6 +551,32 @@ fn strftime(
                 let formatted_month = format!("{:02}", month);
                 res.extend_from_slice(formatted_month.as_bytes());
             }
+                        b'W' => {
+                let wday = time_val.tm_wday;
+                let yday = time_val.tm_yday;
+                // Для %W неделя начинается с понедельника.
+                // tm_wday: 0 = Вск, 1 = Пнд... Нам нужно 0 = Пнд... 6 = Вск
+                let wday_monday_based = (wday + 6) % 7;
+                
+                // Честная формула вычисления номера недели (00-53)
+                let week = (yday - wday_monday_based + 7) / 7;
+                let formatted_week = format!("{:02}", week);
+                res.extend_from_slice(formatted_week.as_bytes());
+            }
+            b'U' => {
+                // Аналогично, но неделя начинается с воскресенья (%U)
+                let wday = time_val.tm_wday;
+                let yday = time_val.tm_yday;
+                let week = (yday - wday + 7) / 7;
+                let formatted_week = format!("{:02}", week);
+                res.extend_from_slice(formatted_week.as_bytes());
+            }
+            b'w' => {
+                // Номер дня недели от 0 (Воскресенье) до 6 (Суббота)
+                let wday = time_val.tm_wday;
+                let formatted_wday = format!("{}", wday);
+                res.extend_from_slice(formatted_wday.as_bytes());
+            }
             b'd' => {
                 let day = time_val.tm_mday;
                 assert!((1..=31).contains(&day));
