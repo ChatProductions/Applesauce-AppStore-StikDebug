@@ -215,7 +215,17 @@ pub fn timestamp_to_calendar_date(timestamp: time_t) -> tm {
 }
 
 pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
-    let year = tm.tm_year + 1900;
+    // ИСПРАВЛЕНИЕ: Нормализация месяца и года по стандарту POSIX.
+    // Если игра передает месяц 12 (или больше), мы конвертируем это в Январь следующего года.
+    // Если передает отрицательный месяц - откатываем год назад.
+    let mut y = tm.tm_year as i64 + 1900;
+    let mut m = tm.tm_mon as i64;
+
+    y += m.div_euclid(12);
+    m = m.rem_euclid(12);
+
+    let year = y as i32;
+    let month = m as usize;
 
     let mut seconds = 0i64;
 
@@ -225,12 +235,16 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
     }
 
     let days_in_months_cumul = if is_leap_year(year) {
-        MONTH_TO_DAY_LEAP[tm.tm_mon as usize]
+        MONTH_TO_DAY_LEAP[month]
     } else {
-        MONTH_TO_DAY_NONLEAP[tm.tm_mon as usize]
+        MONTH_TO_DAY_NONLEAP[month]
     };
 
     seconds += days_in_months_cumul as i64 * 86400;
+    
+    // Дни, часы, минуты и секунды можно не нормализовать сложной математикой —
+    // при конвертации в секунды они сами "перетекают" куда надо, так как 
+    // умножаются на свои константы.
     seconds += (tm.tm_mday as i64 - 1) * 86400;
     seconds += tm.tm_hour as i64 * 3600;
     seconds += tm.tm_min as i64 * 60;
@@ -246,11 +260,6 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
         seconds -= days_before_year * 86400;
     }
 
-    // Saturate `i64` -> `time_t` (`i32`) instead of panicking on
-    // out-of-range timestamps. This is reached for any year before
-    // ~1901 or after ~2038, including the year=0 / year=65636-after-
-    // u16-wrap nonsense that flowed in here from ZIP DateTime defaults
-    // and crashed the app picker on startup.
     seconds.try_into().unwrap_or({
         if seconds > 0 {
             time_t::MAX
@@ -287,6 +296,13 @@ fn localtime(env: &mut Environment, timestamp: ConstPtr<time_t>) -> MutPtr<tm> {
 fn mktime(env: &mut Environment, tm: MutPtr<tm>) -> time_t {
     let tm_value = env.mem.read(tm);
     let res = calendar_date_to_timestamp(tm_value);
+    
+    // ИСПРАВЛЕНИЕ: Стандарт C требует, чтобы mktime нормализовал структуру tm 
+    // и записал её обратно (с правильными днями недели tm_wday, днем в году tm_yday и т.д.).
+    // Мы легко это делаем, прогоняя посчитанный timestamp обратно через конвертер.
+    let normalized_tm = timestamp_to_calendar_date(res);
+    env.mem.write(tm, normalized_tm);
+    
     log_dbg!("mktime({:?}) => {}", tm_value, res);
     res
 }
