@@ -2059,6 +2059,100 @@ fn glGetProgramInfoLog(
         }
     });
 }
+fn glGetActiveUniform(
+    env: &mut Environment,
+    program: GLuint,
+    index: GLuint,
+    bufSize: GLsizei,
+    length: MutPtr<GLsizei>,
+    size: MutPtr<GLint>,
+    type_: MutPtr<GLenum>,
+    name: MutPtr<GLubyte>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        if bufSize <= 0 {
+            if !length.is_null() {
+                mem.write(length, 0);
+            }
+            return;
+        }
+        let mut host_length: GLsizei = 0;
+        let mut host_size: GLint = 0;
+        let mut host_type: GLenum = 0;
+        let mut buf: Vec<u8> = vec![0u8; bufSize as usize];
+        gles.GetActiveUniform(
+            program,
+            index,
+            bufSize,
+            &mut host_length,
+            &mut host_size,
+            &mut host_type,
+            buf.as_mut_ptr().cast(),
+        );
+        if !length.is_null() {
+            mem.write(length, host_length);
+        }
+        if !size.is_null() {
+            mem.write(size, host_size);
+        }
+        if !type_.is_null() {
+            mem.write(type_, host_type);
+        }
+        if !name.is_null() && host_length >= 0 {
+            let count = host_length as usize + 1;
+            let count = count.min(buf.len()).min(bufSize as usize);
+            let dst = mem.ptr_at_mut(name, count.try_into().unwrap_or(0));
+            std::ptr::copy_nonoverlapping(buf.as_ptr(), dst, count);
+        }
+    });
+}
+fn glGetActiveAttrib(
+    env: &mut Environment,
+    program: GLuint,
+    index: GLuint,
+    bufSize: GLsizei,
+    length: MutPtr<GLsizei>,
+    size: MutPtr<GLint>,
+    type_: MutPtr<GLenum>,
+    name: MutPtr<GLubyte>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        if bufSize <= 0 {
+            if !length.is_null() {
+                mem.write(length, 0);
+            }
+            return;
+        }
+        let mut host_length: GLsizei = 0;
+        let mut host_size: GLint = 0;
+        let mut host_type: GLenum = 0;
+        let mut buf: Vec<u8> = vec![0u8; bufSize as usize];
+        gles.GetActiveAttrib(
+            program,
+            index,
+            bufSize,
+            &mut host_length,
+            &mut host_size,
+            &mut host_type,
+            buf.as_mut_ptr().cast(),
+        );
+        if !length.is_null() {
+            mem.write(length, host_length);
+        }
+        if !size.is_null() {
+            mem.write(size, host_size);
+        }
+        if !type_.is_null() {
+            mem.write(type_, host_type);
+        }
+        if !name.is_null() && host_length >= 0 {
+            let count = host_length as usize + 1;
+            let count = count.min(buf.len()).min(bufSize as usize);
+            let dst = mem.ptr_at_mut(name, count.try_into().unwrap_or(0));
+            std::ptr::copy_nonoverlapping(buf.as_ptr(), dst, count);
+        }
+    });
+}
 fn glShaderSource(
     env: &mut Environment,
     shader: GLuint,
@@ -2569,6 +2663,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetShaderInfoLog(_, _, _, _)),
     export_c_func!(glGetProgramiv(_, _, _)),
     export_c_func!(glGetProgramInfoLog(_, _, _, _)),
+    export_c_func!(glGetActiveUniform(_, _, _, _, _, _, _)),
+    export_c_func!(glGetActiveAttrib(_, _, _, _, _, _, _)),
     export_c_func!(glShaderSource(_, _, _, _)),
     export_c_func!(glEnableVertexAttribArray(_)),
     export_c_func!(glDisableVertexAttribArray(_)),
