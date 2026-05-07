@@ -18,7 +18,7 @@ use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::frameworks::foundation::NSUInteger;
 use crate::fs::GuestPath;
-use crate::mem::{ConstVoidPtr, GuestUSize, MutVoidPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
+use crate::mem::{ConstVoidPtr, GuestUSize, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -203,63 +203,6 @@ fn CGDataProviderCreateWithCFData(env: &mut Environment, data: CFDataRef) -> CGD
     )
 }
 
-fn CGDataProviderCreateSequential(
-    env: &mut Environment,
-    info: MutVoidPtr,
-    callbacks: ConstPtr<CGDataProviderSequentialCallbacks>,
-) -> CGDataProviderRef {
-    let cbs = env.mem.read(callbacks);
-    assert!(cbs.version == 0);
-    let get_bytes = cbs.get_bytes;
-    if get_bytes.to_ptr().is_null() {
-        log!("Warning: CGDataProviderCreateSequential called with null getBytes callback");
-        return Ptr::null();
-    }
-    // Read all available data using the getBytes callback.
-    // We use a chunked approach: allocate a guest buffer, call getBytes
-    // repeatedly, and accumulate the results on the host side.
-    const CHUNK_SIZE: GuestUSize = 4096;
-    let guest_buf: MutPtr<u8> = env.mem.alloc(CHUNK_SIZE).cast();
-    let mut host_data: Vec<u8> = Vec::new();
-    loop {
-        let bytes_read: GuestUSize =
-            get_bytes.call_from_host(env, (info, guest_buf.cast::<std::ffi::c_void>().cast_mut(), CHUNK_SIZE));
-        if bytes_read == 0 {
-            break;
-        }
-        let slice = env.mem.bytes_at(guest_buf.cast_const(), bytes_read);
-        host_data.extend_from_slice(slice);
-        if bytes_read < CHUNK_SIZE {
-            break;
-        }
-    }
-    env.mem.free(guest_buf.cast());
-    // Copy accumulated data into guest memory for the provider.
-    let total_size: GuestUSize = host_data.len().try_into().unwrap();
-    let guest_data: MutPtr<u8> = env.mem.alloc(total_size).cast();
-    env.mem
-        .bytes_at_mut(guest_data, total_size)
-        .copy_from_slice(&host_data);
-    // Call releaseProvider if provided, since we've consumed all data.
-    let release_provider = cbs.release_provider;
-    if !release_provider.to_ptr().is_null() {
-        () = release_provider.call_from_host(env, (info,));
-    }
-    let class = env
-        .objc
-        .get_known_class("_touchHLE_CGDataProvider", &mut env.mem);
-    env.objc.alloc_object(
-        class,
-        Box::new(CGDataProviderHostObject::DataWithSize {
-            data: guest_data.cast_const().cast(),
-            size: total_size,
-            info: MutVoidPtr::null(),
-            release_callback: CGDataProviderReleaseDataCallback::null_ptr(),
-        }),
-        &mut env.mem,
-    )
-}
-
 fn CGDataProviderCreateWithFilename(
     env: &mut Environment,
     filename: crate::mem::ConstPtr<u8>,
@@ -330,7 +273,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGDataProviderCopyData(_)),
     export_c_func!(CGDataProviderCreateWithURL(_)),
     export_c_func!(CGDataProviderCreateWithCFData(_)),
-    export_c_func!(CGDataProviderCreateSequential(_, _)),
     export_c_func!(CGDataProviderCreateWithFilename(_)),
     export_c_func!(CGDataProviderGetInfo(_)),
     export_c_func!(CGDataProviderGetSize(_)),
