@@ -36,6 +36,7 @@ pub mod ui_pasteboard;
 pub mod ui_pinch_gesture_recognizer;
 pub mod ui_popover_controller;
 pub mod ui_responder;
+pub mod ui_rotation_gesture_recognizer;
 pub mod ui_screen;
 pub mod ui_screen_mode;
 pub mod ui_split_view_controller;
@@ -155,6 +156,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_pasteboard::CLASSES,
         ui_pinch_gesture_recognizer::CLASSES,
         ui_popover_controller::CLASSES,
+        ui_rotation_gesture_recognizer::CLASSES,
         ui_responder::CLASSES,
         ui_screen_mode::CLASSES,
         ui_screen::CLASSES,
