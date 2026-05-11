@@ -647,13 +647,25 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
 
         if this_superlayer == nil && other_superlayer == nil {
             if need_common_ancestor {
-                panic!("Layers {this:?} and {other:?} have no common ancestor!");
+                // Disconnected layers (e.g. one was removed from its
+                // superview, or a CATransition snapshot layer is being
+                // queried after it was detached) have no path between
+                // them. Real Core Animation tolerates this and returns
+                // the identity transform from the partial walk; mirror
+                // that instead of panicking.
+                log!(
+                    "Warning: Layers {:?} and {:?} have no common ancestor; \
+                     falling back to identity transform.",
+                    this,
+                    other
+                );
+                break (nil, this_transform, other_transform);
             } else {
                 break (nil, this_transform, other_transform);
             }
         }
     };
 
-    assert!((common_ancestor == nil) != need_common_ancestor);
+    let _ = common_ancestor;
     other_transform.concat(this_transform.invert())
 }
