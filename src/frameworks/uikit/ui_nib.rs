@@ -202,25 +202,33 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     log!("[DEBUG NIB] UIClassSwapper loading class: {} (original: {})", name, orig);
 
-    // Блок для определения подменного класса без ворнингов на лишний `mut`
+    // Use try_get_known_class so the lookup returns None instead of
+    // panicking if the app references a custom class (e.g. FirstViewController
+    // in Inotia3) that has no host implementation and isn't registered in the
+    // app binary. We then fall back to the NIB's original class.
     let selected_class = {
-        let mut c = env.objc.get_known_class(&name, &mut env.mem);
-        if c == nil {
-            log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
-            c = env.objc.get_known_class(&orig, &mut env.mem);
-        }
-
         let problematic_views = ["FBLoginButton"];
-        if c == nil || problematic_views.iter().any(|&prob| name == prob) {
+        let mut c = if problematic_views.iter().any(|&prob| name == prob) {
             log!("[DEBUG NIB] Warning: Substituting {} with generic UIView", name);
-            c = env.objc.get_known_class("UIView", &mut env.mem);
+            None
+        } else {
+            env.objc.try_get_known_class(&name, &mut env.mem)
+        };
+
+        if c.is_none() {
+            log!("[DEBUG NIB] Warning: Custom class {} not found. Falling back to original: {}", name, orig);
+            c = env.objc.try_get_known_class(&orig, &mut env.mem);
         }
 
-        if c == nil {
-            log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
-            c = env.objc.get_known_class("NSObject", &mut env.mem);
+        if c.is_none() {
+            log!("[DEBUG NIB] Warning: Original class {} not found either. Falling back to UIView.", orig);
+            c = env.objc.try_get_known_class("UIView", &mut env.mem);
         }
-        c
+
+        c.unwrap_or_else(|| {
+            log!("[DEBUG NIB] CRITICAL: Fallback class not found! Falling back to NSObject.");
+            env.objc.get_known_class("NSObject", &mut env.mem)
+        })
     };
 
     let object: id = msg![env; selected_class alloc];
