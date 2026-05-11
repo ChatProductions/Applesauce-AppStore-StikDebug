@@ -593,7 +593,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())insertSubview:(id)view atIndex:(NSInteger)index {
-    assert!(view != nil);
+    // Apple's UIView silently ignores -insertSubview:atIndex: when `view` is
+    // nil, so do the same instead of asserting. Ancient War (and likely
+    // other games) call this with a nil placeholder during interface
+    // construction.
+    if view == nil { return; }
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
@@ -602,13 +606,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let subview_layer = subview_obj.layer;
 
     let &mut UIViewHostObject { ref mut subviews, layer: this_layer, .. } = env.objc.borrow_mut(this);
-    subviews.insert(index as usize, view);
+    let clamped_index = if index < 0 {
+        0
+    } else {
+        (index as usize).min(subviews.len())
+    };
+    subviews.insert(clamped_index, view);
 
-    assert!(index >= 0);
-    () = msg![env; this_layer insertSublayer:subview_layer atIndex:(index as u32)];
+    () = msg![env; this_layer insertSublayer:subview_layer atIndex:(clamped_index as u32)];
 }
 
 - (())insertSubview:(id)view belowSubview:(id)sibling {
+    if view == nil { return; }
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
@@ -616,13 +625,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
-    let sibling_layer = env.objc.borrow_mut::<UIViewHostObject>(sibling).layer;
+    let sibling_layer = if sibling != nil {
+        env.objc.borrow_mut::<UIViewHostObject>(sibling).layer
+    } else {
+        crate::objc::nil
+    };
 
     let &mut UIViewHostObject { ref mut subviews, layer: this_layer, .. } = env.objc.borrow_mut(this);
-    let idx = subviews.iter().position(|&subview2| subview2 == sibling).unwrap();
+    let idx = subviews
+        .iter()
+        .position(|&subview2| subview2 == sibling)
+        .unwrap_or(subviews.len());
     subviews.insert(idx, view);
 
-    () = msg![env; this_layer insertSublayer:subview_layer below:sibling_layer];
+    if sibling_layer != crate::objc::nil {
+        () = msg![env; this_layer insertSublayer:subview_layer below:sibling_layer];
+    } else {
+        () = msg![env; this_layer addSublayer:subview_layer];
+    }
 }
 
 - (())insertSubview:(id)view aboveSubview:(id)sibling {

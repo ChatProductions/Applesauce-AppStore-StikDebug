@@ -745,7 +745,20 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    // The guest can hold on to AudioQueueRef pointers across
+    // AudioQueueDispose, or pass references that were never created (e.g.
+    // junk memory left in the AVAudioPlayer host object when its underlying
+    // AudioFile became a Dummy and `prepareToPlay` returned early). Real
+    // Audio Queue Services would return an error in those cases; mirror that
+    // here instead of panicking on `unwrap()`.
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        log!(
+            "Warning: prime_audio_queue({:?}) called on an unknown / disposed \
+             audio queue; skipping.",
+            in_aq
+        );
+        return;
+    };
 
     if !is_supported_audio_format(&host_object.format) {
         return;
@@ -901,6 +914,17 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     prime_audio_queue(env, in_aq);
 
+    // The guest callback we just invoked above is allowed to call
+    // AudioQueueDispose on `in_aq`. If it did, the queue is gone and there
+    // is nothing left to do here.
+    if State::get(&mut env.framework_state)
+        .audio_queues
+        .get(&in_aq)
+        .is_none()
+    {
+        return;
+    }
+
     let context = env
         .framework_state
         .audio_toolbox
@@ -939,9 +963,9 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     let state = State::get(&mut env.framework_state);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
-
-    host_object.is_running_handler = false;
+    if let Some(host_object) = state.audio_queues.get_mut(&in_aq) {
+        host_object.is_running_handler = false;
+    }
 }
 
 fn AudioQueuePrime(
@@ -955,10 +979,13 @@ fn AudioQueuePrime(
     prime_audio_queue(env, in_aq);
 
     if !out_number_of_frames_prepared.is_null() {
-        let host_object = State::get(&mut env.framework_state)
+        let Some(host_object) = State::get(&mut env.framework_state)
             .audio_queues
             .get(&in_aq)
-            .unwrap();
+        else {
+            env.mem.write(out_number_of_frames_prepared, 0);
+            return 0;
+        };
 
         let mut prepared_frames = 0;
         let format = &host_object.format;
@@ -986,10 +1013,12 @@ fn AudioQueuePrime(
 }
 
 fn notify_aq_is_running(env: &mut Environment, in_aq: AudioQueueRef) {
-    let host_object = State::get(&mut env.framework_state)
+    let Some(host_object) = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap();
+    else {
+        return;
+    };
 
     if let (Some(in_proc), Some(in_user_data)) = (
         host_object.aq_is_running_proc,
@@ -1014,12 +1043,29 @@ pub fn AudioQueueStart(
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        log!(
+            "Warning: AudioQueueStart({:?}) on an unknown / disposed queue; \
+             returning error.",
+            in_aq
+        );
+        return kAudioQueueErr_InvalidProperty;
+    };
 
     if is_supported_audio_format(&host_object.format) {
         host_object.is_running = AudioQueueIsRunning::Running;
 
-        let al_source = host_object.al_source.unwrap();
+        let Some(al_source) = host_object.al_source else {
+            // prime_audio_queue should have created the OpenAL source, but
+            // it bails out early for unsupported formats and missing
+            // queues. Don't panic if we somehow get here without a source.
+            log!(
+                "Warning: AudioQueueStart({:?}) found no OpenAL source after \
+                 priming; skipping playback.",
+                in_aq
+            );
+            return 0;
+        };
         unsafe { context.SourcePlay(al_source) };
         assert!(unsafe { context.GetError() } == 0);
     } else {
@@ -1041,7 +1087,9 @@ pub fn AudioQueuePause(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus 
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        return 0;
+    };
 
     host_object.is_running = AudioQueueIsRunning::Stopped;
 
@@ -1055,11 +1103,12 @@ pub fn AudioQueuePause(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus 
 
 fn finish_stopping_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     AudioQueueReset(env, in_aq);
-    State::get(&mut env.framework_state)
+    if let Some(host_object) = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap()
-        .is_running = AudioQueueIsRunning::Stopped;
+    {
+        host_object.is_running = AudioQueueIsRunning::Stopped;
+    }
 
     notify_aq_is_running(env, in_aq);
 }
@@ -1073,7 +1122,9 @@ pub fn AudioQueueStop(env: &mut Environment, in_aq: AudioQueueRef, in_immediate:
         let (state, context) =
             State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-        let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+        let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+            return 0;
+        };
         if let Some(al_source) = host_object.al_source {
             unsafe { context.SourceStop(al_source) };
             assert!(unsafe { context.GetError() } == 0);
@@ -1083,7 +1134,9 @@ pub fn AudioQueueStop(env: &mut Environment, in_aq: AudioQueueRef, in_immediate:
     } else {
         let state = State::get(&mut env.framework_state);
 
-        let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+        let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+            return 0;
+        };
         if host_object.is_running != AudioQueueIsRunning::Stopped {
             log_dbg!("Starting asynchronous AudioQueueStop for {:?}.", in_aq);
 
@@ -1107,7 +1160,9 @@ fn AudioQueueReset(env: &mut Environment, in_aq: AudioQueueRef) -> OSStatus {
 
     log_dbg!("Resetting queue {:?}.", in_aq);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        return 0;
+    };
 
     if let Some(al_source) = host_object.al_source {
         unsafe {
@@ -1144,10 +1199,12 @@ fn AudioQueueFreeBuffer(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    let host_object = State::get(&mut env.framework_state)
+    let Some(host_object) = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap();
+    else {
+        return kAudioQueueErr_InvalidBuffer;
+    };
 
     if host_object.buffer_queue.contains(&in_buffer) {
         return kAudioQueueErr_BufferInQueue;
@@ -1178,7 +1235,17 @@ pub fn AudioQueueDispose(
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let mut host_object = state.audio_queues.remove(&in_aq).unwrap();
+    let Some(mut host_object) = state.audio_queues.remove(&in_aq) else {
+        // Disposing a queue that was never created (or was already disposed)
+        // is a no-op; don't panic and don't double-free the OpaqueAudioQueue
+        // pointer.
+        log_dbg!(
+            "AudioQueueDispose({:?}) ignored: queue is unknown / already \
+             disposed.",
+            in_aq
+        );
+        return 0;
+    };
     log_dbg!("Disposing of audio queue {:?}", in_aq);
 
     env.mem.free(in_aq.cast());
