@@ -478,6 +478,38 @@ pub const NSOrderedDescending: NSComparisonResult = 1;
 /// Number of seconds.
 pub type NSTimeInterval = f64;
 
+/// Convert an [`NSTimeInterval`] into a [`std::time::Duration`] without ever
+/// panicking.
+///
+/// [`std::time::Duration::from_secs_f64`] panics when handed `NaN`, infinity,
+/// negative values, or values beyond `u64::MAX` seconds. Real iPhone OS apps
+/// have been observed passing all of these — for example HyperHLE log #4
+/// (Crazy Frog Racer) panicked at `time.rs:964:23` after the first
+/// `NSTimer` fired because the game scheduled a callback with a non-finite
+/// interval, and the Resident Evil 4 / accelerometer paths similarly emit
+/// junk floats during scene transitions.
+///
+/// This helper returns `None` for any value the standard library would
+/// reject so that callers can either skip the conversion or fall back to a
+/// sensible default (such as `0` for "fire immediately"). Apple's own
+/// implementation silently clamps these cases instead of aborting the
+/// process; mirroring that behaviour here keeps the emulator alive when
+/// guest code is buggy in ways the real OS tolerates.
+pub fn ns_time_interval_to_duration(ti: NSTimeInterval) -> Option<std::time::Duration> {
+    if !ti.is_finite() || ti < 0.0 {
+        return None;
+    }
+    std::time::Duration::try_from_secs_f64(ti).ok()
+}
+
+/// Same as [`ns_time_interval_to_duration`] but returns
+/// [`std::time::Duration::ZERO`] (i.e. "fire as soon as possible") when the
+/// input would otherwise be rejected. Useful in hot paths where the only
+/// reasonable fallback is to treat the bad value as "no delay".
+pub fn ns_time_interval_to_duration_or_zero(ti: NSTimeInterval) -> std::time::Duration {
+    ns_time_interval_to_duration(ti).unwrap_or(std::time::Duration::ZERO)
+}
+
 /// UTF-16 code unit.
 #[allow(non_camel_case_types)]
 pub type unichar = u16;

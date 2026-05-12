@@ -192,7 +192,34 @@ pub const CLASSES: ClassExports = objc_classes! {
     if mask != nil { release(env, mask); }
     if let Some(cg_context) = cg_context { CGContextRelease(env, cg_context); }
 
-    assert!(superlayer == nil);
+    // On real iOS a layer being deallocated cannot have a superlayer,
+    // because the superlayer's `sublayers` array holds a strong reference
+    // and would keep the retain count above zero. In touchHLE the
+    // retain/release accounting is occasionally off for games that mix
+    // direct -release with cached `id` references (e.g. Chuzzle's alert-
+    // view init path which produced HyperHLE log #3 — the dealloc fires
+    // while the layer is still installed in the alert view hierarchy).
+    // Panicking the whole emulator over a reference-counting glitch in
+    // the guest is worse than the alternative, so we instead detach
+    // ourselves from the superlayer gracefully. This matches what
+    // CoreAnimation's own internal teardown does when a layer is force-
+    // released through CFRelease while still parented.
+    if superlayer != nil {
+        log!(
+            "Warning: CALayer {:?} is being deallocated while still attached \
+             to superlayer {:?}; detaching to avoid a dangling sublayer \
+             reference.",
+            this,
+            superlayer
+        );
+        let CALayerHostObject { sublayers: ref mut super_sublayers, .. } =
+            env.objc.borrow_mut(superlayer);
+        super_sublayers.retain(|&sublayer| sublayer != this);
+        // Clear our own back-pointer so the recursive cleanup below sees a
+        // clean state if something unexpected re-enters.
+        env.objc.borrow_mut::<CALayerHostObject>(this).superlayer = nil;
+    }
+
     for sublayer in sublayers {
         env.objc.borrow_mut::<CALayerHostObject>(sublayer).superlayer = nil;
         release(env, sublayer);

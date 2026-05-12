@@ -53,11 +53,37 @@ impl State {
         mem: &mut Mem,
         file_ptr: MutPtr<FILE>,
     ) -> &mut FILEHostObject {
-        let FILE { fd } = mem.read(file_ptr);
-        if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO)
-            && !self.file_streams.contains_key(&file_ptr)
-        {
-            // Special case, need to do a lazy creation of host object
+        // Lazily materialize a host object for any `FILE*` we don't know about
+        // yet. This covers two scenarios that occur in real iPhone OS apps:
+        //
+        // 1. Standard streams (`stdin`/`stdout`/`stderr`): apps may use the
+        //    libc-provided `FILE*` symbols without ever calling `fopen`, so
+        //    there is no `FILEHostObject` until the first I/O call.
+        // 2. App-provided `FILE*`s that got out of sync with our bookkeeping.
+        //    Several games (e.g. the path that triggered HyperHLE log #1,
+        //    Ankagua's resource loader) call `free()` directly on a `FILE*`,
+        //    skipping `fclose()`. The allocator can then hand the same
+        //    address back to a later `fopen()`, or — for read-only streams
+        //    that were never tracked at all — the guest hands us the raw
+        //    file descriptor wrapper without going through our `fopen()` at
+        //    all. In either case, `get_mut(...).unwrap()` used to panic the
+        //    whole emulator. POSIX `stdio` itself reports an error on
+        //    invalid streams rather than aborting the process, so we mirror
+        //    that behaviour: create a fresh host object with default state
+        //    and let the surrounding code report errors via `errno` /
+        //    `ferror()` if the underlying `fd` turns out to be invalid.
+        if !self.file_streams.contains_key(&file_ptr) {
+            let FILE { fd } = mem.read(file_ptr);
+            if !matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
+                log!(
+                    "Warning: stdio host object for FILE* {:?} (fd {}) was \
+                     missing; lazily recreating with default state. The guest \
+                     likely called free() on the FILE* without fclose() or \
+                     handed us a stream we never tracked.",
+                    file_ptr,
+                    fd
+                );
+            }
             self.file_streams.insert(
                 file_ptr,
                 FILEHostObject {

@@ -627,7 +627,24 @@ pub const CLASSES: ClassExports = objc_classes! {
         num
     }
 
-    assert_ne!(other, nil);
+    // Apple's documentation says `[NSString compare:]` raises
+    // `NSInvalidArgumentException` if `other` is nil, but real-world iPhone
+    // OS apps (e.g. Angry Birds Crystal init path — HyperHLE log shows
+    // `assertion 'left != right' failed; left: (null), right: (null)`)
+    // pass nil and rely on a soft failure. touchHLE doesn't implement
+    // Objective-C exceptions, so the closest "documented" behaviour is to
+    // treat the non-nil receiver as ordered after nil instead of crashing
+    // the emulator. (`isEqualToString:` in this file already follows the
+    // same lenient convention.)
+    if other == nil {
+        log!(
+            "Warning: [NSString {:?} compare:nil options:{:#x}] — returning \
+             NSOrderedDescending instead of raising NSInvalidArgumentException.",
+            this,
+            mask
+        );
+        return NSOrderedDescending;
+    }
     let mut a_iter = env.objc.borrow::<StringHostObject>(this).iter_code_units().peekable();
     let mut b_iter = env.objc.borrow::<StringHostObject>(other).iter_code_units().peekable();
     let mask = if mask == 0 { NSLiteralSearch } else { mask };

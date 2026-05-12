@@ -237,9 +237,71 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)renderbufferStorage:(NSUInteger)target
                fromDrawable:(id)drawable { // EAGLDrawable (always CAEAGLayer*)
     log!("[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}]", target, drawable);
-    assert!(drawable != nil); // TODO: handle unbinding
 
     assert!(target == gles11::RENDERBUFFER_OES);
+
+    // Apple's `EAGLContext` documentation for
+    // `-renderbufferStorage:fromDrawable:` states that passing `nil` for the
+    // drawable "deletes any earlier binding" of the currently bound
+    // renderbuffer to a drawable and returns `YES`. touchHLE used to
+    // assert against this case (`drawable != nil`), which crashed apps
+    // that legitimately unbind during teardown (e.g. Resident Evil 4 —
+    // HyperHLE log #5 — calls `renderbufferStorage:fromDrawable:nil`
+    // while tearing down its EAGL surface during a scene transition).
+    //
+    // Spec behaviour: look up the currently bound renderbuffer (via
+    // `RENDERBUFFER_BINDING_OES`), drop its entry from the
+    // (renderbuffer -> drawable) map, and release the retained drawable.
+    // No new storage is allocated in this case.
+    if drawable == nil {
+        let window = env
+            .window
+            .as_mut()
+            .expect("OpenGL ES is not supported in headless mode");
+        let current_renderbuffer = {
+            let Some(mut gles) = super::sync_context(
+                &mut env.framework_state.opengles,
+                &mut env.objc,
+                window,
+                env.current_thread,
+            ) else {
+                // No current EAGL context: there can't be a meaningful
+                // renderbuffer binding to remove. Apple-style soft failure.
+                log!(
+                    "[EAGLContext renderbufferStorage:{:#x} fromDrawable:nil] \
+                     called with no current GL context for thread {}; \
+                     treating as no-op.",
+                    target,
+                    env.current_thread
+                );
+                return true;
+            };
+            let mut renderbuffer: gles11::types::GLint = 0;
+            unsafe {
+                gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut renderbuffer);
+            }
+            renderbuffer as gles11::types::GLuint
+        };
+
+        let removed = {
+            let host_obj = env.objc.borrow_mut::<EAGLContextHostObject>(this);
+            host_obj
+                .renderbuffer_drawable_bindings
+                .borrow_mut()
+                .remove(&current_renderbuffer)
+        };
+        if let Some(old_drawable) = removed {
+            release(env, old_drawable);
+        } else {
+            log_dbg!(
+                "[EAGLContext renderbufferStorage:{:#x} fromDrawable:nil]: \
+                 no drawable was bound to renderbuffer {} — nothing to unbind.",
+                target,
+                current_renderbuffer
+            );
+        }
+        return true;
+    }
 
     let props: id = msg![env; drawable drawableProperties];
 
@@ -276,7 +338,22 @@ pub const CLASSES: ClassExports = objc_classes! {
         // Unclear from documentation if this method requires an appropriate
         // context to already be active, but that seems to be the case
         // in practice?
-        let mut gles = super::sync_context(&mut env.framework_state.opengles, &mut env.objc, window, env.current_thread);
+        let Some(mut gles) = super::sync_context(
+            &mut env.framework_state.opengles,
+            &mut env.objc,
+            window,
+            env.current_thread,
+        ) else {
+            log!(
+                "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
+                 called with no current GL context for thread {}; failing \
+                 the call instead of crashing.",
+                target,
+                drawable,
+                env.current_thread
+            );
+            return false;
+        };
         unsafe {
             gles.RenderbufferStorageOES(target, internalformat, width.try_into().unwrap(), height.try_into().unwrap());
             let mut renderbuffer = 0;
@@ -353,7 +430,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Unclear from documentation if this method requires the context to be
     // current, but it would be weird if it didn't?
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
-    let mut gles = super::sync_context(&mut env.framework_state.opengles, &mut env.objc, window, env.current_thread);
+    let Some(mut gles) = super::sync_context(&mut env.framework_state.opengles, &mut env.objc, window, env.current_thread) else {
+        // No current EAGL context. Apple's docs require the receiver to be
+        // the current context for `presentRenderbuffer:` to succeed; the
+        // canonical iOS behaviour is to silently return NO in this state
+        // rather than abort. Returning here also keeps the framerate
+        // limiter from leaking a sleep if we somehow get here without a
+        // context.
+        log!(
+            "[EAGLContext presentRenderbuffer:{:#x}] called with no current \
+             GL context for thread {}; returning NO.",
+            target,
+            env.current_thread
+        );
+        if let Some(sleep_for) = sleep_for {
+            env.sleep(sleep_for);
+        }
+        return false;
+    };
 
     let renderbuffer: GLuint = unsafe {
         let mut renderbuffer = 0;
@@ -415,11 +509,32 @@ pub const CLASSES: ClassExports = objc_classes! {
         );
         let pixels_vec = get_pixels_vec_for_presenting(env, drawable);
         // re-borrow
-        let (pixels_vec, width, height) = {
-            let mut gles = super::sync_context(&mut env.framework_state.opengles, &mut env.objc, env.window.as_mut().unwrap(), env.current_thread);
-            unsafe {
-                read_renderbuffer(gles.as_mut(), pixels_vec)
+        let read_result = {
+            let maybe_gles = super::sync_context(
+                &mut env.framework_state.opengles,
+                &mut env.objc,
+                env.window.as_mut().unwrap(),
+                env.current_thread,
+            );
+            match maybe_gles {
+                Some(mut gles) => Some(unsafe { read_renderbuffer(gles.as_mut(), pixels_vec) }),
+                None => {
+                    log!(
+                        "[EAGLContext presentRenderbuffer:{:#x}] lost GL \
+                         context for thread {} between fast-path and \
+                         slow-path; skipping copy-back.",
+                        target,
+                        env.current_thread
+                    );
+                    None
+                }
             }
+        };
+        let Some((pixels_vec, width, height)) = read_result else {
+            if let Some(sleep_for) = sleep_for {
+                env.sleep(sleep_for);
+            }
+            return false;
         };
         present_pixels(env, drawable, pixels_vec, width, height);
     }
@@ -1005,11 +1120,29 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     };
     let virtual_cursor_visible_at = env.window.as_mut().unwrap().virtual_cursor_visible_at();
 
-    let gles_ctx = super::get_thread_context(
+    let Some(gles_ctx) = super::get_thread_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
         env.current_thread,
-    );
+    ) else {
+        // No current EAGL context for this thread. The caller already
+        // returned `true` from `presentRenderbuffer:` (since the renderbuffer
+        // existed in `renderbuffer_drawable_bindings`), so the only thing
+        // left to do here is skip the host-side composition step and pump
+        // a single SDL swap so the window keeps animating. Without this
+        // guard the emulator used to abort with the panic visible in
+        // HyperHLE log #5 (`opengles.rs:56` — Option::unwrap on a None
+        // current_ctx).
+        log!(
+            "present_renderbuffer: no current GL context for thread {}; \
+             skipping host present and swapping window only.",
+            env.current_thread
+        );
+        if let Some(window) = env.window.as_ref() {
+            window.swap_window();
+        }
+        return;
+    };
 
     let mut gles_boxed = gles_ctx.make_current(env.window.as_mut().unwrap());
     let gles = gles_boxed.as_mut();
