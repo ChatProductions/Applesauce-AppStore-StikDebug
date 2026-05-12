@@ -60,14 +60,26 @@ where
     }
     let trace = env.options.trace_gl_errors;
     let caller = std::panic::Location::caller();
-    let mut gles = super::sync_context(
+    // `sync_context` now returns None when no GL context is bound to the
+    // calling thread. The guard above already short-circuits the common
+    // case where the *guest* never made a context current, but on edge
+    // cases (e.g. context destroyed mid-call, headless GLES driver missing,
+    // see HyperHLE log #5) we may still hit None here. Treat it the same
+    // as the no-context branch above: log once and return the default.
+    let Some(mut gles) = super::sync_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
         env.window
             .as_mut()
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
-    );
+    ) else {
+        log_dbg!(
+            "Skipping GLES call after sync_context returned None (line {})",
+            caller.line()
+        );
+        return U::default();
+    };
     let res = f(gles.as_mut(), &mut env.mem);
     if trace {
         let err = unsafe { gles.GetError() };
@@ -86,20 +98,36 @@ where
 }
 
 #[track_caller]
-fn with_ctx_and_mem_no_skip<T, U>(env: &mut Environment, f: T) -> U
+fn with_ctx_and_mem_no_skip<T, U: Default>(env: &mut Environment, f: T) -> U
 where
     T: FnOnce(&mut dyn GLES, &mut Mem) -> U,
 {
     let trace = env.options.trace_gl_errors;
     let caller = std::panic::Location::caller();
-    let mut gles = super::sync_context(
+    // _no_skip historically panicked if there was no current context,
+    // but real games (HyperHLE log #5 / Resident Evil 4) hit this on
+    // worker threads that issue GL calls after `setCurrentContext:nil`.
+    // Apple's documented behaviour is "GL calls silently fail" — mirror
+    // that by returning the type's default instead of aborting the
+    // emulator. The trade-off vs. with_ctx_and_mem is unchanged: we still
+    // attempt the call when a context exists, even if it isn't the one
+    // the guest expects.
+    let Some(mut gles) = super::sync_context(
         &mut env.framework_state.opengles,
         &mut env.objc,
         env.window
             .as_mut()
             .expect("OpenGL ES is not supported in headless mode"),
         env.current_thread,
-    );
+    ) else {
+        log!(
+            "Warning: with_ctx_and_mem_no_skip dispatched from {}:{} found \
+             no current GL context; returning default.",
+            caller.file(),
+            caller.line()
+        );
+        return U::default();
+    };
     let res = f(gles.as_mut(), &mut env.mem);
     if trace {
         let err = unsafe { gles.GetError() };

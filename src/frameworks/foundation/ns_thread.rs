@@ -9,7 +9,7 @@ use super::NSTimeInterval;
 use crate::dyld::HostFunction;
 use crate::frameworks::core_foundation::CFTypeRef;
 use crate::frameworks::foundation::ns_string;
-use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::foundation::{ns_time_interval_to_duration, NSUInteger};
 use crate::libc::pthread::thread::{
     pthread_attr_init, pthread_attr_setdetachstate, pthread_attr_setstacksize, pthread_attr_t,
     pthread_create, pthread_self, pthread_t, PTHREAD_CREATE_DETACHED,
@@ -22,21 +22,6 @@ use crate::objc::{
 use crate::Environment;
 use crate::{msg, msg_class};
 use std::collections::HashMap;
-use std::time::Duration;
-
-/// Convert an `NSTimeInterval` (a `double` measured in seconds) into a
-/// [`Duration`] without ever panicking. `Duration::from_secs_f64` aborts on
-/// NaN, infinities, or values that exceed `u64::MAX` seconds — and apps
-/// (e.g. HyperHLE appdb report #115, 10 PinShuffle) have been observed
-/// passing junk floats to `[NSThread sleepForTimeInterval:]` after a UI
-/// transition. Returning `None` lets the caller log and skip the sleep
-/// instead of crashing the whole emulator.
-fn ns_time_interval_to_duration(ti: NSTimeInterval) -> Option<Duration> {
-    if !ti.is_finite() || ti < 0.0 {
-        return None;
-    }
-    Duration::try_from_secs_f64(ti).ok()
-}
 
 #[derive(Default)]
 pub struct State {

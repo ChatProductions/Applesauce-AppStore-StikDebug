@@ -7,7 +7,7 @@
 
 use super::ns_run_loop::NSDefaultRunLoopMode;
 use super::NSTimeInterval;
-use super::{ns_run_loop, ns_string};
+use super::{ns_run_loop, ns_string, ns_time_interval_to_duration_or_zero};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
     HostObject, NSZonePtr, SEL,
@@ -47,12 +47,24 @@ pub const CLASSES: ClassExports = objc_classes! {
                    selector:(SEL)selector
                    userInfo:(id)user_info
                     repeats:(bool)repeats {
-    let ns_interval = ns_interval.max(0.0001);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    // Sanitize the interval before handing it to `Duration::from_secs_f64`,
+    // which panics on NaN, infinity, negative, or huge values. iPhone OS
+    // historically clamps such values silently (Crazy Frog Racer
+    // — HyperHLE log #4 — sends a non-finite value here on first
+    // NSTimer fire), so do the same instead of aborting the emulator.
+    let ns_interval = if ns_interval.is_finite() && ns_interval > 0.0001 {
+        ns_interval
+    } else {
+        0.0001
+    };
+    let rust_interval = ns_time_interval_to_duration_or_zero(ns_interval);
 
     retain(env, target);
     retain(env, user_info);
 
+    let due_by = Instant::now()
+        .checked_add(rust_interval)
+        .unwrap_or_else(Instant::now);
     let host_object = Box::new(NSTimerHostObject {
         ns_interval,
         rust_interval,
@@ -60,7 +72,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         selector,
         user_info,
         repeats,
-        due_by: Some(Instant::now().checked_add(rust_interval).unwrap()),
+        due_by: Some(due_by),
         run_loop: nil,
         is_running_callback: false
     });
@@ -178,11 +190,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
     if timer.due_by.is_some() {
-        if time_interval.is_nan() || time_interval <= 0.0 {
+        if !time_interval.is_finite() || time_interval <= 0.0 {
             timer.due_by = Some(Instant::now());
         } else {
             let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
-            timer.due_by = Some(Instant::now() + Duration::from_secs_f64(safe_interval));
+            let delta = ns_time_interval_to_duration_or_zero(safe_interval);
+            timer.due_by = Instant::now().checked_add(delta).or(Some(Instant::now()));
         }
     }
 }
@@ -213,22 +226,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     let retained_target = retain(env, t);
     let retained_user_info = retain(env, ui);
 
-    let safe_ti = ti.max(0.0001);
-    let rust_interval = std::time::Duration::from_secs_f64(safe_ti);
+    let safe_ti = if ti.is_finite() && ti > 0.0001 { ti } else { 0.0001 };
+    let rust_interval = ns_time_interval_to_duration_or_zero(safe_ti);
 
     // ИСПРАВЛЕНИЕ E0499: Вычисляем fire_time ДО того, как берём `borrow_mut`
     let fire_time = if _date != crate::objc::nil {
         // Здесь безопасно использовать env, так как мы еще ничего не
         // позаимствовали
         let time_interval: NSTimeInterval = msg![env; _date timeIntervalSinceNow];
-        if time_interval.is_nan() || time_interval <= 0.0 {
+        if !time_interval.is_finite() || time_interval <= 0.0 {
             std::time::Instant::now()
         } else {
             let safe_interval = time_interval.min(100.0 * 365.0 * 24.0 * 3600.0);
-            std::time::Instant::now() + std::time::Duration::from_secs_f64(safe_interval)
+            let delta = ns_time_interval_to_duration_or_zero(safe_interval);
+            std::time::Instant::now()
+                .checked_add(delta)
+                .unwrap_or_else(std::time::Instant::now)
         }
     } else {
-        std::time::Instant::now() + rust_interval
+        std::time::Instant::now()
+            .checked_add(rust_interval)
+            .unwrap_or_else(std::time::Instant::now)
     };
 
     // ТОЛЬКО ТЕПЕРЬ берём `borrow_mut` и записываем все данные
@@ -278,9 +296,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// For use by `CADisplayLink`
 pub fn set_time_interval(env: &mut Environment, timer: id, interval: NSTimeInterval) {
     let host_object = env.objc.borrow_mut::<NSTimerHostObject>(timer);
-    let safe_interval = interval.max(0.0001);
+    let safe_interval = if interval.is_finite() && interval > 0.0001 {
+        interval
+    } else {
+        0.0001
+    };
     host_object.ns_interval = safe_interval;
-    host_object.rust_interval = Duration::from_secs_f64(safe_interval);
+    host_object.rust_interval = ns_time_interval_to_duration_or_zero(safe_interval);
 }
 
 /// For use by `NSRunLoop`
@@ -319,9 +341,29 @@ pub(super) fn handle_timer(env: &mut Environment, timer: id) -> Option<Instant> 
     retain(env, timer);
 
     if repeats {
-        let advance_by = (overdue_by.as_secs_f64() / ns_interval).max(1.0).ceil() as u32;
-        let advance_by_dur = rust_interval.checked_mul(advance_by).unwrap();
-        let next_time = due_by.checked_add(advance_by_dur).unwrap();
+        // Guard every step of the rescheduling math against junk floats. A
+        // pathological ns_interval (e.g. NaN — see HyperHLE log #4) used
+        // to propagate through `.ceil() as u32` (yielding 0 for NaN) and
+        // then through `checked_mul`/`checked_add` until something
+        // eventually unwrapped to a panic. Here we keep the computation
+        // strictly bounded and fall back to the next interval if any step
+        // overflows.
+        let ratio = if ns_interval.is_finite() && ns_interval > 0.0 {
+            (overdue_by.as_secs_f64() / ns_interval).max(1.0).ceil()
+        } else {
+            1.0
+        };
+        let advance_by: u32 = if ratio.is_finite() && (1.0..=(u32::MAX as f64)).contains(&ratio) {
+            ratio as u32
+        } else {
+            1
+        };
+        let advance_by_dur = rust_interval
+            .checked_mul(advance_by)
+            .unwrap_or(rust_interval);
+        let next_time = due_by
+            .checked_add(advance_by_dur)
+            .unwrap_or_else(|| Instant::now() + rust_interval);
         env.objc.borrow_mut::<NSTimerHostObject>(timer).due_by = Some(next_time);
     }
 
