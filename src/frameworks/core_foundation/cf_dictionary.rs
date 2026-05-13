@@ -294,7 +294,13 @@ fn _touchHLE_CFDictionary_retain(
     allocator: CFAllocatorRef,
     value: ConstVoidPtr,
 ) -> ConstVoidPtr {
-    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    if allocator != kCFAllocatorDefault && !env.mem.read(allocator).is_system_default() {
+        log!(
+            "Warning: _touchHLE_CFDictionary_retain: custom allocator {:?} \
+             unsupported; using system default.",
+            allocator
+        );
+    }
     CFRetain(env, value.cast_mut().cast()).cast_const().cast()
 }
 fn _touchHLE_CFDictionary_release(
@@ -302,14 +308,27 @@ fn _touchHLE_CFDictionary_release(
     allocator: CFAllocatorRef,
     value: ConstVoidPtr,
 ) {
-    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default());
+    if allocator != kCFAllocatorDefault && !env.mem.read(allocator).is_system_default() {
+        log!(
+            "Warning: _touchHLE_CFDictionary_release: custom allocator {:?} \
+             unsupported; using system default.",
+            allocator
+        );
+    }
     CFRelease(env, value.cast_mut().cast());
 }
 fn _touchHLE_CFDictionary_copyDescription(
-    _env: &mut Environment,
+    env: &mut Environment,
     _value: ConstVoidPtr,
 ) -> CFStringRef {
-    todo!()
+    // The default copyDescription callback for kCFTypeDictionary*CallBacks
+    // forwards to CFCopyDescription on the underlying CFType. We don't have
+    // a CF-level copyDescription implementation, so return an empty NSString
+    // (toll-free bridged to CFString). This avoids `todo!()` panicking the
+    // emulator the moment any guest prints a dictionary's description.
+    let empty = crate::frameworks::foundation::ns_string::from_rust_string(env, String::new());
+    log_dbg!("_touchHLE_CFDictionary_copyDescription: returning empty CFString");
+    empty.cast()
 }
 fn _touchHLE_CFDictionary_equal(
     env: &mut Environment,

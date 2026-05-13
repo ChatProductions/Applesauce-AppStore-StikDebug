@@ -38,11 +38,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)numberOfArguments {
-    env.objc.borrow::<NSMethodSignatureHostObject>(this).arg_types.len().try_into().unwrap()
+    let count = env.objc.borrow::<NSMethodSignatureHostObject>(this).arg_types.len();
+    NSUInteger::try_from(count).unwrap_or_else(|_| {
+        log!(
+            "Warning: NSMethodSignature.numberOfArguments overflowed NSUInteger (host len={}); \
+             clamping to NSUInteger::MAX.",
+            count
+        );
+        NSUInteger::MAX
+    })
 }
 
 - (ConstPtr<u8>)getArgumentTypeAtIndex:(NSUInteger)idx {
-    env.objc.borrow::<NSMethodSignatureHostObject>(this).arg_types[idx as usize].0
+    let host = env.objc.borrow::<NSMethodSignatureHostObject>(this);
+    if let Some(entry) = host.arg_types.get(idx as usize) {
+        entry.0
+    } else {
+        log!(
+            "Warning: -[NSMethodSignature getArgumentTypeAtIndex:{}] out of bounds \
+             (numberOfArguments={}); returning NULL.",
+            idx,
+            host.arg_types.len()
+        );
+        crate::mem::Ptr::null()
+    }
 }
 
 - (ConstPtr<u8>)methodReturnType {
@@ -115,6 +134,25 @@ fn parse_signature_inner(env: &mut Environment, curr: ConstPtr<u8>) -> (GuestUSi
             }
             (idx, 1, size)
         }
-        _ => unimplemented!("parse_signature_inner: {}", c as char),
+        b'\0' => {
+            // End of signature; consume nothing and report zero size.
+            (0, 0, 0)
+        }
+        _ => {
+            // Unknown type encoding. Most ObjC type encodings are a single
+            // character optionally followed by an offset. Skip the byte and a
+            // numeric offset (if any) so we don't get stuck in an infinite
+            // loop, and treat the unknown type as a single word-sized value.
+            log!(
+                "Warning: NSMethodSignature: unknown ObjC type encoding {:?}; \
+                 treating as a single 4-byte word.",
+                c as char
+            );
+            idx += 1;
+            while let b'0'..=b'9' = env.mem.read(curr + idx) {
+                idx += 1;
+            }
+            (idx, 1, 4)
+        }
     }
-      }
+}
