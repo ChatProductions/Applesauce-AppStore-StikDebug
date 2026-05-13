@@ -140,16 +140,29 @@ pub fn AudioQueueNewOutput(
     in_flags: u32,
     out_aq: MutPtr<AudioQueueRef>,
 ) -> OSStatus {
-    // reserved
-    assert!(in_flags == 0);
+    // reserved: real Audio Queue Services ignores non-zero flags as a
+    // forward-compatibility measure. Don't panic if a game passes garbage.
+    if in_flags != 0 {
+        log!(
+            "Warning: AudioQueueNewOutput: ignoring unexpected non-zero flags {:#x}",
+            in_flags
+        );
+    }
 
-    // NULL is a synonym of kCFRunLoopCommonModes here
-    assert!(
-        in_callback_run_loop_mode.is_null() || {
-            let common_modes = get_static_str(env, kCFRunLoopCommonModes);
-            msg![env; in_callback_run_loop_mode isEqual:common_modes]
+    // NULL is a synonym of kCFRunLoopCommonModes here. Anything else is
+    // technically unsupported, but real iOS quietly accepts arbitrary
+    // strings and just runs the callback on the requested loop.
+    if !in_callback_run_loop_mode.is_null() {
+        let common_modes = get_static_str(env, kCFRunLoopCommonModes);
+        let is_common: bool = msg![env; in_callback_run_loop_mode isEqual:common_modes];
+        if !is_common {
+            log!(
+                "Warning: AudioQueueNewOutput called with non-kCFRunLoopCommonModes \
+                 run loop mode {:?}; treating as kCFRunLoopCommonModes.",
+                in_callback_run_loop_mode
+            );
         }
-    );
+    }
 
     let in_callback_run_loop = if in_callback_run_loop.is_null() {
         CFRunLoopGetMain(env)
@@ -225,7 +238,19 @@ pub fn AudioQueueGetParameter(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    assert!(in_param_id == kAudioQueueParam_Volume); // others unimplemented
+    // Only kAudioQueueParam_Volume is implemented; other parameters
+    // gracefully report 0 instead of crashing. Real Audio Queue
+    // Services returns kAudioQueueErr_InvalidParameter (-66670) in this
+    // case, which we approximate with kAudioQueueErr_InvalidProperty.
+    if in_param_id != kAudioQueueParam_Volume {
+        log!(
+            "Warning: AudioQueueGetParameter: unsupported param id {}; \
+             returning 0.",
+            in_param_id
+        );
+        env.mem.write(out_value, 0.0);
+        return kAudioQueueErr_InvalidProperty;
+    }
 
     let state = State::get(&mut env.framework_state);
 
@@ -414,10 +439,19 @@ fn AudioQueueRemovePropertyListener(
     return_if_null!(in_aq);
 
     if in_id == kAudioQueueProperty_IsRunning {
-        let host_object = State::get(&mut env.framework_state)
+        // The guest can hold on to AudioQueueRef values past
+        // AudioQueueDispose; mirror real Audio Queue Services and
+        // return an error instead of panicking on a stale ref.
+        let Some(host_object) = State::get(&mut env.framework_state)
             .audio_queues
             .get_mut(&in_aq)
-            .unwrap();
+        else {
+            log!(
+                "Warning: AudioQueueRemovePropertyListener({:?}): unknown / disposed queue.",
+                in_aq
+            );
+            return kAudioQueueErr_InvalidProperty;
+        };
 
         host_object.aq_is_running_proc = None;
         host_object.aq_is_running_user_data = None;
@@ -499,10 +533,18 @@ fn AudioQueueGetProperty(
         return kAudioQueueErr_InvalidPropertySize;
     }
 
-    let host_object = State::get(&mut env.framework_state)
+    // Don't panic on stale AudioQueueRef values: real Audio Queue
+    // Services returns an error instead.
+    let Some(host_object) = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap();
+    else {
+        log!(
+            "Warning: AudioQueueGetProperty({:?}): unknown / disposed queue.",
+            in_aq
+        );
+        return kAudioQueueErr_InvalidProperty;
+    };
 
     match in_property_id {
         kAudioQueueProperty_IsRunning => {
@@ -870,7 +912,11 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    // ns_run_loop can still hold a stale `in_aq` for one tick after
+    // AudioQueueDispose. Skip silently instead of panicking.
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        return;
+    };
 
     let Some(al_source) = host_object.al_source else {
         return;
@@ -889,8 +935,19 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     unqueue_buffers(al_source, &context, |al_buffer| {
         host_object.al_unused_buffers.push(al_buffer);
-        let buffer_ref = host_object.buffer_queue.pop_front().unwrap();
-        buffers_to_reuse.push(buffer_ref);
+        // OpenAL is reporting one buffer as processed, so the queue should
+        // be non-empty. If the host and OpenAL views ever desync (e.g.
+        // through an unexpected reset), just stop pulling from the empty
+        // queue instead of panicking on `.unwrap()`.
+        if let Some(buffer_ref) = host_object.buffer_queue.pop_front() {
+            buffers_to_reuse.push(buffer_ref);
+        } else {
+            log!(
+                "Warning: handle_audio_queue({:?}): OpenAL reported a processed \
+                 buffer but the guest buffer_queue is empty; skipping.",
+                in_aq
+            );
+        }
     });
 
     let &mut AudioQueueHostObject {

@@ -805,10 +805,13 @@ fn funlockfile(_env: &mut Environment, _file_ptr: MutPtr<FILE>) {
 /// Returns 0 on success. In a single-threaded emulator the lock is always
 /// available, so this always succeeds.
 fn ftrylockfile(_env: &mut Environment, _file_ptr: MutPtr<FILE>) -> i32 {
-    log_dbg!("ftrylockfile({:?}) => 0 (no-op, single-threaded)", _file_ptr);
+    log_dbg!(
+        "ftrylockfile({:?}) => 0 (no-op, single-threaded)",
+        _file_ptr
+    );
     0 // success
 }
-                
+
 pub const CONSTANTS: ConstantExports = &[
     (
         "___stdinp",

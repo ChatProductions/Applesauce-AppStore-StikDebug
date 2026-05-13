@@ -532,10 +532,8 @@ impl ObjC {
             // becomes the empty string after CStr decoding). Treat them
             // like any other "unknown class": install a placeholder so the
             // guest can keep running, instead of crashing the emulator.
-            let is_garbage = name.is_empty()
-                || name
-                    .chars()
-                    .any(|c| c.is_control() || !c.is_ascii());
+            let is_garbage =
+                name.is_empty() || name.chars().any(|c| c.is_control() || !c.is_ascii());
 
             if !use_placeholder && !is_fake {
                 // Historically this branch panicked. In the real

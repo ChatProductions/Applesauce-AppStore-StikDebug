@@ -11,8 +11,8 @@
 
 use super::audio_file::{
     kAudioFileBadPropertySizeError, kAudioFilePropertyDataFormat, kAudioFileReadPermission,
-    property_size, AudioFileClose, AudioFileGetProperty, AudioFileID, AudioFileOpenURL,
-    AudioFileReadBytes, AudioFileHostObject
+    property_size, AudioFileClose, AudioFileGetProperty, AudioFileHostObject, AudioFileID,
+    AudioFileOpenURL, AudioFileReadBytes,
 };
 use super::audio_queue::is_supported_audio_format;
 use super::audio_unit::AudioBufferList;
@@ -114,10 +114,14 @@ fn ExtAudioFileGetProperty(
 
     let audio_file_property_id = match in_property_id {
         kExtAudioFileProperty_FileDataFormat => kAudioFilePropertyDataFormat,
-        _ => unimplemented!(
-            "Не реализован ID свойства: {}",
-            debug_fourcc(in_property_id)
-        ),
+        _ => {
+            log!(
+                "Warning: ExtAudioFileGetProperty: unsupported property {}; \
+                 returning kAudioFileBadPropertySizeError.",
+                debug_fourcc(in_property_id)
+            );
+            return kAudioFileBadPropertySizeError;
+        }
     };
 
     let required_size = property_size(audio_file_property_id);
@@ -126,13 +130,19 @@ fn ExtAudioFileGetProperty(
         return kAudioFileBadPropertySizeError;
     }
 
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get(&in_ext_audio_file)
-        .unwrap();
+    else {
+        log!(
+            "Warning: ExtAudioFileGetProperty({:?}): unknown / disposed handle.",
+            in_ext_audio_file
+        );
+        return kAudioFileBadPropertySizeError;
+    };
 
     // Делегируем вызов в обычный AudioFile
     AudioFileGetProperty(
@@ -153,53 +163,100 @@ fn ExtAudioFileSetProperty(
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
 
-    assert_eq!(in_property_id, kExtAudioFileProperty_ClientDataFormat);
-    assert_eq!(
-        in_property_data_size,
-        guest_size_of::<AudioStreamBasicDescription>()
-    );
+    if in_property_id != kExtAudioFileProperty_ClientDataFormat {
+        log!(
+            "Warning: ExtAudioFileSetProperty: unsupported property {}; \
+             returning kAudioFileBadPropertySizeError.",
+            debug_fourcc(in_property_id)
+        );
+        return kAudioFileBadPropertySizeError;
+    }
+    if in_property_data_size != guest_size_of::<AudioStreamBasicDescription>() {
+        log!(
+            "Warning: ExtAudioFileSetProperty(ClientDataFormat): wrong size {}.",
+            in_property_data_size
+        );
+        return kAudioFileBadPropertySizeError;
+    }
 
     let audio_desc_ptr: ConstPtr<AudioStreamBasicDescription> = in_property_data.cast();
     let client_audio_desc = env.mem.read(audio_desc_ptr);
     log_dbg!("ExtAudioFileSetProperty {:?}", client_audio_desc);
     let format_id = client_audio_desc.format_id;
-    assert_eq!(format_id, kAudioFormatLinearPCM);
-    assert!(is_supported_audio_format(&client_audio_desc));
+    if format_id != kAudioFormatLinearPCM {
+        log!(
+            "Warning: ExtAudioFileSetProperty(ClientDataFormat): only PCM is \
+             supported, got {}.",
+            debug_fourcc(format_id)
+        );
+        return kAudioFileBadPropertySizeError;
+    }
+    if !is_supported_audio_format(&client_audio_desc) {
+        log!(
+            "Warning: ExtAudioFileSetProperty(ClientDataFormat): unsupported \
+             format {:?}.",
+            client_audio_desc
+        );
+        return kAudioFileBadPropertySizeError;
+    }
 
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get_mut(&in_ext_audio_file)
-        .unwrap();
-    assert!(host_object.client_data_format.is_none());
+    else {
+        log!(
+            "Warning: ExtAudioFileSetProperty({:?}): unknown / disposed handle.",
+            in_ext_audio_file
+        );
+        return kAudioFileBadPropertySizeError;
+    };
+    if host_object.client_data_format.is_some() {
+        log!(
+            "Warning: ExtAudioFileSetProperty({:?}): ClientDataFormat already \
+             set; overwriting.",
+            in_ext_audio_file
+        );
+    }
     host_object.client_data_format = Some(client_audio_desc);
 
     // Достаем объект AudioFile, чтобы проверить описание.
     // Обрабатываем перечисление из форка (Real или Dummy).
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get(&in_ext_audio_file)
-        .unwrap();
-    let other_host_object = env
+    else {
+        return kAudioFileBadPropertySizeError;
+    };
+    let Some(other_host_object) = env
         .framework_state
         .audio_toolbox
         .audio_file
         .audio_files
         .get(&host_object.guest_audio_file)
-        .unwrap();
+    else {
+        log!(
+            "Warning: ExtAudioFileSetProperty({:?}): underlying AudioFile is \
+             gone; accepting client format but reads will fail.",
+            in_ext_audio_file
+        );
+        return 0;
+    };
 
-    let audio_desc = match other_host_object {
-        AudioFileHostObject::Real(file) => AudioStreamBasicDescription::from_audio_description(file.audio_description()),
+    let _audio_desc = match other_host_object {
+        AudioFileHostObject::Real(file) => {
+            AudioStreamBasicDescription::from_audio_description(file.audio_description())
+        }
         AudioFileHostObject::Dummy { format, .. } => *format,
     };
 
     // TODO: Поддержка конвертации аудио форматов
-    // assert_eq!(audio_desc, client_audio_desc);
+    // assert_eq!(_audio_desc, client_audio_desc);
 
     0 // успех
 }
@@ -214,22 +271,63 @@ fn ExtAudioFileRead(
 
     let mut audio_buffer_list = env.mem.read(io_data);
     let num_buffers = audio_buffer_list.number_buffers;
-    assert_eq!(num_buffers, 1);
+    if num_buffers != 1 {
+        log!(
+            "Warning: ExtAudioFileRead: only 1 buffer is supported, got {}.",
+            num_buffers
+        );
+        env.mem.write(io_number_frames, 0);
+        return kAudioFileBadPropertySizeError;
+    }
 
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get(&in_ext_audio_file)
-        .unwrap();
+    else {
+        log!(
+            "Warning: ExtAudioFileRead({:?}): unknown / disposed handle.",
+            in_ext_audio_file
+        );
+        env.mem.write(io_number_frames, 0);
+        return kAudioFileBadPropertySizeError;
+    };
 
-    audio_buffer_list.buffers[0].number_channels =
-        host_object.client_data_format.unwrap().channels_per_frame;
+    let Some(client_data_format) = host_object.client_data_format else {
+        log!(
+            "Warning: ExtAudioFileRead({:?}) before ClientDataFormat was set; \
+             returning 0 frames.",
+            in_ext_audio_file
+        );
+        env.mem.write(io_number_frames, 0);
+        return kAudioFileBadPropertySizeError;
+    };
+
+    audio_buffer_list.buffers[0].number_channels = client_data_format.channels_per_frame;
 
     let number_frames = env.mem.read(io_number_frames);
-    let bytes_per_frame = host_object.client_data_format.unwrap().bytes_per_frame;
-    let number_of_bytes = number_frames.checked_mul(bytes_per_frame).unwrap();
+    let bytes_per_frame = client_data_format.bytes_per_frame;
+    if bytes_per_frame == 0 {
+        log!(
+            "Warning: ExtAudioFileRead({:?}): bytes_per_frame is zero.",
+            in_ext_audio_file
+        );
+        env.mem.write(io_number_frames, 0);
+        return kAudioFileBadPropertySizeError;
+    }
+    let Some(number_of_bytes) = number_frames.checked_mul(bytes_per_frame) else {
+        log!(
+            "Warning: ExtAudioFileRead({:?}): {} frames * {} bytes_per_frame \
+             overflows u32; clamping to 0.",
+            in_ext_audio_file,
+            number_frames,
+            bytes_per_frame
+        );
+        env.mem.write(io_number_frames, 0);
+        return kAudioFileBadPropertySizeError;
+    };
     let number_of_bytes_ptr = env.mem.alloc_and_write(number_of_bytes);
 
     let res = AudioFileReadBytes(
@@ -259,19 +357,23 @@ fn ExtAudioFileRead(
         return res;
     }
 
-    env.mem.write(
-        io_number_frames,
-        number_of_bytes_read.checked_div(bytes_per_frame).unwrap(),
-    );
+    let frames_read = number_of_bytes_read
+        .checked_div(bytes_per_frame)
+        .unwrap_or(0);
+    env.mem.write(io_number_frames, frames_read);
     audio_buffer_list.buffers[0].data_byte_size = number_of_bytes_read;
 
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get_mut(&in_ext_audio_file)
-        .unwrap();
+    else {
+        // The guest disposed the file mid-read; just bail out.
+        env.mem.write(io_data, audio_buffer_list);
+        return 0;
+    };
     host_object.current_bytes_read += number_of_bytes_read as i64;
 
     env.mem.write(io_data, audio_buffer_list);
@@ -282,24 +384,35 @@ fn ExtAudioFileRead(
 fn ExtAudioFileDispose(env: &mut Environment, in_ext_audio_file: ExtAudioFileRef) -> OSStatus {
     return_if_null!(in_ext_audio_file);
 
-    let host_object = env
+    let Some(host_object) = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
         .get(&in_ext_audio_file)
-        .unwrap();
+    else {
+        log!(
+            "Warning: ExtAudioFileDispose({:?}): already disposed.",
+            in_ext_audio_file
+        );
+        return 0;
+    };
 
     let res = AudioFileClose(env, host_object.guest_audio_file);
-    assert_eq!(res, 0); // успех
+    if res != 0 {
+        log!(
+            "Warning: ExtAudioFileDispose: AudioFileClose returned {}; \
+             continuing with dispose.",
+            res
+        );
+    }
 
     let _host_object = env
         .framework_state
         .audio_toolbox
         .ext_audio_file
         .extended_audio_files
-        .remove(&in_ext_audio_file)
-        .unwrap();
+        .remove(&in_ext_audio_file);
     env.mem.free(in_ext_audio_file.cast());
 
     0 // успех

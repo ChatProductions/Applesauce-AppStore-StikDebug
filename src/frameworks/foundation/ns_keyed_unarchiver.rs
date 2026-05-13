@@ -183,61 +183,83 @@ pub const CLASSES: ClassExports = objc_classes! {
 // if the key is unknown.
 
 - (bool)decodeBoolForKey:(id)key { // NSString *
-    get_value_to_decode_for_key(env, this, key)
-        .is_some_and(|value| value.as_boolean().unwrap())
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return false; };
+    if let Some(b) = value.as_boolean() { return b; }
+    if let Some(i) = value.as_signed_integer() { return i != 0; }
+    if let Some(u) = value.as_unsigned_integer() { return u != 0; }
+    log!("Warning: decodeBoolForKey: non-boolean value {:?}; returning false.", value);
+    false
 }
 
 - (f64)decodeDoubleForKey:(id)key { // NSString *
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0.0,
-        |value| value.as_real().unwrap()
-    )
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0.0; };
+    if let Some(r) = value.as_real() { return r; }
+    if let Some(i) = value.as_signed_integer() { return i as f64; }
+    if let Some(u) = value.as_unsigned_integer() { return u as f64; }
+    log!("Warning: decodeDoubleForKey: non-numeric value {:?}; returning 0.0.", value);
+    0.0
 }
 
 - (f32)decodeFloatForKey:(id)key { // NSString *
-    // TODO: Check bounds, raise NSRangeException if it doesn't fit
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0.0,
-        |value| value.as_real().unwrap()
-    ) as f32
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0.0; };
+    if let Some(r) = value.as_real() { return r as f32; }
+    if let Some(i) = value.as_signed_integer() { return i as f32; }
+    if let Some(u) = value.as_unsigned_integer() { return u as f32; }
+    log!("Warning: decodeFloatForKey: non-numeric value {:?}; returning 0.0.", value);
+    0.0
 }
 
 - (NSInteger)decodeIntegerForKey:(id)key { // NSString *
-    // TODO: Check bounds, raise NSRangeException if it doesn't fit
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0,
-        |value| value.as_signed_integer().unwrap()
-    ).try_into().unwrap()
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0; };
+    let Some(i) = value.as_signed_integer() else {
+        log!("Warning: decodeIntegerForKey: non-integer value {:?}; returning 0.", value);
+        return 0;
+    };
+    // Clamp to NSInteger range instead of panicking.
+    if i > NSInteger::MAX as i64 { return NSInteger::MAX; }
+    if i < NSInteger::MIN as i64 { return NSInteger::MIN; }
+    i as NSInteger
 }
 
 - (i32)decodeIntForKey:(id)key { // NSString *
-    // TODO: Check bounds, raise NSRangeException if it doesn't fit
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0,
-        |value| value.as_signed_integer().unwrap()
-    ).try_into().unwrap()
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0; };
+    let Some(i) = value.as_signed_integer() else {
+        log!("Warning: decodeIntForKey: non-integer value {:?}; returning 0.", value);
+        return 0;
+    };
+    if i > i32::MAX as i64 { return i32::MAX; }
+    if i < i32::MIN as i64 { return i32::MIN; }
+    i as i32
 }
 
 - (i32)decodeInt32ForKey:(id)key { // NSString *
-    // TODO: Check bounds, raise NSRangeException if it doesn't fit
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0,
-        |value| value.as_signed_integer().unwrap()
-    ).try_into().unwrap()
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0; };
+    let Some(i) = value.as_signed_integer() else {
+        log!("Warning: decodeInt32ForKey: non-integer value {:?}; returning 0.", value);
+        return 0;
+    };
+    if i > i32::MAX as i64 { return i32::MAX; }
+    if i < i32::MIN as i64 { return i32::MIN; }
+    i as i32
 }
 
 - (i64)decodeInt64ForKey:(id)key { // NSString *
-    get_value_to_decode_for_key(env, this, key).map_or(
-        0,
-        |value| value.as_signed_integer().unwrap()
-    )
+    let Some(value) = get_value_to_decode_for_key(env, this, key) else { return 0; };
+    let Some(i) = value.as_signed_integer() else {
+        log!("Warning: decodeInt64ForKey: non-integer value {:?}; returning 0.", value);
+        return 0;
+    };
+    i
 }
 
 - (id)decodeObjectForKey:(id)key { // NSString*
     let Some(next_uid) = get_value_to_decode_for_key(env, this, key) else {
         return nil;
     };
-    let next_uid = next_uid.as_uid().copied().unwrap();
+    let Some(next_uid) = next_uid.as_uid().copied() else {
+        log!("Warning: decodeObjectForKey: value {:?} is not a UID; returning nil.", next_uid);
+        return nil;
+    };
     let object = unarchive_key(env, this, next_uid);
 
     // on behalf of the caller
@@ -246,27 +268,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (ConstPtr<u8>)decodeBytesForKey:(id)key returnedLength:(MutPtr<NSUInteger>)length {
-    assert!(key != nil);
+    if key == nil {
+        env.mem.write(length, 0);
+        return ConstPtr::null();
+    }
     let Some(data) = get_value_to_decode_for_key(env, this, key)
         .and_then(|value| value.as_data())
         .map(|data| data.to_vec()) else {
             env.mem.write(length, 0);
             return ConstPtr::null();
     };
-    let len: GuestUSize = data.len().try_into().unwrap();
+    let len: GuestUSize = match data.len().try_into() {
+        Ok(l) => l,
+        Err(_) => {
+            log!("Warning: decodeBytesForKey: data of length {} exceeds u32; truncating.", data.len());
+            GuestUSize::MAX
+        }
+    };
     let guest_bytes: MutVoidPtr = env.mem.alloc(len);
     env.objc.borrow_mut::<NSKeyedUnarchiverHostObject>(this)
         .temporary_buffers
         .push(guest_bytes);
+    let copy_len = std::cmp::min(len as usize, data.len());
     env.mem
-        .bytes_at_mut(guest_bytes.cast(), len)
-        .copy_from_slice(data.as_slice());
+        .bytes_at_mut(guest_bytes.cast(), copy_len as GuestUSize)
+        .copy_from_slice(&data[..copy_len]);
     env.mem.write(length, len);
     guest_bytes.cast().cast_const()
 }
 
 - (bool)containsValueForKey:(id)key { // NSString*
-    assert!(key != nil);
+    if key == nil { return false; }
     get_value_to_decode_for_key(env, this, key).is_some()
 }
 
@@ -295,16 +327,19 @@ fn borrow_host_obj(env: &mut Environment, unarchiver: id) -> &mut NSKeyedUnarchi
 }
 
 fn get_value_to_decode_for_key(env: &mut Environment, unarchiver: id, key: id) -> Option<&Value> {
+    if key == nil {
+        return None;
+    }
     let key = to_rust_string(env, key); // TODO: avoid copying string
     let host_obj = borrow_host_obj(env, unarchiver);
-    let scope = match host_obj.current_key {
+    let scope_value = match host_obj.current_key {
         Some(current_uid) => {
-            &host_obj.plist["$objects"].as_array().unwrap()[current_uid.get() as usize]
+            let objects = host_obj.plist.get("$objects").and_then(|v| v.as_array())?;
+            objects.get(current_uid.get() as usize)?
         }
-        None => &host_obj.plist["$top"],
-    }
-    .as_dictionary()
-    .unwrap();
+        None => host_obj.plist.get("$top")?,
+    };
+    let scope = scope_value.as_dictionary()?;
     scope.get(&key)
 }
 
@@ -319,26 +354,68 @@ fn get_value_to_decode_for_key(env: &mut Environment, unarchiver: id, key: id) -
 /// possibly autorelease it as appropriate.
 fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
     let host_obj = borrow_host_obj(env, unarchiver);
-    if let Some(existing) = host_obj.already_unarchived[key.get() as usize] {
+    let key_idx = key.get() as usize;
+    if key_idx >= host_obj.already_unarchived.len() {
+        log!(
+            "Warning: unarchive_key: uid {} out of range (max {}); returning nil.",
+            key.get(),
+            host_obj.already_unarchived.len()
+        );
+        return nil;
+    }
+    if let Some(existing) = host_obj.already_unarchived[key_idx] {
         return existing;
     }
 
-    let objects = host_obj.plist["$objects"].as_array().unwrap();
+    let Some(objects) = host_obj.plist.get("$objects").and_then(|v| v.as_array()) else {
+        log!("Warning: unarchive_key: $objects missing or not an array; returning nil.");
+        return nil;
+    };
 
-    let item = &objects[key.get() as usize];
+    let Some(item) = objects.get(key_idx) else {
+        log!(
+            "Warning: unarchive_key: uid {} out of $objects range; returning nil.",
+            key.get()
+        );
+        return nil;
+    };
     let new_object = match item {
         // The most general kind of item: a dictionary that contains the info
         // needed to invoke `initWithCoder:` on a class implementing NSCoding.
         Value::Dictionary(dict) => {
-            let class_key = dict["$class"].as_uid().copied().unwrap();
+            let Some(class_key) = dict.get("$class").and_then(|v| v.as_uid()).copied() else {
+                log!(
+                    "Warning: unarchive_key: missing $class for uid {}; returning nil.",
+                    key.get()
+                );
+                return nil;
+            };
+            let class_key_idx = class_key.get() as usize;
             let class;
-            if let Some(existing) = host_obj.already_unarchived[class_key.get() as usize] {
+            if class_key_idx >= host_obj.already_unarchived.len() {
+                log!(
+                    "Warning: unarchive_key: class uid {} out of range; returning nil.",
+                    class_key.get()
+                );
+                return nil;
+            }
+            if let Some(existing) = host_obj.already_unarchived[class_key_idx] {
                 class = existing;
             } else {
-                let class_dict = &objects[class_key.get() as usize];
-                let class_dict = class_dict.as_dictionary().unwrap();
+                let Some(class_dict) = objects.get(class_key_idx) else {
+                    log!("Warning: unarchive_key: class uid {} out of $objects range; returning nil.", class_key.get());
+                    return nil;
+                };
+                let Some(class_dict) = class_dict.as_dictionary() else {
+                    log!("Warning: unarchive_key: class entry at uid {} is not a dict; returning nil.", class_key.get());
+                    return nil;
+                };
 
-                let class_name = class_dict["$classname"].as_string().unwrap();
+                let Some(class_name) = class_dict.get("$classname").and_then(|v| v.as_string())
+                else {
+                    log!("Warning: unarchive_key: missing $classname for class uid {}; returning nil.", class_key.get());
+                    return nil;
+                };
 
                 class = {
                     // get_known_class needs &mut ObjC, so we can't call it
@@ -349,7 +426,7 @@ fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
                 };
                 let host_obj = borrow_host_obj(env, unarchiver); // reborrow
 
-                host_obj.already_unarchived[class_key.get() as usize] = Some(class);
+                host_obj.already_unarchived[class_key_idx] = Some(class);
             };
 
             let host_obj = borrow_host_obj(env, unarchiver); // reborrow
@@ -381,14 +458,58 @@ fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
                 let ulonglong: u64 = uint64;
                 msg![env; number initWithUnsignedLongLong:ulonglong]
             } else {
-                unreachable!(); // according to plist crate docs
+                // plist crate docs say this is unreachable, but if we ever
+                // hit it just return a zero NSNumber rather than panicking.
+                log!("Warning: unarchive_key: integer with no signed/unsigned representation; returning 0.");
+                msg![env; number initWithInteger:(0 as NSInteger)]
             }
         }
-        _ => unimplemented!("Unarchive: {:#?}", item),
+        Value::Real(r) => {
+            let r = *r;
+            let number: id = msg_class![env; NSNumber alloc];
+            msg![env; number initWithDouble:r]
+        }
+        Value::Boolean(b) => {
+            let b = *b;
+            let number: id = msg_class![env; NSNumber alloc];
+            msg![env; number initWithBool:b]
+        }
+        Value::Data(data) => {
+            let data = data.clone();
+            let ns_data: id = msg_class![env; NSData alloc];
+            let len: GuestUSize = match data.len().try_into() {
+                Ok(l) => l,
+                Err(_) => GuestUSize::MAX,
+            };
+            let bytes_ptr: MutVoidPtr = env.mem.alloc(len);
+            let copy_len = std::cmp::min(len as usize, data.len());
+            env.mem
+                .bytes_at_mut(bytes_ptr.cast(), copy_len as GuestUSize)
+                .copy_from_slice(&data[..copy_len]);
+            let ns_len: NSUInteger = copy_len as NSUInteger;
+            let bytes_const: ConstVoidPtr = bytes_ptr.cast_const();
+            let result: id = msg![env; ns_data initWithBytes:bytes_const length:ns_len];
+            env.mem.free(bytes_ptr);
+            result
+        }
+        Value::Date(_) | Value::Array(_) | Value::Uid(_) | Value::Dictionary(_) => {
+            log!(
+                "Warning: unarchive_key: unhandled plist variant for uid {}; returning nil.",
+                key.get()
+            );
+            nil
+        }
+        _ => {
+            log!(
+                "Warning: unarchive_key: unknown plist variant for uid {}; returning nil.",
+                key.get()
+            );
+            nil
+        }
     };
 
     let host_obj = borrow_host_obj(env, unarchiver); // reborrow
-    host_obj.already_unarchived[key.get() as usize] = Some(new_object);
+    host_obj.already_unarchived[key_idx] = Some(new_object);
     new_object
 }
 

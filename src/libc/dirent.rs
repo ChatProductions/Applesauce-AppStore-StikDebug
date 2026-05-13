@@ -190,16 +190,19 @@ fn rewinddir(env: &mut Environment, dirp: MutPtr<DIR>) {
 
     // Проверяем, что директория действительно открыта и отслеживается эмулятором
     if !env.libc_state.dirent.open_dirs.contains_key(&dirp) {
-        log!("Warning: rewinddir called with invalid or already closed dirp: {:?}", dirp);
+        log!(
+            "Warning: rewinddir called with invalid or already closed dirp: {:?}",
+            dirp
+        );
         return;
     }
 
     // Считываем структуру DIR из памяти гостя
     let mut dir = env.mem.read(dirp);
-    
+
     // Сбрасываем курсор на начало
     dir.idx = 0;
-    
+
     // Записываем обновленную структуру обратно в память гостя
     env.mem.write(dirp, dir);
 

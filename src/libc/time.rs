@@ -241,9 +241,9 @@ pub fn calendar_date_to_timestamp(tm: tm) -> time_t {
     };
 
     seconds += days_in_months_cumul as i64 * 86400;
-    
+
     // Дни, часы, минуты и секунды можно не нормализовать сложной математикой —
-    // при конвертации в секунды они сами "перетекают" куда надо, так как 
+    // при конвертации в секунды они сами "перетекают" куда надо, так как
     // умножаются на свои константы.
     seconds += (tm.tm_mday as i64 - 1) * 86400;
     seconds += tm.tm_hour as i64 * 3600;
@@ -296,13 +296,13 @@ fn localtime(env: &mut Environment, timestamp: ConstPtr<time_t>) -> MutPtr<tm> {
 fn mktime(env: &mut Environment, tm: MutPtr<tm>) -> time_t {
     let tm_value = env.mem.read(tm);
     let res = calendar_date_to_timestamp(tm_value);
-    
-    // ИСПРАВЛЕНИЕ: Стандарт C требует, чтобы mktime нормализовал структуру tm 
+
+    // ИСПРАВЛЕНИЕ: Стандарт C требует, чтобы mktime нормализовал структуру tm
     // и записал её обратно (с правильными днями недели tm_wday, днем в году tm_yday и т.д.).
     // Мы легко это делаем, прогоняя посчитанный timestamp обратно через конвертер.
     let normalized_tm = timestamp_to_calendar_date(res);
     env.mem.write(tm, normalized_tm);
-    
+
     log_dbg!("mktime({:?}) => {}", tm_value, res);
     res
 }
@@ -551,13 +551,13 @@ fn strftime(
                 let formatted_month = format!("{:02}", month);
                 res.extend_from_slice(formatted_month.as_bytes());
             }
-                        b'W' => {
+            b'W' => {
                 let wday = time_val.tm_wday;
                 let yday = time_val.tm_yday;
                 // Для %W неделя начинается с понедельника.
                 // tm_wday: 0 = Вск, 1 = Пнд... Нам нужно 0 = Пнд... 6 = Вск
                 let wday_monday_based = (wday + 6) % 7;
-                
+
                 // Честная формула вычисления номера недели (00-53)
                 let week = (yday - wday_monday_based + 7) / 7;
                 let formatted_week = format!("{:02}", week);

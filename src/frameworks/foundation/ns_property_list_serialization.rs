@@ -209,7 +209,10 @@ fn deserialize_plist(
                 let ulonglong: u64 = uint64;
                 msg![env; number initWithUnsignedLongLong:ulonglong]
             } else {
-                unreachable!(); // according to plist crate docs
+                // plist crate docs say this is unreachable, but if it ever
+                // happens, return a 0-valued NSNumber instead of panicking.
+                log!("Warning: deserialize_plist: integer with no signed/unsigned repr; returning 0.");
+                msg![env; number initWithLongLong:(0_i64)]
             }
         }
         Value::Real(real) => {
@@ -224,15 +227,32 @@ fn deserialize_plist(
             NSPropertyListMutableContainersAndLeaves => {
                 ns_string::mutable_from_rust_string(env, s.clone())
             }
-            _ => unreachable!(),
+            _ => {
+                log!(
+                    "Warning: deserialize_plist: unknown mutability option {}; \
+                     treating as immutable.",
+                    mut_options
+                );
+                ns_string::from_rust_string(env, s.clone())
+            }
         },
         Value::Uid(_) => {
-            // These are probably only used by NSKeyedUnarchiver, which does not
-            // currently use this code in our implementation.
-            unimplemented!("deserialize plist value: {:?}", value);
+            // These are produced by NSKeyedUnarchiver. The plist-level
+            // deserializer doesn't know how to resolve them on its own;
+            // return nil so callers can detect and handle the case rather
+            // than crashing the whole emulator.
+            log!(
+                "Warning: deserialize_plist: encountered NSKeyedArchiver UID outside \
+                 of NSKeyedUnarchiver; returning nil."
+            );
+            nil
         }
         _ => {
-            unreachable!() // enum is marked inexhaustive, but shouldn't be
+            log!(
+                "Warning: deserialize_plist: unknown plist value {:?}; returning nil.",
+                value
+            );
+            nil
         }
     }
 }
@@ -248,8 +268,14 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
     let date_class = env.objc.get_known_class("NSDate", &mut env.mem);
 
     if env.objc.class_is_subclass_of(class, dict_class) {
-        // only our internal implementation is supported
-        assert!(env.objc.get_class_name(class).starts_with("_touchHLE_NS"));
+        if !env.objc.get_class_name(class).starts_with("_touchHLE_NS") {
+            log!(
+                "Warning: serialize_plist: dictionary subclass {} is not our \
+                 internal implementation; serializing as empty dict.",
+                env.objc.get_class_name(class)
+            );
+            return Value::Dictionary(plist::dictionary::Dictionary::new());
+        }
 
         let mut dict = plist::dictionary::Dictionary::new();
         let dict_host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(plist));
@@ -264,11 +290,19 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
             let key_class: Class = msg![env; key class];
 
             // only string keys are supported
-            assert!(env.objc.class_is_subclass_of(key_class, str_class));
-            assert!(env
-                .objc
-                .get_class_name(key_class)
-                .starts_with("_touchHLE_NS"));
+            if !env.objc.class_is_subclass_of(key_class, str_class)
+                || !env
+                    .objc
+                    .get_class_name(key_class)
+                    .starts_with("_touchHLE_NS")
+            {
+                log!(
+                    "Warning: serialize_plist: dropping non-string or external \
+                     dictionary key (class {}).",
+                    env.objc.get_class_name(key_class)
+                );
+                continue;
+            }
 
             let key_string = ns_string::to_rust_string(env, key);
             let val_plist = serialize_plist(env, val);
@@ -276,8 +310,14 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         }
         Value::Dictionary(dict)
     } else if env.objc.class_is_subclass_of(class, arr_class) {
-        // only our internal implementation is supported
-        assert!(env.objc.get_class_name(class).starts_with("_touchHLE_NS"));
+        if !env.objc.get_class_name(class).starts_with("_touchHLE_NS") {
+            log!(
+                "Warning: serialize_plist: array subclass {} is not our internal \
+                 implementation; serializing as empty array.",
+                env.objc.get_class_name(class)
+            );
+            return Value::Array(Vec::new());
+        }
 
         let arr_host_obj: ArrayHostObject = std::mem::take(env.objc.borrow_mut(plist));
         let arr: Vec<Value> = arr_host_obj
@@ -288,8 +328,14 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         *env.objc.borrow_mut(plist) = arr_host_obj;
         Value::Array(arr)
     } else if env.objc.class_is_subclass_of(class, str_class) {
-        // only our internal implementation is supported
-        assert!(env.objc.get_class_name(class).starts_with("_touchHLE_NS"));
+        if !env.objc.get_class_name(class).starts_with("_touchHLE_NS") {
+            log!(
+                "Warning: serialize_plist: string subclass {} is not our internal \
+                 implementation; serializing as empty string.",
+                env.objc.get_class_name(class)
+            );
+            return Value::String(String::new());
+        }
 
         let s = ns_string::to_rust_string(env, plist);
         Value::String(s.to_string())
@@ -316,6 +362,10 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
         Value::Date(time.into())
     } else {
-        unimplemented!("class {}", env.objc.get_class_name(class))
+        log!(
+            "Warning: serialize_plist: unsupported class {} - serializing as null string.",
+            env.objc.get_class_name(class)
+        );
+        Value::String(String::new())
     }
 }
