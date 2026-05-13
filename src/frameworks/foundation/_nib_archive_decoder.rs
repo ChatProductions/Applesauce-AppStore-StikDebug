@@ -32,6 +32,61 @@ struct NIBArchiveDecoderHostObject {
 }
 impl HostObject for NIBArchiveDecoderHostObject {}
 
+/// NIB archive's binary value marker for float-encoded numbers (4 bytes each
+/// in little-endian). This is the canonical encoding used by UIKit when it
+/// archives a CGFloat/CGPoint/CGRect on a 32-bit ABI.
+const NIB_MARKER_FLOAT: u8 = 6;
+/// Same as [`NIB_MARKER_FLOAT`] but with double-precision (8 bytes each in
+/// little-endian). Used by newer UIKit versions and Mac archives.
+const NIB_MARKER_DOUBLE: u8 = 7;
+
+/// Best-effort decode of a NIB-archived `CGPoint`. Returns `None` if the data
+/// doesn't match any of the known encodings; the caller is then expected to
+/// log a warning and return `CGPointZero`, matching how Apple's runtime
+/// silently substitutes zero when an archived value is corrupt.
+fn decode_nib_cgpoint(data: &[u8]) -> Option<CGPoint> {
+    match data.first().copied()? {
+        NIB_MARKER_FLOAT if data.len() >= 9 => Some(CGPoint {
+            x: f32::from_le_bytes(data[1..5].try_into().ok()?),
+            y: f32::from_le_bytes(data[5..9].try_into().ok()?),
+        }),
+        NIB_MARKER_DOUBLE if data.len() >= 17 => Some(CGPoint {
+            x: f64::from_le_bytes(data[1..9].try_into().ok()?) as f32,
+            y: f64::from_le_bytes(data[9..17].try_into().ok()?) as f32,
+        }),
+        _ => None,
+    }
+}
+
+/// Best-effort decode of a NIB-archived `CGRect`. Returns `None` if the data
+/// doesn't match any of the known encodings; see [`decode_nib_cgpoint`] for
+/// the caller contract.
+fn decode_nib_cgrect(data: &[u8]) -> Option<CGRect> {
+    match data.first().copied()? {
+        NIB_MARKER_FLOAT if data.len() >= 17 => Some(CGRect {
+            origin: CGPoint {
+                x: f32::from_le_bytes(data[1..5].try_into().ok()?),
+                y: f32::from_le_bytes(data[5..9].try_into().ok()?),
+            },
+            size: CGSize {
+                width: f32::from_le_bytes(data[9..13].try_into().ok()?),
+                height: f32::from_le_bytes(data[13..17].try_into().ok()?),
+            },
+        }),
+        NIB_MARKER_DOUBLE if data.len() >= 33 => Some(CGRect {
+            origin: CGPoint {
+                x: f64::from_le_bytes(data[1..9].try_into().ok()?) as f32,
+                y: f64::from_le_bytes(data[9..17].try_into().ok()?) as f32,
+            },
+            size: CGSize {
+                width: f64::from_le_bytes(data[17..25].try_into().ok()?) as f32,
+                height: f64::from_le_bytes(data[25..33].try_into().ok()?) as f32,
+            },
+        }),
+        _ => None,
+    }
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -188,11 +243,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
     };
-    assert_eq!(6, data[0]);
-    let x = f32::from_le_bytes(data[1..5].try_into().unwrap());
-    let y = f32::from_le_bytes(data[5..9].try_into().unwrap());
-    log_dbg!("decoded CGPoint {} {}", x, y);
-    CGPoint { x, y }
+    if let Some(point) = decode_nib_cgpoint(data) {
+        // Copy out of the packed struct before formatting to avoid taking
+        // a reference to a possibly-misaligned field.
+        let (x, y) = (point.x, point.y);
+        log_dbg!("decoded CGPoint {} {}", x, y);
+        point
+    } else {
+        log!(
+            "Warning: -[NSCoder decodeCGPointForKey:] got unrecognised NIB data \
+             (first byte = 0x{:02x}, len = {}); returning CGPointZero",
+            data.first().copied().unwrap_or(0),
+            data.len()
+        );
+        CGPoint { x: 0.0, y: 0.0 }
+    }
 }
 
 - (CGRect)decodeCGRectForKey:(id)key { // NSString*
@@ -206,15 +271,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ValueVariant::Data(data) = val.unwrap().value() else {
         unreachable!()
     };
-    assert_eq!(6, data[0]);
-    let x = f32::from_le_bytes(data[1..5].try_into().unwrap());
-    let y = f32::from_le_bytes(data[5..9].try_into().unwrap());
-    let width = f32::from_le_bytes(data[9..13].try_into().unwrap());
-    let height = f32::from_le_bytes(data[13..17].try_into().unwrap());
-    log_dbg!("decoded CGRect {} {} {} {}", x, y, width, height);
-    CGRect {
-        origin: CGPoint { x, y },
-        size: CGSize { width, height },
+    if let Some(rect) = decode_nib_cgrect(data) {
+        // Copy out of the packed struct before formatting to avoid taking
+        // a reference to a possibly-misaligned field.
+        let (x, y) = (rect.origin.x, rect.origin.y);
+        let (w, h) = (rect.size.width, rect.size.height);
+        log_dbg!("decoded CGRect {} {} {} {}", x, y, w, h);
+        rect
+    } else {
+        log!(
+            "Warning: -[NSCoder decodeCGRectForKey:] got unrecognised NIB data \
+             (first byte = 0x{:02x}, len = {}); returning CGRectZero",
+            data.first().copied().unwrap_or(0),
+            data.len()
+        );
+        CGRect {
+            origin: CGPoint { x: 0.0, y: 0.0 },
+            size: CGSize { width: 0.0, height: 0.0 },
+        }
     }
 }
 
