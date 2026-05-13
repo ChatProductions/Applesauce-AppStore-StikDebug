@@ -527,8 +527,44 @@ impl ObjC {
                 || name.starts_with("SBScene")
                 || name.starts_with("SBSystem"); // <-- ДОБАВЛЕНО ЗДЕСЬ
 
+            // Detect garbage class names that come from corrupted guest
+            // memory reads (e.g. a NULL-page read returning all zeroes
+            // becomes the empty string after CStr decoding). Treat them
+            // like any other "unknown class": install a placeholder so the
+            // guest can keep running, instead of crashing the emulator.
+            let is_garbage = name.is_empty()
+                || name
+                    .chars()
+                    .any(|c| c.is_control() || !c.is_ascii());
+
             if !use_placeholder && !is_fake {
-                panic!("Missing implementation for class {name}!");
+                // Historically this branch panicked. In the real
+                // Objective-C runtime, looking up a class that doesn't
+                // exist returns `nil` and the caller deals with it — it
+                // never aborts the process. Apps frequently reference
+                // classes that don't exist in the iOS version they
+                // actually run on (e.g. UICollectionViewCell on iOS < 6),
+                // or that touchHLE has no host implementation for, and
+                // they expect to either fall back to a default class or
+                // to detect the absence at runtime. Crashing here breaks
+                // perfectly valid apps, so instead we log a loud warning
+                // and install an UnimplementedClass placeholder, matching
+                // the behaviour of the `link_class` (dyld) path.
+                if is_garbage {
+                    log!(
+                        "Warning: get_known_class called with a garbage/empty class name \
+                         ({:?}) — this usually indicates corrupted guest memory. \
+                         Installing a placeholder so the guest can keep running.",
+                        name
+                    );
+                } else {
+                    log!(
+                        "Warning: get_known_class({:?}) — no host implementation; \
+                         installing a placeholder. Some features depending on this \
+                         class may not work.",
+                        name
+                    );
+                }
             }
 
             if is_fake {

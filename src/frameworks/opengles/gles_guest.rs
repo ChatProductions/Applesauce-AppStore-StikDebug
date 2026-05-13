@@ -1822,17 +1822,57 @@ fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutP
                 .bytes_at_mut(guest_buffer.cast(), buffer_size)
                 .copy_from_slice(from_raw_parts(host_buffer as *mut u8, buffer_size as usize));
         }
-        let current_ctx = env
+        let Some(current_ctx) = *env
             .framework_state
             .opengles
-            .current_ctx_for_thread(env.current_thread);
+            .current_ctx_for_thread(env.current_thread)
+        else {
+            // glMapBufferOES requires a current context (Apple: "An
+            // EAGLContext must be current on the thread before any GL
+            // calls"). Without one, free the temporary guest buffer we
+            // just allocated and return NULL, matching the GL spec which
+            // says glMapBufferOES returns NULL on failure.
+            env.mem.free(guest_buffer);
+            return nil.cast();
+        };
         let current_ctx_host_object = env
             .objc
-            .borrow_mut::<EAGLContextHostObject>(current_ctx.unwrap());
-        assert!(current_ctx_host_object
+            .borrow_mut::<EAGLContextHostObject>(current_ctx);
+        // Per the GL_OES_mapbuffer spec, calling glMapBufferOES while a
+        // buffer is already mapped is a GL_INVALID_OPERATION and returns
+        // NULL. Some apps (e.g. ZAS) accidentally re-map without unmapping
+        // first; the previous host mapping is still owned by the GL
+        // driver, so we cannot just drop it without unmapping. To stay
+        // close to Apple's lenient behaviour, we unmap the stale mapping
+        // (freeing the previous guest mirror) and install the new one so
+        // the app can continue uploading data instead of crashing.
+        if let Some((stale_guest_buffer, _stale_host_buffer)) = current_ctx_host_object
             .mapped_buffers
-            .insert(buffer_object_name, (guest_buffer, host_buffer))
-            .is_none());
+            .remove(&buffer_object_name)
+        {
+            log!(
+                "Warning: glMapBufferOES called on buffer {} that was already mapped; \
+                 discarding the previous mapping (the previous pointer is no longer valid).",
+                buffer_object_name
+            );
+            env.mem.free(stale_guest_buffer);
+            // Issue a real glUnmapBufferOES so the driver releases its
+            // own mapping of the buffer that we just dropped.
+            with_ctx_and_mem(env, |gles, _mem| unsafe {
+                gles.UnmapBufferOES(target);
+            });
+            // Re-borrow because with_ctx_and_mem dropped our reference.
+            let current_ctx_host_object = env
+                .objc
+                .borrow_mut::<EAGLContextHostObject>(current_ctx);
+            current_ctx_host_object
+                .mapped_buffers
+                .insert(buffer_object_name, (guest_buffer, host_buffer));
+        } else {
+            current_ctx_host_object
+                .mapped_buffers
+                .insert(buffer_object_name, (guest_buffer, host_buffer));
+        }
         guest_buffer
     }
 }

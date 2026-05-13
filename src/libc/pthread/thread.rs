@@ -289,12 +289,24 @@ pub fn pthread_create(
 }
 
 fn pthread_equal(env: &mut Environment, thread1: pthread_t, thread2: pthread_t) -> i32 {
-    if State::get(env).threads.get(&thread1).unwrap().thread_id
-        == State::get(env).threads.get(&thread2).unwrap().thread_id
-    {
-        1
-    } else {
-        0
+    // POSIX: pthread_equal() shall return a non-zero value if t1 and t2 are
+    // equal; otherwise, zero shall be returned. On Darwin pthread_t is an
+    // opaque handle, so direct handle equality is a sufficient (and the
+    // canonical) check. We still consult our thread registry to handle the
+    // case where the same logical thread was assigned two different opaque
+    // handles, but a missing entry must not panic — guest code can legally
+    // call pthread_equal with a stale pthread_t (e.g. of a thread that has
+    // already exited and been collected). Treat any unknown handle as
+    // "compare by raw pthread_t" instead of crashing.
+    if thread1 == thread2 {
+        return 1;
+    }
+    let state = State::get(env);
+    let id1 = state.threads.get(&thread1).map(|t| t.thread_id);
+    let id2 = state.threads.get(&thread2).map(|t| t.thread_id);
+    match (id1, id2) {
+        (Some(a), Some(b)) if a == b => 1,
+        _ => 0,
     }
 }
 
