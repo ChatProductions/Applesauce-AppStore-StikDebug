@@ -407,12 +407,10 @@ impl GuestFile {
     pub fn set_len(&self, len: u64) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.set_len(len),
-            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
-                std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Attempt to resize a read-only file",
-                ),
-            ),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Attempt to resize a read-only file",
+            )),
             GuestFile::Directory => Err(std::io::Error::new(
                 std::io::ErrorKind::IsADirectory,
                 "Attempt to resize a directory as a guest file",
@@ -461,12 +459,10 @@ impl Write for GuestFile {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             GuestFile::File(file) => file.write(buf),
-            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
-                std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Attempt to write to a read-only file",
-                ),
-            ),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Attempt to write to a read-only file",
+            )),
             GuestFile::Directory => Err(std::io::Error::new(
                 std::io::ErrorKind::IsADirectory,
                 "Attempt to write to a directory as a guest file",
@@ -481,12 +477,10 @@ impl Write for GuestFile {
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.flush(),
-            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
-                std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "Attempt to flush a read-only file",
-                ),
-            ),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Attempt to flush a read-only file",
+            )),
             GuestFile::Directory => Err(std::io::Error::new(
                 std::io::ErrorKind::IsADirectory,
                 "Attempt to flush a directory as a guest file",

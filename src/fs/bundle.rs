@@ -231,72 +231,75 @@ impl IpaFileRef {
         // be OK as early iOS IPA files are relatively small in size.
         let mut archive_cache = (*self.archive_files_cache).borrow_mut();
         if !archive_cache.contains_key(&self.index) {
+            // Read the zip entry into an owned buffer inside its own block so
+            // the `archive` RefMut is released before we touch the caches.
             let mut archive = (*self.archive).borrow_mut();
-            let mut file = match archive.by_index(self.index) {
-                Ok(file) => file,
+            let decoded: Option<(Vec<u8>, ArchivedFileMetadata)> = match archive
+                .by_index(self.index)
+            {
+                Ok(mut file) => {
+                    let modified = file.last_modified();
+                    // This is not the cleanest way!
+                    // TODO: just use `time` or `chrono` crates for time conversions
+                    // (this also entails a lot of refactoring in [crate::libc:time])
+                    let tm = tm::from(
+                        modified.year(),
+                        modified.month(),
+                        modified.day(),
+                        modified.hour(),
+                        modified.minute(),
+                        modified.second(),
+                    );
+                    let timestamp = calendar_date_to_timestamp(tm);
+                    let size = file.size();
+                    let mut buf = Vec::new();
+                    if let Err(e) = file.read_to_end(&mut buf) {
+                        log!(
+                            "Warning: IpaFileRef::open(): IO error decompressing IPA entry {}: {}; returning partial buffer ({} bytes) to guest.",
+                            self.index,
+                            e,
+                            buf.len()
+                        );
+                    }
+                    Some((
+                        buf,
+                        ArchivedFileMetadata {
+                            last_modified: timestamp.into(),
+                            size,
+                        },
+                    ))
+                }
                 Err(ZipError::Io(e)) => {
-                    // Real IO error reading the host-side IPA. We can't
-                    // surface a partial file to the guest, but we also
-                    // shouldn't tear the host down — return an empty buffer
-                    // so the guest just sees a 0-byte file.
                     log!(
                         "Warning: IpaFileRef::open(): IO error reading IPA entry {}: {}; returning empty file to guest.",
                         self.index,
                         e
                     );
-                    drop(archive);
-                    let cached: DecompressedFile = Rc::from(Vec::new());
-                    archive_cache.insert(self.index, cached);
-                    let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
-                    return IpaFile {
-                        file: Cursor::new(cached_file),
-                    };
+                    None
                 }
                 Err(e) => {
-                    // anything other than IO error means we recorded an invalid
-                    // entry at FS-build time; treat as empty rather than crash.
                     log!(
                         "Warning: IpaFileRef::open(): could not open IPA entry {}: {}; returning empty file to guest.",
                         self.index,
                         e
                     );
-                    drop(archive);
-                    let cached: DecompressedFile = Rc::from(Vec::new());
-                    archive_cache.insert(self.index, cached);
-                    let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
-                    return IpaFile {
-                        file: Cursor::new(cached_file),
-                    };
+                    None
                 }
             };
-            let mut metadata_map = (*self.metadata_map).borrow_mut();
-            let modified = file.last_modified();
-            // This is not the cleanest way!
-            // TODO: just use `time` or `chrono` crates for time conversions
-            // (this also entails a lot of refactoring in [crate::libc:time])
-            let tm = tm::from(
-                modified.year(),
-                modified.month(),
-                modified.day(),
-                modified.hour(),
-                modified.minute(),
-                modified.second(),
-            );
-            let timestamp = calendar_date_to_timestamp(tm);
-            metadata_map.entry(self.index).or_insert(ArchivedFileMetadata {
-                last_modified: timestamp.into(),
-                size: file.size(),
-            });
-            let mut buf = Vec::new();
-            if let Err(e) = file.read_to_end(&mut buf) {
-                log!(
-                    "Warning: IpaFileRef::open(): IO error decompressing IPA entry {}: {}; returning partial buffer ({} bytes) to guest.",
-                    self.index,
-                    e,
-                    buf.len()
-                );
+            drop(archive);
+
+            match decoded {
+                Some((buf, meta)) => {
+                    (*self.metadata_map)
+                        .borrow_mut()
+                        .entry(self.index)
+                        .or_insert(meta);
+                    archive_cache.insert(self.index, Rc::from(buf));
+                }
+                None => {
+                    archive_cache.insert(self.index, Rc::from(Vec::new()));
+                }
             }
-            archive_cache.insert(self.index, Rc::from(buf));
         }
         let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
         IpaFile {

@@ -222,7 +222,8 @@ fn __cxa_throw(env: &mut Environment, _exc: MutVoidPtr, tinfo: ConstVoidPtr, _dt
              touchHLE's SjLj bypass is returning into a caller that re-throws \
              every iteration. Returning to caller to break the loop; the \
              guest will likely abort on its own shortly.",
-            type_name, count
+            type_name,
+            count
         );
         return;
     }

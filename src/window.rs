@@ -1574,9 +1574,7 @@ pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
         window.map(|win| &win.window),
         None,
     ) else {
-        log!(
-            "Warning: Failed to show error message box; falling back to stderr only."
-        );
+        log!("Warning: Failed to show error message box; falling back to stderr only.");
         eprintln!("touchHLE crashed: {}", error_message);
         return;
     };
@@ -1601,9 +1599,7 @@ pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
                 _ => {
                     // SDL_ShowMessageBox should never return an unknown id
                     // for the buttons we configured, but be defensive.
-                    log!(
-                        "Warning: unexpected message-box button id; ignoring."
-                    );
+                    log!("Warning: unexpected message-box button id; ignoring.");
                 }
             }
         }
