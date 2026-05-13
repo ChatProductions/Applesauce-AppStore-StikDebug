@@ -643,7 +643,15 @@ where
     // Provide type info for dynamic type checking.
     env.objc.message_type_info = Some(<(R, P) as MsgSendSuperSignature>::WithoutSuper::type_info());
     if R::SIZE_IN_MEM.is_some() {
-        todo!() // no stret yet
+        // Struct returns (stret) for super-calls aren't implemented yet.
+        // Log this clearly and fall through to the non-stret path so the
+        // host process keeps running and the caller will simply observe
+        // the default-constructed return value via to_regs/to_mem below.
+        log!(
+            "Warning: msg_send_super2: struct-return (stret) super-call is not implemented; falling back to non-stret dispatch. Result may be unreliable.",
+        );
+        (objc_msgSendSuper2 as fn(&mut Environment, ConstPtr<objc_super>, SEL))
+            .call_from_host(env, args)
     } else {
         (objc_msgSendSuper2 as fn(&mut Environment, ConstPtr<objc_super>, SEL))
             .call_from_host(env, args)

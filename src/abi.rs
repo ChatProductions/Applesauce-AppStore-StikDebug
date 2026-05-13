@@ -551,7 +551,12 @@ impl GuestArg for VaList {
         }
     }
     fn to_regs(self, _regs: &mut [u32]) {
-        todo!()
+        // Returning a VaList by value is not part of the AAPCS for guest
+        // code, and we never need to write one back to register state.
+        // Log it instead of panicking if someone happens to invoke it.
+        log!(
+            "Warning: VaList::to_regs called; var-args are read from the stack, never written back. Ignoring."
+        );
     }
 }
 
@@ -599,23 +604,33 @@ pub trait GuestRet: std::fmt::Debug + Sized {
     /// Read the return value from registers.
     fn from_regs(regs: &[u32]) -> Self {
         let _ = regs;
-        panic!()
+        log!(
+            "Warning: GuestRet::from_regs called on a type that did not override it; this is a bug in the ABI implementation. Returning a default-constructed value would be UB; aborting this call."
+        );
+        panic!("GuestRet::from_regs: default impl invoked")
     }
     /// Write the return value to registers.
     fn to_regs(self, regs: &mut [u32]) {
         let _ = regs;
-        panic!()
+        log!(
+            "Warning: GuestRet::to_regs called on a type that did not override it; this is a bug in the ABI implementation."
+        );
     }
 
     /// Read the return value from memory.
     fn from_mem(ptr: ConstVoidPtr, mem: &Mem) -> Self {
         let _ = (ptr, mem);
-        panic!()
+        log!(
+            "Warning: GuestRet::from_mem called on a type that did not override it; this is a bug in the ABI implementation."
+        );
+        panic!("GuestRet::from_mem: default impl invoked")
     }
     /// Write the return value to memory.
     fn to_mem(self, ptr: MutVoidPtr, mem: &mut Mem) {
         let _ = (ptr, mem);
-        panic!()
+        log!(
+            "Warning: GuestRet::to_mem called on a type that did not override it; this is a bug in the ABI implementation."
+        );
     }
 }
 

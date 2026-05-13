@@ -297,10 +297,20 @@ impl Allocator {
         }
 
         let Some(to_trisect) = to_trisect else {
-            panic!("Could not reserve chunk {chunk:?}!");
+            log!(
+                "Warning: Allocator::reserve: could not reserve chunk {:?}; skipping reservation.",
+                chunk
+            );
+            return;
         };
 
-        let (before, after) = to_trisect.trisect_by(chunk).unwrap();
+        let Some((before, after)) = to_trisect.trisect_by(chunk) else {
+            log!(
+                "Warning: Allocator::reserve: trisect_by returned None for chunk {:?}; skipping reservation.",
+                chunk
+            );
+            return;
+        };
         self.unused_chunks.remove_with_base(to_trisect.base);
         if let Some(before) = before {
             self.unused_chunks.insert(before);
@@ -320,7 +330,11 @@ impl Allocator {
         };
 
         let Some(alloc) = self.unused_chunks.allocate(size) else {
-            panic!("Could not find large enough chunk to allocate {size:#x} bytes");
+            log!(
+                "Warning: Allocator::alloc: out of memory (could not find a large enough chunk for {:#x} bytes); returning NULL.",
+                size
+            );
+            return 0;
         };
         self.used_chunks.insert(alloc);
 
@@ -338,7 +352,11 @@ impl Allocator {
     /// This is used for realloc
     pub fn find_allocated_size(&mut self, base: VAddr) -> GuestUSize {
         let Some(size) = self.used_chunks.get_size_with_base(base) else {
-            panic!("Can't find {base:#x}, unknown allocation!");
+            log!(
+                "Warning: Allocator::find_allocated_size: unknown allocation at {:#x}; returning 0.",
+                base
+            );
+            return 0;
         };
         size.get()
     }

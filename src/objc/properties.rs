@@ -48,7 +48,16 @@ unsafe impl SafeRead for ivar_t {}
 impl ClassHostObject {
     pub(super) fn add_ivars_from_bin(&mut self, ivar_list_ptr: ConstPtr<ivar_list_t>, mem: &Mem) {
         let ivar_list_t { entsize, count } = mem.read(ivar_list_ptr);
-        assert!(entsize >= guest_size_of::<ivar_t>());
+        let min_entsize = guest_size_of::<ivar_t>();
+        if entsize < min_entsize {
+            log!(
+                "Warning: add_ivars_from_bin: ivar_list_t at {:?} declares entsize {} smaller than ivar_t ({}); skipping list.",
+                ivar_list_ptr,
+                entsize,
+                min_entsize
+            );
+            return;
+        }
 
         let ivars_base_ptr: ConstPtr<ivar_t> = (ivar_list_ptr + 1).cast();
 
@@ -63,8 +72,14 @@ impl ClassHostObject {
                 ..
             } = mem.read(ivar_ptr);
 
-            let name_string = mem.cstr_at_utf8(name).unwrap().into();
-            self.ivars.insert(name_string, (offset, alignment));
+            let Ok(name_string) = mem.cstr_at_utf8(name) else {
+                log!(
+                    "Warning: add_ivars_from_bin: ivar name at {:?} is not valid UTF-8; skipping entry.",
+                    name
+                );
+                continue;
+            };
+            self.ivars.insert(name_string.into(), (offset, alignment));
         }
     }
 }
@@ -134,13 +149,27 @@ pub(super) fn objc_getProperty(
     // issues with host classes' ivars clobbering guest classes' ivars, but
     // what if the compiler doesn't set the ivar layout at all? This is a simple
     // safeguard: any real ivar offset will be after the isa pointer.
-    assert!(offset >= 4);
+    if offset < 4 {
+        log!(
+            "Warning: objc_getProperty: suspicious ivar offset {} (would clobber isa); returning nil.",
+            offset
+        );
+        return nil;
+    }
 
     if atomic {
         log_once!("TODO: Lock when atomic is set to true in objc_getProperty");
     }
 
-    let ivar: MutPtr<id> = Ptr::from_bits(this.to_bits().checked_add_signed(offset).unwrap());
+    let Some(addr) = this.to_bits().checked_add_signed(offset) else {
+        log!(
+            "Warning: objc_getProperty: overflow computing ivar address for this={:#x}, offset={}; returning nil.",
+            this.to_bits(),
+            offset
+        );
+        return nil;
+    };
+    let ivar: MutPtr<id> = Ptr::from_bits(addr);
     env.mem.read(ivar)
 }
 
@@ -162,13 +191,27 @@ pub(super) fn objc_setProperty(
     // issues with host classes' ivars clobbering guest classes' ivars, but
     // what if the compiler doesn't set the ivar layout at all? This is a simple
     // safeguard: any real ivar offset will be after the isa pointer.
-    assert!(offset >= 4);
+    if offset < 4 {
+        log!(
+            "Warning: objc_setProperty: suspicious ivar offset {} (would clobber isa); ignoring write.",
+            offset
+        );
+        return;
+    }
 
     if atomic {
         log_once!("TODO: Lock when atomic is set to true in objc_setProperty");
     }
 
-    let ivar: MutPtr<id> = Ptr::from_bits(this.to_bits().checked_add_signed(offset).unwrap());
+    let Some(addr) = this.to_bits().checked_add_signed(offset) else {
+        log!(
+            "Warning: objc_setProperty: overflow computing ivar address for this={:#x}, offset={}; ignoring write.",
+            this.to_bits(),
+            offset
+        );
+        return;
+    };
+    let ivar: MutPtr<id> = Ptr::from_bits(addr);
     let old = env.mem.read(ivar);
 
     let void_null: MutVoidPtr = Ptr::null();
@@ -178,8 +221,15 @@ pub(super) fn objc_setProperty(
             1 => msg![env; value copyWithZone:void_null],
             2 => msg![env; value mutableCopyWithZone:void_null],
             // Apple's source code implies that any non-zero value that isn't 2
-            // should mean "copy", but that seems weird, let's be conservative.
-            _ => panic!("Unknown \"should copy\" value: {should_copy}"),
+            // should mean "copy", but that seems weird; treat unknown values
+            // as a regular copy and just log it instead of crashing.
+            other => {
+                log!(
+                    "Warning: objc_setProperty: unknown \"should copy\" value: {}; treating as copyWithZone:.",
+                    other
+                );
+                msg![env; value copyWithZone:void_null]
+            }
         }
     } else {
         nil

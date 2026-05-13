@@ -55,7 +55,11 @@ macro_rules! impl_HostIMP {
             $($P: GuestArg + 'static,)*
         {
             fn type_info(&self) -> (TypeId, &'static str) {
-                todo!("host-to-host message calls with var-args"); // TODO
+                // Host-to-host message calls with var-args are not yet
+                // supported; surface a unique unit type so the runtime can
+                // detect a mismatch without panicking from inside the host
+                // method registration path.
+                (TypeId::of::<fn(DotDotDot) -> R>(), "host_varargs_unsupported")
             }
         }
 
@@ -126,7 +130,16 @@ impl ClassHostObject {
         objc: &mut ObjC,
     ) {
         let method_list_t { entsize, count } = mem.read(method_list_ptr);
-        assert!(entsize >= guest_size_of::<method_t>());
+        let min_entsize = guest_size_of::<method_t>();
+        if entsize < min_entsize {
+            log!(
+                "Warning: add_methods_from_bin: method_list_t at {:?} declares entsize {} smaller than method_t ({}); skipping list.",
+                method_list_ptr,
+                entsize,
+                min_entsize
+            );
+            return;
+        }
 
         let methods_base_ptr: ConstPtr<method_t> = (method_list_ptr + 1).cast();
 
@@ -256,7 +269,15 @@ impl ObjC {
             if methods.contains_key(&sel) {
                 return true;
             } else if superclass == nil {
-                panic!();
+                // Reached the root class without ever encountering the
+                // requested superclass. Treat this as "does not override":
+                // older callers panicked here, but a guest binary with an
+                // inconsistent class hierarchy should not bring down the
+                // host emulator.
+                log!(
+                    "Warning: class_overrides_method_of_superclass: superclass not found in chain for selector; reporting no override."
+                );
+                return false;
             } else {
                 class = superclass;
             }

@@ -842,7 +842,13 @@ impl ObjC {
                     "        {{ \"name\": \"{name}\", \"class_type\": \"fake\" }}{comma}"
                 )?;
             } else {
-                panic!("Unrecognized class type!");
+                log!(
+                    "Warning: dump_classes: encountered unrecognized class host object; emitting placeholder entry.",
+                );
+                writeln!(
+                    file,
+                    "        {{ \"name\": \"<unknown>\", \"class_type\": \"unknown\" }}{comma}"
+                )?;
             }
         }
         writeln!(file, "    ]\n}}")
