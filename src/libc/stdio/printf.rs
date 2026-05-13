@@ -921,7 +921,18 @@ fn __sprintf_chk(
     args: DotDotDot,
 ) -> i32 {
     if strlen == 0 {
-        panic!();
+        // __sprintf_chk is the FORTIFY_SOURCE wrapper around sprintf(); a
+        // zero-byte destination means there is nowhere to even write the
+        // terminating NUL. Real glibc/Apple libc would call __chk_fail()
+        // and abort the process. Log loudly and return 0 ("nothing was
+        // written") instead of crashing the host so an end-of-life iOS app
+        // doesn't take down the emulator.
+        log!(
+            "Warning: __sprintf_chk(dest={:?}, strlen=0, format={:?}): zero-byte destination, refusing to write.",
+            dest,
+            env.mem.cstr_at_utf8(format)
+        );
+        return 0;
     }
     // TODO: respect flags level
     // TODO: full overflow check
@@ -1401,7 +1412,14 @@ where
                         }
                     }
                     Some(modifier) => {
-                        unimplemented!("Length formater '{}' for f", modifier)
+                        // Length modifier we don't model on a %f/%g
+                        // specifier. Drop the parsed value and abort the
+                        // scan rather than crashing the host.
+                        log!(
+                            "Warning: sscanf(): unsupported length modifier '{}' for 'f'/'g'; stopping scan.",
+                            modifier
+                        );
+                        break;
                     }
                 }
             }
@@ -1409,7 +1427,9 @@ where
                 let base: u32 = match specifier {
                     b'x' | b'X' => 16,
                     b'u' => 10,
-                    _ => unreachable!(),
+                    // Outer match guarantees specifier is one of x/X/u, but
+                    // be defensive against future refactors.
+                    _ => 10,
                 };
                 match length_modifier {
                     Some(lm) => {
@@ -1812,7 +1832,14 @@ fn vfprintf(env: &mut Environment, stream: MutPtr<FILE>, format: ConstPtr<u8>, a
     let res = printf_inner::<false, _>(env, |mem, idx| mem.read(format + idx), arg);
     // TODO: I/O error handling
     match env.mem.read(stream).fd {
-        STDIN_FILENO => panic!("Unexpected file descriptor"),
+        STDIN_FILENO => {
+            // vfprintf() to stdin is nonsense; real libc would EBADF. We
+            // simply log and discard the bytes rather than crashing.
+            log!(
+                "Warning: vfprintf() called on STDIN_FILENO; discarding {} bytes.",
+                res.len()
+            );
+        }
         STDOUT_FILENO => _ = std::io::stdout().write_all(&res),
         STDERR_FILENO => _ = std::io::stderr().write_all(&res),
         _ => {
@@ -1824,11 +1851,17 @@ fn vfprintf(env: &mut Environment, stream: MutPtr<FILE>, format: ConstPtr<u8>, a
                 res.len() as GuestUSize,
                 stream,
             );
-            assert_eq!(result, res.len() as GuestUSize);
+            if result != res.len() as GuestUSize {
+                log!(
+                    "Warning: vfprintf(): fwrite wrote {} bytes but {} bytes were formatted.",
+                    result,
+                    res.len()
+                );
+            }
             env.mem.free(buf.cast());
         }
     }
-    res.len().try_into().unwrap()
+    res.len().try_into().unwrap_or(i32::MAX)
 }
 
 fn vwprintf(env: &mut Environment, format: ConstPtr<wchar_t>, arg: VaList) -> i32 {
