@@ -299,7 +299,13 @@ impl Environment {
                         window::DeviceOrientation::Portrait
                     }
 
-                    other => unimplemented!("Unsupported startup orientation: {:?}", other),
+                    other => {
+                        log!(
+                            "Warning: Unsupported startup orientation: {:?}; defaulting to Portrait.",
+                            other
+                        );
+                        window::DeviceOrientation::Portrait
+                    }
                 };
                 log!("App needs non-portrait user interface orientation {:?}, applying device orientation {:?}.", non_portrait_orientation, options.initial_orientation);
             }
@@ -340,7 +346,13 @@ impl Environment {
                     DeviceFamily::iPhone
                 }
             }
-            _ => unreachable!(),
+            _ => {
+                log!(
+                    "Warning: bundle declares an unexpected number of supported device families ({:?}); falling back to iPhone.",
+                    device_family_array
+                );
+                DeviceFamily::iPhone
+            }
         };
         log!("{:?} device family is chosen.", device_family);
         options.device_family = Some(device_family);
@@ -431,7 +443,13 @@ impl Environment {
                         // needed.
                         0
                     }
-                    _ => unimplemented!("Unknown binary slide for {}", name),
+                    _ => {
+                        log!(
+                            "Warning: unknown binary slide for {:?}; loading at slide 0. App may fail to bind some symbols.",
+                            name
+                        );
+                        0
+                    }
                 };
 
                 let dylib = mach_o::MachO::load_from_file(
@@ -1111,7 +1129,18 @@ impl Environment {
                     self.threads[thread].blocked_by = *previous_thread_state;
                 }
             }
-            _ => unreachable!(),
+            other => {
+                // The caller asked to resume a thread that is not currently
+                // suspended. Restore whatever state it was in (already
+                // overwritten with NotBlocked above) and log a warning
+                // instead of crashing the host.
+                log!(
+                    "Warning: resume_thread({}) called on a thread that was not Suspended (was {:?}); leaving thread NotBlocked.",
+                    thread,
+                    other
+                );
+                self.threads[thread].blocked_by = other;
+            }
         }
     }
 
@@ -1261,8 +1290,11 @@ impl Environment {
                     let duration = until.duration_since(Instant::now());
                     std::thread::sleep(duration);
                 }
-                _ => {
-                    panic!("Unexpected ThreadBlock in app picker!");
+                ref other => {
+                    log!(
+                        "Warning: Unexpected ThreadBlock in app picker: {:?}; clearing block.",
+                        other
+                    );
                 }
             }
             self.threads[0].blocked_by = ThreadBlock::NotBlocked;
