@@ -663,7 +663,23 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let a_next = a_iter.next();
                 let b_next = b_iter.next();
                 let (Some(a_unit), Some(b_unit)) = (a_next, b_next) else { return from_rust_ordering(a_next.cmp(&b_next)); };
-                let (Some(a_c), Some(b_c)) = (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) else { panic!("Invalid chars!"); };
+                let (a_c, b_c) = match (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => {
+                        // One of the code units is a UTF-16 surrogate half
+                        // (`char::from_u32` rejects U+D800..=U+DFFF). Fall
+                        // back to byte-order comparison on the raw u16s
+                        // rather than panicking the host.
+                        log!(
+                            "Warning: NSString compare: unpaired surrogate(s) at U+{:04X}/U+{:04X}; falling back to code-unit compare.",
+                            a_unit,
+                            b_unit
+                        );
+                        let ord = a_unit.cmp(&b_unit);
+                        if ord != std::cmp::Ordering::Equal { return from_rust_ordering(ord); }
+                        continue;
+                    }
+                };
 
                 let insensitive_order = a_c.to_lowercase().cmp(b_c.to_lowercase());
                 if insensitive_order != std::cmp::Ordering::Equal { return from_rust_ordering(insensitive_order); }
@@ -675,7 +691,19 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let a_next = a_iter.next();
                 let b_next = b_iter.next();
                 let (Some(a_unit), Some(b_unit)) = (a_next, b_next) else { return from_rust_ordering(a_next.cmp(&b_next)); };
-                let (Some(a_c), Some(b_c)) = (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) else { panic!("Invalid chars!"); };
+                let (a_c, b_c) = match (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => {
+                        log!(
+                            "Warning: NSString compare (numeric): unpaired surrogate(s) at U+{:04X}/U+{:04X}; falling back to code-unit compare.",
+                            a_unit,
+                            b_unit
+                        );
+                        let ord = a_unit.cmp(&b_unit);
+                        if ord != std::cmp::Ordering::Equal { return from_rust_ordering(ord); }
+                        continue;
+                    }
+                };
                 if a_c.is_ascii_digit() && b_c.is_ascii_digit() {
                     let a_int = ascii_number(&mut a_iter, a_c);
                     let b_int = ascii_number(&mut b_iter, b_c);

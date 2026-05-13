@@ -332,7 +332,18 @@ forControlEvents:(UIControlEvents)events {
             );
             () = msg_send(env, (target, action, this, event));
         }
-        _ => panic!(),
+        other => {
+            // UIControl actions have 0, 1 or 2 explicit arguments (plus self
+            // and the selector). Anything else is a malformed selector; on
+            // real UIKit Objective-C would just `objc_msgSend` the call and
+            // garble the arguments. Logging is safer than crashing the host
+            // when an end-of-life iOS app registers an unusual selector.
+            log!(
+                "Warning: UIControl::send_actions: unsupported argument count {} for {:?}; skipping.",
+                other,
+                sel_str
+            );
+        }
     };
 }
 

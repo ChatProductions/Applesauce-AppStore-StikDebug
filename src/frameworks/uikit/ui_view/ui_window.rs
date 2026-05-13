@@ -11,7 +11,9 @@
 
 use super::UIViewHostObject;
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform;
+use crate::frameworks::core_graphics::cg_affine_transform::{
+    CGAffineTransform, CGAffineTransformIdentity,
+};
 use crate::frameworks::core_graphics::{CGPoint, CGRect};
 use crate::frameworks::foundation::ns_string;
 use crate::frameworks::uikit::ui_application::{
@@ -284,7 +286,19 @@ pub const CLASSES: ClassExports = objc_classes! {
             let transform = match orientation {
                 UIInterfaceOrientationLandscapeLeft => CGAffineTransform::make_rotation(-std::f32::consts::FRAC_PI_2),
                 UIInterfaceOrientationLandscapeRight => CGAffineTransform::make_rotation(std::f32::consts::FRAC_PI_2),
-                _ => unimplemented!(),
+                other => {
+                    // UIInterfaceOrientation has Portrait/PortraitUpsideDown/
+                    // LandscapeLeft/LandscapeRight; the first two are filtered
+                    // out earlier (Portrait => None and PortraitUpsideDown
+                    // isn't reachable from window::DeviceOrientation today).
+                    // Fall back to the identity transform so an unexpected
+                    // orientation can't take down the host.
+                    log!(
+                        "Warning: UIWindow autorotation: unsupported interface orientation {}; using identity transform.",
+                        other
+                    );
+                    CGAffineTransformIdentity
+                }
             };
 
             let window_frame: CGRect = msg![env; this frame];

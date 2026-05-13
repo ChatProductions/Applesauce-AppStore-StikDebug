@@ -144,7 +144,13 @@ fn deserialize_plist(
                 NSPropertyListMutableContainers | NSPropertyListMutableContainersAndLeaves => {
                     ns_array::mutable_from_vec(env, array)
                 }
-                _ => unreachable!(),
+                _ => {
+                    log!(
+                        "Warning: deserialize_plist(array): unknown mutability option {}; treating as immutable.",
+                        mut_options
+                    );
+                    ns_array::from_vec(env, array)
+                }
             }
         }
         Value::Dictionary(dict) => {
@@ -164,7 +170,13 @@ fn deserialize_plist(
                 NSPropertyListMutableContainers | NSPropertyListMutableContainersAndLeaves => {
                     ns_dictionary::mutable_dict_from_keys_and_objects(env, &pairs)
                 }
-                _ => unreachable!(),
+                _ => {
+                    log!(
+                        "Warning: deserialize_plist(dict): unknown mutability option {}; treating as immutable.",
+                        mut_options
+                    );
+                    ns_dictionary::dict_from_keys_and_objects(env, &pairs)
+                }
             };
             // ...so they need to be released.
             for (key, value) in pairs {
@@ -189,7 +201,13 @@ fn deserialize_plist(
                     msg_class![env; NSData alloc]
                 }
                 NSPropertyListMutableContainersAndLeaves => msg_class![env; NSMutableData alloc],
-                _ => unreachable!(),
+                _ => {
+                    log!(
+                        "Warning: deserialize_plist(data): unknown mutability option {}; treating as immutable NSData.",
+                        mut_options
+                    );
+                    msg_class![env; NSData alloc]
+                }
             };
             msg![env; ns_data initWithBytesNoCopy:alloc length:length]
         }
