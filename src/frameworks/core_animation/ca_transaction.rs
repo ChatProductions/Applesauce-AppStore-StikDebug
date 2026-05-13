@@ -217,13 +217,27 @@ pub const CLASSES: ClassExports = objc_classes! {
             release(env, old_value);
         },
         kCATransactionCompletionBlock => {
-            unimplemented!();
+            // We do not implement ObjC blocks (^{ ... }) yet so we cannot
+            // invoke a completion block; storing it as plain data is the
+            // closest safe behaviour for guests that simply set it as a
+            // side-effect of using +setValue:forKey: with their own keys.
+            log!(
+                "Warning: [CATransaction setValue:forKey:kCATransactionCompletionBlock] is not supported; ignoring block {:?}.",
+                value
+            );
         },
         _ => {
-            let transaction = State::get_current_transaction_mut(env).unwrap();
-            let old_value = transaction.data.insert(key_string.to_string(), value).unwrap_or(nil);
-            retain(env, value);
-            release(env, old_value);
+            if let Some(transaction) = State::get_current_transaction_mut(env) {
+                let old_value = transaction.data.insert(key_string.to_string(), value).unwrap_or(nil);
+                retain(env, value);
+                release(env, old_value);
+            } else {
+                log!(
+                    "Warning: [CATransaction setValue:{:?} forKey:{:?}] called outside a transaction; ignoring.",
+                    value,
+                    key_string
+                );
+            }
         }
     };
 }
@@ -242,10 +256,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             State::get_current_transaction(env).unwrap().animation_timing_function
         },
         kCATransactionCompletionBlock => {
-            unimplemented!()
+            log!("Warning: [CATransaction valueForKey:kCATransactionCompletionBlock] not supported; returning nil.");
+            nil
         },
         _ => {
-            State::get_current_transaction(env).unwrap().data.get(&*key_string).cloned().unwrap_or(nil)
+            State::get_current_transaction(env)
+                .and_then(|t| t.data.get(&*key_string).cloned())
+                .unwrap_or(nil)
         }
     };
     log_dbg!("[CATransaction valueForKey:{:?} ({})] => {:?}", key, key_string, value);

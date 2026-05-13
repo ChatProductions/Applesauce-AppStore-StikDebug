@@ -558,7 +558,19 @@ fn AudioQueueGetProperty(
         kAudioQueueProperty_MagicCookie => {
             log_dbg!("AudioQueueGetProperty: kAudioQueueProperty_MagicCookie requested, returning empty.");
         }
-        _ => unreachable!(),
+        _ => {
+            // We only advertise IsRunning and MagicCookie as readable via
+            // property_size; if we somehow get here with a different ID it
+            // means the size table and this match got out of sync. Don't
+            // crash the host: return an InvalidProperty error code as Apple
+            // does for unknown properties.
+            log!(
+                "Warning: AudioQueueGetProperty({:?}, {}): unsupported property id; returning kAudioQueueErr_InvalidProperty.",
+                in_aq,
+                debug_fourcc(in_property_id)
+            );
+            return kAudioQueueErr_InvalidProperty;
+        }
     }
 
     0 // success
@@ -635,7 +647,21 @@ pub fn decode_buffer(
 ) -> (ALenum, ALsizei, Vec<u8>) {
     let data_slice = mem.bytes_at(audio_data, audio_data_byte_size);
 
-    assert!(is_supported_audio_format(format));
+    if !is_supported_audio_format(format) {
+        // Real CoreAudio would refuse the buffer back at
+        // AudioQueueNewOutput, but if a previously valid queue is fed an
+        // unsupported format mid-stream (e.g. after seek) we still don't
+        // want to crash the host.
+        log!(
+            "Warning: decode_buffer: format is not supported by our HLE: {:?}; returning empty buffer.",
+            format
+        );
+        return (
+            al::AL_FORMAT_MONO16,
+            format.sample_rate.max(8000.0) as ALsizei,
+            Vec::new(),
+        );
+    }
 
     match format.format_id {
         kAudioFormatAppleIMA4 => {
@@ -713,9 +739,18 @@ pub fn decode_buffer(
                             &u64::from_be_bytes(frame_bytes.try_into().unwrap()).to_le_bytes(),
                         ),
                         16 => processed_data.extend_from_slice(
-                            &u128::from_be_bytes(frame_bytes.try_into().unwrap()).to_le_bytes(),
+                            &u128::from_be_bytes(frame_bytes.try_into().unwrap_or([0u8; 16]))
+                                .to_le_bytes(),
                         ),
-                        _ => unimplemented!(),
+                        other => {
+                            log!(
+                                "Warning: decode_buffer: unsupported bytes_per_frame={}, dropping frame.",
+                                other
+                            );
+                            // Pad with zeroes to keep frame alignment in
+                            // the consumer; better than aborting.
+                            processed_data.extend(std::iter::repeat_n(0u8, other as usize));
+                        }
                     };
                 }
                 processed_data
@@ -770,16 +805,36 @@ pub fn decode_buffer(
                     // Копируем значение в локальную переменную, чтобы избежать
                     // создания ссылки на packed-поле
                     let bits = format.bits_per_channel;
-                    unreachable!(
-                        "Unhandled audio format: {} channels, {} bits",
-                        actual_channels_per_frame, bits
-                    )
+                    log!(
+                        "Warning: decode_buffer: unhandled audio format: {} channels, {} bits; returning empty mono16 buffer.",
+                        actual_channels_per_frame,
+                        bits
+                    );
+                    return (
+                        al::AL_FORMAT_MONO16,
+                        format.sample_rate.max(8000.0) as ALsizei,
+                        Vec::new(),
+                    );
                 }
             };
 
             (f, format.sample_rate as ALsizei, processed_data)
         }
-        _ => unreachable!(),
+        _ => {
+            // Copy values out of the packed struct before formatting to
+            // avoid taking unaligned references.
+            let format_id = format.format_id;
+            let sample_rate = format.sample_rate;
+            log!(
+                "Warning: decode_buffer: unsupported audio format id {}; returning empty mono16 buffer.",
+                format_id
+            );
+            (
+                al::AL_FORMAT_MONO16,
+                sample_rate.max(8000.0) as ALsizei,
+                Vec::new(),
+            )
+        }
     }
 }
 
