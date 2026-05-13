@@ -230,21 +230,46 @@ impl IpaFileRef {
         // The solution here is to cache unzipped data in memory, which should
         // be OK as early iOS IPA files are relatively small in size.
         let mut archive_cache = (*self.archive_files_cache).borrow_mut();
-        archive_cache.entry(self.index).or_insert_with(|| {
+        if !archive_cache.contains_key(&self.index) {
             let mut archive = (*self.archive).borrow_mut();
             let mut file = match archive.by_index(self.index) {
                 Ok(file) => file,
                 Err(ZipError::Io(e)) => {
-                    // this is a runtime error, which we __probably__ should not
-                    // bubble up to the guest
-                    panic!("IO error while opening file from IPA bundle: {e}")
+                    // Real IO error reading the host-side IPA. We can't
+                    // surface a partial file to the guest, but we also
+                    // shouldn't tear the host down — return an empty buffer
+                    // so the guest just sees a 0-byte file.
+                    log!(
+                        "Warning: IpaFileRef::open(): IO error reading IPA entry {}: {}; returning empty file to guest.",
+                        self.index,
+                        e
+                    );
+                    drop(archive);
+                    let cached: DecompressedFile = Rc::from(Vec::new());
+                    archive_cache.insert(self.index, cached);
+                    let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
+                    return IpaFile {
+                        file: Cursor::new(cached_file),
+                    };
                 }
-                // anything other than IO error is a bug in the code, we should
-                // always have a valid index
-                Err(e) => panic!("BUG: could not open file from IPA bundle: {e}"),
+                Err(e) => {
+                    // anything other than IO error means we recorded an invalid
+                    // entry at FS-build time; treat as empty rather than crash.
+                    log!(
+                        "Warning: IpaFileRef::open(): could not open IPA entry {}: {}; returning empty file to guest.",
+                        self.index,
+                        e
+                    );
+                    drop(archive);
+                    let cached: DecompressedFile = Rc::from(Vec::new());
+                    archive_cache.insert(self.index, cached);
+                    let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
+                    return IpaFile {
+                        file: Cursor::new(cached_file),
+                    };
+                }
             };
             let mut metadata_map = (*self.metadata_map).borrow_mut();
-            assert!(!metadata_map.contains_key(&self.index));
             let modified = file.last_modified();
             // This is not the cleanest way!
             // TODO: just use `time` or `chrono` crates for time conversions
@@ -258,17 +283,21 @@ impl IpaFileRef {
                 modified.second(),
             );
             let timestamp = calendar_date_to_timestamp(tm);
-            metadata_map.insert(
-                self.index,
-                ArchivedFileMetadata {
-                    last_modified: timestamp.into(),
-                    size: file.size(),
-                },
-            );
+            metadata_map.entry(self.index).or_insert(ArchivedFileMetadata {
+                last_modified: timestamp.into(),
+                size: file.size(),
+            });
             let mut buf = Vec::new();
-            file.read_to_end(&mut buf).unwrap();
-            Rc::from(buf)
-        });
+            if let Err(e) = file.read_to_end(&mut buf) {
+                log!(
+                    "Warning: IpaFileRef::open(): IO error decompressing IPA entry {}: {}; returning partial buffer ({} bytes) to guest.",
+                    self.index,
+                    e,
+                    buf.len()
+                );
+            }
+            archive_cache.insert(self.index, Rc::from(buf));
+        }
         let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
         IpaFile {
             file: Cursor::new(cached_file),
