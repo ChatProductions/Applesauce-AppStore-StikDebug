@@ -641,7 +641,14 @@ impl Window {
                         && options.dpad_to_touch.is_some()
                     {
                         let Some((x, y, w, h)) = options.dpad_to_touch else {
-                            unreachable!();
+                            // We already checked dpad_to_touch.is_some() in
+                            // the surrounding if-condition, but be defensive
+                            // against future refactors and bail out instead
+                            // of panicking the host.
+                            log!(
+                                "Warning: dpad_to_touch became None between outer check and inner destructure; ignoring D-pad event."
+                            );
+                            continue;
                         };
 
                         // Update held state
@@ -651,7 +658,17 @@ impl Window {
                             crate::options::Button::DPadRight => self.dpad_state.right = pressed,
                             crate::options::Button::DPadUp => self.dpad_state.up = pressed,
                             crate::options::Button::DPadDown => self.dpad_state.down = pressed,
-                            _ => unreachable!(),
+                            _ => {
+                                // The outer `if` already restricts us to the
+                                // four D-pad buttons; if a new variant slips
+                                // through after a refactor, just ignore it
+                                // instead of crashing.
+                                log!(
+                                    "Warning: unexpected button {:?} reached D-pad arm; ignoring.",
+                                    button
+                                );
+                                continue;
+                            }
                         }
 
                         // Compute center
@@ -717,7 +734,14 @@ impl Window {
                                     coords,
                                 )]))
                             }
-                            _ => unreachable!(),
+                            _ => {
+                                // Outer arm only matches ControllerButton{Up,Down}.
+                                log!(
+                                    "Warning: unexpected event {:?} in button-to-touch arm; ignoring.",
+                                    event
+                                );
+                                continue;
+                            }
                         }
                     }
                 }
@@ -859,7 +883,14 @@ impl Window {
                         E::FingerUp { .. } => Event::TouchesUp(map),
                         E::FingerMotion { .. } => Event::TouchesMove(map),
                         E::FingerDown { .. } => Event::TouchesDown(map),
-                        _ => unreachable!(),
+                        _ => {
+                            // Outer arm matches FingerUp/Motion/Down only.
+                            log!(
+                                "Warning: unexpected event {:?} in multi-touch arm; treating as TouchesMove.",
+                                event
+                            );
+                            Event::TouchesMove(map)
+                        }
                     }
                 }
                 E::KeyDown {
@@ -987,7 +1018,16 @@ impl Window {
             if let Some(ref accelerometer) = self.accelerometer {
                 let data = accelerometer.get_data().unwrap();
                 let sdl2::sensor::SensorData::Accel(data) = data else {
-                    panic!();
+                    // We asked SDL for the accelerometer sensor explicitly
+                    // earlier; if SDL handed us a different sensor variant
+                    // (driver bug, future SDL version, etc.), keep the host
+                    // running by reporting the device flat-on-its-back
+                    // (UIAcceleration neutral position).
+                    log!(
+                        "Warning: accelerometer sensor returned non-Accel data ({:?}); reporting neutral acceleration.",
+                        data
+                    );
+                    return (0.0, 0.0, -1.0);
                 };
                 let [x, y, z] = data;
                 // UIAcceleration reports acceleration towards gravity, but SDL2
@@ -1534,7 +1574,11 @@ pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
         window.map(|win| &win.window),
         None,
     ) else {
-        panic!("Failed to show message box!");
+        log!(
+            "Warning: Failed to show error message box; falling back to stderr only."
+        );
+        eprintln!("touchHLE crashed: {}", error_message);
+        return;
     };
 
     match clicked_button {
@@ -1554,7 +1598,13 @@ pub fn show_error_messagebox(window: Option<&Window>, error_message: &str) {
                 },
                 // Close
                 1 => {}
-                _ => unreachable!(),
+                _ => {
+                    // SDL_ShowMessageBox should never return an unknown id
+                    // for the buttons we configured, but be defensive.
+                    log!(
+                        "Warning: unexpected message-box button id; ignoring."
+                    );
+                }
             }
         }
     }
