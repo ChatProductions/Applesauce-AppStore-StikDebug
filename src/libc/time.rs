@@ -455,8 +455,17 @@ fn strptime(
             }
             if chars_count != 2 {
                 Err(())
+            } else if !range.contains(&num) {
+                // The guest fed us a syntactically valid 2-digit number that
+                // is outside the legal range for this field (e.g. hour=99).
+                // Real strptime() returns NULL for this. Don't crash the host.
+                log!(
+                    "Warning: strptime(): value {} out of range {:?} for field; failing conversion.",
+                    num,
+                    range
+                );
+                Err(())
             } else {
-                assert!(range.contains(&num));
                 Ok(num)
             }
         };
@@ -489,11 +498,17 @@ fn strptime(
                     break;
                 }
             },
-            _ => unimplemented!(
-                "Format character '{}'. Formatted up to index {}",
-                specifier as char,
-                format_char_idx
-            ),
+            _ => {
+                // Unsupported format specifier. Real strptime() returns NULL
+                // here; do the same instead of taking down the host.
+                log!(
+                    "Warning: strptime(): unsupported format character '{}' at index {}; failing conversion.",
+                    specifier as char,
+                    format_char_idx
+                );
+                conversation_failed = true;
+                break;
+            }
         }
     }
 
@@ -522,7 +537,16 @@ fn strftime(
     );
 
     let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
-    assert_eq!(env.mem.read(ctype_locale), b'C');
+    let ctype_locale_byte = env.mem.read(ctype_locale);
+    if ctype_locale_byte != b'C' {
+        // We currently only model the C locale. Apps that set a different
+        // LC_CTYPE will silently get C-locale formatting; that's fine for
+        // numeric format specifiers, just log so we notice.
+        log!(
+            "Warning: strftime(): unexpected LC_CTYPE locale {:?}; treating as C locale.",
+            ctype_locale_byte
+        );
+    }
 
     let time_val = env.mem.read(time_ptr);
 
@@ -546,8 +570,7 @@ fn strftime(
 
         match specifier {
             b'm' => {
-                let month = time_val.tm_mon + 1;
-                assert!((1..=12).contains(&month));
+                let month = (time_val.tm_mon + 1).clamp(1, 12);
                 let formatted_month = format!("{:02}", month);
                 res.extend_from_slice(formatted_month.as_bytes());
             }
@@ -578,26 +601,22 @@ fn strftime(
                 res.extend_from_slice(formatted_wday.as_bytes());
             }
             b'd' => {
-                let day = time_val.tm_mday;
-                assert!((1..=31).contains(&day));
+                let day = time_val.tm_mday.clamp(1, 31);
                 let formatted_day = format!("{:02}", day);
                 res.extend_from_slice(formatted_day.as_bytes());
             }
             b'H' => {
-                let hour = time_val.tm_hour;
-                assert!((0..24).contains(&hour));
+                let hour = time_val.tm_hour.clamp(0, 23);
                 let formatted_hour = format!("{:02}", hour);
                 res.extend_from_slice(formatted_hour.as_bytes());
             }
             b'M' => {
-                let minute = time_val.tm_min;
-                assert!((0..60).contains(&minute));
+                let minute = time_val.tm_min.clamp(0, 59);
                 let formatted_minute = format!("{:02}", minute);
                 res.extend_from_slice(formatted_minute.as_bytes());
             }
             b'b' | b'h' => {
-                let month = time_val.tm_mon;
-                assert!((0..12).contains(&month));
+                let month = time_val.tm_mon.clamp(0, 11);
                 const MONTH_ABBRS: [&[u8]; 12] = [
                     b"Jan", b"Feb", b"Mar", b"Apr", b"May", b"Jun", b"Jul", b"Aug", b"Sep", b"Oct",
                     b"Nov", b"Dec",
@@ -605,8 +624,7 @@ fn strftime(
                 res.extend_from_slice(MONTH_ABBRS[month as usize]);
             }
             b'a' => {
-                let wday = time_val.tm_wday;
-                assert!((0..7).contains(&wday));
+                let wday = time_val.tm_wday.clamp(0, 6);
                 const WDAY_ABBRS: [&[u8]; 7] =
                     [b"Sun", b"Mon", b"Tue", b"Wed", b"Thu", b"Fri", b"Sat"];
                 res.extend_from_slice(WDAY_ABBRS[wday as usize]);
@@ -636,17 +654,30 @@ fn strftime(
                 }
             }
             b'S' => {
-                let second = time_val.tm_sec;
-                assert!((0..=60).contains(&second));
+                let second = time_val.tm_sec.clamp(0, 60);
                 let formatted_second = format!("{:02}", second);
                 res.extend_from_slice(formatted_second.as_bytes());
             }
-            _ => unimplemented!(
-                "Format character '{}'. Formatted up to index {}",
-                specifier as char,
-                format_char_idx
-            ),
+            other => {
+                // Unsupported format specifier in strftime(). Emit it
+                // literally (preceded by the percent, as glibc does for
+                // some unsupported specifiers) and continue instead of
+                // crashing the host.
+                log!(
+                    "Warning: strftime(): unsupported format character '{}' at index {}; emitting literally.",
+                    other as char,
+                    format_char_idx
+                );
+                res.push(b'%');
+                res.push(other);
+            }
         }
+    }
+
+    if max_size == 0 {
+        // glibc strftime() with max_size=0 returns 0 and writes nothing.
+        // Avoid the underflow below.
+        return 0;
     }
 
     let middle = if ((max_size - 1) as usize) < res.len() {
@@ -660,7 +691,7 @@ fn strftime(
         dest_slice[i] = byte;
     }
 
-    res.len().try_into().unwrap()
+    res.len().try_into().unwrap_or(GuestUSize::MAX)
 }
 
 fn difftime(_env: &mut Environment, time1: time_t, time0: time_t) -> f64 {
