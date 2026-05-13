@@ -129,7 +129,15 @@ pub fn handle_event(env: &mut Environment, event: Event) {
         Event::TouchesDown(map) => handle_touches_down(env, map),
         Event::TouchesMove(map) => handle_touches_move(env, map),
         Event::TouchesUp(map) => handle_touches_up(env, map),
-        _ => unreachable!(),
+        other => {
+            // ui_touch::handle_event only ever wants touch events; non-touch
+            // events are filtered out before getting here. Log instead of
+            // panicking the host if that contract is ever violated.
+            log!(
+                "Warning: ui_touch::handle_event: unsupported event {:?}; ignored.",
+                other
+            );
+        }
     }
 }
 

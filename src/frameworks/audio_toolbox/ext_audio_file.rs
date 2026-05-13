@@ -330,7 +330,16 @@ pub fn ExtAudioFileGetProperty(
         kExtAudioFileProperty_AudioConverter => {
             return kExtAudioFileError_InvalidProperty;
         }
-        _ => unreachable!(),
+        other => {
+            // ExtAudioFileGetPropertyInfo() filters this out before we get
+            // here, but a guest could theoretically construct a call that
+            // bypasses that path. Don't crash the host on a bad property id.
+            log!(
+                "Warning: ExtAudioFileGetProperty(): unknown property {}; returning kExtAudioFileError_InvalidProperty.",
+                debug_fourcc(other)
+            );
+            return kExtAudioFileError_InvalidProperty;
+        }
     }
 
     0 // success
@@ -356,11 +365,17 @@ pub fn ExtAudioFileSetProperty(
                 "ExtAudioFileSetProperty(ClientDataFormat): {:?}",
                 new_format
             );
-            State::get(&mut env.framework_state)
+            let Some(host_object) = State::get(&mut env.framework_state)
                 .ext_audio_files
                 .get_mut(&in_ext_audio_file)
-                .expect("ExtAudioFileSetProperty: unknown ExtAudioFileRef")
-                .client_format = Some(new_format);
+            else {
+                log!(
+                    "Warning: ExtAudioFileSetProperty(): unknown ExtAudioFileRef {:?}; returning kExtAudioFileError_InvalidOperationOrder.",
+                    in_ext_audio_file
+                );
+                return kExtAudioFileError_InvalidOperationOrder;
+            };
+            host_object.client_format = Some(new_format);
             0 // success
         }
         kExtAudioFileProperty_FileDataFormat
@@ -417,10 +432,16 @@ pub fn ExtAudioFileRead(
     let out_buffer = abl.first_buffer.data;
     let max_bytes = abl.first_buffer.data_byte_size;
 
-    let host = State::get(&mut env.framework_state)
+    let Some(host) = State::get(&mut env.framework_state)
         .ext_audio_files
         .get_mut(&in_ext_audio_file)
-        .expect("Invalid Ref");
+    else {
+        log!(
+            "Warning: ExtAudioFileRead(): unknown ExtAudioFileRef {:?}; returning kExtAudioFileError_InvalidOperationOrder.",
+            in_ext_audio_file
+        );
+        return kExtAudioFileError_InvalidOperationOrder;
+    };
 
     // Extract format info safely from real or dummy files
     let (frames_per_packet, packet_size) = match &host.audio_file {
@@ -523,10 +544,16 @@ pub fn ExtAudioFileTell(
     out_frame_offset: MutPtr<i64>,
 ) -> OSStatus {
     return_if_null!(in_ext_audio_file);
-    let host_object = State::get(&mut env.framework_state)
+    let Some(host_object) = State::get(&mut env.framework_state)
         .ext_audio_files
         .get(&in_ext_audio_file)
-        .expect("ExtAudioFileTell: unknown ExtAudioFileRef");
+    else {
+        log!(
+            "Warning: ExtAudioFileTell(): unknown ExtAudioFileRef {:?}; returning kExtAudioFileError_InvalidOperationOrder.",
+            in_ext_audio_file
+        );
+        return kExtAudioFileError_InvalidOperationOrder;
+    };
     let pos = host_object.frame_position as i64;
     env.mem.write(out_frame_offset, pos);
     log_dbg!(
