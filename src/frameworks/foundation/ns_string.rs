@@ -232,12 +232,21 @@ impl CodeUnitIterator<'_> {
                 Some(prefix_c) => {
                     let self_c = self_match.next();
                     if case_insensitive {
-                        self_c?;
-                        let (Some(a_c), Some(b_c)) = (
-                            char::from_u32(self_c.unwrap() as u32),
-                            char::from_u32(prefix_c as u32),
-                        ) else {
-                            panic!("Invalid chars in the strings!");
+                        let self_c_value = self_c?;
+                        let Some(a_c) = char::from_u32(self_c_value as u32) else {
+                            // Half of a surrogate pair or an otherwise-invalid
+                            // code unit; fall back to a direct comparison so
+                            // we don't crash the host on malformed strings.
+                            if self_c_value != prefix_c {
+                                return None;
+                            }
+                            continue;
+                        };
+                        let Some(b_c) = char::from_u32(prefix_c as u32) else {
+                            if self_c_value != prefix_c {
+                                return None;
+                            }
+                            continue;
                         };
                         if !a_c.to_lowercase().eq(b_c.to_lowercase()) {
                             return None;
@@ -1927,7 +1936,19 @@ pub fn register_constant_strings(bin: &MachO, mem: &mut Mem, objc: &mut ObjC) {
                 "_touchHLE_NSString_CFConstantString_UTF16",
             )
         } else {
-            panic!("Bad CFTypeID for constant string: {flags:#x}");
+            // The constant string flags field encodes the underlying encoding.
+            // We support 0x7C8 (UTF-8) and 0x7D0 (UTF-16LE). Anything else is
+            // a brand-new variant we have not seen in iPhoneOS 2/3 binaries;
+            // skip the constant rather than panic the host. The CFString
+            // contents will then look empty to the guest, which is closer to
+            // how a real device behaves under unknown flag values.
+            log!(
+                "Warning: register_constant_strings: unknown CFTypeID flags {:#x} at {:?}; \
+                 skipping constant string entry.",
+                flags,
+                cfstr_ptr
+            );
+            continue;
         };
 
         objc.register_static_object(cfstr_ptr.cast().cast_mut(), Box::new(host_object));
