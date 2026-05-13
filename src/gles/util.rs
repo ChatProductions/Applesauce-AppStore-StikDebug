@@ -53,12 +53,19 @@ pub enum ParamType {
 pub struct ParamTable(pub &'static [(GLenum, ParamType, u8)]);
 
 impl ParamTable {
-    /// Look up the component type and count for a parameter. Panics if the name
-    /// is not recognized.
+    /// Look up the component type and count for a parameter. Returns a safe
+    /// default (`ParamType::Float`, 1) for unknown names rather than panicking
+    /// the host, so misbehaving guest code only loses correctness for the
+    /// specific call rather than tearing the whole emulator down.
     pub fn get_type_info(&self, pname: GLenum) -> (ParamType, u8) {
         match self.0.iter().find(|&&(pname2, _, _)| pname == pname2) {
             Some(&(_, type_, count)) => (type_, count),
-            None => panic!("Unhandled parameter name: {pname:#x}"),
+            None => {
+                log!(
+                    "Warning: ParamTable::get_type_info: unhandled parameter name {pname:#x}; defaulting to (Float, 1)."
+                );
+                (ParamType::Float, 1)
+            }
         }
     }
 
@@ -71,13 +78,14 @@ impl ParamTable {
         self.0.iter().any(|(pname2, _, _)| pname == *pname2)
     }
 
-    /// Assert that a parameter name is recognized and that the parameter has a
-    /// particular component count.
+    /// Check that a parameter name is recognized and that the parameter has a
+    /// particular component count. Logs a warning instead of panicking the
+    /// host on mismatch, so the worst case is just a malformed GL call.
     pub fn assert_component_count(&self, pname: GLenum, provided_count: u8) {
         let (_type, actual_count) = self.get_type_info(pname);
         if actual_count != provided_count {
-            panic!(
-                "Parameter {pname:#x} has component count {actual_count}, {provided_count} given."
+            log!(
+                "Warning: ParamTable::assert_component_count: parameter {pname:#x} has component count {actual_count}, {provided_count} given; continuing anyway."
             );
         }
     }
