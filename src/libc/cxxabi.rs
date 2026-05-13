@@ -217,18 +217,20 @@ fn __cxa_throw(env: &mut Environment, _exc: MutVoidPtr, tinfo: ConstVoidPtr, _dt
         );
     }
     if count >= THROW_LOOP_LIMIT {
-        panic!(
-            "Exception loop detected: {} threw {} times in a row. touchHLE's \
-             SjLj bypass is returning into a caller that re-throws every \
-             iteration; giving up instead of spinning forever.",
+        log!(
+            "Warning: Exception loop detected: {} threw {} times in a row. \
+             touchHLE's SjLj bypass is returning into a caller that re-throws \
+             every iteration. Returning to caller to break the loop; the \
+             guest will likely abort on its own shortly.",
             type_name, count
         );
+        return;
     }
 
     if !unwind_to_app_frame(env) {
-        panic!(
-            "Could not unwind past C++ exception ({}); no app-level frame on \
-             the stack",
+        log!(
+            "Warning: Could not unwind past C++ exception ({}); no app-level \
+             frame on the stack. Returning to caller; guest will likely abort.",
             type_name
         );
     }
@@ -237,7 +239,10 @@ fn __cxa_throw(env: &mut Environment, _exc: MutVoidPtr, tinfo: ConstVoidPtr, _dt
 fn __cxa_rethrow(env: &mut Environment) {
     log!("__cxa_rethrow — bypassing");
     if !unwind_to_app_frame(env) {
-        panic!("Could not unwind past __cxa_rethrow");
+        log!(
+            "Warning: Could not unwind past __cxa_rethrow; no app-level frame. \
+             Returning to caller; guest will likely abort."
+        );
     }
 }
 
@@ -254,14 +259,20 @@ fn __cxa_end_catch(_env: &mut Environment) {}
 fn __cxa_pure_virtual(env: &mut Environment) {
     log!("Pure virtual function called — vtable slot was NULL. Bypassing.");
     if !unwind_to_app_frame(env) {
-        panic!("Pure virtual function called and no recoverable frame found");
+        log!(
+            "Warning: Pure virtual function called and no recoverable frame; \
+             returning to caller. Guest will likely abort."
+        );
     }
 }
 
 fn __cxa_call_unexpected(env: &mut Environment, _exc: MutVoidPtr) {
     log!("__cxa_call_unexpected — bypassing");
     if !unwind_to_app_frame(env) {
-        panic!("__cxa_call_unexpected with no recoverable frame");
+        log!(
+            "Warning: __cxa_call_unexpected with no recoverable frame; \
+             returning to caller. Guest will likely abort."
+        );
     }
 }
 
@@ -283,7 +294,12 @@ fn _Unwind_SjLj_Unregister(_env: &mut Environment, _jmpbuf: MutVoidPtr) {}
 fn _Unwind_SjLj_RaiseException(env: &mut Environment, _exc: MutVoidPtr) -> i32 {
     log!("_Unwind_SjLj_RaiseException — bypassing");
     if !unwind_to_app_frame(env) {
-        panic!("_Unwind_SjLj_RaiseException with no recoverable frame");
+        log!(
+            "Warning: _Unwind_SjLj_RaiseException with no recoverable frame; \
+             returning _URC_FATAL_PHASE1_ERROR to caller."
+        );
+        // _URC_FATAL_PHASE1_ERROR
+        return 3;
     }
     0
 }
@@ -292,7 +308,10 @@ fn _Unwind_SjLj_RaiseException(env: &mut Environment, _exc: MutVoidPtr) -> i32 {
 fn _Unwind_SjLj_Resume(env: &mut Environment, _exc: MutVoidPtr) {
     log!("_Unwind_SjLj_Resume — bypassing");
     if !unwind_to_app_frame(env) {
-        panic!("_Unwind_SjLj_Resume with no recoverable frame");
+        log!(
+            "Warning: _Unwind_SjLj_Resume with no recoverable frame; returning \
+             to caller. Guest will likely abort."
+        );
     }
 }
 
@@ -300,7 +319,12 @@ fn _Unwind_SjLj_Resume(env: &mut Environment, _exc: MutVoidPtr) {
 fn _Unwind_SjLj_Resume_or_Rethrow(env: &mut Environment, _exc: MutVoidPtr) -> i32 {
     log!("_Unwind_SjLj_Resume_or_Rethrow — bypassing");
     if !unwind_to_app_frame(env) {
-        panic!("_Unwind_SjLj_Resume_or_Rethrow with no recoverable frame");
+        log!(
+            "Warning: _Unwind_SjLj_Resume_or_Rethrow with no recoverable frame; \
+             returning _URC_FATAL_PHASE2_ERROR."
+        );
+        // _URC_FATAL_PHASE2_ERROR
+        return 2;
     }
     0
 }
