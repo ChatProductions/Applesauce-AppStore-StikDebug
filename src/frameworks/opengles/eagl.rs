@@ -850,8 +850,57 @@ unsafe fn present_renderbuffer_es2(
     gles.Disable(gles2::SCISSOR_TEST);
     gles.Clear(gles2::COLOR_BUFFER_BIT | gles2::DEPTH_BUFFER_BIT | gles2::STENCIL_BUFFER_BIT);
 
-    // Compile the present shader program once and cache it.
-    let program = ensure_present_program(gles);
+    // Compile the present shader program once and cache it. If the shader
+    // fails to compile/link (e.g. on a host with a buggy GLSL ES driver),
+    // skip the present pass instead of crashing — the previous frame
+    // remains on screen and the app continues to run.
+    let Some(program) = ensure_present_program(gles) else {
+        log!("Warning: present_renderbuffer_es2: present shader unavailable, skipping frame.");
+        gles.DeleteTextures(1, &tex);
+        // Restore vertex attribute enabled state so the app's next draw works.
+        for (i, &was) in attrib_was_enabled.iter().enumerate() {
+            if was != 0 {
+                gles.EnableVertexAttribArray(i as GLuint);
+            } else {
+                gles.DisableVertexAttribArray(i as GLuint);
+            }
+        }
+        gles.UseProgram(if old_program > 0 {
+            old_program as GLuint
+        } else {
+            0
+        });
+        gles.BindBuffer(gles2::ARRAY_BUFFER, old_array_buffer as GLuint);
+        gles.BindBuffer(gles2::ELEMENT_ARRAY_BUFFER, old_elem_buffer as GLuint);
+        gles.BindFramebuffer(gles2::FRAMEBUFFER, old_framebuffer as GLuint);
+        gles.BindTexture(gles2::TEXTURE_2D, old_texture as GLuint);
+        gles.ActiveTexture(old_active_texture as GLenum);
+        gles.Viewport(
+            old_viewport[0],
+            old_viewport[1],
+            old_viewport[2] as _,
+            old_viewport[3] as _,
+        );
+        gles.ClearColor(
+            old_clear_color[0],
+            old_clear_color[1],
+            old_clear_color[2],
+            old_clear_color[3],
+        );
+        if depth_test_was_on {
+            gles.Enable(gles2::DEPTH_TEST);
+        }
+        if cull_was_on {
+            gles.Enable(gles2::CULL_FACE);
+        }
+        if blend_was_on {
+            gles.Enable(gles2::BLEND);
+        }
+        if scissor_was_on {
+            gles.Enable(gles2::SCISSOR_TEST);
+        }
+        return;
+    };
     gles.UseProgram(program.program);
     gles.Uniform1i(program.u_tex, 0);
     let m = crate::matrix::Matrix::<4>::from(&rotation_matrix);
@@ -978,10 +1027,10 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
+unsafe fn ensure_present_program(gles: &mut dyn GLES) -> Option<PresentProgram> {
     use crate::gles::gles2_raw as gles2;
     if let Some(p) = PRESENT_PROGRAM.with(|c| c.get()) {
-        return p;
+        return Some(p);
     }
 
     let vs_src = b"\
@@ -1017,7 +1066,9 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
             len as _,
         ))
         .unwrap_or("?");
-        panic!("present_es2 vertex shader compile failed: {s}");
+        log!("Warning: present_es2 vertex shader compile failed: {s}");
+        gles.DeleteShader(vs);
+        return None;
     }
 
     let fs = gles.CreateShader(gles2::FRAGMENT_SHADER);
@@ -1035,7 +1086,10 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
             len as _,
         ))
         .unwrap_or("?");
-        panic!("present_es2 fragment shader compile failed: {s}");
+        log!("Warning: present_es2 fragment shader compile failed: {s}");
+        gles.DeleteShader(vs);
+        gles.DeleteShader(fs);
+        return None;
     }
 
     let prog = gles.CreateProgram();
@@ -1056,7 +1110,11 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
             len as _,
         ))
         .unwrap_or("?");
-        panic!("present_es2 program link failed: {s}");
+        log!("Warning: present_es2 program link failed: {s}");
+        gles.DeleteShader(vs);
+        gles.DeleteShader(fs);
+        gles.DeleteProgram(prog);
+        return None;
     }
 
     let a_pos = gles.GetAttribLocation(prog, b"aPos\0".as_ptr() as *const _);
@@ -1072,7 +1130,7 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> PresentProgram {
         u_tex_mat,
     };
     PRESENT_PROGRAM.with(|c| c.set(Some(result)));
-    result
+    Some(result)
 }
 
 /// Copies the pixels in a renderbuffer bound to `GL_RENDERBUFFER_BINDING_OES`

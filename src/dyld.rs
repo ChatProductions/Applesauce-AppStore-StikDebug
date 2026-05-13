@@ -505,15 +505,27 @@ impl Dyld {
             return;
         };
 
-        let entry_size = stubs.dyld_indirect_symbol_info.as_ref().unwrap().entry_size;
+        let Some(indirect_info) = stubs.dyld_indirect_symbol_info.as_ref() else {
+            log!(
+                "Warning: setup_lazy_linking: __symbol_stub section is missing dyld indirect symbol info; skipping lazy stub rewrite."
+            );
+            return;
+        };
+        let entry_size = indirect_info.entry_size;
 
         // two or three A32 instructions (PIC stub needs one more) followed by
         // the address or offset of the corresponding __la_symbol_ptr
-        let expected_instructions = match entry_size {
+        let expected_instructions: &[u32] = match entry_size {
             4 => &[],
             12 => Self::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
             16 => Self::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
-            _ => unimplemented!(),
+            other => {
+                log!(
+                    "Warning: setup_lazy_linking: unsupported stub entry size {}; skipping lazy stub rewrite.",
+                    other
+                );
+                return;
+            }
         };
 
         assert!(stubs.size % entry_size == 0);
@@ -948,14 +960,26 @@ impl Dyld {
             Self::SVC_LAZY_LINK | Self::SVC_LAZY_LINK_RET_FLAG => {
                 self.do_lazy_link(bins, mem, cpu, svc_pc)
             }
-            Self::SVC_THREAD_EXIT | Self::SVC_RETURN_TO_HOST => unreachable!(), // don't handle here
+            Self::SVC_THREAD_EXIT | Self::SVC_RETURN_TO_HOST => {
+                // These are handled before this dispatch; reaching here
+                // would indicate the SVC numbering scheme is corrupted.
+                log!(
+                    "Warning: Dyld::get_svc_handler received SVC #{} (thread exit / return to host) at {:#x}; this should be handled earlier.",
+                    svc, svc_pc
+                );
+                None
+            }
             Self::SVC_LINKED_FUNCTIONS_BASE.. => {
                 let f = self.linked_host_functions.get(
                     ((svc & !Self::SVC_LAZY_LINK_RET_FLAG) - Self::SVC_LINKED_FUNCTIONS_BASE)
                         as usize,
                 );
                 let Some(&(symbol, f)) = f else {
-                    panic!("Unexpected SVC #{svc} at {svc_pc:#x}");
+                    log!(
+                        "Warning: Unexpected SVC #{} at {:#x}; treating as no-op (returning to caller).",
+                        svc, svc_pc
+                    );
+                    return None;
                 };
                 log_dbg!("Call to host function, already linked: {}", symbol);
                 Some(f)
@@ -980,11 +1004,21 @@ impl Dyld {
             entry_size: u32,
             pic_offset: u32,
         ) -> (MutPtr<u32>, MutPtr<u32>) {
-            let original_instructions = match entry_size {
+            let original_instructions: &[u32] = match entry_size {
                 4 => Dyld::SYMBOL_STUB1_INSTRUCTIONS.as_slice(),
                 12 => Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice(),
                 16 => Dyld::PIC_SYMBOL_STUB_INSTRUCTIONS.as_slice(),
-                _ => unreachable!(),
+                other => {
+                    // setup_lazy_linking already filters out unsupported
+                    // sizes; if we reach here something is badly out of
+                    // sync. Treat as a 12-byte normal stub to keep things
+                    // moving rather than aborting the host.
+                    log!(
+                        "Warning: link_by_restoring_stub: unsupported entry size {}; falling back to 12-byte stub.",
+                        other
+                    );
+                    Dyld::SYMBOL_STUB_INSTRUCTIONS.as_slice()
+                }
             };
             let instruction_count: GuestUSize = original_instructions.len().try_into().unwrap();
 
@@ -1220,7 +1254,14 @@ impl Dyld {
 }
 
 fn dyld_stub_binder(_env: &mut Environment, _arg: u32) {
-    panic!("dyld_stub_binder was called! Under HLE, all lazy symbols are bound eagerly, making this unreachable.");
+    // Under HLE we eagerly bind every lazy symbol at link time, so the
+    // dyld_stub_binder should never be invoked. If a guest binary still
+    // jumps here (e.g. through a hand-rolled lazy-binding scheme), log it
+    // instead of crashing the emulator; the caller will simply see a
+    // no-op return.
+    log!(
+        "Warning: dyld_stub_binder was called! Under HLE all lazy symbols are bound eagerly, so this is unexpected. Continuing as a no-op."
+    );
 }
 
 /// Generic fallback stub for functions referenced by the guest binary but
