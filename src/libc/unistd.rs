@@ -215,7 +215,16 @@ fn access(env: &mut Environment, path: ConstPtr<u8>, mode: i32) -> i32 {
                 -1
             }
         }
-        _ => unimplemented!("{}", mode),
+        _ => {
+            // Real access() returns -1 with EINVAL for unknown modes. Match
+            // that instead of crashing the host on a malformed guest call.
+            log!(
+                "Warning: access(): unknown mode {:#x}; returning EINVAL.",
+                mode
+            );
+            set_errno(env, EINVAL);
+            -1
+        }
     }
 }
 
@@ -252,8 +261,17 @@ fn gethostname(env: &mut Environment, name: MutPtr<u8>, namelen: GuestUSize) -> 
     // TODO: define unique hostname once networking is supported
     let hostname = "touchHLE";
     let len: GuestUSize = hostname.len().try_into().unwrap();
-    // TODO: check against HOST_NAME_MAX
-    assert!(namelen > len);
+    if namelen <= len {
+        // POSIX: name buffer too small -> ENAMETOOLONG. Don't crash the host.
+        log!(
+            "Warning: gethostname({:?}, {}): buffer too small for hostname ({} bytes needed); returning -1.",
+            name,
+            namelen,
+            len + 1
+        );
+        set_errno(env, EINVAL);
+        return -1;
+    }
     env.mem
         .bytes_at_mut(name, len)
         .copy_from_slice(hostname.as_bytes());

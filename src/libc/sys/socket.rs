@@ -108,11 +108,22 @@ impl sockaddr {
     }
     fn from_sockaddr_v4(addr: &SocketAddr) -> Self {
         // Only IPV4 for the moment
-        assert!(addr.is_ipv4());
-        let SocketAddr::V4(ipv4addr) = addr else {
-            unreachable!()
-        };
-        sockaddr::from_ipv4_parts(ipv4addr.ip().octets(), ipv4addr.port())
+        match addr {
+            SocketAddr::V4(ipv4addr) => {
+                sockaddr::from_ipv4_parts(ipv4addr.ip().octets(), ipv4addr.port())
+            }
+            SocketAddr::V6(_) => {
+                // Host resolved the peer to an IPv6 address but we don't
+                // model AF_INET6 yet. Return an all-zero IPv4 sockaddr so the
+                // guest sees a well-formed but obviously-invalid address
+                // instead of crashing the host.
+                log!(
+                    "Warning: from_sockaddr_v4(): host returned IPv6 address {:?} but only AF_INET is modelled; returning 0.0.0.0:0.",
+                    addr
+                );
+                sockaddr::from_ipv4_parts([0; 4], 0)
+            }
+        }
     }
     pub fn to_sockaddr_v4(self) -> SocketAddrV4 {
         let (ip, port) = self.to_ipv4_parts();
@@ -443,7 +454,7 @@ fn bind(
     let type_str = match type_ {
         SOCK_STREAM => "TCP",
         SOCK_DGRAM => "UDP",
-        _ => unreachable!(),
+        _ => "<unknown socket type>",
     };
     log_dbg!(
         "bind({}, {:?} ({:?}), {}) -> {} {:?}",
@@ -555,7 +566,17 @@ fn bind(
                 }
             }
         }
-        _ => unreachable!(),
+        other => {
+            // We checked type_ is SOCK_STREAM or SOCK_DGRAM above, but be
+            // defensive against future refactors.
+            log!(
+                "Warning: bind(): unexpected socket type {} on fd {}; returning ESOCKTNOSUPPORT.",
+                other,
+                socket
+            );
+            set_errno(env, ESOCKTNOSUPPORT);
+            return -1;
+        }
     }
 
     0 // Success

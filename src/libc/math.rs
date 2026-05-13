@@ -373,7 +373,17 @@ fn lrint(env: &mut Environment, arg: f64) -> i32 {
             clamped.round_ties_even() as i32
         }
         FE_TOWARDZERO => clamped.trunc() as i32,
-        _ => unimplemented!(),
+        other => {
+            // Unknown rounding mode (the guest set FE_DOWNWARD / FE_UPWARD
+            // via fesetround in a way we don't model yet). Real lrint() is
+            // allowed to fall back to FE_TONEAREST in this case; do that
+            // instead of crashing the host.
+            log!(
+                "Warning: lrint(): unsupported rounding direction {:#x}; falling back to round-to-nearest.",
+                other
+            );
+            clamped.round_ties_even() as i32
+        }
     }
 }
 fn lrintf(env: &mut Environment, arg: f32) -> i32 {
