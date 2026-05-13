@@ -407,14 +407,20 @@ impl GuestFile {
     pub fn set_len(&self, len: u64) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.set_len(len),
-            GuestFile::IpaBundleFile(file) => {
-                panic!("Attempt to resize a read-only file: {file:?}")
-            }
-            GuestFile::ResourceFile(file) => {
-                panic!("Attempt to resize a read-only file: {file:?}")
-            }
-            GuestFile::Directory => panic!("Attempt to resize a directory as a guest file"),
-            _ => unimplemented!(),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Attempt to resize a read-only file",
+                ),
+            ),
+            GuestFile::Directory => Err(std::io::Error::new(
+                std::io::ErrorKind::IsADirectory,
+                "Attempt to resize a directory as a guest file",
+            )),
+            GuestFile::Socket => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "set_len not supported on socket",
+            )),
         }
     }
 
@@ -443,7 +449,10 @@ impl Read for GuestFile {
                 std::io::ErrorKind::IsADirectory,
                 "Attempt to read from a directory as a guest file",
             )),
-            _ => unimplemented!(),
+            GuestFile::Socket => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "read not supported on socket via GuestFile",
+            )),
         }
     }
 }
@@ -452,28 +461,40 @@ impl Write for GuestFile {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             GuestFile::File(file) => file.write(buf),
-            GuestFile::IpaBundleFile(file) => {
-                panic!("Attempt to write to a read-only file: {file:?}")
-            }
-            GuestFile::ResourceFile(file) => {
-                panic!("Attempt to write to a read-only file: {file:?}")
-            }
-            GuestFile::Directory => panic!("Attempt to write to a directory as a guest file"),
-            _ => unimplemented!(),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Attempt to write to a read-only file",
+                ),
+            ),
+            GuestFile::Directory => Err(std::io::Error::new(
+                std::io::ErrorKind::IsADirectory,
+                "Attempt to write to a directory as a guest file",
+            )),
+            GuestFile::Socket => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "write not supported on socket via GuestFile",
+            )),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             GuestFile::File(file) => file.flush(),
-            GuestFile::IpaBundleFile(file) => {
-                panic!("Attempt to flush a read-only file: {file:?}")
-            }
-            GuestFile::ResourceFile(file) => {
-                panic!("Attempt to flush a read-only file: {file:?}")
-            }
-            GuestFile::Directory => panic!("Attempt to flush a directory as a guest file"),
-            _ => unimplemented!(),
+            GuestFile::IpaBundleFile(_) | GuestFile::ResourceFile(_) => Err(
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Attempt to flush a read-only file",
+                ),
+            ),
+            GuestFile::Directory => Err(std::io::Error::new(
+                std::io::ErrorKind::IsADirectory,
+                "Attempt to flush a directory as a guest file",
+            )),
+            GuestFile::Socket => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "flush not supported on socket via GuestFile",
+            )),
         }
     }
 }
@@ -496,7 +517,10 @@ impl Seek for GuestFile {
                     "Attempt to seek a directory as a guest file",
                 ))
             }
-            _ => unimplemented!(),
+            GuestFile::Socket => Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "seek not supported on socket via GuestFile",
+            )),
         }
     }
 }
