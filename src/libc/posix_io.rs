@@ -174,19 +174,23 @@ fn creat(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
 }
 
 pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> FileDescriptor {
-    assert!(
-        flags
-            & !(O_ACCMODE
-                | O_NONBLOCK
-                | O_APPEND
-                | O_SHLOCK
-                | O_NOFOLLOW
-                | O_CREAT
-                | O_TRUNC
-                | O_EXCL
-                | O_NOCTTY)
-            == 0
-    );
+    let known_flags = O_ACCMODE
+        | O_NONBLOCK
+        | O_APPEND
+        | O_SHLOCK
+        | O_NOFOLLOW
+        | O_CREAT
+        | O_TRUNC
+        | O_EXCL
+        | O_NOCTTY;
+    let unknown_flags = flags & !known_flags;
+    if unknown_flags != 0 {
+        log!(
+            "Warning: open(): ignoring unrecognized open flags {:#x} (full flags: {:#x}).",
+            unknown_flags,
+            flags
+        );
+    }
     // ИСПРАВЛЕНИЕ 1: убран assert!(flags & O_EXCL == 0).
     // O_EXCL — валидный флаг (создание файла с проверкой на существование).
     // Вместо паники — корректная обработка ниже, после разрешения пути.
@@ -210,7 +214,18 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             options.read().write();
             needs_flush = true;
         }
-        _ => panic!(),
+        other => {
+            // flags & O_ACCMODE is at most O_ACCMODE wide, so the four
+            // arms above cover all valid values. If a guest passes a
+            // weird value (e.g. an uninitialised buffer), behave like
+            // real libc and return EINVAL instead of crashing the host.
+            log!(
+                "Warning: open(): unknown access mode {:#x}; returning EINVAL.",
+                other
+            );
+            set_errno(env, EINVAL);
+            return -1;
+        }
     };
     if (flags & O_APPEND) != 0 {
         options.append();
@@ -576,7 +591,13 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Err(seek_error) => {
                 match seek_error.kind() {
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
-                    _ => unimplemented!("Unexpected seek error {:?}", seek_error),
+                    _ => {
+                        log!(
+                            "Warning: lseek encountered unexpected seek error {:?}; returning EIO.",
+                            seek_error
+                        );
+                        set_errno(env, EIO);
+                    }
                 }
                 return -1;
             }
@@ -586,7 +607,13 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             Err(seek_error) => {
                 match seek_error.kind() {
                     std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
-                    _ => unimplemented!("Unexpected seek error {:?}", seek_error),
+                    _ => {
+                        log!(
+                            "Warning: lseek encountered unexpected seek error {:?}; returning EIO.",
+                            seek_error
+                        );
+                        set_errno(env, EIO);
+                    }
                 }
                 return -1;
             }
@@ -644,7 +671,13 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
             match seek_error.kind() {
                 std::io::ErrorKind::InvalidInput => set_errno(env, EINVAL),
                 std::io::ErrorKind::IsADirectory => set_errno(env, EISDIR),
-                _ => unimplemented!("Unexpected seek error {:?}", seek_error),
+                _ => {
+                    log!(
+                        "Warning: lseek encountered unexpected seek error {:?}; returning EIO.",
+                        seek_error
+                    );
+                    set_errno(env, EIO);
+                }
             }
             log!(
                 "Warning: lseek({:?}, {:#x}, {}) failed with error: {:?}, \
