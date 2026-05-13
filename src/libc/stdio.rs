@@ -11,7 +11,7 @@ use super::posix_io::{
 };
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::fs::GuestPath;
-use crate::libc::errno::set_errno;
+use crate::libc::errno::{set_errno, EINVAL};
 use crate::libc::string::strlen;
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
@@ -108,10 +108,14 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
 
     let mode = env.mem.cstr_at(mode);
     let [basic_mode @ (b'r' | b'w' | b'a'), flags @ ..] = mode else {
-        panic!(
-            "Unexpected or missing fopen() mode first character: {:?}",
+        // Real Apple libc returns NULL + EINVAL for malformed modes. Match
+        // that behaviour instead of taking down the host.
+        log!(
+            "Warning: fopen() called with unexpected/missing mode first character: {:?}; returning NULL.",
             mode.first()
         );
+        set_errno(env, EINVAL);
+        return Ptr::null();
     };
     let mut plus = false;
     for &flag in flags {
@@ -132,7 +136,16 @@ fn fopen(env: &mut Environment, filename: ConstPtr<u8>, mode: ConstPtr<u8>) -> M
         (b'w', true) => O_RDWR | O_CREAT | O_TRUNC,
         (b'a', false) => O_WRONLY | O_APPEND | O_CREAT,
         (b'a', true) => O_RDWR | O_APPEND | O_CREAT,
-        _ => unreachable!(),
+        _ => {
+            // basic_mode is one of b'r' | b'w' | b'a' per the pattern above;
+            // this arm is only reachable if that pattern is changed without
+            // updating this match. Fall back to read-only as a safe default.
+            log!(
+                "Warning: fopen() basic_mode {:?} fell through; defaulting to O_RDONLY.",
+                basic_mode
+            );
+            O_RDONLY
+        }
     };
 
     match posix_io::open_direct(env, filename, flags) {
@@ -217,7 +230,13 @@ fn freopen(
         (b'w', true) => O_RDWR | O_CREAT | O_TRUNC,
         (b'a', false) => O_WRONLY | O_APPEND | O_CREAT,
         (b'a', true) => O_RDWR | O_APPEND | O_CREAT,
-        _ => unreachable!(),
+        _ => {
+            log!(
+                "Warning: freopen() basic_mode {:?} fell through; defaulting to O_RDONLY.",
+                basic_mode
+            );
+            O_RDONLY
+        }
     };
 
     // 3. Открываем новый файл
@@ -576,7 +595,14 @@ fn fclose(env: &mut Environment, file_ptr: MutPtr<FILE>) -> i32 {
     match posix_io::close(env, fd) {
         0 => 0,
         -1 => EOF,
-        _ => unreachable!(),
+        other => {
+            // posix_io::close should only ever return 0 or -1, but be defensive.
+            log!(
+                "Warning: posix_io::close returned unexpected value {} from fclose(); treating as EOF.",
+                other
+            );
+            EOF
+        }
     }
 }
 
