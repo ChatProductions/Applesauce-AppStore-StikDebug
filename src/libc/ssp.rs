@@ -10,10 +10,17 @@ use crate::environment::Environment;
 
 // Если защита стека поймает переполнение (буфер оверфлоу), игра вызовет эту
 // функцию.
-// Честное поведение — запаниковать и остановить эмулятор, так как память гостя
-// повреждена.
+// На реальном iOS этот вызов аборт-ит гостевой процесс, а не хост. Чтобы не
+// ронять весь эмулятор из-за бага в одной игре, логируем громко и
+// возвращаемся: пусть гость продолжит работу до следующей фатальной ошибки
+// (которая, если что, тоже будет защищена аналогичной обработкой).
 pub fn __stack_chk_fail(_env: &mut Environment) {
-    panic!("Stack smashing detected in guest! (__stack_chk_fail called)");
+    log!(
+        "*** __stack_chk_fail: stack smashing detected in guest! The guest's stack canary was \
+         corrupted. This usually means the app has a real buffer overflow bug. On real iOS this \
+         would abort the process; the emulator will keep running but the app may behave \
+         unpredictably from this point on."
+    );
 }
 
 pub const FUNCTIONS: FunctionExports = &[

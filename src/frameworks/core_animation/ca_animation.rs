@@ -245,7 +245,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         kCAFillModeBoth => kCAFillModeBoth,
         kCAFillModeForwards => kCAFillModeForwards ,
         kCAFillModeRemoved => kCAFillModeRemoved ,
-        _ => panic!("Unknown fill mode \"{}\"", fill_mode_str)
+        other => {
+            log!(
+                "Warning: CAAnimation setFillMode: unknown fill mode {:?}; defaulting to kCAFillModeRemoved.",
+                other
+            );
+            kCAFillModeRemoved
+        }
     };
     env.objc.borrow_mut::<CAAnimationHostObject>(this).fill_mode = fill_mode_str;
 }

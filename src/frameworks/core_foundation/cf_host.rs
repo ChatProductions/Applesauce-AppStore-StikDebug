@@ -391,7 +391,17 @@ fn CFHostStartInfoResolution(
             env.objc.borrow_mut::<CFHostHostObject>(host).resolved[info_idx] = true;
             true
         }
-        _ => unreachable!(),
+        other => {
+            // `info_idx < INFO_TYPE_COUNT` already filters out invalid values,
+            // but we treat any future-added info type defensively rather than
+            // crashing the host.
+            log!(
+                "Warning: CFHostStartInfoResolution: unsupported info type {}; returning false.",
+                other
+            );
+            env.objc.borrow_mut::<CFHostHostObject>(host).in_progress[info_idx] = false;
+            false
+        }
     };
 
     env.objc.borrow_mut::<CFHostHostObject>(host).in_progress[info_idx] = false;

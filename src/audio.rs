@@ -245,7 +245,25 @@ impl AudioFile {
             ..
         } = self.audio_description();
         if !matches!(format, AudioFormat::LinearPcm { .. }) {
-            panic!("{format:?} is a compressed format!");
+            // Callers only invoke this for the Wave/PCM path where the
+            // computation is meaningful. A compressed format here means
+            // something else is calling us for a CAF/AAC track we shouldn't
+            // be sampling; return a safe sentinel (1) and log so we don't
+            // tear the host down.
+            log!(
+                "Warning: AudioFile::bytes_per_sample(): called on compressed format {:?}; returning 1.",
+                format
+            );
+            return 1;
+        }
+        if frames_per_packet == 0 || channels_per_frame == 0 {
+            log!(
+                "Warning: AudioFile::bytes_per_sample(): degenerate description \
+                 (frames_per_packet={}, channels_per_frame={}); returning 1.",
+                frames_per_packet,
+                channels_per_frame
+            );
+            return 1;
         }
         ((bytes_per_packet / frames_per_packet) / channels_per_frame).into()
     }
@@ -320,7 +338,17 @@ impl AudioFile {
                     match bytes_per_sample {
                         1 => buffer[byte_offset] = (sample + 128) as u8,
                         2 => buffer[byte_offset..][..2].copy_from_slice(&sample.to_le_bytes()),
-                        _ => todo!(),
+                        other => {
+                            // 8-bit and 16-bit PCM cover the vast majority of
+                            // iOS WAV assets. Anything else means a broken/
+                            // unusual WAVE header; surface an error to the
+                            // caller rather than crashing the host.
+                            log!(
+                                "Warning: AudioFile::read_bytes(WAV): unsupported bytes_per_sample {}; aborting read.",
+                                other
+                            );
+                            return Err(());
+                        }
                     }
                     byte_offset += bytes_per_sample as usize;
                 }

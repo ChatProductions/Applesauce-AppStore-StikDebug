@@ -1750,7 +1750,10 @@ impl GLES for GLES1OnGL2<'_> {
                 decoded.as_ptr() as *const _,
             )
         } else {
-            unimplemented!("CompressedTexImage2D internalformat: {:#x}", internalformat);
+            log!(
+                "Warning: CompressedTexImage2D: unsupported internalformat {:#x}; skipping upload.",
+                internalformat
+            );
         }
     }
     unsafe fn CopyTexImage2D(
@@ -1815,7 +1818,12 @@ impl GLES for GLES1OnGL2<'_> {
                 );
                 gl21::TexEnvf(target, pname, param)
             }
-            _ => unimplemented!("TexEnvf target {}", target.to_string()),
+            _ => {
+                log!(
+                    "Warning: TexEnvf: unsupported target {:#x}; ignoring call.",
+                    target
+                );
+            }
         }
     }
     unsafe fn TexEnvx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) {
@@ -1834,7 +1842,12 @@ impl GLES for GLES1OnGL2<'_> {
                 assert!(pname == gl21::COORD_REPLACE);
                 gl21::TexEnvf(target, pname, fixed_to_float(param))
             }
-            _ => unimplemented!(),
+            _ => {
+                log!(
+                    "Warning: TexEnvx: unsupported target {:#x}; ignoring call.",
+                    target
+                );
+            }
         }
     }
     unsafe fn TexEnvi(&mut self, target: GLenum, pname: GLenum, param: GLint) {
@@ -1861,7 +1874,13 @@ impl GLES for GLES1OnGL2<'_> {
                 );
                 gl21::TexEnvi(target, pname, param)
             }
-            _ => unimplemented!("target 0x{:X}, pname 0x{:X}", target, pname),
+            _ => {
+                log!(
+                    "Warning: TexEnvi: unsupported target 0x{:X}, pname 0x{:X}; ignoring call.",
+                    target,
+                    pname
+                );
+            }
         }
     }
     unsafe fn TexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *const GLfloat) {
@@ -1891,7 +1910,12 @@ impl GLES for GLES1OnGL2<'_> {
                 assert!(pname == gl21::COORD_REPLACE);
                 gl21::TexEnvfv(target, pname, params)
             }
-            _ => unimplemented!(),
+            _ => {
+                log!(
+                    "Warning: TexEnvfv: unsupported target {:#x}; ignoring call.",
+                    target
+                );
+            }
         }
     }
     unsafe fn TexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *const GLfixed) {
@@ -1912,7 +1936,12 @@ impl GLES for GLES1OnGL2<'_> {
                 let param = fixed_to_float(params.read());
                 gl21::TexEnvfv(target, pname, &param)
             }
-            _ => unimplemented!(),
+            _ => {
+                log!(
+                    "Warning: TexEnvxv: unsupported target {:#x}; ignoring call.",
+                    target
+                );
+            }
         }
     }
     unsafe fn TexEnviv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) {
@@ -1929,7 +1958,12 @@ impl GLES for GLES1OnGL2<'_> {
                 assert!(pname == gl21::COORD_REPLACE);
                 gl21::TexEnviv(target, pname, params)
             }
-            _ => unimplemented!(),
+            _ => {
+                log!(
+                    "Warning: TexEnviv: unsupported target {:#x}; ignoring call.",
+                    target
+                );
+            }
         }
     }
 

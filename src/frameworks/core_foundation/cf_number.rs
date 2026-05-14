@@ -41,7 +41,13 @@ fn CFNumberCreate(
     value_ptr: ConstVoidPtr,
 ) -> CFNumberRef {
     // TODO: unique some common numbers to improve performance
-    assert!(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default()); // unimplemented
+    if allocator != kCFAllocatorDefault && !env.mem.read(allocator).is_system_default() {
+        log!(
+            "Warning: CFNumberCreate: custom allocator {:?} is not supported; \
+             falling back to the system default allocator.",
+            allocator
+        );
+    }
     log_dbg!("CFNumberCreate type {}", type_);
     let num = msg_class![env; NSNumber alloc];
     match type_ {
@@ -69,7 +75,13 @@ fn CFNumberCreate(
             let val: i64 = env.mem.read(value_ptr.cast());
             msg![env; num initWithLongLong:val]
         }
-        _ => unimplemented!("type {}", type_),
+        _ => {
+            log!(
+                "Warning: CFNumberCreate: unsupported CFNumberType {}; defaulting to 0.",
+                type_
+            );
+            msg![env; num initWithInt:(0_i32)]
+        }
     }
 }
 
@@ -112,7 +124,13 @@ fn CFNumberGetValue(
             env.mem.write(value_ptr.cast(), val);
             is_conversion_lossless(env, num, type_)
         }
-        _ => unimplemented!("type {}", type_),
+        _ => {
+            log!(
+                "Warning: CFNumberGetValue: unsupported CFNumberType {}; returning false.",
+                type_
+            );
+            false
+        }
     }
 }
 
@@ -122,7 +140,9 @@ fn CFNumberCompare(
     num2: CFNumberRef,
     context: MutVoidPtr,
 ) -> CFComparisonResult {
-    assert!(context.is_null()); // always NULL according to the docs
+    if !context.is_null() {
+        log!("Warning: CFNumberCompare: context must be NULL; ignoring.");
+    }
     msg![env; num1 compare:num2]
 }
 

@@ -138,7 +138,13 @@ fn alcCloseDevice(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> bool
         log!("alcCloseDevice() вызван с устройством NULL, игнорируем");
         return false;
     }
-    let host_device = State::get(env).devices.remove(&device).unwrap();
+    let Some(host_device) = State::get(env).devices.remove(&device) else {
+        log!(
+            "Warning: alcCloseDevice({:?}) called with unknown device; ignoring.",
+            device
+        );
+        return false;
+    };
     env.mem.free(device.cast());
     let res = unsafe { al::alcCloseDevice(host_device) };
     log_dbg!("alcCloseDevice({:?}) => {:?}", device, res,);
@@ -226,7 +232,7 @@ fn alcCreateContext(
         while env.mem.read(ptr) != 0 {
             let attr = env.mem.read(ptr);
             let val = env.mem.read(ptr + 1);
-            
+
             // ИСПРАВЛЕНИЕ: Мягко фильтруем атрибуты вместо жесткого краша (assert убран).
             // Неизвестные/специфичные для iOS атрибуты просто игнорируем.
             if ALLOWED_CONTEXT_ATTRIBUTES.contains(&attr) {
@@ -234,12 +240,16 @@ fn alcCreateContext(
                 clean_attrs.push(attr);
                 clean_attrs.push(val);
             } else {
-                log!("Warning: Игнорируем неподдерживаемый атрибут контекста OpenAL: {:#x} => {}", attr, val);
+                log!(
+                    "Warning: Игнорируем неподдерживаемый атрибут контекста OpenAL: {:#x} => {}",
+                    attr,
+                    val
+                );
             }
-            
+
             ptr += 2;
         }
-        
+
         if !clean_attrs.is_empty() {
             clean_attrs.push(0); // Добавляем обязательный завершающий нуль
             clean_attrs.as_ptr()
@@ -288,7 +298,13 @@ fn alcDestroyContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
         log!("alcDestroyContext() вызван с контекстом NULL, игнорируем");
         return;
     }
-    let _host_context = State::get(env).contexts.remove(&context).unwrap();
+    let Some(_host_context) = State::get(env).contexts.remove(&context) else {
+        log!(
+            "Warning: alcDestroyContext({:?}) called with unknown context; ignoring.",
+            context
+        );
+        return;
+    };
     env.mem.free(context.cast());
     log_dbg!("alcDestroyContext({:?})", context);
 }
@@ -298,7 +314,13 @@ fn alcProcessContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
         log!("alcProcessContext() вызван с контекстом NULL, игнорируем");
         return;
     }
-    let host_context = State::get(env).contexts.get_mut(&context).unwrap();
+    let Some(host_context) = State::get(env).contexts.get_mut(&context) else {
+        log!(
+            "Warning: alcProcessContext({:?}) called with unknown context; ignoring.",
+            context
+        );
+        return;
+    };
     host_context.ProcessContext()
 }
 fn alcSuspendContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
@@ -306,7 +328,13 @@ fn alcSuspendContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
         log!("alcSuspendContext() вызван с контекстом NULL, игнорируем");
         return;
     }
-    let host_context = State::get(env).contexts.get_mut(&context).unwrap();
+    let Some(host_context) = State::get(env).contexts.get_mut(&context) else {
+        log!(
+            "Warning: alcSuspendContext({:?}) called with unknown context; ignoring.",
+            context
+        );
+        return;
+    };
     host_context.SuspendContext()
 }
 
@@ -333,14 +361,26 @@ fn alcGetContextsDevice(
         log!("alcGetContextsDevice() вызван с контекстом NULL, игнорируем");
         return Ptr::null();
     }
-    let host_context = State::get(env).contexts.get(&context).unwrap();
+    let Some(host_context) = State::get(env).contexts.get(&context) else {
+        log!(
+            "Warning: alcGetContextsDevice({:?}) called with unknown context; returning NULL.",
+            context
+        );
+        return Ptr::null();
+    };
     let host_device = host_context.GetContextsDevice();
-    *State::get(env)
+    let Some((&guest_device, _)) = State::get(env)
         .devices
         .iter()
         .find(|(&_guest, &host)| host == host_device)
-        .unwrap()
-        .0
+    else {
+        log!(
+            "Warning: alcGetContextsDevice({:?}): host device not tracked; returning NULL.",
+            context
+        );
+        return Ptr::null();
+    };
+    guest_device
 }
 
 fn alcGetProcAddress(
@@ -348,8 +388,24 @@ fn alcGetProcAddress(
     _device: ConstPtr<GuestALCdevice>,
     func_name: ConstPtr<u8>,
 ) -> MutVoidPtr {
-    let mangled_func_name = format!("_{}", env.mem.cstr_at_utf8(func_name).unwrap());
-    assert!(mangled_func_name.starts_with("_al"));
+    let raw_name = match env.mem.cstr_at_utf8(func_name) {
+        Ok(s) => s.to_owned(),
+        Err(_) => {
+            log!(
+                "Warning: alcGetProcAddress({:?}): function name is not valid UTF-8; returning NULL.",
+                func_name
+            );
+            return Ptr::null();
+        }
+    };
+    let mangled_func_name = format!("_{}", raw_name);
+    if !mangled_func_name.starts_with("_al") {
+        log!(
+            "Warning: alcGetProcAddress: requested non-AL function {:?}; returning NULL.",
+            raw_name
+        );
+        return Ptr::null();
+    }
 
     if let Ok(ptr) = env
         .dyld
@@ -357,11 +413,16 @@ fn alcGetProcAddress(
     {
         Ptr::from_bits(ptr.addr_with_thumb_bit())
     } else {
-        if mangled_func_name == "_alcMacOSMixerOutputRate" {
-            log!("Допускаем несуществующую функцию alcMacOSMixerOutputRate() в alcGetProcAddress(), возвращаем NULL.");
-            return Ptr::null();
-        }
-        panic!("Запрос адреса процедуры для нереализованной функции OpenAL {mangled_func_name}");
+        // Some apps look up macOS-specific extension entry points (e.g.
+        // alcMacOSMixerOutputRate) and gracefully handle a NULL return.
+        // Many apps also probe for extension function pointers and only use
+        // them when non-NULL. Returning NULL is the spec-compliant behavior
+        // for unsupported function names; panicking would crash the guest.
+        log!(
+            "Warning: alcGetProcAddress: unimplemented OpenAL function {}; returning NULL.",
+            mangled_func_name
+        );
+        Ptr::null()
     }
 }
 

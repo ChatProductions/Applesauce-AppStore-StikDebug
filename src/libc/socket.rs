@@ -90,12 +90,21 @@ impl sockaddr {
         (ip, port)
     }
     fn from_sockaddr_v4(addr: &SocketAddr) -> Self {
-        // Only IPV4 for the moment
-        assert!(addr.is_ipv4());
-        let SocketAddr::V4(ipv4addr) = addr else {
-            unreachable!()
-        };
-        sockaddr::from_ipv4_parts(ipv4addr.ip().octets(), ipv4addr.port())
+        // Only IPV4 is supported by the guest at the moment. For IPv6, fall
+        // back to a zero address so the guest sees "0.0.0.0:0" instead of a
+        // host panic.
+        match addr {
+            SocketAddr::V4(ipv4addr) => {
+                sockaddr::from_ipv4_parts(ipv4addr.ip().octets(), ipv4addr.port())
+            }
+            SocketAddr::V6(_) => {
+                log!(
+                    "Warning: from_sockaddr_v4 called with IPv6 address {:?}; returning zero IPv4 sockaddr.",
+                    addr
+                );
+                sockaddr::from_ipv4_parts([0, 0, 0, 0], 0)
+            }
+        }
     }
     pub fn to_sockaddr_v4(self) -> SocketAddrV4 {
         let (ip, port) = self.to_ipv4_parts();
@@ -344,8 +353,15 @@ fn bind(
     let socket_address = sockaddr_val.to_sockaddr_v4();
     let type_str = match type_ {
         SOCK_STREAM => "TCP",
-        SOCK_DGRAM  => "UDP",
-        _           => unreachable!(),
+        SOCK_DGRAM => "UDP",
+        _ => {
+            log!(
+                "Warning: bind: unsupported socket type {}; returning EINVAL.",
+                type_
+            );
+            set_errno(env, EINVAL);
+            return -1;
+        }
     };
     log_dbg!(
         "bind({}, {:?} ({:?}), {}) -> {} {:?}",
@@ -426,7 +442,14 @@ fn bind(
                 }
             }
         }
-        _ => unreachable!(),
+        _ => {
+            log!(
+                "Warning: bind: socket {} has unexpected type {}; returning EINVAL.",
+                socket, type_
+            );
+            set_errno(env, EINVAL);
+            return -1;
+        }
     }
 
     0 // Success
@@ -621,7 +644,10 @@ fn select(
                             false
                         }
                         Err(e) => {
-                            panic!("select: Peek for socket {fd} failed: {e:?}")
+                            log!(
+                                "select: Peek for socket {fd} failed: {e:?}; treating as not-ready.",
+                            );
+                            false
                         }
                     }
                 }
@@ -660,7 +686,10 @@ fn select(
                                 return false;
                             }
                             Err(e) => {
-                                panic!("select: Socket {fd} has error accepting connection: {e}");
+                                log!(
+                                    "select: Socket {fd} has error accepting connection: {e}; treating as not-ready.",
+                                );
+                                false
                             }
                         }
                     }
@@ -704,11 +733,19 @@ fn select(
                             false
                         }
                         Err(e) => {
-                            panic!("select: Peek for socket {fd} failed: {e}")
+                            log!(
+                                "select: Peek for socket {fd} failed: {e}; treating as not-ready.",
+                            );
+                            false
                         }
                     }
                 }
-                _ => unimplemented!(),
+                _ => {
+                    log!(
+                        "select: read-set socket {fd} has unsupported type; treating as not-ready.",
+                    );
+                    false
+                }
             }
         });
         log_dbg!("select: read_set after {:?}", read_set);
@@ -754,7 +791,12 @@ fn select(
                         false
                     }
                 }
-                _ => unimplemented!(),
+                _ => {
+                    log!(
+                        "select: write-set socket {fd} has unsupported type; treating as not-ready.",
+                    );
+                    false
+                }
             }
         });
         log_dbg!("select: write_set after {:?}", write_set);
@@ -781,14 +823,33 @@ fn select(
                             log_dbg!("No error on TCP socket {}", fd);
                             false
                         }
-                        Ok(Some(error)) => unimplemented!("TCP socket {} error: {:?}", fd, error),
-                        Err(error) => panic!("TCP socket {fd} take_error failed: {error:?}"),
+                        Ok(Some(error)) => {
+                            log!(
+                                "select: TCP socket {} reported error {:?}; signalling exception-set ready.",
+                                fd, error
+                            );
+                            true
+                        }
+                        Err(error) => {
+                            log!(
+                                "select: TCP socket {fd} take_error failed: {error:?}; treating as not-ready.",
+                            );
+                            false
+                        }
                     }
                 }
                 SOCK_DGRAM => {
-                    todo!()
+                    log!(
+                        "select: UDP exception-set polling is not implemented; treating socket {fd} as not-ready.",
+                    );
+                    false
                 }
-                _ => unimplemented!(),
+                _ => {
+                    log!(
+                        "select: exception-set socket {fd} has unsupported type; treating as not-ready.",
+                    );
+                    false
+                }
             }
         });
         log_dbg!("select: error_set after {:?}", error_set);
@@ -870,9 +931,16 @@ fn accept(
     let socket_host_object = State::get(env).sockets.get(&socket).unwrap();
     let listener = socket_host_object.tcp_listener.as_ref().unwrap();
     match listener.accept() {
-        Ok((_, addr)) => {
-            log!("accept: New client: {}", addr);
-            unimplemented!()
+        Ok((_stream, addr)) => {
+            log!(
+                "accept: New client {} from listener {} is not yet handled by guest socket tracking; returning EAGAIN.",
+                addr, socket
+            );
+            // We accepted a host-side connection but don't yet plumb it back
+            // to the guest as a new fd. Drop it instead of crashing so the
+            // app keeps polling.
+            set_errno(env, EAGAIN);
+            -1
         }
         Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
             // No incoming connection is ready
@@ -881,10 +949,19 @@ fn accept(
             // - poll for data in thread scheduling part
             // - write/read/accept/etc data once it is ready
             // - unblock guest thread
-            unimplemented!("accept: TCP listener for socket {} would block on accepting, block current guest thread {}.", socket, env.current_thread)
+            log!(
+                "accept: TCP listener for socket {} would block on accepting (no blocking accept implemented yet); returning EAGAIN to guest thread {}.",
+                socket, env.current_thread,
+            );
+            set_errno(env, EAGAIN);
+            -1
         }
         Err(e) => {
-            panic!("accept: Socket {socket} has error accepting connection: {e}");
+            log!(
+                "accept: Socket {socket} has error accepting connection: {e}; returning EIO.",
+            );
+            set_errno(env, EIO);
+            -1
         }
     }
 }
@@ -971,7 +1048,13 @@ fn recvfrom(
                     set_errno(env, EAGAIN);
                     return -1;
                 }
-                Err(e) => panic!("recvfrom: UDP socket {socket} encountered IO error: {e}"),
+                Err(e) => {
+                    log!(
+                        "recvfrom: UDP socket {socket} encountered IO error: {e}; returning EIO.",
+                    );
+                    set_errno(env, EIO);
+                    return -1;
+                }
             };
             if !address.is_null() {
                 let guest_addr = sockaddr::from_sockaddr_v4(&addr);
@@ -1013,11 +1096,23 @@ fn recvfrom(
                     set_errno(env, EAGAIN);
                     return -1;
                 }
-                Err(e) => panic!("recvfrom: TCP socket {socket} encountered IO error: {e}"),
+                Err(e) => {
+                    log!(
+                        "recvfrom: TCP socket {socket} encountered IO error: {e}; returning EIO.",
+                    );
+                    set_errno(env, EIO);
+                    return -1;
+                }
             };
             (read, tcp_stream.peer_addr())
         }
-        _ => unreachable!(),
+        _ => {
+            log!(
+                "recvfrom: socket {socket} has unsupported type {type_}; returning EINVAL.",
+            );
+            set_errno(env, EINVAL);
+            return -1;
+        }
     };
     log_dbg!(
         "recvfrom: Socket {} received {} bytes from addr {:?}",
@@ -1211,10 +1306,22 @@ fn sendto(
                     set_errno(env, EAGAIN);
                     return -1;
                 }
-                Err(e) => panic!("sendto: Socket {socket} encountered IO error: {e}"),
+                Err(e) => {
+                    log!(
+                        "sendto: Socket {socket} encountered IO error: {e}; returning EIO.",
+                    );
+                    set_errno(env, EIO);
+                    return -1;
+                }
             }
         }
-        _ => unreachable!(),
+        _ => {
+            log!(
+                "sendto: socket {socket} has unsupported type {type_}; returning EINVAL.",
+            );
+            set_errno(env, EINVAL);
+            return -1;
+        }
     };
     log_dbg!(
         "sendto: written {} bytes to UDP socket {} (address {:?})",

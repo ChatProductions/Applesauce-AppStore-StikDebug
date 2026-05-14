@@ -52,8 +52,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)zone {
     // NSArray might be subclassed by something which needs allocWithZone:
-    // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSArray", &mut env.mem));
+    // to have the normal behaviour. We don't currently support that; warn and
+    // fall back to the bridged subclass instead of crashing the host.
+    let ns_array_class = env.objc.get_known_class("NSArray", &mut env.mem);
+    if this != ns_array_class {
+        log!(
+            "Warning: +[NSArray allocWithZone:] called on subclass {:?}; \
+             treating as NSArray.",
+            this
+        );
+    }
     msg_class![env; _touchHLE_NSArray allocWithZone:zone]
 }
 
@@ -420,9 +428,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSMutableArray: NSArray
 
 + (id)allocWithZone:(NSZonePtr)zone {
-    // NSArray might be subclassed by something which needs allocWithZone:
-    // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSMutableArray", &mut env.mem));
+    // NSMutableArray might be subclassed by something which needs
+    // allocWithZone: to have the normal behaviour. Warn and fall back to the
+    // bridged subclass instead of panicking.
+    let mutable_class = env.objc.get_known_class("NSMutableArray", &mut env.mem);
+    if this != mutable_class {
+        log!(
+            "Warning: +[NSMutableArray allocWithZone:] called on subclass {:?}; \
+             treating as NSMutableArray.",
+            this
+        );
+    }
     msg_class![env; _touchHLE_NSMutableArray allocWithZone:zone]
 }
 
@@ -623,11 +639,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_array(env, coder)
     } else {
-        unimplemented!()
+        log!(
+            "Warning: -[_touchHLE_NSArray initWithCoder:] unsupported coder class {:?}; \
+             returning empty array.",
+            class
+        );
+        Vec::new()
     };
     let host_object: &mut ArrayHostObject = env.objc.borrow_mut(this);
-    assert!(host_object.array.is_empty());
-    host_object.array = objects;
+    if !host_object.array.is_empty() {
+        log!(
+            "Warning: -[_touchHLE_NSArray initWithCoder:] called on an already-populated array; \
+             releasing existing contents first."
+        );
+        let prev = std::mem::take(&mut host_object.array);
+        for obj in prev {
+            release(env, obj);
+        }
+    }
+    env.objc.borrow_mut::<ArrayHostObject>(this).array = objects;
     // objects are already retained
     this
 }
@@ -847,11 +877,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_array(env, coder)
     } else {
-        unimplemented!()
+        log!(
+            "Warning: -[_touchHLE_NSMutableArray initWithCoder:] unsupported coder class {:?}; \
+             returning empty array.",
+            class
+        );
+        Vec::new()
     };
     let host_object: &mut ArrayHostObject = env.objc.borrow_mut(this);
-    assert!(host_object.array.is_empty());
-    host_object.array = objects;
+    if !host_object.array.is_empty() {
+        log!(
+            "Warning: -[_touchHLE_NSMutableArray initWithCoder:] called on an already-populated array; \
+             releasing existing contents first."
+        );
+        let prev = std::mem::take(&mut host_object.array);
+        for obj in prev {
+            release(env, obj);
+        }
+    }
+    env.objc.borrow_mut::<ArrayHostObject>(this).array = objects;
     // objects are already retained
     this
 }

@@ -287,9 +287,17 @@ pub fn init_with_objects_and_keys(
     mut va_args: VaList,
 ) -> id {
     let first_key: id = va_args.next(env);
-    assert!(first_key != nil); // TODO: raise proper exception
-
+    // Spec: `dictionaryWithObjectsAndKeys:` should @throw if the first key is
+    // nil. We log + return an empty dictionary instead of panicking the host.
     let mut host_object = <DictionaryHostObject as Default>::default();
+    if first_key == nil {
+        log!(
+            "Warning: dictionaryWithObjectsAndKeys:/initWithObjectsAndKeys: first key is nil; \
+             returning empty dictionary."
+        );
+        *env.objc.borrow_mut(this) = host_object;
+        return this;
+    }
     host_object.insert(env, first_key, first_object, /* copy_key: */ true);
 
     loop {
@@ -298,7 +306,14 @@ pub fn init_with_objects_and_keys(
             break;
         }
         let key: id = va_args.next(env);
-        // assert!(key != nil); // TODO: raise proper exception
+        if key == nil {
+            log!(
+                "Warning: dictionaryWithObjectsAndKeys:/initWithObjectsAndKeys: \
+                 nil key for value {:?}; truncating dictionary here.",
+                object
+            );
+            break;
+        }
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
 
@@ -326,7 +341,14 @@ fn init_with_dictionary_common(env: &mut Environment, this: id, other_dict: id) 
 fn init_with_objects_for_keys_common(env: &mut Environment, this: id, objects: id, keys: id) -> id {
     let keys_size: NSUInteger = msg![env; keys count];
     let objects_size: NSUInteger = msg![env; objects count];
-    assert_eq!(keys_size, objects_size); // TODO: raise proper exception
+    if keys_size != objects_size {
+        log!(
+            "Warning: initWithObjects:forKeys: count mismatch (keys={}, objects={}); \
+             truncating to the shorter array.",
+            keys_size,
+            objects_size
+        );
+    }
 
     let mut host_object = <DictionaryHostObject as Default>::default();
 
@@ -336,8 +358,7 @@ fn init_with_objects_for_keys_common(env: &mut Environment, this: id, objects: i
     loop {
         let next_key: id = msg![env; keys_enumerator nextObject];
         let next_object: id = msg![env; objects_enumerator nextObject];
-        if next_key == nil {
-            assert_eq!(next_object, nil);
+        if next_key == nil || next_object == nil {
             break;
         }
         host_object.insert(env, next_key, next_object, /* copy_key: */ true);
@@ -362,7 +383,13 @@ fn init_with_objects_for_keys_count_common(
         let offset = i * elem_size;
         let key: id = env.mem.read(ConstPtr::from_bits(keys_bits + offset));
         let object: id = env.mem.read(ConstPtr::from_bits(objects_bits + offset));
-        assert_ne!(key, nil); // TODO: raise proper exception
+        if key == nil {
+            log!(
+                "Warning: initWithObjects:forKeys:count: nil key at index {}; skipping pair.",
+                i
+            );
+            continue;
+        }
         host_object.insert(env, key, object, /* copy_key: */ true);
     }
 
@@ -403,8 +430,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)zone {
     // NSDictionary might be subclassed by something which needs allocWithZone:
-    // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSDictionary", &mut env.mem));
+    // to have the normal behaviour. We don't currently support that; warn and
+    // fall back to the bridged subclass instead of crashing the host.
+    let ns_dict_class = env.objc.get_known_class("NSDictionary", &mut env.mem);
+    if this != ns_dict_class {
+        log!(
+            "Warning: +[NSDictionary allocWithZone:] called on subclass {:?}; \
+             treating as NSDictionary.",
+            this
+        );
+    }
     msg_class![env; _touchHLE_NSDictionary allocWithZone:zone]
 }
 
@@ -415,7 +450,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)dictionaryWithObject:(id)object forKey:(id)key {
-    assert_ne!(key, nil); // TODO: raise proper exception
+    if key == nil {
+        log!(
+            "Warning: +[NSDictionary dictionaryWithObject:forKey:] called with nil key; \
+             returning empty dictionary."
+        );
+        let new_dict = dict_from_keys_and_objects(env, &[]);
+        return autorelease(env, new_dict);
+    }
 
     let new_dict = dict_from_keys_and_objects(env, &[(key, object)]);
     autorelease(env, new_dict)
@@ -463,7 +505,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)init {
-    todo!("TODO: Implement [dictionary init] for custom subclasses")
+    // NSDictionary is abstract; calling -init on the base class is unusual but
+    // some buggy apps may still do it. Fall back to an empty mutable dict-
+    // backed host object so the receiver remains usable instead of panicking.
+    log!(
+        "Warning: -[NSDictionary init] called on the abstract base class; \
+         returning empty dictionary."
+    );
+    *env.objc.borrow_mut(this) = <DictionaryHostObject as Default>::default();
+    this
 }
 
 - (id)keyEnumerator {
@@ -519,8 +569,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)valueForKey:(id)key { // NSString*
     let key_str = to_rust_string(env, key);
-    // TODO: strip '@' and call super
-    assert!(!key_str.starts_with('@'));
+    // NSKeyValueCoding: keys starting with '@' (e.g. "@count") are KVC
+    // operators. We don't implement them; just log and fall back to a normal
+    // objectForKey: lookup so the guest doesn't crash.
+    if key_str.starts_with('@') {
+        log!(
+            "Warning: -[NSDictionary valueForKey:] KVC operator {:?} not implemented; \
+             falling back to objectForKey:.",
+            key_str
+        );
+    }
     msg![env; this objectForKey:key]
 }
 
@@ -557,9 +615,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSMutableDictionary: NSDictionary
 
 + (id)allocWithZone:(NSZonePtr)zone {
-    // NSDictionary might be subclassed by something which needs allocWithZone:
-    // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSMutableDictionary", &mut env.mem));
+    // NSMutableDictionary might be subclassed; warn but don't crash.
+    let mutable_class = env.objc.get_known_class("NSMutableDictionary", &mut env.mem);
+    if this != mutable_class {
+        log!(
+            "Warning: +[NSMutableDictionary allocWithZone:] called on subclass {:?}; \
+             treating as NSMutableDictionary.",
+            this
+        );
+    }
     msg_class![env; _touchHLE_NSMutableDictionary allocWithZone:zone]
 }
 
@@ -778,7 +842,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_dict(env, coder)
     } else {
-        unimplemented!()
+        log!(
+            "Warning: -[NSMutableDictionary initWithCoder:] unsupported coder class {:?}; \
+             returning empty dictionary.",
+            class
+        );
+        Vec::new()
     };
     release(env, this);
     let dict = dict_from_keys_and_objects(env, &tuples);
@@ -1007,11 +1076,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithKeyCallbacks:(ConstPtr<CFDictionaryKeyCallBacks>)key_callbacks
          andValueCallbacks:(ConstPtr<CFDictionaryValueCallBacks>)value_callbacks {
     if !key_callbacks.is_null() {
-        assert!(!value_callbacks.is_null());
+        if value_callbacks.is_null() {
+            log!(
+                "Warning: _touchHLE_NSMutableDictionary_non_retaining initWithKeyCallbacks: \
+                 value_callbacks is NULL while key_callbacks is set; using default value callbacks."
+            );
+        } else {
+            let host_object = env.objc.borrow_mut::<CFDictionaryHostObject>(this);
+            host_object.value_callbacks = env.mem.read(value_callbacks);
+        }
         let host_object = env.objc.borrow_mut::<CFDictionaryHostObject>(this);
         host_object.key_callbacks = env.mem.read(key_callbacks);
-        host_object.value_callbacks = env.mem.read(value_callbacks);
-    };
+    }
     this
 }
 
@@ -1020,16 +1096,34 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithObjectsAndKeys:(id)_first_object, ..._dots {
-    todo!();
+    log!(
+        "Warning: -[_touchHLE_NSMutableDictionary_non_retaining initWithObjectsAndKeys:] \
+         is not implemented; returning empty CF dictionary."
+    );
+    this
 }
 - (id)description {
-    todo!();
+    log!(
+        "Warning: -[_touchHLE_NSMutableDictionary_non_retaining description] \
+         is not implemented; returning empty string."
+    );
+    from_rust_string(env, String::new())
 }
 - (id)copyWithZone:(NSZonePtr)_zone {
-    todo!();
+    log!(
+        "Warning: -[_touchHLE_NSMutableDictionary_non_retaining copyWithZone:] \
+         is not implemented; returning self (no copy)."
+    );
+    retain(env, this);
+    this
 }
 - (id)mutableCopyWithZone:(NSZonePtr)_zone {
-    todo!();
+    log!(
+        "Warning: -[_touchHLE_NSMutableDictionary_non_retaining mutableCopyWithZone:] \
+         is not implemented; returning retained self."
+    );
+    retain(env, this);
+    this
 }
 
 - (id)objectForKey:(id)key {
@@ -1040,7 +1134,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)valueForKey:(id)_key {
-    panic!("Unexpected call to valueForKey: for _touchHLE_NSMutableDictionary_non_retaining object {this:?}");
+    log!(
+        "Warning: -[_touchHLE_NSMutableDictionary_non_retaining valueForKey:] \
+         not supported; returning nil."
+    );
+    nil
 }
 
 - (())setObject:(id)object

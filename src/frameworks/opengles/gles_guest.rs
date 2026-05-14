@@ -1257,20 +1257,39 @@ fn glTexParameterxv(
     })
 }
 fn image_size_estimate(pixel_count: GuestUSize, format: GLenum, type_: GLenum) -> GuestUSize {
-    let bytes_per_pixel: GuestUSize = match type_ {
+    // This is only an upper-bound estimate used for memory tracking, not
+    // anything OpenGL actually needs. Unknown combos should yield a
+    // conservative "don't try to copy guest pixels" sentinel (0) and log,
+    // not crash the host. The driver will catch real format issues.
+    let bytes_per_pixel: Option<GuestUSize> = match type_ {
         gles11::UNSIGNED_BYTE => match format {
-            gles11::ALPHA | gles11::LUMINANCE => 1,
-            gles11::LUMINANCE_ALPHA => 2,
-            gles11::RGB => 3,
-            gles11::RGBA | gles11::BGRA_EXT => 4,
-            _ => panic!("Unexpected format {format:#x}"),
+            gles11::ALPHA | gles11::LUMINANCE => Some(1),
+            gles11::LUMINANCE_ALPHA => Some(2),
+            gles11::RGB => Some(3),
+            gles11::RGBA | gles11::BGRA_EXT => Some(4),
+            _ => None,
         },
         gles11::UNSIGNED_SHORT_5_6_5
         | gles11::UNSIGNED_SHORT_4_4_4_4
-        | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
-        _ => panic!("Unexpected type {type_:#x}"),
+        | gles11::UNSIGNED_SHORT_5_5_5_1 => Some(2),
+        _ => None,
     };
-    pixel_count.checked_mul(bytes_per_pixel).unwrap()
+    let Some(bpp) = bytes_per_pixel else {
+        log!(
+            "Warning: image_size_estimate(): unsupported format/type combination (format={:#x}, type={:#x}); treating as 0 bytes.",
+            format,
+            type_
+        );
+        return 0;
+    };
+    pixel_count.checked_mul(bpp).unwrap_or_else(|| {
+        log!(
+            "Warning: image_size_estimate(): pixel_count {} * bpp {} overflowed GuestUSize; returning u32::MAX.",
+            pixel_count,
+            bpp
+        );
+        GuestUSize::MAX
+    })
 }
 fn glTexImage2D(
     env: &mut Environment,
@@ -1777,7 +1796,16 @@ fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum
     let binding = match target {
         ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
         ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
-        _ => panic!("Unexpected buffer target {:#x}", target),
+        other => {
+            // Anything else is a malformed call from the guest. Real GL
+            // would set GL_INVALID_ENUM; we have nothing sensible to bind
+            // against so just report "no object bound" and continue.
+            log!(
+                "Warning: _get_currently_bound_buffer_object_name(): unsupported buffer target {:#x}; returning 0.",
+                other
+            );
+            return 0;
+        }
     };
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         let mut name: GLint = 0;
@@ -1835,9 +1863,7 @@ fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutP
             env.mem.free(guest_buffer);
             return nil.cast();
         };
-        let current_ctx_host_object = env
-            .objc
-            .borrow_mut::<EAGLContextHostObject>(current_ctx);
+        let current_ctx_host_object = env.objc.borrow_mut::<EAGLContextHostObject>(current_ctx);
         // Per the GL_OES_mapbuffer spec, calling glMapBufferOES while a
         // buffer is already mapped is a GL_INVALID_OPERATION and returns
         // NULL. Some apps (e.g. ZAS) accidentally re-map without unmapping
@@ -1862,9 +1888,7 @@ fn glMapBufferOES(env: &mut Environment, target: GLenum, access: GLenum) -> MutP
                 gles.UnmapBufferOES(target);
             });
             // Re-borrow because with_ctx_and_mem dropped our reference.
-            let current_ctx_host_object = env
-                .objc
-                .borrow_mut::<EAGLContextHostObject>(current_ctx);
+            let current_ctx_host_object = env.objc.borrow_mut::<EAGLContextHostObject>(current_ctx);
             current_ctx_host_object
                 .mapped_buffers
                 .insert(buffer_object_name, (guest_buffer, host_buffer));

@@ -83,29 +83,45 @@ impl LazyALContext {
     ) -> OpenAL<'s> {
         self.get_context(manager).make_current(manager)
     }
-    pub fn get_context(&mut self, manager: &mut OpenALManager) -> &mut OpenALContext {
+    pub fn try_get_context(&mut self, manager: &mut OpenALManager) -> Option<&mut OpenALContext> {
         if self.0.is_none() {
             // OpenALContext::new already attempts a fallback to OpenAL Soft's
             // "No Output" null backend if the host audio device cannot be
             // opened, so under normal circumstances this will succeed. If even
-            // that fails we still cannot keep going (the audio frameworks
-            // assume a context exists), but emit a clear log message before
-            // unwinding so the user understands what happened instead of
-            // seeing only a raw `unwrap` panic.
-            let context = match OpenALContext::new(manager) {
-                Ok(ctx) => ctx,
+            // that fails we now log and return None instead of panicking the
+            // entire emulator — guest code calling AudioQueue/AudioFile APIs
+            // will then get error codes rather than a host crash.
+            match OpenALContext::new(manager) {
+                Ok(context) => {
+                    log_dbg!("Новый внутренний контекст OpenAL ({:?})", context);
+                    self.0 = Some(context);
+                }
                 Err(err) => {
                     log!(
-                        "Fatal: could not create OpenAL context for \
-                         AudioToolbox: {}. Audio cannot be initialised.",
+                        "Warning: could not create OpenAL context for \
+                         AudioToolbox: {}. Audio will be unavailable until a \
+                         working backend is found.",
                         err
                     );
-                    panic!("Could not create OpenAL context: {}", err);
+                    return None;
                 }
-            };
-            log_dbg!("Новый внутренний контекст OpenAL ({:?})", context);
-            self.0 = Some(context);
+            }
         }
-        self.0.as_mut().unwrap()
+        self.0.as_mut()
+    }
+
+    pub fn get_context(&mut self, manager: &mut OpenALManager) -> &mut OpenALContext {
+        // Preserve the previous (panicking) signature for callers that absolutely
+        // require a context. New callers should prefer `try_get_context`.
+        if let Some(ctx) = self.try_get_context(manager) {
+            // SAFETY: `try_get_context` just inserted a value into `self.0`
+            // when the option was None; we can re-borrow it here without UB.
+            // Using an extra `expect` keeps the error case obvious if the
+            // implementation ever drifts.
+            let _ = ctx;
+        }
+        self.0
+            .as_mut()
+            .expect("OpenAL context unavailable; see prior log message for details")
     }
 }

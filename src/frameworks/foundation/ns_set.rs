@@ -38,7 +38,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)zone {
     // NSSet might be subclassed by something which needs allocWithZone:
     // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSSet", &mut env.mem));
+    if this != env.objc.get_known_class("NSSet", &mut env.mem) {
+        log!(
+            "Warning: [+ {:?} allocWithZone:{:?}] called on NSSet subclass; falling back to _touchHLE_NSSet.",
+            this,
+            zone
+        );
+    }
     msg_class![env; _touchHLE_NSSet allocWithZone:zone]
 }
 
@@ -69,15 +75,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)setWithObject:(id)object {
-    assert!(object != nil);
+    if object == nil {
+        log!("Warning: +[NSSet setWithObject:nil]; returning empty set.");
+        let new: id = msg![env; this alloc];
+        let new: id = msg![env; new init];
+        return autorelease(env, new);
+    }
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new initWithObject:object];
     autorelease(env, new)
 }
 
 + (id)setWithObjects:(id)first_obj, ...args {
-    assert!(this == env.objc.get_known_class("NSSet", &mut env.mem));
-    let new: id = msg![env; this alloc];
+    if this != env.objc.get_known_class("NSSet", &mut env.mem) {
+        log!(
+            "Warning: +[{:?} setWithObjects:...] called on NSSet subclass; falling back to _touchHLE_NSSet.",
+            this
+        );
+    }
+    let new: id = msg_class![env; _touchHLE_NSSet alloc];
     env.objc.borrow_mut::<SetHostObject>(new).dict = set_from_objects(env, first_obj, args);
     autorelease(env, new)
 }
@@ -118,27 +134,49 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)zone {
     // NSSet might be subclassed by something which needs allocWithZone:
     // to have the normal behaviour. Unimplemented: call superclass alloc then.
-    assert!(this == env.objc.get_known_class("NSMutableSet", &mut env.mem));
+    if this != env.objc.get_known_class("NSMutableSet", &mut env.mem) {
+        log!(
+            "Warning: [+ {:?} allocWithZone:{:?}] called on NSMutableSet subclass; falling back to _touchHLE_NSMutableSet.",
+            this,
+            zone
+        );
+    }
     msg_class![env; _touchHLE_NSMutableSet allocWithZone:zone]
 }
 
 + (id)setWithCapacity:(NSUInteger)numItems {
-    assert!(this == env.objc.get_known_class("NSMutableSet", &mut env.mem));
-    let new: id = msg![env; this alloc];
+    if this != env.objc.get_known_class("NSMutableSet", &mut env.mem) {
+        log!(
+            "Warning: +[{:?} setWithCapacity:{}] called on NSMutableSet subclass; falling back to _touchHLE_NSMutableSet.",
+            this,
+            numItems
+        );
+    }
+    let new: id = msg_class![env; _touchHLE_NSMutableSet alloc];
     let new: id = msg![env; new initWithCapacity:numItems];
     autorelease(env, new)
 }
 
 + (id)setWithObjects:(id)first_obj, ...args {
-    assert!(this == env.objc.get_known_class("NSMutableSet", &mut env.mem));
-    let new: id = msg![env; this alloc];
+    if this != env.objc.get_known_class("NSMutableSet", &mut env.mem) {
+        log!(
+            "Warning: +[{:?} setWithObjects:...] called on NSMutableSet subclass; falling back to _touchHLE_NSMutableSet.",
+            this
+        );
+    }
+    let new: id = msg_class![env; _touchHLE_NSMutableSet alloc];
     env.objc.borrow_mut::<SetHostObject>(new).dict = set_from_objects(env, first_obj, args);
     autorelease(env, new)
 }
 
 // NSCopying implementation
+// NSMutableSet's -copyWithZone: must produce an immutable NSSet that
+// snapshots the receiver. We materialise the elements via -allObjects
+// (which is implemented for our private subclass) and reuse the
+// +[NSSet setWithArray:] code path to build a fresh immutable set.
 - (id)copyWithZone:(NSZonePtr)_zone {
-    todo!(); // TODO: this should produce an immutable copy
+    let objects: id = msg![env; this allObjects];
+    msg_class![env; NSSet setWithArray:objects]
 }
 
 @end

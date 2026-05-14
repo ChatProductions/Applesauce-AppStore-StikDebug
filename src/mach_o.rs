@@ -236,7 +236,13 @@ fn cpu_subtype_to_str(ty: cpu_subtype_t) -> &'static str {
         mach_object::CPU_SUBTYPE_ARM_V7S => "armv7s",
         mach_object::CPU_SUBTYPE_ARM_V7K => "armv7k",
         mach_object::CPU_SUBTYPE_ARM_V8 => "armv8",
-        _ => panic!("Unexpected cpu subtype: {ty:?}"),
+        _ => {
+            log!(
+                "Warning: cpu_subtype_to_str: unexpected cpu subtype: {:?}; using 'armv???'.",
+                ty
+            );
+            "armv???"
+        }
     }
 }
 
@@ -473,13 +479,28 @@ impl MachO {
                             // Debug-символы по-прежнему игнорируем
                             Some(Symbol::Debug { .. }) => None,
                             None => None,
-                            _ => panic!("Unexpected symbol kind {sym:?}"),
+                            other => {
+                                log!(
+                                    "Warning: indirect symbol table contains an unexpected symbol kind {:?}; treating as anonymous.",
+                                    other
+                                );
+                                None
+                            }
                         })
                     }
 
                     let extrels = &bytes[extreloff as usize..][..nextrel as usize * 8];
                     for entry in extrels.chunks(8) {
-                        let reloc = Reloc::parse(is_bigend, entry.try_into().unwrap());
+                        let entry_arr: [u8; 8] = match entry.try_into() {
+                            Ok(a) => a,
+                            Err(_) => {
+                                log!(
+                                    "Warning: external relocation table entry is not 8 bytes; truncated dynamic symbol table."
+                                );
+                                break;
+                            }
+                        };
+                        let reloc = Reloc::parse(is_bigend, entry_arr);
                         let Reloc::External {
                             addr,
                             sym_idx,
@@ -488,7 +509,11 @@ impl MachO {
                             type_: 0, // generic
                         } = reloc
                         else {
-                            panic!("Unhandled extrel: {reloc:?}")
+                            log!(
+                                "Warning: skipping unsupported external relocation entry: {:?}",
+                                reloc
+                            );
+                            continue;
                         };
                         let addr = if split_segs {
                             addr + first_read_write_segment_base.unwrap()
@@ -530,7 +555,13 @@ impl MachO {
                                 into_mem.write(ptr_ptr, 0); // Clear prebinding.
                                 external_relocations.push((addr, String::from(n)));
                             }
-                            _ => panic!("Unexpected symbol kind {sym:?}"),
+                            other => {
+                                log!(
+                                    "Warning: external relocation references an unexpected symbol kind {:?}; skipping fixup at {:#x}.",
+                                    other,
+                                    addr
+                                );
+                            }
                         };
                     }
                 }
@@ -554,10 +585,27 @@ impl MachO {
                         __cpsr: 0,
                     } = state
                     else {
-                        panic!("Unexpected initial thread state in {name:?}: {state:?}");
+                        log!(
+                            "Warning: unexpected initial thread state in {:?}: {:?}; falling back to extracted PC if present.",
+                            name,
+                            state
+                        );
+                        // Try to read the PC anyway; otherwise leave entry
+                        // unset which will surface as a clear error later.
+                        if let ThreadState::Arm { __pc, .. } = state {
+                            if entry_point_pc.is_none() {
+                                entry_point_pc = Some(__pc);
+                            }
+                        }
+                        continue;
                     };
-                    // There should only be a single initial thread state.
-                    assert!(entry_point_pc.is_none());
+                    if entry_point_pc.is_some() {
+                        log!(
+                            "Warning: multiple initial thread states in {:?}; ignoring extra entries.",
+                            name
+                        );
+                        continue;
+                    }
                     entry_point_pc = Some(pc);
                 }
                 // New-style entry point PC command
@@ -604,10 +652,12 @@ impl MachO {
                                 );
                                 into_mem.write(original_location, old + slide);
                             }
-                            _ => unimplemented!(
-                                "Unhandled DyldInfo rebase symbol type: {:?}",
-                                symb.symbol_type
-                            ),
+                            other => {
+                                log!(
+                                    "Warning: unhandled DyldInfo rebase symbol type: {:?}; skipping.",
+                                    other
+                                );
+                            }
                         }
                     }
 
@@ -624,10 +674,12 @@ impl MachO {
                                 log_dbg!("Pointer bind: {:#x} -> {}", addr, symb.name);
                                 external_relocations.push((addr, symb.name));
                             }
-                            _ => unimplemented!(
-                                "Unhandled DyldInfo bind symbol type: {:?}",
-                                symb.symbol_type
-                            ),
+                            other => {
+                                log!(
+                                    "Warning: unhandled DyldInfo bind symbol type: {:?}; skipping.",
+                                    other
+                                );
+                            }
                         }
                     }
                 }

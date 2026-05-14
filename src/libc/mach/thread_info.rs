@@ -78,8 +78,22 @@ fn thread_info(
     thread_info_out: thread_info_t,
     thread_info_out_count: MutPtr<mach_msg_type_number_t>,
 ) -> kern_return_t {
-    assert!(target_act != MACH_PORT_NULL && target_act != MACH_PORT_DEAD);
-    let thread = env.threads.get((target_act - 1) as usize).unwrap();
+    if target_act == MACH_PORT_NULL || target_act == MACH_PORT_DEAD {
+        // Real Mach returns KERN_INVALID_ARGUMENT (4); we don't have that
+        // const wired up here yet, but any non-zero kern_return_t works.
+        log!(
+            "Warning: thread_info() called with invalid target_act {:?}; returning KERN_INVALID_ARGUMENT.",
+            target_act
+        );
+        return 4;
+    }
+    let Some(thread) = env.threads.get((target_act - 1) as usize) else {
+        log!(
+            "Warning: thread_info(): target_act {:?} does not correspond to a known thread; returning KERN_INVALID_ARGUMENT.",
+            target_act
+        );
+        return 4;
+    };
 
     let out_size_available = env.mem.read(thread_info_out_count);
 
@@ -87,7 +101,17 @@ fn thread_info(
         THREAD_BASIC_INFO => {
             let out_size_expected =
                 guest_size_of::<thread_basic_info>() / guest_size_of::<integer_t>();
-            assert!(out_size_expected <= out_size_available);
+            if out_size_expected > out_size_available {
+                // Real Mach returns MIG_ARRAY_TOO_LARGE / KERN_INVALID_ARGUMENT
+                // when the caller's buffer is too small. Don't crash the host
+                // on a guest passing a wrong-sized buffer.
+                log!(
+                    "Warning: thread_info(THREAD_BASIC_INFO): caller buffer too small ({} < {}); returning KERN_INVALID_ARGUMENT.",
+                    out_size_available,
+                    out_size_expected
+                );
+                return 4;
+            }
             env.mem.write(
                 thread_info_out.cast(),
                 thread_basic_info {
@@ -104,10 +128,7 @@ fn thread_info(
                     run_state: if thread.active {
                         match thread.blocked_by {
                             ThreadBlock::NotBlocked => TH_STATE_RUNNING,
-                            ThreadBlock::Suspended(count, _) => {
-                                assert!(count > 0);
-                                TH_STATE_WAITING
-                            }
+                            ThreadBlock::Suspended(_, _) => TH_STATE_WAITING,
                             _ => TH_STATE_WAITING,
                         }
                     } else {
@@ -115,10 +136,7 @@ fn thread_info(
                     },
                     flags: 0, // FIXME
                     suspend_count: match thread.blocked_by {
-                        ThreadBlock::Suspended(count, _) => {
-                            assert!(count > 0);
-                            count.try_into().unwrap()
-                        }
+                        ThreadBlock::Suspended(count, _) => count.try_into().unwrap_or(0),
                         _ => 0,
                     },
                     sleep_time: 0,
@@ -129,7 +147,14 @@ fn thread_info(
         THREAD_SCHED_TIMESHARE_INFO => {
             let out_size_expected =
                 guest_size_of::<policy_timeshare_info>() / guest_size_of::<integer_t>();
-            assert!(out_size_expected <= out_size_available);
+            if out_size_expected > out_size_available {
+                log!(
+                    "Warning: thread_info(THREAD_SCHED_TIMESHARE_INFO): caller buffer too small ({} < {}); returning KERN_INVALID_ARGUMENT.",
+                    out_size_available,
+                    out_size_expected
+                );
+                return 4;
+            }
             env.mem.write(
                 thread_info_out.cast(),
                 policy_timeshare_info {
@@ -142,7 +167,16 @@ fn thread_info(
             );
             env.mem.write(thread_info_out_count, out_size_expected);
         }
-        _ => unimplemented!("TODO: flavor {:?}", flavor),
+        _ => {
+            // Unknown thread_info flavor: return KERN_INVALID_ARGUMENT rather
+            // than panicking the host. The app can fall back to whatever it
+            // does on real Mach when an unsupported flavor is requested.
+            log!(
+                "Warning: thread_info(): unsupported flavor {:?}; returning KERN_INVALID_ARGUMENT.",
+                flavor
+            );
+            return 4;
+        }
     }
 
     KERN_SUCCESS

@@ -240,7 +240,16 @@ fn bytes_per_pixel(data: &CGBitmapContextData) -> GuestUSize {
         alpha_info,
         ..
     } = data;
-    assert!(bits_per_component == 8);
+    if bits_per_component != 8 {
+        // We don't currently support 16-bit-per-component or float bitmap
+        // contexts. Clamp to the 8-bit interpretation so callers don't crash
+        // outright; rendering may look wrong but the host stays alive.
+        log!(
+            "Warning: CGBitmapContext: unsupported bitsPerComponent {} (expected 8); \
+             treating as 8.",
+            bits_per_component
+        );
+    }
     match color_space {
         kCGColorSpaceGenericRGB => components_for_rgb(alpha_info).unwrap_or(4),
         kCGColorSpaceGenericGray => components_for_gray(alpha_info).unwrap_or(1),

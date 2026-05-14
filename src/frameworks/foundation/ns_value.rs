@@ -234,7 +234,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
         NSValueHostObject::CGPoint(cg_point) => *cg_point,
-        _ => unimplemented!()
+        other => {
+            log!(
+                "Warning: [{:?} CGPointValue] called on NSValue with kind {:?}; returning (0, 0).",
+                this,
+                other
+            );
+            CGPoint { x: 0.0, y: 0.0 }
+        }
     }
 }
 
@@ -242,7 +249,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
         NSValueHostObject::CGSize(cg_size) => *cg_size,
-        _ => unimplemented!()
+        other => {
+            log!(
+                "Warning: [{:?} CGSizeValue] called on NSValue with kind {:?}; returning zero size.",
+                this,
+                other
+            );
+            CGSize { width: 0.0, height: 0.0 }
+        }
     }
 }
 
@@ -250,7 +264,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
         NSValueHostObject::CGRect(cg_rect) => *cg_rect,
-        _ => unimplemented!()
+        other => {
+            log!(
+                "Warning: [{:?} CGRectValue] called on NSValue with kind {:?}; returning zero rect.",
+                this,
+                other
+            );
+            CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize { width: 0.0, height: 0.0 },
+            }
+        }
     }
 }
 
@@ -258,7 +282,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = env.objc.borrow::<NSValueHostObject>(this);
     match host_object {
         NSValueHostObject::NSRange(r) => NSRange { location: r.location, length: r.length },
-        _ => unimplemented!("Called rangeValue on non-range NSValue")
+        other => {
+            log!(
+                "Warning: [{:?} rangeValue] called on NSValue with kind {:?}; returning {{0, 0}}.",
+                this,
+                other
+            );
+            NSRange { location: 0, length: 0 }
+        }
     }
 }
 
@@ -546,7 +577,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let new_num = if env.objc.class_is_subclass_of(class, nib_archive_class) {
         _nib_archive_decoder::decode_current_number(env, coder)
     } else {
-        unimplemented!();
+        // Non-NIB coders (e.g. NSKeyedUnarchiver) for NSNumber are not
+        // fully supported yet. Return a zero NSNumber instead of crashing
+        // the host, mirroring the behaviour of a missing decoder.
+        log!(
+            "Warning: [NSNumber initWithCoder:{:?}] not implemented for coder class {:?}; returning numberWithInt:0.",
+            coder,
+            class
+        );
+        msg_class![env; NSNumber numberWithInt:(0 as i32)]
     };
     release(env, this);
     new_num
@@ -851,7 +890,15 @@ pub fn is_conversion_lossless(env: &mut Environment, this: id, type_: CFNumberTy
             let val: f64 = num.as_double();
             msg_class![env; NSNumber numberWithDouble:val]
         }
-        _ => unimplemented!("is_conversion_lossless for {}", type_),
+        _ => {
+            // Unknown CFNumber type: be conservative and treat the
+            // comparison as lossy to avoid claiming bogus equality.
+            log!(
+                "Warning: NSNumber isEqualToValue: unsupported CFNumberType {}, falling back to inequality.",
+                type_
+            );
+            return false;
+        }
     };
     msg![env; this isEqualToNumber:num2]
 }

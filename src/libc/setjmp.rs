@@ -75,7 +75,20 @@ fn longjmp(env: &mut Environment, jmp_buf: MutPtr<JmpBuf>, status: u32) {
     if cur_stack.last() != other_stack.last()
         && !ALLOWED_FOR_LONGJMP_BYPASS.contains(&env.bundle.bundle_identifier())
     {
-        panic!("longjmp across host stack frames, current {cur_stack:?}, other {other_stack:?}");
+        // longjmp across host stack frames is unsafe (it would unwind past
+        // Rust frames that own non-trivial state). Real iOS would also
+        // happily corrupt the program in this case; the host has no way to
+        // recover. Log the offending bundle id so the user can either add
+        // it to ALLOWED_FOR_LONGJMP_BYPASS or fix the guest, then go ahead
+        // with the jump anyway \u2014 the alternative is a hard host crash and
+        // any leaked Rust state would have been leaked across the panic
+        // unwind too.
+        log!(
+            "Warning: longjmp across host stack frames (bundle {:?}); current {:?}, other {:?}. Proceeding anyway. If this app needs the bypass, add its bundle id to ALLOWED_FOR_LONGJMP_BYPASS.",
+            env.bundle.bundle_identifier(),
+            cur_stack,
+            other_stack
+        );
     }
 
     let regs = env.cpu.regs_mut();

@@ -232,12 +232,21 @@ impl CodeUnitIterator<'_> {
                 Some(prefix_c) => {
                     let self_c = self_match.next();
                     if case_insensitive {
-                        self_c?;
-                        let (Some(a_c), Some(b_c)) = (
-                            char::from_u32(self_c.unwrap() as u32),
-                            char::from_u32(prefix_c as u32),
-                        ) else {
-                            panic!("Invalid chars in the strings!");
+                        let self_c_value = self_c?;
+                        let Some(a_c) = char::from_u32(self_c_value as u32) else {
+                            // Half of a surrogate pair or an otherwise-invalid
+                            // code unit; fall back to a direct comparison so
+                            // we don't crash the host on malformed strings.
+                            if self_c_value != prefix_c {
+                                return None;
+                            }
+                            continue;
+                        };
+                        let Some(b_c) = char::from_u32(prefix_c as u32) else {
+                            if self_c_value != prefix_c {
+                                return None;
+                            }
+                            continue;
                         };
                         if !a_c.to_lowercase().eq(b_c.to_lowercase()) {
                             return None;
@@ -654,7 +663,23 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let a_next = a_iter.next();
                 let b_next = b_iter.next();
                 let (Some(a_unit), Some(b_unit)) = (a_next, b_next) else { return from_rust_ordering(a_next.cmp(&b_next)); };
-                let (Some(a_c), Some(b_c)) = (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) else { panic!("Invalid chars!"); };
+                let (a_c, b_c) = match (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => {
+                        // One of the code units is a UTF-16 surrogate half
+                        // (`char::from_u32` rejects U+D800..=U+DFFF). Fall
+                        // back to byte-order comparison on the raw u16s
+                        // rather than panicking the host.
+                        log!(
+                            "Warning: NSString compare: unpaired surrogate(s) at U+{:04X}/U+{:04X}; falling back to code-unit compare.",
+                            a_unit,
+                            b_unit
+                        );
+                        let ord = a_unit.cmp(&b_unit);
+                        if ord != std::cmp::Ordering::Equal { return from_rust_ordering(ord); }
+                        continue;
+                    }
+                };
 
                 let insensitive_order = a_c.to_lowercase().cmp(b_c.to_lowercase());
                 if insensitive_order != std::cmp::Ordering::Equal { return from_rust_ordering(insensitive_order); }
@@ -666,7 +691,19 @@ pub const CLASSES: ClassExports = objc_classes! {
                 let a_next = a_iter.next();
                 let b_next = b_iter.next();
                 let (Some(a_unit), Some(b_unit)) = (a_next, b_next) else { return from_rust_ordering(a_next.cmp(&b_next)); };
-                let (Some(a_c), Some(b_c)) = (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) else { panic!("Invalid chars!"); };
+                let (a_c, b_c) = match (char::from_u32(a_unit as u32), char::from_u32(b_unit as u32)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => {
+                        log!(
+                            "Warning: NSString compare (numeric): unpaired surrogate(s) at U+{:04X}/U+{:04X}; falling back to code-unit compare.",
+                            a_unit,
+                            b_unit
+                        );
+                        let ord = a_unit.cmp(&b_unit);
+                        if ord != std::cmp::Ordering::Equal { return from_rust_ordering(ord); }
+                        continue;
+                    }
+                };
                 if a_c.is_ascii_digit() && b_c.is_ascii_digit() {
                     let a_int = ascii_number(&mut a_iter, a_c);
                     let b_int = ascii_number(&mut b_iter, b_c);
@@ -1927,7 +1964,19 @@ pub fn register_constant_strings(bin: &MachO, mem: &mut Mem, objc: &mut ObjC) {
                 "_touchHLE_NSString_CFConstantString_UTF16",
             )
         } else {
-            panic!("Bad CFTypeID for constant string: {flags:#x}");
+            // The constant string flags field encodes the underlying encoding.
+            // We support 0x7C8 (UTF-8) and 0x7D0 (UTF-16LE). Anything else is
+            // a brand-new variant we have not seen in iPhoneOS 2/3 binaries;
+            // skip the constant rather than panic the host. The CFString
+            // contents will then look empty to the guest, which is closer to
+            // how a real device behaves under unknown flag values.
+            log!(
+                "Warning: register_constant_strings: unknown CFTypeID flags {:#x} at {:?}; \
+                 skipping constant string entry.",
+                flags,
+                cfstr_ptr
+            );
+            continue;
         };
 
         objc.register_static_object(cfstr_ptr.cast().cast_mut(), Box::new(host_object));

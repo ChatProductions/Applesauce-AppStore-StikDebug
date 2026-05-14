@@ -29,10 +29,22 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         count: GuestUSize,
         dest_count: GuestUSize,
     ) -> MutPtr<T> {
-        if count > dest_count {
-            panic!("buffer overflow!");
-        }
-        for i in 0..count {
+        // FORTIFY_SOURCE-style overflow check. On real Apple libc the guest
+        // would abort via __chk_fail(); we cap the write at the declared
+        // buffer size, log loudly, and let the guest keep running. A host
+        // panic would also stop the emulator, which is worse than a possibly
+        // truncated memset.
+        let actual = if count > dest_count {
+            log!(
+                "Warning: __memset_chk: count {} > dest_count {}; truncating instead of aborting.",
+                count,
+                dest_count
+            );
+            dest_count
+        } else {
+            count
+        };
+        for i in 0..actual {
             env.mem.write(dest + i, ch);
         }
         dest
@@ -45,11 +57,18 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         size: GuestUSize,
         dest_size: GuestUSize,
     ) -> MutPtr<T> {
-        if size > dest_size {
-            panic!("buffer overflow!");
-        }
+        let actual = if size > dest_size {
+            log!(
+                "Warning: __memcpy_chk: size {} > dest_size {}; truncating instead of aborting.",
+                size,
+                dest_size
+            );
+            dest_size
+        } else {
+            size
+        };
         env.mem
-            .memmove(dest.cast(), src.cast(), size * guest_size_of::<T>());
+            .memmove(dest.cast(), src.cast(), actual * guest_size_of::<T>());
         dest
     }
 
@@ -60,11 +79,18 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         size: GuestUSize,
         dest_size: GuestUSize,
     ) -> MutPtr<T> {
-        if size > dest_size {
-            panic!("buffer overflow!");
-        }
+        let actual = if size > dest_size {
+            log!(
+                "Warning: __memmove_chk: size {} > dest_size {}; truncating instead of aborting.",
+                size,
+                dest_size
+            );
+            dest_size
+        } else {
+            size
+        };
         env.mem
-            .memmove(dest.cast(), src.cast(), size * guest_size_of::<T>());
+            .memmove(dest.cast(), src.cast(), actual * guest_size_of::<T>());
         dest
     }
 
@@ -118,17 +144,27 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         mut bufsz: GuestUSize,
     ) -> MutPtr<T> {
         {
-            let (mut dest, mut src) = (dest, src);
+            let (mut dest_p, mut src) = (dest, src);
             loop {
                 if bufsz == 0 {
-                    panic!("Buffer overrun");
+                    // Buffer is full and we have not seen NUL yet. Write a
+                    // NUL into the last byte (defensive — keeps the string
+                    // C-terminated even though the caller asked for an
+                    // unbounded copy) and bail out instead of panicking the
+                    // host.
+                    log!(
+                        "Warning: __strcpy_chk-style copy hit buffer end at {:?} without seeing NUL; truncating.",
+                        dest_p
+                    );
+                    env.mem.write(dest_p, Self::null());
+                    break;
                 }
                 let c = env.mem.read(src);
-                env.mem.write(dest, c);
+                env.mem.write(dest_p, c);
                 if c == Self::null() {
                     break;
                 }
-                dest += 1;
+                dest_p += 1;
                 src += 1;
                 bufsz -= 1;
             }
@@ -144,9 +180,19 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
     ) -> MutPtr<T> {
         {
             let dest_len = Self::strlen(env, dest.cast_const());
-            let dest = dest + dest_len;
-            let remaining = bufsz.checked_sub(dest_len).expect("strcat overflowed");
-            Self::strcpy(env, dest, src, remaining);
+            let tail = dest + dest_len;
+            let remaining = match bufsz.checked_sub(dest_len) {
+                Some(r) => r,
+                None => {
+                    log!(
+                        "Warning: __strcat_chk overflow: dest_len {} > bufsz {}; refusing to append.",
+                        dest_len,
+                        bufsz
+                    );
+                    return dest;
+                }
+            };
+            Self::strcpy(env, tail, src, remaining);
         }
         dest
     }
@@ -185,11 +231,18 @@ impl<T: Copy + Default + Eq + Ord + SafeRead + Debug> GenericChar<T> {
         size: GuestUSize,
         dest_size: GuestUSize,
     ) -> MutPtr<T> {
-        if dest_size < size {
-            panic!("Buffer overflow");
-        }
+        let actual = if dest_size < size {
+            log!(
+                "Warning: __strncpy_chk: size {} > dest_size {}; truncating instead of aborting.",
+                size,
+                dest_size
+            );
+            dest_size
+        } else {
+            size
+        };
         let mut end = false;
-        for i in 0..size {
+        for i in 0..actual {
             if !end {
                 let c = env.mem.read(src + i);
                 if c == Self::null() {

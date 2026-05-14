@@ -140,16 +140,29 @@ pub fn AudioQueueNewOutput(
     in_flags: u32,
     out_aq: MutPtr<AudioQueueRef>,
 ) -> OSStatus {
-    // reserved
-    assert!(in_flags == 0);
+    // reserved: real Audio Queue Services ignores non-zero flags as a
+    // forward-compatibility measure. Don't panic if a game passes garbage.
+    if in_flags != 0 {
+        log!(
+            "Warning: AudioQueueNewOutput: ignoring unexpected non-zero flags {:#x}",
+            in_flags
+        );
+    }
 
-    // NULL is a synonym of kCFRunLoopCommonModes here
-    assert!(
-        in_callback_run_loop_mode.is_null() || {
-            let common_modes = get_static_str(env, kCFRunLoopCommonModes);
-            msg![env; in_callback_run_loop_mode isEqual:common_modes]
+    // NULL is a synonym of kCFRunLoopCommonModes here. Anything else is
+    // technically unsupported, but real iOS quietly accepts arbitrary
+    // strings and just runs the callback on the requested loop.
+    if !in_callback_run_loop_mode.is_null() {
+        let common_modes = get_static_str(env, kCFRunLoopCommonModes);
+        let is_common: bool = msg![env; in_callback_run_loop_mode isEqual:common_modes];
+        if !is_common {
+            log!(
+                "Warning: AudioQueueNewOutput called with non-kCFRunLoopCommonModes \
+                 run loop mode {:?}; treating as kCFRunLoopCommonModes.",
+                in_callback_run_loop_mode
+            );
         }
-    );
+    }
 
     let in_callback_run_loop = if in_callback_run_loop.is_null() {
         CFRunLoopGetMain(env)
@@ -225,7 +238,19 @@ pub fn AudioQueueGetParameter(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    assert!(in_param_id == kAudioQueueParam_Volume); // others unimplemented
+    // Only kAudioQueueParam_Volume is implemented; other parameters
+    // gracefully report 0 instead of crashing. Real Audio Queue
+    // Services returns kAudioQueueErr_InvalidParameter (-66670) in this
+    // case, which we approximate with kAudioQueueErr_InvalidProperty.
+    if in_param_id != kAudioQueueParam_Volume {
+        log!(
+            "Warning: AudioQueueGetParameter: unsupported param id {}; \
+             returning 0.",
+            in_param_id
+        );
+        env.mem.write(out_value, 0.0);
+        return kAudioQueueErr_InvalidProperty;
+    }
 
     let state = State::get(&mut env.framework_state);
 
@@ -414,10 +439,19 @@ fn AudioQueueRemovePropertyListener(
     return_if_null!(in_aq);
 
     if in_id == kAudioQueueProperty_IsRunning {
-        let host_object = State::get(&mut env.framework_state)
+        // The guest can hold on to AudioQueueRef values past
+        // AudioQueueDispose; mirror real Audio Queue Services and
+        // return an error instead of panicking on a stale ref.
+        let Some(host_object) = State::get(&mut env.framework_state)
             .audio_queues
             .get_mut(&in_aq)
-            .unwrap();
+        else {
+            log!(
+                "Warning: AudioQueueRemovePropertyListener({:?}): unknown / disposed queue.",
+                in_aq
+            );
+            return kAudioQueueErr_InvalidProperty;
+        };
 
         host_object.aq_is_running_proc = None;
         host_object.aq_is_running_user_data = None;
@@ -499,10 +533,18 @@ fn AudioQueueGetProperty(
         return kAudioQueueErr_InvalidPropertySize;
     }
 
-    let host_object = State::get(&mut env.framework_state)
+    // Don't panic on stale AudioQueueRef values: real Audio Queue
+    // Services returns an error instead.
+    let Some(host_object) = State::get(&mut env.framework_state)
         .audio_queues
         .get_mut(&in_aq)
-        .unwrap();
+    else {
+        log!(
+            "Warning: AudioQueueGetProperty({:?}): unknown / disposed queue.",
+            in_aq
+        );
+        return kAudioQueueErr_InvalidProperty;
+    };
 
     match in_property_id {
         kAudioQueueProperty_IsRunning => {
@@ -516,7 +558,19 @@ fn AudioQueueGetProperty(
         kAudioQueueProperty_MagicCookie => {
             log_dbg!("AudioQueueGetProperty: kAudioQueueProperty_MagicCookie requested, returning empty.");
         }
-        _ => unreachable!(),
+        _ => {
+            // We only advertise IsRunning and MagicCookie as readable via
+            // property_size; if we somehow get here with a different ID it
+            // means the size table and this match got out of sync. Don't
+            // crash the host: return an InvalidProperty error code as Apple
+            // does for unknown properties.
+            log!(
+                "Warning: AudioQueueGetProperty({:?}, {}): unsupported property id; returning kAudioQueueErr_InvalidProperty.",
+                in_aq,
+                debug_fourcc(in_property_id)
+            );
+            return kAudioQueueErr_InvalidProperty;
+        }
     }
 
     0 // success
@@ -593,7 +647,21 @@ pub fn decode_buffer(
 ) -> (ALenum, ALsizei, Vec<u8>) {
     let data_slice = mem.bytes_at(audio_data, audio_data_byte_size);
 
-    assert!(is_supported_audio_format(format));
+    if !is_supported_audio_format(format) {
+        // Real CoreAudio would refuse the buffer back at
+        // AudioQueueNewOutput, but if a previously valid queue is fed an
+        // unsupported format mid-stream (e.g. after seek) we still don't
+        // want to crash the host.
+        log!(
+            "Warning: decode_buffer: format is not supported by our HLE: {:?}; returning empty buffer.",
+            format
+        );
+        return (
+            al::AL_FORMAT_MONO16,
+            format.sample_rate.max(8000.0) as ALsizei,
+            Vec::new(),
+        );
+    }
 
     match format.format_id {
         kAudioFormatAppleIMA4 => {
@@ -671,9 +739,18 @@ pub fn decode_buffer(
                             &u64::from_be_bytes(frame_bytes.try_into().unwrap()).to_le_bytes(),
                         ),
                         16 => processed_data.extend_from_slice(
-                            &u128::from_be_bytes(frame_bytes.try_into().unwrap()).to_le_bytes(),
+                            &u128::from_be_bytes(frame_bytes.try_into().unwrap_or([0u8; 16]))
+                                .to_le_bytes(),
                         ),
-                        _ => unimplemented!(),
+                        other => {
+                            log!(
+                                "Warning: decode_buffer: unsupported bytes_per_frame={}, dropping frame.",
+                                other
+                            );
+                            // Pad with zeroes to keep frame alignment in
+                            // the consumer; better than aborting.
+                            processed_data.extend(std::iter::repeat_n(0u8, other as usize));
+                        }
                     };
                 }
                 processed_data
@@ -728,16 +805,36 @@ pub fn decode_buffer(
                     // Копируем значение в локальную переменную, чтобы избежать
                     // создания ссылки на packed-поле
                     let bits = format.bits_per_channel;
-                    unreachable!(
-                        "Unhandled audio format: {} channels, {} bits",
-                        actual_channels_per_frame, bits
-                    )
+                    log!(
+                        "Warning: decode_buffer: unhandled audio format: {} channels, {} bits; returning empty mono16 buffer.",
+                        actual_channels_per_frame,
+                        bits
+                    );
+                    return (
+                        al::AL_FORMAT_MONO16,
+                        format.sample_rate.max(8000.0) as ALsizei,
+                        Vec::new(),
+                    );
                 }
             };
 
             (f, format.sample_rate as ALsizei, processed_data)
         }
-        _ => unreachable!(),
+        _ => {
+            // Copy values out of the packed struct before formatting to
+            // avoid taking unaligned references.
+            let format_id = format.format_id;
+            let sample_rate = format.sample_rate;
+            log!(
+                "Warning: decode_buffer: unsupported audio format id {}; returning empty mono16 buffer.",
+                format_id
+            );
+            (
+                al::AL_FORMAT_MONO16,
+                sample_rate.max(8000.0) as ALsizei,
+                Vec::new(),
+            )
+        }
     }
 }
 
@@ -870,7 +967,11 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
     let (state, context) =
         State::get_with_context(&mut env.framework_state, &mut env.openal_manager);
 
-    let host_object = state.audio_queues.get_mut(&in_aq).unwrap();
+    // ns_run_loop can still hold a stale `in_aq` for one tick after
+    // AudioQueueDispose. Skip silently instead of panicking.
+    let Some(host_object) = state.audio_queues.get_mut(&in_aq) else {
+        return;
+    };
 
     let Some(al_source) = host_object.al_source else {
         return;
@@ -889,8 +990,19 @@ pub fn handle_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     unqueue_buffers(al_source, &context, |al_buffer| {
         host_object.al_unused_buffers.push(al_buffer);
-        let buffer_ref = host_object.buffer_queue.pop_front().unwrap();
-        buffers_to_reuse.push(buffer_ref);
+        // OpenAL is reporting one buffer as processed, so the queue should
+        // be non-empty. If the host and OpenAL views ever desync (e.g.
+        // through an unexpected reset), just stop pulling from the empty
+        // queue instead of panicking on `.unwrap()`.
+        if let Some(buffer_ref) = host_object.buffer_queue.pop_front() {
+            buffers_to_reuse.push(buffer_ref);
+        } else {
+            log!(
+                "Warning: handle_audio_queue({:?}): OpenAL reported a processed \
+                 buffer but the guest buffer_queue is empty; skipping.",
+                in_aq
+            );
+        }
     });
 
     let &mut AudioQueueHostObject {

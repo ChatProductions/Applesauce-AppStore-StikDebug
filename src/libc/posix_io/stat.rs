@@ -144,13 +144,32 @@ fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> 
             // TODO: use `std::fs::metadata()` instead
 
             // Obtain file size
-            stat.st_size = file.file.stream_len().unwrap().try_into().unwrap();
+            stat.st_size = match file.file.stream_len() {
+                Ok(len) => len.try_into().unwrap_or(off_t::MAX),
+                Err(err) => {
+                    log!(
+                        "Warning: fstat({:?}): could not determine file size ({:?}); reporting 0.",
+                        fd,
+                        err
+                    );
+                    0
+                }
+            };
         }
         GuestFile::Directory => {
             stat.st_mode |= S_IFDIR;
             // TODO: st_size
         }
-        _ => unimplemented!(),
+        _ => {
+            // Socket / pipe / other non-file kinds: fstat() on a socket on
+            // real iOS would return a struct with st_mode = S_IFSOCK; we
+            // don't model that here yet, but the safest thing is to leave
+            // st_mode = 0 and st_size = 0 rather than crashing the host.
+            log!(
+                "Warning: fstat({:?}): unsupported GuestFile variant; returning zeroed stat.",
+                fd
+            );
+        }
     }
 
     env.mem.write(buf, stat);

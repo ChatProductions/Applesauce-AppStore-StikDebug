@@ -728,19 +728,39 @@ pub fn CGContextClearRect(env: &mut Environment, context: CGContextRef, rect: CG
 }
 
 pub fn CGContextClipToRect(env: &mut Environment, context: CGContextRef, rect: CGRect) {
+    if context.is_null() {
+        return;
+    }
     if rect.origin == CGPointZero
         && rect.size.height == CGBitmapContextGetHeight(env, context) as f32
         && rect.size.width == CGBitmapContextGetWidth(env, context) as f32
     {
-        assert!(env
+        // The fast path: the rect already covers the whole context. As long as
+        // the CTM is identity, this is a no-op. With a non-identity CTM the
+        // rect actually represents a sub-region of the backing store, so
+        // arbitrary clipping is required — we don't implement that yet, but
+        // we no longer panic on it.
+        let is_identity = env
             .objc
             .borrow_mut::<CGContextHostObject>(context)
             .transform
-            .is_identity());
-        // All good, clipping is not needed!
+            .is_identity();
+        if is_identity {
+            return;
+        }
+        log_dbg!(
+            "CGContextClipToRect({:?}): full-bounds rect with non-identity CTM; \
+             clipping is not implemented, ignoring.",
+            rect
+        );
         return;
     }
-    todo!();
+    log_dbg!(
+        "CGContextClipToRect({:?}) on context {:?}: arbitrary clipping is not implemented, \
+         ignoring.",
+        rect,
+        context
+    );
 }
 
 pub fn CGContextConcatCTM(

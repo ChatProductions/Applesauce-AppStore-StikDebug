@@ -76,7 +76,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (i64)offsetInFile {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
     match posix_io::lseek(env, fd, 0, posix_io::SEEK_CUR) {
-        -1 => panic!("offsetInFile failed"),
+        -1 => {
+            log!("Warning: NSFileHandle offsetInFile failed for fd {}; returning 0.", fd);
+            0
+        }
         // TODO: What's the correct behaviour if the position is beyond 2GiB?
         cur_pos => cur_pos,
     }
@@ -84,16 +87,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())seekToFileOffset:(i64)offset {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
-    match posix_io::lseek(env, fd, offset, posix_io::SEEK_SET) {
-        -1 => panic!("seekToFileOffset: failed"),
-        _cur_pos => (),
+    if posix_io::lseek(env, fd, offset, posix_io::SEEK_SET) == -1 {
+        log!(
+            "Warning: NSFileHandle seekToFileOffset:{} failed for fd {}; ignoring.",
+            offset, fd
+        );
     }
 }
 
 - (i64)seekToEndOfFile {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
     match posix_io::lseek(env, fd, 0, posix_io::SEEK_END) {
-        -1 => panic!("seekToFileOffset: failed"),
+        -1 => {
+            log!("Warning: NSFileHandle seekToEndOfFile failed for fd {}; returning 0.", fd);
+            0
+        }
         cur_pos => cur_pos,
     }
 }
@@ -102,10 +110,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     let fd = env.objc.borrow::<NSFileHandleHostObject>(this).fd;
     let buffer = env.mem.alloc(length);
     match posix_io::read(env, fd, buffer, length) {
-        -1 => panic!("readDataOfLength: failed"),
+        -1 => {
+            log!(
+                "Warning: NSFileHandle readDataOfLength:{} failed for fd {}; \
+                 returning empty NSData.",
+                length, fd
+            );
+            env.mem.free(buffer);
+            msg_class![env; NSData data]
+        }
         bytes_read => {
-            assert_eq!(length, bytes_read.try_into().unwrap());
-            msg_class![env; NSData dataWithBytesNoCopy:buffer length:length]
+            let bytes_read_u32: NSUInteger = bytes_read.try_into().unwrap_or(0);
+            if bytes_read_u32 != length {
+                log!(
+                    "Warning: NSFileHandle readDataOfLength: short read on fd {} \
+                     (wanted {}, got {}); returning what was read.",
+                    fd, length, bytes_read_u32
+                );
+            }
+            msg_class![env; NSData dataWithBytesNoCopy:buffer length:bytes_read_u32]
         }
     }
 }
@@ -114,7 +137,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let offset: i64 = msg![env; this offsetInFile];
     let eof: i64 = msg![env; this seekToEndOfFile];
     let _: () = msg![env; this seekToFileOffset:offset];
-    let length: NSUInteger = (eof - offset).try_into().unwrap();
+    let delta = eof.saturating_sub(offset);
+    let Ok(length): Result<NSUInteger, _> = delta.try_into() else {
+        log!(
+            "Warning: NSFileHandle readDataToEndOfFile: negative or oversize range \
+             ({} bytes); returning empty NSData.",
+            delta
+        );
+        return msg_class![env; NSData data];
+    };
 
     msg![env; this readDataOfLength:length]
 }
@@ -129,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bytes: ConstVoidPtr = msg![env; data bytes];
     let length: NSUInteger = msg![env; data length];
     if posix_io::write(env, fd, bytes, length) == -1 {
-        panic!("writeData: failed")
+        log!("Warning: NSFileHandle writeData: failed for fd {}; ignoring.", fd);
     }
 }
 
@@ -147,7 +178,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Truncates or extends the file represented by the file handle to a
     // specified offset
     if posix_io::ftruncate(env, fd, offset) == -1 {
-        panic!("truncateFileAtOffset: failed")
+        log!(
+            "Warning: NSFileHandle truncateFileAtOffset:{} failed for fd {}; ignoring.",
+            offset, fd
+        );
     }
 }
 

@@ -721,7 +721,8 @@ fn _touchHLE_AVAudioPlayerOutputBufferHelper(
             "Warning: AVAudioPlayer audio callback fired with audio queue \
              {:?} that no longer matches the one stored on the player \
              ({:?}); ignoring.",
-            in_aq, aq
+            in_aq,
+            aq
         );
         return;
     }
