@@ -149,6 +149,30 @@ impl FsNode {
             writeable: false,
         }
     }
+
+    // ИСПРАВЛЕНИЕ: Рекурсивно обновляем пути хоста во всем дереве VFS 
+    // при перемещении или переименовании директорий. Без этого дочерние 
+    // файлы будут ссылаться на старые несуществующие пути.
+    fn update_host_paths_recursively(&mut self, new_host_path: PathBuf) {
+        match self {
+            FsNode::File {
+                location: FileLocation::Path(p),
+                ..
+            } => {
+                *p = new_host_path;
+            }
+            FsNode::Directory {
+                children,
+                writeable: Some(p),
+            } => {
+                *p = new_host_path.clone();
+                for (name, child) in children.iter_mut() {
+                    child.update_host_paths_recursively(new_host_path.join(name));
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 // Put well-known paths in the guest filesystem here.
@@ -1022,54 +1046,68 @@ impl Fs {
         }
     }
 
+    // ИСПРАВЛЕНИЕ: ЧЕСТНАЯ РЕАЛИЗАЦИЯ ПЕРЕИМЕНОВАНИЯ 
+    // Поддерживает и файлы, и директории, обновляет дерево VFS без паники
     pub fn rename<P: AsRef<GuestPath> + Copy>(&mut self, from: P, to: P) -> Result<(), ()> {
-        let from_node = self.lookup_node(from.as_ref()).ok_or(())?;
-        let from_host_path = match from_node {
-            FsNode::File {
-                location: from_location,
-                writeable: from_writeable,
-            } => {
-                let FileLocation::Path(from_host_path) = from_location else {
-                    // TODO: return EISDIR
-                    return Err(());
-                };
-                assert!(from_writeable); // TODO: return errno
-                                         // TODO: avoid copy?
-                from_host_path.clone()
-            }
-            _ => unimplemented!(),
-        };
-        if self.lookup_node(to.as_ref()).is_none() {
-            // In case target guest node do not exist, we need to create one
-            let mut options = GuestOpenOptions::new();
-            options.write().create().truncate();
-            self.open_with_options(to, options)?;
+        let from_path = from.as_ref();
+        let to_path = to.as_ref();
+
+        if from_path.as_str() == to_path.as_str() {
+            return Ok(());
         }
 
-        let to_node = self.lookup_node(to.as_ref()).unwrap();
-        let FsNode::File {
-            location: to_location,
-            writeable: to_writeable,
-        } = to_node
-        else {
-            // TODO: return EISDIR
-            return Err(());
+        let from_host_path = match self.lookup_node(from_path).ok_or(())? {
+            FsNode::File {
+                location: FileLocation::Path(p),
+                writeable: true,
+            } => p.clone(),
+            FsNode::Directory {
+                writeable: Some(p),
+                ..
+            } => p.clone(),
+            _ => return Err(()), // Нельзя перемещать read-only или системные файлы архива
         };
-        let FileLocation::Path(to_host_path) = to_location else {
-            // TODO: return EACCES
-            return Err(());
+
+        let (to_parent_node, to_name) = self.lookup_parent_node(to_path).ok_or(())?;
+        let to_parent_host_path = match to_parent_node {
+            FsNode::Directory {
+                writeable: Some(p), ..
+            } => p.clone(),
+            _ => return Err(()), // Нельзя перемещать в read-only родителя
         };
-        assert!(to_writeable); // TODO: return errno
-        let res = fs::rename(from_host_path, to_host_path);
-        if res.is_ok() {
-            // Remove reference to the old from node
-            let (parent_from, component) = self.lookup_parent_node(from.as_ref()).unwrap();
-            let FsNode::Directory { children, .. } = parent_from else {
-                panic!()
-            };
-            children.remove(&component).unwrap();
+        let to_host_path = to_parent_host_path.join(&to_name);
+
+        // 1. Выполняем настоящее физическое перемещение на диске хоста
+        if fs::rename(&from_host_path, &to_host_path).is_err() {
+            return Err(());
         }
-        res.map_err(|_| ())
+
+        // 2. Извлекаем старую ноду из VFS
+        let (from_parent_node, from_name) = self.lookup_parent_node(from_path).unwrap();
+        let FsNode::Directory {
+            children: from_children,
+            ..
+        } = from_parent_node
+        else {
+            unreachable!()
+        };
+        let mut moving_node = from_children.remove(&from_name).unwrap();
+
+        // 3. Рекурсивно обновляем внутри нее все Host-пути на новые
+        moving_node.update_host_paths_recursively(to_host_path);
+
+        // 4. Вставляем обновленную ноду по новому пути в VFS
+        let (to_parent_final, to_name_final) = self.lookup_parent_node(to_path).unwrap();
+        let FsNode::Directory {
+            children: to_children,
+            ..
+        } = to_parent_final
+        else {
+            unreachable!()
+        };
+        to_children.insert(to_name_final, moving_node);
+
+        Ok(())
     }
 
     /// Like [File::options] but for the guest filesystem.
