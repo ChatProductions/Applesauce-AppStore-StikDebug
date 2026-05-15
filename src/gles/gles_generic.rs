@@ -783,7 +783,27 @@ pub trait GLES {
         self.RenderbufferStorageOES(target, internalformat, width, height);
     }
     unsafe fn ResolveMultisampleFramebufferAPPLE(&mut self) {
-        unimplemented!("ResolveMultisampleFramebufferAPPLE not implemented by this backend")
+        // Default fallback for backends that don't implement a true
+        // multisample resolve (e.g. native OpenGL ES 1.1 / ES 2.0 on Android,
+        // where the host driver lacks `GL_APPLE_framebuffer_multisample` and
+        // there's no `glBlitFramebuffer` to copy with). The companion
+        // `RenderbufferStorageMultisampleAPPLE` default impl already degrades
+        // multisample storage to single-sample, so the "sample" renderbuffer
+        // holds the rendered pixels directly. With the canonical Apple
+        // EAGLView MSAA pattern the sample framebuffer remains the currently
+        // bound framebuffer (because the driver rejects
+        // `GL_READ_FRAMEBUFFER_APPLE` / `GL_DRAW_FRAMEBUFFER_APPLE` as
+        // targets without the extension), so `presentRenderbuffer:`'s
+        // existing fallback — `glCopyTexImage2D` from the currently bound
+        // FBO's color attachment — still finds the rendered frame and
+        // displays it. Panicking here turned Temple Run (and any other
+        // canonical EAGLView MSAA app) into a hard host-process abort on the
+        // first frame; logging once and continuing keeps the app running.
+        log_once!(
+            "ResolveMultisampleFramebufferAPPLE: backend lacks a real resolve; \
+             relying on the single-sample fallback for RenderbufferStorageMultisampleAPPLE \
+             and the bound-FBO source in presentRenderbuffer:"
+        );
     }
 
     // Non-OES aliases for OES_framebuffer_object functions.
