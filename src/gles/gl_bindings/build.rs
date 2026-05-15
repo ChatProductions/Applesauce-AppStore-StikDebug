@@ -18,6 +18,17 @@ fn main() {
         Fallbacks::None,
         [
             "GL_EXT_framebuffer_object",
+            // EXT_framebuffer_blit gives us glBlitFramebufferEXT plus the
+            // GL_READ_FRAMEBUFFER_EXT / GL_DRAW_FRAMEBUFFER_EXT targets that
+            // map 1:1 to the values used by GL_APPLE_framebuffer_multisample's
+            // GL_READ_FRAMEBUFFER_APPLE / GL_DRAW_FRAMEBUFFER_APPLE constants.
+            // We need this to implement glResolveMultisampleFramebufferAPPLE
+            // (i.e. blit the multisample sample-FB into the resolve-FB whose
+            // color renderbuffer is the CAEAGLLayer drawable).
+            "GL_EXT_framebuffer_blit",
+            // Required so the underlying GL accepts multisample renderbuffer
+            // storage if/when we choose to honour the requested sample count.
+            "GL_EXT_framebuffer_multisample",
             "GL_EXT_texture_filter_anisotropic",
             "GL_EXT_texture_lod_bias",
             "GL_ARB_matrix_palette",

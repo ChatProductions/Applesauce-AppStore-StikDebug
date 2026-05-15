@@ -2195,6 +2195,75 @@ impl GLES for GLES1OnGL2<'_> {
         gl21::GenerateMipmapEXT(target)
     }
 
+    // GL_APPLE_framebuffer_multisample → GL_EXT_framebuffer_multisample +
+    // GL_EXT_framebuffer_blit, which are baseline on every desktop GL that
+    // can host this layer.
+    unsafe fn RenderbufferStorageMultisampleAPPLE(
+        &mut self,
+        target: GLenum,
+        samples: GLsizei,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        gl21::RenderbufferStorageMultisampleEXT(
+            target,
+            samples,
+            internalformat,
+            width,
+            height,
+        )
+    }
+    unsafe fn ResolveMultisampleFramebufferAPPLE(&mut self) {
+        // Apple's GL_APPLE_framebuffer_multisample doesn't take any arguments:
+        // the source is whatever is currently bound to GL_READ_FRAMEBUFFER_APPLE
+        // and the destination is whatever is currently bound to
+        // GL_DRAW_FRAMEBUFFER_APPLE. Their numeric values are identical to
+        // GL_READ_FRAMEBUFFER_EXT / GL_DRAW_FRAMEBUFFER_EXT, so we can hand
+        // them straight to glBlitFramebufferEXT.
+        //
+        // Figure out the rectangle to blit from the READ framebuffer's color
+        // attachment so that the blit covers exactly the rendered area.
+        let mut color_rb: GLint = 0;
+        gl21::GetFramebufferAttachmentParameterivEXT(
+            gl21::READ_FRAMEBUFFER_EXT,
+            gl21::COLOR_ATTACHMENT0_EXT,
+            gl21::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_EXT,
+            &mut color_rb,
+        );
+        // Remember and restore the renderbuffer binding so we don't perturb
+        // whatever the guest expects to be current.
+        let mut old_rb: GLint = 0;
+        gl21::GetIntegerv(gl21::RENDERBUFFER_BINDING_EXT, &mut old_rb);
+        gl21::BindRenderbufferEXT(gl21::RENDERBUFFER_EXT, color_rb as GLuint);
+        let mut width: GLint = 0;
+        let mut height: GLint = 0;
+        gl21::GetRenderbufferParameterivEXT(
+            gl21::RENDERBUFFER_EXT,
+            gl21::RENDERBUFFER_WIDTH_EXT,
+            &mut width,
+        );
+        gl21::GetRenderbufferParameterivEXT(
+            gl21::RENDERBUFFER_EXT,
+            gl21::RENDERBUFFER_HEIGHT_EXT,
+            &mut height,
+        );
+        gl21::BindRenderbufferEXT(gl21::RENDERBUFFER_EXT, old_rb as GLuint);
+
+        gl21::BlitFramebufferEXT(
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            gl21::COLOR_BUFFER_BIT,
+            gl21::NEAREST,
+        );
+    }
+
     // Non-OES aliases for OES_framebuffer_object functions.
     // Some GLES1 apps call the suffix-free ES2-style names directly.
     unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint) {
