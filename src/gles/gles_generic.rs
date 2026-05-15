@@ -757,6 +757,35 @@ pub trait GLES {
         unimplemented!("GenerateMipmapOES not implemented by this backend")
     }
 
+    // GL_APPLE_framebuffer_multisample
+    //
+    // Apple's iOS MSAA pattern uses a "sample" framebuffer with multisample
+    // renderbuffer storage, renders to it, and then resolves into a separate
+    // "resolve" framebuffer whose color renderbuffer is the CAEAGLLayer
+    // drawable. `presentRenderbuffer:` is then called on the resolve
+    // renderbuffer. Without an honest resolve, the resolve renderbuffer stays
+    // empty and the screen never updates — see Apple's "Working with EAGL
+    // Contexts" docs and the
+    // [GL_APPLE_framebuffer_multisample]
+    // (https://registry.khronos.org/OpenGL/extensions/APPLE/APPLE_framebuffer_multisample.txt)
+    // extension spec.
+    unsafe fn RenderbufferStorageMultisampleAPPLE(
+        &mut self,
+        target: GLenum,
+        samples: GLsizei,
+        internalformat: GLenum,
+        width: GLsizei,
+        height: GLsizei,
+    ) {
+        // Default: fall back to single-sample. Concrete backends that have
+        // the equivalent host-side extension override this.
+        let _ = samples;
+        self.RenderbufferStorageOES(target, internalformat, width, height);
+    }
+    unsafe fn ResolveMultisampleFramebufferAPPLE(&mut self) {
+        unimplemented!("ResolveMultisampleFramebufferAPPLE not implemented by this backend")
+    }
+
     // Non-OES aliases for OES_framebuffer_object functions.
     // Some GLES1 apps call the suffix-free ES2-style names directly.
     unsafe fn GenFramebuffers(&mut self, n: GLsizei, framebuffers: *mut GLuint) {

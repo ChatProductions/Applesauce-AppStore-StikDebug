@@ -825,14 +825,30 @@ fn glDrawTexxvOES(_env: &mut Environment, _coords: ConstPtr<GLfixed>) {}
 fn glRenderbufferStorageMultisampleAPPLE(
     env: &mut Environment,
     target: GLenum,
-    _samples: GLsizei,
+    samples: GLsizei,
     internalformat: GLenum,
     width: GLsizei,
     height: GLsizei,
 ) {
-    glRenderbufferStorageOES(env, target, internalformat, width, height);
+    // Apply --scale-hack so an MSAA renderbuffer matches the size of the
+    // single-sample one it'll be resolved into.
+    let factor = env.options.scale_hack.get() as GLsizei;
+    let (width, height) = (width * factor, height * factor);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.RenderbufferStorageMultisampleAPPLE(target, samples, internalformat, width, height)
+    })
 }
-fn glResolveMultisampleFramebufferAPPLE(_env: &mut Environment) {}
+fn glResolveMultisampleFramebufferAPPLE(env: &mut Environment) {
+    // Apple's MSAA pattern: the app binds the sample (multisample) framebuffer
+    // to GL_READ_FRAMEBUFFER_APPLE and the resolve (single-sample) framebuffer
+    // (whose color renderbuffer is the CAEAGLLayer drawable) to
+    // GL_DRAW_FRAMEBUFFER_APPLE, then calls this to copy the resolved pixels
+    // into the drawable. Without this copy the resolve renderbuffer stays
+    // empty and `presentRenderbuffer:` has nothing to display.
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.ResolveMultisampleFramebufferAPPLE()
+    })
+}
 fn glDiscardFramebufferEXT(
     _env: &mut Environment,
     _target: GLenum,

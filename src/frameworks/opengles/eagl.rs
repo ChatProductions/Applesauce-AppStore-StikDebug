@@ -537,6 +537,25 @@ pub const CLASSES: ClassExports = objc_classes! {
             return false;
         };
         present_pixels(env, drawable, pixels_vec, width, height);
+
+        // The slow path stores the freshly rendered frame in `presented_pixels`
+        // on the drawable, but the *screen* is only updated when the Core
+        // Animation compositor runs. The compositor is normally driven from
+        // NSRunLoop iterations, but some games (notably Temple Run) drive
+        // their own render loop and only spin NSRunLoop very rarely, so the
+        // screen would otherwise update at well below 2 FPS even though the
+        // app is rendering at 60 FPS.
+        //
+        // Apple's documentation for `-[EAGLContext presentRenderbuffer:]`
+        // states that the contents of the renderbuffer are displayed when
+        // this method returns. To honour that contract — and to keep the
+        // composited overlay (UIKit controls drawn on top of the EAGL view)
+        // in step with the rendered frame — drive the compositor here
+        // explicitly when we are on this slow path. We pass `force: true`
+        // so the compositor's 60Hz throttle doesn't suppress this tick;
+        // recomposite_if_necessary still updates its internal scheduler so
+        // NSRunLoop-driven ticks remain rate-limited.
+        crate::frameworks::core_animation::recomposite_if_necessary(env, true);
     }
 
     if let Some(sleep_for) = sleep_for {
