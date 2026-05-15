@@ -855,6 +855,28 @@ fn fcntl(
         return -1;
     }
 
+    // Apple `man 2 fcntl`: stdin/stdout/stderr are always open file
+    // descriptors on iOS, so `F_GETFD`/`F_GETFL` must succeed for them.
+    // Returning EBADF here breaks managed runtimes (Mono's `System.Console`
+    // initialiser queries `F_GETFL` on stderr and bails out if it fails).
+    // Report sane defaults: no FD_CLOEXEC, access mode matches the stream's
+    // role (read-only for stdin, write-only for stdout/stderr).
+    if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
+        match cmd {
+            F_GETFD => return 0,
+            F_GETFL => {
+                return if fd == STDIN_FILENO {
+                    O_RDONLY
+                } else {
+                    O_WRONLY
+                };
+            }
+            // Other operations are silently accepted as no-ops for std
+            // streams (e.g. F_SETFD with FD_CLOEXEC=0).
+            _ => return 0,
+        }
+    }
+
     match cmd {
         // ----------------------------------------------------------------
         // File descriptor flags

@@ -288,24 +288,66 @@ fn glFlush(env: &mut Environment) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.Flush() })
 }
 fn glGetString(env: &mut Environment, name: GLenum) -> ConstPtr<GLubyte> {
-    let res = if let Some(&str) = env.framework_state.opengles.strings_cache.get(&name) {
-        str
-    } else {
-        let s: &[u8] = match name {
+    // Per Apple's `EAGLContext` / OpenGL ES Programming Guide, the values
+    // returned by `glGetString(GL_VERSION)` and `GL_SHADING_LANGUAGE_VERSION`
+    // depend on which `kEAGLRenderingAPI` the context was created with:
+    //
+    //   * `kEAGLRenderingAPIOpenGLES1` – reports a `"OpenGL ES-CM 1.1 …"`
+    //     version string (the `-CM` denotes the Common profile) and no
+    //     `GL_SHADING_LANGUAGE_VERSION` entry.
+    //   * `kEAGLRenderingAPIOpenGLES2` – reports `"OpenGL ES 2.0 …"` (note:
+    //     NO `-CM`) plus `GL_SHADING_LANGUAGE_VERSION == "OpenGL ES GLSL ES
+    //     1.00 …"`. Apps such as Unity 3.5 (Bad Piggies, iOS 4.0 build) use
+    //     this string to decide whether to follow their ES 2.0 renderer code
+    //     path. If we return the ES-CM 1.1 string while serving an ES 2.0
+    //     context, Unity leaves itself in a half-initialised state and the
+    //     resulting frames look torn / overlapped on screen.
+    //
+    // We therefore branch on the *currently-bound context's* API instead of
+    // hard-coding the ES 1.1 strings. The cache is keyed by `(is_es2, name)`
+    // because the two profiles share the same `name` enum values.
+    let is_es2 = with_ctx_and_mem(env, |gles, _mem| gles.is_es2());
+
+    if let Some(&str) = env
+        .framework_state
+        .opengles
+        .strings_cache
+        .get(&(is_es2, name))
+    {
+        return str;
+    }
+
+    let s: &[u8] = if !is_es2 {
+        match name {
             gles11::VENDOR => b"Imagination Technologies",
             gles11::RENDERER => b"PowerVR MBXLite with VGPLite",
             gles11::VERSION => b"OpenGL ES-CM 1.1 (76)",
             gles11::EXTENSIONS => b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_blend_subtract GL_OES_compressed_paletted_texture GL_OES_depth24 GL_OES_draw_texture GL_OES_framebuffer_object GL_OES_mapbuffer GL_OES_matrix_palette GL_OES_point_size_array GL_OES_point_sprite GL_OES_read_format GL_OES_rgb8_rgba8 GL_OES_texture_mirrored_repeat GL_OES_vertex_array_object ",
-            _ => b"Unknown"
-        };
-        let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
-        env.framework_state
-            .opengles
-            .strings_cache
-            .insert(name, new_str);
-        new_str
+            _ => b"Unknown",
+        }
+    } else {
+        // Strings reported by an iPhone 3GS / iPhone 4 running iOS 4.0 in an
+        // `kEAGLRenderingAPIOpenGLES2` context. Crucially the `VERSION`
+        // string does NOT contain the `-CM` Common-profile suffix, and the
+        // `SHADING_LANGUAGE_VERSION` query is supported.
+        match name {
+            gles11::VENDOR => b"Imagination Technologies",
+            gles11::RENDERER => b"PowerVR SGX 535",
+            gles11::VERSION => b"OpenGL ES 2.0 IMGSGX535-63.27",
+            // `GL_SHADING_LANGUAGE_VERSION` is 0x8B8C in both ES 2.0 and
+            // desktop GL; reference it by numeric literal so we don't have
+            // to pull in the ES 2.0 enum table here.
+            0x8B8C => b"OpenGL ES GLSL ES 1.00",
+            gles11::EXTENSIONS => b"GL_APPLE_framebuffer_multisample GL_APPLE_texture_max_level GL_EXT_discard_framebuffer GL_EXT_texture_filter_anisotropic GL_EXT_texture_lod_bias GL_IMG_read_format GL_IMG_texture_compression_pvrtc GL_IMG_texture_format_BGRA8888 GL_OES_depth24 GL_OES_depth_texture GL_OES_packed_depth_stencil GL_OES_rgb8_rgba8 GL_OES_standard_derivatives GL_OES_texture_float GL_OES_texture_half_float GL_OES_vertex_array_object ",
+            _ => b"Unknown",
+        }
     };
-    res
+    let new_str = env.mem.alloc_and_write_cstr(s).cast_const();
+    env.framework_state
+        .opengles
+        .strings_cache
+        .insert((is_es2, name), new_str);
+    new_str
 }
 
 fn glAlphaFunc(env: &mut Environment, func: GLenum, ref_: GLclampf) {
