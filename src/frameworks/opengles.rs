@@ -28,7 +28,12 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 pub struct State {
     /// Current EAGLContext for each thread
     current_ctxs: std::collections::HashMap<crate::ThreadId, Option<crate::objc::id>>,
-    strings_cache: std::collections::HashMap<GLenum, ConstPtr<u8>>,
+    /// `glGetString()` results cache, keyed by `(is_es2, name)` so that an
+    /// ES 2.0 context does not return the ES 1.1 `OpenGL ES-CM 1.1` version
+    /// string (Bad Piggies / Unity 3.5 checks the version string to decide
+    /// which renderer code path to use — mismatching the API leaves Unity in
+    /// a half-initialised ES 2.0 path that emits torn / overlapping frames).
+    strings_cache: std::collections::HashMap<(bool, GLenum), ConstPtr<u8>>,
 }
 impl State {
     fn current_ctx_for_thread(&mut self, thread: crate::ThreadId) -> &mut Option<crate::objc::id> {

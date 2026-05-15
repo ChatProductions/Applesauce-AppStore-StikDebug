@@ -5,7 +5,7 @@
  */
 //! POSIX `sys/stat.h`
 
-use super::{close, off_t, open_direct, FileDescriptor};
+use super::{close, off_t, open_direct, FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestFile, GuestPath};
 use crate::libc::errno::{set_errno, EACCES, EBADF, EEXIST, ENOENT};
@@ -31,6 +31,8 @@ pub type blkcnt_t = u64;
 pub type blksize_t = u32;
 
 // enum values sourced from `man 2 stat`
+pub const S_IFIFO: mode_t = 0o0010000;
+pub const S_IFCHR: mode_t = 0o0020000;
 pub const S_IFDIR: mode_t = 0o0040000;
 pub const S_IFREG: mode_t = 0o0100000;
 
@@ -128,6 +130,24 @@ fn mkdir(env: &mut Environment, path: ConstPtr<u8>, mode: mode_t) -> i32 {
 
 /// Helper for [stat()] and [fstat()] that fills the data in the stat struct
 fn fstat_inner(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<stat>) -> i32 {
+    // Apple `man 2 fstat`: the standard streams (stdin/stdout/stderr) are
+    // always valid file descriptors on iOS — they are connected to either a
+    // terminal-style character device or, when the app is launched by
+    // SpringBoard, an Apple System Log pipe.  Returning EBADF here breaks
+    // managed runtimes (Mono's `System.Console..cctor()` calls
+    // `MonoIO.GetFileType()` which goes through `fstat()`; an EBADF result
+    // makes `FileStream..ctor(IntPtr handle, ...)` throw
+    // `ArgumentException("handle", "Invalid")` and aborts the process at
+    // launch — observed with Bad Piggies / Unity 3.5).  Report the streams
+    // as character devices so callers see a valid handle.
+    if matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
+        let mut stat = stat::default();
+        stat.st_mode = S_IFCHR | 0o600;
+        stat.st_nlink = 1;
+        env.mem.write(buf, stat);
+        return 0;
+    }
+
     let Some(file) = env.libc_state.posix_io.file_for_fd(fd) else {
         set_errno(env, EBADF);
         return -1;
