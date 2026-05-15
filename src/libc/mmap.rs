@@ -118,9 +118,17 @@ fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, mode: u32) ->
     open_direct(env, name, oflag)
 }
 
+fn mprotect(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, prot: i32) -> i32 {
+    log!("TODO: mprotect({:?}, {}, {}) -> -1", addr, len, prot);
+    set_errno(env, ENOTSUP);
+    -1
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mmap(_, _, _, _, _, _)),
     export_c_func!(munmap(_, _)),
     export_c_func!(madvise(_, _, _)),
     export_c_func!(shm_open(_, _, _)),
+    export_c_func!(shm_open(_, _, _)),
+    export_c_func!(mprotect(_, _, _)),
 ];
