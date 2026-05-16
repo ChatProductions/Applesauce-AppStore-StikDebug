@@ -36,7 +36,7 @@ use crate::objc::{
     autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain,
     Class, ClassExports, HostObject, NSZonePtr, ObjC, SEL,
 };
-use crate::Environment;
+use crate::{todo_objc_setter, Environment};
 
 /// State maintained for UIView's class-level animation block API
 /// (`+beginAnimations:context:` ... `+commitAnimations`). At most one block

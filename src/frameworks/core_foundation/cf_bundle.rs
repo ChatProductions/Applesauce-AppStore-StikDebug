@@ -732,8 +732,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFBundleCopyHelpBookName(_)),
     // URLs
     export_c_func!(CFBundleCopyBundleURL(_)),
-    export_c_func!(CFBundleCopyResourcesDirectoryURL(_)),
     export_c_func!(CFBundleCopyExecutableURL(_)),
+    export_c_func!(CFBundleCopyResourcesDirectoryURL(_)),
     export_c_func!(CFBundleCopyAuxiliaryExecutableURL(_, _)),
     export_c_func!(CFBundleCopyPrivateFrameworksURL(_)),
     export_c_func!(CFBundleCopySharedFrameworksURL(_)),

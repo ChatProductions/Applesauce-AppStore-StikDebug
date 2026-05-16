@@ -170,21 +170,6 @@ const CONSTANTS: ConstantExports = &[
     ("_NSKeyValueChangeNewKey", HostConstant::NSString("new")),
 ];
 
-/// Block support is iOS 4+, but it seems like Block Runtime Helpers
-/// could still be called on even if minimal iOS version is set to 3.x?
-///
-/// ref. <https://clang.llvm.org/docs/Block-ABI-Apple.html#runtime-helper-functions>
-fn _Block_object_dispose(_env: &mut Environment, object: ConstVoidPtr, flags: i32) {
-    // `BLOCK_FIELD_IS_BYREF` flag defines an on stack structure holding
-    // the __block variable. It is _probably_ safe to ignore.
-    // TODO: properly implement for block support
-    assert!(flags == 8); // BLOCK_FIELD_IS_BYREF
-    log!(
-        "Warning: Ignoring _Block_object_dispose({:?}, BLOCK_FIELD_IS_BYREF)",
-        object
-    );
-}
-
 const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_msgSend(_, _)),
     export_c_func!(objc_msgSend_stret(_, _, _)),
@@ -218,6 +203,5 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(method_getImplementation(_, _)),
     export_c_func!(method_setImplementation(_, _)),
     export_c_func!(method_getTypeEncoding(_, _)),
-    export_c_func!(_Block_object_dispose(_, _)),
     export_c_func!(___objc_personality_v0(_, _, _, _, _)),
 ];

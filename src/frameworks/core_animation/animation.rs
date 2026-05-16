@@ -325,6 +325,7 @@ impl State {
     }
 }
 
+#[allow(clippy::eq_op)]
 fn get_from_and_by_values<T>(
     current_value: Option<T>,
     from_value: Option<T>,

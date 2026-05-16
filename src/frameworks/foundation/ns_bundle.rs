@@ -441,13 +441,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let exec_path = from_rust_string(env, exec_path_str);
     autorelease(env, exec_path)
 }
-
 - (id)executableURL {
+    // TODO: cache result
     let exec_path: id = msg![env; this executablePath];
     if exec_path == nil { return nil; }
-    let url: id = msg_class![env; NSURL alloc];
-    let url: id = msg![env; url initFileURLWithPath:exec_path];
-    autorelease(env, url)
+    msg_class![env; NSURL fileURLWithPath:exec_path]
 }
 
 - (id)privateFrameworksPath {
