@@ -332,11 +332,6 @@ fn CFBundleCopyBundleURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef
     msg![env; url copy]
 }
 
-fn CFBundleCopyExecutableURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
-    let url: id = msg![env; bundle executableURL];
-    msg![env; url copy]
-}
-
 fn CFBundleCopyResourcesDirectoryURL(env: &mut Environment, bundle: CFBundleRef) -> CFURLRef {
     if bundle == nil {
         return nil;

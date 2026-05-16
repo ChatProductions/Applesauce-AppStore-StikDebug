@@ -474,12 +474,6 @@ fn _ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__norma
     arg1.min(arg2)
 }
 
-fn rint(env: &mut Environment, arg: f64) -> f64 {
-    // TODO: handle errno properly
-    set_errno(env, 0);
-    arg.log10()
-}
-
 fn nearbyintf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
