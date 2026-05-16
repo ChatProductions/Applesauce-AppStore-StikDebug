@@ -14,6 +14,7 @@ use super::{NSTimeInterval, NSUInteger};
 // ДОБАВЛЕНЫ ИМПОРТЫ ДЛЯ ЭКСПОРТА ФУНКЦИИ И ОКРУЖЕНИЯ
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::foundation::ns_thread::detach_new_thread_inner;
+use crate::libc::semaphore::{host_create_semaphore, host_destroy_semaphore, sem_post, sem_wait};
 use crate::mem::MutVoidPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, msg_send_no_type_checking, nil, objc_classes,
@@ -28,6 +29,16 @@ pub static mut CANCELLED_PERFORMS: std::vec::Vec<(u32, std::option::Option<std::
 // Хранилище для динамических свойств KVC (когда NIB устанавливает кастомные IBOutlet на базовые классы)
 pub static mut DYNAMIC_KVC_STORAGE: std::vec::Vec<(u32, std::string::String, u32)> =
     std::vec::Vec::new();
+
+// Side-channel storage for `performSelectorOnMainThread:withObject:waitUntilDone:YES` requests
+// scheduled from background threads. Each entry maps a pending NSTimer's id to the host semaphore
+// the background thread is blocked on, so that `_touchHLE_timerFireMethod:` can post the
+// semaphore once the selector has finished running on the main thread. Without this, the
+// `waitUntilDone:YES` argument is effectively ignored and background threads race ahead of the
+// scheduled selector — this manifests, for example, as Call of Duty: Zombies' Marmalade-based
+// `RunOnMainThread` helper clobbering `s3eAppDelegate.m_Func` repeatedly before the main thread's
+// `-[s3eAppDelegate Functor]` fires, eventually loading a NULL function pointer and crashing.
+pub static mut SYNC_PERFORM_SEMAPHORES: std::vec::Vec<(u32, u32)> = std::vec::Vec::new();
 
 // ДОБАВЛЕНА РЕАЛИЗАЦИЯ NSAllocateObject
 fn NSAllocateObject(
@@ -461,6 +472,52 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
+    if wait {
+        // `waitUntilDone:YES` from a background thread: schedule the selector to run on the main
+        // thread and block the calling thread on a host semaphore that
+        // `_touchHLE_timerFireMethod:` will post once the selector has finished executing.
+        //
+        // Games such as Call of Duty: Zombies (Marmalade SDK) rely on this synchronisation to
+        // safely hand work off to the main thread via an `s3eAppDelegate.m_Func` slot: the
+        // background thread sets `m_Func`, calls `performSelectorOnMainThread:Functor
+        // withObject:nil waitUntilDone:YES`, and expects to block until `Functor` has called and
+        // cleared `m_Func`. Returning early here lets the background thread overwrite `m_Func`
+        // before the main thread's `Functor` has a chance to read it, eventually loading a
+        // NULL function pointer and crashing into the guest's null page.
+        let sel_name_owned = sel_name.to_string();
+        log_dbg!(
+            "performSelectorOnMainThread:{} from background thread {} (wait=true) — scheduling and waiting",
+            sel_name_owned, env.current_thread
+        );
+
+        let sel_key: id = get_static_str(env, "SEL");
+        let sel_str = from_rust_string(env, sel_name_owned);
+        let arg_key: id = get_static_str(env, "arg");
+        let dict = dict_from_keys_and_objects(env, &[(sel_key, sel_str), (arg_key, arg)]);
+
+        let fire_selector = env.objc.lookup_selector("_touchHLE_timerFireMethod:").unwrap();
+        let timer: id = msg_class![env;
+            NSTimer timerWithTimeInterval:(0.0 as NSTimeInterval)
+                                   target:this
+                                 selector:fire_selector
+                                 userInfo:dict
+                                  repeats:false
+        ];
+
+        let sem = host_create_semaphore(env, 0);
+        unsafe {
+            SYNC_PERFORM_SEMAPHORES.push((timer.to_bits(), sem.to_bits()));
+        }
+
+        let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
+        let mode: id = get_static_str(env, NSDefaultRunLoopMode);
+        () = msg![env; run_loop addTimer:timer forMode:mode];
+
+        sem_wait(env, sem);
+        host_destroy_semaphore(env, sem);
+        return;
+    }
+
     log_dbg!(
         "performSelectorOnMainThread:{} from background thread {} (wait={}) — scheduling",
         sel_name, env.current_thread, wait
@@ -489,14 +546,33 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    if cancelled {
-        return;
+    // Pull out any semaphore associated with this timer up-front so we can post it after the
+    // selector has finished, regardless of whether it was cancelled. (If we skipped posting on
+    // cancellation, the waiting thread would hang forever.)
+    let sem_to_post = unsafe {
+        let timer_bits = which.to_bits();
+        if let Some(pos) = SYNC_PERFORM_SEMAPHORES
+            .iter()
+            .position(|x| x.0 == timer_bits)
+        {
+            Some(SYNC_PERFORM_SEMAPHORES.remove(pos).1)
+        } else {
+            None
+        }
+    };
+
+    if !cancelled {
+        if sel.as_str(&env.mem).ends_with(':') {
+            () = msg_send(env, (this, sel, arg));
+        } else {
+            () = msg_send(env, (this, sel));
+        }
     }
 
-    if sel.as_str(&env.mem).ends_with(':') {
-        () = msg_send(env, (this, sel, arg));
-    } else {
-        () = msg_send(env, (this, sel));
+    if let Some(sem_bits) = sem_to_post {
+        let sem: crate::mem::MutPtr<crate::libc::semaphore::sem_t> =
+            crate::mem::MutPtr::from_bits(sem_bits);
+        sem_post(env, sem);
     }
 }
 
