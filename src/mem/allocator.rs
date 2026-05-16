@@ -321,18 +321,30 @@ impl Allocator {
         self.used_chunks.insert(chunk);
     }
 
-    pub fn alloc(&mut self, size: GuestUSize) -> VAddr {
-        let size = if size < PAGE_SIZE {
-            let size = size.max(MIN_CHUNK_SIZE);
-            Self::align(size, MIN_CHUNK_SIZE)
+        pub fn alloc(&mut self, size: GuestUSize) -> VAddr {
+        // ИСПРАВЛЕНИЕ: Выравнивание может привести к переполнению (overflow), 
+        // если игра запрашивает гигантский объем памяти (например, 0xffffffff).
+        let aligned_size_opt = if size < PAGE_SIZE {
+            let s = size.max(MIN_CHUNK_SIZE);
+            Self::align(s, MIN_CHUNK_SIZE)
         } else {
             Self::align(size, PAGE_SIZE)
         };
 
-        let Some(alloc) = self.unused_chunks.allocate(size) else {
+        // Если переполнение произошло (вернулся None), значит запрошен
+        // неадекватно большой размер. Честно возвращаем NULL (0).
+        let Some(aligned_size) = aligned_size_opt else {
+            log!(
+                "Warning: Allocator::alloc: requested size {:#x} overflows after alignment; returning NULL.",
+                size
+            );
+            return 0;
+        };
+
+        let Some(alloc) = self.unused_chunks.allocate(aligned_size) else {
             log!(
                 "Warning: Allocator::alloc: out of memory (could not find a large enough chunk for {:#x} bytes); returning NULL.",
-                size
+                aligned_size
             );
             return 0;
         };
@@ -341,11 +353,13 @@ impl Allocator {
         alloc.base
     }
 
-    fn align(size: GuestUSize, align: GuestUSize) -> GuestUSize {
+    // ИСПРАВЛЕНИЕ: Используем checked_add для безопасного сложения.
+    fn align(size: GuestUSize, align: GuestUSize) -> Option<GuestUSize> {
         if !size.is_multiple_of(align) {
-            size + align - (size % align)
+            let addend = align - (size % align);
+            size.checked_add(addend)
         } else {
-            size
+            Some(size)
         }
     }
 
