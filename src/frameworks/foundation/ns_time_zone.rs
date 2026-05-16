@@ -146,7 +146,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)knownTimeZoneNames {
     let names: Vec<id> = ZONE_TABLE
         .iter()
-        .filter(|r| r.0 == r.0) // keep all; caller can filter
         // Deduplicate: only include rows where the name is not a bare
         // abbreviation
         .filter(|r| !r.0.chars().all(|c| c.is_ascii_uppercase() || c == '/'))
