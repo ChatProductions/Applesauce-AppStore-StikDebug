@@ -516,6 +516,31 @@ pub(super) fn UIApplicationMain(
         let _: () = msg![env; pool drain];
     }
 
+    // Apple docs: after `beginGeneratingDeviceOrientationNotifications` the
+    // device begins generating `UIDeviceOrientationDidChangeNotification`s.
+    // On a real iPhone the accelerometer wakes the moment the user picks up
+    // the device, so the very first orientation event practically always
+    // arrives during launch. Some games (e.g. Dead Space) gate the start of
+    // their C++ engine on this first notification — if it never fires they
+    // sit forever in the run loop waiting for it. Post an initial
+    // notification here so the app can transition out of its idle splash
+    // state. See `UIDevice` documentation:
+    //   https://developer.apple.com/documentation/uikit/uidevice/1620018-beginGeneratingdeviceorientationn
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let current_device: id = msg_class![env; UIDevice currentDevice];
+        let is_generating: bool =
+            msg![env; current_device isGeneratingDeviceOrientationNotifications];
+        if is_generating {
+            log_dbg!(
+                "Posting initial UIDeviceOrientationDidChangeNotification \
+                 so apps observing device orientation can finish initializing."
+            );
+            let _: () = msg![env; current_device _postOrientationChangeNotification];
+        }
+        let _: () = msg![env; pool drain];
+    }
+
     let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
     let _: () = msg![env; run_loop run];
 }
