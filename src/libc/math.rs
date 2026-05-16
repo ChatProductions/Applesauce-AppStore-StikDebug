@@ -824,7 +824,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_ZNSt6vectorIN8InputMgr9TouchDataESaIS1_EE7reserveEm(_, _)),
     export_c_func!(_ZNSt6vectorIN8InputMgr7KeyDataESaIS1_EE14_M_fill_insertEN9__gnu_cxx17__normal_iteratorIPS1_S3_EEmRKS1_(_, _)),
     // Other
-    export_c_func!(rint(_)),
     export_c_func!(rintf(_)),
     export_c_func!(nearbyint(_)),
     export_c_func!(nearbyintf(_)),

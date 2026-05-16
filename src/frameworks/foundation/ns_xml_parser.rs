@@ -68,10 +68,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setShouldResolveExternalEntities:(bool)should_resolve {
         env.objc.borrow_mut::<NSXMLParserHostObject>(this).should_resolve_external_entities = should_resolve;
 }
-
-- (())setShouldResolveExternalEntities:(bool)should {
-    todo_objc_setter!(this, should);
-}
 - (())setShouldProcessNamespaces:(bool)should {
     todo_objc_setter!(this, should);
 }

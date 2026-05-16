@@ -1043,13 +1043,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBounds:(CGRect { origin: CGPoint::default(), size: new_size })];
 }
 
-- (())setContentScaleFactor:(CGFloat)factor {
-    todo_objc_setter!(this, factor);
-}
-- (CGFloat)contentScaleFactor {
-    1.0 // TODO
-}
-
 @end
 
 };
