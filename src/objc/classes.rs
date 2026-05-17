@@ -1405,7 +1405,13 @@ pub fn ___objc_personality_v0(
     // _URC_FATAL_PHASE1_ERROR
     3
 }
-
+pub fn objc_retainAutorelease(env: &mut crate::Environment, obj: id) -> id {
+    if !obj.is_null() {
+        crate::objc::retain(env, obj);
+        crate::objc::autorelease(env, obj);
+    }
+    obj
+}
 
 // === Additional ObjC runtime helpers used by iOS 5/6 Cocoa classes ===
 //
