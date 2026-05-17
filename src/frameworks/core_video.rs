@@ -18,6 +18,7 @@ pub const kCVPixelBufferExtendedPixelsLeftKey: &str = "ExtendedPixelsLeft";
 pub const kCVPixelBufferExtendedPixelsTopKey: &str = "ExtendedPixelsTop";
 pub const kCVPixelBufferExtendedPixelsRightKey: &str = "ExtendedPixelsRight";
 pub const kCVPixelBufferExtendedPixelsBottomKey: &str = "ExtendedPixelsBottom";
+pub const kCVPixelBufferMemoryAllocatorKey: &str = "MemoryAllocator";
 
 pub const CONSTANTS: ConstantExports = &[
     (
@@ -71,6 +72,15 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCVPixelBufferExtendedPixelsBottomKey",
         HostConstant::NSString(kCVPixelBufferExtendedPixelsBottomKey),
+    ),
+    // Apple `CVPixelBuffer.h` — `kCVPixelBufferMemoryAllocatorKey` is a
+    // CFStringRef key for a `CFAllocatorRef` value. Apps thread their
+    // own allocator through CVPixelBufferCreate; touchHLE's CVPixelBuffer
+    // implementation always allocates via the default allocator, so the
+    // key participates only in dictionary-equality comparisons.
+    (
+        "_kCVPixelBufferMemoryAllocatorKey",
+        HostConstant::NSString(kCVPixelBufferMemoryAllocatorKey),
     ),
 ];
 

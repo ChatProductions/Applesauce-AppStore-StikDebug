@@ -349,6 +349,171 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (())setAnimationsEnabled:(f32)_enabled { }
 + (())setAnimationTransition:(NSInteger)_transition forView:(id)_view cache:(bool)_cache { }
 
+// MARK: - Block-based animation API (iOS 4+)
+//
+// touchHLE doesn't actually animate property changes — assignments inside
+// the `animations` block snap to their final value immediately. The
+// important contract that *must* be honoured is:
+//
+//   1. Run the `animations` block synchronously, with view-animation
+//      semantics, so the app's mutations to view properties take effect.
+//   2. Schedule a one-shot timer that fires `completion(YES)` after
+//      `delay + duration` seconds (or immediately, if both are zero, on
+//      the next run-loop tick — we approximate this with a 0-second
+//      NSTimer).
+//
+// This matches Apple's documentation for
+// `+[UIView animateWithDuration:delay:options:animations:completion:]`,
+// which guarantees the completion handler is invoked exactly once on the
+// main thread, with `finished:YES` if the animation ran to completion
+// (we never cancel them, so this is always YES).
+//
+// On the wire, `animations` and `completion` are Objective-C blocks. A
+// block is a guest pointer to a `Block_layout` struct whose `invoke`
+// field (offset 12) is the function pointer to call. We fish the
+// `invoke` out with `mem.read` and call it via `GuestFunction`'s
+// `call_from_host`.
+
++ (())animateWithDuration:(f64)duration
+                animations:(MutPtr<()>)animations {
+    let zero_completion: MutPtr<()> = MutPtr::null();
+    () = msg![env; this
+        animateWithDuration:duration
+                      delay:(0.0_f64)
+                    options:(0u32)
+                 animations:animations
+                 completion:zero_completion
+    ];
+}
+
++ (())animateWithDuration:(f64)duration
+                animations:(MutPtr<()>)animations
+                completion:(MutPtr<()>)completion {
+    () = msg![env; this
+        animateWithDuration:duration
+                      delay:(0.0_f64)
+                    options:(0u32)
+                 animations:animations
+                 completion:completion
+    ];
+}
+
++ (())animateWithDuration:(f64)duration
+                     delay:(f64)delay
+                   options:(u32)_options
+                animations:(MutPtr<()>)animations
+                completion:(MutPtr<()>)completion {
+    // 1. Invoke the animations block synchronously. Animation blocks on
+    //    iOS take no arguments and return void, so we just need
+    //    `invoke(block_ptr)`.
+    if !animations.is_null() {
+        invoke_void_block(env, animations);
+    }
+
+    // 2. Fire `completion(BOOL finished)` after `delay + duration`
+    //    seconds via a one-shot NSTimer on the main run loop. We must
+    //    retain the block first because the user-supplied block is
+    //    typically a stack block; on real iOS the runtime promotes it
+    //    to the heap as part of the call. _Block_copy is a no-op for
+    //    global blocks but `objc::retain` does the right thing for
+    //    blocks that have an isa pointing at `_NSConcreteMallocBlock`.
+    if completion.is_null() {
+        return;
+    }
+    let total_delay = (delay + duration).max(0.0);
+    let completion_id: id = completion.cast();
+    retain(env, completion_id);
+
+    // Pack the block pointer into an NSNumber so it survives userInfo.
+    let bits = completion.to_bits();
+    let context_num: id = msg_class![env; NSNumber numberWithUnsignedInt:bits];
+
+    let key_block: id = get_static_str(env, "_touchHLE_uiview_block_anim_block");
+    let dict: id = dict_from_keys_and_objects(env, &[(key_block, context_num)]);
+
+    let fire_sel = env
+        .objc
+        .lookup_selector("_touchHLE_blockAnimationDidFinish:")
+        .expect("UIView _touchHLE_blockAnimationDidFinish: not registered");
+    let ui_view_class: Class = env.objc.get_known_class("UIView", &mut env.mem);
+    let _: id = msg_class![env;
+        NSTimer scheduledTimerWithTimeInterval:total_delay
+                                       target:ui_view_class
+                                     selector:fire_sel
+                                     userInfo:dict
+                                      repeats:false
+    ];
+}
+
++ (())_touchHLE_blockAnimationDidFinish:(id)which_timer {
+    let dict: id = msg![env; which_timer userInfo];
+    let key_block: id = get_static_str(env, "_touchHLE_uiview_block_anim_block");
+    let context_num: id = msg![env; dict objectForKey:key_block];
+    if context_num == nil { return; }
+
+    let bits: u32 = msg![env; context_num unsignedIntValue];
+    let block: MutPtr<()> = MutPtr::from_bits(bits);
+    if !block.is_null() {
+        invoke_bool_block(env, block, true);
+        // Pair the retain we issued in `animateWithDuration:...`.
+        let block_id: id = block.cast();
+        release(env, block_id);
+    }
+}
+
+// `+transitionWithView:duration:options:animations:completion:` and
+// `+transitionFromView:toView:duration:options:completion:` ship in
+// iOS 4 too. Real iOS swaps the view hierarchy with a flip / cross-
+// fade transition; touchHLE has no animator, so we do the swap
+// instantaneously and still fire the completion block — that keeps
+// games whose state machine waits on the completion (e.g. Bubble
+// Witch's level transition) from deadlocking.
+
++ (())transitionWithView:(id)_view
+                duration:(f64)duration
+                 options:(u32)options
+              animations:(MutPtr<()>)animations
+              completion:(MutPtr<()>)completion {
+    () = msg![env; this
+        animateWithDuration:duration
+                      delay:(0.0_f64)
+                    options:options
+                 animations:animations
+                 completion:completion
+    ];
+}
+
++ (())transitionFromView:(id)from_view
+                  toView:(id)to_view
+                duration:(f64)duration
+                 options:(u32)options
+              completion:(MutPtr<()>)completion {
+    // Apple docs: removes `from_view` from its superview and inserts
+    // `to_view` into the same place (unless the
+    // UIViewAnimationOptionShowHideTransitionViews option is set, in
+    // which case both views remain in their hierarchy and only their
+    // hidden state is toggled).
+    const SHOW_HIDE_OPTION: u32 = 1 << 19;
+    if options & SHOW_HIDE_OPTION != 0 {
+        if from_view != nil { let _: () = msg![env; from_view setHidden:true]; }
+        if to_view != nil { let _: () = msg![env; to_view setHidden:false]; }
+    } else if from_view != nil {
+        let parent: id = msg![env; from_view superview];
+        if parent != nil && to_view != nil {
+            let _: () = msg![env; parent addSubview:to_view];
+        }
+        let _: () = msg![env; from_view removeFromSuperview];
+    }
+    let zero_animations: MutPtr<()> = MutPtr::null();
+    () = msg![env; this
+        animateWithDuration:duration
+                      delay:(0.0_f64)
+                    options:options
+                 animations:zero_animations
+                 completion:completion
+    ];
+}
+
 - (())setIsUncontrolled:(bool)uncontrolled {
     env.objc.borrow_mut::<UIViewHostObject>(this).is_uncontrolled = uncontrolled;
 }
@@ -1046,3 +1211,67 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+
+// MARK: - Block-invocation helpers
+//
+// Apple Blocks ABI: a block is a guest pointer to a `Block_layout`
+// struct whose `invoke` field lives at byte offset 12 on 32-bit ARM
+// (after `isa` at +0, `flags` at +4, `reserved` at +8). `invoke` is a
+// function whose first argument is the block pointer itself; any
+// additional arguments come after.
+//
+// References:
+// - Apple [Block Implementation Specification](https://clang.llvm.org/docs/Block-ABI-Apple.html)
+
+const BLOCK_INVOKE_OFFSET: u32 = 12;
+
+/// Invoke a block whose underlying function signature is `void (^)(void)`.
+fn invoke_void_block(env: &mut Environment, block: MutPtr<()>) {
+    if block.is_null() {
+        return;
+    }
+    let invoke_ptr_addr: MutPtr<u32> =
+        crate::mem::Ptr::from_bits(block.to_bits() + BLOCK_INVOKE_OFFSET);
+    let invoke_addr: u32 = env.mem.read(invoke_ptr_addr);
+    if invoke_addr == 0 {
+        log!(
+            "Warning: invoke_void_block: block at {:?} has NULL invoke pointer; skipping.",
+            block
+        );
+        return;
+    }
+    let func = crate::abi::GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    let block_arg: crate::mem::ConstVoidPtr =
+        crate::mem::Ptr::from_bits(block.to_bits()).cast_const();
+    use crate::abi::CallFromHost;
+    <crate::abi::GuestFunction as CallFromHost<(), (crate::mem::ConstVoidPtr,)>>::call_from_host(
+        &func,
+        env,
+        (block_arg,),
+    );
+}
+
+/// Invoke a block whose signature is `void (^)(BOOL finished)`.
+fn invoke_bool_block(env: &mut Environment, block: MutPtr<()>, arg: bool) {
+    if block.is_null() {
+        return;
+    }
+    let invoke_ptr_addr: MutPtr<u32> =
+        crate::mem::Ptr::from_bits(block.to_bits() + BLOCK_INVOKE_OFFSET);
+    let invoke_addr: u32 = env.mem.read(invoke_ptr_addr);
+    if invoke_addr == 0 {
+        log!(
+            "Warning: invoke_bool_block: block at {:?} has NULL invoke pointer; skipping.",
+            block
+        );
+        return;
+    }
+    let func = crate::abi::GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    let block_arg: crate::mem::ConstVoidPtr =
+        crate::mem::Ptr::from_bits(block.to_bits()).cast_const();
+    use crate::abi::CallFromHost;
+    <crate::abi::GuestFunction as CallFromHost<(), (crate::mem::ConstVoidPtr, bool)>>::call_from_host(
+        &func, env, (block_arg, arg),
+    );
+}

@@ -181,6 +181,44 @@ pub const CONSTANTS: ConstantExports = &[
             env.mem.alloc_and_write(num).cast_void().cast_const()
         }),
     ),
+    // Apple Developer Documentation:
+    // > kCFNumberPositiveInfinity   "Positive infinity (kCFNumberFloat64Type)."
+    // > kCFNumberNegativeInfinity   "Negative infinity (kCFNumberFloat64Type)."
+    // > kCFNumberNaN                "Not a number (kCFNumberFloat64Type)."
+    //
+    // These are documented `const CFNumberRef` singletons. The real CF
+    // implementation creates them once at framework load time, marks them
+    // as immortal, and lets `CFNumberGetType()` report
+    // `kCFNumberFloat64Type` for each one. Here we build them with the
+    // existing NSNumber bridge so they participate in toll-free bridging
+    // with `CFNumber*` calls and behave correctly under `intValue` /
+    // `doubleValue` / `compare:` (NaN sorts as `NSOrderedDescending`
+    // against any non-NaN, infinities sort by sign — exactly the
+    // semantics our `NSNumberHostObject::Double` already provides).
+    (
+        "_kCFNumberPositiveInfinity",
+        HostConstant::Custom(|env| {
+            let num = msg_class![env; NSNumber alloc];
+            let num: id = msg![env; num initWithDouble:(f64::INFINITY)];
+            env.mem.alloc_and_write(num).cast_void().cast_const()
+        }),
+    ),
+    (
+        "_kCFNumberNegativeInfinity",
+        HostConstant::Custom(|env| {
+            let num = msg_class![env; NSNumber alloc];
+            let num: id = msg![env; num initWithDouble:(f64::NEG_INFINITY)];
+            env.mem.alloc_and_write(num).cast_void().cast_const()
+        }),
+    ),
+    (
+        "_kCFNumberNaN",
+        HostConstant::Custom(|env| {
+            let num = msg_class![env; NSNumber alloc];
+            let num: id = msg![env; num initWithDouble:(f64::NAN)];
+            env.mem.alloc_and_write(num).cast_void().cast_const()
+        }),
+    ),
 ];
 
 pub const FUNCTIONS: FunctionExports = &[

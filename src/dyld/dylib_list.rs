@@ -199,6 +199,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &frameworks::common_crypto::DYLIB,
     &frameworks::core_video::DYLIB,
     &frameworks::address_book::DYLIB,
+    &frameworks::accounts::DYLIB,
     &frameworks::game_controller::DYLIB,
     &CORE_AUDIO,
     &CF_NETWORK,

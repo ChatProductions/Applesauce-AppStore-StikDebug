@@ -27,6 +27,7 @@ pub mod cf_number;
 pub mod cf_preferences;
 pub mod cf_run_loop;
 pub mod cf_run_loop_timer;
+pub mod cf_set;
 pub mod cf_socket;
 pub mod cf_stream;
 pub mod cf_string;
@@ -70,6 +71,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         cf_preferences::FUNCTIONS,
         cf_run_loop::FUNCTIONS,
         cf_run_loop_timer::FUNCTIONS,
+        cf_set::FUNCTIONS,
         cf_string::FUNCTIONS,
         cf_stream::FUNCTIONS,
         cf_type::FUNCTIONS,

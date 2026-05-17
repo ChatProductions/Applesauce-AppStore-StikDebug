@@ -94,6 +94,160 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_AVLinearPCMIsNonInterleaved",
         HostConstant::NSString("AVLinearPCMIsNonInterleaved"),
     ),
+    // -----------------------------------------------------------------
+    // AVAssetWriter / AVAssetExportSession video output keys & preset
+    // identifiers (Apple `AVVideoSettings.h`, `AVAssetExportSession.h`).
+    // String literals match Apple's; the comparison sites are
+    // dictionary lookups (`outputSettings[AVVideoCodecKey]`) and
+    // identity checks against the documented preset names.
+    // -----------------------------------------------------------------
+    ("_AVVideoCodecKey", HostConstant::NSString("AVVideoCodecKey")),
+    (
+        "_AVVideoCodecH264",
+        HostConstant::NSString("avc1"),
+    ),
+    (
+        "_AVVideoCodecJPEG",
+        HostConstant::NSString("jpeg"),
+    ),
+    (
+        "_AVVideoCodecAppleProRes422",
+        HostConstant::NSString("apcn"),
+    ),
+    (
+        "_AVVideoCodecAppleProRes4444",
+        HostConstant::NSString("ap4h"),
+    ),
+    (
+        "_AVVideoWidthKey",
+        HostConstant::NSString("AVVideoWidthKey"),
+    ),
+    (
+        "_AVVideoHeightKey",
+        HostConstant::NSString("AVVideoHeightKey"),
+    ),
+    (
+        "_AVVideoCompressionPropertiesKey",
+        HostConstant::NSString("AVVideoCompressionPropertiesKey"),
+    ),
+    (
+        "_AVVideoAverageBitRateKey",
+        HostConstant::NSString("AVVideoAverageBitRateKey"),
+    ),
+    (
+        "_AVVideoMaxKeyFrameIntervalKey",
+        HostConstant::NSString("AVVideoMaxKeyFrameIntervalKey"),
+    ),
+    (
+        "_AVVideoProfileLevelKey",
+        HostConstant::NSString("AVVideoProfileLevelKey"),
+    ),
+    (
+        "_AVVideoScalingModeKey",
+        HostConstant::NSString("AVVideoScalingModeKey"),
+    ),
+    (
+        "_AVVideoScalingModeFit",
+        HostConstant::NSString("AVVideoScalingModeFit"),
+    ),
+    (
+        "_AVVideoScalingModeResize",
+        HostConstant::NSString("AVVideoScalingModeResize"),
+    ),
+    (
+        "_AVVideoScalingModeResizeAspect",
+        HostConstant::NSString("AVVideoScalingModeResizeAspect"),
+    ),
+    (
+        "_AVVideoScalingModeResizeAspectFill",
+        HostConstant::NSString("AVVideoScalingModeResizeAspectFill"),
+    ),
+    // AVFileType* — UTI strings used as the second argument to
+    // -[AVAssetExportSession initWithAsset:presetName:] /
+    // outputFileType. Literals are Apple's documented UTIs.
+    (
+        "_AVFileTypeQuickTimeMovie",
+        HostConstant::NSString("com.apple.quicktime-movie"),
+    ),
+    (
+        "_AVFileTypeMPEG4",
+        HostConstant::NSString("public.mpeg-4"),
+    ),
+    (
+        "_AVFileTypeAppleM4V",
+        HostConstant::NSString("com.apple.m4v-video"),
+    ),
+    (
+        "_AVFileTypeAppleM4A",
+        HostConstant::NSString("com.apple.m4a-audio"),
+    ),
+    (
+        "_AVFileTypeMPEGLayer3",
+        HostConstant::NSString("public.mp3"),
+    ),
+    (
+        "_AVFileTypeWAVE",
+        HostConstant::NSString("com.microsoft.waveform-audio"),
+    ),
+    (
+        "_AVFileTypeAIFF",
+        HostConstant::NSString("public.aiff-audio"),
+    ),
+    (
+        "_AVFileTypeAIFC",
+        HostConstant::NSString("public.aifc-audio"),
+    ),
+    (
+        "_AVFileTypeAMR",
+        HostConstant::NSString("org.3gpp.adaptive-multi-rate-audio"),
+    ),
+    (
+        "_AVFileType3GPP",
+        HostConstant::NSString("public.3gpp"),
+    ),
+    (
+        "_AVFileTypeCoreAudioFormat",
+        HostConstant::NSString("com.apple.coreaudio-format"),
+    ),
+    // AVAssetExportSession preset names — also bare `NSString *
+    // const`. These map to Apple's published preset identifiers used
+    // by -[AVAssetExportSession exportPresetsCompatibleWithAsset:].
+    (
+        "_AVAssetExportPresetLowQuality",
+        HostConstant::NSString("AVAssetExportPresetLowQuality"),
+    ),
+    (
+        "_AVAssetExportPresetMediumQuality",
+        HostConstant::NSString("AVAssetExportPresetMediumQuality"),
+    ),
+    (
+        "_AVAssetExportPresetHighestQuality",
+        HostConstant::NSString("AVAssetExportPresetHighestQuality"),
+    ),
+    (
+        "_AVAssetExportPreset640x480",
+        HostConstant::NSString("AVAssetExportPreset640x480"),
+    ),
+    (
+        "_AVAssetExportPreset960x540",
+        HostConstant::NSString("AVAssetExportPreset960x540"),
+    ),
+    (
+        "_AVAssetExportPreset1280x720",
+        HostConstant::NSString("AVAssetExportPreset1280x720"),
+    ),
+    (
+        "_AVAssetExportPreset1920x1080",
+        HostConstant::NSString("AVAssetExportPreset1920x1080"),
+    ),
+    (
+        "_AVAssetExportPresetAppleM4A",
+        HostConstant::NSString("AVAssetExportPresetAppleM4A"),
+    ),
+    (
+        "_AVAssetExportPresetPassthrough",
+        HostConstant::NSString("AVAssetExportPresetPassthrough"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

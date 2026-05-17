@@ -8,6 +8,7 @@
 
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string, NSUTF8StringEncoding};
 use super::NSUInteger;
+use crate::dyld::{ConstantExports, HostConstant};
 use crate::fs::{GuestPath, GuestPathBuf};
 use crate::mem::MutPtr;
 use crate::objc::{
@@ -27,6 +28,134 @@ enum NSURLHostObject {
     },
 }
 impl HostObject for NSURLHostObject {}
+
+// MARK: - URL resource-value keys (Apple Foundation `NSURL.h`).
+//
+// These are exported as `NSString * const` and used as identifiers for
+// `-[NSURL setResourceValue:forKey:error:]` / `-[NSURL
+// resourceValuesForKeys:error:]`. Apps reach them either by symbol
+// (Mach-O lookup, like `NSURLIsExcludedFromBackupKey`) or by literal
+// string. The literal values must match Apple's so that toll-free
+// bridging with `CFURLCopyResourcePropertyForKey()` continues to work.
+//
+// Reference: Apple File System Programming Guide,
+// "Where You Should Put Your App's Files" — `NSURLIsExcludedFromBackupKey`
+// has been the documented way to opt files out of iCloud backup since
+// iOS 5.1.
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_NSURLIsExcludedFromBackupKey",
+        HostConstant::NSString("NSURLIsExcludedFromBackupKey"),
+    ),
+    (
+        "_NSURLNameKey",
+        HostConstant::NSString("NSURLNameKey"),
+    ),
+    (
+        "_NSURLLocalizedNameKey",
+        HostConstant::NSString("NSURLLocalizedNameKey"),
+    ),
+    (
+        "_NSURLIsRegularFileKey",
+        HostConstant::NSString("NSURLIsRegularFileKey"),
+    ),
+    (
+        "_NSURLIsDirectoryKey",
+        HostConstant::NSString("NSURLIsDirectoryKey"),
+    ),
+    (
+        "_NSURLIsSymbolicLinkKey",
+        HostConstant::NSString("NSURLIsSymbolicLinkKey"),
+    ),
+    (
+        "_NSURLIsVolumeKey",
+        HostConstant::NSString("NSURLIsVolumeKey"),
+    ),
+    (
+        "_NSURLIsPackageKey",
+        HostConstant::NSString("NSURLIsPackageKey"),
+    ),
+    (
+        "_NSURLIsHiddenKey",
+        HostConstant::NSString("NSURLIsHiddenKey"),
+    ),
+    (
+        "_NSURLIsAliasFileKey",
+        HostConstant::NSString("NSURLIsAliasFileKey"),
+    ),
+    (
+        "_NSURLFileSizeKey",
+        HostConstant::NSString("NSURLFileSizeKey"),
+    ),
+    (
+        "_NSURLFileAllocatedSizeKey",
+        HostConstant::NSString("NSURLFileAllocatedSizeKey"),
+    ),
+    (
+        "_NSURLTotalFileSizeKey",
+        HostConstant::NSString("NSURLTotalFileSizeKey"),
+    ),
+    (
+        "_NSURLTotalFileAllocatedSizeKey",
+        HostConstant::NSString("NSURLTotalFileAllocatedSizeKey"),
+    ),
+    (
+        "_NSURLContentModificationDateKey",
+        HostConstant::NSString("NSURLContentModificationDateKey"),
+    ),
+    (
+        "_NSURLContentAccessDateKey",
+        HostConstant::NSString("NSURLContentAccessDateKey"),
+    ),
+    (
+        "_NSURLCreationDateKey",
+        HostConstant::NSString("NSURLCreationDateKey"),
+    ),
+    (
+        "_NSURLAttributeModificationDateKey",
+        HostConstant::NSString("NSURLAttributeModificationDateKey"),
+    ),
+    (
+        "_NSURLLinkCountKey",
+        HostConstant::NSString("NSURLLinkCountKey"),
+    ),
+    (
+        "_NSURLParentDirectoryURLKey",
+        HostConstant::NSString("NSURLParentDirectoryURLKey"),
+    ),
+    (
+        "_NSURLVolumeURLKey",
+        HostConstant::NSString("NSURLVolumeURLKey"),
+    ),
+    (
+        "_NSURLTypeIdentifierKey",
+        HostConstant::NSString("NSURLTypeIdentifierKey"),
+    ),
+    (
+        "_NSURLLocalizedTypeDescriptionKey",
+        HostConstant::NSString("NSURLLocalizedTypeDescriptionKey"),
+    ),
+    (
+        "_NSURLLabelNumberKey",
+        HostConstant::NSString("NSURLLabelNumberKey"),
+    ),
+    (
+        "_NSURLLabelColorKey",
+        HostConstant::NSString("NSURLLabelColorKey"),
+    ),
+    (
+        "_NSURLEffectiveIconKey",
+        HostConstant::NSString("NSURLEffectiveIconKey"),
+    ),
+    (
+        "_NSURLCustomIconKey",
+        HostConstant::NSString("NSURLCustomIconKey"),
+    ),
+    (
+        "_NSURLFileResourceTypeKey",
+        HostConstant::NSString("NSURLFileResourceTypeKey"),
+    ),
+];
 
 pub const CLASSES: ClassExports = objc_classes! {
 

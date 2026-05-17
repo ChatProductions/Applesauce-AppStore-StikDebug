@@ -24,6 +24,7 @@
 
 pub mod address_book;
 pub mod address_book_ui;
+pub mod accounts;
 pub mod audio_toolbox;
 pub mod avfoundation;
 pub mod captive_network;
