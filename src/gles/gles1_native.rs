@@ -18,6 +18,20 @@ use std::marker::PhantomData;
 pub struct GLES1NativeContext {
     gl_ctx: GLContext,
     is_loaded: bool,
+    /// Whether the underlying OpenGL ES 1.1 driver advertises
+    /// `GL_IMG_texture_compression_pvrtc`. Apps shipped for iPhone OS use
+    /// PVRTC textures pervasively (Apple's recommended compression format on
+    /// PowerVR-based devices), so when the host driver lacks PVRTC we must
+    /// software-decode the payload and upload it as plain RGBA — otherwise
+    /// every PVRTC texture silently fails with `GL_INVALID_ENUM` and the
+    /// app renders as black silhouettes (see Temple Run 1.0 on
+    /// ARM Mali / Qualcomm Adreno, neither of which advertises this
+    /// extension on their ES 1.1 surface).
+    pvrtc_native: bool,
+    /// Whether `pvrtc_native` has been populated yet. The check is deferred
+    /// to the first `make_current` because we need a current GL context to
+    /// query `GL_EXTENSIONS`.
+    pvrtc_native_checked: bool,
 }
 
 impl GLESContext for GLES1NativeContext {
@@ -29,6 +43,8 @@ impl GLESContext for GLES1NativeContext {
         Ok(Self {
             gl_ctx: window.create_gl_context(GLVersion::GLES11)?,
             is_loaded: false,
+            pvrtc_native: false,
+            pvrtc_native_checked: false,
         })
     }
 
@@ -39,6 +55,7 @@ impl GLESContext for GLES1NativeContext {
         if self.gl_ctx.is_current() && self.is_loaded {
             return Box::new(GLES1Native {
                 _gl_lifetime: PhantomData,
+                pvrtc_native: self.pvrtc_native,
             });
         }
 
@@ -47,8 +64,27 @@ impl GLESContext for GLES1NativeContext {
         }
         gles11::load_with(|s| window.gl_get_proc_address(s));
         self.is_loaded = true;
+        if !self.pvrtc_native_checked {
+            self.pvrtc_native = unsafe { detect_pvrtc_support() };
+            self.pvrtc_native_checked = true;
+            log!(
+                "GLES1Native: GL_IMG_texture_compression_pvrtc {} (PVRTC textures will \
+                 be {} on this driver)",
+                if self.pvrtc_native {
+                    "advertised by host driver"
+                } else {
+                    "NOT advertised by host driver"
+                },
+                if self.pvrtc_native {
+                    "uploaded directly"
+                } else {
+                    "software-decoded to RGBA before upload"
+                },
+            );
+        }
         Box::new(GLES1Native {
             _gl_lifetime: PhantomData,
+            pvrtc_native: self.pvrtc_native,
         })
     }
 
@@ -60,20 +96,51 @@ impl GLESContext for GLES1NativeContext {
         if self.gl_ctx.is_current() && self.is_loaded {
             return Box::new(GLES1Native {
                 _gl_lifetime: PhantomData,
+                pvrtc_native: self.pvrtc_native,
             });
         }
 
         make_current_fn(&self.gl_ctx);
         gles11::load_with(loader_fn);
         self.is_loaded = true;
+        if !self.pvrtc_native_checked {
+            self.pvrtc_native = detect_pvrtc_support();
+            self.pvrtc_native_checked = true;
+        }
         Box::new(GLES1Native {
             _gl_lifetime: PhantomData,
+            pvrtc_native: self.pvrtc_native,
         })
     }
 }
 
+/// Query `GL_EXTENSIONS` on the currently-bound OpenGL ES 1.1 context and
+/// return whether it advertises `GL_IMG_texture_compression_pvrtc`.
+///
+/// Must be called with a current GL context. Returns `false` on any
+/// driver-reported error (NULL string, non-UTF-8 string, missing token);
+/// software-decoding PVRTC is the safe-default behaviour.
+unsafe fn detect_pvrtc_support() -> bool {
+    let raw = gles11::GetString(gles11::EXTENSIONS);
+    if raw.is_null() {
+        return false;
+    }
+    let Ok(s) = CStr::from_ptr(raw as *const _).to_str() else {
+        return false;
+    };
+    if s.is_empty() {
+        return false;
+    }
+    s.split(' ')
+        .any(|ext| ext == "GL_IMG_texture_compression_pvrtc")
+}
+
 pub struct GLES1Native<'gl_ctx> {
     _gl_lifetime: PhantomData<&'gl_ctx ()>,
+    /// Mirror of [`GLES1NativeContext::pvrtc_native`]; copied at make_current
+    /// time so the per-call `CompressedTexImage2D` path doesn't have to
+    /// re-query `GL_EXTENSIONS`.
+    pvrtc_native: bool,
 }
 
 impl GLES for GLES1Native<'_> {
@@ -596,25 +663,109 @@ impl GLES for GLES1Native<'_> {
         image_size: GLsizei,
         data: *const GLvoid,
     ) {
-        if data.is_null() {
-            return;
-        } // Защита
-        let data = unsafe { std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize) };
-        if try_decode_pvrtc(
-            self,
-            target,
-            level,
-            internalformat,
-            width,
-            height,
-            border,
-            data,
-        ) {
+        // POSIX-style guard: a NULL data pointer with image_size==0 is
+        // technically allowed by the spec for some texture-storage queries,
+        // but in practice no iPhone OS app does this — it'd just be a guest
+        // bug. Drop the call on the floor instead of dereferencing the
+        // pointer.
+        if data.is_null() && image_size > 0 {
+            log!(
+                "Warning: GLES1Native::CompressedTexImage2D: NULL data with \
+                 non-zero image_size {image_size} (target={target:#x}, \
+                 level={level}, format={internalformat:#x}, {width}x{height}); \
+                 dropping upload."
+            );
             return;
         }
-        if PalettedTextureFormat::get_info(internalformat).is_none() {
-            return;
+
+        // Slice the guest payload exactly once. Even when the host driver
+        // advertises PVRTC natively, we need a `&[u8]` for the paletted /
+        // decode fallbacks below.
+        let payload: &[u8] = if image_size > 0 {
+            std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize)
+        } else {
+            &[]
+        };
+
+        // PowerVR-class drivers (Apple's iPhone OS, plus desktop GL via the
+        // Mesa PowerVR backend) support `GL_IMG_texture_compression_pvrtc`
+        // natively, in which case the most efficient thing to do is to hand
+        // the compressed payload straight to the driver. ARM Mali, Qualcomm
+        // Adreno's ES 1.1 surface, the Mesa software rasteriser, etc. do
+        // *not* advertise PVRTC, so we need to software-decode to RGBA
+        // before uploading. The decision is based on the
+        // `GL_EXTENSIONS` string queried at context creation; see
+        // [`GLES1NativeContext::pvrtc_native`].
+        if !self.pvrtc_native && !payload.is_empty() {
+            if try_decode_pvrtc(
+                self,
+                target,
+                level,
+                internalformat,
+                width,
+                height,
+                border,
+                payload,
+            ) {
+                return;
+            }
+            // Apple-targeted apps also sometimes ship
+            // `GL_OES_compressed_paletted_texture` data. Mali / Adreno ES 1.1
+            // surfaces likewise don't advertise that extension, so a
+            // straight passthrough would silently fail with
+            // `GL_INVALID_ENUM`. We don't yet have a software paletted-
+            // texture decoder for the ES 1.1 native backend (TODO), so the
+            // best we can do is drop the upload with a single visible
+            // warning per format rather than corrupt the texture state.
+            if PalettedTextureFormat::get_info(internalformat).is_some() {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static REPORTED: AtomicU32 = AtomicU32::new(0);
+                let bit = match internalformat {
+                    gles11::PALETTE4_R5_G6_B5_OES => 1u32,
+                    gles11::PALETTE4_RGB5_A1_OES => 1 << 1,
+                    gles11::PALETTE4_RGB8_OES => 1 << 2,
+                    gles11::PALETTE4_RGBA4_OES => 1 << 3,
+                    gles11::PALETTE4_RGBA8_OES => 1 << 4,
+                    gles11::PALETTE8_R5_G6_B5_OES => 1 << 5,
+                    gles11::PALETTE8_RGB5_A1_OES => 1 << 6,
+                    gles11::PALETTE8_RGB8_OES => 1 << 7,
+                    gles11::PALETTE8_RGBA4_OES => 1 << 8,
+                    gles11::PALETTE8_RGBA8_OES => 1 << 9,
+                    _ => 0,
+                };
+                let prev = REPORTED.fetch_or(bit, Ordering::Relaxed);
+                if (prev & bit) == 0 {
+                    log!(
+                        "Warning: GLES1Native::CompressedTexImage2D: paletted \
+                         format {internalformat:#x} not supported on this ES 1.1 \
+                         driver (no GL_OES_compressed_paletted_texture); skipping \
+                         {width}x{height} upload. (TODO: software-decode paletted \
+                         textures on ES 1.1 native, like the PVRTC path.)"
+                    );
+                }
+                return;
+            }
+            // Unknown compressed format AND host driver doesn't advertise
+            // PVRTC — passthrough would just produce GL_INVALID_ENUM. Log
+            // once per (format) value so a misbehaving guest can't spam
+            // the console.
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static SEEN_UNKNOWN: AtomicBool = AtomicBool::new(false);
+            if !SEEN_UNKNOWN.swap(true, Ordering::Relaxed) {
+                log!(
+                    "Warning: GLES1Native::CompressedTexImage2D: unknown \
+                     compressed format {internalformat:#x} on a host that does \
+                     not advertise PVRTC; passing through to driver but \
+                     expecting GL_INVALID_ENUM. {width}x{height}, level {level}. \
+                     [this log will only be shown once for unknown formats]"
+                );
+            }
         }
+
+        // Either we're on a PVRTC-capable host (let the driver do its thing),
+        // or we hit a non-PVRTC, non-paletted format on a non-PVRTC host
+        // (let it fail loudly with GL_INVALID_ENUM, exactly like a real
+        // device would).
         gles11::CompressedTexImage2D(
             target,
             level,
@@ -623,7 +774,7 @@ impl GLES for GLES1Native<'_> {
             height,
             border,
             image_size,
-            data.as_ptr() as *const _,
+            data,
         );
     }
 

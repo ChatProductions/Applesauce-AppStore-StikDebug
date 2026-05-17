@@ -148,10 +148,25 @@ impl ParamTable {
 }
 
 /// Helper for implementing `glCompressedTexImage2D`: if `internalformat` is
-/// one of the `IMG_texture_compression_pvrtc` formats, decode it and call
-/// `glTexImage2D`. Returns `true` if this is done.
+/// one of the `IMG_texture_compression_pvrtc` formats, decode it via the
+/// software PVRTC decoder and call `glTexImage2D` to upload the resulting
+/// RGBA8 texture. Returns:
+/// * `true` if the format was a PVRTC variant and the upload was attempted
+///   (regardless of whether the upload itself succeeded — that's between the
+///   driver and the caller).
+/// * `false` if `internalformat` is not a PVRTC variant; the caller is then
+///   responsible for handling the format some other way (passthrough,
+///   paletted-texture decode, ...).
 ///
-/// Note that this panics rather than create GL errors for invalid use (TODO?)
+/// Previously this helper used `assert!` for `border == 0` and for the
+/// payload-size check inside `decode_pvrtc`. Real-world iPhone OS games
+/// occasionally pass in slightly truncated payloads (broken builds, in-app
+/// procedural textures with off-by-one mip sizes, third-party loaders that
+/// trim trailing zeros), and a panic in the present pipeline brings down the
+/// whole host process. Treat malformed input as a soft failure: log once and
+/// return `true` *without* uploading anything, so the caller doesn't
+/// re-attempt (the data is unusable either way) and the rest of the frame
+/// can still draw.
 #[allow(clippy::too_many_arguments)]
 pub fn try_decode_pvrtc(
     gles: &mut dyn GLES,
@@ -169,13 +184,53 @@ pub fn try_decode_pvrtc(
         _ => return false,
     };
 
-    assert!(border == 0);
-    let pixels = crate::image::decode_pvrtc(
-        pvrtc_data,
-        is_2bit,
-        width.try_into().unwrap(),
-        height.try_into().unwrap(),
-    );
+    if border != 0 {
+        log!(
+            "Warning: try_decode_pvrtc: invalid non-zero border ({border}) for PVRTC \
+             upload {width}x{height} (level {level}, format {internalformat:#x}); \
+             skipping upload."
+        );
+        return true;
+    }
+
+    let Ok(width_u) = u32::try_from(width) else {
+        log!(
+            "Warning: try_decode_pvrtc: invalid width {width} for PVRTC upload \
+             (level {level}, format {internalformat:#x}); skipping upload."
+        );
+        return true;
+    };
+    let Ok(height_u) = u32::try_from(height) else {
+        log!(
+            "Warning: try_decode_pvrtc: invalid height {height} for PVRTC upload \
+             (level {level}, format {internalformat:#x}); skipping upload."
+        );
+        return true;
+    };
+
+    // The IMG_texture_compression_pvrtc spec specifies a fixed payload size
+    // for any given (is_2bit, width, height) tuple. Validate it here so that
+    // a short / oversized input from the guest doesn't panic the host
+    // PVRTC decoder. (`decode_pvrtc` itself still asserts internally as
+    // a defence-in-depth measure, but we shouldn't rely on that — see the
+    // function-level doc comment.)
+    let expected_size = if is_2bit {
+        (width_u.max(16) as usize * height_u.max(8) as usize * 2).div_ceil(8)
+    } else {
+        (width_u.max(8) as usize * height_u.max(8) as usize * 4).div_ceil(8)
+    };
+    if pvrtc_data.len() != expected_size {
+        log!(
+            "Warning: try_decode_pvrtc: PVRTC payload size mismatch for \
+             {width}x{height} (level {level}, format {internalformat:#x}, \
+             is_2bit={is_2bit}): got {} bytes, expected {expected_size}; \
+             skipping upload.",
+            pvrtc_data.len(),
+        );
+        return true;
+    }
+
+    let pixels = crate::image::decode_pvrtc(pvrtc_data, is_2bit, width_u, height_u);
     unsafe {
         gles.TexImage2D(
             target,
