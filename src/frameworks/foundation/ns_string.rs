@@ -343,9 +343,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)stringWithContentsOfURL:(id)path {
++ (id)stringWithContentsOfURL:(id)url {
     let new: id = msg![env; this alloc];
-    let new: id = msg![env; new initWithContentsOfFile:path];
+    let new: id = msg![env; new initWithContentsOfURL:url];
     autorelease(env, new)
 }
 
@@ -362,9 +362,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)stringWithContentsOfURL:(id)url encoding:(NSStringEncoding)encoding error:(MutPtr<id>)error {
-    if url == nil { return nil; }
-    let path: id = msg![env; url path];
-    msg![env; this stringWithContentsOfFile:path encoding:encoding error:error]
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url encoding:encoding error:error];
+    autorelease(env, new)
+}
+
++ (id)stringWithContentsOfURL:(id)url usedEncoding:(MutPtr<NSUInteger>)enc error:(MutPtr<id>)error {
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithContentsOfURL:url usedEncoding:enc error:error];
+    autorelease(env, new)
 }
 
 + (id)stringWithFormat:(id)format, ...args {
@@ -1517,6 +1523,64 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
     *env.objc.borrow_mut(this) = host_object;
     this
+}
+
+// NSString URL-based initializers. Per Apple's Foundation docs
+// (https://developer.apple.com/documentation/foundation/nsstring),
+// these methods load the contents of the resource at the given URL.
+// We currently only support file URLs; we extract the path and reuse
+// the file-based implementation. For non-file URLs we fail gracefully
+// instead of letting the message dispatcher fall through to a stub.
+
+- (id)initWithContentsOfURL:(id)url {
+    if url == nil {
+        release(env, this);
+        return nil;
+    }
+    let path: id = msg![env; url path];
+    if path == nil {
+        release(env, this);
+        return nil;
+    }
+    msg![env; this initWithContentsOfFile:path]
+}
+
+- (id)initWithContentsOfURL:(id)url encoding:(NSStringEncoding)encoding error:(MutPtr<id>)error {
+    if url == nil {
+        if !error.is_null() {
+            env.mem.write(error, nil);
+        }
+        release(env, this);
+        return nil;
+    }
+    let path: id = msg![env; url path];
+    if path == nil {
+        if !error.is_null() {
+            env.mem.write(error, nil);
+        }
+        release(env, this);
+        return nil;
+    }
+    msg![env; this initWithContentsOfFile:path encoding:encoding error:error]
+}
+
+- (id)initWithContentsOfURL:(id)url usedEncoding:(MutPtr<NSUInteger>)enc error:(MutPtr<id>)error {
+    if url == nil {
+        if !error.is_null() {
+            env.mem.write(error, nil);
+        }
+        release(env, this);
+        return nil;
+    }
+    let path: id = msg![env; url path];
+    if path == nil {
+        if !error.is_null() {
+            env.mem.write(error, nil);
+        }
+        release(env, this);
+        return nil;
+    }
+    msg![env; this initWithContentsOfFile:path usedEncoding:enc error:error]
 }
 
 - (id)systemUptime {

@@ -359,7 +359,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)boolForKey:(id)key { // NSString *
     let val: id = msg![env; this objectForKey:key];
-    msg![env; val boolValue]
+    if val == nil {
+        return false;
+    }
+    let ns_number_class: Class = msg_class![env; NSNumber class];
+    let ns_string_class: Class = msg_class![env; NSString class];
+    let is_number: bool = msg![env; val isKindOfClass:ns_number_class];
+    let is_string: bool = msg![env; val isKindOfClass:ns_string_class];
+    if is_number || is_string {
+        msg![env; val boolValue]
+    } else {
+        false
+    }
 }
 
 - (())setBool:(bool)value forKey:(id)key { // NSString *
@@ -368,8 +379,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSInteger)integerForKey:(id)key {
+    // Per Apple docs: returns the integer value associated with the
+    // specified key, or 0 if the key was not found or the value is not
+    // an NSNumber/NSString convertible to an integer. We must avoid
+    // sending integerValue to incompatible types (e.g. NSArray).
     let val: id = msg![env; this objectForKey:key];
-    msg![env; val integerValue]
+    if val == nil {
+        return 0;
+    }
+    let ns_number_class: Class = msg_class![env; NSNumber class];
+    let ns_string_class: Class = msg_class![env; NSString class];
+    let is_number: bool = msg![env; val isKindOfClass:ns_number_class];
+    let is_string: bool = msg![env; val isKindOfClass:ns_string_class];
+    if is_number || is_string {
+        msg![env; val integerValue]
+    } else {
+        0
+    }
 }
 
 - (())setInteger:(NSInteger)value forKey:(id)key {
@@ -379,7 +405,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (f32)floatForKey:(id)key {
     let val: id = msg![env; this objectForKey:key];
-    msg![env; val floatValue]
+    if val == nil {
+        return 0.0;
+    }
+    let ns_number_class: Class = msg_class![env; NSNumber class];
+    let ns_string_class: Class = msg_class![env; NSString class];
+    let is_number: bool = msg![env; val isKindOfClass:ns_number_class];
+    let is_string: bool = msg![env; val isKindOfClass:ns_string_class];
+    if is_number || is_string {
+        msg![env; val floatValue]
+    } else {
+        0.0
+    }
 }
 
 - (())setFloat:(f32)value forKey:(id)key {
@@ -389,7 +426,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (f64)doubleForKey:(id)key {
     let val: id = msg![env; this objectForKey:key];
-    msg![env; val doubleValue]
+    if val == nil {
+        return 0.0;
+    }
+    let ns_number_class: Class = msg_class![env; NSNumber class];
+    let ns_string_class: Class = msg_class![env; NSString class];
+    let is_number: bool = msg![env; val isKindOfClass:ns_number_class];
+    let is_string: bool = msg![env; val isKindOfClass:ns_string_class];
+    if is_number || is_string {
+        msg![env; val doubleValue]
+    } else {
+        0.0
+    }
 }
 
 - (())setDouble:(f64)value forKey:(id)key {
