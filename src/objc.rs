@@ -41,7 +41,7 @@ pub use classes::{
     objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass,
     objc_readClassPair, objc_release, objc_retain, objc_retainAutorelease,
     objc_retainAutoreleaseReturnValue, objc_retainAutoreleasedReturnValue,
-    objc_setProperty_nonatomic, object_getClass, object_getClassName, object_getIndexedIvars,
+    object_getClass, object_getClassName, object_getIndexedIvars,
     protocol_getName, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
@@ -66,7 +66,9 @@ use messages::{
 use methods::method_list_t;
 use objects::{objc_object, HostObjectEntry};
 use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty};
-use properties::{objc_setProperty_atomic_copy, objc_setProperty_nonatomic_copy};
+use properties::{
+    objc_setProperty_atomic_copy, objc_setProperty_nonatomic, objc_setProperty_nonatomic_copy,
+};
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -99,6 +101,25 @@ pub struct ObjC {
 
     /// Mutexes used in @synchronized blocks (objc_sync_enter/exit).
     sync_mutexes: HashMap<id, MutexId>,
+
+    /// Per-object recursive mutexes used to make `atomic` properties
+    /// thread-safe (`objc_getProperty(..., atomic=true)` /
+    /// `objc_setProperty(..., atomic=true, ...)`).
+    ///
+    /// Apple's `objc-accessors.mm` (open-source `objc4`) uses a striped
+    /// table of 8 spinlocks indexed by ivar address — that is purely a
+    /// space optimisation. A per-object recursive mutex implements the
+    /// same observable contract (a single-writer/single-reader barrier
+    /// per object's atomic property accesses) and additionally cannot
+    /// false-share the lock between unrelated objects.
+    ///
+    /// The mutex is recursive because Apple's accessors can re-enter
+    /// themselves indirectly: a `@property (atomic, copy)` setter calls
+    /// `[newValue copyWithZone:]` while holding the lock, and the
+    /// `copyWithZone:` of e.g. `NSMutableString` may itself synthesize
+    /// further atomic-property reads on the same object. Lazy created
+    /// on first contended access; cleaned up in `dealloc_object`.
+    property_locks: HashMap<id, MutexId>,
 
     /// Temporary storage for optional type information when sending a message.
     /// Type information isn't part of the `objc_msgSend` ABI, so an alternative
@@ -137,6 +158,7 @@ impl ObjC {
             objects: HashMap::new(),
             classes: HashMap::new(),
             sync_mutexes: HashMap::new(),
+            property_locks: HashMap::new(),
             message_type_info: None,
             initialized_classes: HashSet::new(),
             weak_refs: HashMap::new(),
@@ -219,7 +241,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_retain(_)),
     export_c_func!(objc_retainAutorelease(_)),
     export_c_func!(objc_release(_)),
-    export_c_func!(objc_setProperty_nonatomic(_)),
+    export_c_func!(objc_setProperty_nonatomic(_, _, _, _)),
     export_c_func!(objc_exception_throw(_)),
     export_c_func!(objc_begin_catch(_)),
     export_c_func!(objc_end_catch(_)),
