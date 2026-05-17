@@ -127,6 +127,27 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCFStreamSSLIsServer",
         HostConstant::NSString(kCFStreamSSLIsServer),
     ),
+    // Network service-type stream property + values.
+    (
+        "_kCFStreamNetworkServiceType",
+        HostConstant::NSString("kCFStreamNetworkServiceType"),
+    ),
+    (
+        "_kCFStreamNetworkServiceTypeVoIP",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoIP"),
+    ),
+    (
+        "_kCFStreamNetworkServiceTypeVideo",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVideo"),
+    ),
+    (
+        "_kCFStreamNetworkServiceTypeBackground",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeBackground"),
+    ),
+    (
+        "_kCFStreamNetworkServiceTypeVoice",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoice"),
+    ),
 ];
 
 // MARK: - ObjC backing classes

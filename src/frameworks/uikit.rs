@@ -110,6 +110,64 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIScreenDidConnectNotification",
         HostConstant::NSString("UIScreenDidConnectNotification"),
     ),
+    // -----------------------------------------------------------------
+    // UIApplication launch-options dictionary keys (passed in
+    // `application:didFinishLaunchingWithOptions:`).
+    // -----------------------------------------------------------------
+    (
+        "_UIApplicationLaunchOptionsURLKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsURLKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsSourceApplicationKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsSourceApplicationKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsAnnotationKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsAnnotationKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsRemoteNotificationKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsRemoteNotificationKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocalNotificationKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsLocalNotificationKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocationKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsLocationKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsNewsstandDownloadsKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsNewsstandDownloadsKey"),
+    ),
+    // -----------------------------------------------------------------
+    // UIPasteboard well-known pasteboard names.
+    // -----------------------------------------------------------------
+    (
+        "_UIPasteboardNameGeneral",
+        HostConstant::NSString("UIPasteboardNameGeneral"),
+    ),
+    (
+        "_UIPasteboardNameFind",
+        HostConstant::NSString("UIPasteboardNameFind"),
+    ),
+    // -----------------------------------------------------------------
+    // UITextView change notification.
+    // -----------------------------------------------------------------
+    (
+        "_UITextViewTextDidChangeNotification",
+        HostConstant::NSString("UITextViewTextDidChangeNotification"),
+    ),
+    (
+        "_UITextViewTextDidBeginEditingNotification",
+        HostConstant::NSString("UITextViewTextDidBeginEditingNotification"),
+    ),
+    (
+        "_UITextViewTextDidEndEditingNotification",
+        HostConstant::NSString("UITextViewTextDidEndEditingNotification"),
+    ),
     // UIWindowLevel constants (CGFloat / f32 on 32-bit iOS)
     (
         "_UIWindowLevelNormal",
@@ -131,6 +189,40 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIApplicationDidChangeStatusBarOrientationNotification",
         HostConstant::NSString("UIApplicationDidChangeStatusBarOrientationNotification"),
+    ),
+    // Status-bar frame change notifications + userInfo key.
+    (
+        "_UIApplicationWillChangeStatusBarFrameNotification",
+        HostConstant::NSString("UIApplicationWillChangeStatusBarFrameNotification"),
+    ),
+    (
+        "_UIApplicationDidChangeStatusBarFrameNotification",
+        HostConstant::NSString("UIApplicationDidChangeStatusBarFrameNotification"),
+    ),
+    (
+        "_UIApplicationStatusBarFrameUserInfoKey",
+        HostConstant::NSString("UIApplicationStatusBarFrameUserInfoKey"),
+    ),
+    (
+        "_UIApplicationStatusBarOrientationUserInfoKey",
+        HostConstant::NSString("UIApplicationStatusBarOrientationUserInfoKey"),
+    ),
+    // UIViewController transition coordinator context keys (iOS 5+).
+    (
+        "_UITransitionContextFromViewControllerKey",
+        HostConstant::NSString("UITransitionContextFromViewController"),
+    ),
+    (
+        "_UITransitionContextToViewControllerKey",
+        HostConstant::NSString("UITransitionContextToViewController"),
+    ),
+    (
+        "_UITransitionContextFromViewKey",
+        HostConstant::NSString("UITransitionContextFromView"),
+    ),
+    (
+        "_UITransitionContextToViewKey",
+        HostConstant::NSString("UITransitionContextToView"),
     ),
 ];
 

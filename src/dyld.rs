@@ -699,6 +699,19 @@ impl Dyld {
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
                 fn_ptr.cast().cast_const()
+            } else if name == "___objc_personality_v0" {
+                // Objective-C exception personality routine. Mirrors the
+                // non-lazy stub above: a guest-code BX LR returning 0
+                // (_URC_NO_REASON) so the unwinder keeps walking instead
+                // of branching to NULL when an iOS 5+ binary places a
+                // pointer to this symbol directly into its __DATA section
+                // via an external relocation (rather than through the
+                // __nl_symbol_ptr table).
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                log_dbg!("Stubbed ___objc_personality_v0 -> {:#x}", fn_ptr.to_bits());
+                fn_ptr.cast().cast_const()
             } else if name == "___cxa_terminate_handler"
                 || name == "___cxa_unexpected_handler"
                 || name == "___cxa_new_handler"
@@ -710,6 +723,58 @@ impl Dyld {
                 // word of zero-initialised guest memory.
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
+                p.cast().cast_const()
+            } else if name == "__dispatch_source_type_read"
+                || name == "__dispatch_source_type_write"
+                || name == "__dispatch_source_type_timer"
+                || name == "__dispatch_source_type_data_add"
+                || name == "__dispatch_source_type_data_or"
+                || name == "__dispatch_source_type_signal"
+                || name == "__dispatch_source_type_proc"
+                || name == "__dispatch_source_type_vnode"
+                || name == "__dispatch_source_type_mach_send"
+                || name == "__dispatch_source_type_mach_recv"
+                || name == "__dispatch_source_type_memorypressure"
+                || name == "__dispatch_queue_attr_concurrent"
+                || name == "__dispatch_queue_attr_serial"
+                || name == "__dispatch_data_empty"
+                || name == "__dispatch_data_destructor_default"
+                || name == "__dispatch_data_destructor_free"
+                || name == "__dispatch_data_destructor_munmap"
+                || name == "__dispatch_main_q"
+                || name == "__dispatch_queue_main"
+            {
+                // GCD dispatch_source_type_t / queue-attribute / data-marker
+                // pointers are opaque "type tag" identifiers; touchHLE's
+                // libdispatch implementation never inspects their contents,
+                // only their identity. A small non-NULL allocation satisfies
+                // that contract and prevents NULL-page reads when an app
+                // passes one to dispatch_source_create / dispatch_queue_create
+                // / dispatch_data_create.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                p.cast().cast_const()
+            } else if name == "_in6addr_any" || name == "_in6addr_loopback" {
+                // `struct in6_addr` is 16 bytes. `in6addr_any` is all zeros
+                // (`::`) and `in6addr_loopback` is `::1` (last byte = 1).
+                let p: MutPtr<u8> = mem.alloc(16).cast();
+                for i in 0..16 {
+                    mem.write(p + i, 0);
+                }
+                if name == "_in6addr_loopback" {
+                    mem.write(p + 15, 1u8);
+                }
+                p.cast().cast_const()
+            } else if name == "_NDR_record" {
+                // MIG `NDR_record` is a 12-byte transfer-syntax descriptor
+                // that's part of the (unused-by-touchHLE) Mach IPC stack.
+                // Apps reference the symbol from auto-generated MIG stubs but
+                // never actually transmit the bytes. Provide a zero-filled
+                // slot so the linker doesn't leave a NULL pointer behind.
+                let p: MutPtr<u8> = mem.alloc(12).cast();
+                for i in 0..12 {
+                    mem.write(p + i, 0);
+                }
                 p.cast().cast_const()
             } else if let Some(&external_addr) = bins
                 .iter()
@@ -907,6 +972,59 @@ impl Dyld {
                 // Default-NULL global handler pointer.
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
+                continue;
+            }
+
+            if symbol == "__dispatch_source_type_read"
+                || symbol == "__dispatch_source_type_write"
+                || symbol == "__dispatch_source_type_timer"
+                || symbol == "__dispatch_source_type_data_add"
+                || symbol == "__dispatch_source_type_data_or"
+                || symbol == "__dispatch_source_type_signal"
+                || symbol == "__dispatch_source_type_proc"
+                || symbol == "__dispatch_source_type_vnode"
+                || symbol == "__dispatch_source_type_mach_send"
+                || symbol == "__dispatch_source_type_mach_recv"
+                || symbol == "__dispatch_source_type_memorypressure"
+                || symbol == "__dispatch_queue_attr_concurrent"
+                || symbol == "__dispatch_queue_attr_serial"
+                || symbol == "__dispatch_data_empty"
+                || symbol == "__dispatch_data_destructor_default"
+                || symbol == "__dispatch_data_destructor_free"
+                || symbol == "__dispatch_data_destructor_munmap"
+                || symbol == "__dispatch_main_q"
+                || symbol == "__dispatch_queue_main"
+            {
+                // See the matching branch in the external-relocation loop.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
+                log_dbg!(
+                    "Stubbed libdispatch identity tag {} -> {:#x}",
+                    symbol,
+                    p.to_bits()
+                );
+                continue;
+            }
+
+            if symbol == "_in6addr_any" || symbol == "_in6addr_loopback" {
+                let p: MutPtr<u8> = mem.alloc(16).cast();
+                for i in 0..16 {
+                    mem.write(p + i, 0);
+                }
+                if symbol == "_in6addr_loopback" {
+                    mem.write(p + 15, 1u8);
+                }
+                mem.write(ptr_ptr, p.cast().cast_const());
+                continue;
+            }
+
+            if symbol == "_NDR_record" {
+                let p: MutPtr<u8> = mem.alloc(12).cast();
+                for i in 0..12 {
+                    mem.write(p + i, 0);
+                }
                 mem.write(ptr_ptr, p.cast().cast_const());
                 continue;
             }

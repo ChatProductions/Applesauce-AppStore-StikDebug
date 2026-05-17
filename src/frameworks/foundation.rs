@@ -317,12 +317,234 @@ fn ns_foundation_version_number(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+/// CoreFoundation's twin of `NSFoundationVersionNumber`. iOS 4.0 reports
+/// 550.32 (`kCFCoreFoundationVersionNumber_iPhoneOS_4_0`), which keeps
+/// `if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iPhoneOS_4_0)`
+/// gates on the iOS-4 branch — matches the rest of touchHLE's identity.
+fn cf_core_foundation_version_number(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
+    env.mem.write(ptr, 550.32f64.to_bits());
+    ptr.cast().cast_const()
+}
+
+/// `UIViewNoIntrinsicMetric` is `(CGFloat)-1.0`, used as a sentinel value
+/// for "this view has no intrinsic content size on this axis" by AutoLayout.
+/// On 32-bit iOS, `CGFloat` is `float`; the symbol is a 4-byte little-endian
+/// `-1.0f`.
+fn ui_view_no_intrinsic_metric(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, (-1.0f32).to_bits());
+    ptr.cast().cast_const()
+}
+
 pub const STUB_CONSTANTS: ConstantExports = &[
     // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
     // from foundation::ns_error::CONSTANTS; not duplicated here.
     (
         "_NSFoundationVersionNumber",
         HostConstant::Custom(ns_foundation_version_number),
+    ),
+    (
+        "_kCFCoreFoundationVersionNumber",
+        HostConstant::Custom(cf_core_foundation_version_number),
+    ),
+    (
+        "_UIViewNoIntrinsicMetric",
+        HostConstant::Custom(ui_view_no_intrinsic_metric),
+    ),
+    // -----------------------------------------------------------------
+    // NSError userInfo keys not in ns_error::CONSTANTS.
+    // -----------------------------------------------------------------
+    (
+        "_NSRecoveryAttempterErrorKey",
+        HostConstant::NSString("NSRecoveryAttempterErrorKey"),
+    ),
+    // -----------------------------------------------------------------
+    // Attributed-string attribute name keys (UIKit re-exports them as
+    // NSString constants on iOS 6+; the canonical literal values are the
+    // names themselves, which is what real iOS uses internally and what
+    // any sane comparison (CFEqual / isEqualToString:) relies on).
+    // -----------------------------------------------------------------
+    (
+        "_NSFontAttributeName",
+        HostConstant::NSString("NSFont"),
+    ),
+    (
+        "_NSForegroundColorAttributeName",
+        HostConstant::NSString("NSColor"),
+    ),
+    (
+        "_NSBackgroundColorAttributeName",
+        HostConstant::NSString("NSBackgroundColor"),
+    ),
+    (
+        "_NSParagraphStyleAttributeName",
+        HostConstant::NSString("NSParagraphStyle"),
+    ),
+    (
+        "_NSStrokeColorAttributeName",
+        HostConstant::NSString("NSStrokeColor"),
+    ),
+    (
+        "_NSStrokeWidthAttributeName",
+        HostConstant::NSString("NSStrokeWidth"),
+    ),
+    (
+        "_NSShadowAttributeName",
+        HostConstant::NSString("NSShadow"),
+    ),
+    (
+        "_NSKernAttributeName",
+        HostConstant::NSString("NSKern"),
+    ),
+    (
+        "_NSLigatureAttributeName",
+        HostConstant::NSString("NSLigature"),
+    ),
+    (
+        "_NSUnderlineStyleAttributeName",
+        HostConstant::NSString("NSUnderline"),
+    ),
+    (
+        "_NSUnderlineColorAttributeName",
+        HostConstant::NSString("NSUnderlineColor"),
+    ),
+    (
+        "_NSStrikethroughStyleAttributeName",
+        HostConstant::NSString("NSStrikethrough"),
+    ),
+    (
+        "_NSStrikethroughColorAttributeName",
+        HostConstant::NSString("NSStrikethroughColor"),
+    ),
+    (
+        "_NSObliquenessAttributeName",
+        HostConstant::NSString("NSObliqueness"),
+    ),
+    (
+        "_NSExpansionAttributeName",
+        HostConstant::NSString("NSExpansion"),
+    ),
+    (
+        "_NSBaselineOffsetAttributeName",
+        HostConstant::NSString("NSBaselineOffset"),
+    ),
+    (
+        "_NSWritingDirectionAttributeName",
+        HostConstant::NSString("NSWritingDirection"),
+    ),
+    (
+        "_NSVerticalGlyphFormAttributeName",
+        HostConstant::NSString("NSVerticalGlyphForm"),
+    ),
+    (
+        "_NSTextEffectAttributeName",
+        HostConstant::NSString("NSTextEffect"),
+    ),
+    (
+        "_NSAttachmentAttributeName",
+        HostConstant::NSString("NSAttachment"),
+    ),
+    (
+        "_NSLinkAttributeName",
+        HostConstant::NSString("NSLink"),
+    ),
+    // -----------------------------------------------------------------
+    // KVO change-dictionary keys.
+    // _NSKeyValueChangeNewKey is exported from objc::CONSTANTS already.
+    // -----------------------------------------------------------------
+    (
+        "_NSKeyValueChangeKindKey",
+        HostConstant::NSString("kind"),
+    ),
+    (
+        "_NSKeyValueChangeOldKey",
+        HostConstant::NSString("old"),
+    ),
+    (
+        "_NSKeyValueChangeIndexesKey",
+        HostConstant::NSString("indexes"),
+    ),
+    (
+        "_NSKeyValueChangeNotificationIsPriorKey",
+        HostConstant::NSString("notificationIsPrior"),
+    ),
+    // -----------------------------------------------------------------
+    // NSError / NSURL extra userInfo keys not in ns_error::CONSTANTS.
+    // -----------------------------------------------------------------
+    (
+        "_NSURLErrorFailingURLErrorKey",
+        HostConstant::NSString("NSErrorFailingURLKey"),
+    ),
+    (
+        "_NSURLErrorFailingURLStringErrorKey",
+        HostConstant::NSString("NSErrorFailingURLStringKey"),
+    ),
+    (
+        "_NSURLErrorFailingURLPeerTrustErrorKey",
+        HostConstant::NSString("NSURLErrorFailingURLPeerTrustErrorKey"),
+    ),
+    // -----------------------------------------------------------------
+    // NSStream property / userInfo keys.
+    // -----------------------------------------------------------------
+    (
+        "_NSStreamFileCurrentOffsetKey",
+        HostConstant::NSString("kCFStreamPropertyFileCurrentOffset"),
+    ),
+    (
+        "_NSStreamDataWrittenToMemoryStreamKey",
+        HostConstant::NSString("kCFStreamPropertyDataWritten"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelKey",
+        HostConstant::NSString("kCFStreamPropertySocketSecurityLevel"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelNone",
+        HostConstant::NSString("kCFStreamSocketSecurityLevelNone"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelSSLv2",
+        HostConstant::NSString("kCFStreamSocketSecurityLevelSSLv2"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelSSLv3",
+        HostConstant::NSString("kCFStreamSocketSecurityLevelSSLv3"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelTLSv1",
+        HostConstant::NSString("kCFStreamSocketSecurityLevelTLSv1"),
+    ),
+    (
+        "_NSStreamSocketSecurityLevelNegotiatedSSL",
+        HostConstant::NSString("kCFStreamSocketSecurityLevelNegotiatedSSL"),
+    ),
+    // -----------------------------------------------------------------
+    // NSFileHandle notification names / userInfo keys.
+    // -----------------------------------------------------------------
+    (
+        "_NSFileHandleDataAvailableNotification",
+        HostConstant::NSString("NSFileHandleDataAvailableNotification"),
+    ),
+    (
+        "_NSFileHandleReadCompletionNotification",
+        HostConstant::NSString("NSFileHandleReadCompletionNotification"),
+    ),
+    (
+        "_NSFileHandleReadToEndOfFileCompletionNotification",
+        HostConstant::NSString("NSFileHandleReadToEndOfFileCompletionNotification"),
+    ),
+    (
+        "_NSFileHandleConnectionAcceptedNotification",
+        HostConstant::NSString("NSFileHandleConnectionAcceptedNotification"),
+    ),
+    (
+        "_NSFileHandleNotificationDataItem",
+        HostConstant::NSString("NSFileHandleNotificationDataItem"),
+    ),
+    (
+        "_NSFileHandleNotificationFileHandleItem",
+        HostConstant::NSString("NSFileHandleNotificationFileHandleItem"),
     ),
 ];
 

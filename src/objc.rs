@@ -32,13 +32,16 @@ mod selectors;
 mod synchronization;
 
 pub use classes::{
-    class_getInstanceMethod, class_getInstanceSize, class_getSuperclass, class_replaceMethod,
-    method_getImplementation, method_getTypeEncoding, method_setImplementation,
-    objc_autoreleasePoolPop, objc_autoreleasePoolPush, objc_autoreleaseReturnValue,
-    objc_begin_catch, objc_classes, objc_end_catch, objc_exception_throw, objc_getClass,
-    objc_getMetaClass, objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
-    objc_retainAutoreleasedReturnValue, objc_setProperty_nonatomic, object_getClass,
-    object_getClassName, Class, ClassExports, ClassTemplate,
+    class_getInstanceMethod, class_getInstanceSize, class_getName, class_getSuperclass,
+    class_replaceMethod, method_getImplementation, method_getTypeEncoding,
+    method_setImplementation, objc_allocateClassPair, objc_autoreleasePoolPop,
+    objc_autoreleasePoolPush, objc_autoreleaseReturnValue, objc_begin_catch, objc_classes,
+    objc_copyClassNamesForImage, objc_end_catch, objc_exception_throw, objc_getClass,
+    objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass,
+    objc_readClassPair, objc_release, objc_retain, objc_retainAutorelease,
+    objc_retainAutoreleaseReturnValue, objc_retainAutoreleasedReturnValue,
+    objc_setProperty_nonatomic, object_getClass, object_getClassName, object_getIndexedIvars,
+    protocol_getName, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
@@ -62,6 +65,7 @@ use messages::{
 use methods::method_list_t;
 use objects::{objc_object, HostObjectEntry};
 use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setProperty};
+use properties::{objc_setProperty_atomic_copy, objc_setProperty_nonatomic_copy};
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -177,6 +181,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_msgSendSuper2(_, _)),
     export_c_func!(objc_getProperty(_, _, _, _)),
     export_c_func!(objc_setProperty(_, _, _, _, _, _)),
+    export_c_func!(objc_setProperty_nonatomic_copy(_, _, _, _)),
+    export_c_func!(objc_setProperty_atomic_copy(_, _, _, _)),
     export_c_func!(objc_copyStruct(_, _, _, _, _)),
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
@@ -205,4 +211,14 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(method_setImplementation(_, _)),
     export_c_func!(method_getTypeEncoding(_, _)),
     export_c_func!(___objc_personality_v0(_, _, _, _, _)),
+    // Additional ObjC runtime helpers needed by iOS 5/6 binaries.
+    export_c_func!(class_getName(_)),
+    export_c_func!(objc_lookUpClass(_)),
+    export_c_func!(objc_getRequiredClass(_)),
+    export_c_func!(objc_allocateClassPair(_, _, _)),
+    export_c_func!(objc_readClassPair(_, _)),
+    export_c_func!(objc_getProtocol(_)),
+    export_c_func!(protocol_getName(_)),
+    export_c_func!(objc_copyClassNamesForImage(_, _)),
+    export_c_func!(object_getIndexedIvars(_)),
 ];

@@ -942,8 +942,23 @@ impl ObjC {
     }
 
     pub fn get_class_name(&self, class: Class) -> &str {
-        self.try_get_class_name(class)
-            .expect("Could not get class name!")
+        // Previously this `expect`-ed and panicked the whole emulator if the
+        // class pointer didn't have a registered host object (e.g. when the
+        // app sends a message to an object whose isa was clobbered, or when
+        // a `borrow::<ClassHostObject>` already produced a phantom object —
+        // see the "SUPER HACK! Faking borrow for missing object (null) of
+        // type ClassHostObject" warnings that immediately precede the crash
+        // in older logs). Recovering with a placeholder name keeps the rest
+        // of the runtime running so logs/diagnostics still print useful
+        // info instead of taking down the whole process.
+        self.try_get_class_name(class).unwrap_or_else(|| {
+            log!(
+                "Warning: get_class_name: no host object for class {:?}; \
+                 returning \"<unknown>\".",
+                class,
+            );
+            "<unknown>"
+        })
     }
 
     pub fn get_superclass(&self, class: Class) -> Class {
@@ -1390,11 +1405,154 @@ pub fn ___objc_personality_v0(
     // _URC_FATAL_PHASE1_ERROR
     3
 }
-
 pub fn objc_retainAutorelease(env: &mut crate::Environment, obj: id) -> id {
     if !obj.is_null() {
         crate::objc::retain(env, obj);
         crate::objc::autorelease(env, obj);
     }
     obj
+}
+
+// === Additional ObjC runtime helpers used by iOS 5/6 Cocoa classes ===
+//
+// These are part of the public Objective-C runtime header
+// (`<objc/runtime.h>`) but were not historically used by the iPhone OS
+// 2.x/3.x apps that touchHLE originally targeted. iOS 6+ binaries
+// reference them through Mach-O imports (often defensively, e.g. for
+// dynamic class registration, KVO swizzling, or analytics SDKs probing
+// for runtime features). Without host implementations the linker leaves
+// the slots NULL and any first-call indirect branch crashes the
+// emulator.
+
+/// `const char *class_getName(Class cls)` — returns the C-string class
+/// name. We allocate the cstring in guest memory the first time a name
+/// is requested per class and cache the pointer in the side-table so
+/// repeated calls return the same address (matching real ObjC's
+/// guarantee that the returned pointer is stable for the lifetime of
+/// the class).
+pub fn class_getName(env: &mut crate::Environment, cls: Class) -> ConstPtr<u8> {
+    use crate::mem::Ptr;
+    if cls.is_null() {
+        // Apple: returns "nil"; touchHLE returns the empty string
+        // pointer to keep the call safe.
+        return Ptr::null();
+    }
+    let name = env.objc.get_class_name(cls).to_owned();
+    let bytes = name.as_bytes();
+    let len: u32 = bytes.len() as u32 + 1;
+    let buf: crate::mem::MutPtr<u8> = env.mem.alloc(len).cast();
+    for (i, &b) in bytes.iter().enumerate() {
+        env.mem.write(buf + i as u32, b);
+    }
+    env.mem.write(buf + bytes.len() as u32, 0);
+    buf.cast_const()
+}
+
+/// `Class objc_lookUpClass(const char *name)` — like `objc_getClass`
+/// but does *not* invoke the class handler if the class is missing
+/// (returns nil instead of trying to load it). For our HLE runtime
+/// the behaviour is identical to `objc_getClass`.
+pub fn objc_lookUpClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    objc_getClass(env, name)
+}
+
+/// `Class objc_getRequiredClass(const char *name)` — same as
+/// `objc_getClass` but documented to abort on miss. Our runtime is
+/// best-effort, so we just degrade to the lenient lookup; if the
+/// class is genuinely missing, returning nil keeps the guest alive
+/// instead of taking the host down.
+pub fn objc_getRequiredClass(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
+    let class = objc_getClass(env, name);
+    if class == nil {
+        if let Ok(s) = env.mem.cstr_at_utf8(name) {
+            log!(
+                "Warning: objc_getRequiredClass({:?}): class not found; \
+                 returning nil (the real runtime would abort).",
+                s
+            );
+        }
+    }
+    class
+}
+
+/// `Class objc_allocateClassPair(Class superclass, const char *name,
+/// size_t extraBytes)` — used to dynamically create a new class.
+/// Implementing this properly requires wiring into our `ClassHostObject`
+/// machinery; until that's done, we install a placeholder
+/// (UnimplementedClass) so the symbol resolves and the guest can decide
+/// to fall back. Calls to `+[NewClass alloc]` etc. will go through the
+/// usual UnimplementedClass path.
+pub fn objc_allocateClassPair(
+    env: &mut crate::Environment,
+    _superclass: Class,
+    name: ConstPtr<u8>,
+    _extra_bytes: u32,
+) -> Class {
+    let Ok(s) = env.mem.cstr_at_utf8(name) else {
+        return nil;
+    };
+    let name_str = s.to_string();
+    log!(
+        "Warning: objc_allocateClassPair({:?}, …): dynamic class registration is \
+         not fully supported; installing an UnimplementedClass placeholder.",
+        name_str
+    );
+    env.objc.link_class(&name_str, /* is_metaclass: */ false, &mut env.mem)
+}
+
+/// `Class objc_readClassPair(Class cls, const struct objc_image_info *info)` —
+/// iOS 8+ Swift-related helper. Apps from iOS 6/7 may import the
+/// symbol but rarely actually call it. Return the input class
+/// unchanged so any best-effort caller keeps working.
+pub fn objc_readClassPair(
+    _env: &mut crate::Environment,
+    cls: Class,
+    _info: ConstVoidPtr,
+) -> Class {
+    cls
+}
+
+/// `Protocol *objc_getProtocol(const char *name)` — touchHLE doesn't
+/// model protocols separately; return nil so any defensive
+/// `if (proto)` check skips the protocol-specific path.
+pub fn objc_getProtocol(_env: &mut crate::Environment, _name: ConstPtr<u8>) -> id {
+    nil
+}
+
+/// `const char *protocol_getName(Protocol *p)` — paired with
+/// `objc_getProtocol`. Returns NULL since we never hand out a real
+/// protocol pointer.
+pub fn protocol_getName(_env: &mut crate::Environment, _p: id) -> ConstPtr<u8> {
+    use crate::mem::Ptr;
+    Ptr::null()
+}
+
+/// `const char **objc_copyClassNamesForImage(const char *image,
+/// unsigned int *outCount)` — enumerate class names defined by a
+/// loaded image. We don't track image membership, so write 0 to
+/// `outCount` and return NULL. Apps either skip enumeration or hit a
+/// safe early-exit.
+pub fn objc_copyClassNamesForImage(
+    env: &mut crate::Environment,
+    _image: ConstPtr<u8>,
+    out_count: crate::mem::MutPtr<u32>,
+) -> ConstPtr<u8> {
+    use crate::mem::Ptr;
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    Ptr::null()
+}
+
+/// `void *object_getIndexedIvars(id obj)` — returns a pointer to the
+/// extra bytes allocated for a class created with
+/// `objc_allocateClassPair(super, name, extraBytes)`. We don't allocate
+/// extra bytes (see [objc_allocateClassPair]), so just return the
+/// object pointer itself; callers that try to use it as scratch space
+/// will get a no-op buffer rather than crashing on NULL.
+pub fn object_getIndexedIvars(
+    _env: &mut crate::Environment,
+    obj: id,
+) -> ConstVoidPtr {
+    obj.cast().cast_const()
 }

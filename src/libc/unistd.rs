@@ -96,6 +96,18 @@ fn getgid(_env: &mut Environment) -> gid_t {
     // Not a real value
     0
 }
+fn getegid(_env: &mut Environment) -> gid_t {
+    0
+}
+fn getuid(_env: &mut Environment) -> gid_t {
+    // touchHLE simulates a single, unprivileged user. The exact value is
+    // mostly irrelevant — apps usually only check `getuid() == 0` (root)
+    // or feed it into a hash for analytics.
+    501
+}
+fn geteuid(env: &mut Environment) -> gid_t {
+    getuid(env)
+}
 
 fn isatty(env: &mut Environment, fd: FileDescriptor) -> i32 {
     // TODO: handle errno properly
@@ -366,6 +378,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(usleep(_)),
     export_c_func!(getpid()),
     export_c_func!(getppid()),
+    export_c_func!(getuid()),
+    export_c_func!(geteuid()),
+    export_c_func!(getegid()),
     export_c_func!(isatty(_)),
     export_c_func!(access(_, _)),
     export_c_func!(unlink(_)),
