@@ -42,7 +42,7 @@ pub const CORE_MEDIA: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/CoreMedia.framework/CoreMedia",
     aliases: &[],
     class_exports: &[],
-    constant_exports: &[],
+    constant_exports: &[frameworks::core_media::CONSTANTS],
     function_exports: &[frameworks::core_media::FUNCTIONS],
 };
 
@@ -136,6 +136,40 @@ pub const AD_SUPPORT: super::HostDylib = super::HostDylib {
     function_exports: &[],
 };
 
+// CoreImage (stub — no real CIFilter pipeline yet, but apps that include
+// the framework reach the kCIInputImageKey / kCIContextWorkingColorSpace /
+// kCIOutputImageKey constants via Mach-O lookup; without a HostDylib entry
+// those slots stay NULL and any guest dictionary key-equality check
+// dereferences NULL).
+pub const CORE_IMAGE: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/CoreImage.framework/CoreImage",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[frameworks::core_image::CONSTANTS],
+    function_exports: &[frameworks::core_image::FUNCTIONS],
+};
+
+// CoreData (stub — apps that link CoreData defensively (often via linked
+// libraries' analytics SDKs) just need the dylib path to resolve so the
+// "missing dylib" warning at startup goes away).
+pub const CORE_DATA: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/CoreData.framework/CoreData",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+
+// CaptiveNetwork bits of SystemConfiguration — exposes the `kCNNetworkInfo*`
+// dictionary keys without implementing actual Wi-Fi telemetry.
+pub const CAPTIVE_NETWORK: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/SystemConfiguration.framework/CaptiveNetwork",
+    aliases: &["/System/Library/SystemConfiguration/CaptiveNetwork.bundle/CaptiveNetwork"],
+    class_exports: &[],
+    constant_exports: &[frameworks::captive_network::CONSTANTS],
+    function_exports: &[frameworks::captive_network::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -180,6 +214,9 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &EVENT_KIT_UI,
     &IAD,
     &AD_SUPPORT,
+    &CORE_IMAGE,
+    &CORE_DATA,
+    &CAPTIVE_NETWORK,
 ];
 
 #[cfg(test)]

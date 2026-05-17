@@ -1047,6 +1047,101 @@ fn SecItemDelete(_env: &mut Environment, _query: crate::mem::ConstVoidPtr) -> i3
     errSecItemNotFound
 }
 
+// === One-shot SHA helpers ====================================================
+//
+// CommonCrypto exposes a "compute the hash in a single call" overload for
+// every digest:
+//
+// ```c
+// unsigned char *CC_SHA1  (const void *data, CC_LONG len, unsigned char *md);
+// unsigned char *CC_SHA256(const void *data, CC_LONG len, unsigned char *md);
+// /* etc. */
+// ```
+//
+// `len` is `uint32_t` (CC_LONG), `md` is a caller-allocated output buffer of
+// the digest's natural size (20/28/32/48/64 bytes), and the return value is
+// the same `md` pointer (or NULL if `md` is NULL).
+//
+// We implement these via the `sha1` / `sha2` crates so analytics SDKs that
+// hash device IDs / payloads get a real, deterministic digest rather than
+// the all-zero fallback that the generic return-0 stub used to produce.
+
+fn read_guest_bytes(env: &Environment, data: ConstVoidPtr, len: GuestUSize) -> Vec<u8> {
+    if data.is_null() || len == 0 {
+        return Vec::new();
+    }
+    env.mem.bytes_at(data.cast(), len).to_vec()
+}
+
+fn write_digest(env: &mut Environment, md: MutVoidPtr, digest: &[u8]) {
+    if md.is_null() {
+        return;
+    }
+    env.mem
+        .bytes_at_mut(md.cast(), digest.len() as u32)
+        .copy_from_slice(digest);
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA1(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: MutVoidPtr) -> MutVoidPtr {
+    use sha1::{Digest, Sha1};
+    if md.is_null() {
+        return MutVoidPtr::null();
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let digest = Sha1::digest(&bytes);
+    write_digest(env, md, digest.as_slice());
+    md
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA224(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: MutVoidPtr) -> MutVoidPtr {
+    use sha2::{Digest, Sha224};
+    if md.is_null() {
+        return MutVoidPtr::null();
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let digest = Sha224::digest(&bytes);
+    write_digest(env, md, digest.as_slice());
+    md
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA256(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: MutVoidPtr) -> MutVoidPtr {
+    use sha2::{Digest, Sha256};
+    if md.is_null() {
+        return MutVoidPtr::null();
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let digest = Sha256::digest(&bytes);
+    write_digest(env, md, digest.as_slice());
+    md
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA384(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: MutVoidPtr) -> MutVoidPtr {
+    use sha2::{Digest, Sha384};
+    if md.is_null() {
+        return MutVoidPtr::null();
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let digest = Sha384::digest(&bytes);
+    write_digest(env, md, digest.as_slice());
+    md
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA512(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: MutVoidPtr) -> MutVoidPtr {
+    use sha2::{Digest, Sha512};
+    if md.is_null() {
+        return MutVoidPtr::null();
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let digest = Sha512::digest(&bytes);
+    write_digest(env, md, digest.as_slice());
+    md
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
     export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)),
@@ -1055,6 +1150,13 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_MD5_Init(_)),         // Было (_, _), нужно (_)
     export_c_func!(CC_MD5_Update(_, _, _)), // Было (_, _, _, _), нужно (_, _, _)
     export_c_func!(CC_MD5_Final(_, _)),     // Было (_, _, _), нужно (_, _)
+    // One-shot SHA helpers used by analytics/auth SDKs that compute a
+    // hash in a single call. Implemented via the `sha2`/`sha1` crates.
+    export_c_func!(CC_SHA1(_, _, _)),
+    export_c_func!(CC_SHA224(_, _, _)),
+    export_c_func!(CC_SHA256(_, _, _)),
+    export_c_func!(CC_SHA384(_, _, _)),
+    export_c_func!(CC_SHA512(_, _, _)),
                                             // SecItem* helpers are exported from frameworks::security; not duplicated.
 ];
 

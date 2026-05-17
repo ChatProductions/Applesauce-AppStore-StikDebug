@@ -735,12 +735,22 @@ impl Dyld {
                 || name == "__dispatch_source_type_mach_send"
                 || name == "__dispatch_source_type_mach_recv"
                 || name == "__dispatch_source_type_memorypressure"
+                || name == "__dispatch_queue_attr_concurrent"
+                || name == "__dispatch_queue_attr_serial"
+                || name == "__dispatch_data_empty"
+                || name == "__dispatch_data_destructor_default"
+                || name == "__dispatch_data_destructor_free"
+                || name == "__dispatch_data_destructor_munmap"
+                || name == "__dispatch_main_q"
+                || name == "__dispatch_queue_main"
             {
-                // GCD dispatch_source_type_t are opaque "type tag" pointers;
-                // touchHLE's libdispatch implementation never inspects their
-                // contents, only their identity. A small non-NULL allocation
-                // satisfies that contract and prevents NULL-page reads when
-                // an app passes one to dispatch_source_create.
+                // GCD dispatch_source_type_t / queue-attribute / data-marker
+                // pointers are opaque "type tag" identifiers; touchHLE's
+                // libdispatch implementation never inspects their contents,
+                // only their identity. A small non-NULL allocation satisfies
+                // that contract and prevents NULL-page reads when an app
+                // passes one to dispatch_source_create / dispatch_queue_create
+                // / dispatch_data_create.
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
                 p.cast().cast_const()
@@ -977,13 +987,21 @@ impl Dyld {
                 || symbol == "__dispatch_source_type_mach_send"
                 || symbol == "__dispatch_source_type_mach_recv"
                 || symbol == "__dispatch_source_type_memorypressure"
+                || symbol == "__dispatch_queue_attr_concurrent"
+                || symbol == "__dispatch_queue_attr_serial"
+                || symbol == "__dispatch_data_empty"
+                || symbol == "__dispatch_data_destructor_default"
+                || symbol == "__dispatch_data_destructor_free"
+                || symbol == "__dispatch_data_destructor_munmap"
+                || symbol == "__dispatch_main_q"
+                || symbol == "__dispatch_queue_main"
             {
                 // See the matching branch in the external-relocation loop.
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
                 mem.write(ptr_ptr, p.cast().cast_const());
                 log_dbg!(
-                    "Stubbed dispatch_source_type {} -> {:#x}",
+                    "Stubbed libdispatch identity tag {} -> {:#x}",
                     symbol,
                     p.to_bits()
                 );

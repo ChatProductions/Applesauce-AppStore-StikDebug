@@ -317,12 +317,47 @@ fn ns_foundation_version_number(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+/// CoreFoundation's twin of `NSFoundationVersionNumber`. iOS 4.0 reports
+/// 550.32 (`kCFCoreFoundationVersionNumber_iPhoneOS_4_0`), which keeps
+/// `if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iPhoneOS_4_0)`
+/// gates on the iOS-4 branch — matches the rest of touchHLE's identity.
+fn cf_core_foundation_version_number(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
+    env.mem.write(ptr, 550.32f64.to_bits());
+    ptr.cast().cast_const()
+}
+
+/// `UIViewNoIntrinsicMetric` is `(CGFloat)-1.0`, used as a sentinel value
+/// for "this view has no intrinsic content size on this axis" by AutoLayout.
+/// On 32-bit iOS, `CGFloat` is `float`; the symbol is a 4-byte little-endian
+/// `-1.0f`.
+fn ui_view_no_intrinsic_metric(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, (-1.0f32).to_bits());
+    ptr.cast().cast_const()
+}
+
 pub const STUB_CONSTANTS: ConstantExports = &[
     // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
     // from foundation::ns_error::CONSTANTS; not duplicated here.
     (
         "_NSFoundationVersionNumber",
         HostConstant::Custom(ns_foundation_version_number),
+    ),
+    (
+        "_kCFCoreFoundationVersionNumber",
+        HostConstant::Custom(cf_core_foundation_version_number),
+    ),
+    (
+        "_UIViewNoIntrinsicMetric",
+        HostConstant::Custom(ui_view_no_intrinsic_metric),
+    ),
+    // -----------------------------------------------------------------
+    // NSError userInfo keys not in ns_error::CONSTANTS.
+    // -----------------------------------------------------------------
+    (
+        "_NSRecoveryAttempterErrorKey",
+        HostConstant::NSString("NSRecoveryAttempterErrorKey"),
     ),
     // -----------------------------------------------------------------
     // Attributed-string attribute name keys (UIKit re-exports them as

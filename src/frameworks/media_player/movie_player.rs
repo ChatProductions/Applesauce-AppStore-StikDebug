@@ -124,6 +124,10 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::NSString("MPMovieDurationAvailableNotification"),
     ),
     (
+        "_MPMoviePlayerReadyForDisplayDidChangeNotification",
+        HostConstant::NSString("MPMoviePlayerReadyForDisplayDidChangeNotification"),
+    ),
+    (
         "_MPMovieNaturalSizeAvailableNotification",
         HostConstant::NSString("MPMovieNaturalSizeAvailableNotification"),
     ),
