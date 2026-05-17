@@ -36,7 +36,7 @@ pub use classes::{
     method_getImplementation, method_getTypeEncoding, method_setImplementation,
     objc_autoreleasePoolPop, objc_autoreleasePoolPush, objc_autoreleaseReturnValue,
     objc_begin_catch, objc_classes, objc_end_catch, objc_exception_throw, objc_getClass,
-    objc_getMetaClass, objc_release, objc_retain, objc_retainAutoreleaseReturnValue,
+    objc_getMetaClass, objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
     objc_retainAutoreleasedReturnValue, objc_setProperty_nonatomic, object_getClass,
     object_getClassName, Class, ClassExports, ClassTemplate,
 };
