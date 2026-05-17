@@ -61,8 +61,15 @@ fn mmap(
         }
 
         if !addr.is_null() {
-            log!(
-                "Warning: mmap MAP_ANON ignoring hint for address {:?}, actual is {:?}",
+            // POSIX `mmap` documents the `addr` argument as a hint that
+            // implementations may ignore. We always allocate from the
+            // guest heap, so the actual placement is the heap allocator's
+            // choice. Apps that genuinely require fixed-address mappings
+            // would set MAP_FIXED, which we'd then need to honour
+            // separately. Demoted to debug to keep Mono/Unity startup
+            // logs readable; the host-vs-hint mismatch is not an error.
+            log_dbg!(
+                "mmap MAP_ANON ignoring hint for address {:?}, actual is {:?}",
                 addr,
                 ptr
             );
@@ -119,9 +126,30 @@ fn shm_open(env: &mut Environment, name: ConstPtr<u8>, oflag: i32, mode: u32) ->
 }
 
 fn mprotect(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, prot: i32) -> i32 {
-    log!("TODO: mprotect({:?}, {}, {}) -> -1", addr, len, prot);
-    set_errno(env, ENOTSUP);
-    -1
+    // POSIX `int mprotect(void *addr, size_t len, int prot)`: returns 0
+    // on success, -1 on failure with errno set.
+    //
+    // touchHLE doesn't enforce per-page memory protections — the entire
+    // guest address space is treated as RW (and code pages as RX through
+    // the JIT). However, returning -1 + ENOTSUP for every mprotect call
+    // is wrong: it makes Mono/Boehm GC and Unity's runtime think the
+    // protection change failed during JIT/GC initialization, which can
+    // leave them in a broken state. Real Darwin kernels never fail
+    // mprotect for the address ranges that mmap'd allocations sit in,
+    // so the correct behavior is "succeed silently as a no-op".
+    //
+    // Reference: POSIX mprotect(2) — return value is 0 on success, -1 on
+    // error; the only documented errors apply to invalid/non-mapped
+    // address ranges, which our guest mmap allocator handles by always
+    // returning a valid range.
+    log_dbg!(
+        "mprotect({:?}, {}, {:#x}) -> 0 (no-op; touchHLE does not enforce per-page protections)",
+        addr,
+        len,
+        prot
+    );
+    set_errno(env, 0);
+    0
 }
 
 pub const FUNCTIONS: FunctionExports = &[

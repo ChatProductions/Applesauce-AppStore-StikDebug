@@ -301,10 +301,19 @@ fn readlink(
     buf: MutPtr<u8>,
     buf_size: GuestISize,
 ) -> GuestISize {
-    log!(
-        "TODO: readlink({:?} '{}', {:?}, {}) -> -1",
+    // POSIX `ssize_t readlink(const char *path, char *buf, size_t bufsize)`:
+    // returns the number of bytes placed in `buf` on success, -1 on
+    // error (with errno set). On a path that exists but is not a
+    // symbolic link, the documented errno is EINVAL — and that's the
+    // common case for the guest filesystem touchHLE exposes (no symlinks
+    // anywhere). Mono probes readlink on every dynamic-assembly load
+    // (mscorlib.dll, System.dll, etc.) to figure out the canonical
+    // path; demoting to debug keeps Unity-engine games from drowning
+    // the console in warnings on startup.
+    log_dbg!(
+        "readlink({:?} '{}', {:?}, {}) => -1, errno=EINVAL (no symlinks in guest filesystem)",
         path,
-        env.mem.cstr_at_utf8(path).unwrap(),
+        env.mem.cstr_at_utf8(path).unwrap_or("<invalid utf8>"),
         buf,
         buf_size,
     );

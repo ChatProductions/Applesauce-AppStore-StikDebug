@@ -387,15 +387,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())cancelAllLocalNotifications {
-    log!("UIApplication cancelAllLocalNotifications: stubbed");
+    log_dbg!("UIApplication cancelAllLocalNotifications: no-op (notifications not delivered by host)");
 }
 
 - (())cancelLocalNotification:(id)_notification {
-    log!("UIApplication cancelLocalNotification: stubbed");
+    log_dbg!("UIApplication cancelLocalNotification: no-op (notifications not delivered by host)");
 }
 
 - (())scheduleLocalNotification:(id)_notification {
-    log!("UIApplication scheduleLocalNotification: stubbed");
+    log_dbg!("UIApplication scheduleLocalNotification: no-op (notifications not delivered by host)");
 }
 
 - (id)scheduledLocalNotifications {
@@ -435,7 +435,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())presentLocalNotificationNow:(id)_notification {
-    log!("UIApplication presentLocalNotificationNow: stubbed");
+    log_dbg!("UIApplication presentLocalNotificationNow: no-op (notifications not delivered by host)");
 }
 
 - (id)keyWindow {

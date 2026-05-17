@@ -302,23 +302,18 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
     let Some(&value) = env.env_vars.get(name_cstr) else {
-        // Игнорируем предупреждения для известных переменных, отсутствие
-        // которых — норма.
-        // MMGC_HEAP_LIMIT и MMGC_HEAP_SOFT_LIMIT ищет Adobe AIR / Flash
-        // (Macromedia GC).
-        // Возвращать NULL для них — это правильное и честное поведение,
-        // так как движок сам подставит нужные дефолтные лимиты для iOS.
-        if name_str != "LUA_PATH"
-            && name_str != "LUA_CPATH"
-            && name_str != "MMGC_HEAP_LIMIT"
-            && name_str != "MMGC_HEAP_SOFT_LIMIT"
-        {
-            log!(
-                "Warning: getenv() for {:?} ({:?}) unhandled",
-                name,
-                name_str
-            );
-        }
+        // POSIX `getenv()` returns NULL for unset variables — this is the
+        // documented success path for "variable doesn't exist". Logging a
+        // Warning every time floods the console for any guest using a
+        // managed runtime: Mono probes ~30 MONO_*/GC_* vars on startup,
+        // Adobe AIR queries MMGC_HEAP_*, Lua looks up LUA_PATH/CPATH,
+        // CoreFoundation reads CFFIXED_USER_HOME etc. None of these are
+        // errors, so we demote to debug-only.
+        log_dbg!(
+            "getenv({:?} ({:?})) => NULL (unset)",
+            name,
+            name_str
+        );
         return Ptr::null();
     };
     log_dbg!(
