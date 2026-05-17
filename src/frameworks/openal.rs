@@ -216,7 +216,7 @@ fn alcGetString(
     // contents-of-the-string are the same.
     let cache_key = (
         if device.is_null() {
-            Ptr::<GuestALCdevice>::null()
+            MutPtr::<GuestALCdevice>::null()
         } else {
             device
         },
@@ -551,7 +551,10 @@ fn alEnable(env: &mut Environment, capability: ALenum) {
 }
 
 fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
-    let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&param) {
+    // alGetString queries are global (not device-bound), so we key the
+    // shared strings cache with a null `GuestALCdevice` sentinel.
+    let cache_key = (MutPtr::<GuestALCdevice>::null(), param);
+    let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&cache_key) {
         str
     } else {
         // Strings extracted from iPhone 3GS, iOS 4.0.1 (also matches the iPhone
@@ -585,7 +588,7 @@ fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
         env.framework_state
             .openal
             .strings_cache
-            .insert(param, new_str);
+            .insert(cache_key, new_str);
         new_str
     };
     log_dbg!(
