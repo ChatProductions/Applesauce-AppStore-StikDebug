@@ -253,51 +253,91 @@ impl Bundle {
     }
 
     pub fn supported_interface_orientations(&self) -> Vec<&str> {
-        // UIInterfaceOrientation (iPhone OS 2.0) is a single string
-        // (or a comma separated list of strings).
-        // UISupportedInterfaceOrientations (iOS 3.2) is an array of strings and
-        // takes precedence.
-        self.plist
-            .get("UISupportedInterfaceOrientations")
-            .map(|v| {
-                v.as_array()
-                    .unwrap()
+        // Apple's Bundle Resources documentation
+        // (https://developer.apple.com/documentation/bundleresources/information-property-list/uisupportedinterfaceorientations)
+        // says UISupportedInterfaceOrientations (iOS 3.2+) is an Array of
+        // Strings, and UIInterfaceOrientation (iPhone OS 2.0+) is a single
+        // String. UISupportedInterfaceOrientations takes precedence.
+        //
+        // In practice some pre-3.2 apps (e.g. Tiny Zoo Friends, plist
+        // observed in the wild) store UISupportedInterfaceOrientations as
+        // a single String — sometimes even a comma-separated list — which
+        // is technically malformed but iOS accepts it. We mirror that
+        // tolerance instead of crashing the host emulator.
+        if let Some(v) = self.plist.get("UISupportedInterfaceOrientations") {
+            if let Some(arr) = v.as_array() {
+                return arr
                     .iter()
-                    .map(|o| o.as_string().unwrap())
-                    .collect()
-            })
-            .unwrap_or_else(|| {
-                if let Some(v) = self
-                    .plist
-                    .get("UIInterfaceOrientation") {
-                    let str = v.as_string().unwrap();
-                    if str.contains(',') {
-                        log!("UIInterfaceOrientation is a comma separated list of strings ({}), splitting!", str);
-                    }
-                    str.split(',').collect()
-                } else {
-                    vec!["UIInterfaceOrientationPortrait"]
+                    .filter_map(|o| o.as_string())
+                    .collect();
+            }
+            if let Some(s) = v.as_string() {
+                if s.contains(',') {
+                    log!(
+                        "UISupportedInterfaceOrientations is a comma-separated string ({}); splitting.",
+                        s
+                    );
                 }
-            })
+                return s.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+            }
+            log!(
+                "UISupportedInterfaceOrientations has unexpected plist type {:?}; ignoring.",
+                v
+            );
+        }
+
+        if let Some(v) = self.plist.get("UIInterfaceOrientation") {
+            let str = v.as_string().unwrap_or("UIInterfaceOrientationPortrait");
+            if str.contains(',') {
+                log!("UIInterfaceOrientation is a comma separated list of strings ({}), splitting!", str);
+            }
+            return str.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+        }
+
+        vec!["UIInterfaceOrientationPortrait"]
     }
 
     pub fn device_family_array(&self) -> Vec<DeviceFamily> {
-        self.plist
-            .get("UIDeviceFamily")
-            .map(|v| {
-                v.as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|o| {
-                        DeviceFamily::try_from(match o {
-                            Value::Integer(i) => i.as_unsigned().unwrap(),
-                            Value::String(s) => s.parse().unwrap(),
-                            _ => unreachable!(),
-                        })
-                        .unwrap()
-                    })
-                    .collect()
-            })
-            .unwrap_or_else(|| vec![DeviceFamily::iPhone])
+        // Apple docs: UIDeviceFamily is an Array of Numbers (1=iPhone, 2=iPad).
+        // https://developer.apple.com/documentation/bundleresources/information-property-list/uidevicefamily
+        // We additionally accept strings ("1", "2", "iphone", "ipad") because
+        // a few real-world plists serialise the values that way; ignore
+        // unknown entries instead of panicking the emulator.
+        let Some(v) = self.plist.get("UIDeviceFamily") else {
+            return vec![DeviceFamily::iPhone];
+        };
+        let Some(arr) = v.as_array() else {
+            log!(
+                "UIDeviceFamily has unexpected plist type {:?}; defaulting to iPhone.",
+                v
+            );
+            return vec![DeviceFamily::iPhone];
+        };
+        let mut families = Vec::new();
+        for o in arr {
+            let parsed = match o {
+                Value::Integer(i) => i.as_unsigned().and_then(|n| DeviceFamily::try_from(n).ok()),
+                Value::String(s) => {
+                    // First try numeric; fall back to symbolic name.
+                    s.parse::<u64>()
+                        .ok()
+                        .and_then(|n| DeviceFamily::try_from(n).ok())
+                        .or_else(|| DeviceFamily::try_from(s.as_str()).ok())
+                }
+                _ => None,
+            };
+            match parsed {
+                Some(family) => families.push(family),
+                None => log!(
+                    "UIDeviceFamily entry {:?} is not a recognised device family; ignoring.",
+                    o
+                ),
+            }
+        }
+        if families.is_empty() {
+            vec![DeviceFamily::iPhone]
+        } else {
+            families
+        }
     }
 }

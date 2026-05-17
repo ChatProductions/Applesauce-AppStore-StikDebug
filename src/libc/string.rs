@@ -19,13 +19,19 @@ pub struct State {
 }
 
 fn strtok(env: &mut Environment, s: MutPtr<u8>, sep: ConstPtr<u8>) -> MutPtr<u8> {
+    // POSIX: A subsequent call with a null first argument continues searching
+    // from the saved pointer. If no further token exists (or strtok() has
+    // never been called with a non-null first argument), a null pointer is
+    // returned. We must NOT panic here — some apps invoke strtok(NULL, ...)
+    // speculatively or after a previous call returned NULL.
     let s = if s.is_null() {
-        let state = env.libc_state.string.strtok.unwrap();
-        if state.is_null() {
-            env.libc_state.string.strtok = None;
-            return Ptr::null();
+        match env.libc_state.string.strtok {
+            Some(state) if !state.is_null() => state,
+            _ => {
+                env.libc_state.string.strtok = None;
+                return Ptr::null();
+            }
         }
-        state
     } else {
         s
     };
