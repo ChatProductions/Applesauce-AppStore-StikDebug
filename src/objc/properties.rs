@@ -19,7 +19,7 @@ use crate::mem::{
     guest_size_of, ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr,
     SafeRead,
 };
-use crate::Environment;
+use crate::{Environment, MutexType};
 
 /// The layout of a property list in an app binary.
 ///
@@ -134,6 +134,46 @@ impl ObjC {
     }
 }
 
+/// Acquire the per-object recursive mutex used to protect `atomic`
+/// property accesses. Lazily creates the mutex on first use.
+///
+/// Mirrors the role of Apple's striped `PropertyLocks` table from
+/// `objc-accessors.mm` — see [`ObjC::property_locks`] for the full
+/// design rationale. Returns `None` if `this` is `nil` (in which case
+/// no locking is needed because no real ivar will be accessed below).
+fn lock_property_atomic(env: &mut Environment, this: id) -> Option<crate::MutexId> {
+    if this == nil {
+        return None;
+    }
+    let mutex_id = if let Some(&existing) = env.objc.property_locks.get(&this) {
+        existing
+    } else {
+        let new_id = env
+            .mutex_state
+            .init_mutex(MutexType::PTHREAD_MUTEX_RECURSIVE);
+        env.objc.property_locks.insert(this, new_id);
+        log_dbg!(
+            "Created property-lock mutex #{} for object {:#x}",
+            new_id,
+            this.to_bits()
+        );
+        new_id
+    };
+    // Lock errors here would be a host-side bug (recursive mutex on the
+    // same thread can never fail), so unwrap is safe.
+    env.lock_mutex(mutex_id).unwrap();
+    Some(mutex_id)
+}
+
+/// Release a property lock previously acquired with [`lock_property_atomic`].
+fn unlock_property_atomic(env: &mut Environment, mutex_id: Option<crate::MutexId>) {
+    if let Some(mutex_id) = mutex_id {
+        // Same reasoning as above: unlocking a mutex we just locked on
+        // the current thread cannot fail.
+        let _ = env.unlock_mutex(mutex_id);
+    }
+}
+
 /// Undocumented function (see link above) apparently used by auto-generated
 /// methods for properties to get an ivar.
 pub(super) fn objc_getProperty(
@@ -157,9 +197,11 @@ pub(super) fn objc_getProperty(
         return nil;
     }
 
-    if atomic {
-        log_once!("TODO: Lock when atomic is set to true in objc_getProperty");
-    }
+    let lock = if atomic {
+        lock_property_atomic(env, this)
+    } else {
+        None
+    };
 
     let Some(addr) = this.to_bits().checked_add_signed(offset) else {
         log!(
@@ -167,10 +209,13 @@ pub(super) fn objc_getProperty(
             this.to_bits(),
             offset
         );
+        unlock_property_atomic(env, lock);
         return nil;
     };
     let ivar: MutPtr<id> = Ptr::from_bits(addr);
-    env.mem.read(ivar)
+    let value = env.mem.read(ivar);
+    unlock_property_atomic(env, lock);
+    value
 }
 
 /// Undocumented function (see link above) apparently used by auto-generated
@@ -199,9 +244,11 @@ pub(super) fn objc_setProperty(
         return;
     }
 
-    if atomic {
-        log_once!("TODO: Lock when atomic is set to true in objc_setProperty");
-    }
+    let lock = if atomic {
+        lock_property_atomic(env, this)
+    } else {
+        None
+    };
 
     let Some(addr) = this.to_bits().checked_add_signed(offset) else {
         log!(
@@ -209,6 +256,7 @@ pub(super) fn objc_setProperty(
             this.to_bits(),
             offset
         );
+        unlock_property_atomic(env, lock);
         return;
     };
     let ivar: MutPtr<id> = Ptr::from_bits(addr);
@@ -239,6 +287,31 @@ pub(super) fn objc_setProperty(
     if old != nil {
         release(env, old);
     }
+
+    unlock_property_atomic(env, lock);
+}
+
+/// Optimised non-atomic, retain-property setter. Modern compilers emit
+/// `_objc_setProperty_nonatomic` instead of the generic
+/// `_objc_setProperty(…, atomic=false, should_copy=0)` for autosynthesised
+/// `@property (nonatomic, retain)` / `@property (nonatomic, strong)`
+/// setters. We just forward to the generic implementation so the ivar
+/// receives a real `objc_retain` of the new value (with proper
+/// `objc_release` of the previous value), instead of touchHLE silently
+/// dropping the assignment.
+///
+/// Note the argument order: `(self, _cmd, newValue, offset)` — the
+/// optimised variants put the value *before* the offset, the opposite of
+/// the generic [objc_setProperty]. See Apple's open-source
+/// `objc4/runtime/Accessors.subproj/objc-accessors.mm`.
+pub(super) fn objc_setProperty_nonatomic(
+    env: &mut Environment,
+    this: id,
+    _cmd: SEL,
+    value: id,
+    offset: GuestISize,
+) {
+    objc_setProperty(env, this, _cmd, offset, value, /* atomic: */ false, /* should_copy: */ 0)
 }
 
 /// Optimised non-atomic, copy-property setter. Mid-iOS-6+ compilers emit

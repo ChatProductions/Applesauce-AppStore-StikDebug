@@ -1171,26 +1171,6 @@ pub fn objc_autoreleasePoolPop(_env: &mut crate::Environment, _context: MutVoidP
     // this path very rarely (it's primarily used by ARC).
 }
 
-pub fn objc_setProperty_nonatomic(env: &mut crate::Environment, name: ConstPtr<u8>) -> Class {
-    if name.is_null() {
-        return nil;
-    }
-
-    let name_str = match env.mem.cstr_at_utf8(name) {
-        Ok(s) => s.to_string(),
-        Err(_) => return nil,
-    };
-    if let Some(class) = env.objc.get_class(&name_str, false, &env.mem) {
-        return class;
-    }
-
-    if ObjC::find_template(&name_str).is_some() {
-        return env.objc.link_class(&name_str, false, &mut env.mem);
-    }
-
-    nil
-}
-
 pub fn class_getSuperclass(env: &mut crate::Environment, cls: Class) -> Class {
     if cls.is_null() {
         return nil;

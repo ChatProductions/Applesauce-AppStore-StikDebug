@@ -241,19 +241,47 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
 
-    // Below we treat a special case of adding view controller's view
-    // to a window, in order to generate display related notifications
-
-    if env.objc.borrow::<UIViewHostObject>(this).subviews.contains(&view) {
-        // For the case of existing view hidden by another view,
-        // we need to delay a below sequence up until obstructions are removed
-        log!("TODO: case of existing view hidden by another view for sending view[Will,Did]Appear");
+    // Below we treat a special case of adding a view controller's view
+    // to a window, in order to generate the appropriate display-related
+    // notifications. Apple's UIViewController contract:
+    //   - viewWillAppear: is sent before the view is added to the
+    //     view hierarchy AND will become visible.
+    //   - viewDidAppear:  is sent after that.
+    // When the view is already a subview, [UIView addSubview:] still
+    // moves it to the top of the subviews array (Apple docs:
+    // "Calls to this method with a view that is already a subview
+    //  result in the view being moved to the end of the subview list.")
+    // After moving to the top there are no obstructing siblings, so the
+    // appearance lifecycle is fired iff the view is not explicitly
+    // hidden via -setHidden:YES. The previous TODO existed because
+    // touchHLE had no way to detect this case; we now defer to
+    // -isHidden, which mirrors UIKit's actual visibility test.
+    let was_subview = env
+        .objc
+        .borrow::<UIViewHostObject>(this)
+        .subviews
+        .contains(&view);
+    let view_hidden: bool = msg![env; view isHidden];
+    let should_fire_appearance = !view_hidden;
+    if was_subview {
+        log_dbg!(
+            "[(UIWindow*){:?} addSubview:{:?}]: re-adding existing subview; \
+             moving to top, appearance lifecycle will{} fire (hidden={}).",
+            this,
+            view,
+            if should_fire_appearance { "" } else { " not" },
+            view_hidden
+        );
     }
 
     let vc = env.objc.borrow::<UIViewHostObject>(view).view_controller;
-    () = msg![env; vc viewWillAppear:false];
+    if should_fire_appearance {
+        () = msg![env; vc viewWillAppear:false];
+    }
     () = msg_super![env; this addSubview:view];
-    () = msg![env; vc viewDidAppear:false];
+    if should_fire_appearance {
+        () = msg![env; vc viewDidAppear:false];
+    }
 
     // Support auto-rotation. This is currently only for apps that request a
     // non-portrait interface orientation via Info.plist, as we do not yet
