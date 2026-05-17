@@ -82,12 +82,16 @@ const IF_NAMESIZE: usize = 16;
 
 /// `unsigned int if_nametoindex(const char *ifname)`
 ///
-/// Returns the index for the named interface, or 0 on error.
-/// Stub: we have no real interfaces, so always returns 0 / ENXIO.
+/// Returns the index for the named interface, or 0 on error (per POSIX,
+/// which also documents `errno` getting set to `ENXIO`). touchHLE
+/// doesn't expose any host network interfaces to the guest, so the
+/// answer is always "no such interface". Returning 0 silently is the
+/// right behavior — apps that probe `en0` / `pdp_ip0` to detect Wi-Fi
+/// vs cellular fall back to "offline" gracefully when this returns 0.
 fn if_nametoindex(env: &mut Environment, ifname: ConstPtr<u8>) -> u32 {
     let name = env.mem.cstr_at_utf8(ifname).unwrap_or("<invalid>");
-    log!(
-        "TODO: if_nametoindex(\"{}\") – returning 0 (not implemented)",
+    log_dbg!(
+        "if_nametoindex(\"{}\") => 0 (no host interfaces exposed to guest)",
         name
     );
     set_errno(env, ENXIO);

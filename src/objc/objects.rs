@@ -249,11 +249,22 @@ impl super::ObjC {
         // fix would register a real `Default::default()` host object, but
         // that requires a `T: Default` bound which many callers don't yet
         // provide.
-        log!(
-            "Warning: SUPER HACK! Faking borrow for missing object {:?} of type {}",
-            object,
-            std::any::type_name::<T>()
-        );
+        // POSIX/Objective-C semantics: a message to `nil` returns the
+        // zero/empty form of the return type — the runtime is expected
+        // to treat such calls as a no-op. Returning a zero-initialized
+        // phantom host object preserves this without flooding the log.
+        if object == nil {
+            log_dbg!(
+                "borrow on nil receiver of type {} — returning zero-initialized phantom",
+                std::any::type_name::<T>()
+            );
+        } else {
+            log!(
+                "Warning: SUPER HACK! Faking borrow for missing object {:?} of type {}",
+                object,
+                std::any::type_name::<T>()
+            );
+        }
         phantom_host_object::<T>(object)
     }
 
@@ -277,11 +288,18 @@ impl super::ObjC {
         }
 
         // See comment in `borrow` above for rationale.
-        log!(
-            "Warning: SUPER HACK! Faking borrow_mut for missing object {:?} of type {}",
-            object,
-            std::any::type_name::<T>()
-        );
+        if object == nil {
+            log_dbg!(
+                "borrow_mut on nil receiver of type {} — returning zero-initialized phantom",
+                std::any::type_name::<T>()
+            );
+        } else {
+            log!(
+                "Warning: SUPER HACK! Faking borrow_mut for missing object {:?} of type {}",
+                object,
+                std::any::type_name::<T>()
+            );
+        }
         phantom_host_object_mut::<T>(object)
     }
 

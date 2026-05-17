@@ -153,7 +153,56 @@ fn glGetError(env: &mut Environment) -> GLenum {
             if ignore_gl_errors {
                 return 0;
             }
-            log!("Warning: glGetError() returned {:#x}", err);
+            // Many engines (Unity, Cocos2d, Mono Game) call glGetError
+            // every frame as an instrumentation hook. Once an error is
+            // sticky in the host GL state machine (e.g. a strict Mali
+            // driver returns GL_INVALID_ENUM for a call that the
+            // emulator tolerated), every subsequent app-side
+            // glGetError gets the same code, flooding the log. We
+            // remember which error codes we've already reported and
+            // demote repeats of the same code to log_dbg so the
+            // diagnostic information is preserved (developers can
+            // still use `--trace-gl-errors` to find the originating
+            // call) but the console isn't drowning in identical lines.
+            //
+            // The set is per-process (no thread synchronisation
+            // needed because GL contexts are accessed serialised
+            // through `with_ctx_and_mem`); we cap it at 16 distinct
+            // codes which is more than the entire OpenGL ES error
+            // enum space.
+            use std::sync::atomic::{AtomicU32, Ordering};
+            const MAX_REPORTED: usize = 16;
+            static REPORTED: [AtomicU32; MAX_REPORTED] = [
+                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
+                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
+                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
+                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
+            ];
+            let mut already_seen = false;
+            for slot in &REPORTED {
+                let cur = slot.load(Ordering::Relaxed);
+                if cur == err {
+                    already_seen = true;
+                    break;
+                }
+                if cur == 0
+                    && slot
+                        .compare_exchange(0, err, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                {
+                    break;
+                }
+            }
+            if already_seen {
+                log_dbg!("glGetError() returned {:#x} (already reported)", err);
+            } else {
+                log!(
+                    "Warning: glGetError() returned {:#x} (subsequent repeats \
+                     of the same code are silenced; rerun with \
+                     --trace-gl-errors to identify the originating GL call)",
+                    err
+                );
+            }
         }
         err
     })

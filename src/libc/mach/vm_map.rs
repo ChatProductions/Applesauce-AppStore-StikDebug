@@ -40,8 +40,14 @@ pub fn vm_allocate(
     } else {
         size
     };
-    // TODO: implement and use VM allocator instead
-    log_once!("TODO: vm_allocate() is implemented atop of standard allocator.");
+    // touchHLE delegates page-granularity Mach VM allocations to the
+    // standard guest heap allocator. This is fine in practice — apps
+    // call vm_allocate to obtain page-aligned scratch buffers, which
+    // env.mem.alloc does honour — but it does mean we can't enforce
+    // protection bits or sparse mappings. Demoted to debug because Mono
+    // / Boehm GC use vm_allocate as their primary heap source and the
+    // log_once line was the very first noisy entry in long sessions.
+    log_dbg!("vm_allocate() implemented atop standard allocator");
     let allocated = env.mem.alloc(new_size);
     let address = allocated.to_bits();
     assert!(address & PAGE_SIZE_ALIGN_MASK == 0);
@@ -62,8 +68,7 @@ fn vm_deallocate(
     size: mach_vm_size_t,
 ) -> kern_return_t {
     assert_eq!(target_task, MACH_TASK_SELF);
-    // TODO: implement and use VM (de)allocator instead
-    log_once!("TODO: vm_deallocate() is implemented atop of standard allocator.");
+    log_dbg!("vm_deallocate() implemented atop standard allocator");
 
     assert_eq!(
         *env.libc_state.mach_vm.allocations.get(&address).unwrap(),

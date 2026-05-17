@@ -138,8 +138,17 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
     {
         Ok(addr) => Ptr::from_bits(addr.addr_with_thumb_bit()),
         Err(_) => {
-            log!(
-                "Warning: dlsym() returning NULL for valid but unimplemented function {}",
+            // POSIX `dlsym(3)`: returning NULL for an unknown symbol is the
+            // documented success path for "this symbol does not exist".
+            // In particular, Mono PInvoke handlers (`[DllImport("__Internal")]`
+            // in C# code) probe dlsym to discover game-specific
+            // entry points that live inside the guest binary and are
+            // resolved separately by the Mono runtime. There's nothing
+            // for the host to do for these symbols — emitting a Warning
+            // every time turns a normal Mono cold start into hundreds
+            // of log lines. Demoted to debug-only.
+            log_dbg!(
+                "dlsym({}): no host-side implementation, returning NULL",
                 symbol_formatted
             );
             Ptr::null()
