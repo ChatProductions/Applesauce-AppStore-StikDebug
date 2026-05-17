@@ -319,7 +319,7 @@ impl Bundle {
         let bytes = candidates.iter().find_map(|path| match fs.read(path) {
             Ok(bytes) => Some(bytes),
             Err(_) => {
-                last_err = Some(format!("missing: {}", path.display()));
+                last_err = Some(format!("missing: {}", path.as_str()));
                 None
             }
         });

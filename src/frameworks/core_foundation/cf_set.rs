@@ -252,7 +252,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFSetCreate(_, _, _, _)),
     export_c_func!(CFSetCreateCopy(_, _)),
     export_c_func!(CFSetCreateMutable(_, _, _)),
-    export_c_func!(CFSetCreateMutableCopy(_, _, _, _)),
+    export_c_func!(CFSetCreateMutableCopy(_, _, _)),
     export_c_func!(CFSetGetCount(_)),
     export_c_func!(CFSetGetCountOfValue(_, _)),
     export_c_func!(CFSetContainsValue(_, _)),

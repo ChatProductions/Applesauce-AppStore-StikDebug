@@ -241,8 +241,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // expects the answer to be NO when the corresponding app is not
     // installed. We therefore log a debug note and return false so the
     // app's "app isn't installed" fallback runs.
-    let bundle_class: crate::objc::Class = msg_class![env; NSBundle];
-    let main_bundle: id = msg![env; bundle_class mainBundle];
+    let main_bundle: id = msg_class![env; NSBundle mainBundle];
     if main_bundle != nil {
         let key_str = ns_string::get_static_str(env, "LSApplicationQueriesSchemes");
         let allowed_arr: id = msg![env; main_bundle objectForInfoDictionaryKey:key_str];
