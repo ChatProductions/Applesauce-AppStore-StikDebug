@@ -110,6 +110,22 @@ pub const kCAFilterLinear: &str = "kCAFilterLinear";
 pub const kCAFilterNearest: &str = "kCAFilterNearest";
 pub const kCAFilterTrilinear: &str = "kCAFilterTrilinear";
 pub const kCAGravityCenter: &str = "center";
+// Apple QuartzCore framework — `CALayer.h` declares these as
+// `CA_EXTERN NSString * const kCAGravity*` strings. The literal values
+// match what real Core Animation uses internally and what `isEqual:`
+// comparisons on the contentsGravity property test against.
+pub const kCAGravityResize: &str = "resize";
+pub const kCAGravityResizeAspect: &str = "resizeAspect";
+pub const kCAGravityResizeAspectFill: &str = "resizeAspectFill";
+pub const kCAGravityTop: &str = "top";
+pub const kCAGravityBottom: &str = "bottom";
+pub const kCAGravityLeft: &str = "left";
+pub const kCAGravityRight: &str = "right";
+pub const kCAGravityTopLeft: &str = "topLeft";
+pub const kCAGravityTopRight: &str = "topRight";
+pub const kCAGravityBottomLeft: &str = "bottomLeft";
+pub const kCAGravityBottomRight: &str = "bottomRight";
+
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
     (
@@ -123,6 +139,44 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCAGravityCenter",
         HostConstant::NSString(kCAGravityCenter),
+    ),
+    (
+        "_kCAGravityResize",
+        HostConstant::NSString(kCAGravityResize),
+    ),
+    (
+        "_kCAGravityResizeAspect",
+        HostConstant::NSString(kCAGravityResizeAspect),
+    ),
+    (
+        "_kCAGravityResizeAspectFill",
+        HostConstant::NSString(kCAGravityResizeAspectFill),
+    ),
+    ("_kCAGravityTop", HostConstant::NSString(kCAGravityTop)),
+    (
+        "_kCAGravityBottom",
+        HostConstant::NSString(kCAGravityBottom),
+    ),
+    ("_kCAGravityLeft", HostConstant::NSString(kCAGravityLeft)),
+    (
+        "_kCAGravityRight",
+        HostConstant::NSString(kCAGravityRight),
+    ),
+    (
+        "_kCAGravityTopLeft",
+        HostConstant::NSString(kCAGravityTopLeft),
+    ),
+    (
+        "_kCAGravityTopRight",
+        HostConstant::NSString(kCAGravityTopRight),
+    ),
+    (
+        "_kCAGravityBottomLeft",
+        HostConstant::NSString(kCAGravityBottomLeft),
+    ),
+    (
+        "_kCAGravityBottomRight",
+        HostConstant::NSString(kCAGravityBottomRight),
     ),
 ];
 pub const CLASSES: ClassExports = objc_classes! {

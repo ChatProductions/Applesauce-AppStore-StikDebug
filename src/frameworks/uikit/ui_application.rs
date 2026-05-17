@@ -178,8 +178,97 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.on_parent_stack_in_coroutine(|window, _| window.set_screen_saver_enabled(!disabled))
 }
 
-- (bool)canOpenURL:(id)_url { // NSURL
-    log!("TODO: stubbed canOpenURL:");
+- (bool)canOpenURL:(id)url { // NSURL
+    // Apple `-[UIApplication canOpenURL:]` documentation: returns `YES`
+    // if the URL can be handled — i.e. the device has at least one
+    // installed application that has registered for the URL's scheme
+    // (`CFBundleURLTypes` → `CFBundleURLSchemes`). On iOS 9+ apps must
+    // additionally list each scheme they intend to query in
+    // `LSApplicationQueriesSchemes`, otherwise the call always returns
+    // NO.
+    //
+    // touchHLE has no app launcher, but legitimately reports YES for
+    // the URL schemes that the host environment (Android) routes to
+    // its own Intent handlers — `http`/`https`/`tel`/`mailto`/`sms`
+    // are universally handled, and we permit them here so apps that
+    // gate sharing buttons on `canOpenURL:` (Talking Carl's social
+    // links, the Bubble Witch share sheet, the Imobamoba "rate me"
+    // popup) take the "yes, link the user out" branch instead of
+    // greying out the button. Application-specific schemes (e.g.
+    // `fb://`, `twitter://`) we report as unavailable because no
+    // host-side app responds to them.
+    if url == nil {
+        return false;
+    }
+    let ns_string: id = msg![env; url scheme];
+    if ns_string == nil {
+        return false;
+    }
+    let scheme = ns_string::to_rust_string(env, ns_string);
+    let scheme_lower = scheme.to_lowercase();
+
+    // Schemes the host environment (browsers / mail / phone / SMS /
+    // file viewers) is guaranteed to handle on every reasonable
+    // device. Source: Apple "URL Schemes" Technote (
+    // https://developer.apple.com/library/archive/featuredarticles/iPhoneURLScheme_Reference/
+    // ).
+    const HOST_HANDLED_SCHEMES: &[&str] = &[
+        "http",
+        "https",
+        "ftp",
+        "tel",
+        "telprompt",
+        "facetime",
+        "facetime-audio",
+        "mailto",
+        "sms",
+        "imessage",
+        "file",
+        "data",
+        "itms",
+        "itms-apps",
+        "itms-services",
+        "itmss",
+        "maps",
+    ];
+    if HOST_HANDLED_SCHEMES.contains(&scheme_lower.as_str()) {
+        return true;
+    }
+
+    // Honour the Info.plist allow-list (`LSApplicationQueriesSchemes`).
+    // Real iOS uses this only to *gate* the query, not to answer it,
+    // but if the app lists a scheme there it almost always genuinely
+    // expects the answer to be NO when the corresponding app is not
+    // installed. We therefore log a debug note and return false so the
+    // app's "app isn't installed" fallback runs.
+    let main_bundle: id = msg_class![env; NSBundle mainBundle];
+    if main_bundle != nil {
+        let key_str = ns_string::get_static_str(env, "LSApplicationQueriesSchemes");
+        let allowed_arr: id = msg![env; main_bundle objectForInfoDictionaryKey:key_str];
+        if allowed_arr != nil {
+            let count: u32 = msg![env; allowed_arr count];
+            for i in 0..count {
+                let entry: id = msg![env; allowed_arr objectAtIndex:i];
+                if entry == nil {
+                    continue;
+                }
+                let entry_str = ns_string::to_rust_string(env, entry);
+                if entry_str.to_lowercase() == scheme_lower {
+                    log_dbg!(
+                        "canOpenURL: {:?} is in LSApplicationQueriesSchemes; \
+                         host can't launch it, returning NO",
+                        scheme_lower
+                    );
+                    return false;
+                }
+            }
+        }
+    }
+
+    log_dbg!(
+        "canOpenURL: scheme {:?} not handled by host, returning NO",
+        scheme_lower
+    );
     false
 }
 

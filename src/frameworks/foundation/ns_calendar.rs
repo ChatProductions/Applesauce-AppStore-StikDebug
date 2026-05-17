@@ -26,10 +26,68 @@ pub const NSWeekdayCalendarUnit: NSUInteger = 1 << 9; // kCFCalendarUnitWeekday
 /// TODO: Support other calendar types.
 const NSGregorianCalendar: &str = "NSGregorianCalendar";
 
-pub const CONSTANTS: ConstantExports = &[(
-    "_NSGregorianCalendar",
-    HostConstant::NSString(NSGregorianCalendar),
-)];
+// Apple Foundation calendar-identifier constants. Each is exported as
+// `NSString * const`. The string values are the canonical CFCalendar
+// identifiers used by `CFCalendarCreateWithIdentifier()` (see
+// `CFCalendar.h`); apps compare against them with `isEqualToString:` /
+// `CFEqual()`, so the literal values must match Apple's exactly.
+const NSBuddhistCalendar: &str = "buddhist";
+const NSPersianCalendar: &str = "persian";
+const NSIslamicCalendar: &str = "islamic";
+const NSHebrewCalendar: &str = "hebrew";
+const NSIslamicCivilCalendar: &str = "islamic-civil";
+const NSJapaneseCalendar: &str = "japanese";
+const NSRepublicOfChinaCalendar: &str = "roc";
+const NSChineseCalendar: &str = "chinese";
+const NSIndianCalendar: &str = "indian";
+const NSISO8601Calendar: &str = "iso8601";
+
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_NSGregorianCalendar",
+        HostConstant::NSString(NSGregorianCalendar),
+    ),
+    (
+        "_NSBuddhistCalendar",
+        HostConstant::NSString(NSBuddhistCalendar),
+    ),
+    (
+        "_NSPersianCalendar",
+        HostConstant::NSString(NSPersianCalendar),
+    ),
+    (
+        "_NSIslamicCalendar",
+        HostConstant::NSString(NSIslamicCalendar),
+    ),
+    (
+        "_NSHebrewCalendar",
+        HostConstant::NSString(NSHebrewCalendar),
+    ),
+    (
+        "_NSIslamicCivilCalendar",
+        HostConstant::NSString(NSIslamicCivilCalendar),
+    ),
+    (
+        "_NSJapaneseCalendar",
+        HostConstant::NSString(NSJapaneseCalendar),
+    ),
+    (
+        "_NSRepublicOfChinaCalendar",
+        HostConstant::NSString(NSRepublicOfChinaCalendar),
+    ),
+    (
+        "_NSChineseCalendar",
+        HostConstant::NSString(NSChineseCalendar),
+    ),
+    (
+        "_NSIndianCalendar",
+        HostConstant::NSString(NSIndianCalendar),
+    ),
+    (
+        "_NSISO8601Calendar",
+        HostConstant::NSString(NSISO8601Calendar),
+    ),
+];
 
 #[derive(Default)]
 pub struct State {

@@ -8,6 +8,7 @@
 
 use crate::frameworks::foundation::ns_string;
 use crate::frameworks::foundation::{NSInteger, NSUInteger};
+use crate::dyld::{ConstantExports, HostConstant};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -97,6 +98,206 @@ struct NSFetchRequestHostObject {
     includes_subentities: bool,
 }
 impl HostObject for NSFetchRequestHostObject {}
+
+// Apple Core Data — exported `NSString * const` identifiers used as
+// store-type tags, error-domain names, store-option keys, notification
+// names, and `userInfo` dictionary keys. The literal values must match
+// the system's, because apps compare them with `isEqualToString:` and
+// `CFStringCompare()` (e.g. `[type isEqualToString:NSSQLiteStoreType]`
+// to pick a SQLite store, or `[error.domain
+// isEqualToString:NSSQLiteErrorDomain]` to filter SQL errors).
+//
+// Reference: Apple Core Data Programming Guide,
+// `NSPersistentStoreCoordinator.h` and `NSManagedObjectContext.h`.
+pub const CONSTANTS: ConstantExports = &[
+    // Store-type identifiers
+    ("_NSSQLiteStoreType", HostConstant::NSString("SQLite")),
+    ("_NSXMLStoreType", HostConstant::NSString("XML")),
+    ("_NSBinaryStoreType", HostConstant::NSString("Binary")),
+    ("_NSInMemoryStoreType", HostConstant::NSString("InMemory")),
+    // Error domain
+    (
+        "_NSSQLiteErrorDomain",
+        HostConstant::NSString("NSSQLiteErrorDomain"),
+    ),
+    // NSError userInfo keys
+    (
+        "_NSDetailedErrorsKey",
+        HostConstant::NSString("NSDetailedErrorsKey"),
+    ),
+    (
+        "_NSValidationObjectErrorKey",
+        HostConstant::NSString("NSValidationObjectErrorKey"),
+    ),
+    (
+        "_NSValidationKeyErrorKey",
+        HostConstant::NSString("NSValidationKeyErrorKey"),
+    ),
+    (
+        "_NSValidationPredicateErrorKey",
+        HostConstant::NSString("NSValidationPredicateErrorKey"),
+    ),
+    (
+        "_NSValidationValueErrorKey",
+        HostConstant::NSString("NSValidationValueErrorKey"),
+    ),
+    (
+        "_NSAffectedStoresErrorKey",
+        HostConstant::NSString("NSAffectedStoresErrorKey"),
+    ),
+    (
+        "_NSAffectedObjectsErrorKey",
+        HostConstant::NSString("NSAffectedObjectsErrorKey"),
+    ),
+    (
+        "_NSPersistentStoreSaveConflictsErrorKey",
+        HostConstant::NSString("NSPersistentStoreSaveConflictsErrorKey"),
+    ),
+    // Persistent-store option keys
+    (
+        "_NSReadOnlyPersistentStoreOption",
+        HostConstant::NSString("NSReadOnlyPersistentStoreOption"),
+    ),
+    (
+        "_NSPersistentStoreTimeoutOption",
+        HostConstant::NSString("NSPersistentStoreTimeoutOption"),
+    ),
+    (
+        "_NSSQLitePragmasOption",
+        HostConstant::NSString("NSSQLitePragmasOption"),
+    ),
+    (
+        "_NSSQLiteAnalyzeOption",
+        HostConstant::NSString("NSSQLiteAnalyzeOption"),
+    ),
+    (
+        "_NSSQLiteManualVacuumOption",
+        HostConstant::NSString("NSSQLiteManualVacuumOption"),
+    ),
+    (
+        "_NSIgnorePersistentStoreVersioningOption",
+        HostConstant::NSString("NSIgnorePersistentStoreVersioningOption"),
+    ),
+    (
+        "_NSMigratePersistentStoresAutomaticallyOption",
+        HostConstant::NSString("NSMigratePersistentStoresAutomaticallyOption"),
+    ),
+    (
+        "_NSInferMappingModelAutomaticallyOption",
+        HostConstant::NSString("NSInferMappingModelAutomaticallyOption"),
+    ),
+    (
+        "_NSStoreUUIDInMetadataKey",
+        HostConstant::NSString("NSStoreUUID"),
+    ),
+    ("_NSStoreTypeKey", HostConstant::NSString("NSStoreType")),
+    (
+        "_NSStoreModelVersionHashesKey",
+        HostConstant::NSString("NSStoreModelVersionHashes"),
+    ),
+    (
+        "_NSStoreModelVersionIdentifiersKey",
+        HostConstant::NSString("NSStoreModelVersionIdentifiers"),
+    ),
+    (
+        "_NSPersistentStoreOSCompatibility",
+        HostConstant::NSString("NSPersistentStoreOSCompatibility"),
+    ),
+    // Merge-policy singletons. On real iOS these are `id`
+    // (NSMergePolicy*) constants. We expose unique non-NULL slots so
+    // identity comparisons (`policy == NSOverwriteMergePolicy`) work.
+    // The stub NSManagedObjectContext accepts any non-NULL id as the
+    // mergePolicy.
+    ("_NSErrorMergePolicy", HostConstant::NullPtr),
+    (
+        "_NSMergeByPropertyStoreTrumpMergePolicy",
+        HostConstant::NullPtr,
+    ),
+    (
+        "_NSMergeByPropertyObjectTrumpMergePolicy",
+        HostConstant::NullPtr,
+    ),
+    ("_NSOverwriteMergePolicy", HostConstant::NullPtr),
+    ("_NSRollbackMergePolicy", HostConstant::NullPtr),
+    // Notification names
+    (
+        "_NSManagedObjectContextDidSaveNotification",
+        HostConstant::NSString("NSManagedObjectContextDidSaveNotification"),
+    ),
+    (
+        "_NSManagedObjectContextWillSaveNotification",
+        HostConstant::NSString("NSManagedObjectContextWillSaveNotification"),
+    ),
+    (
+        "_NSManagedObjectContextObjectsDidChangeNotification",
+        HostConstant::NSString("NSManagedObjectContextObjectsDidChangeNotification"),
+    ),
+    (
+        "_NSPersistentStoreCoordinatorStoresDidChangeNotification",
+        HostConstant::NSString("NSPersistentStoreCoordinatorStoresDidChangeNotification"),
+    ),
+    (
+        "_NSPersistentStoreCoordinatorStoresWillChangeNotification",
+        HostConstant::NSString("NSPersistentStoreCoordinatorStoresWillChangeNotification"),
+    ),
+    (
+        "_NSPersistentStoreCoordinatorWillRemoveStoreNotification",
+        HostConstant::NSString("NSPersistentStoreCoordinatorWillRemoveStoreNotification"),
+    ),
+    (
+        "_NSPersistentStoreDidImportUbiquitousContentChangesNotification",
+        HostConstant::NSString("NSPersistentStoreDidImportUbiquitousContentChangesNotification"),
+    ),
+    // Notification userInfo keys
+    ("_NSInsertedObjectsKey", HostConstant::NSString("inserted")),
+    ("_NSUpdatedObjectsKey", HostConstant::NSString("updated")),
+    ("_NSDeletedObjectsKey", HostConstant::NSString("deleted")),
+    (
+        "_NSRefreshedObjectsKey",
+        HostConstant::NSString("refreshed"),
+    ),
+    (
+        "_NSInvalidatedObjectsKey",
+        HostConstant::NSString("invalidated"),
+    ),
+    (
+        "_NSInvalidatedAllObjectsKey",
+        HostConstant::NSString("invalidatedAll"),
+    ),
+    (
+        "_NSAddedPersistentStoresKey",
+        HostConstant::NSString("NSAddedPersistentStoresKey"),
+    ),
+    (
+        "_NSRemovedPersistentStoresKey",
+        HostConstant::NSString("NSRemovedPersistentStoresKey"),
+    ),
+    (
+        "_NSUUIDChangedPersistentStoresKey",
+        HostConstant::NSString("NSUUIDChangedPersistentStoresKey"),
+    ),
+    // Ubiquitous (iCloud) Core Data option keys
+    (
+        "_NSPersistentStoreUbiquitousContentNameKey",
+        HostConstant::NSString("NSPersistentStoreUbiquitousContentNameKey"),
+    ),
+    (
+        "_NSPersistentStoreUbiquitousContentURLKey",
+        HostConstant::NSString("NSPersistentStoreUbiquitousContentURLKey"),
+    ),
+    (
+        "_NSPersistentStoreUbiquitousPeerTokenOption",
+        HostConstant::NSString("NSPersistentStoreUbiquitousPeerTokenOption"),
+    ),
+    (
+        "_NSPersistentStoreRemoveUbiquitousMetadataOption",
+        HostConstant::NSString("NSPersistentStoreRemoveUbiquitousMetadataOption"),
+    ),
+    (
+        "_NSPersistentStoreRebuildFromUbiquitousContentOption",
+        HostConstant::NSString("NSPersistentStoreRebuildFromUbiquitousContentOption"),
+    ),
+];
 
 pub const CLASSES: ClassExports = objc_classes! {
 

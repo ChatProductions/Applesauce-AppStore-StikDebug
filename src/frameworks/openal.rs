@@ -36,7 +36,14 @@ pub const DYLIB: HostDylib = HostDylib {
 pub struct State {
     devices: HashMap<MutPtr<GuestALCdevice>, *mut ALCdevice>,
     contexts: HashMap<MutPtr<GuestALCcontext>, OpenALContext>,
-    strings_cache: HashMap<ALenum, ConstPtr<u8>>,
+    /// Cache of guest-memory copies of strings returned from
+    /// `alcGetString`. Per OpenAL 1.1 §6.3.5 the returned pointer is
+    /// owned by the implementation and must remain valid for the
+    /// lifetime of the device, so we hand the same pointer back on
+    /// repeat calls instead of allocating a new guest cstr each time.
+    /// Keyed on `(device, param)` because device-bound queries can
+    /// produce different strings per device.
+    strings_cache: HashMap<(MutPtr<GuestALCdevice>, ALenum), ConstPtr<u8>>,
     current_ctx: MutPtr<GuestALCcontext>,
 }
 impl State {
@@ -116,10 +123,13 @@ fn alcOpenDevice(env: &mut Environment, devicename: ConstPtr<u8>) -> MutPtr<Gues
                 env.mem.cstr_at_utf8(devicename),
                 env.mem.cstr_at_utf8(d_name)
             );
-            env.mem.free(d_name.cast_mut().cast());
+            // NB: do NOT free `d_name` here — `alcGetString` now caches
+            // its return values in `State::strings_cache` and reuses the
+            // same guest pointer on subsequent calls (per OpenAL 1.1
+            // §6.3.5). Freeing it would leave a dangling pointer in the
+            // cache.
             return Ptr::null();
         }
-        env.mem.free(d_name.cast_mut().cast());
     }
 
     let res = unsafe { al::alcOpenDevice(std::ptr::null()) };
@@ -145,6 +155,21 @@ fn alcCloseDevice(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> bool
         );
         return false;
     };
+    // Drop any cached `alcGetString` entries that referenced this
+    // device — both the device-specific ones and any global query
+    // (NULL device) entry would otherwise keep guest pointers alive
+    // forever. The owned guest memory is freed below.
+    let stale_keys: Vec<_> = State::get(env)
+        .strings_cache
+        .keys()
+        .filter(|(d, _)| *d == device)
+        .copied()
+        .collect();
+    for key in stale_keys {
+        if let Some(ptr) = State::get(env).strings_cache.remove(&key) {
+            env.mem.free(ptr.cast_mut().cast());
+        }
+    }
     env.mem.free(device.cast());
     let res = unsafe { al::alcCloseDevice(host_device) };
     log_dbg!("alcCloseDevice({:?}) => {:?}", device, res,);
@@ -173,8 +198,41 @@ fn alcGetString(
     device: MutPtr<GuestALCdevice>,
     param: ALenum,
 ) -> ConstPtr<u8> {
-    // Получаем реальный (хостовый) указатель на устройство, если игра его
-    // передала
+    // Check the cache first — `alcGetString` is documented (OpenAL 1.1
+    // spec, §6.3.5) to return a static, library-owned C string. Real
+    // implementations literally hand back the same pointer on every
+    // call. Apps in the wild (Pou, 3D Magic Words, Chess Free, etc.)
+    // call `alcGetString` from inside their audio update loop —
+    // allocating a fresh guest cstr each time leaks an unbounded
+    // amount of guest memory until the heap is exhausted, which on
+    // Android (where touchHLE has a small fixed guest address space)
+    // crashes the emulator after a few minutes of play.
+    //
+    // We key the cache on `(device, param)` because the spec lets
+    // device-bound queries (`ALC_DEVICE_SPECIFIER`, `ALC_EXTENSIONS`,
+    // ...) return a string that depends on the device identity. We
+    // collapse the `device` half to "null" / "non-null" since touchHLE
+    // exposes exactly one host device per guest device anyway and the
+    // contents-of-the-string are the same.
+    let cache_key = (
+        if device.is_null() {
+            MutPtr::<GuestALCdevice>::null()
+        } else {
+            device
+        },
+        param,
+    );
+    if let Some(&cached) = State::get(env).strings_cache.get(&cache_key) {
+        log_dbg!(
+            "alcGetString({:?}, {}) => {:?} (cached)",
+            device,
+            param,
+            cached
+        );
+        return cached;
+    }
+
+    // Resolve to the host OpenAL Soft device (or NULL for global queries).
     let host_device = if device.is_null() {
         std::ptr::null_mut()
     } else {
@@ -190,22 +248,25 @@ fn alcGetString(
         }
     };
 
-    // Передаем хостовое устройство (или NULL) в настоящую библиотеку OpenAL
-    // Soft
+    // SAFETY: alcGetString returns a pointer to memory owned by OpenAL
+    // Soft itself; we only borrow it long enough to copy into guest
+    // memory.
     let res = unsafe { al::alcGetString(host_device, param) };
-
-    // Защита от краша, если OpenAL ничего не вернул
     if res.is_null() {
         log_dbg!("alcGetString({:?}, {}) вернул NULL", device, param);
         return Ptr::null();
     }
 
     let s = unsafe { CStr::from_ptr(res) };
-    log_dbg!("alcGetString({:?}, {}) => {:?}", device, param, s);
-    log!("TODO: alcGetString({}) приводит к утечке памяти", param);
-
-    // Аллоцируем строку в памяти гостя
-    env.mem.alloc_and_write_cstr(s.to_bytes()).cast_const()
+    let guest_ptr = env.mem.alloc_and_write_cstr(s.to_bytes()).cast_const();
+    log_dbg!(
+        "alcGetString({:?}, {}) => {:?} (caching for future calls)",
+        device,
+        param,
+        s
+    );
+    State::get(env).strings_cache.insert(cache_key, guest_ptr);
+    guest_ptr
 }
 
 const ALLOWED_CONTEXT_ATTRIBUTES: [ALCint; 5] = [
@@ -490,7 +551,10 @@ fn alEnable(env: &mut Environment, capability: ALenum) {
 }
 
 fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
-    let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&param) {
+    // alGetString queries are global (not device-bound), so we key the
+    // shared strings cache with a null `GuestALCdevice` sentinel.
+    let cache_key = (MutPtr::<GuestALCdevice>::null(), param);
+    let res = if let Some(&str) = env.framework_state.openal.strings_cache.get(&cache_key) {
         str
     } else {
         // Strings extracted from iPhone 3GS, iOS 4.0.1 (also matches the iPhone
@@ -524,7 +588,7 @@ fn alGetString(env: &mut Environment, param: ALenum) -> ConstPtr<u8> {
         env.framework_state
             .openal
             .strings_cache
-            .insert(param, new_str);
+            .insert(cache_key, new_str);
         new_str
     };
     log_dbg!(

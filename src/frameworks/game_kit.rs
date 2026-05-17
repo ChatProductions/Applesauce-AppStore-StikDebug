@@ -19,6 +19,19 @@ pub mod gk_local_player;
 mod gk_score;
 mod gk_session;
 
+use crate::dyld::{ConstantExports, HostConstant};
+
+/// Apple GameKit framework — `GKError.h`. `GKErrorDomain` is the
+/// `NSError.domain` value used for every error reported by GameKit
+/// APIs (Game Center authentication, leaderboards, achievements,
+/// matchmaking). Apps compare against it with
+/// `[error.domain isEqualToString:GKErrorDomain]` to filter
+/// GameKit-specific failures, so the literal must match Apple's.
+pub const CONSTANTS: ConstantExports = &[(
+    "_GKErrorDomain",
+    HostConstant::NSString("GKErrorDomain"),
+)];
+
 /// Per-process state for the GameKit framework.
 #[derive(Default)]
 pub struct State {
@@ -36,6 +49,10 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         gk_score::CLASSES,
         gk_session::CLASSES,
     ],
-    constant_exports: &[gk_local_player::CONSTANTS, ad_banner_view::CONSTANTS],
+    constant_exports: &[
+        gk_local_player::CONSTANTS,
+        ad_banner_view::CONSTANTS,
+        CONSTANTS,
+    ],
     function_exports: &[],
 };

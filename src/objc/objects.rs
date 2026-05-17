@@ -333,6 +333,13 @@ impl super::ObjC {
             return;
         }
 
+        // ARC weak-reference contract: zero out every `__weak` slot
+        // that referred to this object before its memory is freed, so
+        // subsequent `objc_loadWeakRetained` calls correctly observe
+        // `nil`. This must happen before we drop the host object,
+        // because the writeback uses guest memory only.
+        self.zero_weak_references_for(object, mem);
+
         if let Some(entry) = self.objects.remove(&object) {
             std::mem::drop(entry.host_object);
             mem.free(object.cast());

@@ -224,6 +224,28 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UITransitionContextToViewKey",
         HostConstant::NSString("UITransitionContextToView"),
     ),
+    // UIKit text-attribute keys (iOS 5–6 era; deprecated in iOS 7 in favour
+    // of NSAttributedString attribute names but still present in apps that
+    // target iOS 5). Apple `UIStringDrawing.h` declares them as
+    // `UIKIT_EXTERN NSString * const`. Apps reach them through Mach-O
+    // symbol lookup or via `[bar setTitleTextAttributes:@{
+    //   UITextAttributeFont: ...,  UITextAttributeTextColor: ... }]`.
+    (
+        "_UITextAttributeFont",
+        HostConstant::NSString("UITextAttributeFont"),
+    ),
+    (
+        "_UITextAttributeTextColor",
+        HostConstant::NSString("UITextAttributeTextColor"),
+    ),
+    (
+        "_UITextAttributeTextShadowColor",
+        HostConstant::NSString("UITextAttributeTextShadowColor"),
+    ),
+    (
+        "_UITextAttributeTextShadowOffset",
+        HostConstant::NSString("UITextAttributeTextShadowOffset"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

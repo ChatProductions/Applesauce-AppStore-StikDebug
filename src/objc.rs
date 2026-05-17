@@ -30,6 +30,7 @@ mod objects;
 mod properties;
 mod selectors;
 mod synchronization;
+mod weak;
 
 pub use classes::{
     class_getInstanceMethod, class_getInstanceSize, class_getName, class_getSuperclass,
@@ -109,6 +110,24 @@ pub struct ObjC {
     /// `+initialize` dispatch contract:
     /// <https://developer.apple.com/documentation/objectivec/nsobject/1418639-initialize>
     pub(super) initialized_classes: HashSet<Class>,
+
+    /// ARC weak-reference side table.
+    ///
+    /// `objc_storeWeak(location, value)` registers `location` (a guest
+    /// `id*`) as a slot that should be zeroed when `value` is
+    /// deallocated. Per the clang ARC specification this is the only
+    /// way the runtime can guarantee that "weak references load nil
+    /// once the referenced object has been destroyed". We mirror that
+    /// behaviour exactly: every `dealloc_object` walks the entry for
+    /// the object being torn down and writes `nil` into every
+    /// registered location before freeing the object's memory.
+    ///
+    /// References:
+    /// - clang ARC documentation, "Runtime support",
+    ///   `objc_storeWeak` / `objc_loadWeakRetained` / `objc_destroyWeak`.
+    /// - Apple `objc-runtime-new.mm` `weak_table_t` (open-source on
+    ///   <https://opensource.apple.com/source/objc4/>).
+    pub(crate) weak_refs: HashMap<id, Vec<crate::mem::MutPtr<id>>>,
 }
 
 impl ObjC {
@@ -120,6 +139,7 @@ impl ObjC {
             sync_mutexes: HashMap::new(),
             message_type_info: None,
             initialized_classes: HashSet::new(),
+            weak_refs: HashMap::new(),
         }
     }
 
@@ -138,7 +158,7 @@ pub const DYLIB: HostDylib = HostDylib {
     aliases: &["/usr/lib/libobjc.dylib"],
     class_exports: &[],
     constant_exports: &[CONSTANTS],
-    function_exports: &[FUNCTIONS],
+    function_exports: &[FUNCTIONS, weak::FUNCTIONS],
 };
 
 const CONSTANTS: ConstantExports = &[

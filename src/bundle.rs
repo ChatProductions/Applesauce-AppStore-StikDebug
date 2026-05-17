@@ -192,30 +192,143 @@ impl Bundle {
             .unwrap_or(false)
     }
 
-    fn icon_path(&self) -> GuestPathBuf {
-        if let Some(filename) = self.plist.get("CFBundleIconFile") {
-            if filename
-                .as_string()
-                .unwrap()
-                .to_lowercase()
-                .ends_with(".png")
-            {
-                self.path.join(filename.as_string().unwrap())
+    /// Resolve all candidate icon files declared by the bundle's
+    /// Info.plist, in priority order. Returns paths from most-specific
+    /// to least-specific so callers can fall back when a file is
+    /// missing on disk.
+    ///
+    /// Apple's documented lookup order (see "App Icons on iPhone, iPod
+    /// touch, and iPad", `CFBundleIcons` reference, and historical
+    /// `CFBundleIconFile`):
+    ///
+    /// 1. `CFBundleIcons` (iOS 5+) → `CFBundlePrimaryIcon` →
+    ///    `CFBundleIconFiles[]` (an array of stem names; iOS picks the
+    ///    one whose suffix matches the device class — `@2x.png`,
+    ///    `@2x~ipad.png`, …; we just try the literal name and the
+    ///    explicit "@2x.png"/".png" decorations).
+    /// 2. `CFBundleIconFile` (legacy single-string key, iOS 2/3/4).
+    /// 3. Hard-coded defaults: `Icon.png`, `icon.png`,
+    ///    `Icon@2x.png`.
+    fn icon_path_candidates(&self) -> Vec<GuestPathBuf> {
+        let mut candidates: Vec<String> = Vec::new();
+
+        let push = |candidates: &mut Vec<String>, name: &str| {
+            let lower = name.to_lowercase();
+            if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+                candidates.push(name.to_string());
             } else {
-                let filename_with_extension = format!("{}.png", filename.as_string().unwrap());
-                self.path.join(filename_with_extension)
+                candidates.push(format!("{name}.png"));
+                candidates.push(format!("{name}@2x.png"));
+                candidates.push(format!("{name}.jpg"));
             }
-        } else {
-            self.path.join("Icon.png")
+        };
+
+        // 1. CFBundleIcons → CFBundlePrimaryIcon → CFBundleIconFiles (iOS 5+).
+        if let Some(icons) = self.plist.get("CFBundleIcons") {
+            if let Some(dict) = icons.as_dictionary() {
+                if let Some(primary) = dict.get("CFBundlePrimaryIcon") {
+                    if let Some(primary_dict) = primary.as_dictionary() {
+                        if let Some(files) = primary_dict.get("CFBundleIconFiles") {
+                            if let Some(arr) = files.as_array() {
+                                for entry in arr {
+                                    if let Some(s) = entry.as_string() {
+                                        push(&mut candidates, s);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+        // The iPad-specific variant (`CFBundleIcons~ipad`) lives at the
+        // top level too.
+        if let Some(icons) = self.plist.get("CFBundleIcons~ipad") {
+            if let Some(dict) = icons.as_dictionary() {
+                if let Some(primary) = dict.get("CFBundlePrimaryIcon") {
+                    if let Some(primary_dict) = primary.as_dictionary() {
+                        if let Some(files) = primary_dict.get("CFBundleIconFiles") {
+                            if let Some(arr) = files.as_array() {
+                                for entry in arr {
+                                    if let Some(s) = entry.as_string() {
+                                        push(&mut candidates, s);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. CFBundleIconFiles[] at the top level (rare; iOS 3.2+ aux key).
+        if let Some(files) = self.plist.get("CFBundleIconFiles") {
+            if let Some(arr) = files.as_array() {
+                for entry in arr {
+                    if let Some(s) = entry.as_string() {
+                        push(&mut candidates, s);
+                    }
+                }
+            }
+        }
+
+        // 3. Legacy CFBundleIconFile (iOS 2/3/4).
+        if let Some(filename) = self.plist.get("CFBundleIconFile") {
+            if let Some(s) = filename.as_string() {
+                push(&mut candidates, s);
+            }
+        }
+
+        // 4. Hard-coded defaults documented in
+        //    "Icon Files" of the iPhone Application Programming Guide.
+        for default in [
+            "Icon.png",
+            "icon.png",
+            "Icon@2x.png",
+            "Icon-72.png",
+            "Icon-Small.png",
+        ] {
+            candidates.push(default.to_string());
+        }
+
+        // Deduplicate while preserving order.
+        let mut seen = std::collections::HashSet::new();
+        candidates.retain(|c| seen.insert(c.clone()));
+
+        candidates
+            .into_iter()
+            .map(|name| self.path.join(name))
+            .collect()
+    }
+
+    fn icon_path(&self) -> GuestPathBuf {
+        // Backwards-compatible single-path accessor: return the first
+        // candidate produced by the full lookup. The new `load_icon`
+        // path tries all of them in order before giving up.
+        self.icon_path_candidates()
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| self.path.join("Icon.png"))
     }
 
     /// Load icon and round off its corners (and add sheen if needed) for
     /// display.
     pub fn load_icon(&self, fs: &Fs) -> Result<Image, String> {
-        let bytes = fs
-            .read(self.icon_path())
-            .map_err(|_| "Could not read icon file".to_string())?;
+        let candidates = self.icon_path_candidates();
+        let mut last_err: Option<String> = None;
+        let bytes = candidates.iter().find_map(|path| match fs.read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(_) => {
+                last_err = Some(format!("missing: {}", path.as_str()));
+                None
+            }
+        });
+        let bytes = bytes.ok_or_else(|| {
+            // Mirror the historical phrasing so any tooling that scrapes
+            // the warning still recognises it.
+            "Could not read icon file".to_string()
+        })?;
+        let _ = last_err;
         let mut image =
             Image::from_bytes(&bytes).map_err(|e| format!("Could not parse icon image: {e}"))?;
         // UIPrerenderedIcon is used to avoid iOS applying a sheen effect,
