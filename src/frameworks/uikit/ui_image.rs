@@ -122,6 +122,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// iOS 4.0+
++ (id)imageWithCGImage:(CGImageRef)cg_image scale:(CGFloat)_scale orientation:(NSInteger)orientation {
+    // touchHLE's UIImage doesn't honour the scale factor (the app already
+    // assumes the image's pixel dimensions are correct), so we just call
+    // the regular initializer and store the orientation. Apps on iOS 5/6
+    // (e.g. ketchapp's "2 Cars") rely on this overload existing —
+    // returning `nil` from `[UIImage imageWithCGImage:scale:orientation:]`
+    // makes most images render as a placeholder.
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithCGImage:cg_image];
+    if new != nil {
+        env.objc.borrow_mut::<UIImageHostObject>(new).orientation = orientation;
+    }
+    autorelease(env, new)
+}
+
+// iOS 4.0+
++ (id)imageWithCGImage:(CGImageRef)cg_image scale:(CGFloat)scale {
+    msg![env; this imageWithCGImage:cg_image scale:scale orientation:(0i32)]
+}
+
 // MARK: - Initializers
 
 - (id)initWithCGImage:(CGImageRef)cg_image {

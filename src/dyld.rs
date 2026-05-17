@@ -699,6 +699,19 @@ impl Dyld {
                 mem.write(fn_ptr + 1, encode_a32_trap());
                 log_dbg!("Stubbed ___gxx_personality_sj0 -> {:#x}", fn_ptr.to_bits());
                 fn_ptr.cast().cast_const()
+            } else if name == "___objc_personality_v0" {
+                // Objective-C exception personality routine. Mirrors the
+                // non-lazy stub above: a guest-code BX LR returning 0
+                // (_URC_NO_REASON) so the unwinder keeps walking instead
+                // of branching to NULL when an iOS 5+ binary places a
+                // pointer to this symbol directly into its __DATA section
+                // via an external relocation (rather than through the
+                // __nl_symbol_ptr table).
+                let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+                mem.write(fn_ptr + 0, encode_a32_ret());
+                mem.write(fn_ptr + 1, encode_a32_trap());
+                log_dbg!("Stubbed ___objc_personality_v0 -> {:#x}", fn_ptr.to_bits());
+                fn_ptr.cast().cast_const()
             } else if name == "___cxa_terminate_handler"
                 || name == "___cxa_unexpected_handler"
                 || name == "___cxa_new_handler"

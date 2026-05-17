@@ -277,6 +277,36 @@ fn __cxa_call_unexpected(env: &mut Environment, _exc: MutVoidPtr) {
     }
 }
 
+/// Itanium ABI `__dynamic_cast`:
+///
+/// ```c
+/// void *__dynamic_cast(const void *src,
+///                      const __class_type_info *src_type,
+///                      const __class_type_info *dst_type,
+///                      ptrdiff_t src2dst_offset);
+/// ```
+///
+/// Returns the casted pointer on success, or NULL on failure (the cast
+/// does not apply / a `dynamic_cast<T*>` should evaluate to nullptr).
+///
+/// touchHLE has no real RTTI walk because every Itanium type_info vtable
+/// is stubbed (see [crate::dyld::do_non_lazy_linking]). We can't ever
+/// say "yes this is the right cast", so always returning NULL is the
+/// only safe answer — it matches the language semantics for failed
+/// casts. Apps that rely on dynamic_cast to *succeed* (rather than just
+/// using it as a defensive nullptr check) will still misbehave, but
+/// they were already going to crash on the broken vtables anyway.
+fn __dynamic_cast(
+    _env: &mut Environment,
+    _src: ConstVoidPtr,
+    _src_type: ConstVoidPtr,
+    _dst_type: ConstVoidPtr,
+    _src2dst_offset: i32,
+) -> ConstVoidPtr {
+    log_dbg!("__dynamic_cast: returning NULL (RTTI vtables are stubbed)");
+    Ptr::null()
+}
+
 // === SjLj unwinder entry points ===
 //
 // `_Unwind_SjLj_Register/Unregister` push and pop a jmpbuf onto the
@@ -344,6 +374,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_end_catch()),
     export_c_func!(__cxa_pure_virtual()),
     export_c_func!(__cxa_call_unexpected(_)),
+    export_c_func!(__dynamic_cast(_, _, _, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_RaiseException(_)),
