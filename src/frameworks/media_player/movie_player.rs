@@ -117,6 +117,24 @@ pub const CONSTANTS: ConstantExports = &[
         "_MPMoviePlayerPlaybackDidFinishReasonUserInfoKey",
         HostConstant::NSString(MPMoviePlayerPlaybackDidFinishReasonUserInfoKey),
     ),
+    // iOS 4+ MPMoviePlayer notifications referenced by 6.0+ apps that we
+    // can still satisfy as plain constants (no real movie playback yet).
+    (
+        "_MPMovieDurationAvailableNotification",
+        HostConstant::NSString("MPMovieDurationAvailableNotification"),
+    ),
+    (
+        "_MPMovieNaturalSizeAvailableNotification",
+        HostConstant::NSString("MPMovieNaturalSizeAvailableNotification"),
+    ),
+    (
+        "_MPMovieMediaTypesAvailableNotification",
+        HostConstant::NSString("MPMovieMediaTypesAvailableNotification"),
+    ),
+    (
+        "_MPMovieSourceTypeAvailableNotification",
+        HostConstant::NSString("MPMovieSourceTypeAvailableNotification"),
+    ),
 ];
 
 struct MPMoviePlayerControllerHostObject {

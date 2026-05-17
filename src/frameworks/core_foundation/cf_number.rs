@@ -152,6 +152,18 @@ fn CFBooleanGetValue(env: &mut Environment, boolean: CFBooleanRef) -> bool {
 
 pub const CONSTANTS: ConstantExports = &[
     (
+        "_kCFNull",
+        HostConstant::Custom(|env| {
+            // CFNull is a singleton CFType. Apps usually only compare against
+            // it for identity (`x == kCFNull`) or pass it through dictionaries
+            // representing JSON `null` values. NSNull already exists in our
+            // runtime and is a singleton, so we reuse it: any later reference
+            // to `kCFNull` will resolve to the same NSNull pointer-to-pointer.
+            let null: id = msg_class![env; NSNull null];
+            env.mem.alloc_and_write(null).cast_void().cast_const()
+        }),
+    ),
+    (
         "_kCFBooleanFalse",
         HostConstant::Custom(|env| {
             let num = msg_class![env; NSNumber alloc];

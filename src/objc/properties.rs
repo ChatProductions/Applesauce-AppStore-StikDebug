@@ -241,6 +241,40 @@ pub(super) fn objc_setProperty(
     }
 }
 
+/// Optimised non-atomic, copy-property setter. Mid-iOS-6+ compilers emit
+/// `_objc_setProperty_nonatomic_copy` instead of the generic
+/// `_objc_setProperty(…, atomic=false, should_copy=1)` for autosynthesised
+/// `@property (nonatomic, copy)` setters; we just forward to the generic
+/// implementation so the ivar gets a real `copyWithZone:` of the new value
+/// (with proper retain/release of the previous value), instead of touchHLE
+/// installing a return-0 stub that silently drops every assignment.
+///
+/// Note the argument order: `(self, _cmd, newValue, offset)` — the
+/// optimised variants put the value *before* the offset, the opposite of
+/// the generic [objc_setProperty].
+pub(super) fn objc_setProperty_nonatomic_copy(
+    env: &mut Environment,
+    this: id,
+    _cmd: SEL,
+    value: id,
+    offset: GuestISize,
+) {
+    objc_setProperty(env, this, _cmd, offset, value, /* atomic: */ false, /* should_copy: */ 1)
+}
+
+/// Optimised atomic, copy-property setter. Same idea as
+/// [objc_setProperty_nonatomic_copy] but emitted for `@property (copy)` /
+/// `@property (atomic, copy)` setters.
+pub(super) fn objc_setProperty_atomic_copy(
+    env: &mut Environment,
+    this: id,
+    _cmd: SEL,
+    value: id,
+    offset: GuestISize,
+) {
+    objc_setProperty(env, this, _cmd, offset, value, /* atomic: */ true, /* should_copy: */ 1)
+}
+
 // note: https://opensource.apple.com/source/objc4/objc4-723/runtime/objc-accessors.mm.auto.html
 //       says that hasStrong is unused.
 pub(super) fn objc_copyStruct(

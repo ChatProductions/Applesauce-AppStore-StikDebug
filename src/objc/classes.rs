@@ -942,8 +942,23 @@ impl ObjC {
     }
 
     pub fn get_class_name(&self, class: Class) -> &str {
-        self.try_get_class_name(class)
-            .expect("Could not get class name!")
+        // Previously this `expect`-ed and panicked the whole emulator if the
+        // class pointer didn't have a registered host object (e.g. when the
+        // app sends a message to an object whose isa was clobbered, or when
+        // a `borrow::<ClassHostObject>` already produced a phantom object —
+        // see the "SUPER HACK! Faking borrow for missing object (null) of
+        // type ClassHostObject" warnings that immediately precede the crash
+        // in older logs). Recovering with a placeholder name keeps the rest
+        // of the runtime running so logs/diagnostics still print useful
+        // info instead of taking down the whole process.
+        self.try_get_class_name(class).unwrap_or_else(|| {
+            log!(
+                "Warning: get_class_name: no host object for class {:?}; \
+                 returning \"<unknown>\".",
+                class,
+            );
+            "<unknown>"
+        })
     }
 
     pub fn get_superclass(&self, class: Class) -> Class {

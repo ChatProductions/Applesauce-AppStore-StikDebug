@@ -73,6 +73,69 @@ pub const ADDRESS_BOOK_UI: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::address_book_ui::FUNCTIONS],
 };
 
+// Social (stub — no real share-sheet implementation yet, but we resolve
+// the SLServiceType* string constants so the linker doesn't leave them NULL)
+pub const SOCIAL: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/Social.framework/Social",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[frameworks::social::CONSTANTS],
+    function_exports: &[frameworks::social::FUNCTIONS],
+};
+
+// Twitter (stub — superseded by Social on iOS 6+, but legacy apps still
+// link it; we route SLServiceTypeTwitter through Social).
+pub const TWITTER: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/Twitter.framework/Twitter",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+
+// CoreTelephony (stub — no real cellular support, but we resolve the
+// CTRadioAccessTechnology* string constants and CTRadioAccessTechnology-
+// DidChangeNotification name so observers don't dereference NULL).
+pub const CORE_TELEPHONY: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[frameworks::core_telephony::CONSTANTS],
+    function_exports: &[frameworks::core_telephony::FUNCTIONS],
+};
+
+// EventKit / EventKitUI / iAd / AdSupport (stubs — apps just need them to
+// resolve so the "missing dylib" warning doesn't fire and any non-lazy
+// references don't end up pointing at NULL).
+pub const EVENT_KIT: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/EventKit.framework/EventKit",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+pub const EVENT_KIT_UI: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/EventKitUI.framework/EventKitUI",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+pub const IAD: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/iAd.framework/iAd",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+pub const AD_SUPPORT: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/AdSupport.framework/AdSupport",
+    aliases: &[],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -110,6 +173,13 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &MAP_KIT,
     &MESSAGE_UI,
     &ADDRESS_BOOK_UI,
+    &SOCIAL,
+    &TWITTER,
+    &CORE_TELEPHONY,
+    &EVENT_KIT,
+    &EVENT_KIT_UI,
+    &IAD,
+    &AD_SUPPORT,
 ];
 
 #[cfg(test)]

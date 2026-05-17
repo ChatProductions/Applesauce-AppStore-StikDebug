@@ -711,6 +711,48 @@ impl Dyld {
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
                 p.cast().cast_const()
+            } else if name == "__dispatch_source_type_read"
+                || name == "__dispatch_source_type_write"
+                || name == "__dispatch_source_type_timer"
+                || name == "__dispatch_source_type_data_add"
+                || name == "__dispatch_source_type_data_or"
+                || name == "__dispatch_source_type_signal"
+                || name == "__dispatch_source_type_proc"
+                || name == "__dispatch_source_type_vnode"
+                || name == "__dispatch_source_type_mach_send"
+                || name == "__dispatch_source_type_mach_recv"
+                || name == "__dispatch_source_type_memorypressure"
+            {
+                // GCD dispatch_source_type_t are opaque "type tag" pointers;
+                // touchHLE's libdispatch implementation never inspects their
+                // contents, only their identity. A small non-NULL allocation
+                // satisfies that contract and prevents NULL-page reads when
+                // an app passes one to dispatch_source_create.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                p.cast().cast_const()
+            } else if name == "_in6addr_any" || name == "_in6addr_loopback" {
+                // `struct in6_addr` is 16 bytes. `in6addr_any` is all zeros
+                // (`::`) and `in6addr_loopback` is `::1` (last byte = 1).
+                let p: MutPtr<u8> = mem.alloc(16).cast();
+                for i in 0..16 {
+                    mem.write(p + i, 0);
+                }
+                if name == "_in6addr_loopback" {
+                    mem.write(p + 15, 1u8);
+                }
+                p.cast().cast_const()
+            } else if name == "_NDR_record" {
+                // MIG `NDR_record` is a 12-byte transfer-syntax descriptor
+                // that's part of the (unused-by-touchHLE) Mach IPC stack.
+                // Apps reference the symbol from auto-generated MIG stubs but
+                // never actually transmit the bytes. Provide a zero-filled
+                // slot so the linker doesn't leave a NULL pointer behind.
+                let p: MutPtr<u8> = mem.alloc(12).cast();
+                for i in 0..12 {
+                    mem.write(p + i, 0);
+                }
+                p.cast().cast_const()
             } else if let Some(&external_addr) = bins
                 .iter()
                 .flat_map(|other_bin| other_bin.exported_symbols.get(name))
@@ -907,6 +949,51 @@ impl Dyld {
                 // Default-NULL global handler pointer.
                 let p: MutPtr<u32> = mem.alloc(4).cast();
                 mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
+                continue;
+            }
+
+            if symbol == "__dispatch_source_type_read"
+                || symbol == "__dispatch_source_type_write"
+                || symbol == "__dispatch_source_type_timer"
+                || symbol == "__dispatch_source_type_data_add"
+                || symbol == "__dispatch_source_type_data_or"
+                || symbol == "__dispatch_source_type_signal"
+                || symbol == "__dispatch_source_type_proc"
+                || symbol == "__dispatch_source_type_vnode"
+                || symbol == "__dispatch_source_type_mach_send"
+                || symbol == "__dispatch_source_type_mach_recv"
+                || symbol == "__dispatch_source_type_memorypressure"
+            {
+                // See the matching branch in the external-relocation loop.
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                mem.write(ptr_ptr, p.cast().cast_const());
+                log_dbg!(
+                    "Stubbed dispatch_source_type {} -> {:#x}",
+                    symbol,
+                    p.to_bits()
+                );
+                continue;
+            }
+
+            if symbol == "_in6addr_any" || symbol == "_in6addr_loopback" {
+                let p: MutPtr<u8> = mem.alloc(16).cast();
+                for i in 0..16 {
+                    mem.write(p + i, 0);
+                }
+                if symbol == "_in6addr_loopback" {
+                    mem.write(p + 15, 1u8);
+                }
+                mem.write(ptr_ptr, p.cast().cast_const());
+                continue;
+            }
+
+            if symbol == "_NDR_record" {
+                let p: MutPtr<u8> = mem.alloc(12).cast();
+                for i in 0..12 {
+                    mem.write(p + i, 0);
+                }
                 mem.write(ptr_ptr, p.cast().cast_const());
                 continue;
             }

@@ -132,6 +132,40 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIApplicationDidChangeStatusBarOrientationNotification",
         HostConstant::NSString("UIApplicationDidChangeStatusBarOrientationNotification"),
     ),
+    // Status-bar frame change notifications + userInfo key.
+    (
+        "_UIApplicationWillChangeStatusBarFrameNotification",
+        HostConstant::NSString("UIApplicationWillChangeStatusBarFrameNotification"),
+    ),
+    (
+        "_UIApplicationDidChangeStatusBarFrameNotification",
+        HostConstant::NSString("UIApplicationDidChangeStatusBarFrameNotification"),
+    ),
+    (
+        "_UIApplicationStatusBarFrameUserInfoKey",
+        HostConstant::NSString("UIApplicationStatusBarFrameUserInfoKey"),
+    ),
+    (
+        "_UIApplicationStatusBarOrientationUserInfoKey",
+        HostConstant::NSString("UIApplicationStatusBarOrientationUserInfoKey"),
+    ),
+    // UIViewController transition coordinator context keys (iOS 5+).
+    (
+        "_UITransitionContextFromViewControllerKey",
+        HostConstant::NSString("UITransitionContextFromViewController"),
+    ),
+    (
+        "_UITransitionContextToViewControllerKey",
+        HostConstant::NSString("UITransitionContextToViewController"),
+    ),
+    (
+        "_UITransitionContextFromViewKey",
+        HostConstant::NSString("UITransitionContextFromView"),
+    ),
+    (
+        "_UITransitionContextToViewKey",
+        HostConstant::NSString("UITransitionContextToView"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
