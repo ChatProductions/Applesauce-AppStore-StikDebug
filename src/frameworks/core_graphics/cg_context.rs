@@ -1043,6 +1043,138 @@ fn CGContextShowGlyphsAtPoint(
     });
 }
 
+/// `void CGContextShowGlyphsAtPositions(CGContextRef c,
+///     const CGGlyph *glyphs, const CGPoint *positions, size_t count)`
+///
+/// Draws glyphs at specified positions relative to the text position.
+/// Each position gives the (x, y) offset for the corresponding glyph.
+fn CGContextShowGlyphsAtPositions(
+    env: &mut Environment,
+    context: CGContextRef,
+    glyphs: ConstPtr<CGGlyph>,
+    positions: ConstPtr<CGPoint>,
+    count: GuestUSize,
+) {
+    if context.is_null() {
+        return;
+    }
+    let font = env.objc.borrow::<CGContextHostObject>(context).font;
+    if font.is_null() {
+        log!("Warning: CGContextShowGlyphsAtPositions called with no font set");
+        return;
+    }
+    if !super::cg_font::is_data_provider_font(env, font) {
+        log!(
+            "TODO: CGContextShowGlyphsAtPositions with non-data-provider font {:?}, skipping",
+            font
+        );
+        return;
+    }
+
+    let mut glyph_ids = Vec::with_capacity(count as usize);
+    let mut pos_vec = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let glyph_id: CGGlyph = env.mem.read(glyphs + i);
+        glyph_ids.push(rusttype::GlyphId(glyph_id));
+        let pos: CGPoint = env.mem.read(positions + i);
+        pos_vec.push((pos.x, pos.y));
+    }
+
+    let font_size = env.objc.borrow::<CGContextHostObject>(context).font_size;
+
+    let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
+    let fill_color = drawer.rgb_fill_color();
+
+    let rusttype_font = &env.objc.borrow::<CGFontHostObject>(font).font;
+    rusttype_font.draw_glyphs_at_positions(
+        font_size,
+        &glyph_ids,
+        &pos_vec,
+        (0.0, 0.0),
+        |raster_glyph| {
+            uikit::ui_font::draw_font_glyph(
+                &mut drawer,
+                raster_glyph,
+                fill_color,
+                /* clip_x: */ None,
+                /* clip_y: */ None,
+            )
+        },
+    );
+}
+
+/// `void CGContextShowGlyphsWithAdvances(CGContextRef c,
+///     const CGGlyph *glyphs, const CGSize *advances, size_t count)`
+///
+/// Draws glyphs with explicit advance widths/heights between each glyph.
+fn CGContextShowGlyphsWithAdvances(
+    env: &mut Environment,
+    context: CGContextRef,
+    glyphs: ConstPtr<CGGlyph>,
+    advances: ConstPtr<super::CGSize>,
+    count: GuestUSize,
+) {
+    if context.is_null() {
+        return;
+    }
+    let font = env.objc.borrow::<CGContextHostObject>(context).font;
+    if font.is_null() {
+        log!("Warning: CGContextShowGlyphsWithAdvances called with no font set");
+        return;
+    }
+    if !super::cg_font::is_data_provider_font(env, font) {
+        log!(
+            "TODO: CGContextShowGlyphsWithAdvances with non-data-provider font {:?}, skipping",
+            font
+        );
+        return;
+    }
+
+    let mut glyph_ids = Vec::with_capacity(count as usize);
+    let mut advance_vec = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let glyph_id: CGGlyph = env.mem.read(glyphs + i);
+        glyph_ids.push(rusttype::GlyphId(glyph_id));
+        let adv: super::CGSize = env.mem.read(advances + i);
+        advance_vec.push((adv.width, adv.height));
+    }
+
+    let font_size = env.objc.borrow::<CGContextHostObject>(context).font_size;
+
+    let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
+    let fill_color = drawer.rgb_fill_color();
+
+    let rusttype_font = &env.objc.borrow::<CGFontHostObject>(font).font;
+    rusttype_font.draw_glyphs_with_advances(
+        font_size,
+        &glyph_ids,
+        &advance_vec,
+        (0.0, 0.0),
+        |raster_glyph| {
+            uikit::ui_font::draw_font_glyph(
+                &mut drawer,
+                raster_glyph,
+                fill_color,
+                /* clip_x: */ None,
+                /* clip_y: */ None,
+            )
+        },
+    );
+}
+
+/// `void CGContextShowGlyphs(CGContextRef c, const CGGlyph *glyphs, size_t count)`
+///
+/// Draws glyphs at the current text position. Since we don't track text
+/// position fully yet, we draw at (0, 0).
+fn CGContextShowGlyphs(
+    env: &mut Environment,
+    context: CGContextRef,
+    glyphs: ConstPtr<CGGlyph>,
+    count: GuestUSize,
+) {
+    CGContextShowGlyphsAtPoint(env, context, 0.0, 0.0, glyphs, count);
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -1073,6 +1205,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetFontSize(_, _)),
     export_c_func!(CGContextSetFont(_, _)),
     export_c_func!(CGContextShowGlyphsAtPoint(_, _, _, _, _)),
+    export_c_func!(CGContextShowGlyphsAtPositions(_, _, _, _)),
+    export_c_func!(CGContextShowGlyphsWithAdvances(_, _, _, _)),
+    export_c_func!(CGContextShowGlyphs(_, _, _)),
     // Add to FUNCTIONS:
     export_c_func!(CGContextSetStrokeColorWithColor(_, _)),
     export_c_func!(CGContextSetGrayStrokeColor(_, _, _)),

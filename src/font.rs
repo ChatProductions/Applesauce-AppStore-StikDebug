@@ -19,6 +19,8 @@ use std::io::Read;
 
 pub struct Font {
     font: rusttype::Font<'static>,
+    /// Raw font file bytes — needed for TrueType table access (CGFontCopyTableForTag).
+    raw_data: Option<Vec<u8>>,
 }
 
 pub enum TextAlignment {
@@ -71,6 +73,97 @@ impl Font {
         self.font.glyph(char::from_u32(c as u32).unwrap()).id()
     }
 
+    /// Returns the total number of glyphs in the font.
+    pub fn glyph_count(&self) -> u32 {
+        self.font.glyph_count() as u32
+    }
+
+    /// Returns the units-per-em value from the font. rusttype normalizes to
+    /// 1.0 scale = 1 em, so we read it from the raw 'head' table if available,
+    /// otherwise default to 2048.
+    pub fn units_per_em(&self) -> u16 {
+        if let Some(data) = self.table_data(0x68656164 /* 'head' */) {
+            if data.len() >= 20 {
+                // unitsPerEm is at offset 18 in the 'head' table (big-endian u16)
+                let upm = u16::from_be_bytes([data[18], data[19]]);
+                if upm > 0 {
+                    return upm;
+                }
+            }
+        }
+        2048
+    }
+
+    /// Returns the advance width (in design units) for a glyph.
+    pub fn glyph_advance(&self, glyph_id: GlyphId) -> i32 {
+        let upm = self.units_per_em() as f32;
+        let g = self.font.glyph(glyph_id).scaled(Scale::uniform(upm));
+        g.h_metrics().advance_width.round() as i32
+    }
+
+    /// Returns the left side bearing (in design units) for a glyph.
+    pub fn glyph_left_side_bearing(&self, glyph_id: GlyphId) -> i32 {
+        let upm = self.units_per_em() as f32;
+        let g = self.font.glyph(glyph_id).scaled(Scale::uniform(upm));
+        g.h_metrics().left_side_bearing.round() as i32
+    }
+
+    /// Returns the bounding box of a glyph in design units.
+    /// Returns (x_min, y_min, width, height). If the glyph has no outline,
+    /// returns a zero rect.
+    pub fn glyph_bbox(&self, glyph_id: GlyphId) -> (f32, f32, f32, f32) {
+        let upm = self.units_per_em() as f32;
+        let g = self
+            .font
+            .glyph(glyph_id)
+            .scaled(Scale::uniform(upm))
+            .positioned(Point { x: 0.0, y: 0.0 });
+        match g.pixel_bounding_box() {
+            Some(bb) => {
+                let x = bb.min.x as f32;
+                let y = bb.min.y as f32;
+                let w = (bb.max.x - bb.min.x) as f32;
+                let h = (bb.max.y - bb.min.y) as f32;
+                (x, y, w, h)
+            }
+            None => (0.0, 0.0, 0.0, 0.0),
+        }
+    }
+
+    /// Returns raw bytes of the font data (for table access).
+    pub fn raw_data(&self) -> Option<&[u8]> {
+        self.raw_data.as_deref()
+    }
+
+    /// Parse and return the raw data for a specific TrueType/OpenType table
+    /// identified by its 4-byte tag (e.g. b"head" → 0x68656164).
+    pub fn table_data(&self, tag: u32) -> Option<Vec<u8>> {
+        let data = self.raw_data.as_ref()?;
+        parse_table_from_raw(data, tag)
+    }
+
+    /// Returns a list of all table tags present in the font file.
+    pub fn table_tags(&self) -> Vec<u32> {
+        let Some(data) = self.raw_data.as_ref() else {
+            return Vec::new();
+        };
+        parse_table_tags_from_raw(data)
+    }
+
+    /// Look up a glyph by its PostScript name. Returns `None` if the 'post'
+    /// table is unavailable or the name is not found.
+    pub fn glyph_for_name(&self, name: &str) -> Option<GlyphId> {
+        // Parse the 'post' table to build a name→glyph mapping.
+        let post_data = self.table_data(0x706F7374 /* 'post' */)?;
+        glyph_id_from_post_table(&post_data, name, self.glyph_count())
+    }
+
+    /// Returns the PostScript name for a glyph index, or None.
+    pub fn glyph_name(&self, glyph_id: GlyphId) -> Option<String> {
+        let post_data = self.table_data(0x706F7374 /* 'post' */)?;
+        glyph_name_from_post_table(&post_data, glyph_id.0 as u32, self.glyph_count())
+    }
+
     fn from_resource_file(filename: &str) -> Font {
         let mut bytes = Vec::new();
         let path = format!("{}/{}", paths::FONTS_DIR, filename);
@@ -82,19 +175,27 @@ impl Font {
             );
         }
 
+        let raw_copy = bytes.clone();
         let Some(font) = rusttype::Font::try_from_vec(bytes) else {
             panic!("Couldn't parse bundled font file {path:?}. This probably means the file is corrupt. Try re-downloading it.");
         };
 
-        Font { font }
+        Font {
+            font,
+            raw_data: Some(raw_copy),
+        }
     }
 
     pub fn from_vec(bytes: Vec<u8>) -> Font {
+        let raw_copy = bytes.clone();
         let Some(font) = rusttype::Font::try_from_vec(bytes) else {
             panic!("Couldn't parse font bytes.");
         };
 
-        Font { font }
+        Font {
+            font,
+            raw_data: Some(raw_copy),
+        }
     }
 
     pub fn mono_regular() -> Font {
@@ -483,5 +584,415 @@ impl Font {
 
             draw_glyph(raster_glyph);
         }
+    }
+
+    /// Draw glyphs at specified positions. Each glyph is placed at its
+    /// corresponding position (x, y). Used by CGContextShowGlyphsAtPositions.
+    /// The y sense matches CoreGraphics (y growing upward in user space).
+    pub fn draw_glyphs_at_positions<F>(
+        &self,
+        font_size: f32,
+        glyphs: &[GlyphId],
+        positions: &[(f32, f32)],
+        origin: (f32, f32),
+        mut draw_glyph: F,
+    ) where
+        F: FnMut(RasterGlyph),
+    {
+        let mut glyph_bitmap: Vec<f32> = Vec::new();
+
+        for (glyph_id, pos) in glyphs.iter().zip(positions.iter()) {
+            let x = origin.0 + pos.0;
+            let y = origin.1 + pos.1;
+
+            let g = self
+                .font
+                .glyph(*glyph_id)
+                .scaled(scale(font_size))
+                .positioned(Point { x, y: 0.0 });
+
+            let Some(glyph_bounds) = g.pixel_bounding_box() else {
+                continue;
+            };
+
+            let x_offset = glyph_bounds.min.x;
+            let y_offset = (y.round() as i32) - glyph_bounds.max.y;
+
+            let glyph_bitmap_bounds = (
+                glyph_bounds.width() as usize,
+                glyph_bounds.height() as usize,
+            );
+            glyph_bitmap.clear();
+            glyph_bitmap.resize(glyph_bitmap_bounds.0 * glyph_bitmap_bounds.1, 0.0);
+
+            g.draw(|x, y, coverage| {
+                glyph_bitmap[(glyph_bitmap_bounds.1 - 1 - y as usize) * glyph_bitmap_bounds.0
+                    + x as usize] = coverage;
+            });
+
+            let raster_glyph = RasterGlyph {
+                origin: (x_offset as f32, y_offset as f32),
+                dimensions: (glyph_bitmap_bounds.0 as _, glyph_bitmap_bounds.1 as _),
+                pixels: &glyph_bitmap,
+            };
+
+            draw_glyph(raster_glyph);
+        }
+    }
+
+    /// Draw glyphs with explicit advances. Each glyph is placed sequentially
+    /// with the given advance (dx, dy) offsets. Used by
+    /// CGContextShowGlyphsWithAdvances.
+    pub fn draw_glyphs_with_advances<F>(
+        &self,
+        font_size: f32,
+        glyphs: &[GlyphId],
+        advances: &[(f32, f32)],
+        origin: (f32, f32),
+        mut draw_glyph: F,
+    ) where
+        F: FnMut(RasterGlyph),
+    {
+        let mut glyph_bitmap: Vec<f32> = Vec::new();
+        let mut current_x = origin.0;
+        let mut current_y = origin.1;
+
+        for (i, glyph_id) in glyphs.iter().enumerate() {
+            let g = self
+                .font
+                .glyph(*glyph_id)
+                .scaled(scale(font_size))
+                .positioned(Point {
+                    x: current_x,
+                    y: 0.0,
+                });
+
+            let Some(glyph_bounds) = g.pixel_bounding_box() else {
+                // Even if the glyph has no outline, advance the pen.
+                if i < advances.len() {
+                    current_x += advances[i].0;
+                    current_y += advances[i].1;
+                }
+                continue;
+            };
+
+            let x_offset = glyph_bounds.min.x;
+            let y_offset = (current_y.round() as i32) - glyph_bounds.max.y;
+
+            let glyph_bitmap_bounds = (
+                glyph_bounds.width() as usize,
+                glyph_bounds.height() as usize,
+            );
+            glyph_bitmap.clear();
+            glyph_bitmap.resize(glyph_bitmap_bounds.0 * glyph_bitmap_bounds.1, 0.0);
+
+            g.draw(|x, y, coverage| {
+                glyph_bitmap[(glyph_bitmap_bounds.1 - 1 - y as usize) * glyph_bitmap_bounds.0
+                    + x as usize] = coverage;
+            });
+
+            let raster_glyph = RasterGlyph {
+                origin: (x_offset as f32, y_offset as f32),
+                dimensions: (glyph_bitmap_bounds.0 as _, glyph_bitmap_bounds.1 as _),
+                pixels: &glyph_bitmap,
+            };
+
+            draw_glyph(raster_glyph);
+
+            if i < advances.len() {
+                current_x += advances[i].0;
+                current_y += advances[i].1;
+            }
+        }
+    }
+}
+
+// =============================================================================
+// MARK: - TrueType/OpenType table parsing helpers
+// =============================================================================
+
+/// Parse the table directory from raw font file bytes and return all table tags.
+fn parse_table_tags_from_raw(data: &[u8]) -> Vec<u32> {
+    if data.len() < 12 {
+        return Vec::new();
+    }
+
+    // Check for TTC (TrueType Collection) — we only handle the first font.
+    let offset_to_dir = if &data[0..4] == b"ttcf" {
+        if data.len() < 16 {
+            return Vec::new();
+        }
+        // offsetTable[0] is at byte 12 in TTC header
+        u32::from_be_bytes([data[12], data[13], data[14], data[15]]) as usize
+    } else {
+        0
+    };
+
+    if data.len() < offset_to_dir + 12 {
+        return Vec::new();
+    }
+
+    let num_tables =
+        u16::from_be_bytes([data[offset_to_dir + 4], data[offset_to_dir + 5]]) as usize;
+
+    let table_dir_start = offset_to_dir + 12;
+    let mut tags = Vec::with_capacity(num_tables);
+
+    for i in 0..num_tables {
+        let entry_offset = table_dir_start + i * 16;
+        if data.len() < entry_offset + 4 {
+            break;
+        }
+        let tag = u32::from_be_bytes([
+            data[entry_offset],
+            data[entry_offset + 1],
+            data[entry_offset + 2],
+            data[entry_offset + 3],
+        ]);
+        tags.push(tag);
+    }
+
+    tags
+}
+
+/// Parse a specific table from raw font file bytes by its 4-byte tag.
+fn parse_table_from_raw(data: &[u8], tag: u32) -> Option<Vec<u8>> {
+    if data.len() < 12 {
+        return None;
+    }
+
+    let offset_to_dir = if &data[0..4] == b"ttcf" {
+        if data.len() < 16 {
+            return None;
+        }
+        u32::from_be_bytes([data[12], data[13], data[14], data[15]]) as usize
+    } else {
+        0
+    };
+
+    if data.len() < offset_to_dir + 12 {
+        return None;
+    }
+
+    let num_tables =
+        u16::from_be_bytes([data[offset_to_dir + 4], data[offset_to_dir + 5]]) as usize;
+
+    let table_dir_start = offset_to_dir + 12;
+
+    for i in 0..num_tables {
+        let entry_offset = table_dir_start + i * 16;
+        if data.len() < entry_offset + 16 {
+            break;
+        }
+        let entry_tag = u32::from_be_bytes([
+            data[entry_offset],
+            data[entry_offset + 1],
+            data[entry_offset + 2],
+            data[entry_offset + 3],
+        ]);
+        if entry_tag == tag {
+            let offset = u32::from_be_bytes([
+                data[entry_offset + 8],
+                data[entry_offset + 9],
+                data[entry_offset + 10],
+                data[entry_offset + 11],
+            ]) as usize;
+            let length = u32::from_be_bytes([
+                data[entry_offset + 12],
+                data[entry_offset + 13],
+                data[entry_offset + 14],
+                data[entry_offset + 15],
+            ]) as usize;
+            if offset + length <= data.len() {
+                return Some(data[offset..offset + length].to_vec());
+            }
+            return None;
+        }
+    }
+
+    None
+}
+
+// Standard PostScript glyph names for glyph indices 0..257 (Macintosh
+// standard ordering) used by 'post' table format 1.0 and 2.0.
+const STANDARD_MAC_GLYPH_NAMES: &[&str] = &[
+    ".notdef", ".null", "nonmarkingreturn", "space", "exclam", "quotedbl",
+    "numbersign", "dollar", "percent", "ampersand", "quotesingle", "parenleft",
+    "parenright", "asterisk", "plus", "comma", "hyphen", "period", "slash",
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "colon", "semicolon", "less", "equal", "greater", "question", "at",
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
+    "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "bracketleft", "backslash", "bracketright", "asciicircum", "underscore",
+    "grave", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+    "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+    "braceleft", "bar", "braceright", "asciitilde", "Adieresis", "Aring",
+    "Ccedilla", "Eacute", "Ntilde", "Odieresis", "Udieresis", "aacute",
+    "agrave", "acircumflex", "adieresis", "atilde", "aring", "ccedilla",
+    "eacute", "egrave", "ecircumflex", "edieresis", "iacute", "igrave",
+    "icircumflex", "idieresis", "ntilde", "oacute", "ograve", "ocircumflex",
+    "odieresis", "otilde", "uacute", "ugrave", "ucircumflex", "udieresis",
+    "dagger", "degree", "cent", "sterling", "section", "bullet", "paragraph",
+    "germandbls", "registered", "copyright", "trademark", "acute", "dieresis",
+    "notequal", "AE", "Oslash", "infinity", "plusminus", "lessequal",
+    "greaterequal", "yen", "mu", "partialdiff", "summation", "product", "pi",
+    "integral", "ordfeminine", "ordmasculine", "Omega", "ae", "oslash",
+    "questiondown", "exclamdown", "logicalnot", "radical", "florin",
+    "approxequal", "Delta", "guillemotleft", "guillemotright", "ellipsis",
+    "nonbreakingspace", "Agrave", "Atilde", "Otilde", "OE", "oe", "endash",
+    "emdash", "quotedblleft", "quotedblright", "quoteleft", "quoteright",
+    "divide", "lozenge", "ydieresis", "Ydieresis", "fraction", "currency",
+    "guilsinglleft", "guilsinglright", "fi", "fl", "daggerdbl", "periodcentered",
+    "quotesinglbase", "quotedblbase", "perthousand", "Acircumflex",
+    "Ecircumflex", "Aacute", "Edieresis", "Egrave", "Iacute", "Icircumflex",
+    "Idieresis", "Igrave", "Oacute", "Ocircumflex", "apple", "Ograve",
+    "Uacute", "Ucircumflex", "Ugrave", "dotlessi", "circumflex", "tilde",
+    "macron", "breve", "dotaccent", "ring", "cedilla", "hungarumlaut",
+    "ogonek", "caron", "Lslash", "lslash", "Scaron", "scaron", "Zcaron",
+    "zcaron", "brokenbar", "Eth", "eth", "Yacute", "yacute", "Thorn",
+    "thorn", "minus", "multiply", "onesuperior", "twosuperior", "threesuperior",
+    "onehalf", "onequarter", "threequarters", "franc", "Gbreve", "gbreve",
+    "Idotaccent", "Scedilla", "scedilla", "Cacute", "cacute", "Ccaron",
+    "ccaron", "dcroat",
+];
+
+/// Look up a glyph index from a 'post' table by PostScript name.
+fn glyph_id_from_post_table(post_data: &[u8], name: &str, _glyph_count: u32) -> Option<GlyphId> {
+    if post_data.len() < 32 {
+        return None;
+    }
+
+    let format = u32::from_be_bytes([post_data[0], post_data[1], post_data[2], post_data[3]]);
+
+    match format {
+        // Format 1.0: standard 258 Macintosh glyphs
+        0x00010000 => {
+            for (i, &std_name) in STANDARD_MAC_GLYPH_NAMES.iter().enumerate() {
+                if std_name == name {
+                    return Some(GlyphId(i as u16));
+                }
+            }
+            None
+        }
+        // Format 2.0: custom glyph names
+        0x00020000 => {
+            if post_data.len() < 34 {
+                return None;
+            }
+            let num_glyphs =
+                u16::from_be_bytes([post_data[32], post_data[33]]) as usize;
+            let indices_start = 34;
+            let indices_end = indices_start + num_glyphs * 2;
+            if post_data.len() < indices_end {
+                return None;
+            }
+
+            // Parse the string table (Pascal strings after the index array)
+            let mut extra_names: Vec<&str> = Vec::new();
+            let mut pos = indices_end;
+            while pos < post_data.len() {
+                let len = post_data[pos] as usize;
+                pos += 1;
+                if pos + len > post_data.len() {
+                    break;
+                }
+                let s = std::str::from_utf8(&post_data[pos..pos + len]).unwrap_or("");
+                extra_names.push(s);
+                pos += len;
+            }
+
+            for glyph_idx in 0..num_glyphs {
+                let idx_offset = indices_start + glyph_idx * 2;
+                let name_index = u16::from_be_bytes([
+                    post_data[idx_offset],
+                    post_data[idx_offset + 1],
+                ]) as usize;
+
+                let glyph_name = if name_index < 258 {
+                    STANDARD_MAC_GLYPH_NAMES
+                        .get(name_index)
+                        .copied()
+                        .unwrap_or("")
+                } else {
+                    let extra_idx = name_index - 258;
+                    extra_names.get(extra_idx).copied().unwrap_or("")
+                };
+
+                if glyph_name == name {
+                    return Some(GlyphId(glyph_idx as u16));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Get the PostScript name of a glyph from the 'post' table.
+fn glyph_name_from_post_table(
+    post_data: &[u8],
+    glyph_index: u32,
+    _glyph_count: u32,
+) -> Option<String> {
+    if post_data.len() < 32 {
+        return None;
+    }
+
+    let format = u32::from_be_bytes([post_data[0], post_data[1], post_data[2], post_data[3]]);
+
+    match format {
+        // Format 1.0
+        0x00010000 => STANDARD_MAC_GLYPH_NAMES
+            .get(glyph_index as usize)
+            .map(|s| s.to_string()),
+        // Format 2.0
+        0x00020000 => {
+            if post_data.len() < 34 {
+                return None;
+            }
+            let num_glyphs =
+                u16::from_be_bytes([post_data[32], post_data[33]]) as usize;
+            if glyph_index as usize >= num_glyphs {
+                return None;
+            }
+            let indices_start = 34;
+            let indices_end = indices_start + num_glyphs * 2;
+            if post_data.len() < indices_end {
+                return None;
+            }
+
+            let idx_offset = indices_start + glyph_index as usize * 2;
+            let name_index = u16::from_be_bytes([
+                post_data[idx_offset],
+                post_data[idx_offset + 1],
+            ]) as usize;
+
+            if name_index < 258 {
+                return STANDARD_MAC_GLYPH_NAMES
+                    .get(name_index)
+                    .map(|s| s.to_string());
+            }
+
+            // Parse extra names
+            let extra_idx = name_index - 258;
+            let mut pos = indices_end;
+            let mut current_extra = 0usize;
+            while pos < post_data.len() {
+                let len = post_data[pos] as usize;
+                pos += 1;
+                if pos + len > post_data.len() {
+                    break;
+                }
+                if current_extra == extra_idx {
+                    return std::str::from_utf8(&post_data[pos..pos + len])
+                        .ok()
+                        .map(|s| s.to_string());
+                }
+                pos += len;
+                current_extra += 1;
+            }
+            None
+        }
+        _ => None,
     }
 }
