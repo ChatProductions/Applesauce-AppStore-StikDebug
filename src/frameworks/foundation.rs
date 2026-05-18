@@ -485,6 +485,59 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("NSURLErrorFailingURLPeerTrustErrorKey"),
     ),
     // -----------------------------------------------------------------
+    // CFDateFormatter property key constants (CFStringRef).
+    // These are string keys used with CFDateFormatterSetProperty /
+    // CFDateFormatterCopyProperty. The literal value of each constant
+    // is its own symbol name, matching Apple's CoreFoundation behaviour.
+    // -----------------------------------------------------------------
+    (
+        "_kCFDateFormatterCalendar",
+        HostConstant::NSString("kCFDateFormatterCalendar"),
+    ),
+    (
+        "_kCFDateFormatterMonthSymbols",
+        HostConstant::NSString("kCFDateFormatterMonthSymbols"),
+    ),
+    (
+        "_kCFDateFormatterShortMonthSymbols",
+        HostConstant::NSString("kCFDateFormatterShortMonthSymbols"),
+    ),
+    (
+        "_kCFDateFormatterShortWeekdaySymbols",
+        HostConstant::NSString("kCFDateFormatterShortWeekdaySymbols"),
+    ),
+    (
+        "_kCFDateFormatterStandaloneMonthSymbols",
+        HostConstant::NSString("kCFDateFormatterStandaloneMonthSymbols"),
+    ),
+    (
+        "_kCFDateFormatterTimeZone",
+        HostConstant::NSString("kCFDateFormatterTimeZone"),
+    ),
+    (
+        "_kCFDateFormatterVeryShortStandaloneWeekdaySymbols",
+        HostConstant::NSString("kCFDateFormatterVeryShortStandaloneWeekdaySymbols"),
+    ),
+    (
+        "_kCFDateFormatterWeekdaySymbols",
+        HostConstant::NSString("kCFDateFormatterWeekdaySymbols"),
+    ),
+    // -----------------------------------------------------------------
+    // NSThread notification constants.
+    // -----------------------------------------------------------------
+    (
+        "_NSThreadWillExitNotification",
+        HostConstant::NSString("NSThreadWillExitNotification"),
+    ),
+    (
+        "_NSWillBecomeMultiThreadedNotification",
+        HostConstant::NSString("NSWillBecomeMultiThreadedNotification"),
+    ),
+    (
+        "_NSDidBecomeSingleThreadedNotification",
+        HostConstant::NSString("NSDidBecomeSingleThreadedNotification"),
+    ),
+    // -----------------------------------------------------------------
     // NSStream property / userInfo keys.
     // -----------------------------------------------------------------
     (

@@ -180,6 +180,18 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::NSString(NSFileAppendOnly),
     ),
     ("_NSFileBusy", HostConstant::NSString(NSFileBusy)),
+    (
+        "_NSFileGroupOwnerAccountID",
+        HostConstant::NSString("NSFileGroupOwnerAccountID"),
+    ),
+    (
+        "_NSFileOwnerAccountID",
+        HostConstant::NSString("NSFileOwnerAccountID"),
+    ),
+    (
+        "_NSFileHFSCreatorCode",
+        HostConstant::NSString("NSFileHFSCreatorCode"),
+    ),
 ];
 
 fn NSSearchPathForDirectoriesInDomains(
