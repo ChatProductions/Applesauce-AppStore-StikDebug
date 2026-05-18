@@ -180,11 +180,14 @@ pub fn sqlite3_prepare_v2(env: &mut Environment, p_db: u32, sql_ptr: u32, _n_byt
         }
     }
 
-    // Validate SQL by trying to prepare it
+    // Validate SQL by trying to prepare it. Bind the temporary `Statement`
+    // to a local so it (and its borrow of the connection) is dropped before
+    // the `MutexGuard` at the end of the block.
     let valid = {
         let handles = SQLITE_CONNECTIONS.lock().unwrap();
         let conn = handles.get(&p_db).unwrap();
-        conn.prepare(&sql).is_ok()
+        let ok = conn.prepare(&sql).is_ok();
+        ok
     };
 
     if !valid {
