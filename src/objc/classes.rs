@@ -907,6 +907,7 @@ impl ObjC {
                         instance_start: Default::default(),
                         instance_size: Default::default(),
                         ivars: Default::default(),
+                        properties: Default::default(),
                     },
                 );
                 log_dbg!(
