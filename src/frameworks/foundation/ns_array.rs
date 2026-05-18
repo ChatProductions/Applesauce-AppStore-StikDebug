@@ -1092,6 +1092,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<ArrayHostObject>(this).array = Vec::new()
 }
 
+// Apple docs: Returns an array that lists the receiving array's elements in
+// ascending order, as determined by the comparison method specified by a given
+// selector. The new array contains references to the receiving array's
+// elements, not copies of them.
+- (id)sortedArrayUsingSelector:(SEL)comparator {
+    let new = msg![env; this mutableCopy];
+    () = msg![env; new sortUsingSelector:comparator];
+    autorelease(env, new)
+}
+
+// Apple docs: Returns an array that lists the receiving array's elements in
+// ascending order as defined by the comparison function comparator.
+- (id)sortedArrayUsingFunction:(GuestFunction)comparator
+                       context:(MutVoidPtr)context {
+    let new = msg![env; this mutableCopy];
+    () = msg![env; new sortUsingFunction:comparator context:context];
+    autorelease(env, new)
+}
+
 @end
 
 // Special variant for use by CFArray with NULL callbacks: objects aren't

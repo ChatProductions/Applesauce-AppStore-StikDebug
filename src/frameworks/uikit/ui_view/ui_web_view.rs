@@ -9,9 +9,11 @@
 use crate::frameworks::core_graphics::{cg_image, CGRect};
 use crate::frameworks::foundation::ns_string::{self, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::uikit::ui_view::UIViewHostObject;
 use crate::image::Image;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, msg_class, nil, objc_classes, release, retain,
+    ClassExports, NSZonePtr,
 };
 use crate::Environment;
 use std::borrow::Cow;
@@ -38,6 +40,7 @@ pub const UIDataDetectorTypeNone: UIDataDetectorTypes = 0;
 pub const UIDataDetectorTypeAll: UIDataDetectorTypes = u32::MAX as UIDataDetectorTypes;
 
 struct UIWebViewHostObject {
+    superclass: UIViewHostObject,
     /// UIWebViewDelegate — weak reference (no retain per Apple docs)
     delegate: id,
     scales_page_to_fit: bool,
@@ -60,7 +63,7 @@ struct UIWebViewHostObject {
     back_stack: Vec<id>,
     forward_stack: Vec<id>,
 }
-impl HostObject for UIWebViewHostObject {}
+impl_HostObject_with_superclass!(UIWebViewHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -74,6 +77,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIWebViewHostObject {
+        superclass: UIViewHostObject::default(),
         delegate: nil,
         scales_page_to_fit: false,
         detects_phone_numbers: true,
