@@ -112,19 +112,15 @@ impl HostObject for CMDeviceMotionHostObject {}
 /// Returns (x, y, z) in G-force units matching iOS coordinate convention,
 /// or None if no sensor is available.
 fn read_sdl_accelerometer(env: &Environment) -> Option<CMAcceleration> {
-    // The window holds an SDL accelerometer sensor. SDL reports acceleration
-    // in m/s^2 in the device's coordinate system. iOS reports in G-force units.
-    // Conversion: 1G ≈ 9.80665 m/s^2
-    // SDL2 Android sensor orientation matches iOS convention (x=right, y=up,
-    // z=toward user), but values are in m/s^2 and may be negative-gravity
-    // (i.e., SDL includes gravity in its readings, same as iOS raw accel).
+    // `Window::get_acceleration` already returns the real or simulated
+    // accelerometer reading in iOS G-force units (it converts SDL's m/s^2 and
+    // flips the sign internally), so we just forward those values.
     let window = env.window.as_ref()?;
-    let accel_data = window.get_accelerometer_data()?;
-    const G: f64 = 9.80665;
+    let (x, y, z) = window.get_acceleration(&env.options);
     Some(CMAcceleration {
-        x: accel_data.0 as f64 / G,
-        y: accel_data.1 as f64 / G,
-        z: accel_data.2 as f64 / G,
+        x: x as f64,
+        y: y as f64,
+        z: z as f64,
     })
 }
 

@@ -93,7 +93,7 @@ fn mmap(
             );
             env.mem.free(ptr);
             set_errno(env, EIO);
-            return Ptr::from_bits(0xFFFFFFFF); // MAP_FAILED
+            return MutVoidPtr::from_bits(0xFFFFFFFF); // MAP_FAILED
         }
 
         let read = posix_io::read(env, fd, ptr, len);

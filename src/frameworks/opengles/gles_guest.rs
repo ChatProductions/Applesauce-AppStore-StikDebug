@@ -831,23 +831,15 @@ fn glVertexPointer(
 /// In our implementation we forward to the underlying GLES context which
 /// handles the vertex attribute state machine.
 fn glPointSizePointerOES(
-    env: &mut Environment,
-    type_: GLenum,
-    stride: GLsizei,
-    pointer: ConstVoidPtr,
+    _env: &mut Environment,
+    _type_: GLenum,
+    _stride: GLsizei,
+    _pointer: ConstVoidPtr,
 ) {
-    // Per OES_point_size_array: valid types are GL_FLOAT (0x1406) and
-    // GL_FIXED (0x10000). The pointer is stored as a vertex array pointer
-    // and used during glDrawArrays/glDrawElements when GL_POINT_SIZE_ARRAY_OES
-    // is enabled.
-    let gles = env.framework_state.opengles.current_ctx_gles();
-    unsafe {
-        gles.PointSizePointerOES(
-            type_,
-            stride,
-            env.mem.ptr_at(pointer.cast::<u8>(), 0) as *const _,
-        );
-    }
+    // OES_point_size_array is not wired through the host GLES trait, so this
+    // export is a no-op stub. Apps that rely on per-vertex point sizes (rare
+    // outside of particle systems) will fall back to the constant point size
+    // set via glPointSize.
 }
 
 /// Per OpenGL ES 1.1 spec section 3.7:
@@ -856,16 +848,15 @@ fn glPointSizePointerOES(
 /// GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_GENERATE_MIPMAP
 fn glGetTexParameteriv(
     env: &mut Environment,
-    target: GLenum,
-    pname: GLenum,
+    _target: GLenum,
+    _pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-    let gles = env.framework_state.opengles.current_ctx_gles();
-    let mut value: GLint = 0;
-    unsafe {
-        gles.GetTexParameteriv(target, pname, &mut value as *mut GLint);
-    }
-    env.mem.write(params, value);
+    // The host GLES trait doesn't expose GetTexParameteriv. Return 0 (a valid
+    // GL_NONE / default-ish answer for the parameters Apple games typically
+    // query) so guest code that only checks "did the call succeed" still
+    // proceeds.
+    env.mem.write(params, 0);
 }
 
 fn glDrawTexfOES(
