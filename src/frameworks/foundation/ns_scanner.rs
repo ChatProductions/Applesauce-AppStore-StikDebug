@@ -94,6 +94,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     len == pos
 }
 
+- (NSUInteger)scanLocation {
+    env.objc.borrow::<NSScannerHostObject>(this).pos
+}
+
+- (())setScanLocation:(NSUInteger)location {
+    let len = env.objc.borrow::<NSScannerHostObject>(this).len;
+    // Apple docs: setting scanLocation beyond the string length raises
+    // NSRangeException.  Here we silently clamp, matching the spirit of HLE.
+    let clamped = if location > len { len } else { location };
+    env.objc.borrow_mut::<NSScannerHostObject>(this).pos = clamped;
+}
+
+- (id)string {
+    env.objc.borrow::<NSScannerHostObject>(this).string
+}
+
 - (bool)scanUpToCharactersFromSet:(id)cset intoString:(MutPtr<id>)str {
     skip_characters(env, this);
 

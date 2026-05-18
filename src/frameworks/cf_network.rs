@@ -358,4 +358,9 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCFStreamErrorDomainMach",
         HostConstant::NSString("kCFStreamErrorDomainMach"),
     ),
+    // kCFStreamErrorDomainNetDB is an integer constant (value 12 per Apple CFNetwork headers).
+    (
+        "_kCFStreamErrorDomainNetDB",
+        HostConstant::Custom(|env| env.mem.alloc_and_write(12i32).cast().cast_const()),
+    ),
 ];
