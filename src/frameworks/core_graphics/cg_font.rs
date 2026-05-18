@@ -810,7 +810,7 @@ fn CGFontCopyTableForTag(env: &mut Environment, font: CGFontRef, tag: u32) -> CF
             let len: u32 = bytes.len() as u32;
             let buf = env.mem.alloc(len);
             env.mem.bytes_at_mut(buf.cast(), len).copy_from_slice(&bytes);
-            CFDataCreate(env, kCFAllocatorDefault, buf.cast(), len as i32)
+            CFDataCreate(env, kCFAllocatorDefault, buf.cast_const().cast(), len as i32)
         }
         None => nil,
     }
