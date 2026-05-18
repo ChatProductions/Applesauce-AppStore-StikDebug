@@ -32,7 +32,7 @@ pub(super) struct ivar_list_t {
 }
 unsafe impl SafeRead for ivar_list_t {}
 
-/// The layout of a property in an app binary.
+/// The layout of an ivar in an app binary.
 ///
 /// The name, field names and field layout are based on what Ghidra outputs.
 #[repr(C, packed)]
@@ -44,6 +44,27 @@ struct ivar_t {
     size: u32,
 }
 unsafe impl SafeRead for ivar_t {}
+
+/// The layout of an Objective-C property list in an app binary.
+/// Matches `objc_property_list` from Apple's objc4 runtime source.
+#[repr(C, packed)]
+pub(super) struct property_list_t {
+    entsize_and_flags: GuestUSize,
+    count: GuestUSize,
+    // property_t entries follow the struct
+}
+unsafe impl SafeRead for property_list_t {}
+
+/// The layout of a single declared @property in an app binary.
+/// Matches `property_t` from Apple's objc4 runtime source.
+/// `class_getProperty` returns a pointer to this structure as the
+/// opaque `objc_property_t`.
+#[repr(C, packed)]
+pub(super) struct property_t {
+    name: ConstPtr<u8>,
+    attributes: ConstPtr<u8>,
+}
+unsafe impl SafeRead for property_t {}
 
 impl ClassHostObject {
     pub(super) fn add_ivars_from_bin(&mut self, ivar_list_ptr: ConstPtr<ivar_list_t>, mem: &Mem) {
@@ -80,6 +101,57 @@ impl ClassHostObject {
                 continue;
             };
             self.ivars.insert(name_string.into(), (offset, alignment));
+        }
+    }
+
+    /// Parse the property list from the binary and populate `self.properties`.
+    /// This allows `class_getProperty` to return proper `objc_property_t`
+    /// pointers for declared @property entries.
+    pub(super) fn add_properties_from_bin(
+        &mut self,
+        prop_list_ptr: ConstVoidPtr,
+        mem: &Mem,
+    ) {
+        let prop_list_ptr: ConstPtr<property_list_t> = prop_list_ptr.cast();
+        let property_list_t {
+            entsize_and_flags,
+            count,
+        } = mem.read(prop_list_ptr);
+
+        // The entsize field may have flags in the high bits; mask to get
+        // the actual entry size (Apple's runtime uses & ~3u for alignment,
+        // but we just mask the lower 16 bits which is safe for any
+        // reasonable entry size).
+        let entsize = entsize_and_flags & 0xFFFF;
+        let min_entsize = guest_size_of::<property_t>();
+        if entsize < min_entsize {
+            log_dbg!(
+                "add_properties_from_bin: property_list_t at {:?} declares entsize {} smaller than property_t ({}); skipping list.",
+                prop_list_ptr,
+                entsize,
+                min_entsize
+            );
+            return;
+        }
+
+        let props_base_ptr: ConstPtr<property_t> = (prop_list_ptr + 1).cast();
+
+        for i in 0..count {
+            let prop_ptr: ConstPtr<property_t> =
+                Ptr::from_bits(props_base_ptr.to_bits() + i * entsize);
+
+            let property_t { name, .. } = mem.read(prop_ptr);
+
+            if name.is_null() {
+                continue;
+            }
+            let Ok(name_string) = mem.cstr_at_utf8(name) else {
+                continue;
+            };
+            // Store the guest pointer to the property_t entry itself.
+            // class_getProperty returns this as the opaque objc_property_t.
+            self.properties
+                .insert(name_string.to_string(), prop_ptr.cast());
         }
     }
 }

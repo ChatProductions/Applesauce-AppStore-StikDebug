@@ -44,6 +44,10 @@ pub(super) struct ClassHostObject {
     /// Maps ivar name to a tuple of an offset (as pointer) and an alignment.
     /// (Alignment is used during ivar reconciliation.)
     pub(super) ivars: HashMap<String, (ConstPtr<GuestUSize>, u32)>,
+    /// Maps declared @property name to the guest-memory pointer of its
+    /// `property_t` entry (as read from the binary's property list).
+    /// This is what `class_getProperty` queries.
+    pub(super) properties: HashMap<String, ConstVoidPtr>,
     /// Offset into the allocated memory for the object where the ivars of
     /// instances of this class or metaclass (respectively: normal objects or
     /// classes) should live. This is always >= the value in the superclass.
@@ -304,6 +308,7 @@ impl ClassHostObject {
             instance_start: size,
             instance_size: size,
             ivars: HashMap::default(),
+            properties: HashMap::default(),
         }
     }
 
@@ -317,6 +322,7 @@ impl ClassHostObject {
             name,
             base_methods,
             ivars,
+            _base_properties,
             ..
         } = mem.read(data);
         let name = mem.cstr_at_utf8(name).unwrap().to_string();
@@ -330,6 +336,7 @@ impl ClassHostObject {
             instance_start,
             instance_size,
             ivars: HashMap::new(),
+            properties: HashMap::new(),
         };
         if !base_methods.is_null() {
             host_object.add_methods_from_bin(base_methods, mem, objc);
@@ -337,6 +344,10 @@ impl ClassHostObject {
 
         if !ivars.is_null() {
             host_object.add_ivars_from_bin(ivars, mem);
+        }
+
+        if !_base_properties.is_null() {
+            host_object.add_properties_from_bin(_base_properties, mem);
         }
 
         host_object
@@ -896,6 +907,7 @@ impl ObjC {
                         instance_start: Default::default(),
                         instance_size: Default::default(),
                         ivars: Default::default(),
+                        properties: Default::default(),
                     },
                 );
                 log_dbg!(
@@ -1560,4 +1572,47 @@ pub fn method_exchangeImplementations(
         m1,
         m2
     );
+}
+
+
+/// `objc_property_t class_getProperty(Class cls, const char *name)` —
+/// returns an opaque pointer to the property metadata for the named
+/// declared @property, walking the class hierarchy. Returns NULL if
+/// no such property is declared.
+///
+/// Per Apple's Objective-C Runtime Reference:
+/// https://developer.apple.com/documentation/objectivec/1418553-class_getproperty
+pub fn class_getProperty(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: ConstPtr<u8>,
+) -> ConstVoidPtr {
+    if cls.is_null() || name.is_null() {
+        return ConstVoidPtr::null();
+    }
+    let Ok(name_str) = env.mem.cstr_at_utf8(name) else {
+        return ConstVoidPtr::null();
+    };
+    let name_string = name_str.to_string();
+
+    // Walk the class hierarchy looking for the property.
+    let mut current = cls;
+    loop {
+        if let Some(host_obj) = env.objc.get_host_object(current) {
+            if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+                if let Some(&prop_ptr) = class_obj.properties.get(&name_string) {
+                    return prop_ptr;
+                }
+                if class_obj.superclass == nil {
+                    break;
+                }
+                current = class_obj.superclass;
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Property not found in hierarchy — return NULL (spec-compliant).
+    ConstVoidPtr::null()
 }
