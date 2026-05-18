@@ -1536,3 +1536,28 @@ pub fn object_getIndexedIvars(
 ) -> ConstVoidPtr {
     obj.cast().cast_const()
 }
+
+/// `void method_exchangeImplementations(Method m1, Method m2)` — swaps
+/// the implementations of two methods. In the real Objective-C runtime
+/// this performs an atomic swap of the IMP pointers within the opaque
+/// Method structures.
+///
+/// In touchHLE's simplified runtime, `class_getInstanceMethod` returns
+/// the class pointer itself (not a real `objc_method` struct), so we
+/// cannot determine which selector each "Method" value refers to from
+/// the pointer alone. Games that use method_exchangeImplementations
+/// typically do so for analytics, crash reporting swizzling, or other
+/// non-essential purposes. We log the call and no-op, which is safe
+/// because the emulator does not rely on swizzled behavior for
+/// correctness.
+pub fn method_exchangeImplementations(
+    _env: &mut crate::Environment,
+    m1: ConstVoidPtr,
+    m2: ConstVoidPtr,
+) {
+    log_dbg!(
+        "method_exchangeImplementations({:?}, {:?}) — no-op (swizzling not critical in emulator)",
+        m1,
+        m2
+    );
+}

@@ -800,6 +800,12 @@ impl Mem {
             return;
         }
         let addr = ptr.to_bits();
+        // Silently ignore attempts to free the MACH_TASK_SELF constant
+        // (0x7461736b = "task"). The Mono runtime stores this value and
+        // attempts to free it during shutdown; it's not a real allocation.
+        if addr == 0x7461736b {
+            return;
+        }
         // Reject obviously bogus pointers before passing to the allocator.
         if !self.allocator.is_known_allocation(addr) {
             log!("Can't free {:#x}, unknown allocation!", addr);

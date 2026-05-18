@@ -783,6 +783,64 @@ pub const CLASSES: ClassExports = objc_classes! {
     build_description(env, this)
 }
 
+// NSCoding implementation for immutable NSDictionary
+- (id)initWithCoder:(id)coder {
+    let class: Class = msg![env; coder class];
+    let keyed_unarch_class: Class = msg_class![env; NSKeyedUnarchiver class];
+    let nib_archive_class: Class = msg_class![env; _touchHLE_NIBArchiveDecoder class];
+    let tuples = if env.objc.class_is_subclass_of(class, keyed_unarch_class) {
+        ns_keyed_unarchiver::decode_current_dict(env, coder)
+    } else if env.objc.class_is_subclass_of(class, nib_archive_class) {
+        _nib_archive_decoder::decode_current_dict(env, coder)
+    } else {
+        log!(
+            "Warning: -[_touchHLE_NSDictionary initWithCoder:] unsupported coder class {:?}; \
+             returning empty dictionary.",
+            class
+        );
+        Vec::new()
+    };
+    release(env, this);
+    dict_from_keys_and_objects(env, &tuples)
+}
+
+- (())encodeWithCoder:(id)coder {
+    let class: Class = msg![env; coder class];
+    let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
+
+    if env.objc.class_is_subclass_of(class, keyed_arch_class) {
+        let host = env.objc.borrow::<DictionaryHostObject>(this);
+        let pairs: Vec<(id, id)> = host.map.values()
+           .flat_map(|v| v.iter().copied())
+           .collect();
+        drop(host);
+
+        let keys_array: id = msg_class![env; NSMutableArray new];
+        let objects_array: id = msg_class![env; NSMutableArray new];
+        for (k, v) in &pairs {
+            let key = *k;
+            let val = *v;
+            () = msg![env; keys_array addObject:key];
+            () = msg![env; objects_array addObject:val];
+        }
+
+        let keys_str = from_rust_string(env, "NS.keys".to_string());
+        let objects_str = from_rust_string(env, "NS.objects".to_string());
+        () = msg![env; coder encodeObject:keys_array forKey:keys_str];
+        () = msg![env; coder encodeObject:objects_array forKey:objects_str];
+
+        release(env, keys_str);
+        release(env, objects_str);
+        release(env, keys_array);
+        release(env, objects_array);
+    } else {
+        log!(
+            "Warning: -[_touchHLE_NSDictionary encodeWithCoder:] unsupported coder class {:?}",
+            class
+        );
+    }
+}
+
 @end
 
 // Our private subclass that is the single implementation of

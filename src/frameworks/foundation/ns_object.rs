@@ -40,6 +40,11 @@ pub static mut DYNAMIC_KVC_STORAGE: std::vec::Vec<(u32, std::string::String, u32
 // `-[s3eAppDelegate Functor]` fires, eventually loading a NULL function pointer and crashing.
 pub static mut SYNC_PERFORM_SEMAPHORES: std::vec::Vec<(u32, u32)> = std::vec::Vec::new();
 
+// KVO (Key-Value Observing) storage.
+// Each entry: (observed_object_bits, observer_bits, keyPath string, options, context_bits)
+pub static mut KVO_OBSERVERS: std::vec::Vec<(u32, u32, std::string::String, u32, u32)> =
+    std::vec::Vec::new();
+
 // ДОБАВЛЕНА РЕАЛИЗАЦИЯ NSAllocateObject
 fn NSAllocateObject(
     env: &mut Environment,
@@ -696,12 +701,93 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (())addObserver:(id)_observer forKeyPath:(id)_keyPath options:(NSUInteger)_options context:(id)_context {
-    log!("Warning: NSObject addObserver:forKeyPath:options:context: is stubbed");
+- (())addObserver:(id)observer forKeyPath:(id)keyPath options:(NSUInteger)options context:(id)context {
+    if observer == nil || keyPath == nil {
+        log_dbg!("addObserver:forKeyPath:options:context: — observer or keyPath is nil, ignored");
+        return;
+    }
+    let key_str = to_rust_string(env, keyPath);
+    log_dbg!(
+        "addObserver:{:?} forKeyPath:{:?} options:{} context:{:?}",
+        observer, key_str, options, context
+    );
+
+    // Store the observer registration in our global KVO storage.
+    // Format: (observed_object, observer, keyPath string, options, context)
+    unsafe {
+        KVO_OBSERVERS.push((
+            this.to_bits(),
+            observer.to_bits(),
+            key_str.into_owned(),
+            options,
+            context.to_bits(),
+        ));
+    }
+
+    // If NSKeyValueObservingOptionInitial (0x04) is set, deliver an
+    // initial notification immediately
+    if options & 0x04 != 0 {
+        let change_dict: id = msg_class![env; NSDictionary dictionary];
+        let observe_sel = env.objc.lookup_selector("observeValueForKeyPath:ofObject:change:context:");
+        if let Some(sel) = observe_sel {
+            let _: () = msg_send(env, (observer, sel, keyPath, this, change_dict, context));
+        }
+    }
 }
 
-- (())removeObserver:(id)_observer forKeyPath:(id)_keyPath {
-    log!("Warning: NSObject removeObserver:forKeyPath: is stubbed");
+- (())removeObserver:(id)observer forKeyPath:(id)keyPath {
+    if observer == nil || keyPath == nil {
+        return;
+    }
+    let key_str = to_rust_string(env, keyPath);
+    log_dbg!(
+        "removeObserver:{:?} forKeyPath:{:?}",
+        observer, key_str
+    );
+    unsafe {
+        KVO_OBSERVERS.retain(|entry| {
+            !(entry.0 == this.to_bits()
+                && entry.1 == observer.to_bits()
+                && entry.2 == key_str.as_ref())
+        });
+    }
+}
+
+- (())removeObserver:(id)observer forKeyPath:(id)keyPath context:(id)_context {
+    () = msg![env; this removeObserver:observer forKeyPath:keyPath];
+}
+
+- (())willChangeValueForKey:(id)_key {
+    // KVO pre-change notification — currently a no-op.
+    // A full implementation would snapshot the old value here.
+}
+
+- (())didChangeValueForKey:(id)key {
+    if key == nil { return; }
+    let key_str = to_rust_string(env, key);
+
+    // Collect matching observers
+    let observers: Vec<(u32, u32, u32)> = unsafe {
+        KVO_OBSERVERS.iter()
+            .filter(|entry| entry.0 == this.to_bits() && entry.2 == key_str.as_ref())
+            .map(|entry| (entry.1, entry.3, entry.4))
+            .collect()
+    };
+
+    for (observer_bits, _options, context_bits) in observers {
+        use crate::objc::id;
+        let observer: id = crate::mem::Ptr::from_bits(observer_bits);
+        let context: id = crate::mem::Ptr::from_bits(context_bits);
+        let change_dict: id = msg_class![env; NSDictionary dictionary];
+        let observe_sel = env.objc.lookup_selector("observeValueForKeyPath:ofObject:change:context:");
+        if let Some(sel) = observe_sel {
+            let _: () = msg_send(env, (observer, sel, key, this, change_dict, context));
+        }
+    }
+}
+
+- (())observeValueForKeyPath:(id)_keyPath ofObject:(id)_object change:(id)_change context:(id)_context {
+    // Default implementation does nothing — subclasses override this.
 }
 
 @end
