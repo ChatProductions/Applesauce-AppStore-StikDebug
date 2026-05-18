@@ -519,13 +519,77 @@ impl GLES for GLES2Native<'_> {
             // Apple-targeted apps also sometimes ship
             // `GL_OES_compressed_paletted_texture` data. Desktop ES 2.0
             // doesn't advertise that extension either, so we'd silently
-            // produce another GL_INVALID_ENUM. Drop the upload with a
-            // single warning rather than corrupting the texture state.
-            if PalettedTextureFormat::get_info(internalformat).is_some() {
-                log!(
-                    "GLES2Native::CompressedTexImage2D: unsupported paletted format {:#x}; \
-                     skipping {width}x{height} upload.",
-                    internalformat,
+            // produce another GL_INVALID_ENUM. Software-decode paletted
+            // textures to uncompressed RGBA/RGB and upload via glTexImage2D.
+            if let Some(PalettedTextureFormat {
+                index_is_nibble,
+                palette_entry_format,
+                palette_entry_type,
+            }) = PalettedTextureFormat::get_info(internalformat)
+            {
+                let palette_entry_size = match palette_entry_type {
+                    gles11::UNSIGNED_BYTE => match palette_entry_format {
+                        gles11::RGB => 3,
+                        gles11::RGBA => 4,
+                        _ => unreachable!(),
+                    },
+                    gles11::UNSIGNED_SHORT_5_6_5
+                    | gles11::UNSIGNED_SHORT_4_4_4_4
+                    | gles11::UNSIGNED_SHORT_5_5_5_1 => 2,
+                    _ => unreachable!(),
+                };
+                let palette_entry_count: usize = if index_is_nibble { 16 } else { 256 };
+                let palette_size = palette_entry_size * palette_entry_count;
+
+                let index_count = width as usize * height as usize;
+                let (index_word_size, index_word_count) = if index_is_nibble {
+                    (1, index_count.div_ceil(2))
+                } else {
+                    (4, index_count.div_ceil(4))
+                };
+                let indices_size = index_word_size * index_word_count;
+
+                let expected_size = palette_size + indices_size;
+                if payload.len() < expected_size {
+                    log!(
+                        "Warning: GLES2Native::CompressedTexImage2D: paletted \
+                         format {internalformat:#x} payload too small: got {} \
+                         bytes, expected at least {expected_size} for \
+                         {width}x{height}; skipping upload.",
+                        payload.len()
+                    );
+                    return;
+                }
+
+                let (palette, indices) = payload.split_at(palette_size);
+
+                let mut decoded = Vec::<u8>::with_capacity(palette_entry_size * index_count);
+                for i in 0..index_count {
+                    let index = if index_is_nibble {
+                        (indices[i / 2] >> ((1 - (i % 2)) * 4)) & 0xf
+                    } else {
+                        indices[i]
+                    } as usize;
+                    let start = index * palette_entry_size;
+                    let palette_entry = &palette[start..start + palette_entry_size];
+                    decoded.extend_from_slice(palette_entry);
+                }
+
+                log_dbg!(
+                    "GLES2Native: software-decoded paletted texture \
+                     {width}x{height} (format {internalformat:#x})"
+                );
+
+                gles2::TexImage2D(
+                    target,
+                    level,
+                    palette_entry_format as GLint,
+                    width,
+                    height,
+                    border,
+                    palette_entry_format,
+                    palette_entry_type,
+                    decoded.as_ptr() as *const _,
                 );
                 return;
             }
