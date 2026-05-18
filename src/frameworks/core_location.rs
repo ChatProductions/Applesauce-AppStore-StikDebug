@@ -549,37 +549,14 @@ const CONSTANTS: ConstantExports = &[
 ];
 
 // =========================================================================
-// MARK: - Added Stubs
+// MARK: - Region Monitoring (per Apple CLLocationManager docs iOS 4.0+)
 // =========================================================================
 
-// Заглушки для CLLocationManager
-#[no_mangle]
-pub extern "C" fn CLLocationManager_new() -> *mut std::ffi::c_void {
-    log_dbg!("Warning: CLLocationManager_new: stub called");
-    std::ptr::null_mut()
-}
-
-#[no_mangle]
-pub extern "C" fn CLLocationManager_startUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    log_dbg!("Warning: CLLocationManager_startUpdatingLocation: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn CLLocationManager_stopUpdatingLocation(_manager: *mut std::ffi::c_void) {
-    log_dbg!("Warning: CLLocationManager_stopUpdatingLocation: stub called");
-}
-
-#[no_mangle]
-pub extern "C" fn CLLocationManager_setDelegate(
-    _manager: *mut std::ffi::c_void,
-    _delegate: *mut std::ffi::c_void,
-) {
-    log_dbg!("Warning: CLLocationManager_setDelegate: stub called");
-}
-
-// Заглушки для CLAuthorizationStatus
-#[no_mangle]
-pub extern "C" fn CLAuthorizationStatus() -> i32 {
-    log_dbg!("Warning: CLAuthorizationStatus: stub called");
-    3 // Возвращаем CL_AUTHORIZATION_STATUS_AUTHORIZED
-}
+// Region monitoring is not supported in the emulator (no GPS hardware).
+// Per Apple docs, when monitoring is started for a region, the location
+// manager calls the delegate's locationManager:monitoringDidFailForRegion:
+// withError: method if the region cannot be monitored.
+// We don't implement this callback because:
+// 1. isMonitoringAvailableForClass: already returns false
+// 2. Games check availability before calling startMonitoring
+// 3. The ObjC runtime gracefully handles unrecognized selectors
