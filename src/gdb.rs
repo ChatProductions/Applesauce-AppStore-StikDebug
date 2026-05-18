@@ -294,7 +294,15 @@ impl GdbServer {
                 b'c' | b's' => {
                     let addr = &p[1..];
                     if !addr.is_empty() {
-                        todo!("TODO: Resume at {}", addr);
+                        // GDB requested resume at a specific address.
+                        // Parse the hex address and set the PC before resuming.
+                        if let Ok(new_pc) = u32::from_str_radix(addr, 16) {
+                            log!("GDB: Resume at address {:#x}", new_pc);
+                            let func = crate::abi::GuestFunction::from_addr_with_thumb_bit(new_pc);
+                            cpu.branch(func);
+                        } else {
+                            log!("GDB: Could not parse resume address {:?}, ignoring", addr);
+                        }
                     }
                     break p.as_bytes()[0] == b's';
                 }
@@ -303,7 +311,15 @@ impl GdbServer {
                 b'C' | b'S' => {
                     // Signal is just ignored for now (TODO?)
                     if let Some((_signal, addr)) = p[1..].split_once(';') {
-                        todo!("TODO: Resume at {}", addr);
+                        if !addr.is_empty() {
+                            if let Ok(new_pc) = u32::from_str_radix(addr, 16) {
+                                log!("GDB: Resume with signal at address {:#x}", new_pc);
+                                let func = crate::abi::GuestFunction::from_addr_with_thumb_bit(new_pc);
+                                cpu.branch(func);
+                            } else {
+                                log!("GDB: Could not parse resume address {:?}, ignoring", addr);
+                            }
+                        }
                     }
                     break p.as_bytes()[0] == b'S';
                 }

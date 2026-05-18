@@ -856,12 +856,22 @@ impl Mem {
     /// Get a C string (null-terminated) as a slice.
     /// The null terminator is not
     /// included in the slice.
+    ///
+    /// Safety: includes a maximum length guard (64KB) to prevent infinite loops
+    /// if the guest provides a pointer to non-terminated data.
     pub fn cstr_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>) -> &[u8] {
-        let mut len = 0;
+        const MAX_CSTR_LEN: u32 = 65536; // 64KB safety limit
+        let mut len: u32 = 0;
         while self.read(ptr + len) != b'\0' {
             len += 1;
+            if len >= MAX_CSTR_LEN {
+                log!(
+                    "Warning: cstr_at({:?}): hit {}B safety limit without finding null terminator; truncating.",
+                    ptr, MAX_CSTR_LEN
+                );
+                break;
+            }
         }
-
         self.bytes_at(ptr, len)
     }
 
@@ -875,9 +885,17 @@ impl Mem {
     }
 
     pub fn wcstr_at<const MUT: bool>(&self, ptr: Ptr<wchar_t, MUT>) -> String {
-        let mut len = 0;
+        const MAX_WCSTR_LEN: u32 = 16384; // 16K chars safety limit
+        let mut len: u32 = 0;
         while self.read(ptr + len) != wchar_t::default() {
             len += 1;
+            if len >= MAX_WCSTR_LEN {
+                log!(
+                    "Warning: wcstr_at({:?}): hit {} char safety limit without finding null terminator; truncating.",
+                    ptr, MAX_WCSTR_LEN
+                );
+                break;
+            }
         }
 
         let iter = self

@@ -6,7 +6,7 @@
 //! The Core Motion framework.
 
 use crate::dyld::HostDylib;
-use crate::objc::{id, nil, objc_classes, ClassExports};
+use crate::objc::{id, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 pub const DYLIB: HostDylib = HostDylib {
     path: "/System/Library/Frameworks/CoreMotion.framework/CoreMotion",
@@ -16,92 +16,174 @@ pub const DYLIB: HostDylib = HostDylib {
     function_exports: &[],
 };
 
+struct CMMotionManagerHostObject {
+    accelerometer_update_interval: f64,
+    gyro_update_interval: f64,
+    device_motion_update_interval: f64,
+    accelerometer_active: bool,
+    gyro_active: bool,
+    device_motion_active: bool,
+}
+impl HostObject for CMMotionManagerHostObject {}
+
+struct CMAccelerometerDataHostObject {
+    x: f64,
+    y: f64,
+    z: f64,
+    timestamp: f64,
+}
+impl HostObject for CMAccelerometerDataHostObject {}
+
 const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
+// =============================================================================
+// CMAccelerometerData — returned by [CMMotionManager accelerometerData]
+// =============================================================================
+
+@implementation CMAccelerometerData: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(CMAccelerometerDataHostObject {
+        x: 0.0,
+        y: 0.0,
+        z: -1.0, // Default: phone flat on table, gravity pointing down
+        timestamp: 0.0,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (f64)timestamp {
+    env.objc.borrow::<CMAccelerometerDataHostObject>(this).timestamp
+}
+
+@end
+
+// =============================================================================
+// CMMotionManager
+// =============================================================================
+
 @implementation CMMotionManager: NSObject
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(CMMotionManagerHostObject {
+        accelerometer_update_interval: 0.01, // 100 Hz default
+        gyro_update_interval: 0.01,
+        device_motion_update_interval: 0.01,
+        accelerometer_active: false,
+        gyro_active: false,
+        device_motion_active: false,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
 - (bool)isGyroAvailable {
-    // FakeGyroCheck
-    log!("TODO: [(CMMotionManager *){:?} isGyroAvailable] -> true", this);
-    true
+    false
 }
 - (bool)isDeviceMotionAvailable {
-    // FakeDeviceMotion
-    log!("TODO: [(CMMotionManager *){:?} isDeviceMotionAvailable] -> true", this);
-    true
+    false
 }
 - (bool)isAccelerometerAvailable {
-    // FakeAccelerometerCheck
-    log!("TODO: [(CMMotionManager *){:?} isAccelerometerAvailable] -> true", this);
     true
+}
+- (bool)isMagnetometerAvailable {
+    false
 }
 
 - (())setAccelerometerUpdateInterval:(f64)interval {
-    // FakeAccelInterval
-    log!("TODO: [(CMMotionManager *){:?} setAccelerometerUpdateInterval:{}]", this, interval);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).accelerometer_update_interval = interval;
+}
+
+- (f64)accelerometerUpdateInterval {
+    env.objc.borrow::<CMMotionManagerHostObject>(this).accelerometer_update_interval
 }
 
 - (())startAccelerometerUpdates {
-    // FakeAccelStart
-    log!("TODO: [(CMMotionManager *){:?} startAccelerometerUpdates]", this);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).accelerometer_active = true;
+}
+
+- (())stopAccelerometerUpdates {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).accelerometer_active = false;
 }
 
 - (())setGyroUpdateInterval:(f64)interval {
-    // FakeGyroInterval
-    log!("TODO: [(CMMotionManager *){:?} setGyroUpdateInterval:{}]", this, interval);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).gyro_update_interval = interval;
+}
+
+- (f64)gyroUpdateInterval {
+    env.objc.borrow::<CMMotionManagerHostObject>(this).gyro_update_interval
 }
 
 - (())startGyroUpdates {
-    // FakeGyroStart
-    log!("TODO: [(CMMotionManager *){:?} startGyroUpdates]", this);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).gyro_active = true;
+}
+
+- (())stopGyroUpdates {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).gyro_active = false;
 }
 
 - (())setDeviceMotionUpdateInterval:(f64)interval {
-    // FakeMotionInterval
-    log!("TODO: [(CMMotionManager *){:?} setDeviceMotionUpdateInterval:{}]", this, interval);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).device_motion_update_interval = interval;
+}
+
+- (f64)deviceMotionUpdateInterval {
+    env.objc.borrow::<CMMotionManagerHostObject>(this).device_motion_update_interval
 }
 
 - (())startDeviceMotionUpdates {
-    // FakeMotionStart
-    log!("TODO: [(CMMotionManager *){:?} startDeviceMotionUpdates]", this);
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).device_motion_active = true;
+}
+
+- (())stopDeviceMotionUpdates {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).device_motion_active = false;
 }
 
 - (bool)isDeviceMotionActive {
-    // FakeMotionActive
-    log!("TODO: [(CMMotionManager *){:?} isDeviceMotionActive] -> true", this);
-    true
+    env.objc.borrow::<CMMotionManagerHostObject>(this).device_motion_active
 }
 
 - (bool)isAccelerometerActive {
-    // FakeAccelActive
-    log!("TODO: [(CMMotionManager *){:?} isAccelerometerActive] -> true", this);
-    true
+    env.objc.borrow::<CMMotionManagerHostObject>(this).accelerometer_active
 }
 
 - (bool)isGyroActive {
-    // FakeGyroActive
-    log!("TODO: [(CMMotionManager *){:?} isGyroActive] -> true", this);
-    true
+    env.objc.borrow::<CMMotionManagerHostObject>(this).gyro_active
 }
 
 - (id)deviceMotion {
-    // FakeDeviceMotion
-    log!("TODO: [(CMMotionManager *){:?} deviceMotion] -> nil", this);
     nil
 }
 
 - (id)accelerometerData {
-    // FakeAccelData
-    log!("TODO: [(CMMotionManager *){:?} accelerometerData] -> nil", this);
-    nil
+    let active = env.objc.borrow::<CMMotionManagerHostObject>(this).accelerometer_active;
+    if !active {
+        return nil;
+    }
+    // Return a fresh CMAccelerometerData with default gravity values.
+    // Real accelerometer data (if available from SDL sensor) would be
+    // integrated here via the window's accelerometer reading.
+    let data: id = msg_class![env; CMAccelerometerData new];
+    data
 }
 
 - (id)gyroData {
-    // FakeGyroData
-    log!("TODO: [(CMMotionManager *){:?} gyroData] -> nil", this);
     nil
+}
+
+- (())startAccelerometerUpdatesToQueue:(id)_queue withHandler:(id)_handler {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).accelerometer_active = true;
+    log_dbg!("CMMotionManager startAccelerometerUpdatesToQueue:withHandler: — handler will not be called (stub)");
+}
+
+- (())startGyroUpdatesToQueue:(id)_queue withHandler:(id)_handler {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).gyro_active = true;
+    log_dbg!("CMMotionManager startGyroUpdatesToQueue:withHandler: — handler will not be called (stub)");
+}
+
+- (())startDeviceMotionUpdatesToQueue:(id)_queue withHandler:(id)_handler {
+    env.objc.borrow_mut::<CMMotionManagerHostObject>(this).device_motion_active = true;
+    log_dbg!("CMMotionManager startDeviceMotionUpdatesToQueue:withHandler: — handler will not be called (stub)");
 }
 
 @end

@@ -1965,10 +1965,26 @@ impl Environment {
                 // there will be soon, since timing is approximate).
                 continue;
             } else {
-                // This should hopefully not happen, but if a thread is
-                // blocked on another thread waiting for a deferred return,
-                // it could.
-                // TODO: handle a thread waiting on condition with a timeout
+                // All threads are blocked but none are sleeping — potential
+                // deadlock. Before panicking, give conditions with timeouts
+                // a brief grace period (10ms). This handles the edge case
+                // where a condition-wait with timeout hasn't been detected
+                // as "sleeping" because the scheduler loop hasn't
+                // re-evaluated it yet. After the grace period, if still
+                // stuck, abort with a clear diagnostic.
+                static DEADLOCK_GRACE_COUNT: std::sync::atomic::AtomicU32 =
+                    std::sync::atomic::AtomicU32::new(0);
+                let count = DEADLOCK_GRACE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if count < 3 {
+                    log!(
+                        "Warning: All threads appear blocked (attempt {}/3). \
+                         Sleeping 10ms before retrying…",
+                        count + 1
+                    );
+                    std::thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                DEADLOCK_GRACE_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
                 panic!("No active threads, program has deadlocked!");
             }
         }
