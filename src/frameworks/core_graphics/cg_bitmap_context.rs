@@ -101,6 +101,9 @@ pub fn CGBitmapContextCreate(
         flatness: 0.0,
         blend_mode: 0,
         interpolation_quality: 2,
+        // Quartz's default font state.
+        font: crate::mem::Ptr::null(),
+        font_size: 17.0,
         state_stack: Vec::new(),
         path_points: Vec::new(),
     };

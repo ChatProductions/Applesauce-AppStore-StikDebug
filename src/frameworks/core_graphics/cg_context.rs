@@ -11,10 +11,15 @@ use super::{cg_bitmap_context, cg_color, CGFloat, CGPoint, CGRect};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_bitmap_context::{
-    CGBitmapContextGetHeight, CGBitmapContextGetWidth,
+    CGBitmapContextDrawer, CGBitmapContextGetHeight, CGBitmapContextGetWidth,
 };
 use crate::frameworks::core_graphics::cg_color::CGColorRef;
+use crate::frameworks::core_graphics::cg_font::{
+    CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph,
+};
 use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
+use crate::frameworks::uikit;
+use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -35,6 +40,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     if bitmap_data.data_is_owned {
         env.mem.free(bitmap_data.data);
     }
+    let font = host_obj.font;
+    CGFontRelease(env, font);
 
     env.objc.dealloc_object(this, &mut env.mem)
 }
@@ -55,6 +62,10 @@ pub(super) struct CGContextHostObject {
     pub(super) flatness: CGFloat,
     pub(super) blend_mode: i32,
     pub(super) interpolation_quality: CGInterpolationQuality,
+    /// Current font (or null). Used by CGContextShowGlyphsAtPoint.
+    pub(super) font: CGFontRef,
+    /// Current font size in points.
+    pub(super) font_size: CGFloat,
     pub(super) transform: CGAffineTransform,
     /// (fill, stroke, alpha, line_width, line_cap, line_join, miter_limit,
     ///  flatness, blend_mode, transform)
@@ -77,6 +88,8 @@ pub(super) struct CGContextState {
     pub blend_mode: i32,
     pub interpolation_quality: CGInterpolationQuality,
     pub transform: CGAffineTransform,
+    pub font: CGFontRef,
+    pub font_size: CGFloat,
 }
 
 pub(super) enum CGContextSubclass {
@@ -852,17 +865,31 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         blend_mode: h.blend_mode,
         interpolation_quality: h.interpolation_quality,
         transform: h.transform,
+        font: h.font,
+        font_size: h.font_size,
     };
     env.objc
         .borrow_mut::<CGContextHostObject>(context)
         .state_stack
         .push(state);
+    // Retain the font we just stored in the saved state. It will be released
+    // by CGContextRestoreGState (or whenever the matching state is popped).
+    let font = env.objc.borrow::<CGContextHostObject>(context).font;
+    CGFontRetain(env, font);
 }
 
 fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     if context.is_null() {
         return;
     }
+    // We need to release the _current_ font on the context before overwriting
+    // it. There are 2 cases:
+    // - font hasn't been set between save/restore: this release balances the
+    //   font retain from save
+    // - font has been set between save/restore: we need to release the
+    //   font that was retained by CGContextSetFont
+    let current_font = env.objc.borrow::<CGContextHostObject>(context).font;
+    CGFontRelease(env, current_font);
     let host = env.objc.borrow_mut::<CGContextHostObject>(context);
     if let Some(state) = host.state_stack.pop() {
         host.rgb_fill_color = state.fill_color;
@@ -876,6 +903,8 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
         host.blend_mode = state.blend_mode;
         host.interpolation_quality = state.interpolation_quality;
         host.transform = state.transform;
+        host.font = state.font;
+        host.font_size = state.font_size;
     } else {
         log!("Warning: CGContextRestoreGState: stack underflow");
     }
@@ -942,13 +971,76 @@ fn CGContextShowText(
 ) {
 }
 
-fn CGContextSetFontSize(_env: &mut Environment, _context: CGContextRef, _size: CGFloat) {}
+fn CGContextSetFontSize(env: &mut Environment, context: CGContextRef, size: CGFloat) {
+    if context.is_null() {
+        return;
+    }
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .font_size = size;
+}
 
-fn CGContextSetFont(
-    _env: &mut Environment,
-    _context: CGContextRef,
-    _font: crate::mem::ConstVoidPtr,
+fn CGContextSetFont(env: &mut Environment, context: CGContextRef, font: CGFontRef) {
+    if context.is_null() {
+        return;
+    }
+    CGFontRetain(env, font);
+    let old_font = env.objc.borrow_mut::<CGContextHostObject>(context).font;
+    CGFontRelease(env, old_font);
+    env.objc.borrow_mut::<CGContextHostObject>(context).font = font;
+}
+
+/// `void CGContextShowGlyphsAtPoint(CGContextRef c, CGFloat x, CGFloat y,
+///                                  const CGGlyph *glyphs, size_t count)`
+fn CGContextShowGlyphsAtPoint(
+    env: &mut Environment,
+    context: CGContextRef,
+    x: CGFloat,
+    y: CGFloat,
+    glyphs: ConstPtr<CGGlyph>,
+    count: GuestUSize,
 ) {
+    if context.is_null() {
+        return;
+    }
+    let font = env.objc.borrow::<CGContextHostObject>(context).font;
+    if font.is_null() {
+        log!("Warning: CGContextShowGlyphsAtPoint called with no font set");
+        return;
+    }
+    if !super::cg_font::is_data_provider_font(env, font) {
+        log!(
+            "TODO: CGContextShowGlyphsAtPoint with non-data-provider font {:?}, skipping",
+            font
+        );
+        return;
+    }
+
+    let mut glyph_ids = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let glyph_id: CGGlyph = env.mem.read(glyphs + i);
+        glyph_ids.push(rusttype::GlyphId(glyph_id));
+    }
+
+    let font_size = env.objc.borrow::<CGContextHostObject>(context).font_size;
+
+    let mut drawer = CGBitmapContextDrawer::new(&env.objc, &mut env.mem, context);
+    let fill_color = drawer.rgb_fill_color();
+
+    // Borrow the actual rusttype Font for rendering. We hold a separate
+    // borrow on env.objc here because `drawer` has already taken a borrow
+    // on env.mem and on the bitmap context's host object, but it does not
+    // need the font host object.
+    let rusttype_font = &env.objc.borrow::<CGFontHostObject>(font).font;
+    rusttype_font.draw_glyphs(font_size, glyph_ids, (x, y), |raster_glyph| {
+        uikit::ui_font::draw_font_glyph(
+            &mut drawer,
+            raster_glyph,
+            fill_color,
+            /* clip_x: */ None,
+            /* clip_y: */ None,
+        )
+    });
 }
 
 pub const FUNCTIONS: FunctionExports = &[
@@ -980,6 +1072,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextShowText(_, _, _)),
     export_c_func!(CGContextSetFontSize(_, _)),
     export_c_func!(CGContextSetFont(_, _)),
+    export_c_func!(CGContextShowGlyphsAtPoint(_, _, _, _, _)),
     // Add to FUNCTIONS:
     export_c_func!(CGContextSetStrokeColorWithColor(_, _)),
     export_c_func!(CGContextSetGrayStrokeColor(_, _, _)),

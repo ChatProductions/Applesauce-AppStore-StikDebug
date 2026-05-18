@@ -29,6 +29,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         cg_color::CLASSES,
         cg_color_space::CLASSES,
         cg_context::CLASSES,
+        cg_font::CLASSES,
         cg_gradient::CLASSES,
         cg_image::CLASSES,
         cg_layer::CLASSES,
