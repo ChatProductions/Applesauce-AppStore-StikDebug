@@ -211,10 +211,15 @@ impl GuestPath {
 
     /// Splits the path into a parent path and a file name.
     pub fn parent_and_file_name(&self) -> Option<(&GuestPath, &str)> {
-        // TODO
-        assert!(!self.as_str().ends_with('/'));
-        // FIXME: this should do the same resolution as `std::path::file_name()`
-        let (parent_name, file_name) = self.as_str().rsplit_once('/')?;
+        // Strip trailing slashes to handle paths like "/foo/bar/"
+        let path_str = self.as_str().trim_end_matches('/');
+        if path_str.is_empty() {
+            return None;
+        }
+        let (parent_name, file_name) = path_str.rsplit_once('/')?;
+        if file_name.is_empty() {
+            return None;
+        }
         Some((GuestPath::new(parent_name), file_name))
     }
 

@@ -489,12 +489,32 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)lengthOfBytesUsingEncoding:(NSStringEncoding)encoding {
+    let string = to_rust_string(env, this);
     if C_STRING_FRIENDLY_ENCODINGS.contains(&encoding) {
-        let string = to_rust_string(env, this);
-        assert!(string.as_bytes().iter().all(|byte| byte.is_ascii())); // TODO
+        // For byte-compatible encodings, the byte length equals the
+        // string's UTF-8 byte length (for ASCII content) or the
+        // character count (for single-byte charsets). Use the UTF-8
+        // byte length as a safe upper bound — this matches what
+        // Apple's implementation returns for UTF-8.
         string.len().try_into().unwrap()
+    } else if encoding == NSUnicodeStringEncoding || encoding == NSUTF16StringEncoding {
+        // UTF-16: each code unit is 2 bytes. Rust's encode_utf16()
+        // gives exact code unit count.
+        (string.encode_utf16().count() * 2) as NSUInteger
+    } else if encoding == NSUTF16BigEndianStringEncoding {
+        (string.encode_utf16().count() * 2) as NSUInteger
+    } else if encoding == NSUTF32StringEncoding || encoding == NSUTF32LittleEndianStringEncoding {
+        // UTF-32: each character is 4 bytes.
+        (string.chars().count() * 4) as NSUInteger
     } else {
-        unimplemented!("lengthOfBytesUsingEncoding: {}", encoding)
+        // Fallback: return UTF-8 byte length rather than crashing.
+        // This is a safe approximation and prevents the emulator from
+        // aborting on an uncommon encoding.
+        log!(
+            "Warning: lengthOfBytesUsingEncoding: unknown encoding {}; returning UTF-8 byte count as fallback.",
+            encoding
+        );
+        string.len().try_into().unwrap()
     }
 }
 

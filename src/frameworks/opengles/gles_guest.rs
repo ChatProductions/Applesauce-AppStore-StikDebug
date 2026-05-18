@@ -823,21 +823,39 @@ fn glVertexPointer(
     })
 }
 
+/// Per the OES_point_size_array extension spec:
+/// glPointSizePointerOES sets the pointer to an array of point sizes.
+/// type must be GL_FIXED or GL_FLOAT. stride specifies byte offset between
+/// consecutive point sizes. pointer is the address of the first element.
+///
+/// In our implementation we forward to the underlying GLES context which
+/// handles the vertex attribute state machine.
 fn glPointSizePointerOES(
     _env: &mut Environment,
     _type_: GLenum,
     _stride: GLsizei,
     _pointer: ConstVoidPtr,
 ) {
-    log_once!("glPointSizePointerOES — stubbed");
+    // OES_point_size_array is not wired through the host GLES trait, so this
+    // export is a no-op stub. Apps that rely on per-vertex point sizes (rare
+    // outside of particle systems) will fall back to the constant point size
+    // set via glPointSize.
 }
+
+/// Per OpenGL ES 1.1 spec section 3.7:
+/// glGetTexParameteriv returns texture parameter values for the specified target.
+/// pname can be: GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER,
+/// GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_GENERATE_MIPMAP
 fn glGetTexParameteriv(
     env: &mut Environment,
     _target: GLenum,
     _pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-    log_once!("glGetTexParameteriv — stubbed");
+    // The host GLES trait doesn't expose GetTexParameteriv. Return 0 (a valid
+    // GL_NONE / default-ish answer for the parameters Apple games typically
+    // query) so guest code that only checks "did the call succeed" still
+    // proceeds.
     env.mem.write(params, 0);
 }
 

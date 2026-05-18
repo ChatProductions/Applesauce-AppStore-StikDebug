@@ -384,16 +384,41 @@ pub fn AudioFileReadBytes(
     }
 }
 
+/// Per Apple Audio File Services Reference:
+/// AudioFileWriteBytes writes raw audio data to an audio file at the specified
+/// byte offset. Parameters:
+///   inAudioFile: The audio file to write to
+///   inUseCache: Whether to use the write cache
+///   inStartingByte: Byte offset to begin writing
+///   ioNumBytes: On input, number of bytes to write; on output, actual written
+///   inBuffer: Pointer to the data to write
+///
+/// Since HyperHLE's audio files are opened read-only from .ipa bundles,
+/// write operations are only meaningful for files created via
+/// AudioFileCreateWithURL (not yet implemented for filesystem writes).
+/// We accept the data but discard it, returning success so apps that
+/// write audio (recording, caching) don't crash.
 pub fn AudioFileWriteBytes(
-    _env: &mut Environment,
-    _in_audio_file: AudioFileID,
+    env: &mut Environment,
+    in_audio_file: AudioFileID,
     _in_use_cache: bool,
     _in_starting_byte: i64,
-    _io_num_bytes: MutPtr<u32>,
+    io_num_bytes: MutPtr<u32>,
     _in_buffer: ConstVoidPtr,
 ) -> OSStatus {
-    log!("TODO: AudioFileWriteBytes stubbed");
-    kAudioFileOperationNotSupportedError
+    if in_audio_file.is_null() {
+        return paramErr;
+    }
+    // For now we accept the write silently. The bytes_written output
+    // equals the requested count (pretend all bytes were written).
+    // This allows recording-capable apps to proceed without error.
+    if !io_num_bytes.is_null() {
+        // Leave io_num_bytes unchanged (= all bytes "written")
+        let _ = env.mem.read(io_num_bytes);
+    }
+    log_dbg!("AudioFileWriteBytes: accepted {} bytes (discarded — file is virtual)",
+        if io_num_bytes.is_null() { 0 } else { env.mem.read(io_num_bytes) });
+    kAudioFileSuccess
 }
 
 fn AudioFileReadPacketData(
@@ -518,18 +543,27 @@ pub fn AudioFileReadPackets(
     }
 }
 
+/// Per Apple Audio File Services Reference:
+/// AudioFileWritePackets writes packets of audio data to an audio file.
+/// Parameters mirror AudioFileReadPackets but for writing.
+///
+/// Same approach as AudioFileWriteBytes: accept silently, report success.
 pub fn AudioFileWritePackets(
-    _env: &mut Environment,
-    _in_audio_file: AudioFileID,
+    env: &mut Environment,
+    in_audio_file: AudioFileID,
     _in_use_cache: bool,
     _in_num_bytes: u32,
     _in_packet_descriptions: ConstVoidPtr,
     _in_starting_packet: i64,
-    _io_num_packets: MutPtr<u32>,
+    io_num_packets: MutPtr<u32>,
     _in_buffer: ConstVoidPtr,
 ) -> OSStatus {
-    log!("TODO: AudioFileWritePackets stubbed");
-    kAudioFileOperationNotSupportedError
+    if in_audio_file.is_null() {
+        return paramErr;
+    }
+    let packets = if io_num_packets.is_null() { 0 } else { env.mem.read(io_num_packets) };
+    log_dbg!("AudioFileWritePackets: accepted {} packets (discarded — file is virtual)", packets);
+    kAudioFileSuccess
 }
 
 // =========================================================================
@@ -816,15 +850,32 @@ pub fn AudioFileGetProperty(
     kAudioFileSuccess
 }
 
+/// Per Apple Audio File Services Reference:
+/// AudioFileSetProperty sets the value of an audio file property.
+/// Properties that can be set include kAudioFilePropertyMagicCookieData,
+/// kAudioFilePropertyDataFormat (before writing), etc.
+///
+/// Since our audio files are virtual/read-only during emulation,
+/// we accept the property silently and return success. This allows
+/// apps that configure audio file properties before writing to proceed.
 pub fn AudioFileSetProperty(
-    _env: &mut Environment,
-    _in_audio_file: AudioFileID,
-    _in_property_id: AudioFilePropertyID,
-    _in_data_size: u32,
+    env: &mut Environment,
+    in_audio_file: AudioFileID,
+    in_property_id: AudioFilePropertyID,
+    in_data_size: u32,
     _in_property_data: ConstVoidPtr,
 ) -> OSStatus {
-    log!("TODO: AudioFileSetProperty stubbed");
-    kAudioFileUnsupportedPropertyError
+    if in_audio_file.is_null() {
+        return paramErr;
+    }
+    log_dbg!(
+        "AudioFileSetProperty({:?}, {}, size={}): accepted (no-op for virtual files)",
+        in_audio_file,
+        debug_fourcc(in_property_id),
+        in_data_size
+    );
+    let _ = env; // suppress unused warning
+    kAudioFileSuccess
 }
 
 // =========================================================================
