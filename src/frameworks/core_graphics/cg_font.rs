@@ -5,12 +5,17 @@
  */
 //! `CGFont`.
 
+use super::cg_data_provider;
+use super::cg_data_provider::CGDataProviderRef;
 use crate::dyld::{export_c_func, FunctionExports};
+use crate::font::Font;
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
-use crate::frameworks::core_foundation::CFTypeRef;
-use crate::frameworks::foundation::ns_string;
-use crate::mem::{MutVoidPtr, Ptr};
-use crate::objc::{id, msg, msg_class, nil, release, retain};
+use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
+use crate::frameworks::foundation::{ns_string, unichar};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, ObjC,
+};
 use crate::Environment;
 
 // =========================================================================
@@ -96,31 +101,102 @@ fn CGFontCreateCopyWithVariations(
 }
 
 /// `CGFontRef CGFontCreateWithDataProvider(CGDataProviderRef provider)`
-fn CGFontCreateWithDataProvider(_env: &mut Environment, provider: CFTypeRef) -> CGFontRef {
-    log!(
-        "TODO: CGFontCreateWithDataProvider({:?}) — returning NULL",
-        provider
-    );
-    Ptr::null()
+///
+/// Creates a CGFont backed by a real rasterizable [Font] parsed from the
+/// bytes provided by the data provider. The returned ref is an instance of
+/// the private `_touchHLE_CGFont` class.
+fn CGFontCreateWithDataProvider(
+    env: &mut Environment,
+    provider: CGDataProviderRef,
+) -> CGFontRef {
+    if provider.is_null() {
+        return Ptr::null();
+    }
+    let bytes = cg_data_provider::borrow_bytes(env, provider).to_vec();
+    let font = Font::from_vec(bytes);
+    let host_obj = Box::new(CGFontHostObject { font });
+    let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
+    env.objc.alloc_object(class, host_obj, &mut env.mem)
+}
+
+/// Host object backing a CGFont created via [CGFontCreateWithDataProvider].
+pub struct CGFontHostObject {
+    pub font: Font,
+}
+impl HostObject for CGFontHostObject {}
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+@implementation _touchHLE_CGFont: NSObject
+@end
+
+};
+
+/// Returns `true` if `font` is a CGFont created via
+/// [CGFontCreateWithDataProvider] (backed by [CGFontHostObject]).
+pub fn is_data_provider_font(env: &mut Environment, font: CGFontRef) -> bool {
+    if font.is_null() {
+        return false;
+    }
+    let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
+    let obj_class = ObjC::read_isa(font, &env.mem);
+    obj_class == class || env.objc.class_is_subclass_of(obj_class, class)
+}
+
+/// This is an undocumented API, but some apps still call it.
+fn CGFontGetGlyphsForUnichars(
+    env: &mut Environment,
+    font: CGFontRef,
+    chars: ConstPtr<unichar>,
+    glyphs: MutPtr<CGGlyph>,
+    length: GuestUSize,
+) -> bool {
+    if font.is_null() {
+        return false;
+    }
+    // Only the rusttype-backed _touchHLE_CGFont supports real glyph lookup.
+    if !is_data_provider_font(env, font) {
+        log!(
+            "TODO: CGFontGetGlyphsForUnichars on non-data-provider font {:?}, returning false",
+            font
+        );
+        return false;
+    }
+    let mut mapped: Vec<CGGlyph> = Vec::with_capacity(length as usize);
+    for i in 0..length {
+        let c: unichar = env.mem.read(chars + i);
+        let g = env
+            .objc
+            .borrow::<CGFontHostObject>(font)
+            .font
+            .glyph_id_for_char(c)
+            .0;
+        mapped.push(g);
+    }
+    for (i, g) in mapped.into_iter().enumerate() {
+        env.mem.write(glyphs + i as GuestUSize, g);
+    }
+    true
 }
 
 // =========================================================================
 // MARK: - Retain / Release
 // =========================================================================
 
-fn CGFontRetain(env: &mut Environment, font: CGFontRef) -> CGFontRef {
+pub fn CGFontRetain(env: &mut Environment, font: CGFontRef) -> CGFontRef {
     if font.is_null() {
         return Ptr::null();
     }
-    retain(env, font);
-    font
+    CFRetain(env, font)
 }
 
-fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
+pub fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
     if font.is_null() {
         return;
     }
-    release(env, font);
+    CFRelease(env, font);
 }
 
 // =========================================================================
@@ -130,6 +206,10 @@ fn CGFontRelease(env: &mut Environment, font: CGFontRef) {
 /// `CFStringRef CGFontCopyPostScriptName(CGFontRef font)`
 fn CGFontCopyPostScriptName(env: &mut Environment, font: CGFontRef) -> CFStringRef {
     if font.is_null() {
+        return nil;
+    }
+    if is_data_provider_font(env, font) {
+        // Data-provider-based CGFonts don't expose a queryable name.
         return nil;
     }
     // UIFont -fontName returns the PostScript name on iOS.
@@ -164,6 +244,13 @@ fn CGFontGetAscent(env: &mut Environment, font: CGFontRef) -> i32 {
     if font.is_null() {
         return 0;
     }
+    if is_data_provider_font(env, font) {
+        // Use the rusttype font's ascent at a 1-pt scale and map to design
+        // units (units-per-em).
+        let upm = CGFontGetUnitsPerEm(env, font) as f32;
+        let ascent = env.objc.borrow::<CGFontHostObject>(font).font.ascent(1.0);
+        return (ascent * upm).round() as i32;
+    }
     let ascender: f32 = msg![env; font ascender];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
     let point_size: f32 = msg![env; font pointSize];
@@ -178,6 +265,11 @@ fn CGFontGetDescent(env: &mut Environment, font: CGFontRef) -> i32 {
     if font.is_null() {
         return 0;
     }
+    if is_data_provider_font(env, font) {
+        let upm = CGFontGetUnitsPerEm(env, font) as f32;
+        let descent = env.objc.borrow::<CGFontHostObject>(font).font.descent(1.0);
+        return (descent * upm).round() as i32;
+    }
     let descender: f32 = msg![env; font descender];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
     let point_size: f32 = msg![env; font pointSize];
@@ -191,6 +283,15 @@ fn CGFontGetDescent(env: &mut Environment, font: CGFontRef) -> i32 {
 fn CGFontGetLeading(env: &mut Environment, font: CGFontRef) -> i32 {
     if font.is_null() {
         return 0;
+    }
+    if is_data_provider_font(env, font) {
+        let upm = CGFontGetUnitsPerEm(env, font) as f32;
+        let line_gap = env
+            .objc
+            .borrow::<CGFontHostObject>(font)
+            .font
+            .line_gap(1.0);
+        return (line_gap * upm).round() as i32;
     }
     let leading: f32 = msg![env; font leading];
     let upm = CGFontGetUnitsPerEm(env, font) as f32;
@@ -426,6 +527,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGFontCreateWithFontName(_)),
     export_c_func!(CGFontCreateCopyWithVariations(_, _)),
     export_c_func!(CGFontCreateWithDataProvider(_)),
+    // Glyph lookup
+    export_c_func!(CGFontGetGlyphsForUnichars(_, _, _, _)),
     // Retain / Release
     export_c_func!(CGFontRetain(_)),
     export_c_func!(CGFontRelease(_)),
