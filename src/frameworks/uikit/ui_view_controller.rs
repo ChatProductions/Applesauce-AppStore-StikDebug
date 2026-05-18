@@ -487,6 +487,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     false
 }
 
+// Apple docs: The style used to transition the receiver's modal view controller
+// (its modalViewController property) to the screen.
+- (UIModalTransitionStyle)modalTransitionStyle {
+    env.objc.borrow::<UIViewControllerHostObject>(this).modal_transition_style
+}
+- (())setModalTransitionStyle:(UIModalTransitionStyle)style {
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).modal_transition_style = style;
+}
+
+// Apple docs: The presentation style for modally presented view controllers.
+- (UIModalPresentationStyle)modalPresentationStyle {
+    env.objc.borrow::<UIViewControllerHostObject>(this).modal_presentation_style
+}
+- (())setModalPresentationStyle:(UIModalPresentationStyle)style {
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).modal_presentation_style = style;
+}
+
 - (bool)hidesBottomBarWhenPushed {
     false
 }

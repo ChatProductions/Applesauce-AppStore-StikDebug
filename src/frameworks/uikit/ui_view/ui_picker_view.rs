@@ -6,20 +6,23 @@
 //! `UIPickerView`.
 
 use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::uikit::ui_view::UIViewHostObject;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, msg_class, nil, objc_classes, release, retain,
+    ClassExports, NSZonePtr,
 };
 
 // TODO: rendering
 
 struct UIPickerViewHostObject {
+    superclass: UIViewHostObject,
     delegate: id,
     data_source: id,
     shows_selection_indicator: bool,
     /// Cached component count (from data source).
     number_of_components: NSUInteger,
 }
-impl HostObject for UIPickerViewHostObject {}
+impl_HostObject_with_superclass!(UIPickerViewHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -29,6 +32,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIPickerViewHostObject {
+        superclass: UIViewHostObject::default(),
         delegate: nil,
         data_source: nil,
         shows_selection_indicator: false,

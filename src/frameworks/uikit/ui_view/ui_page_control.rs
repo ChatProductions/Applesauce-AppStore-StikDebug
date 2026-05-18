@@ -6,11 +6,14 @@
 //! `UIPageControl`.
 
 use crate::frameworks::foundation::NSInteger;
+use super::ui_control::UIControlHostObject;
 use crate::objc::{
-    id, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg_class, nil, objc_classes, release, retain,
+    ClassExports, NSZonePtr,
 };
 
 struct UIPageControlHostObject {
+    superclass: UIControlHostObject,
     number_of_pages: NSInteger,
     current_page: NSInteger,
     hides_for_single_page: bool,
@@ -20,7 +23,7 @@ struct UIPageControlHostObject {
     /// UIColor* for the current-page dot.
     current_page_indicator_tint_color: id,
 }
-impl HostObject for UIPageControlHostObject {}
+impl_HostObject_with_superclass!(UIPageControlHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -30,6 +33,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UIPageControlHostObject {
+        superclass: UIControlHostObject::default(),
         number_of_pages: 0,
         current_page: 0,
         hides_for_single_page: false,
