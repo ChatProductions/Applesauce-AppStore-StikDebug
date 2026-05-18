@@ -102,10 +102,24 @@ fn munmap(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize) -> i32 {
         return -1;
     }
 
-    assert_eq!(*env.libc_state.mmap.allocations.get(&addr).unwrap(), len);
-    env.mem.free(addr);
-    env.libc_state.mmap.allocations.remove(&addr);
-    0 // success
+    if let Some(&expected_len) = env.libc_state.mmap.allocations.get(&addr) {
+        if expected_len != len {
+            log_dbg!(
+                "munmap({:?}, {}): length mismatch (expected {}), proceeding anyway",
+                addr, len, expected_len
+            );
+        }
+        env.mem.free(addr);
+        env.libc_state.mmap.allocations.remove(&addr);
+        0 // success
+    } else {
+        log!(
+            "Warning: munmap({:?}, {}): unknown mapping, returning -1",
+            addr, len
+        );
+        set_errno(env, EINVAL);
+        -1
+    }
 }
 
 fn madvise(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, advice: i32) -> i32 {

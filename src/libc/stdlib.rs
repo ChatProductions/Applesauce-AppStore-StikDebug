@@ -102,6 +102,11 @@ fn NSZoneRealloc(
 }
 
 fn NSZoneFree(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr) {
+    if ptr.is_null() {
+        return;
+    }
+    // Use the same safe path as libc free() — unknown pointers are
+    // gracefully rejected inside Mem::free with a log message.
     env.mem.free(ptr)
 }
 
