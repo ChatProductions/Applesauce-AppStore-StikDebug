@@ -398,9 +398,16 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     ""
                 };
                 if pad_width > 0 {
-                    assert!(precision.is_none());
-                    // TODO
                     let pad_width = pad_width as usize;
+                    // When precision is specified, it gives minimum digits
+                    // (zero-padded); pad_char '0' width-padding is suppressed
+                    // per POSIX/C99 when precision is given.
+                    let digits = if let Some(prec) = precision {
+                        format!("{:0>prec$x}", uint, prec = prec)
+                    } else {
+                        format!("{:x}", uint)
+                    };
+                    let formatted_with_prefix = format!("{}{}", prefix, digits);
                     if pad_char == '0' && precision.is_none() && !left_justified {
                         // For zero padding with alternative form, prefix goes
                         // before zeros
@@ -410,23 +417,20 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         } else {
                             write!(&mut res, "{:0>pad_width$x}", uint).unwrap();
                         }
+                    } else if left_justified {
+                        write!(&mut res, "{:<pad_width$}", formatted_with_prefix).unwrap();
                     } else {
-                        let formatted = format!("{}{:x}", prefix, uint);
-                        if left_justified {
-                            write!(&mut res, "{:<pad_width$}", formatted).unwrap();
-                        } else {
-                            write!(&mut res, "{:>pad_width$}", formatted).unwrap();
-                        }
+                        write!(&mut res, "{:>pad_width$}", formatted_with_prefix).unwrap();
                     }
                 } else {
-                    let tmp = if precision.is_some_and(|value| value > 0) {
-                        let prec = precision.unwrap();
-                        format!("{}{:0>prec$x}", prefix, uint, prec = prec)
-                    } else {
-                        if let Some(precision) = precision {
-                            assert!(precision == 0 && uint != 0);
-                            // TODO
+                    let tmp = if let Some(prec) = precision {
+                        if prec == 0 && uint == 0 {
+                            // %.0x with value 0 produces no output per C99
+                            String::new()
+                        } else {
+                            format!("{}{:0>prec$x}", prefix, uint, prec = prec)
                         }
+                    } else {
                         format!("{}{:x}", prefix, uint)
                     };
                     res.extend_from_slice(tmp.as_bytes());
@@ -434,7 +438,6 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'X' => {
                 assert!(!prepend_sign);
-                assert!(precision.is_none());
                 let uint: u64 = if length_modifier == Some("ll") {
                     args.next(env)
                 } else if length_modifier == Some("hh") {
@@ -454,6 +457,15 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 };
                 if pad_width > 0 {
                     let pad_width = pad_width as usize;
+                    // When precision is specified, it gives minimum digits
+                    // (zero-padded); pad_char '0' width-padding is suppressed
+                    // per POSIX/C99 when precision is given.
+                    let digits = if let Some(prec) = precision {
+                        format!("{:0>prec$X}", uint, prec = prec)
+                    } else {
+                        format!("{:X}", uint)
+                    };
+                    let formatted_with_prefix = format!("{}{}", prefix, digits);
                     if pad_char == '0' && precision.is_none() && !left_justified {
                         // For zero padding with alternative form, prefix goes
                         // before zeros
@@ -463,16 +475,23 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                         } else {
                             write!(&mut res, "{:0>pad_width$X}", uint).unwrap();
                         }
+                    } else if left_justified {
+                        write!(&mut res, "{:<pad_width$}", formatted_with_prefix).unwrap();
                     } else {
-                        let formatted = format!("{}{:X}", prefix, uint);
-                        if left_justified {
-                            write!(&mut res, "{:<pad_width$}", formatted).unwrap();
-                        } else {
-                            write!(&mut res, "{:>pad_width$}", formatted).unwrap();
-                        }
+                        write!(&mut res, "{:>pad_width$}", formatted_with_prefix).unwrap();
                     }
                 } else {
-                    res.extend_from_slice(format!("{}{:X}", prefix, uint).as_bytes());
+                    let tmp = if let Some(prec) = precision {
+                        if prec == 0 && uint == 0 {
+                            // %.0X with value 0 produces no output per C99
+                            String::new()
+                        } else {
+                            format!("{}{:0>prec$X}", prefix, uint, prec = prec)
+                        }
+                    } else {
+                        format!("{}{:X}", prefix, uint)
+                    };
+                    res.extend_from_slice(tmp.as_bytes());
                 }
             }
             b'p' => {

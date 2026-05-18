@@ -796,7 +796,16 @@ impl Mem {
 
     /// Free an allocation made with one of the `alloc` methods on this type.
     pub fn free(&mut self, ptr: MutVoidPtr) {
-        let size = self.allocator.free(ptr.to_bits());
+        if ptr.is_null() {
+            return;
+        }
+        let addr = ptr.to_bits();
+        // Reject obviously bogus pointers before passing to the allocator.
+        if !self.allocator.is_known_allocation(addr) {
+            log!("Can't free {:#x}, unknown allocation!", addr);
+            return;
+        }
+        let size = self.allocator.free(addr);
         if self.zero_memory_on_free {
             self.bytes_at_mut(ptr.cast(), size).fill(0);
         }

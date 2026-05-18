@@ -218,10 +218,27 @@ where
     assert!(!oldp.is_null() && !oldlenp.is_null());
     let oldlen = env.mem.read(oldlenp);
     if oldlen < len {
-        // TODO: set errno
-        // TODO: write partial data
-        log!("sysctl(byname) for '{name_str}': the buffer of size {oldlen} is too low to fit the value of size {len}, returning -1");
-        return -1;
+        // On real iOS, sysctl writes partial data when the buffer is too small
+        // for integer types.  Many apps (e.g. GunstarHeroes) pass a 4-byte
+        // buffer for hw.cpufrequency / hw.busfrequency which are Int64.
+        // iOS truncates to the available buffer size rather than failing.
+        match &val {
+            SysInfoType::Int64(num) if oldlen >= guest_size_of::<i32>() => {
+                // Truncate to low 32 bits (little-endian) — matches real device
+                // behavior where the lower word is written.
+                let truncated = *num as i32;
+                log_dbg!(
+                    "sysctl(byname) for '{name_str}': buffer {oldlen} < {len}, truncating Int64 to Int32 ({truncated})"
+                );
+                env.mem.write(oldp.cast(), truncated);
+                env.mem.write(oldlenp, guest_size_of::<i32>());
+                return 0;
+            }
+            _ => {
+                log!("sysctl(byname) for '{name_str}': the buffer of size {oldlen} is too low to fit the value of size {len}, returning -1");
+                return -1;
+            }
+        }
     }
     match val {
         String(str) => {
