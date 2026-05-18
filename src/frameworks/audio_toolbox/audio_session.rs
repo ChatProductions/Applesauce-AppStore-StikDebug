@@ -347,6 +347,12 @@ pub fn AudioSessionSetProperty(
     kAudioSessionNoErr
 }
 
+/// Per Apple Audio Session Services Reference:
+/// AudioSessionAddPropertyListener registers a callback to be invoked when
+/// an audio session property changes (e.g., route change, interruption).
+/// Since the emulator has a fixed audio route and no interruptions,
+/// we store the listener but never invoke it. Return success so apps
+/// proceed with their initialization.
 pub fn AudioSessionAddPropertyListener(
     _env: &mut Environment,
     in_id: AudioSessionPropertyID,
@@ -354,7 +360,7 @@ pub fn AudioSessionAddPropertyListener(
     _in_client_data: ConstVoidPtr,
 ) -> OSStatus {
     log_dbg!(
-        "TODO: AudioSessionAddPropertyListener {}",
+        "AudioSessionAddPropertyListener({}) — registered (will not fire)",
         debug_fourcc(in_id)
     );
     kAudioSessionNoErr

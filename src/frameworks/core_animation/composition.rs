@@ -719,10 +719,24 @@ unsafe fn composite_layer_recursive(
     }
     std::mem::drop(gles);
 
-    // avoid holding mutable borrow while recursing
-    let original_host_obj = env.objc.borrow_mut::<CALayerHostObject>(layer);
-    for &child_layer in &original_host_obj.sublayers.clone() {
-        // TODO: clipping/masksToBounds support
+    // Sort sublayers by zPosition for correct back-to-front compositing.
+    // Per Apple's CALayer documentation (iOS 2.0+):
+    //   "Sublayers that share the same value in their zPosition property
+    //    are rendered in the order they appear in the sublayers array."
+    // We clone the sublayer list, sort by zPosition (stable sort preserves
+    // order of equal elements), then composite each child.
+    let sorted_sublayers = {
+        let original_host_obj = env.objc.borrow::<CALayerHostObject>(layer);
+        let mut sublayers_copy = original_host_obj.sublayers.clone();
+        sublayers_copy.sort_by(|&a, &b| {
+            let z_a = env.objc.borrow::<CALayerHostObject>(a).z_position;
+            let z_b = env.objc.borrow::<CALayerHostObject>(b).z_position;
+            z_a.partial_cmp(&z_b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        sublayers_copy
+    };
+
+    for child_layer in sorted_sublayers {
         composite_layer_recursive(
             env,
             animation_state,

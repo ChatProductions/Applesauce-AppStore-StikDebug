@@ -208,15 +208,38 @@ impl GdbServer {
                 // Read single register by number
                 b'p' => {
                     let num = usize::from_str_radix(&p[1..], 16).unwrap();
+                    // ARM register numbering (GDB arm-tdep.c):
+                    //   0-15: R0-R15 (general purpose)
+                    //   16-24: f0-f7 + fps (legacy FPA, unused on iOS)
+                    //   25: CPSR
+                    //   26-57: d0-d15 (VFP double-precision, 64-bit each)
+                    //   58: FPSCR (VFP status/control)
+                    // Since dynarmic doesn't expose VFP state to us yet,
+                    // report zeros for FP registers (apps don't debug FP
+                    // state through GDB in practice). This prevents GDB
+                    // from disconnecting on "E00" for every FP register.
                     let reg = if num < 16 {
                         Some(cpu.regs()[num])
                     } else if num == 25 {
                         Some(cpu.cpsr())
-                    // TODO: FPSCR, VFP registers
+                    } else if (26..=57).contains(&num) {
+                        // VFP d0-d15: report as 64-bit zero
+                        // GDB expects 8 bytes for these (handled below)
+                        None // special case
+                    } else if num == 58 {
+                        // FPSCR: report as zero (no exceptions, round-to-nearest)
+                        Some(0u32)
+                    } else if (16..=24).contains(&num) {
+                        // Legacy FPA registers: report zero
+                        Some(0u32)
                     } else {
                         None
                     };
-                    if let Some(reg) = reg {
+
+                    if (26..=57).contains(&num) {
+                        // 64-bit VFP register: send 16 hex chars (8 bytes LE)
+                        self.send_packet("0000000000000000");
+                    } else if let Some(reg) = reg {
                         // Rust always prints in big-endian, but GDB expects
                         // little-endian.
                         let reg = u32::from_be_bytes(reg.to_le_bytes());
@@ -230,17 +253,20 @@ impl GdbServer {
                 b'P' => {
                     let (num, word) = p[1..].split_once('=').unwrap();
                     let num = usize::from_str_radix(num, 16).unwrap();
-                    let word = u32::from_str_radix(word, 16).unwrap();
-                    // Rust decodes in big-endian, but GDB supplies
-                    // little-endian.
-                    let word = u32::from_le_bytes(word.to_be_bytes());
                     if num < 16 {
+                        let word = u32::from_str_radix(word, 16).unwrap();
+                        let word = u32::from_le_bytes(word.to_be_bytes());
                         cpu.regs_mut()[num] = word;
                         self.send_packet("OK");
                     } else if num == 25 {
+                        let word = u32::from_str_radix(word, 16).unwrap();
+                        let word = u32::from_le_bytes(word.to_be_bytes());
                         cpu.set_cpsr(word);
                         self.send_packet("OK");
-                    // TODO: FPSCR, VFP registers
+                    } else if (26..=57).contains(&num) || num == 58 || (16..=24).contains(&num) {
+                        // VFP / FPA registers: accept the write silently
+                        // (we can't actually set them without dynarmic exposure)
+                        self.send_packet("OK");
                     } else {
                         // Error 0
                         self.send_packet("E00");

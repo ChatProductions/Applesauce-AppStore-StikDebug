@@ -823,22 +823,49 @@ fn glVertexPointer(
     })
 }
 
+/// Per the OES_point_size_array extension spec:
+/// glPointSizePointerOES sets the pointer to an array of point sizes.
+/// type must be GL_FIXED or GL_FLOAT. stride specifies byte offset between
+/// consecutive point sizes. pointer is the address of the first element.
+///
+/// In our implementation we forward to the underlying GLES context which
+/// handles the vertex attribute state machine.
 fn glPointSizePointerOES(
-    _env: &mut Environment,
-    _type_: GLenum,
-    _stride: GLsizei,
-    _pointer: ConstVoidPtr,
+    env: &mut Environment,
+    type_: GLenum,
+    stride: GLsizei,
+    pointer: ConstVoidPtr,
 ) {
-    log_once!("glPointSizePointerOES — stubbed");
+    // Per OES_point_size_array: valid types are GL_FLOAT (0x1406) and
+    // GL_FIXED (0x10000). The pointer is stored as a vertex array pointer
+    // and used during glDrawArrays/glDrawElements when GL_POINT_SIZE_ARRAY_OES
+    // is enabled.
+    let gles = env.framework_state.opengles.current_ctx_gles();
+    unsafe {
+        gles.PointSizePointerOES(
+            type_,
+            stride,
+            env.mem.ptr_at(pointer.cast::<u8>(), 0) as *const _,
+        );
+    }
 }
+
+/// Per OpenGL ES 1.1 spec section 3.7:
+/// glGetTexParameteriv returns texture parameter values for the specified target.
+/// pname can be: GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER,
+/// GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_GENERATE_MIPMAP
 fn glGetTexParameteriv(
     env: &mut Environment,
-    _target: GLenum,
-    _pname: GLenum,
+    target: GLenum,
+    pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-    log_once!("glGetTexParameteriv — stubbed");
-    env.mem.write(params, 0);
+    let gles = env.framework_state.opengles.current_ctx_gles();
+    let mut value: GLint = 0;
+    unsafe {
+        gles.GetTexParameteriv(target, pname, &mut value as *mut GLint);
+    }
+    env.mem.write(params, value);
 }
 
 fn glDrawTexfOES(
