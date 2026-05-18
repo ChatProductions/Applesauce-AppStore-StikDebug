@@ -6,8 +6,10 @@
 //! `UITabBarController` and `UITabBar`.
 
 use crate::frameworks::foundation::NSUInteger;
+use crate::frameworks::uikit::ui_view_controller::UIViewControllerHostObject;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, msg_class, nil, objc_classes, release, retain,
+    ClassExports, HostObject, NSZonePtr,
 };
 
 // MARK: - UITabBar host object
@@ -27,6 +29,7 @@ impl HostObject for UITabBarHostObject {}
 // MARK: - UITabBarController host object
 
 struct UITabBarControllerHostObject {
+    superclass: UIViewControllerHostObject,
     /// `NSArray*` of `UIViewController*`
     view_controllers: id,
     selected_index: NSUInteger,
@@ -35,7 +38,7 @@ struct UITabBarControllerHostObject {
     tab_bar: id,
     more_navigation_controller: id,
 }
-impl HostObject for UITabBarControllerHostObject {}
+impl_HostObject_with_superclass!(UITabBarControllerHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -236,6 +239,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(UITabBarControllerHostObject {
+        superclass: UIViewControllerHostObject::default(),
         view_controllers: nil,
         selected_index: 0,
         delegate: nil,
