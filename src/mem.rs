@@ -341,22 +341,31 @@ pub struct Mem {
     /// See [crate::Environment] for more info.
     pub(super) zero_memory_on_free: bool,
 
-    /// HACK: stub page for null-page accesses.
-    /// Uses NOP-sled: page is filled with zeros (safe for reading
-    /// data/pointers), and at the end has a BX LR instruction
-    /// (0x4770 in Thumb) for a safe return on direct NULL calls.
-    /// This lets games keep running instead of crashing on
-    /// UndefinedInstruction.
+    /// HACK: stub page for null-page READ accesses.
+    /// Filled with zeros so that reading *(void**)NULL returns NULL.
+    /// This page is NEVER written to by guest code — writes go to
+    /// `null_write_sink` instead.
     null_stub_page: *mut u8,
+
+    /// HACK: separate write-sink page for null-page WRITE accesses.
+    /// Writes to the null page go here and are silently discarded.
+    /// This prevents write operations from corrupting the zero-filled
+    /// read stub page.
+    null_write_sink: *mut u8,
 }
 
 impl Drop for Mem {
     fn drop(&mut self) {
         unsafe {
             crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
-            // Освобождаем страницу-заглушку
+            // Free the read stub page
             if !self.null_stub_page.is_null() {
                 crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize)
+                    .unwrap();
+            }
+            // Free the write sink page
+            if !self.null_write_sink.is_null() {
+                crate::mem::host::free_memory(self.null_write_sink.cast(), PAGE_SIZE as usize)
                     .unwrap();
             }
         }
@@ -389,22 +398,22 @@ impl Mem {
         );
         let bytes = ptr as *mut Bytes;
 
-        // ХАК: Создаём страницу-заглушку для null-page (4KB)
-        // Use a NOP-sled technique.
-        // Fill the page with zeros so that reading *(void**)0 returns NULL.
-        // If the game calls NULL directly: ((void(*)())0)(), the CPU will
-        // execute NOPs (MOVS R0,R0) and slide to the end of the page, where
-        // it hits BX LR and returns.
+        // Allocate read stub page for null-page reads (4KB, zero-filled).
+        // Data reads of a NULL pointer (e.g. `*(void**)0`) return NULL.
         let null_stub_page = unsafe {
             let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
             let stub_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
-
-            // Fill with zeros so that data reads of a NULL pointer
-            // (e.g. `*(void**)0`) keep returning NULL. We don't try to
-            // turn this page into an instruction "BX LR sled" — guest
-            // code that actually jumps through NULL is treated as a
-            // hard error elsewhere in the CPU emulator.
             stub_slice.fill(0);
+            page as *mut u8
+        };
+
+        // Allocate a separate write-sink page for null-page writes (4KB).
+        // Writes to the null page are absorbed here so that they don't
+        // corrupt the read stub page's zeros.
+        let null_write_sink = unsafe {
+            let page = crate::mem::host::allocate_memory(PAGE_SIZE as usize).unwrap();
+            let sink_slice = std::slice::from_raw_parts_mut(page as *mut u8, PAGE_SIZE as usize);
+            sink_slice.fill(0);
             page as *mut u8
         };
 
@@ -415,6 +424,7 @@ impl Mem {
             allocator,
             zero_memory_on_free: true,
             null_stub_page,
+            null_write_sink,
         }
     }
 
@@ -589,14 +599,15 @@ impl Mem {
         // ХАК: Вместо паники логируем и возвращаем данные из stub-страницы
         if ptr.to_bits() < self.null_segment_size {
             Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut");
-            // For writes to null-page, return the stub page (the write
-            // will be silently ignored).
+            // For writes to null-page, return the write-sink page so that
+            // writes are silently absorbed without corrupting the read stub
+            // page's zeros.
             let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
             let count_usize = count as usize;
             let available = PAGE_SIZE as usize - offset;
             let actual_count = count_usize.min(available);
             return unsafe {
-                std::slice::from_raw_parts_mut(self.null_stub_page.add(offset), actual_count)
+                std::slice::from_raw_parts_mut(self.null_write_sink.add(offset), actual_count)
             };
         }
         &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]

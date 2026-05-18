@@ -45,6 +45,21 @@ pub struct State {
     /// produce different strings per device.
     strings_cache: HashMap<(MutPtr<GuestALCdevice>, ALenum), ConstPtr<u8>>,
     current_ctx: MutPtr<GuestALCcontext>,
+    /// "Zombie" context: when a guest app destroys the current context
+    /// without first deleting its buffers/sources, we keep the host
+    /// OpenAL context alive here so that subsequent `alDeleteBuffers`
+    /// / `alDeleteSources` calls can still execute against a valid
+    /// host context. The zombie is dropped when a new context is made
+    /// current, or when the device is closed.
+    /// This matches Apple's iPhone OS behavior where the implementation
+    /// tolerates out-of-order cleanup.
+    zombie_context: Option<OpenALContext>,
+    /// Maps guest context pointers that have been destroyed to their
+    /// associated guest device pointer. This allows `alcGetContextsDevice`
+    /// to still return the correct device for contexts in cleanup sequences
+    /// (apps like Galaxy On Fire destroy the context, then query its device,
+    /// then close the device).
+    destroyed_context_devices: HashMap<MutPtr<GuestALCcontext>, MutPtr<GuestALCdevice>>,
 }
 impl State {
     fn get(env: &mut Environment) -> &mut Self {
@@ -53,10 +68,17 @@ impl State {
 
     fn try_make_current(env: &mut Environment) -> Option<OpenAL<'_>> {
         let state = &mut env.framework_state.openal;
-        state
-            .contexts
-            .get_mut(&state.current_ctx)
-            .map(|ctx| ctx.make_current(&mut env.openal_manager))
+        // Try the active context first.
+        if let Some(ctx) = state.contexts.get_mut(&state.current_ctx) {
+            return Some(ctx.make_current(&mut env.openal_manager));
+        }
+        // Fall back to the zombie context — this allows cleanup operations
+        // (alDeleteBuffers, alDeleteSources) to succeed even after the guest
+        // has called alcDestroyContext on what was the current context.
+        if let Some(zombie) = state.zombie_context.as_mut() {
+            return Some(zombie.make_current(&mut env.openal_manager));
+        }
+        None
     }
 }
 
@@ -155,6 +177,16 @@ fn alcCloseDevice(env: &mut Environment, device: MutPtr<GuestALCdevice>) -> bool
         );
         return false;
     };
+
+    // Drop the zombie context (if any) before closing the device,
+    // otherwise OpenAL Soft may complain about dangling contexts.
+    State::get(env).zombie_context = None;
+
+    // Clean up destroyed_context_devices entries referencing this device.
+    State::get(env)
+        .destroyed_context_devices
+        .retain(|_, dev| *dev != device);
+
     // Drop any cached `alcGetString` entries that referenced this
     // device — both the device-specific ones and any global query
     // (NULL device) entry would otherwise keep guest pointers alive
@@ -359,13 +391,48 @@ fn alcDestroyContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
         log!("alcDestroyContext() вызван с контекстом NULL, игнорируем");
         return;
     }
-    let Some(_host_context) = State::get(env).contexts.remove(&context) else {
-        log!(
-            "Warning: alcDestroyContext({:?}) called with unknown context; ignoring.",
-            context
-        );
+    let Some(host_context) = State::get(env).contexts.remove(&context) else {
+        // Check if it's already been destroyed (idempotent destroy)
+        if State::get(env).destroyed_context_devices.contains_key(&context) {
+            log_dbg!(
+                "alcDestroyContext({:?}): already destroyed (idempotent call); ignoring.",
+                context
+            );
+        } else {
+            log!(
+                "Warning: alcDestroyContext({:?}) called with unknown context; ignoring.",
+                context
+            );
+        }
         return;
     };
+
+    // Track the device association so alcGetContextsDevice still works
+    // for recently-destroyed contexts (apps query device after destroy).
+    let device_ptr = {
+        let host_device = host_context.GetContextsDevice();
+        State::get(env)
+            .devices
+            .iter()
+            .find(|(&_guest, &host)| host == host_device)
+            .map(|(&guest, _)| guest)
+            .unwrap_or(Ptr::null())
+    };
+    State::get(env)
+        .destroyed_context_devices
+        .insert(context, device_ptr);
+
+    // If this was the current context, save it as a zombie so that
+    // subsequent alDeleteBuffers/alDeleteSources calls can still
+    // execute cleanup against a valid host OpenAL context.
+    let is_current = State::get(env).current_ctx == context;
+    if is_current {
+        // Drop any previous zombie before replacing it.
+        State::get(env).zombie_context = Some(host_context);
+        State::get(env).current_ctx = Ptr::null();
+    }
+    // else: the context is simply dropped (triggering alcDestroyContext on host)
+
     env.mem.free(context.cast());
     log_dbg!("alcDestroyContext({:?})", context);
 }
@@ -401,6 +468,12 @@ fn alcSuspendContext(env: &mut Environment, context: MutPtr<GuestALCcontext>) {
 
 fn alcMakeContextCurrent(env: &mut Environment, context: MutPtr<GuestALCcontext>) -> bool {
     let res = if context.is_null() || State::get(env).contexts.contains_key(&context) {
+        // When switching to a new valid context (or NULL), drop the zombie.
+        // The zombie was only kept alive for cleanup operations; once the
+        // app sets a new context, cleanup is considered done.
+        if !context.is_null() {
+            State::get(env).zombie_context = None;
+        }
         State::get(env).current_ctx = context;
         true
     } else {
@@ -422,26 +495,38 @@ fn alcGetContextsDevice(
         log!("alcGetContextsDevice() вызван с контекстом NULL, игнорируем");
         return Ptr::null();
     }
-    let Some(host_context) = State::get(env).contexts.get(&context) else {
-        log!(
-            "Warning: alcGetContextsDevice({:?}) called with unknown context; returning NULL.",
-            context
-        );
-        return Ptr::null();
-    };
-    let host_device = host_context.GetContextsDevice();
-    let Some((&guest_device, _)) = State::get(env)
-        .devices
-        .iter()
-        .find(|(&_guest, &host)| host == host_device)
-    else {
+    // Check live contexts first.
+    if let Some(host_context) = State::get(env).contexts.get(&context) {
+        let host_device = host_context.GetContextsDevice();
+        let found = State::get(env)
+            .devices
+            .iter()
+            .find(|(&_guest, &host)| host == host_device)
+            .map(|(&guest_device, _)| guest_device);
+        if let Some(guest_device) = found {
+            return guest_device;
+        }
         log!(
             "Warning: alcGetContextsDevice({:?}): host device not tracked; returning NULL.",
             context
         );
         return Ptr::null();
-    };
-    guest_device
+    }
+    // Check recently-destroyed contexts — apps like Galaxy On Fire
+    // destroy the context and then immediately query its device.
+    if let Some(&device_ptr) = State::get(env).destroyed_context_devices.get(&context) {
+        log_dbg!(
+            "alcGetContextsDevice({:?}): context was destroyed but device {:?} still known.",
+            context,
+            device_ptr
+        );
+        return device_ptr;
+    }
+    log!(
+        "Warning: alcGetContextsDevice({:?}) called with unknown context; returning NULL.",
+        context
+    );
+    Ptr::null()
 }
 
 fn alcGetProcAddress(
@@ -712,7 +797,15 @@ fn alDeleteSources(env: &mut Environment, n: ALsizei, sources: ConstPtr<ALuint>)
         }
     };
     let sources = env.mem.ptr_at(sources, n_usize);
-    try_get_context!(env, context);
+    let Some(context) = State::try_make_current(env) else {
+        log!(
+            "Попытка вызова alDeleteSources({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
+            n,
+            sources,
+            State::get(env).current_ctx
+        );
+        return;
+    };
     unsafe { context.DeleteSources(n, sources) };
 }
 
