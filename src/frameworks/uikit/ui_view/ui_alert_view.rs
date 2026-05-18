@@ -5,6 +5,7 @@
  */
 //! `UIAlertView` — shows an SDL2 message box dialog.
 
+use crate::frameworks::core_graphics::cg_affine_transform::CGAffineTransform;
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::{ns_string, NSInteger, NSUInteger};
 use crate::objc::{
@@ -169,6 +170,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setFrame:(CGRect)_frame {
     log_dbg!("UIAlertView setFrame: ignored");
+}
+
+// UIAlertView inherits from UIView in real iOS.  We can't structurally
+// derive from UIView here (SDL2 dialog), so we stub the selectors that
+// guest apps actually invoke on alert views.
+- (())setTransform:(CGAffineTransform)_transform {
+    // UIAlertView in touchHLE is rendered via SDL2 system dialog,
+    // so geometric transforms are not applicable.
+    log_dbg!("UIAlertView setTransform: ignored (SDL2 dialog)");
+}
+
+- (id)viewWithTag:(NSInteger)tag {
+    // Real UIAlertView would search subviews, but touchHLE doesn't manage
+    // a subview hierarchy for alerts.  Return self if the tag matches,
+    // otherwise nil (Apple semantics: receiver is searched first).
+    let own_tag: NSInteger = msg![env; this tag];
+    if own_tag == tag { return this; }
+    nil
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {

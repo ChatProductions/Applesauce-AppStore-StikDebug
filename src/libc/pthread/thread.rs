@@ -544,6 +544,61 @@ fn pthread_setschedparam(
     0
 }
 
+// =========================================================================
+// MARK: - Signals & scope (stubs for compatibility)
+// =========================================================================
+
+/// `pthread_sigmask` — change or examine the signal mask for the calling thread.
+/// In touchHLE signals are not emulated, so this is a no-op returning success.
+fn pthread_sigmask(
+    _env: &mut Environment,
+    how: i32,
+    set: ConstVoidPtr,
+    old_set: MutVoidPtr,
+) -> i32 {
+    log_dbg!(
+        "pthread_sigmask(how={}, set={:?}, old_set={:?}) -> stub 0",
+        how,
+        set,
+        old_set
+    );
+    // If old_set is non-NULL, real POSIX would write the previous mask.
+    // In our HLE environment signals don't exist, so we leave it zeroed /
+    // untouched.  Returning 0 = success.
+    0
+}
+
+/// `pthread_kill` — send a signal to a specific thread.
+/// Not supported in HLE; returns 0 (success) to avoid app abort.
+fn pthread_kill(
+    _env: &mut Environment,
+    thread: pthread_t,
+    sig: i32,
+) -> i32 {
+    log_dbg!(
+        "pthread_kill(thread={:?}, sig={}) -> stub 0",
+        thread,
+        sig
+    );
+    0
+}
+
+/// `pthread_attr_setscope` — set the contention scope attribute.
+/// On Darwin this is essentially always PTHREAD_SCOPE_SYSTEM.  We accept any
+/// value and return 0.
+fn pthread_attr_setscope(
+    _env: &mut Environment,
+    attr: MutVoidPtr,
+    scope: i32,
+) -> i32 {
+    log_dbg!(
+        "pthread_attr_setscope(attr={:?}, scope={}) -> stub 0",
+        attr,
+        scope
+    );
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     // Attributes
     export_c_func!(pthread_attr_init(_)),
@@ -554,6 +609,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_attr_setinheritsched(_, _)),
     export_c_func!(pthread_attr_setschedpolicy(_, _)),
     export_c_func!(pthread_attr_setschedparam(_, _)),
+    export_c_func!(pthread_attr_setscope(_, _)),
     export_c_func!(pthread_attr_destroy(_)),
     // Lifecycle
     export_c_func!(pthread_create(_, _, _, _)),
@@ -567,6 +623,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_setcancelstate(_, _)),
     export_c_func!(pthread_setcanceltype(_, _)),
     export_c_func!(pthread_testcancel()),
+    // Signals
+    export_c_func!(pthread_sigmask(_, _, _)),
+    export_c_func!(pthread_kill(_, _)),
     // Darwin extensions
     export_c_func!(pthread_mach_thread_np(_)),
     export_c_func!(pthread_get_stackaddr_np(_)),
