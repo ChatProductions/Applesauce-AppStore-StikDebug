@@ -25,6 +25,7 @@ pub mod ui_document;
 pub mod ui_event;
 pub mod ui_font;
 pub mod ui_geometry;
+pub mod ui_gesture_recognizer;
 pub mod ui_graphics;
 pub mod ui_image;
 pub mod ui_image_picker_controller;
@@ -39,6 +40,7 @@ pub mod ui_responder;
 pub mod ui_rotation_gesture_recognizer;
 pub mod ui_screen;
 pub mod ui_screen_mode;
+pub mod ui_search_bar;
 pub mod ui_split_view_controller;
 pub mod ui_tab_bar_controller;
 pub mod ui_tab_bar_item;
@@ -281,6 +283,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_document::CLASSES,
         ui_event::CLASSES,
         ui_font::CLASSES,
+        ui_gesture_recognizer::CLASSES,
         ui_image::CLASSES,
         ui_image_picker_controller::CLASSES,
         ui_keyboard::CLASSES,
@@ -294,12 +297,14 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_responder::CLASSES,
         ui_screen_mode::CLASSES,
         ui_screen::CLASSES,
+        ui_search_bar::CLASSES,
         ui_split_view_controller::CLASSES,
         ui_tab_bar_item::CLASSES,
         ui_tab_bar_controller::CLASSES,
         ui_touch::CLASSES,
         ui_view::CLASSES,
         ui_view::ui_alert_view::CLASSES,
+        ui_view::ui_collection_view::CLASSES,
         ui_view::ui_control::CLASSES,
         ui_view::ui_control::ui_bar_button_item::CLASSES,
         ui_view::ui_control::ui_button::CLASSES,

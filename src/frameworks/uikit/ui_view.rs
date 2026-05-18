@@ -11,6 +11,7 @@
 //! - Apple's [View Programming Guide for iOS](https://developer.apple.com/library/archive/documentation/WindowsViews/Conceptual/ViewPG_iPhoneOS/Introduction/Introduction.html)
 
 pub mod ui_alert_view;
+pub mod ui_collection_view;
 pub mod ui_control;
 pub mod ui_image_view;
 pub mod ui_label;
@@ -667,7 +668,123 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isExclusiveTouch { env.objc.borrow::<UIViewHostObject>(this).exclusive_touch }
 - (())setExclusiveTouch:(bool)exclusive { env.objc.borrow_mut::<UIViewHostObject>(this).exclusive_touch = exclusive; }
 
-- (())layoutSubviews { }
+- (())layoutSubviews {
+    // Apple docs: "The default implementation uses any constraints you have
+    // set to determine the size and position of any subviews." For legacy
+    // autoresizing mask-based layout (iOS ≤ 5 era), the default implementation
+    // adjusts subviews based on their autoresizingMask relative to changes
+    // in the receiver's bounds.
+    //
+    // Autoresizing mask bits:
+    //   UIViewAutoresizingFlexibleLeftMargin   = 1 << 0
+    //   UIViewAutoresizingFlexibleWidth        = 1 << 1
+    //   UIViewAutoresizingFlexibleRightMargin  = 1 << 2
+    //   UIViewAutoresizingFlexibleTopMargin    = 1 << 3
+    //   UIViewAutoresizingFlexibleHeight       = 1 << 4
+    //   UIViewAutoresizingFlexibleBottomMargin = 1 << 5
+    //
+    // We only apply autoresizing if `autoresizesSubviews` is YES (default).
+    let autoresizes: bool = msg![env; this autoresizesSubviews];
+    if !autoresizes {
+        return;
+    }
+
+    let bounds: CGRect = msg![env; this bounds];
+    let subviews = env.objc.borrow::<UIViewHostObject>(this).subviews.clone();
+
+    for subview in subviews {
+        let mask: NSUInteger = msg![env; subview autoresizingMask];
+        if mask == 0 {
+            continue;
+        }
+
+        let frame: CGRect = msg![env; subview frame];
+        let parent_w = bounds.size.width;
+        let parent_h = bounds.size.height;
+
+        // Determine how to distribute extra space horizontally.
+        let flex_left = (mask & (1 << 0)) != 0;
+        let flex_width = (mask & (1 << 1)) != 0;
+        let flex_right = (mask & (1 << 2)) != 0;
+
+        let mut new_x = frame.origin.x;
+        let mut new_w = frame.size.width;
+
+        let right_margin = parent_w - (frame.origin.x + frame.size.width);
+        let h_flex_count =
+            flex_left as i32 + flex_width as i32 + flex_right as i32;
+        if h_flex_count > 0 {
+            // For flexible width, expand to fill; for flexible margins, center.
+            if flex_width && !flex_left && !flex_right {
+                new_w = parent_w - frame.origin.x - right_margin;
+            } else if flex_width && flex_left && flex_right {
+                // All three flexible: distribute proportionally based on
+                // original ratios. Simplified: just stretch width to fill.
+                let total = frame.origin.x + frame.size.width + right_margin;
+                if total > 0.0 {
+                    let ratio_x = frame.origin.x / total;
+                    let ratio_w = frame.size.width / total;
+                    new_x = parent_w * ratio_x;
+                    new_w = parent_w * ratio_w;
+                }
+            } else if flex_left && flex_right && !flex_width {
+                // Flexible margins, fixed width: center.
+                new_x = (parent_w - frame.size.width) / 2.0;
+            } else if flex_width && flex_left {
+                new_x = parent_w - new_w - right_margin;
+                new_w = parent_w - new_x - right_margin;
+            } else if flex_width && flex_right {
+                new_w = parent_w - frame.origin.x - right_margin;
+            } else if flex_left && !flex_width {
+                new_x = parent_w - frame.size.width - right_margin;
+            }
+            // flex_right only: x and width stay the same
+        }
+
+        // Determine how to distribute extra space vertically.
+        let flex_top = (mask & (1 << 3)) != 0;
+        let flex_height = (mask & (1 << 4)) != 0;
+        let flex_bottom = (mask & (1 << 5)) != 0;
+
+        let mut new_y = frame.origin.y;
+        let mut new_h = frame.size.height;
+
+        let bottom_margin = parent_h - (frame.origin.y + frame.size.height);
+        let v_flex_count =
+            flex_top as i32 + flex_height as i32 + flex_bottom as i32;
+        if v_flex_count > 0 {
+            if flex_height && !flex_top && !flex_bottom {
+                new_h = parent_h - frame.origin.y - bottom_margin;
+            } else if flex_height && flex_top && flex_bottom {
+                let total = frame.origin.y + frame.size.height + bottom_margin;
+                if total > 0.0 {
+                    let ratio_y = frame.origin.y / total;
+                    let ratio_h = frame.size.height / total;
+                    new_y = parent_h * ratio_y;
+                    new_h = parent_h * ratio_h;
+                }
+            } else if flex_top && flex_bottom && !flex_height {
+                new_y = (parent_h - frame.size.height) / 2.0;
+            } else if flex_height && flex_top {
+                new_y = parent_h - new_h - bottom_margin;
+                new_h = parent_h - new_y - bottom_margin;
+            } else if flex_height && flex_bottom {
+                new_h = parent_h - frame.origin.y - bottom_margin;
+            } else if flex_top && !flex_height {
+                new_y = parent_h - frame.size.height - bottom_margin;
+            }
+        }
+
+        let new_frame = CGRect {
+            origin: CGPoint { x: new_x, y: new_y },
+            size: CGSize { width: new_w.max(0.0), height: new_h.max(0.0) },
+        };
+
+        if new_frame != frame {
+            () = msg![env; subview setFrame:new_frame];
+        }
+    }
+}
 
 // Per Apple docs: "Use this method to force the view to update its layout
 // immediately. [...] This method acts on the root view of the receiver's
