@@ -153,6 +153,26 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIPasteboardNameFind",
         HostConstant::NSString("UIPasteboardNameFind"),
     ),
+    // UIPasteboard type list constants (NSArray of UTI strings).
+    // On real iOS these are NSArray singletons; here we export them as
+    // NSString constants since the dyld linker only needs a non-NULL
+    // address and the app typically uses them for identity comparison.
+    (
+        "_UIPasteboardTypeListString",
+        HostConstant::NSString("public.utf8-plain-text"),
+    ),
+    (
+        "_UIPasteboardTypeListURL",
+        HostConstant::NSString("public.url"),
+    ),
+    (
+        "_UIPasteboardTypeListImage",
+        HostConstant::NSString("public.image"),
+    ),
+    (
+        "_UIPasteboardTypeListColor",
+        HostConstant::NSString("com.apple.uikit.color"),
+    ),
     // -----------------------------------------------------------------
     // UITextView change notification.
     // -----------------------------------------------------------------

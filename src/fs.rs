@@ -716,6 +716,22 @@ impl Fs {
             FsNode::from_host_dir(&root_host_path, true)
         };
 
+        // Create a writable host directory for the app's sandbox root
+        // (the UUID directory). Some apps (notably Unity/Mono games) need to
+        // create hidden directories like .wapi in this location.
+        let app_sandbox_host_path = if !read_only_mode {
+            let path = paths::user_data_base_path()
+                .join(paths::SANDBOX_DIR)
+                .join(bundle_id)
+                .join("AppSandbox");
+            if let Err(e) = std::fs::create_dir_all(&path) {
+                panic!("Could not create app sandbox directory at {path:?}: {e:?}");
+            }
+            Some(path)
+        } else {
+            None
+        };
+
         let root = root_node
             .with_child(
                 "var",
@@ -728,7 +744,7 @@ impl Fs {
                                 FAKE_UUID,
                                 FsNode::Directory {
                                     children: app_dir_children,
-                                    writeable: None,
+                                    writeable: app_sandbox_host_path,
                                 },
                             ),
                         )

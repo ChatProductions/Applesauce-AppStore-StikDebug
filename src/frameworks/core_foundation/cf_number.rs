@@ -219,6 +219,89 @@ pub const CONSTANTS: ConstantExports = &[
             env.mem.alloc_and_write(num).cast_void().cast_const()
         }),
     ),
+    // -----------------------------------------------------------------
+    // CFNumberFormatter property key constants (CFStringRef).
+    // These are the string keys passed to CFNumberFormatterSetProperty /
+    // CFNumberFormatterCopyProperty. Apple documents their literal values
+    // as their own names (e.g. "kCFNumberFormatterCurrencyCode").
+    // Reference: Apple CF source & ICU backing.
+    // -----------------------------------------------------------------
+    (
+        "_kCFNumberFormatterCurrencyCode",
+        HostConstant::NSString("kCFNumberFormatterCurrencyCode"),
+    ),
+    (
+        "_kCFNumberFormatterCurrencyDecimalSeparator",
+        HostConstant::NSString("kCFNumberFormatterCurrencyDecimalSeparator"),
+    ),
+    (
+        "_kCFNumberFormatterCurrencyGroupingSeparator",
+        HostConstant::NSString("kCFNumberFormatterCurrencyGroupingSeparator"),
+    ),
+    (
+        "_kCFNumberFormatterCurrencySymbol",
+        HostConstant::NSString("kCFNumberFormatterCurrencySymbol"),
+    ),
+    (
+        "_kCFNumberFormatterDecimalSeparator",
+        HostConstant::NSString("kCFNumberFormatterDecimalSeparator"),
+    ),
+    (
+        "_kCFNumberFormatterGroupingSeparator",
+        HostConstant::NSString("kCFNumberFormatterGroupingSeparator"),
+    ),
+    (
+        "_kCFNumberFormatterGroupingSize",
+        HostConstant::NSString("kCFNumberFormatterGroupingSize"),
+    ),
+    (
+        "_kCFNumberFormatterMaxFractionDigits",
+        HostConstant::NSString("kCFNumberFormatterMaxFractionDigits"),
+    ),
+    (
+        "_kCFNumberFormatterMinFractionDigits",
+        HostConstant::NSString("kCFNumberFormatterMinFractionDigits"),
+    ),
+    (
+        "_kCFNumberFormatterMinIntegerDigits",
+        HostConstant::NSString("kCFNumberFormatterMinIntegerDigits"),
+    ),
+    (
+        "_kCFNumberFormatterMinusSign",
+        HostConstant::NSString("kCFNumberFormatterMinusSign"),
+    ),
+    (
+        "_kCFNumberFormatterNegativePrefix",
+        HostConstant::NSString("kCFNumberFormatterNegativePrefix"),
+    ),
+    (
+        "_kCFNumberFormatterNegativeSuffix",
+        HostConstant::NSString("kCFNumberFormatterNegativeSuffix"),
+    ),
+    (
+        "_kCFNumberFormatterPositivePrefix",
+        HostConstant::NSString("kCFNumberFormatterPositivePrefix"),
+    ),
+    (
+        "_kCFNumberFormatterPositiveSuffix",
+        HostConstant::NSString("kCFNumberFormatterPositiveSuffix"),
+    ),
+    (
+        "_kCFNumberFormatterRoundingIncrement",
+        HostConstant::NSString("kCFNumberFormatterRoundingIncrement"),
+    ),
+    (
+        "_kCFNumberFormatterSecondaryGroupingSize",
+        HostConstant::NSString("kCFNumberFormatterSecondaryGroupingSize"),
+    ),
+    (
+        "_kCFNumberFormatterUseGroupingSeparator",
+        HostConstant::NSString("kCFNumberFormatterUseGroupingSeparator"),
+    ),
+    (
+        "_kCFNumberFormatterZeroSymbol",
+        HostConstant::NSString("kCFNumberFormatterZeroSymbol"),
+    ),
 ];
 
 pub const FUNCTIONS: FunctionExports = &[

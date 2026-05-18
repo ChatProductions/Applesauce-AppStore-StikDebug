@@ -50,9 +50,12 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
         // return either NULL or a unique pointer; we choose unique...
     }
 
-    // Твой стандартный лимит TouchHLE (обычно 128 МБ - 0x0800_0000)
-    // Если в твоем файле лимит другой - оставь свою цифру.
-    if size > 0x0800_0000 {
+    // Refuse allocations that exceed guest address space (32-bit).
+    // The practical guest heap is limited to ~256 MB; anything above that
+    // is almost certainly a corrupted size value. We use 0x1000_0000
+    // (256 MB) as the threshold — this covers real-world games like
+    // Dead Space that may allocate large texture/audio buffers.
+    if size > 0x1000_0000 {
         log!(
             "TouchHLE::libc::stdlib: malloc({:#x}) refused as out of range — returning NULL",
             size

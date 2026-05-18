@@ -301,6 +301,11 @@ fn strstr(env: &mut Environment, string: ConstPtr<u8>, substring: ConstPtr<u8>) 
 fn strchr(env: &mut Environment, path: ConstPtr<u8>, c: u8) -> ConstPtr<u8> {
     GenericChar::<u8>::strchr(env, path, c)
 }
+/// POSIX `index()` — identical to `strchr()`. Finds the first occurrence of
+/// byte `c` in the string pointed to by `s`.
+fn index(env: &mut Environment, s: ConstPtr<u8>, c: u8) -> ConstPtr<u8> {
+    GenericChar::<u8>::strchr(env, s, c)
+}
 fn strrchr(env: &mut Environment, path: ConstPtr<u8>, c: u8) -> ConstPtr<u8> {
     GenericChar::<u8>::strrchr(env, path, c)
 }
@@ -653,6 +658,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strncat(_, _, _)),
     export_c_func!(strstr(_, _)),
     export_c_func!(strchr(_, _)),
+    export_c_func!(index(_, _)),
     export_c_func!(strrchr(_, _)),
     export_c_func!(strlcpy(_, _, _)),
     export_c_func!(strlcat(_, _, _)),

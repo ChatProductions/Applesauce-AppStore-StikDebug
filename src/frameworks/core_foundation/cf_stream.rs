@@ -61,6 +61,7 @@ pub const kCFStreamSSLValidatesCertificateChain: &str = "kCFStreamSSLValidatesCe
 pub const kCFStreamSSLPeerName: &str = "kCFStreamSSLPeerName";
 pub const kCFStreamSSLCertificates: &str = "kCFStreamSSLCertificates";
 pub const kCFStreamSSLIsServer: &str = "kCFStreamSSLIsServer";
+pub const kCFStreamPropertySocketSecurityLevel: &str = "kCFStreamPropertySocketSecurityLevel";
 
 pub const CONSTANTS: ConstantExports = &[
     (
@@ -86,6 +87,10 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCFStreamPropertySocketRemotePortNumber",
         HostConstant::NSString(kCFStreamPropertySocketRemotePortNumber),
+    ),
+    (
+        "_kCFStreamPropertySocketSecurityLevel",
+        HostConstant::NSString(kCFStreamPropertySocketSecurityLevel),
     ),
     (
         "_kCFStreamPropertyShouldCloseNativeSocket",
