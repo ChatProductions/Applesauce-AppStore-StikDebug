@@ -1402,7 +1402,23 @@ impl Fs {
         }
 
         let host_path = dir_host_path.join(&new_dir_name);
-        handle_open_err(std::fs::create_dir(&host_path), &host_path);
+        // Use create_dir but tolerate AlreadyExists — the directory may exist
+        // on disk from a previous run even though it was not in the in-memory
+        // filesystem tree (e.g. the tree was rebuilt on launch while the host
+        // directory was preserved).
+        match std::fs::create_dir(&host_path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                // The directory already exists on the host — this is fine.
+                log_dbg!(
+                    "create_dir: host directory already exists at {:?}, reusing",
+                    host_path
+                );
+            }
+            Err(e) => {
+                handle_open_err(Err::<(), _>(e), &host_path);
+            }
+        }
         log_dbg!(
             "Created directory at path {:?} (host path: {:?})",
             path,

@@ -9,7 +9,7 @@
 //! Resources:
 //! - [View Controller Programming Guide for iOS (Legacy)](https://developer.apple.com/library/archive/documentation/WindowsViews/Conceptual/ViewControllerPGforiOSLegacy/BasicViewControllers/BasicViewControllers.html)
 
-use crate::frameworks::core_graphics::CGRect;
+use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::ns_objc_runtime::NSStringFromClass;
 use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
@@ -29,7 +29,7 @@ pub type UIModalTransitionStyle = i32;
 pub type UIModalPresentationStyle = i32;
 
 #[derive(Default)]
-struct UIViewControllerHostObject {
+pub(crate) struct UIViewControllerHostObject {
     /// The root view.
     /// `UIView*`
     view: id,
@@ -502,6 +502,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setModalPresentationStyle:(UIModalPresentationStyle)style {
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).modal_presentation_style = style;
+}
+
+// =========================================================================
+// MARK: - Preferred content size (iOS 7+, replaces deprecated
+//         contentSizeForViewInPopover)
+// =========================================================================
+
+- (CGSize)preferredContentSize {
+    // Return zero — the caller (UIPopoverController) uses a default size when
+    // this is zero.
+    CGSize { width: 0.0, height: 0.0 }
+}
+
+- (())setPreferredContentSize:(CGSize)_size {
+    // Stub — we don't render popovers, so we just swallow the value.
+}
+
+// Deprecated predecessor (iOS 3.2–7.0)
+- (CGSize)contentSizeForViewInPopover {
+    msg![env; this preferredContentSize]
+}
+
+- (())setContentSizeForViewInPopover:(CGSize)size {
+    let _: () = msg![env; this setPreferredContentSize:size];
 }
 
 - (bool)hidesBottomBarWhenPushed {
