@@ -16,6 +16,8 @@ use std::num::FpCategory;
 type FERoundingDirection = i32;
 const FE_TONEAREST: FERoundingDirection = 0x000000;
 const FE_TOWARDZERO: FERoundingDirection = 0xc00000;
+const FE_UPWARD: FERoundingDirection = 0x400000;
+const FE_DOWNWARD: FERoundingDirection = 0x800000;
 
 #[derive(Default)]
 pub struct State {
@@ -373,7 +375,15 @@ fn rint(env: &mut Environment, arg: f64) -> f64 {
             arg.round_ties_even()
         }
         FE_TOWARDZERO => arg.trunc(),
-        _ => unimplemented!(),
+        FE_UPWARD => arg.ceil(),
+        FE_DOWNWARD => arg.floor(),
+        other => {
+            log!(
+                "Warning: rint/nearbyint: unknown rounding mode {}; defaulting to round-to-nearest.",
+                other
+            );
+            arg.round_ties_even()
+        }
     }
 }
 fn lrint(env: &mut Environment, arg: f64) -> i32 {

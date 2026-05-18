@@ -125,8 +125,12 @@ pub fn pthread_cond_timedwait(
     abs_time: ConstPtr<timespec>,
 ) -> i32 {
     let time = env.mem.read(abs_time);
-    let deadline = Duration::from_secs(time.tv_sec.try_into().unwrap())
-        + Duration::from_nanos(time.tv_nsec.try_into().unwrap());
+    // Per POSIX, tv_sec and tv_nsec are signed but negative values are invalid.
+    // Real iOS clamps them to 0 rather than crashing. Some games (e.g. Unity
+    // engine with uninitialized timespec) pass garbage values here.
+    let secs: u64 = time.tv_sec.max(0) as u64;
+    let nanos: u64 = time.tv_nsec.max(0) as u64;
+    let deadline = Duration::from_secs(secs) + Duration::from_nanos(nanos);
 
     if let Err(e) = check_or_register_cond(env, cond) {
         return e;

@@ -7,7 +7,7 @@
 use crate::dyld::FunctionExports;
 use crate::environment::Environment;
 use crate::export_c_func;
-use crate::libc::errno::{set_errno, EINVAL, ENOTSUP};
+use crate::libc::errno::{set_errno, EIO, EINVAL, ENOTSUP};
 use crate::libc::posix_io;
 use crate::libc::posix_io::{off_t, open_direct, FileDescriptor, SEEK_SET};
 use crate::mem::{ConstPtr, GuestUSize, MutVoidPtr, PAGE_SIZE_ALIGN_MASK};
@@ -75,13 +75,35 @@ fn mmap(
             );
         }
     } else {
-        assert!(addr.is_null());
-        // Смещение файла корректно отрабатывается через lseek
+        // File-backed mmap: read file content into the allocated buffer.
+        if !addr.is_null() {
+            log_dbg!(
+                "mmap file-backed ignoring hint for address {:?}, actual is {:?}",
+                addr,
+                ptr
+            );
+        }
+        // Seek to the requested offset. If the seek fails (e.g. bad fd),
+        // return MAP_FAILED (-1 as pointer) instead of crashing.
         let new_offset = posix_io::lseek(env, fd, offset, SEEK_SET);
-        assert_eq!(new_offset, offset);
+        if new_offset != offset {
+            log!(
+                "Warning: mmap: lseek to offset {} failed (returned {}); returning MAP_FAILED",
+                offset, new_offset
+            );
+            env.mem.free(ptr);
+            set_errno(env, EIO);
+            return Ptr::from_bits(0xFFFFFFFF); // MAP_FAILED
+        }
 
         let read = posix_io::read(env, fd, ptr, len);
-        assert_eq!(read as u32, len);
+        if (read as u32) < len {
+            log!(
+                "Warning: mmap: read only {} of {} bytes from fd {}; padding remainder with zeros",
+                read, len, fd
+            );
+            // Remainder is already zeroed (calloc)
+        }
     }
 
     assert!(!env.libc_state.mmap.allocations.contains_key(&ptr));

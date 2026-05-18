@@ -200,8 +200,17 @@ fn sysctl_generic<F>(
 where
     F: FnOnce(&mut Environment) -> Option<(&'static str, SysInfoType)>,
 {
-    assert!(newp.is_null());
-    assert_eq!(newlen, 0);
+    // Per POSIX, sysctl with non-null newp sets a value. iOS apps sometimes
+    // call this (e.g. Mono runtime trying to set kern.osrelease), but on
+    // real iOS it silently fails with EPERM. Mirror that instead of crashing.
+    if !newp.is_null() || newlen != 0 {
+        log!(
+            "Warning: sysctl: write attempt (newp={:?}, newlen={}) — returning EPERM (-1)",
+            newp, newlen
+        );
+        set_errno(env, 1); // EPERM
+        return -1;
+    }
 
     let Some((name_str, val)) = name_lookup(env) else {
         return -1;

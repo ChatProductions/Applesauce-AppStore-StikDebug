@@ -44,16 +44,16 @@ fn statvfs(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<statvfs>) -> i
     let statvfs = statvfs {
         // From the manpage:
         // "Corresponds to the f_iosize member of struct statfs."
-        f_bsize: statfs.f_iosize.try_into().unwrap(),
+        f_bsize: statfs.f_iosize.try_into().unwrap_or(u32::MAX),
         // From the manpage:
         // "This corresponds to the f_bsize member of struct statfs."
         f_frsize: statfs.f_bsize,
-        f_blocks: statfs.f_blocks.try_into().unwrap(),
-        f_bfree: statfs.f_bfree.try_into().unwrap(),
-        f_bavail: statfs.f_bavail.try_into().unwrap(),
-        f_files: statfs.f_files.try_into().unwrap(),
-        f_ffree: statfs.f_ffree.try_into().unwrap(),
-        f_favail: statfs.f_ffree.try_into().unwrap(), // TODO: Is this right?
+        f_blocks: statfs.f_blocks.try_into().unwrap_or(u32::MAX),
+        f_bfree: statfs.f_bfree.try_into().unwrap_or(u32::MAX),
+        f_bavail: statfs.f_bavail.try_into().unwrap_or(u32::MAX),
+        f_files: statfs.f_files.try_into().unwrap_or(u32::MAX),
+        f_ffree: statfs.f_ffree.try_into().unwrap_or(u32::MAX),
+        f_favail: statfs.f_ffree.try_into().unwrap_or(u32::MAX), // TODO: Is this right?
         // From the manpage: "Not meaningful in this implementation"
         f_fsid: 0,
         // ИСПРАВЛЕНИЕ: было `& ST_RDONLY & ST_NOSUID`, что всегда равно 0,

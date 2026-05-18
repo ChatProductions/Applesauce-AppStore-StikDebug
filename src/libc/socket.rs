@@ -22,7 +22,7 @@
 //! - [Beej's Guide to Network Programming](https://beej.us/guide/bgnet/html/index-wide.html)
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::libc::errno::{set_errno, EACCES, ENOTCONN, EAGAIN, EADDRINUSE, EADDRNOTAVAIL, EBADF, ECONNRESET, ECONNREFUSED, EINVAL, EIO, EISCONN, ENETUNREACH, ESOCKTNOSUPPORT, ETIMEDOUT, EPROTONOSUPPORT};
+use crate::libc::errno::{set_errno, EACCES, EAFNOSUPPORT, ENOTCONN, EAGAIN, EADDRINUSE, EADDRNOTAVAIL, EBADF, ECONNRESET, ECONNREFUSED, EINVAL, EIO, EISCONN, ENETUNREACH, ESOCKTNOSUPPORT, ETIMEDOUT, EPROTONOSUPPORT};
 use crate::libc::posix_io::{close, find_or_create_socket, is_socket, FileDescriptor};
 use crate::libc::time::timeval;
 use crate::mem::{
@@ -79,7 +79,15 @@ impl sockaddr {
     /// Port is returned in the native endian format.
     fn to_ipv4_parts(self) -> ([u8; 4], u16) {
         assert!(self.sa_len == 16 || self.sa_len == 0);
-        assert_eq!(self.sa_family, AF_INET as u8);
+        // Gracefully handle non-AF_INET sockaddr: if the family is wrong,
+        // return a zero address instead of panicking.
+        if self.sa_family != AF_INET as u8 {
+            log!(
+                "Warning: to_ipv4_parts called with sa_family={} (not AF_INET={}); returning 0.0.0.0:0",
+                self.sa_family, AF_INET
+            );
+            return ([0, 0, 0, 0], 0);
+        }
         let port = u16::from_be_bytes([self.sa_data[0], self.sa_data[1]]);
         let ip = [
             self.sa_data[2],
@@ -164,9 +172,25 @@ fn socket(env: &mut Environment, domain: i32, type_: i32, protocol: i32) -> File
         return -1;
     }
 
-    assert_eq!(domain, AF_INET);
-    assert!(type_ == SOCK_STREAM || type_ == SOCK_DGRAM);
-    assert!(protocol == IPPROTO_TCP || protocol == IPPROTO_UDP || protocol == 0);
+    // Per BSD sockets API, only AF_INET (IPv4) is supported by this emulator.
+    // If the game requests AF_INET6 or another family, return an error instead
+    // of crashing the host.
+    if domain != AF_INET {
+        log!(
+            "Warning: socket({}, {}, {}): unsupported address family (only AF_INET supported); returning -1",
+            domain, type_, protocol
+        );
+        set_errno(env, EAFNOSUPPORT);
+        return -1;
+    }
+    if type_ != SOCK_STREAM && type_ != SOCK_DGRAM {
+        log!(
+            "Warning: socket({}, {}, {}): unsupported socket type; returning -1",
+            domain, type_, protocol
+        );
+        set_errno(env, EPROTONOSUPPORT);
+        return -1;
+    }
 
     let fd = find_or_create_socket(env);
     assert!(!State::get(env).sockets.contains_key(&fd));
