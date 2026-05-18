@@ -573,7 +573,23 @@ impl Mem {
                 std::slice::from_raw_parts(self.null_stub_page.add(offset), actual_count)
             };
         }
-        &self.bytes()[ptr.to_bits() as usize..][..count as usize]
+        // Guard against out-of-bounds reads near the top of the 32-bit address
+        // space. If `ptr + count` wraps around or exceeds the backing array,
+        // return the stub page. This prevents panics when a game uses -1 or
+        // another near-max address as a pointer (corrupted pointer arithmetic).
+        let addr = ptr.to_bits() as usize;
+        let end = addr.saturating_add(count as usize);
+        if end > self.bytes().len() || end < addr {
+            Self::null_check_fail(ptr.to_bits(), count, false, "bytes_at(OOB)");
+            let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let available = PAGE_SIZE as usize - offset;
+            let actual_count = count_usize.min(available);
+            return unsafe {
+                std::slice::from_raw_parts(self.null_stub_page.add(offset), actual_count)
+            };
+        }
+        &self.bytes()[addr..][..count as usize]
     }
     /// Get a slice for reading `count` bytes without a null-page check.
     ///
@@ -585,7 +601,19 @@ impl Mem {
         ptr: Ptr<u8, MUT>,
         count: GuestUSize,
     ) -> &[u8] {
-        &self.bytes()[ptr.to_bits() as usize..][..count as usize]
+        let addr = ptr.to_bits() as usize;
+        let end = addr.saturating_add(count as usize);
+        if end > self.bytes().len() || end < addr {
+            Self::null_check_fail(ptr.to_bits(), count, false, "unchecked_bytes_at(OOB)");
+            let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let available = PAGE_SIZE as usize - offset;
+            let actual_count = count_usize.min(available);
+            return unsafe {
+                std::slice::from_raw_parts(self.null_stub_page.add(offset), actual_count)
+            };
+        }
+        &self.bytes()[addr..][..count as usize]
     }
     /// Get a slice for reading or writing `count` bytes.
     /// This is the basic
@@ -610,7 +638,21 @@ impl Mem {
                 std::slice::from_raw_parts_mut(self.null_write_sink.add(offset), actual_count)
             };
         }
-        &mut self.bytes_mut()[ptr.to_bits() as usize..][..count as usize]
+        // Guard against out-of-bounds writes near the top of the 32-bit
+        // address space (e.g. corrupted pointer = 0xFFFFFFFF).
+        let addr = ptr.to_bits() as usize;
+        let end = addr.saturating_add(count as usize);
+        if end > self.bytes().len() || end < addr {
+            Self::null_check_fail(ptr.to_bits(), count, true, "bytes_at_mut(OOB)");
+            let offset = (ptr.to_bits() % PAGE_SIZE) as usize;
+            let count_usize = count as usize;
+            let available = PAGE_SIZE as usize - offset;
+            let actual_count = count_usize.min(available);
+            return unsafe {
+                std::slice::from_raw_parts_mut(self.null_write_sink.add(offset), actual_count)
+            };
+        }
+        &mut self.bytes_mut()[addr..][..count as usize]
     }
 
     /// Get a pointer for reading an array of `count` elements of type `T`.

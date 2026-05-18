@@ -790,6 +790,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Default implementation does nothing — subclasses override this.
 }
 
+// =========================================================================
+// Fallback UIView-like methods on NSObject for compatibility with game
+// engines (e.g. Digital Chocolate) that send view-hierarchy messages to
+// objects of the wrong type due to corrupted pointers. Returning an empty
+// array / nil prevents infinite loops and log spam without crashing.
+// =========================================================================
+- (id)subviews {
+    // Return an empty NSArray so iteration loops terminate immediately.
+    msg_class![env; NSArray array]
+}
+
+- (id)superview {
+    nil
+}
+
 @end
 
 };

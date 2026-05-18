@@ -798,9 +798,15 @@ impl Dyld {
                     trampoline_ptr
                 );
                 trampoline_ptr
-            } else if search_host_dylibs(|dylib| dylib.constant_exports, name).is_some() {
-                // Skip the constants from DYLD_INFO because we already
-                // handle the consts when reading the __nl_symbol_ptr section
+            } else if let Some((_, template)) = search_host_dylibs(|dylib| dylib.constant_exports, name) {
+                // Constants from host dylibs need late linking (they may
+                // require a full Environment to resolve, e.g. NSString
+                // objects). Store for resolution in do_late_linking().
+                // NOTE: We must NOT skip these — a binary may reference a
+                // constant ONLY via external relocations without a matching
+                // __nl_symbol_ptr entry (e.g. ___sF in Digital Chocolate
+                // games compiled with older toolchains).
+                self.constants_to_link_later.push((ptr_ptr, template));
                 continue;
             } else {
                 unhandled_relocations

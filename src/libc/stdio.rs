@@ -840,6 +840,13 @@ fn ftrylockfile(_env: &mut Environment, _file_ptr: MutPtr<FILE>) -> i32 {
     0 // success
 }
 
+/// Size of Darwin's `__sFILE` struct on 32-bit ARM (88 bytes).
+/// Apps compiled against the real SDK use `___sF` as an array of 3 such
+/// structs, indexed by file descriptor number: `&___sF[0]` = stdin,
+/// `&___sF[1]` = stdout, `&___sF[2]` = stderr. We must match this stride
+/// even though our internal FILE only uses the first 4 bytes (the fd field).
+const DARWIN_SFILE_SIZE: u32 = 88;
+
 pub const CONSTANTS: ConstantExports = &[
     (
         "___stdinp",
@@ -863,6 +870,35 @@ pub const CONSTANTS: ConstantExports = &[
             let ptr = env.mem.alloc_and_write(FILE { fd: STDERR_FILENO });
             // Note: Host object would be created lazily
             env.mem.alloc_and_write(ptr).cast().cast_const()
+        }),
+    ),
+    // BSD/Darwin `___sF` — an array of 3 `__sFILE` structs used by older
+    // binaries (armv6 era) that reference stdin/stdout/stderr via this
+    // symbol rather than the individual `___stdinp` / `___stdoutp` /
+    // `___stderrp` pointers. Digital Chocolate engine games (StuntCar,
+    // Pyramid Bloxx, etc.) link against this symbol.
+    (
+        "___sF",
+        HostConstant::Custom(|env| -> ConstVoidPtr {
+            // Allocate a contiguous block of 3 * 88 bytes (zero-filled).
+            let total_size = DARWIN_SFILE_SIZE * 3;
+            let base: MutPtr<u8> = env.mem.alloc(total_size).cast();
+            // Zero the entire block first
+            for i in 0..total_size {
+                env.mem.write((base + i).cast::<u8>(), 0u8);
+            }
+            // Write the fd field at the start of each __sFILE slot.
+            // Offset 0 of each struct is `_p` (char*) on real Darwin,
+            // but since our FILE only needs the fd and apps using ___sF
+            // typically pass the pointer to fprintf/fscanf which reads
+            // our FILE.fd, we place fd at offset 0.
+            let stdin_ptr: MutPtr<i32> = base.cast();
+            env.mem.write(stdin_ptr, STDIN_FILENO);
+            let stdout_ptr: MutPtr<i32> = Ptr::from_bits(base.to_bits() + DARWIN_SFILE_SIZE);
+            env.mem.write(stdout_ptr, STDOUT_FILENO);
+            let stderr_ptr: MutPtr<i32> = Ptr::from_bits(base.to_bits() + DARWIN_SFILE_SIZE * 2);
+            env.mem.write(stderr_ptr, STDERR_FILENO);
+            base.cast_const().cast()
         }),
     ),
 ];

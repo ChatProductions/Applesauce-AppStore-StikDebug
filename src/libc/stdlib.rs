@@ -51,11 +51,16 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
     }
 
     // Refuse allocations that exceed guest address space (32-bit).
-    // The practical guest heap is limited to ~256 MB; anything above that
-    // is almost certainly a corrupted size value. We use 0x1000_0000
-    // (256 MB) as the threshold — this covers real-world games like
-    // Dead Space that may allocate large texture/audio buffers.
-    if size > 0x1000_0000 {
+    // The practical guest heap is limited to ~512 MB; anything above that
+    // is almost certainly a corrupted size value. Original iPhone OS devices
+    // had at most 128-256 MB of RAM, so any allocation in the hundreds of
+    // megabytes range is highly suspect. We use 0x2000_0000 (512 MB) as
+    // the threshold — generous enough for real-world games with heavy
+    // texture/audio buffers (e.g. Dead Space) while still catching obviously
+    // corrupted values from buggy game engines (Digital Chocolate games
+    // sometimes compute nonsensical allocation sizes due to NULL pointer
+    // arithmetic when upstream issues cause initialization failures).
+    if size > 0x2000_0000 {
         log!(
             "TouchHLE::libc::stdlib: malloc({:#x}) refused as out of range — returning NULL",
             size
