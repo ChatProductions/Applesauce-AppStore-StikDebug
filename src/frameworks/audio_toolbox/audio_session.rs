@@ -49,6 +49,8 @@ const kAudioSessionProperty_OverrideCategoryDefaultToSpeaker: AudioSessionProper
     fourcc(b"cspk");
 const kAudioSessionProperty_OverrideCategoryEnableBluetoothInput: AudioSessionPropertyID =
     fourcc(b"cblu");
+const kAudioSessionProperty_OtherMixableAudioShouldDuck: AudioSessionPropertyID =
+    fourcc(b"duck");
 
 // Значения категорий (из AudioSession.h)
 const kAudioSessionCategory_AmbientSound: u32 = fourcc(b"ambi");
@@ -68,6 +70,7 @@ pub struct State {
     pub mix_with_others: u32,
     pub default_to_speaker: u32,
     pub bluetooth_input: u32,
+    pub duck_others: u32,
 }
 
 impl Default for State {
@@ -90,6 +93,7 @@ impl Default for State {
             mix_with_others: 0,
             default_to_speaker: 0,
             bluetooth_input: 0,
+            duck_others: 0,
         }
     }
 }
@@ -105,7 +109,8 @@ fn get_audio_session_property_size(in_id: AudioSessionPropertyID) -> u32 {
         | kAudioSessionProperty_OverrideAudioRoute
         | kAudioSessionProperty_OverrideCategoryMixWithOthers
         | kAudioSessionProperty_OverrideCategoryDefaultToSpeaker
-        | kAudioSessionProperty_OverrideCategoryEnableBluetoothInput => guest_size_of::<u32>(),
+        | kAudioSessionProperty_OverrideCategoryEnableBluetoothInput
+        | kAudioSessionProperty_OtherMixableAudioShouldDuck => guest_size_of::<u32>(),
 
         kAudioSessionProperty_CurrentHardwareOutputVolume
         | kAudioSessionProperty_CurrentHardwareIOBufferDuration
@@ -243,6 +248,10 @@ pub fn AudioSessionGetProperty(
             env.mem
                 .write(out_data.cast::<u32>(), session.bluetooth_input);
         }
+        kAudioSessionProperty_OtherMixableAudioShouldDuck => {
+            env.mem
+                .write(out_data.cast::<u32>(), session.duck_others);
+        }
         _ => {
             log!(
                 "TODO: AudioSessionGetProperty UNIMPLEMENTED write for {}",
@@ -319,6 +328,13 @@ pub fn AudioSessionSetProperty(
         }
         kAudioSessionProperty_OverrideCategoryEnableBluetoothInput => {
             session.bluetooth_input = env.mem.read(in_data.cast::<u32>());
+        }
+        kAudioSessionProperty_OtherMixableAudioShouldDuck => {
+            session.duck_others = env.mem.read(in_data.cast::<u32>());
+            log_dbg!(
+                "AudioSessionSetProperty OtherMixableAudioShouldDuck -> {}",
+                session.duck_others
+            );
         }
         _ => {
             log!(

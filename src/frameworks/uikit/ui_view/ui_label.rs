@@ -225,7 +225,52 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())sizeToFit {
-    log!("TODO: [UILabel*) {:?} sizeToFit]", this);
+    let size: CGSize = msg![env; this sizeThatFits:(CGSize { width: CGFloat::MAX, height: CGFloat::MAX })];
+    let origin: CGPoint = {
+        let frame: CGRect = msg![env; this frame];
+        frame.origin
+    };
+    let new_frame = CGRect { origin, size };
+    () = msg![env; this setFrame:new_frame];
+}
+
+- (CGSize)sizeThatFits:(CGSize)size {
+    let &UILabelHostObject { text, font, line_break_mode, number_of_lines, .. } =
+        env.objc.borrow(this);
+
+    if text == nil || font == nil {
+        return CGSize { width: 0.0, height: 0.0 };
+    }
+
+    let len: NSUInteger = msg![env; text length];
+    if len == 0 {
+        // Even with empty text, UILabel reports one line height
+        let line_height: CGFloat = msg![env; font lineHeight];
+        return CGSize { width: 0.0, height: line_height };
+    }
+
+    let single_line = number_of_lines == 1;
+
+    if single_line {
+        let text_size: CGSize = msg![env; text sizeWithFont:font];
+        text_size
+    } else {
+        // Constrain to the proposed width (or infinite if unconstrained),
+        // with effectively unlimited height for multi-line labels.
+        let max_height = if number_of_lines == 0 {
+            // 0 means unlimited lines
+            CGFloat::MAX
+        } else {
+            // number_of_lines > 1: allow that many lines worth of height
+            let line_height: CGFloat = msg![env; font lineHeight];
+            line_height * (number_of_lines as CGFloat) + 1.0
+        };
+        let constraint = CGSize { width: size.width, height: max_height };
+        let text_size: CGSize = msg![env; text sizeWithFont:font
+                  constrainedToSize:constraint
+                      lineBreakMode:line_break_mode];
+        text_size
+    }
 }
 
 - (())drawRect:(CGRect)_rect {

@@ -7,7 +7,7 @@
 
 use crate::dyld::FunctionExports;
 use crate::export_c_func;
-use crate::libc::errno::{set_errno, EINVAL, ENXIO};
+use crate::libc::errno::{set_errno, ENXIO};
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::Environment;
 
@@ -41,21 +41,18 @@ unsafe impl SafeRead for ifaddrs {}
 
 /// `int getifaddrs(struct ifaddrs **ifap)`
 ///
-/// Stub: we do not enumerate real host interfaces. Returns -1 / EOPNOTSUPP so
-/// that callers fall back gracefully instead of crashing on a null list.
+/// Returns success (0) with an empty interface list (*ifap = NULL).
+/// Network-aware apps interpret an empty list as "no network interfaces
+/// available" and gracefully fall back to offline mode, which is the
+/// correct behavior for an emulator that doesn't expose host networking.
 fn getifaddrs(env: &mut Environment, ifap: MutPtr<MutPtr<ifaddrs>>) -> i32 {
-    // Write NULL into *ifap so callers that ignore the return value and
-    // dereference ifap anyway get a well-defined NULL rather than garbage.
+    // Write NULL into *ifap — an empty linked list means no interfaces.
     if !ifap.is_null() {
         env.mem.write(ifap, MutPtr::null());
     }
 
-    // EOPNOTSUPP = 102 on Darwin; reuse the closest available errno constant.
-    // Using set_errno with literal 102 keeps us independent of whether
-    // touchHLE has EOPNOTSUPP defined yet.
-    set_errno(env, 102 /* EOPNOTSUPP */);
-    log!("TODO: getifaddrs() – returning error (not implemented)");
-    -1
+    log_dbg!("getifaddrs() => 0 (empty list, no interfaces exposed to guest)");
+    0 // success
 }
 
 /// `void freeifaddrs(struct ifaddrs *ifa)`

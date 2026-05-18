@@ -182,6 +182,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// valueForPasteboardType: is the older iOS API name for dataForPasteboardType:
+- (id)valueForPasteboardType:(id)pasteboard_type {
+    msg![env; this dataForPasteboardType:pasteboard_type]
+}
+
+// setValue:forPasteboardType: is the older iOS API name for setData:forPasteboardType:
+- (())setValue:(id)value forPasteboardType:(id)pasteboard_type {
+    () = msg![env; this setData:value forPasteboardType:pasteboard_type];
+}
+
 - (())setData:(id)data forPasteboardType:(id)pasteboard_type { // NSData*, NSString*
     if pasteboard_type == nil {
         return;

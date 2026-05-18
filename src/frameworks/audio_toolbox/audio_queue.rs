@@ -123,6 +123,8 @@ pub type AudioQueuePropertyID = u32;
 pub const kAudioQueueProperty_IsRunning: AudioQueuePropertyID = fourcc(b"aqrn");
 const kAudioQueueProperty_MagicCookie: AudioQueuePropertyID = fourcc(b"aqmc");
 const kAudioQueueProperty_StreamDescription: AudioQueuePropertyID = fourcc(b"aqft");
+const kAudioQueueProperty_MaximumOutputPacketSize: AudioQueuePropertyID = fourcc(b"aqmv");
+const kAudioQueueProperty_EnableLevelMetering: AudioQueuePropertyID = fourcc(b"aqme");
 type AudioQueuePropertyListenerProc = GuestFunction;
 
 const kAudioQueueErr_InvalidBuffer: OSStatus = -66687;
@@ -474,6 +476,8 @@ fn property_size(property_id: AudioQueuePropertyID) -> Option<GuestUSize> {
         kAudioQueueProperty_StreamDescription => {
             Some(guest_size_of::<AudioStreamBasicDescription>())
         }
+        kAudioQueueProperty_MaximumOutputPacketSize => Some(guest_size_of::<u32>()),
+        kAudioQueueProperty_EnableLevelMetering => Some(guest_size_of::<u32>()),
         _ => None,
     }
 }
@@ -558,8 +562,30 @@ fn AudioQueueGetProperty(
         kAudioQueueProperty_MagicCookie => {
             log_dbg!("AudioQueueGetProperty: kAudioQueueProperty_MagicCookie requested, returning empty.");
         }
+        kAudioQueueProperty_MaximumOutputPacketSize => {
+            // Return the bytes_per_packet from the queue's stream format.
+            // If the format is VBR (bytes_per_packet == 0), report a
+            // reasonable upper bound so the caller can size its read buffer.
+            let max_packet = if host_object.format.bytes_per_packet > 0 {
+                host_object.format.bytes_per_packet
+            } else {
+                // Conservative upper bound for common compressed formats
+                // (AAC, MP3, etc.) — matches what Core Audio typically
+                // reports on real hardware.
+                2048
+            };
+            env.mem.write(out_property_data.cast(), max_packet);
+            log_dbg!(
+                "AudioQueueGetProperty: kAudioQueueProperty_MaximumOutputPacketSize => {}",
+                max_packet
+            );
+        }
+        kAudioQueueProperty_EnableLevelMetering => {
+            // Level metering is not implemented; report it as disabled (0).
+            env.mem.write(out_property_data.cast::<u32>(), 0u32);
+        }
         _ => {
-            // We only advertise IsRunning and MagicCookie as readable via
+            // We only advertise known properties as readable via
             // property_size; if we somehow get here with a different ID it
             // means the size table and this match got out of sync. Don't
             // crash the host: return an InvalidProperty error code as Apple
