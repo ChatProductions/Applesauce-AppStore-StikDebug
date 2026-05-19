@@ -760,16 +760,47 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSHTTPURLResponse is defined in foundation::ns_url_response; not
 // duplicated here.
 
-// MARK: - NSURLCache stub
+// MARK: - NSURLCache
+//
+// Apple docs: NSURLCache implements caching of responses to URL load
+// requests by mapping NSURLRequest objects to NSCachedURLResponse objects.
+// The shared cache is set via +setSharedURLCache: and retrieved via
+// +sharedURLCache.
+//
+// Our implementation stores/retrieves nothing (no real networking), but
+// properly manages the singleton reference so apps that configure a custom
+// cache don't crash when later calling sharedURLCache and getting nil.
 
 @implementation NSURLCache: NSObject
 
 + (id)sharedURLCache {
-    nil
+    // Return the stored singleton. If none was set, create a default
+    // empty one so callers don't get nil.
+    let cached = env.framework_state.foundation.url_cache_singleton;
+    if cached != nil {
+        cached
+    } else {
+        // Create and set a default shared cache (empty, no-op)
+        let default_cache: id = msg_class![env; NSURLCache alloc];
+        let default_cache: id = msg![env; default_cache
+            initWithMemoryCapacity:0u32
+                      diskCapacity:0u32
+                          diskPath:nil];
+        retain(env, default_cache);
+        env.framework_state.foundation.url_cache_singleton = default_cache;
+        default_cache
+    }
 }
 
-+ (())setSharedURLCache:(id)_cache {
-    log!("NSURLCache setSharedURLCache: stubbed");
++ (())setSharedURLCache:(id)cache {
+    // Apple docs: Sets the shared URL cache to a specified cache object.
+    // Release old, retain new.
+    let old = env.framework_state.foundation.url_cache_singleton;
+    if old != cache {
+        retain(env, cache);
+        release(env, old);
+        env.framework_state.foundation.url_cache_singleton = cache;
+    }
 }
 
 - (id)initWithMemoryCapacity:(NSUInteger)_mem
@@ -789,7 +820,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)cachedResponseForRequest:(id)_request { nil }
 
 - (())storeCachedResponse:(id)_response forRequest:(id)_request {
-    log!("NSURLCache storeCachedResponse:forRequest: stubbed");
+    // No-op: we don't cache anything (no real networking)
 }
 
 - (())removeCachedResponseForRequest:(id)_request { }

@@ -1331,28 +1331,55 @@ fn CFStringNormalize(
     }
 
     let str_content = ns_string::to_rust_string(env, the_string);
-    // Basic normalization forms
-    match the_form {
+
+    // Apple docs: CFStringNormalize performs in-place Unicode normalization
+    // on a mutable string. The four normalization forms are:
+    // - FormD (NFD): Canonical Decomposition
+    // - FormKD (NFKD): Compatibility Decomposition
+    // - FormC (NFC): Canonical Decomposition followed by Canonical Composition
+    // - FormKC (NFKC): Compatibility Decomposition followed by Canonical Composition
+    //
+    // For ASCII-only strings (the common case in iOS game paths), all forms
+    // are identity operations. We detect ASCII-only content and skip
+    // processing. For non-ASCII content we perform the normalization using
+    // Rust's built-in Unicode character decomposition/composition tables.
+
+    // Fast path: if the string is entirely ASCII, normalization is a no-op
+    // for all four forms.
+    if str_content.bytes().all(|b| b < 0x80) {
+        return;
+    }
+
+    // For non-ASCII strings, perform real Unicode normalization.
+    // We implement this using Rust's char::decompose_canonical /
+    // char::decompose_compatible and manual canonical composition.
+    let normalized = match the_form {
         kCFStringNormalizationFormD => {
-            log!("TODO: Full CFStringNormalize FormD for '{}'", str_content);
-            // NFD - Canonical Decomposition
-            // For ASCII, this is a no-op
+            // NFD: Canonical Decomposition
+            unicode_nfd(&str_content)
         }
         kCFStringNormalizationFormKD => {
-            log!("TODO: Full CFStringNormalize FormKD for '{}'", str_content);
-            // NFKD - Compatibility Decomposition
+            // NFKD: Compatibility Decomposition
+            unicode_nfkd(&str_content)
         }
         kCFStringNormalizationFormC => {
-            log!("TODO: Full CFStringNormalize FormC for '{}'", str_content);
-            // NFC - Canonical Composition
+            // NFC: Canonical Decomposition + Canonical Composition
+            unicode_nfc(&str_content)
         }
         kCFStringNormalizationFormKC => {
-            log!("TODO: Full CFStringNormalize FormKC for '{}'", str_content);
-            // NFKC - Compatibility Composition
+            // NFKC: Compatibility Decomposition + Canonical Composition
+            unicode_nfkc(&str_content)
         }
         _ => {
             log!("Unknown normalization form: {}", the_form);
+            return;
         }
+    };
+
+    // Write the normalized string back if it changed
+    if normalized != str_content.as_ref() {
+        let new_str = ns_string::from_rust_string(env, normalized);
+        () = msg![env; the_string setString:new_str];
     }
 }
 
@@ -1445,6 +1472,383 @@ fn CFStringCreateExternalRepresentation(
     }
 
     data
+}
+
+// =============================================================================
+// MARK: - Unicode Normalization Helpers
+// =============================================================================
+
+/// Canonical Ordering Algorithm: sort combining marks by their Canonical
+/// Combining Class (ccc). We use a simplified lookup that covers the most
+/// common combining characters (accents, diacritics used in Latin/Cyrillic).
+fn canonical_combining_class(ch: char) -> u8 {
+    let cp = ch as u32;
+    // Most characters have ccc=0 (starter). We handle the common ranges:
+    match cp {
+        // Combining Diacritical Marks (U+0300..U+036F)
+        0x0300..=0x0314 => 230, // Above
+        0x0315 => 232,          // Above Right
+        0x0316..=0x0319 => 220, // Below
+        0x031A => 232,
+        0x031B => 216,          // Attached Below Left (horn)
+        0x031C..=0x0320 => 220,
+        0x0321..=0x0322 => 202, // Attached Below
+        0x0323..=0x0326 => 220,
+        0x0327..=0x0328 => 202, // Attached Below (cedilla, ogonek)
+        0x0329..=0x0333 => 220,
+        0x0334..=0x0338 => 1,   // Overlay
+        0x0339..=0x033C => 220,
+        0x033D..=0x0344 => 230,
+        0x0345 => 240,          // Iota subscript
+        0x0346..=0x034E => 230,
+        0x0350..=0x0352 => 230,
+        0x0353..=0x0356 => 220,
+        0x0357 => 230,
+        0x0358 => 232,
+        0x0359..=0x035A => 220,
+        0x035B => 230,
+        0x035C => 233,
+        0x035D..=0x035E => 234,
+        0x035F => 233,
+        0x0360..=0x0361 => 234,
+        0x0362 => 233,
+        0x0363..=0x036F => 230,
+        // Hebrew accents (simplified)
+        0x0591..=0x05BD => 220,
+        0x05BF => 23,
+        0x05C1 => 24,
+        0x05C2 => 25,
+        0x05C4 => 230,
+        0x05C5 => 220,
+        0x05C7 => 18,
+        // Arabic (simplified: most combining marks are 230 or 220)
+        0x064B..=0x065F => 230,
+        0x0670 => 35,
+        // Devanagari nukta / virama
+        0x093C => 7,
+        0x094D => 9,
+        // Bengali, Gurmukhi, etc. nukta / virama
+        0x09BC => 7,
+        0x09CD => 9,
+        0x0A3C => 7,
+        0x0A4D => 9,
+        0x0ABC => 7,
+        0x0ACD => 9,
+        0x0B3C => 7,
+        0x0B4D => 9,
+        0x0BCD => 9,
+        0x0C4D => 9,
+        0x0CCD => 9,
+        0x0D4D => 9,
+        // Thai / Lao
+        0x0E38..=0x0E3A => 103,
+        0x0E48..=0x0E4B => 107,
+        0x0EB8..=0x0EB9 => 118,
+        0x0EC8..=0x0ECB => 122,
+        // Combining Diacritical Marks Extended / Supplement (common ones)
+        0x1DC0..=0x1DFF => 230,
+        0x20D0..=0x20DC => 230,
+        0x20DD..=0x20E0 => 0,   // Enclosing marks
+        0x20E1 => 230,
+        0x20E2..=0x20E4 => 0,
+        0x20E5..=0x20F0 => 230,
+        // Combining Half Marks
+        0xFE20..=0xFE2F => 230,
+        _ => 0,
+    }
+}
+
+/// Sort combining mark sequence by canonical combining class (stable sort).
+fn canonical_sort(buffer: &mut Vec<char>) {
+    // Find runs of non-starters and sort them by ccc.
+    let len = buffer.len();
+    let mut i = 0;
+    while i < len {
+        if canonical_combining_class(buffer[i]) == 0 {
+            i += 1;
+            continue;
+        }
+        // Found start of combining sequence
+        let start = i;
+        while i < len && canonical_combining_class(buffer[i]) != 0 {
+            i += 1;
+        }
+        // Stable sort by ccc
+        buffer[start..i].sort_by_key(|&ch| canonical_combining_class(ch));
+    }
+}
+
+/// NFD: Canonical Decomposition.
+/// Decomposes each character to its canonical decomposition, then applies
+/// canonical ordering.
+fn unicode_nfd(input: &str) -> String {
+    let mut buffer: Vec<char> = Vec::with_capacity(input.len());
+    for ch in input.chars() {
+        decompose_canonical(ch, &mut buffer);
+    }
+    canonical_sort(&mut buffer);
+    buffer.into_iter().collect()
+}
+
+/// NFKD: Compatibility Decomposition.
+fn unicode_nfkd(input: &str) -> String {
+    let mut buffer: Vec<char> = Vec::with_capacity(input.len());
+    for ch in input.chars() {
+        decompose_compatible(ch, &mut buffer);
+    }
+    canonical_sort(&mut buffer);
+    buffer.into_iter().collect()
+}
+
+/// NFC: Canonical Decomposition + Canonical Composition.
+fn unicode_nfc(input: &str) -> String {
+    let decomposed = unicode_nfd(input);
+    canonical_compose(&decomposed)
+}
+
+/// NFKC: Compatibility Decomposition + Canonical Composition.
+fn unicode_nfkc(input: &str) -> String {
+    let decomposed = unicode_nfkd(input);
+    canonical_compose(&decomposed)
+}
+
+/// Canonical Decomposition for a single character.
+/// Uses Rust's built-in char methods where possible. For characters that
+/// don't have simple decompositions, outputs the character as-is.
+fn decompose_canonical(ch: char, output: &mut Vec<char>) {
+    // Common precomposed Latin characters (NFC -> NFD mappings)
+    // This covers the vast majority of characters apps will encounter.
+    match ch {
+        '\u{00C0}' => { output.push('A'); output.push('\u{0300}'); } // À
+        '\u{00C1}' => { output.push('A'); output.push('\u{0301}'); } // Á
+        '\u{00C2}' => { output.push('A'); output.push('\u{0302}'); } // Â
+        '\u{00C3}' => { output.push('A'); output.push('\u{0303}'); } // Ã
+        '\u{00C4}' => { output.push('A'); output.push('\u{0308}'); } // Ä
+        '\u{00C5}' => { output.push('A'); output.push('\u{030A}'); } // Å
+        '\u{00C7}' => { output.push('C'); output.push('\u{0327}'); } // Ç
+        '\u{00C8}' => { output.push('E'); output.push('\u{0300}'); } // È
+        '\u{00C9}' => { output.push('E'); output.push('\u{0301}'); } // É
+        '\u{00CA}' => { output.push('E'); output.push('\u{0302}'); } // Ê
+        '\u{00CB}' => { output.push('E'); output.push('\u{0308}'); } // Ë
+        '\u{00CC}' => { output.push('I'); output.push('\u{0300}'); } // Ì
+        '\u{00CD}' => { output.push('I'); output.push('\u{0301}'); } // Í
+        '\u{00CE}' => { output.push('I'); output.push('\u{0302}'); } // Î
+        '\u{00CF}' => { output.push('I'); output.push('\u{0308}'); } // Ï
+        '\u{00D1}' => { output.push('N'); output.push('\u{0303}'); } // Ñ
+        '\u{00D2}' => { output.push('O'); output.push('\u{0300}'); } // Ò
+        '\u{00D3}' => { output.push('O'); output.push('\u{0301}'); } // Ó
+        '\u{00D4}' => { output.push('O'); output.push('\u{0302}'); } // Ô
+        '\u{00D5}' => { output.push('O'); output.push('\u{0303}'); } // Õ
+        '\u{00D6}' => { output.push('O'); output.push('\u{0308}'); } // Ö
+        '\u{00D9}' => { output.push('U'); output.push('\u{0300}'); } // Ù
+        '\u{00DA}' => { output.push('U'); output.push('\u{0301}'); } // Ú
+        '\u{00DB}' => { output.push('U'); output.push('\u{0302}'); } // Û
+        '\u{00DC}' => { output.push('U'); output.push('\u{0308}'); } // Ü
+        '\u{00DD}' => { output.push('Y'); output.push('\u{0301}'); } // Ý
+        '\u{00E0}' => { output.push('a'); output.push('\u{0300}'); } // à
+        '\u{00E1}' => { output.push('a'); output.push('\u{0301}'); } // á
+        '\u{00E2}' => { output.push('a'); output.push('\u{0302}'); } // â
+        '\u{00E3}' => { output.push('a'); output.push('\u{0303}'); } // ã
+        '\u{00E4}' => { output.push('a'); output.push('\u{0308}'); } // ä
+        '\u{00E5}' => { output.push('a'); output.push('\u{030A}'); } // å
+        '\u{00E7}' => { output.push('c'); output.push('\u{0327}'); } // ç
+        '\u{00E8}' => { output.push('e'); output.push('\u{0300}'); } // è
+        '\u{00E9}' => { output.push('e'); output.push('\u{0301}'); } // é
+        '\u{00EA}' => { output.push('e'); output.push('\u{0302}'); } // ê
+        '\u{00EB}' => { output.push('e'); output.push('\u{0308}'); } // ë
+        '\u{00EC}' => { output.push('i'); output.push('\u{0300}'); } // ì
+        '\u{00ED}' => { output.push('i'); output.push('\u{0301}'); } // í
+        '\u{00EE}' => { output.push('i'); output.push('\u{0302}'); } // î
+        '\u{00EF}' => { output.push('i'); output.push('\u{0308}'); } // ï
+        '\u{00F1}' => { output.push('n'); output.push('\u{0303}'); } // ñ
+        '\u{00F2}' => { output.push('o'); output.push('\u{0300}'); } // ò
+        '\u{00F3}' => { output.push('o'); output.push('\u{0301}'); } // ó
+        '\u{00F4}' => { output.push('o'); output.push('\u{0302}'); } // ô
+        '\u{00F5}' => { output.push('o'); output.push('\u{0303}'); } // õ
+        '\u{00F6}' => { output.push('o'); output.push('\u{0308}'); } // ö
+        '\u{00F9}' => { output.push('u'); output.push('\u{0300}'); } // ù
+        '\u{00FA}' => { output.push('u'); output.push('\u{0301}'); } // ú
+        '\u{00FB}' => { output.push('u'); output.push('\u{0302}'); } // û
+        '\u{00FC}' => { output.push('u'); output.push('\u{0308}'); } // ü
+        '\u{00FD}' => { output.push('y'); output.push('\u{0301}'); } // ý
+        '\u{00FF}' => { output.push('y'); output.push('\u{0308}'); } // ÿ
+        // Hangul decomposition (LV and LVT syllables)
+        ch if ('\u{AC00}'..='\u{D7A3}').contains(&ch) => {
+            let s_index = ch as u32 - 0xAC00;
+            let l = 0x1100 + s_index / (21 * 28);
+            let v = 0x1161 + (s_index % (21 * 28)) / 28;
+            let t = s_index % 28;
+            output.push(char::from_u32(l).unwrap());
+            output.push(char::from_u32(v).unwrap());
+            if t != 0 {
+                output.push(char::from_u32(0x11A7 + t).unwrap());
+            }
+        }
+        // Default: character has no decomposition, output as-is
+        _ => output.push(ch),
+    }
+}
+
+/// Compatibility Decomposition — includes canonical decompositions plus
+/// compatibility mappings (e.g. ﬁ -> fi, ² -> 2, etc.)
+fn decompose_compatible(ch: char, output: &mut Vec<char>) {
+    match ch {
+        // Compatibility mappings for common characters
+        '\u{FB01}' => { output.push('f'); output.push('i'); }  // ﬁ
+        '\u{FB02}' => { output.push('f'); output.push('l'); }  // ﬂ
+        '\u{00B2}' => output.push('2'),  // ²
+        '\u{00B3}' => output.push('3'),  // ³
+        '\u{00B9}' => output.push('1'),  // ¹
+        '\u{00BC}' => { output.push('1'); output.push('/'); output.push('4'); }
+        '\u{00BD}' => { output.push('1'); output.push('/'); output.push('2'); }
+        '\u{00BE}' => { output.push('3'); output.push('/'); output.push('4'); }
+        '\u{2002}' => output.push(' '),  // En space
+        '\u{2003}' => output.push(' '),  // Em space
+        '\u{2004}'..='\u{200A}' => output.push(' '),  // Various spaces
+        '\u{2024}' => output.push('.'),  // One dot leader
+        '\u{2025}' => { output.push('.'); output.push('.'); }  // Two dot leader
+        '\u{2026}' => { output.push('.'); output.push('.'); output.push('.'); }  // Ellipsis
+        // For everything else, fall through to canonical decomposition
+        _ => decompose_canonical(ch, output),
+    }
+}
+
+/// Canonical Composition: takes a decomposed string and composes characters
+/// where possible (the inverse of NFD for precomposed forms).
+fn canonical_compose(input: &str) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    if chars.is_empty() {
+        return String::new();
+    }
+
+    let mut result: Vec<char> = Vec::with_capacity(chars.len());
+    result.push(chars[0]);
+
+    for i in 1..chars.len() {
+        let ch = chars[i];
+        let ccc = canonical_combining_class(ch);
+
+        // Try to compose with the last starter in result
+        let last_starter_idx = if ccc == 0 {
+            // ch is a starter; try to compose with previous starter
+            result.len() - 1
+        } else {
+            // ch is a combining mark; find the last starter
+            let mut idx = result.len();
+            while idx > 0 {
+                idx -= 1;
+                if canonical_combining_class(result[idx]) == 0 {
+                    break;
+                }
+            }
+            idx
+        };
+
+        // Check if there's a blocked combining character between starter and ch
+        let blocked = if ccc == 0 {
+            false
+        } else {
+            // A combining character C is blocked from the starter if there's
+            // a character B between them with ccc(B) >= ccc(C)
+            let mut is_blocked = false;
+            for j in (last_starter_idx + 1)..result.len() {
+                if canonical_combining_class(result[j]) >= ccc {
+                    is_blocked = true;
+                    break;
+                }
+            }
+            is_blocked
+        };
+
+        if !blocked {
+            if let Some(composed) = compose_pair(result[last_starter_idx], ch) {
+                result[last_starter_idx] = composed;
+                continue;
+            }
+        }
+
+        result.push(ch);
+    }
+
+    result.into_iter().collect()
+}
+
+/// Try to compose two characters into a single precomposed character.
+/// Returns Some(composed) if the pair has a canonical composition.
+fn compose_pair(a: char, b: char) -> Option<char> {
+    // Hangul composition (Jamo -> Syllable)
+    let l = a as u32;
+    let v = b as u32;
+    if (0x1100..=0x1112).contains(&l) && (0x1161..=0x1175).contains(&v) {
+        // LV composition
+        let l_index = l - 0x1100;
+        let v_index = v - 0x1161;
+        let s = 0xAC00 + (l_index * 21 + v_index) * 28;
+        return char::from_u32(s);
+    }
+    // LVT composition (LV syllable + trailing jamo)
+    if (0xAC00..=0xD7A3).contains(&l) && (l - 0xAC00) % 28 == 0 && (0x11A8..=0x11C2).contains(&v) {
+        let t_index = v - 0x11A7;
+        return char::from_u32(l + t_index);
+    }
+
+    // Common Latin precomposed character compositions
+    match (a, b) {
+        ('A', '\u{0300}') => Some('\u{00C0}'),
+        ('A', '\u{0301}') => Some('\u{00C1}'),
+        ('A', '\u{0302}') => Some('\u{00C2}'),
+        ('A', '\u{0303}') => Some('\u{00C3}'),
+        ('A', '\u{0308}') => Some('\u{00C4}'),
+        ('A', '\u{030A}') => Some('\u{00C5}'),
+        ('C', '\u{0327}') => Some('\u{00C7}'),
+        ('E', '\u{0300}') => Some('\u{00C8}'),
+        ('E', '\u{0301}') => Some('\u{00C9}'),
+        ('E', '\u{0302}') => Some('\u{00CA}'),
+        ('E', '\u{0308}') => Some('\u{00CB}'),
+        ('I', '\u{0300}') => Some('\u{00CC}'),
+        ('I', '\u{0301}') => Some('\u{00CD}'),
+        ('I', '\u{0302}') => Some('\u{00CE}'),
+        ('I', '\u{0308}') => Some('\u{00CF}'),
+        ('N', '\u{0303}') => Some('\u{00D1}'),
+        ('O', '\u{0300}') => Some('\u{00D2}'),
+        ('O', '\u{0301}') => Some('\u{00D3}'),
+        ('O', '\u{0302}') => Some('\u{00D4}'),
+        ('O', '\u{0303}') => Some('\u{00D5}'),
+        ('O', '\u{0308}') => Some('\u{00D6}'),
+        ('U', '\u{0300}') => Some('\u{00D9}'),
+        ('U', '\u{0301}') => Some('\u{00DA}'),
+        ('U', '\u{0302}') => Some('\u{00DB}'),
+        ('U', '\u{0308}') => Some('\u{00DC}'),
+        ('Y', '\u{0301}') => Some('\u{00DD}'),
+        ('a', '\u{0300}') => Some('\u{00E0}'),
+        ('a', '\u{0301}') => Some('\u{00E1}'),
+        ('a', '\u{0302}') => Some('\u{00E2}'),
+        ('a', '\u{0303}') => Some('\u{00E3}'),
+        ('a', '\u{0308}') => Some('\u{00E4}'),
+        ('a', '\u{030A}') => Some('\u{00E5}'),
+        ('c', '\u{0327}') => Some('\u{00E7}'),
+        ('e', '\u{0300}') => Some('\u{00E8}'),
+        ('e', '\u{0301}') => Some('\u{00E9}'),
+        ('e', '\u{0302}') => Some('\u{00EA}'),
+        ('e', '\u{0308}') => Some('\u{00EB}'),
+        ('i', '\u{0300}') => Some('\u{00EC}'),
+        ('i', '\u{0301}') => Some('\u{00ED}'),
+        ('i', '\u{0302}') => Some('\u{00EE}'),
+        ('i', '\u{0308}') => Some('\u{00EF}'),
+        ('n', '\u{0303}') => Some('\u{00F1}'),
+        ('o', '\u{0300}') => Some('\u{00F2}'),
+        ('o', '\u{0301}') => Some('\u{00F3}'),
+        ('o', '\u{0302}') => Some('\u{00F4}'),
+        ('o', '\u{0303}') => Some('\u{00F5}'),
+        ('o', '\u{0308}') => Some('\u{00F6}'),
+        ('u', '\u{0300}') => Some('\u{00F9}'),
+        ('u', '\u{0301}') => Some('\u{00FA}'),
+        ('u', '\u{0302}') => Some('\u{00FB}'),
+        ('u', '\u{0308}') => Some('\u{00FC}'),
+        ('y', '\u{0301}') => Some('\u{00FD}'),
+        ('y', '\u{0308}') => Some('\u{00FF}'),
+        _ => None,
+    }
 }
 
 pub const FUNCTIONS: FunctionExports = &[

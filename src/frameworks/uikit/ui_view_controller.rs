@@ -272,8 +272,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setEditing:(bool)editing {
     todo_objc_setter!(this, editing);
 }
-- (())setWantsFullScreenLayout:(bool)wants {
-    todo_objc_setter!(this, wants);
+- (())setWantsFullScreenLayout:(bool)_wants {
+    // Apple docs: When set to YES, the view controller's view extends
+    // underneath the status bar and navigation bar. On real iOS this
+    // affects layout insets. In touchHLE we always render full-screen,
+    // so this is effectively a no-op but we accept it silently.
+}
+- (bool)wantsFullScreenLayout {
+    // Always report YES since touchHLE renders games full-screen.
+    true
 }
 
 - (())dismissModalViewControllerAnimated:(bool)animated {
