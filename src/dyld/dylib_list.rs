@@ -170,6 +170,18 @@ pub const CAPTIVE_NETWORK: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::captive_network::FUNCTIONS],
 };
 
+// Accelerate (vDSP, vImage, BLAS — real FFT implementation for audio apps)
+pub const ACCELERATE: super::HostDylib = super::HostDylib {
+    path: "/System/Library/Frameworks/Accelerate.framework/Accelerate",
+    aliases: &[
+        "/System/Library/Frameworks/vecLib.framework/vecLib",
+        "/System/Library/Frameworks/vDSP.framework/vDSP",
+    ],
+    class_exports: &[],
+    constant_exports: &[],
+    function_exports: &[frameworks::accelerate::FUNCTIONS],
+};
+
 /// The single list of host dylibs that the linker (and Objective-C runtime)
 /// searches through.
 pub const DYLIB_LIST: &[&super::HostDylib] = &[
@@ -218,6 +230,7 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &CORE_IMAGE,
     &CORE_DATA,
     &CAPTIVE_NETWORK,
+    &ACCELERATE,
 ];
 
 #[cfg(test)]

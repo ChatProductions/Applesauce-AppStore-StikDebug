@@ -769,6 +769,33 @@ impl Mem {
         let size_us = size as usize;
         let max = self.bytes_mut().len();
 
+        // Early reject: if size looks like a negative i32 cast to u32
+        // (>= 0x8000_0000), it's almost certainly corrupted. Guest code on
+        // 32-bit ARM that passes (size_t)(-1) or similar huge values is
+        // buggy — skip the operation to keep the emulator alive.
+        if size >= 0x8000_0000 {
+            log!(
+                "WARNING: memmove with likely-negative size ({:#x} = {}); \
+                 src={:#x}, dest={:#x} — skipping",
+                size,
+                size as i32,
+                src_addr,
+                dest_addr,
+            );
+            return;
+        }
+
+        // Also reject NULL source — real memmove(dest, NULL, n) is UB
+        // but guest games (Geometry Dash) trigger it via corrupted strings.
+        if src_addr == 0 && size > 0 {
+            log!(
+                "WARNING: memmove from NULL (dest={:#x}, size={:#x}) — skipping",
+                dest_addr,
+                size_us,
+            );
+            return;
+        }
+
         let src_end = match src_addr.checked_add(size_us) {
             Some(v) if v <= max => v,
             _ => {
