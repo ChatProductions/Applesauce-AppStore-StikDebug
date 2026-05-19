@@ -14,7 +14,7 @@
 //! which is correct but not SIMD-optimized (sufficient for emulation).
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
 
 
@@ -45,6 +45,7 @@ struct GuestDSPSplitComplex {
     realp: MutPtr<f32>,
     imagp: MutPtr<f32>,
 }
+unsafe impl SafeRead for GuestDSPSplitComplex {}
 
 
 /// `vDSP_create_fftsetup` — allocate and initialize an FFT weights array.
