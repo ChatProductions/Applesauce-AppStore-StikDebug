@@ -160,12 +160,26 @@ fn objc_msgSend_inner(
     }
     let _guard = DepthGuard;
     if depth > MAX_DEPTH {
+        let sel_name = selector.as_str(&env.mem).to_string();
         log!(
             "Warning: objc_msgSend recursion limit ({}) exceeded while dispatching \"{}\" to {:?}; bailing out with a nil return.",
             MAX_DEPTH,
-            selector.as_str(&env.mem),
+            sel_name,
             receiver,
         );
+        // Special handling for allocWithZone: — if recursion is hit during
+        // allocation, perform the allocation directly using NSObject's
+        // fallback path rather than returning nil (which causes cascading
+        // failures like "texture cannot be nil!" in games).
+        if sel_name == "allocWithZone:" {
+            let obj = env.objc.alloc_object(
+                receiver,
+                Box::new(super::TrivialHostObject),
+                &mut env.mem,
+            );
+            env.cpu.regs_mut()[0] = obj.to_bits();
+            return;
+        }
         env.cpu.regs_mut()[0..2].fill(0);
         return;
     }
