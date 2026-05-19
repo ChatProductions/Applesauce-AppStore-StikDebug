@@ -93,6 +93,8 @@ struct ThreadHostObject {
     cancel_disabled: bool,
     /// Set by pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS).
     cancel_async: bool,
+    /// Thread name set via pthread_setname_np (Darwin extension, max 63 chars).
+    name: String,
 }
 
 impl ThreadHostObject {
@@ -104,6 +106,7 @@ impl ThreadHostObject {
             cancel_requested: false,
             cancel_disabled: false,
             cancel_async: false,
+            name: String::new(),
         }
     }
 }
@@ -599,6 +602,58 @@ fn pthread_attr_setscope(
     0
 }
 
+// =========================================================================
+// MARK: - Thread naming (Darwin extensions)
+// =========================================================================
+
+/// `int pthread_getname_np(pthread_t thread, char *name, size_t len)`
+/// Gets the name of the specified thread. On Darwin, thread names are limited
+/// to 63 characters + NUL. If no name has been set, the buffer is filled with
+/// an empty string.
+/// See: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/pthread_getname_np.3.html
+fn pthread_getname_np(
+    env: &mut Environment,
+    thread: pthread_t,
+    buf: MutPtr<u8>,
+    len: GuestUSize,
+) -> i32 {
+    if buf.is_null() || len == 0 {
+        return EINVAL;
+    }
+    let Some(host_obj) = State::get(env).threads.get(&thread) else {
+        log_dbg!("pthread_getname_np: unknown thread {:?}, returning ESRCH", thread);
+        return ESRCH;
+    };
+    let name = host_obj.name.clone();
+    let name_bytes = name.as_bytes();
+    let copy_len = name_bytes.len().min((len as usize).saturating_sub(1));
+    let dst = env.mem.bytes_at_mut(buf, len);
+    dst[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+    dst[copy_len] = 0;
+    log_dbg!("pthread_getname_np({:?}) => {:?}", thread, name);
+    0
+}
+
+/// `int pthread_setname_np(const char *name)`
+/// Sets the name of the calling thread. On Darwin this only applies to the
+/// current thread (unlike Linux where you pass a pthread_t).
+/// See: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/pthread_setname_np.3.html
+fn pthread_setname_np(env: &mut Environment, name: ConstPtr<u8>) -> i32 {
+    let name_str = if name.is_null() {
+        String::new()
+    } else {
+        env.mem.cstr_at_utf8(name).unwrap_or("").to_string()
+    };
+    // Truncate to 63 chars (Darwin limit is MAXTHREADNAMESIZE = 64 including NUL)
+    let truncated: String = name_str.chars().take(63).collect();
+    let self_t = pthread_self(env);
+    if let Some(host_obj) = State::get(env).threads.get_mut(&self_t) {
+        host_obj.name = truncated.clone();
+    }
+    log_dbg!("pthread_setname_np({:?})", truncated);
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     // Attributes
     export_c_func!(pthread_attr_init(_)),
@@ -632,4 +687,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_get_stacksize_np(_)),
     export_c_func!(pthread_getschedparam(_, _, _)),
     export_c_func!(pthread_setschedparam(_, _, _)),
+    export_c_func!(pthread_getname_np(_, _, _)),
+    export_c_func!(pthread_setname_np(_)),
 ];

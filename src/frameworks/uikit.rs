@@ -79,6 +79,22 @@ fn ui_window_level_alert(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+/// UIScrollViewDecelerationRateNormal = 0.998 (CGFloat)
+/// https://developer.apple.com/documentation/uikit/uiscrollview/1619438-decelerationratenormal
+fn ui_scroll_view_deceleration_rate_normal(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 0.998f32.to_bits());
+    ptr.cast().cast_const()
+}
+
+/// UIScrollViewDecelerationRateFast = 0.99 (CGFloat)
+/// https://developer.apple.com/documentation/uikit/uiscrollview/1619438-decelerationratefast
+fn ui_scroll_view_deceleration_rate_fast(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, 0.99f32.to_bits());
+    ptr.cast().cast_const()
+}
+
 pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIBackgroundTaskInvalid",
@@ -267,6 +283,16 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UITextAttributeTextShadowOffset",
         HostConstant::NSString("UITextAttributeTextShadowOffset"),
+    ),
+    // UIScrollView deceleration rate constants (CGFloat).
+    // https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate
+    (
+        "_UIScrollViewDecelerationRateNormal",
+        HostConstant::Custom(ui_scroll_view_deceleration_rate_normal),
+    ),
+    (
+        "_UIScrollViewDecelerationRateFast",
+        HostConstant::Custom(ui_scroll_view_deceleration_rate_fast),
     ),
 ];
 

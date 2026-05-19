@@ -40,6 +40,12 @@ pub const kCAAnimationLinear: &str = "linear";
 pub const kCAAnimationPaced: &str = "paced";
 
 pub const CONSTANTS: ConstantExports = &[
+    // `kCATransition` — the animation key used when adding a CATransition to a
+    // layer via `[CALayer addAnimation:forKey:]`. Equal to @"transition".
+    (
+        "_kCATransition",
+        HostConstant::NSString("transition"),
+    ),
     // `CATransitionType` values.
     (
         "_kCATransitionFade",
