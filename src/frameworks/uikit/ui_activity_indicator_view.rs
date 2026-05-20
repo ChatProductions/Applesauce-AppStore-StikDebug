@@ -7,7 +7,7 @@
 
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, impl_HostObject_with_superclass, msg, objc_classes, todo_objc_setter, ClassExports,
+    id, impl_HostObject_with_superclass, msg, objc_classes, ClassExports,
     NSZonePtr,
 };
 
@@ -17,6 +17,7 @@ pub struct UIActivityIndicatorViewHostObject {
     superclass: super::ui_view::UIViewHostObject,
     animating: bool,
     hides_when_stopped: bool,
+    style: UIActivityIndicatorViewStyle,
 }
 impl_HostObject_with_superclass!(UIActivityIndicatorViewHostObject);
 
@@ -31,6 +32,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         superclass: Default::default(),
         animating: false,
         hides_when_stopped: true, // По умолчанию в iOS это свойство равно YES
+        style: 0, // UIActivityIndicatorViewStyleWhiteLarge
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -44,9 +46,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setActivityIndicatorViewStyle:(UIActivityIndicatorViewStyle)style {
-    // Можно добавить хранение стиля в HostObject, если это потребуется для
-    // рендеринга
-    todo_objc_setter!(this, style);
+    env.objc.borrow_mut::<UIActivityIndicatorViewHostObject>(this).style = style;
+}
+- (UIActivityIndicatorViewStyle)activityIndicatorViewStyle {
+    env.objc.borrow::<UIActivityIndicatorViewHostObject>(this).style
 }
 
 - (())startAnimating {

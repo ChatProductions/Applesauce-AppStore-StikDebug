@@ -1348,6 +1348,30 @@ where
                                     Err(_) => break,
                                 }
                             }
+                            "l" => {
+                                // On 32-bit ARM, long is 32-bit.
+                                let res = str_to_int_inner_generic(
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| i32::from_str_radix(s, base).unwrap_or(i32::MAX),
+                                    |num| num.checked_mul(-1).unwrap_or(i32::MIN),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<i32> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
                             "ll" => {
                                 let res = str_to_int_inner_generic(
                                     env,
@@ -1472,6 +1496,30 @@ where
                                         if !suppress_assignment {
                                             let ptr: ConstPtr<u8> = args.next(env);
                                             env.mem.write(ptr.cast_mut(), val as u8);
+                                        }
+                                    }
+                                    Err(_) => break,
+                                }
+                            }
+                            "l" => {
+                                // On 32-bit ARM, unsigned long is 32-bit.
+                                let res = str_to_int_inner_generic(
+                                    env,
+                                    &getc_fn,
+                                    &ungetc_fn,
+                                    subject,
+                                    src_char_idx,
+                                    base,
+                                    if max_width > 0 { max_width } else { u32::MAX },
+                                    |s, base| u32::from_str_radix(s, base).unwrap_or(u32::MAX),
+                                    |num| num.wrapping_neg(),
+                                );
+                                match res {
+                                    Ok((val, len)) => {
+                                        src_char_idx += len;
+                                        if !suppress_assignment {
+                                            let ptr: ConstPtr<u32> = args.next(env);
+                                            env.mem.write(ptr.cast_mut(), val);
                                         }
                                     }
                                     Err(_) => break,

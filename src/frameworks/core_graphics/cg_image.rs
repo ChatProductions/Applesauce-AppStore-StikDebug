@@ -331,7 +331,101 @@ fn CGImageIsMask(_env: &mut Environment, _image: CGImageRef) -> bool {
     false
 }
 
+/// `CGImageCreate` — create a bitmap image from raw pixel data provided by a
+/// `CGDataProvider`.  Only the RGBA/RGBX 8-bit-per-component layout that our
+/// `Image` type uses internally is fully supported; other configurations are
+/// converted to that format on a best-effort basis so that apps which call this
+/// function to compose textures at runtime can proceed.
+fn CGImageCreate(
+    env: &mut Environment,
+    width: GuestUSize,
+    height: GuestUSize,
+    bits_per_component: GuestUSize,
+    bits_per_pixel: GuestUSize,
+    bytes_per_row: GuestUSize,
+    _space: CGColorSpaceRef,
+    bitmap_info: CGBitmapInfo,
+    provider: CGDataProviderRef,
+    _decode: ConstPtr<CGFloat>,
+    _should_interpolate: bool,
+    _intent: i32,
+) -> CGImageRef {
+    if provider.is_null() || width == 0 || height == 0 {
+        return nil;
+    }
+
+    let src = cg_data_provider::borrow_bytes(env, provider);
+
+    let alpha_info = bitmap_info & kCGBitmapAlphaInfoMask;
+    let byte_order = bitmap_info & kCGBitmapByteOrderMask;
+
+    let expected_len = bytes_per_row as usize * height as usize;
+    if src.len() < expected_len {
+        log!(
+            "CGImageCreate: provider has {} bytes but {}×{} at {} bpr needs {}",
+            src.len(), width, height, bytes_per_row, expected_len,
+        );
+        return nil;
+    }
+
+    let mut dst = vec![0u8; (width * height * 4) as usize];
+
+    let src_components = (bits_per_pixel / bits_per_component) as usize;
+    let src_bytes_per_pixel = (bits_per_pixel / 8) as usize;
+
+    for row in 0..height as usize {
+        for col in 0..width as usize {
+            let si = row * bytes_per_row as usize + col * src_bytes_per_pixel;
+            let di = (row * width as usize + col) * 4;
+
+            if bits_per_component == 8 && src_components >= 3 {
+                let (r, g, b, a) = match (alpha_info, byte_order) {
+                    (kCGImageAlphaPremultipliedFirst, _)
+                    | (kCGImageAlphaFirst, _)
+                    | (kCGImageAlphaNoneSkipFirst, _) => {
+                        let a = if alpha_info == kCGImageAlphaNoneSkipFirst { 255 } else { src[si] };
+                        (src[si + 1], src[si + 2], src[si + 3], a)
+                    }
+                    (kCGImageAlphaPremultipliedLast, _)
+                    | (kCGImageAlphaLast, _) => {
+                        (src[si], src[si + 1], src[si + 2], src[si + 3])
+                    }
+                    (kCGImageAlphaNoneSkipLast, _) => {
+                        (src[si], src[si + 1], src[si + 2], 255)
+                    }
+                    _ => {
+                        if src_components >= 4 {
+                            (src[si], src[si + 1], src[si + 2], src[si + 3])
+                        } else {
+                            (src[si], src[si + 1], src[si + 2], 255)
+                        }
+                    }
+                };
+                dst[di] = r;
+                dst[di + 1] = g;
+                dst[di + 2] = b;
+                dst[di + 3] = a;
+            } else if bits_per_component == 8 && src_components == 1 {
+                let v = src[si];
+                dst[di] = v;
+                dst[di + 1] = v;
+                dst[di + 2] = v;
+                dst[di + 3] = 255;
+            } else {
+                dst[di] = 0;
+                dst[di + 1] = 0;
+                dst[di + 2] = 0;
+                dst[di + 3] = 255;
+            }
+        }
+    }
+
+    let image = Image::from_pixels(width, height, dst);
+    from_image(env, image)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(CGImageCreate(_, _, _, _, _, _, _, _, _, _, _)),
     export_c_func!(CGImageRelease(_)),
     export_c_func!(CGImageRetain(_)),
     export_c_func!(CGImageCreateCopyWithColorSpace(_, _)),

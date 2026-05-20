@@ -16,7 +16,7 @@ use crate::frameworks::uikit::ui_font::{
 use crate::mem::SafeRead;
 use crate::objc::{
     autorelease, id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes,
-    release, retain, todo_objc_setter, ClassExports, HostObject, NSZonePtr,
+    release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 use std::collections::HashMap;
@@ -541,8 +541,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIButtonHostObject>(this).tint_color = color;
 }
 
-- (())setTitleShadowOffset:(bool)offset {
-    todo_objc_setter!(this, offset);
+- (())setTitleShadowOffset:(CGSize)offset {
+    // Per Apple docs this is a deprecated visual property (UIButton.titleShadowOffset).
+    // We accept and ignore it since touchHLE does not render title shadows.
 }
 
 // MARK: - Titles

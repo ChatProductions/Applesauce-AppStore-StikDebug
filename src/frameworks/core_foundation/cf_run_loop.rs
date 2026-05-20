@@ -184,8 +184,13 @@ fn CFRunLoopRunInMode(
     kCFRunLoopRunFinished
 }
 
-fn CFRunLoopStop(_env: &mut Environment, _rl: CFRunLoopRef) {
-    log!("CFRunLoopStop: stubbed (run loop cannot be stopped externally)");
+fn CFRunLoopStop(env: &mut Environment, rl: CFRunLoopRef) {
+    if rl.is_null() {
+        return;
+    }
+    env.objc
+        .borrow_mut::<crate::frameworks::foundation::ns_run_loop::NSRunLoopHostObject>(rl)
+        .stopped = true;
 }
 
 fn CFRunLoopWakeUp(_env: &mut Environment, _rl: CFRunLoopRef) {
