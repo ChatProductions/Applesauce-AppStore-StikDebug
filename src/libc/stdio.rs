@@ -939,4 +939,12 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(flockfile(_)),
     export_c_func!(funlockfile(_)),
     export_c_func!(ftrylockfile(_)),
+    // BSD/Darwin internal stdio functions.
+    // ___srget is the slow-path single-character read called by the getc()
+    // macro when the FILE's inline buffer is empty. It's semantically
+    // identical to fgetc(). Apps compiled against the iOS SDK reference
+    // this symbol directly because the SDK headers expand getc() to an
+    // inline that calls ___srget on buffer miss.
+    // The Mach-O symbol is "___srget" (C name "__srget" with _ prefix).
+    ("___srget", &(fgetc as fn(&mut crate::Environment, MutPtr<FILE>) -> i32)),
 ];

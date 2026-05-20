@@ -442,8 +442,22 @@ pub const CLASSES: ClassExports = objc_classes! {
                     waitUntilDone:(bool)wait {
     let sel_name = sel.as_str(&env.mem);
 
+    // Video playback selectors: instead of silently dropping these, we
+    // forward them to the object so that MPMoviePlayerController's play/stop
+    // implementations run and post the required notifications (e.g.
+    // MPMoviePlayerPlaybackDidFinishNotification). This allows apps that
+    // start video playback from a background thread to have their
+    // completion handlers fire correctly.
     if sel_name == "play" || sel_name == "startMovie:" || sel_name == "stopMovie:" || sel_name == "stopMovie" || sel_name == "moviePlayerInit:" || sel_name == "loadMovie:" {
-        log!("Warning: Video playback is not implemented. Stubbing performSelectorOnMainThread:SEL({})", sel_name);
+        log_dbg!(
+            "performSelectorOnMainThread:SEL({}) — forwarding video selector to object {:?}",
+            sel_name, this
+        );
+        if sel_name.ends_with(':') {
+            () = msg_send(env, (this, sel, arg));
+        } else {
+            () = msg_send(env, (this, sel));
+        }
         return;
     }
 

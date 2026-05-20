@@ -78,8 +78,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; data writeToFile:file atomically:true]
 }
 
-- (id)initForWritingWithMutableData:(id)_data {
-    log!("Warning: stubbed NSKeyedArchiver initForWritingWithMutableData:");
+- (id)initForWritingWithMutableData:(id)data {
+    // Apple docs: Initializes an archiver to encode data into a given
+    // mutable-data object. The archiver writes its output into `data`
+    // when -finishEncoding is called.
+    //
+    // We store the reference to the mutable data object so that when
+    // finishEncoding is called we write the serialized plist into it.
+    retain(env, data);
+    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = data;
     this
 }
 
@@ -228,10 +235,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     let len = buffer.len() as GuestUSize;
     let guest_buffer = env.mem.alloc(len);
     env.mem.bytes_at_mut(guest_buffer.cast(), len).copy_from_slice(&buffer[..]);
-    let encoded_data: id = msg_class![env;
-    NSData dataWithBytesNoCopy:guest_buffer length:len];
-    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = encoded_data;
-    retain(env, encoded_data);
+
+    let existing_data = env.objc.borrow::<NSKeyedArchiverHostObject>(this).encoded_data;
+    if existing_data != nil {
+        // initForWritingWithMutableData: was used — append bytes to the
+        // caller-provided NSMutableData.
+        let _: () = msg![env; existing_data appendBytes:guest_buffer length:len];
+        env.mem.free(guest_buffer);
+    } else {
+        // archivedDataWithRootObject: path — create internal NSData.
+        let encoded_data: id = msg_class![env;
+        NSData dataWithBytesNoCopy:guest_buffer length:len];
+        env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = encoded_data;
+        retain(env, encoded_data);
+    }
 }
 
 - (id)encodedData {

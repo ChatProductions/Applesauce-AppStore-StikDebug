@@ -1014,13 +1014,61 @@ fn AudioFileStreamOpen(
 }
 
 pub fn AudioFormatGetPropertyInfo(
-    _env: &mut Environment,
-    _property_id: AudioFilePropertyID,
+    env: &mut Environment,
+    property_id: AudioFilePropertyID,
     _specifier_size: u32,
     _specifier: crate::mem::ConstPtr<u8>,
-    _out_property_data_size: MutPtr<u32>,
+    out_property_data_size: MutPtr<u32>,
 ) -> OSStatus {
-    -50 // paramErr
+    // kAudioFormatProperty_Encoders = 'aenc' (0x61656E63)
+    // kAudioFormatProperty_Decoders = 'adec' (0x61646563)
+    // kAudioFormatProperty_FormatList = 'flst'
+    // kAudioFormatProperty_FormatInfo = 'fmti'
+    //
+    // Apple docs: AudioFormatGetPropertyInfo returns the size in bytes of
+    // the data for the given property. When the property is a list of items,
+    // the number of items = size / sizeof(one_item).
+    //
+    // For Encoders/Decoders we return size=0 indicating no encoders/decoders
+    // are available on this (emulated) device. This is a valid response that
+    // apps handle gracefully — they simply skip encoding or fall back to
+    // raw PCM.
+    let prop_name = crate::frameworks::core_audio_types::debug_fourcc(property_id);
+    log_dbg!(
+        "AudioFormatGetPropertyInfo(property='{}') => size=0 (no codecs available)",
+        prop_name
+    );
+
+    if !out_property_data_size.is_null() {
+        env.mem.write(out_property_data_size, 0u32);
+    }
+    kAudioFileSuccess
+}
+
+/// `AudioFormatGetProperty` — retrieve audio format property data.
+///
+/// Apple docs: Gets the value of an audio format property.
+/// Since we report size=0 for most properties in GetPropertyInfo, callers
+/// typically won't call this with a non-zero buffer. If they do, we return
+/// noErr with an empty result.
+pub fn AudioFormatGetProperty(
+    env: &mut Environment,
+    property_id: AudioFilePropertyID,
+    _specifier_size: u32,
+    _specifier: crate::mem::ConstPtr<u8>,
+    io_property_data_size: MutPtr<u32>,
+    _out_property_data: MutVoidPtr,
+) -> OSStatus {
+    let prop_name = crate::frameworks::core_audio_types::debug_fourcc(property_id);
+    log_dbg!(
+        "AudioFormatGetProperty(property='{}') => returning empty",
+        prop_name
+    );
+    // Set output size to 0 — no data written
+    if !io_property_data_size.is_null() {
+        env.mem.write(io_property_data_size, 0u32);
+    }
+    kAudioFileSuccess
 }
 
 // =========================================================================
@@ -1073,5 +1121,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(AudioFileOptimize(_)),
     export_c_func!(AudioFileStreamOpen(_, _, _, _, _)),
     export_c_func!(AudioFormatGetPropertyInfo(_, _, _, _)),
+    export_c_func!(AudioFormatGetProperty(_, _, _, _, _)),
     export_c_func!(AudioQueueSetOfflineRenderFormat(_, _, _)),
 ];

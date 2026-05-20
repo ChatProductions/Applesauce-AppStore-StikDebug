@@ -704,6 +704,8 @@ pub struct State {
     pub ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
     pub ns_undo_manager: ns_undo_manager::State,
     ns_user_defaults: ns_user_defaults::State,
+    /// Singleton for [NSURLCache sharedURLCache].
+    pub url_cache_singleton: crate::objc::id,
 }
 
 pub type NSInteger = i32;
