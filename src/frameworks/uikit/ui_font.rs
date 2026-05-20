@@ -10,7 +10,7 @@ use super::ui_graphics::UIGraphicsGetCurrentContext;
 use crate::font::{Font, TextAlignment, WrapMode};
 use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
+use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{autorelease, id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 use crate::Environment;
@@ -226,6 +226,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     let class_ptr = env.objc.get_known_class("UIFont", &mut env.mem);
     let new_font = env.objc.alloc_object(class_ptr, Box::new(host_object), &mut env.mem);
     autorelease(env, new_font)
+}
+
+- (id)fontName {
+    let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
+    let name = font_kind_to_name(kind);
+    let ns = from_rust_string(env, name.to_string());
+    autorelease(env, ns)
+}
+
+- (id)familyName {
+    let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
+    let family = font_kind_to_family(kind);
+    let ns = from_rust_string(env, family.to_string());
+    autorelease(env, ns)
 }
 
 @end
@@ -538,5 +552,39 @@ fn get_equivalent_font(system_font: &str) -> Option<FontKind> {
         "soopafre.ttf"                     => Some(FontKind::SansRegular),
 
         _ => None,
+    }
+}
+
+fn font_kind_to_name(kind: FontKind) -> &'static str {
+    match kind {
+        FontKind::MonoRegular => "CourierNewPSMT",
+        FontKind::MonoBold => "CourierNewPS-BoldMT",
+        FontKind::MonoBoldItalic => "CourierNewPS-BoldItalicMT",
+        FontKind::MonoItalic => "CourierNewPS-ItalicMT",
+        FontKind::SansRegular => "Helvetica",
+        FontKind::SansBold => "Helvetica-Bold",
+        FontKind::SansBoldItalic => "Helvetica-BoldOblique",
+        FontKind::SansItalic => "Helvetica-Oblique",
+        FontKind::SerifRegular => "TimesNewRomanPSMT",
+        FontKind::SerifBold => "TimesNewRomanPS-BoldMT",
+        FontKind::SerifBoldItalic => "TimesNewRomanPS-BoldItalicMT",
+        FontKind::SerifItalic => "TimesNewRomanPS-ItalicMT",
+    }
+}
+
+fn font_kind_to_family(kind: FontKind) -> &'static str {
+    match kind {
+        FontKind::MonoRegular
+        | FontKind::MonoBold
+        | FontKind::MonoBoldItalic
+        | FontKind::MonoItalic => "Courier New",
+        FontKind::SansRegular
+        | FontKind::SansBold
+        | FontKind::SansBoldItalic
+        | FontKind::SansItalic => "Helvetica",
+        FontKind::SerifRegular
+        | FontKind::SerifBold
+        | FontKind::SerifBoldItalic
+        | FontKind::SerifItalic => "Times New Roman",
     }
 }

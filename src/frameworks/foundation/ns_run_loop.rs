@@ -45,7 +45,7 @@ pub struct State {
     run_loops: HashMap<ThreadId, id>,
 }
 
-struct NSRunLoopHostObject {
+pub(crate) struct NSRunLoopHostObject {
     audio_units: Vec<AudioUnit>,
     /// Weak reference. Audio queue must remove itself when destroyed (TODO).
     /// They are in no particular order.
@@ -53,6 +53,8 @@ struct NSRunLoopHostObject {
     /// Strong references to `NSTimer*` in no particular order. Timers are owned
     /// by the run loop. The timer must remove itself when invalidated.
     timers: Vec<id>,
+    /// Set by CFRunLoopStop; cleared at the start of the next run.
+    pub(crate) stopped: bool,
 }
 impl HostObject for NSRunLoopHostObject {}
 
@@ -394,6 +396,12 @@ pub fn run_run_loop(
             break;
         }
 
+        // CFRunLoopStop sets this flag to break out of the loop.
+        if env.objc.borrow::<NSRunLoopHostObject>(run_loop).stopped {
+            env.objc.borrow_mut::<NSRunLoopHostObject>(run_loop).stopped = false;
+            break;
+        }
+
         if let Some(limit) = unix_time_limit {
             // We use Unix epoch as a convenience reference date.
             // (Apple's epoch is less convenient in Rust. And "pure"
@@ -424,6 +432,7 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
             audio_units: Vec::new(),
             audio_queues: Vec::new(),
             timers: Vec::new(),
+            stopped: false,
         });
         // TODO: is it OK to allocate static object for all threads,
         // not only main one?

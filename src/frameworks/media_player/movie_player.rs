@@ -10,8 +10,7 @@ use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, ns_url, NSInteger};
 use crate::frameworks::uikit::ui_device::UIDeviceOrientation;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, ClassExports,
-    HostObject, NSZonePtr,
+    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 use std::collections::VecDeque;
@@ -220,7 +219,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithContentURL:(id)url { // NSURL*
     log!(
-        "TODO: [(MPMoviePlayerController*){:?} initWithContentURL:{:?} ({:?})]",
+        "[(MPMoviePlayerController*){:?} initWithContentURL:{:?} ({:?})]",
         this,
         url,
         ns_url::to_rust_path(env, url),
@@ -292,11 +291,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)backgroundColor {
-    msg_class![env;
-UIColor blackColor] // TODO
+    msg_class![env; UIColor blackColor]
 }
-- (())setBackgroundColor:(id)color { // UIColor*
-    todo_objc_setter!(this, color);
+- (())setBackgroundColor:(id)_color { // UIColor*
+    // Background color is a visual property; we have no movie view to tint.
 }
 
 // --- Scaling mode ---
@@ -307,11 +305,6 @@ UIColor blackColor] // TODO
         .scaling_mode
 }
 - (())setScalingMode:(MPMovieScalingMode)mode {
-    log!(
-        "TODO: [(MPMoviePlayerController*){:?} setScalingMode:{:?}]",
-        this,
-        mode
-    );
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .scaling_mode = mode;
@@ -325,11 +318,6 @@ UIColor blackColor] // TODO
         .control_style
 }
 - (())setControlStyle:(MPMovieControlStyle)style {
-    log!(
-        "TODO: [(MPMoviePlayerController*){:?} setControlStyle:{:?}]",
-        this,
-        style
-    );
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .control_style = style;
@@ -376,21 +364,15 @@ UIColor blackColor] // TODO
 
 // --- Misc setters ---
 
-- (())setUseApplicationAudioSession:(bool)use_session {
-    todo_objc_setter!(this, use_session);
+- (())setUseApplicationAudioSession:(bool)_use_session {
+    // No audio session integration needed in the emulator.
 }
 
-- (())setFullscreen:(bool)fullscreen {
-    todo_objc_setter!(this, fullscreen);
+- (())setFullscreen:(bool)_fullscreen {
+    // Fullscreen is always implied; no UI chrome to hide.
 }
 
-- (())setFullscreen:(bool)fullscreen animated:(bool)animated {
-    log!(
-        "TODO: [(MPMoviePlayerController*){:?} setFullscreen:{:?} animated:{:?}]",
-        this,
-        fullscreen,
-        animated
-    );
+- (())setFullscreen:(bool)_fullscreen animated:(bool)_animated {
 }
 
 // --- View ---
@@ -405,7 +387,12 @@ UIColor blackColor] // TODO
     ensure_background_view(env, this)
 }
 - (())setBackgroundView:(id)view {
-    todo_objc_setter!(this, view);
+    let old = env.objc.borrow::<MPMoviePlayerControllerHostObject>(this).background_view;
+    if old != nil {
+        release(env, old);
+    }
+    retain(env, view);
+    env.objc.borrow_mut::<MPMoviePlayerControllerHostObject>(this).background_view = view;
 }
 
 // --- Playback state / time ---
@@ -419,8 +406,8 @@ UIColor blackColor] // TODO
 - (f64)currentPlaybackTime {
     1.0 // Return non-zero dummy time
 }
-- (())setCurrentPlaybackTime:(f64)time {
-    todo_objc_setter!(this, time);
+- (())setCurrentPlaybackTime:(f64)_time {
+    // No real playback to seek in.
 }
 
 - (f64)initialPlaybackTime {
@@ -465,7 +452,6 @@ UIColor blackColor] // TODO
 
 // MPMediaPlayback implementation
 - (())play {
-    log!("TODO: [(MPMoviePlayerController*){:?} play]", this);
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStatePlaying;
@@ -480,14 +466,12 @@ UIColor blackColor] // TODO
 }
 
 - (())pause {
-    log!("TODO: [(MPMoviePlayerController*){:?} pause]", this);
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStatePaused;
 }
 
 - (())stop {
-    log!("TODO: [(MPMoviePlayerController*){:?} stop]", this);
     env.objc
         .borrow_mut::<MPMoviePlayerControllerHostObject>(this)
         .playback_state = MPMoviePlaybackStateStopped;

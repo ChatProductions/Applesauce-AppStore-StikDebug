@@ -44,6 +44,7 @@ pub mod ns_error;
 pub mod ns_exception;
 pub mod ns_file_handle;
 pub mod ns_file_manager;
+pub mod ns_host;
 pub mod ns_index_path;
 pub mod ns_input_stream;
 pub mod ns_invocation;
@@ -628,6 +629,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_exception::CLASSES,
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
+        ns_host::CLASSES,
         ns_index_path::CLASSES,
         ns_input_stream::CLASSES,
         ns_invocation::CLASSES,

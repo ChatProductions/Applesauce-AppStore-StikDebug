@@ -16,7 +16,7 @@ use crate::objc::{
     NSZonePtr, SEL,
 };
 use crate::window::DeviceOrientation;
-use crate::{todo_objc_setter, Environment};
+use crate::Environment;
 
 #[derive(Default)]
 pub struct State {
@@ -31,6 +31,7 @@ pub struct State {
 struct UIApplicationHostObject {
     delegate: id,
     delegate_is_retained: bool,
+    status_bar_style: UIStatusBarStyle,
 }
 impl HostObject for UIApplicationHostObject {}
 
@@ -64,6 +65,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(UIApplicationHostObject {
         delegate: nil,
         delegate_is_retained: false,
+        status_bar_style: 0,
     });
     env.objc.alloc_static_object(this, host_object, &mut env.mem)
 }
@@ -128,7 +130,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setStatusBarStyle:(UIStatusBarStyle)style {
-    todo_objc_setter!(this, style);
+    env.objc.borrow_mut::<UIApplicationHostObject>(this).status_bar_style = style;
+}
+- (UIStatusBarStyle)statusBarStyle {
+    env.objc.borrow::<UIApplicationHostObject>(this).status_bar_style
 }
 
 - (())setStatusBarStyle:(UIStatusBarStyle)style
@@ -150,6 +155,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())setStatusBarOrientation:(UIInterfaceOrientation)orientation {
     match orientation {
+        UIDeviceOrientationUnknown => {
+            // Per Apple docs UIDeviceOrientationUnknown (0) means the
+            // orientation cannot be determined.  Ignore it.
+        }
         UIDeviceOrientationPortrait => {
             env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::Portrait));
         }

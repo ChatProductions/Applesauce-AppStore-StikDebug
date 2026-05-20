@@ -215,6 +215,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array_imm)
 }
 
+- (id)sortedArrayUsingDescriptors:(id)descriptors { // NSArray* of NSSortDescriptor*
+    let array = msg![env; this mutableCopy];
+    () = msg![env; array sortUsingDescriptors:descriptors];
+    let array_imm = msg![env; array copy];
+    release(env, array);
+    autorelease(env, array_imm)
+}
+
 // Add to NSArray @implementation:
 
 - (id)objectsAtIndexes:(id)index_set { // NSIndexSet*
@@ -984,6 +992,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     );
     let (env, _) = user_data;
     env.objc.borrow_mut::<ArrayHostObject>(this).array = array;
+}
+
+- (())sortUsingDescriptors:(id)descriptors { // NSArray* of NSSortDescriptor*
+    super::ns_sort_descriptor::sort_with_descriptors(env, this, descriptors);
 }
 
 // NSFastEnumeration implementation

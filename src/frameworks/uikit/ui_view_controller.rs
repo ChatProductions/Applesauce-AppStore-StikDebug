@@ -19,7 +19,7 @@ use crate::frameworks::uikit::ui_application::{
 use crate::frameworks::uikit::ui_view::set_view_controller;
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_super, nil, objc_classes, release, retain,
-    todo_objc_setter, Class, ClassExports, HostObject, NSZonePtr,
+    Class, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 
@@ -57,6 +57,7 @@ pub(crate) struct UIViewControllerHostObject {
     // ---------------------------
     modal_transition_style: UIModalTransitionStyle,
     modal_presentation_style: UIModalPresentationStyle,
+    editing: bool,
 }
 impl HostObject for UIViewControllerHostObject {}
 
@@ -270,7 +271,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setEditing:(bool)editing {
-    todo_objc_setter!(this, editing);
+    env.objc.borrow_mut::<UIViewControllerHostObject>(this).editing = editing;
+}
+- (bool)isEditing {
+    env.objc.borrow::<UIViewControllerHostObject>(this).editing
 }
 - (())setWantsFullScreenLayout:(bool)_wants {
     // Apple docs: When set to YES, the view controller's view extends
