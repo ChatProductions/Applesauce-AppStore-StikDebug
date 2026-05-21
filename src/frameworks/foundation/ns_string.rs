@@ -437,6 +437,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     utf16.len().try_into().unwrap()
 }
 
+- (NSStringEncoding)fastestEncoding {
+    fastest_encoding(env, this)
+}
+
+- (NSStringEncoding)smallestEncoding {
+    smallest_encoding(env, this)
+}
+
 - (u16)characterAtIndex:(NSUInteger)index {
     let host_object = env.objc.borrow_mut::<StringHostObject>(this);
     let (utf16, did_convert) = host_object.convert_to_utf16_inplace();
@@ -2119,6 +2127,51 @@ pub fn to_rust_string(env: &mut Environment, string: id) -> Cow<'static, str> {
         .borrow_mut::<StringHostObject>(string)
         .to_utf8()
         .unwrap()
+}
+
+/// Returns the encoding in which `string`'s underlying code units can be
+/// retrieved without conversion.
+///
+/// This mirrors `CFStringGetFastestEncoding` and Cocoa's
+/// `-[NSString fastestEncoding]`: an `NSString` stored as UTF-16 reports
+/// `NSUnicodeStringEncoding`, a pure-ASCII UTF-8 string reports
+/// `NSASCIIStringEncoding`, and any other UTF-8 string reports
+/// `NSUTF8StringEncoding`. `nil` is treated as the empty string (ASCII).
+pub fn fastest_encoding(env: &mut Environment, string: id) -> NSStringEncoding {
+    if string == nil {
+        return NSASCIIStringEncoding;
+    }
+    match env.objc.borrow::<StringHostObject>(string) {
+        StringHostObject::Utf8(s) => {
+            if s.is_ascii() {
+                NSASCIIStringEncoding
+            } else {
+                NSUTF8StringEncoding
+            }
+        }
+        StringHostObject::Utf16(_) => NSUnicodeStringEncoding,
+    }
+}
+
+/// Returns the smallest encoding that can losslessly represent `string`.
+///
+/// This mirrors `CFStringGetSmallestEncoding` and `-[NSString smallestEncoding]`:
+/// pure-ASCII content reports `NSASCIIStringEncoding`, otherwise we report
+/// `NSUTF8StringEncoding` because every Unicode scalar value fits in UTF-8.
+pub fn smallest_encoding(env: &mut Environment, string: id) -> NSStringEncoding {
+    if string == nil {
+        return NSASCIIStringEncoding;
+    }
+    let host = env.objc.borrow::<StringHostObject>(string);
+    let is_ascii = match host {
+        StringHostObject::Utf8(s) => s.is_ascii(),
+        StringHostObject::Utf16(v) => v.iter().all(|&c| c <= 0x7F),
+    };
+    if is_ascii {
+        NSASCIIStringEncoding
+    } else {
+        NSUTF8StringEncoding
+    }
 }
 
 pub fn for_each_code_unit<F>(env: &mut Environment, string: id, mut f: F)

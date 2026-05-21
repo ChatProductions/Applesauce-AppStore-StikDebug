@@ -8,8 +8,8 @@
 use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetGregorianDate;
 use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter,
-    ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 
 // MARK: - Style constants
@@ -20,6 +20,27 @@ const NSDateFormatterShortStyle: NSDateFormatterStyle = 1;
 const NSDateFormatterMediumStyle: NSDateFormatterStyle = 2;
 const NSDateFormatterLongStyle: NSDateFormatterStyle = 3;
 const NSDateFormatterFullStyle: NSDateFormatterStyle = 4;
+
+// MARK: - Behavior constants
+
+/// `NSDateFormatterBehavior` — selects between the legacy Foundation date
+/// formatter behaviour (`NSDateFormatterBehavior10_0`, using NeXTSTEP-style
+/// "%Y-%m-%d" strftime tokens) and the modern Unicode CLDR-based behaviour
+/// (`NSDateFormatterBehavior10_4`). `NSDateFormatterBehaviorDefault` resolves
+/// to whichever behaviour is currently set as the class-wide default; in real
+/// Cocoa that resolves to `NSDateFormatterBehavior10_4` on iOS.
+///
+/// touchHLE implements the modern (10.4) behaviour, but we still need to
+/// store and report the requested behaviour so apps that round-trip the value
+/// see the expected result.
+pub type NSDateFormatterBehavior = NSUInteger;
+pub const NSDateFormatterBehaviorDefault: NSDateFormatterBehavior = 0;
+pub const NSDateFormatterBehavior10_0: NSDateFormatterBehavior = 1000;
+pub const NSDateFormatterBehavior10_4: NSDateFormatterBehavior = 1040;
+
+/// Process-wide default for `+[NSDateFormatter defaultFormatterBehavior]`.
+/// Apple uses `NSDateFormatterBehavior10_4` on iOS, and so do we.
+const DEFAULT_FORMATTER_BEHAVIOR: NSDateFormatterBehavior = NSDateFormatterBehavior10_4;
 
 struct NSDateFormatterHostObject {
     /// `NSString*` — custom format string, nil if using style
@@ -32,11 +53,25 @@ struct NSDateFormatterHostObject {
     calendar: id,
     date_style: NSDateFormatterStyle,
     time_style: NSDateFormatterStyle,
+    /// `NSDateFormatterBehavior` — see [`NSDateFormatterBehavior`].
+    formatter_behavior: NSDateFormatterBehavior,
     lenient: bool,
     uses_24hr: bool,
     two_digit_start_date: id, // NSDate*
     default_date: id,         // NSDate*
     does_relative_date_formatting: bool,
+    /// `NSString*` — AM symbol (defaults to "AM" via `apply_format`).
+    am_symbol: id,
+    /// `NSString*` — PM symbol (defaults to "PM").
+    pm_symbol: id,
+    /// `NSArray<NSString*>*` — short month names (e.g. "Jan", "Feb"). nil = default.
+    short_month_symbols: id,
+    /// `NSArray<NSString*>*` — full month names. nil = default.
+    month_symbols: id,
+    /// `NSArray<NSString*>*` — short weekday names ("Sun" .. "Sat"). nil = default.
+    short_weekday_symbols: id,
+    /// `NSArray<NSString*>*` — full weekday names. nil = default.
+    weekday_symbols: id,
 }
 impl HostObject for NSDateFormatterHostObject {}
 
@@ -54,13 +89,47 @@ pub const CLASSES: ClassExports = objc_classes! {
         calendar:      nil,
         date_style:    NSDateFormatterNoStyle,
         time_style:    NSDateFormatterNoStyle,
+        formatter_behavior: DEFAULT_FORMATTER_BEHAVIOR,
         lenient:       false,
         uses_24hr:     false,
         two_digit_start_date: nil,
         default_date:  nil,
         does_relative_date_formatting: false,
+        am_symbol:               nil,
+        pm_symbol:               nil,
+        short_month_symbols:     nil,
+        month_symbols:           nil,
+        short_weekday_symbols:   nil,
+        weekday_symbols:         nil,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+// MARK: - Class-wide default behavior
+
++ (NSDateFormatterBehavior)defaultFormatterBehavior {
+    // touchHLE implements modern (Unicode CLDR) behaviour, matching iOS.
+    DEFAULT_FORMATTER_BEHAVIOR
+}
+
++ (())setDefaultFormatterBehavior:(NSDateFormatterBehavior)behavior {
+    // Apple lets the process pick between the legacy 10.0 NeXT-style
+    // formatter and the modern 10.4 CLDR formatter. touchHLE only implements
+    // the modern one, so we accept the setter but warn (rather than crash)
+    // if anyone explicitly asks for the legacy path.
+    if behavior == NSDateFormatterBehavior10_0 {
+        log!(
+            "Warning: +[NSDateFormatter setDefaultFormatterBehavior:NSDateFormatterBehavior10_0] \
+             requested; touchHLE only implements NSDateFormatterBehavior10_4 (Unicode CLDR), \
+             ignoring."
+        );
+    } else if behavior != NSDateFormatterBehavior10_4 && behavior != NSDateFormatterBehaviorDefault
+    {
+        log!(
+            "Warning: unknown NSDateFormatterBehavior {}, ignoring",
+            behavior
+        );
+    }
 }
 
 + (id)localizedStringFromDate:(id)date
@@ -83,16 +152,30 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host = env.objc.borrow::<NSDateFormatterHostObject>(this);
-    let (fmt, locale, tz, cal, tds, dd) = (
-        host.date_format, host.locale, host.time_zone,
-        host.calendar, host.two_digit_start_date, host.default_date,
-    );
+    let fmt = host.date_format;
+    let locale = host.locale;
+    let tz = host.time_zone;
+    let cal = host.calendar;
+    let tds = host.two_digit_start_date;
+    let dd = host.default_date;
+    let am = host.am_symbol;
+    let pm = host.pm_symbol;
+    let sms = host.short_month_symbols;
+    let ms = host.month_symbols;
+    let sws = host.short_weekday_symbols;
+    let ws = host.weekday_symbols;
     release(env, fmt);
     release(env, locale);
     release(env, tz);
     release(env, cal);
     release(env, tds);
     release(env, dd);
+    release(env, am);
+    release(env, pm);
+    release(env, sms);
+    release(env, ms);
+    release(env, sws);
+    release(env, ws);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -127,8 +210,103 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<NSDateFormatterHostObject>(this).time_style = style;
 }
 
-- (())setShortMonthSymbols:(bool)symbols {
-    todo_objc_setter!(this, symbols);
+// MARK: - Per-instance NSDateFormatterBehavior
+
+- (NSDateFormatterBehavior)formatterBehavior {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).formatter_behavior
+}
+
+- (())setFormatterBehavior:(NSDateFormatterBehavior)behavior {
+    let resolved = match behavior {
+        NSDateFormatterBehaviorDefault => DEFAULT_FORMATTER_BEHAVIOR,
+        NSDateFormatterBehavior10_0 => {
+            log!(
+                "Warning: [(NSDateFormatter*){:?} setFormatterBehavior:NSDateFormatterBehavior10_0]: \
+                 touchHLE only implements the modern (10.4) Unicode behaviour; the value will be \
+                 stored as requested but formatting still uses Unicode CLDR tokens.",
+                this
+            );
+            NSDateFormatterBehavior10_0
+        }
+        NSDateFormatterBehavior10_4 => NSDateFormatterBehavior10_4,
+        other => {
+            log!(
+                "Warning: [(NSDateFormatter*){:?} setFormatterBehavior:{}]: unknown behaviour, \
+                 falling back to NSDateFormatterBehavior10_4",
+                this, other
+            );
+            NSDateFormatterBehavior10_4
+        }
+    };
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).formatter_behavior = resolved;
+}
+
+// MARK: - Symbols (AM/PM, months, weekdays)
+//
+// Apple lets apps localise an `NSDateFormatter` by overriding individual
+// symbol arrays. `apply_format` uses English defaults when these are `nil`,
+// but storing them with proper retain/release means apps that round-trip the
+// values (or read them back via `monthSymbols` etc.) observe the same array
+// they set.
+
+- (id)AMSymbol {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).am_symbol
+}
+- (())setAMSymbol:(id)symbol {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).am_symbol;
+    release(env, old);
+    let copy: id = if symbol != nil { msg![env; symbol copy] } else { nil };
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).am_symbol = copy;
+}
+
+- (id)PMSymbol {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).pm_symbol
+}
+- (())setPMSymbol:(id)symbol {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).pm_symbol;
+    release(env, old);
+    let copy: id = if symbol != nil { msg![env; symbol copy] } else { nil };
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).pm_symbol = copy;
+}
+
+- (id)shortMonthSymbols {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).short_month_symbols
+}
+- (())setShortMonthSymbols:(id)symbols {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).short_month_symbols;
+    release(env, old);
+    retain(env, symbols);
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).short_month_symbols = symbols;
+}
+
+- (id)monthSymbols {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).month_symbols
+}
+- (())setMonthSymbols:(id)symbols {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).month_symbols;
+    release(env, old);
+    retain(env, symbols);
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).month_symbols = symbols;
+}
+
+- (id)shortWeekdaySymbols {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).short_weekday_symbols
+}
+- (())setShortWeekdaySymbols:(id)symbols {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).short_weekday_symbols;
+    release(env, old);
+    retain(env, symbols);
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).short_weekday_symbols = symbols;
+}
+
+- (id)weekdaySymbols {
+    env.objc.borrow::<NSDateFormatterHostObject>(this).weekday_symbols
+}
+- (())setWeekdaySymbols:(id)symbols {
+    let old = env.objc.borrow::<NSDateFormatterHostObject>(this).weekday_symbols;
+    release(env, old);
+    retain(env, symbols);
+    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).weekday_symbols = symbols;
 }
 
 // MARK: - Locale / TimeZone / Calendar
@@ -276,15 +454,56 @@ pub const CLASSES: ClassExports = objc_classes! {
     let fmt_id = env.objc.borrow::<NSDateFormatterHostObject>(this).date_format;
     let fmt_copy: id = if fmt_id != nil { msg![env; fmt_id copy] } else { nil };
     let host = env.objc.borrow::<NSDateFormatterHostObject>(this);
-    let (ds, ts, lenient, rel) = (host.date_style, host.time_style, host.lenient,
-                                  host.does_relative_date_formatting);
+    let ds = host.date_style;
+    let ts = host.time_style;
+    let lenient = host.lenient;
+    let uses_24hr = host.uses_24hr;
+    let rel = host.does_relative_date_formatting;
+    let behavior = host.formatter_behavior;
+    // Reference types are retained-by-the-copy so the source instance still
+    // owns them when it deallocs.
+    let locale = host.locale;
+    let tz = host.time_zone;
+    let calendar = host.calendar;
+    let tds = host.two_digit_start_date;
+    let dd = host.default_date;
+    let am = host.am_symbol;
+    let pm = host.pm_symbol;
+    let sms = host.short_month_symbols;
+    let ms = host.month_symbols;
+    let sws = host.short_weekday_symbols;
+    let ws = host.weekday_symbols;
     drop(host);
+    let am_copy: id = if am != nil { msg![env; am copy] } else { nil };
+    let pm_copy: id = if pm != nil { msg![env; pm copy] } else { nil };
+    retain(env, locale);
+    retain(env, tz);
+    retain(env, calendar);
+    retain(env, tds);
+    retain(env, dd);
+    retain(env, sms);
+    retain(env, ms);
+    retain(env, sws);
+    retain(env, ws);
     let h = env.objc.borrow_mut::<NSDateFormatterHostObject>(copy);
     h.date_format = fmt_copy;
     h.date_style  = ds;
     h.time_style  = ts;
     h.lenient     = lenient;
+    h.uses_24hr   = uses_24hr;
+    h.formatter_behavior = behavior;
     h.does_relative_date_formatting = rel;
+    h.locale      = locale;
+    h.time_zone   = tz;
+    h.calendar    = calendar;
+    h.two_digit_start_date = tds;
+    h.default_date         = dd;
+    h.am_symbol            = am_copy;
+    h.pm_symbol            = pm_copy;
+    h.short_month_symbols  = sms;
+    h.month_symbols        = ms;
+    h.short_weekday_symbols = sws;
+    h.weekday_symbols      = ws;
     autorelease(env, copy)
 }
 

@@ -96,13 +96,16 @@ pub const TWITTER: super::HostDylib = super::HostDylib {
     function_exports: &[],
 };
 
-// CoreTelephony (stub — no real cellular support, but we resolve the
-// CTRadioAccessTechnology* string constants and CTRadioAccessTechnology-
-// DidChangeNotification name so observers don't dereference NULL).
+// CoreTelephony — touchHLE has no cellular radio, but we expose real
+// `CTTelephonyNetworkInfo` / `CTCarrier` classes plus the
+// `CTRadioAccessTechnology*` string constants and the
+// `CTRadioAccessTechnologyDidChangeNotification` notification name so apps
+// that ask "what carrier am I on?" get a deterministic "no SIM" answer
+// instead of a NULL-deref inside `CFStringHash`.
 pub const CORE_TELEPHONY: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony",
     aliases: &[],
-    class_exports: &[],
+    class_exports: &[frameworks::core_telephony::CLASSES],
     constant_exports: &[frameworks::core_telephony::CONSTANTS],
     function_exports: &[frameworks::core_telephony::FUNCTIONS],
 };
