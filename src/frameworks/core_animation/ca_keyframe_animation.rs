@@ -10,26 +10,6 @@ pub(super) struct CAValueFunctionHostObject {
     name: id,
 }
 
-pub(super) struct CABasicAnimationHostObject {
-    // CAAnimation & CAMediaTiming
-    duration: f64,
-    fill_mode: id,
-    delegate: id,
-    removed_on_completion: bool,
-    timing_function: id,
-
-    // CAPropertyAnimation
-    key_path: id,
-    is_cumulative: bool,
-    is_additive: bool,
-    value_function: id,
-
-    // CABasicAnimation
-    from_value: id,
-    to_value: id,
-    by_value: id,
-}
-
 pub(super) struct CASpringAnimationHostObject {
     // CAAnimation & CAMediaTiming
     duration: f64,
@@ -86,27 +66,9 @@ pub(super) struct CAKeyframeAnimationHostObject {
     bias_values: id,
 }
 
-pub(super) struct CATransitionHostObject {
-    // CAAnimation & CAMediaTiming
-    duration: f64,
-    fill_mode: id,
-    delegate: id,
-    removed_on_completion: bool,
-    timing_function: id,
-
-    // CATransition
-    type_val: id,
-    subtype: id,
-    start_progress: f32,
-    end_progress: f32,
-    filter: id,
-}
-
 impl HostObject for CAValueFunctionHostObject {}
-impl HostObject for CABasicAnimationHostObject {}
 impl HostObject for CASpringAnimationHostObject {}
 impl HostObject for CAKeyframeAnimationHostObject {}
-impl HostObject for CATransitionHostObject {}
 
 // =====================================================================
 // CLASSES EXPORT

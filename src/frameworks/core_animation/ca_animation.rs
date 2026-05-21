@@ -11,23 +11,23 @@ use crate::frameworks::core_animation::ca_media_timing_function::kCAMediaTimingF
 use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
 use crate::objc::{
-    autorelease, id, msg, nil, objc_classes, release, retain, todo_objc_setter, ClassExports,
-    HostObject, NSZonePtr,
+    autorelease, id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 use crate::{impl_HostObject_with_superclass, msg_class, msg_super};
 
 type CATransitionType = id; // NSString*
-const kCATransitionFade: &str = "fade";
-const kCATransitionMoveIn: &str = "moveIn";
-const kCATransitionPush: &str = "push";
-const kCATransitionReveal: &str = "reveal";
+type CATransitionSubtype = id; // NSString*
+pub const kCATransitionFade: &str = "fade";
+pub const kCATransitionMoveIn: &str = "moveIn";
+pub const kCATransitionPush: &str = "push";
+pub const kCATransitionReveal: &str = "reveal";
 
 // CATransitionSubtype values: directions for the transition animation.
-const kCATransitionFromTop: &str = "fromTop";
-const kCATransitionFromBottom: &str = "fromBottom";
-const kCATransitionFromLeft: &str = "fromLeft";
-const kCATransitionFromRight: &str = "fromRight";
+pub const kCATransitionFromTop: &str = "fromTop";
+pub const kCATransitionFromBottom: &str = "fromBottom";
+pub const kCATransitionFromLeft: &str = "fromLeft";
+pub const kCATransitionFromRight: &str = "fromRight";
 
 pub type CAMediaTimingFillMode = id; // NSString*
 pub const kCAFillModeBackwards: &str = "backwards";
@@ -42,10 +42,7 @@ pub const kCAAnimationPaced: &str = "paced";
 pub const CONSTANTS: ConstantExports = &[
     // `kCATransition` — the animation key used when adding a CATransition to a
     // layer via `[CALayer addAnimation:forKey:]`. Equal to @"transition".
-    (
-        "_kCATransition",
-        HostConstant::NSString("transition"),
-    ),
+    ("_kCATransition", HostConstant::NSString("transition")),
     // `CATransitionType` values.
     (
         "_kCATransitionFade",
@@ -159,6 +156,99 @@ struct CAAnimationGroupHostObject {
     animations: id, // NSArray*
 }
 impl_HostObject_with_superclass!(CAAnimationGroupHostObject);
+
+/// Host object for `CATransition`.
+///
+/// In Apple's class hierarchy `CATransition` is a direct subclass of
+/// `CAAnimation` (not `CABasicAnimation`). We therefore inherit only from
+/// `CAAnimationHostObject` and add the `CATransition`-specific properties
+/// directly: `type`, `subtype`, `startProgress`, `endProgress`, `filter`.
+///
+/// Many real-world apps also call `setKeyPath:` / `setFromValue:` /
+/// `setToValue:` / `setByValue:` on a `CATransition` (e.g. when configuring a
+/// transition via key-value coding). Apple's runtime silently stores those
+/// values via the generic KVC machinery, so we mirror that here by giving
+/// `CATransition` its own backing storage for them.
+struct CATransitionHostObject {
+    superclass: CAAnimationHostObject,
+    // `CATransition` properties.
+    type_value: &'static str,
+    subtype: Option<&'static str>,
+    start_progress: f32,
+    end_progress: f32,
+    filter: id, // CIFilter*
+    // KVC-style storage that mirrors `CABasicAnimation` / `CAPropertyAnimation`
+    // so that apps that set these on a `CATransition` round-trip correctly.
+    key_path: id, // NSString*
+    from_value: id,
+    to_value: id,
+    by_value: id,
+}
+impl Default for CATransitionHostObject {
+    fn default() -> Self {
+        Self {
+            superclass: CAAnimationHostObject::default(),
+            // Apple defaults `type` to `kCATransitionFade`.
+            type_value: kCATransitionFade,
+            subtype: None,
+            start_progress: 0.0,
+            end_progress: 1.0,
+            filter: nil,
+            key_path: nil,
+            from_value: nil,
+            to_value: nil,
+            by_value: nil,
+        }
+    }
+}
+impl_HostObject_with_superclass!(CATransitionHostObject);
+
+/// Match an NSString against the set of valid `CATransitionType` values.
+/// Returns the canonical static string for known types, or logs a warning and
+/// defaults to `kCATransitionFade` for unknown values.
+fn canonicalize_transition_type(env: &mut Environment, value: id) -> &'static str {
+    if value == nil {
+        return kCATransitionFade;
+    }
+    let s = to_rust_string(env, value);
+    match &*s {
+        kCATransitionFade => kCATransitionFade,
+        kCATransitionMoveIn => kCATransitionMoveIn,
+        kCATransitionPush => kCATransitionPush,
+        kCATransitionReveal => kCATransitionReveal,
+        other => {
+            log!(
+                "Warning: CATransition setType: unknown transition type {:?}; \
+                 defaulting to kCATransitionFade.",
+                other
+            );
+            kCATransitionFade
+        }
+    }
+}
+
+/// Match an NSString against the set of valid `CATransitionSubtype` values.
+/// Returns `Some(...)` for a known subtype, `None` for nil (subtypes are
+/// optional on Apple's CATransition), and logs a warning for unknown values.
+fn canonicalize_transition_subtype(env: &mut Environment, value: id) -> Option<&'static str> {
+    if value == nil {
+        return None;
+    }
+    let s = to_rust_string(env, value);
+    match &*s {
+        kCATransitionFromTop => Some(kCATransitionFromTop),
+        kCATransitionFromBottom => Some(kCATransitionFromBottom),
+        kCATransitionFromLeft => Some(kCATransitionFromLeft),
+        kCATransitionFromRight => Some(kCATransitionFromRight),
+        other => {
+            log!(
+                "Warning: CATransition setSubtype: unknown subtype {:?}; storing as nil.",
+                other
+            );
+            None
+        }
+    }
+}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -397,12 +487,172 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation CATransition : CAAnimation
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::<CABasicAnimationHostObject>::default();
+    let host_object = Box::<CATransitionHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-- (())setType:(CATransitionType)transitionType {
-    todo_objc_setter!(this, to_rust_string(env, transitionType));
++ (id)animation {
+    let object: id = msg![env; this new];
+    autorelease(env, object)
+}
+
+// CATransition-specific properties.
+
+- (())setType:(CATransitionType)transition_type {
+    let canonical = canonicalize_transition_type(env, transition_type);
+    log_dbg!(
+        "[(CATransition*){:?} setType:{:?} ({:?})]",
+        this, transition_type, canonical
+    );
+    env.objc.borrow_mut::<CATransitionHostObject>(this).type_value = canonical;
+}
+- (CATransitionType)type {
+    let type_value = env.objc.borrow::<CATransitionHostObject>(this).type_value;
+    get_static_str(env, type_value)
+}
+
+- (())setSubtype:(CATransitionSubtype)subtype {
+    let canonical = canonicalize_transition_subtype(env, subtype);
+    log_dbg!(
+        "[(CATransition*){:?} setSubtype:{:?} ({:?})]",
+        this, subtype, canonical
+    );
+    env.objc.borrow_mut::<CATransitionHostObject>(this).subtype = canonical;
+}
+- (CATransitionSubtype)subtype {
+    let subtype = env.objc.borrow::<CATransitionHostObject>(this).subtype;
+    match subtype {
+        Some(s) => get_static_str(env, s),
+        None => nil,
+    }
+}
+
+- (())setStartProgress:(f32)progress {
+    let clamped = progress.clamp(0.0, 1.0);
+    log_dbg!(
+        "[(CATransition*){:?} setStartProgress:{:?}]",
+        this, clamped
+    );
+    env.objc.borrow_mut::<CATransitionHostObject>(this).start_progress = clamped;
+}
+- (f32)startProgress {
+    env.objc.borrow::<CATransitionHostObject>(this).start_progress
+}
+
+- (())setEndProgress:(f32)progress {
+    let clamped = progress.clamp(0.0, 1.0);
+    log_dbg!(
+        "[(CATransition*){:?} setEndProgress:{:?}]",
+        this, clamped
+    );
+    env.objc.borrow_mut::<CATransitionHostObject>(this).end_progress = clamped;
+}
+- (f32)endProgress {
+    env.objc.borrow::<CATransitionHostObject>(this).end_progress
+}
+
+- (())setFilter:(id)filter { // CIFilter*
+    log_dbg!("[(CATransition*){:?} setFilter:{:?}]", this, filter);
+    let old = env.objc.borrow::<CATransitionHostObject>(this).filter;
+    if filter != nil {
+        retain(env, filter);
+    }
+    env.objc.borrow_mut::<CATransitionHostObject>(this).filter = filter;
+    if old != nil {
+        release(env, old);
+    }
+}
+- (id)filter {
+    env.objc.borrow::<CATransitionHostObject>(this).filter
+}
+
+// `CAPropertyAnimation`-style methods. `CATransition` does not actually
+// inherit from `CAPropertyAnimation` on Apple's platforms, but many apps set
+// these values through Key-Value Coding, so we provide explicit accessors.
+
+- (())setKeyPath:(id)path { // NSString*
+    log_dbg!(
+        "[(CATransition*){:?} setKeyPath:{:?} ({:?})]",
+        this, path, if path == nil { String::new() } else { to_rust_string(env, path).to_string() }
+    );
+    let path_copy: id = if path == nil { nil } else { msg![env; path copy] };
+    let old = env.objc.borrow::<CATransitionHostObject>(this).key_path;
+    env.objc.borrow_mut::<CATransitionHostObject>(this).key_path = path_copy;
+    if old != nil {
+        release(env, old);
+    }
+}
+- (id)keyPath {
+    env.objc.borrow::<CATransitionHostObject>(this).key_path
+}
+
+// `CABasicAnimation`-style methods (KVC compatibility, see comment above).
+
+- (())setFromValue:(id)value {
+    log_dbg!("[(CATransition*){:?} setFromValue:{:?}]", this, value);
+    let old = env.objc.borrow::<CATransitionHostObject>(this).from_value;
+    if value != nil {
+        retain(env, value);
+    }
+    env.objc.borrow_mut::<CATransitionHostObject>(this).from_value = value;
+    if old != nil {
+        release(env, old);
+    }
+}
+- (id)fromValue {
+    env.objc.borrow::<CATransitionHostObject>(this).from_value
+}
+
+- (())setToValue:(id)value {
+    log_dbg!("[(CATransition*){:?} setToValue:{:?}]", this, value);
+    let old = env.objc.borrow::<CATransitionHostObject>(this).to_value;
+    if value != nil {
+        retain(env, value);
+    }
+    env.objc.borrow_mut::<CATransitionHostObject>(this).to_value = value;
+    if old != nil {
+        release(env, old);
+    }
+}
+- (id)toValue {
+    env.objc.borrow::<CATransitionHostObject>(this).to_value
+}
+
+- (())setByValue:(id)value {
+    log_dbg!("[(CATransition*){:?} setByValue:{:?}]", this, value);
+    let old = env.objc.borrow::<CATransitionHostObject>(this).by_value;
+    if value != nil {
+        retain(env, value);
+    }
+    env.objc.borrow_mut::<CATransitionHostObject>(this).by_value = value;
+    if old != nil {
+        release(env, old);
+    }
+}
+- (id)byValue {
+    env.objc.borrow::<CATransitionHostObject>(this).by_value
+}
+
+- (())dealloc {
+    let &CATransitionHostObject {
+        filter, key_path, from_value, to_value, by_value, ..
+    } = env.objc.borrow(this);
+    if filter != nil {
+        release(env, filter);
+    }
+    if key_path != nil {
+        release(env, key_path);
+    }
+    if from_value != nil {
+        release(env, from_value);
+    }
+    if to_value != nil {
+        release(env, to_value);
+    }
+    if by_value != nil {
+        release(env, by_value);
+    }
+    msg_super![env; this dealloc]
 }
 
 @end
