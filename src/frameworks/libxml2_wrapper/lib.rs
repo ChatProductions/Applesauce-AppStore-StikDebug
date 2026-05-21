@@ -272,6 +272,7 @@ extern "C" {
     pub fn xmlInitParser();
     pub fn xmlCleanupParser();
     pub fn xmlKeepBlanksDefault(val: c_int) -> c_int;
+    pub fn xmlCheckVersion(version: c_int);
 
     // ------------------------ Memory ------------------------------------
     pub fn xmlFree(ptr: *mut c_void);
@@ -358,6 +359,14 @@ extern "C" {
         chunk: *const c_char,
         size: c_int,
         terminate: c_int,
+    ) -> c_int;
+
+    // ------------------------ SAX parser -------------------------------
+    pub fn xmlSAXUserParseMemory(
+        sax: *mut c_void,
+        user_data: *mut c_void,
+        buffer: *const c_char,
+        size: c_int,
     ) -> c_int;
 
     // ------------------------ Tree --------------------------------------

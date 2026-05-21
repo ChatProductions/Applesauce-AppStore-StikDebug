@@ -356,6 +356,15 @@ fn xmlCleanupParser(_env: &mut Environment) {
 }
 
 #[allow(non_snake_case)]
+fn xmlCheckVersion(_env: &mut Environment, version: i32) {
+    // Forwards to real libxml2's runtime version sanity check.  Real libxml2
+    // logs a warning if the compile-time and runtime versions differ; we
+    // route that through our quiet error handler so it stays out of stderr.
+    with_state(|_| {});
+    unsafe { xml::xmlCheckVersion(version as c_int) };
+}
+
+#[allow(non_snake_case)]
 fn xmlCtxtGetLastError(_env: &mut Environment, ctxt: u32) -> u32 {
     let p = h2parser_ctxt(ctxt) as *mut c_void;
     let err = unsafe { xml::xmlCtxtGetLastError(p) };
@@ -2488,6 +2497,43 @@ fn xmlCharStrdup(env: &mut Environment, s: u32) -> u32 {
 }
 
 #[allow(non_snake_case)]
+fn xmlSAXUserParseMemory(
+    env: &mut Environment,
+    sax: u32,
+    user_data: u32,
+    buffer: u32,
+    size: i32,
+) -> i32 {
+    // The guest may pass a SAX handler whose function pointers are guest
+    // (ARM) addresses; libxml2 can't safely call into those.  Treat any
+    // non-NULL guest SAX as "no callbacks": parse with libxml2's default
+    // SAX handler, which still validates the document and surfaces errors
+    // through xmlGetLastError().  user_data is opaque to libxml2 in that
+    // case and therefore safe to drop.
+    let _ = (sax, user_data);
+    if size <= 0 || buffer == 0 {
+        return -1;
+    }
+    let data = read_guest_bytes(env, buffer, size as u32);
+    unsafe {
+        xml::xmlSAXUserParseMemory(
+            ptr::null_mut(),
+            ptr::null_mut(),
+            data.as_ptr() as *const c_char,
+            size as c_int,
+        )
+    }
+}
+
+#[allow(non_snake_case)]
+fn xmlMemoryDump(_env: &mut Environment) -> i32 {
+    // libxml2's allocation tracker is a no-op unless xmlMemSetup() was
+    // called by the embedder; we forward the call verbatim so the guest
+    // observes the same return value (typically 0) as on iPhone OS.
+    unsafe { xml::xmlMemoryDump() }
+}
+
+#[allow(non_snake_case)]
 fn xmlFree(env: &mut Environment, ptr: u32) {
     // If the guest is freeing one of our object handles, drop it from the
     // table (libxml2 itself would have called the appropriate xmlFreeFoo).
@@ -2553,6 +2599,9 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlParseDoc(_)),
     export_c_func!(xmlCreatePushParserCtxt(_, _, _, _, _)),
     export_c_func!(xmlParseChunk(_, _, _, _)),
+    export_c_func!(xmlCheckVersion(_)),
+    export_c_func!(xmlSAXUserParseMemory(_, _, _, _)),
+    export_c_func!(xmlMemoryDump()),
     // ---- tree ----
     export_c_func!(xmlNewDoc(_)),
     export_c_func!(xmlFreeDoc(_)),
