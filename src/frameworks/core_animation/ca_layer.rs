@@ -51,6 +51,12 @@ pub(super) struct CALayerHostObject {
     /// matrix is kept here so `-[CALayer transform]` can roundtrip the
     /// value the app assigned.
     pub(super) transform_3d: CATransform3D,
+    /// `CALayer.sublayerTransform` — a transform applied to the layer's
+    /// sublayers when they are rendered. Defaults to the identity matrix.
+    /// Stored verbatim so reads round-trip; touchHLE's 2D renderer doesn't
+    /// currently apply this when compositing sublayers, but apps that set
+    /// and read it back observe the right values.
+    pub(super) sublayer_transform: CATransform3D,
     pub(super) hidden: bool,
     pub(super) opaque: bool,
     pub(super) opacity: f32,
@@ -199,6 +205,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         anchor_point: CGPoint { x: 0.5, y: 0.5 },
         affine_transform: CGAffineTransformIdentity,
         transform_3d: CATransform3DIdentity,
+        sublayer_transform: CATransform3DIdentity,
         hidden: false,
         opaque: false,
         opacity: 1.0,
@@ -404,6 +411,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_obj = env.objc.borrow_mut::<CALayerHostObject>(this);
     host_obj.transform_3d = transform;
     host_obj.affine_transform = catransform3d_to_affine(transform);
+}
+
+// `-[CALayer sublayerTransform]` / `-setSublayerTransform:` — the
+// `CATransform3D` applied to this layer's sublayers when rendering.
+- (CATransform3D)sublayerTransform {
+    env.objc.borrow::<CALayerHostObject>(this).sublayer_transform
+}
+- (())setSublayerTransform:(CATransform3D)transform {
+    env.objc.borrow_mut::<CALayerHostObject>(this).sublayer_transform = transform;
 }
 
 - (CGRect)frame {
@@ -649,14 +665,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// up into the equivalent `CATransform3D` used by `setTransform:`. This is
 /// the documented `CATransform3DMakeAffineTransform(t)` mapping.
 fn affine_transform_to_catransform3d(t: CGAffineTransform) -> CATransform3D {
-    let mut out = CATransform3DIdentity;
-    out.m11 = t.a;
-    out.m12 = t.b;
-    out.m21 = t.c;
-    out.m22 = t.d;
-    out.m41 = t.tx;
-    out.m42 = t.ty;
-    out
+    CATransform3D::from_affine(t)
 }
 
 /// Collapse a `CATransform3D` to its 2x3 affine submatrix, the way the
@@ -665,14 +674,7 @@ fn affine_transform_to_catransform3d(t: CGAffineTransform) -> CATransform3D {
 /// is 2D so layers with non-trivial 3D content just get their projected
 /// 2D shadow.
 fn catransform3d_to_affine(t: CATransform3D) -> CGAffineTransform {
-    CGAffineTransform {
-        a: t.m11,
-        b: t.m12,
-        c: t.m21,
-        d: t.m22,
-        tx: t.m41,
-        ty: t.m42,
-    }
+    t.to_affine()
 }
 
 pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: id) {

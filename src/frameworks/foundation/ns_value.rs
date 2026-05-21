@@ -22,6 +22,7 @@ use crate::frameworks::core_foundation::cf_number::{
     kCFNumberShortType,
     CFNumberType,
 };
+use crate::frameworks::core_animation::ca_transform3d::CATransform3D;
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::mem::{ConstPtr, ConstVoidPtr, MutVoidPtr};
@@ -38,6 +39,7 @@ pub(super) enum NSValueHostObject {
     CGSize(CGSize),
     CGRect(CGRect),
     NSRange(NSRange),
+    CATransform3D(CATransform3D),
 }
 impl HostObject for NSValueHostObject {}
 
@@ -148,6 +150,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// QuartzCore declares `+valueWithCATransform3D:` / `-CATransform3DValue`
+// as a category on `NSValue` (`NSValue (CATransform3DAdditions)`). The
+// methods only become available once QuartzCore is loaded, but we always
+// publish them — the actual category symbol resolution still happens via
+// the regular Objective-C runtime.
++ (id)valueWithCATransform3D:(CATransform3D)value {
+    let host_object = Box::new(NSValueHostObject::CATransform3D(value));
+    let new = env.objc.alloc_object(this, host_object, &mut env.mem);
+    autorelease(env, new)
+}
+
 + (id)valueWithNonretainedObject:(id)object {
     // Store the pointer bits as an unsigned int.
     msg_class![env; NSNumber numberWithUnsignedInt:(object.to_bits())]
@@ -196,6 +209,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         (NSValueHostObject::NSRange(a), NSValueHostObject::NSRange(b)) => {
             a.location == b.location && a.length == b.length
         }
+        (NSValueHostObject::CATransform3D(a), NSValueHostObject::CATransform3D(b)) => {
+            a.equal_to(*b)
+        }
         _ => false,
     }
 }
@@ -224,6 +240,19 @@ pub const CLASSES: ClassExports = objc_classes! {
             let loc = r.location;
             let len = r.length;
             format!("NSRange: {{{}, {}}}", loc, len)
+        }
+        NSValueHostObject::CATransform3D(t) => {
+            let (m11, m12, m13, m14) = (t.m11, t.m12, t.m13, t.m14);
+            let (m21, m22, m23, m24) = (t.m21, t.m22, t.m23, t.m24);
+            let (m31, m32, m33, m34) = (t.m31, t.m32, t.m33, t.m34);
+            let (m41, m42, m43, m44) = (t.m41, t.m42, t.m43, t.m44);
+            format!(
+                "CATransform3D: {{[{}, {}, {}, {}], [{}, {}, {}, {}], [{}, {}, {}, {}], [{}, {}, {}, {}]}}",
+                m11, m12, m13, m14,
+                m21, m22, m23, m24,
+                m31, m32, m33, m34,
+                m41, m42, m43, m44,
+            )
         }
     };
     let ns = from_rust_string(env, s);
@@ -289,6 +318,24 @@ pub const CLASSES: ClassExports = objc_classes! {
                 other
             );
             NSRange { location: 0, length: 0 }
+        }
+    }
+}
+
+// QuartzCore's `NSValue (CATransform3DAdditions)` accessor. Returns the
+// stored 4x4 transform, or the identity transform if the receiver wasn't
+// constructed with `+valueWithCATransform3D:`.
+- (CATransform3D)CATransform3DValue {
+    let host_object = env.objc.borrow::<NSValueHostObject>(this);
+    match host_object {
+        NSValueHostObject::CATransform3D(t) => *t,
+        other => {
+            log!(
+                "Warning: [{:?} CATransform3DValue] called on NSValue with kind {:?}; returning identity.",
+                this,
+                other
+            );
+            crate::frameworks::core_animation::ca_transform3d::CATransform3DIdentity
         }
     }
 }
