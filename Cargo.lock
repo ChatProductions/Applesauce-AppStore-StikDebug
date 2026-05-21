@@ -1240,6 +1240,7 @@ dependencies = [
  "symphonia",
  "touchHLE_dynarmic_wrapper",
  "touchHLE_gl_bindings",
+ "touchHLE_libxml2_wrapper",
  "touchHLE_openal_soft_wrapper",
  "touchHLE_pvrt_decompress_wrapper",
  "touchHLE_stb_image_wrapper",
@@ -1262,6 +1263,14 @@ name = "touchHLE_gl_bindings"
 version = "0.2.3"
 dependencies = [
  "gl_generator",
+]
+
+[[package]]
+name = "touchHLE_libxml2_wrapper"
+version = "0.2.3"
+dependencies = [
+ "cc",
+ "cmake",
 ]
 
 [[package]]
