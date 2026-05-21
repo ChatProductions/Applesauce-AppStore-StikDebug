@@ -128,7 +128,9 @@ fn main() {
     }
 
     // libxml2's threads code uses pthreads on Unix-likes.
-    if !os.eq_ignore_ascii_case("windows") {
+    // On Android, pthread is part of libc (bionic), so there is no separate
+    // libpthread to link against — emitting `-lpthread` causes a link failure.
+    if !os.eq_ignore_ascii_case("windows") && !os.eq_ignore_ascii_case("android") {
         println!("cargo:rustc-link-lib=dylib=pthread");
     }
     if os.eq_ignore_ascii_case("linux") || os.eq_ignore_ascii_case("android") {
