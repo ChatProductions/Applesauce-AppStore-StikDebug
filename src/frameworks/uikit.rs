@@ -20,6 +20,7 @@ pub mod ui_action_sheet;
 pub mod ui_activity_indicator_view;
 pub mod ui_application;
 pub mod ui_color;
+pub mod ui_custom_object;
 pub mod ui_device;
 pub mod ui_document;
 pub mod ui_event;
@@ -305,6 +306,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_activity_indicator_view::CLASSES,
         ui_application::CLASSES,
         ui_color::CLASSES,
+        ui_custom_object::CLASSES,
         ui_device::CLASSES,
         ui_document::CLASSES,
         ui_event::CLASSES,
