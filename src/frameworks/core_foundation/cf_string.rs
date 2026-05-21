@@ -196,6 +196,36 @@ fn CFStringGetSystemEncoding(_env: &mut Environment) -> CFStringEncoding {
     kCFStringEncodingUTF8
 }
 
+/// Returns the encoding in which the string is most efficiently stored.
+///
+/// CoreFoundation's `CFString` may hold its bytes as ASCII, UTF-16, or a
+/// platform encoding; this getter lets callers grab those bytes without a
+/// conversion. We bridge into `NSString`'s host object via
+/// [`ns_string::fastest_encoding`] and translate the result back to a
+/// `CFStringEncoding`.
+fn CFStringGetFastestEncoding(env: &mut Environment, the_string: CFStringRef) -> CFStringEncoding {
+    if the_string.is_null() {
+        // Apple's real implementation also tolerates NULL by returning
+        // `kCFStringEncodingASCII` rather than crashing.
+        return kCFStringEncodingASCII;
+    }
+    let ns_enc = ns_string::fastest_encoding(env, the_string);
+    CFStringConvertNSStringEncodingToEncoding(env, ns_enc)
+}
+
+/// Returns the smallest encoding that can losslessly represent the string.
+///
+/// Mirrors `CFStringGetSmallestEncoding`. ASCII-only content reports
+/// `kCFStringEncodingASCII`; anything with non-ASCII code points reports
+/// `kCFStringEncodingUTF8` (UTF-8 covers the full Unicode range).
+fn CFStringGetSmallestEncoding(env: &mut Environment, the_string: CFStringRef) -> CFStringEncoding {
+    if the_string.is_null() {
+        return kCFStringEncodingASCII;
+    }
+    let ns_enc = ns_string::smallest_encoding(env, the_string);
+    CFStringConvertNSStringEncodingToEncoding(env, ns_enc)
+}
+
 fn CFStringGetMostCompatibleMacStringEncoding(
     _env: &mut Environment,
     encoding: CFStringEncoding,
@@ -1860,6 +1890,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFStringConvertNSStringEncodingToEncoding(_)),
     export_c_func!(CFStringIsEncodingAvailable(_)),
     export_c_func!(CFStringGetSystemEncoding()),
+    export_c_func!(CFStringGetFastestEncoding(_)),
+    export_c_func!(CFStringGetSmallestEncoding(_)),
     export_c_func!(CFStringGetMostCompatibleMacStringEncoding(_)),
     // Immutable constructors
     export_c_func!(CFStringCreateCopy(_, _)),
