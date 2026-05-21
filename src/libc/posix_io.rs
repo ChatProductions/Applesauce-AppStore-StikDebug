@@ -12,9 +12,7 @@ pub mod statvfs;
 use crate::abi::DotDotDot;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{GuestFile, GuestOpenOptions, GuestPath};
-use crate::libc::errno::{
-    set_errno, EAGAIN, EBADF, EINTR, EINVAL, EIO, EISDIR, EOVERFLOW, ESPIPE,
-};
+use crate::libc::errno::{set_errno, EBADF, EINTR, EINVAL, EIO, EISDIR, EOVERFLOW, ESPIPE};
 use crate::libc::sys::socket::close_socket;
 use crate::libc::unistd::pid_t;
 use crate::mem::{
@@ -56,14 +54,6 @@ pub struct LockRange {
 impl LockRange {
     fn overlaps(&self, other: &LockRange) -> bool {
         self.start < other.end && other.start < self.end
-    }
-    fn conflicts(&self, other: &LockRange) -> bool {
-        if !self.overlaps(other) {
-            return false;
-        }
-        // POSIX: two read locks never conflict. Any pair involving a write
-        // lock does.
-        self.lock_type == F_WRLCK || other.lock_type == F_WRLCK
     }
 }
 
@@ -959,46 +949,27 @@ fn fcntl(
         // Advisory record locking
         // ----------------------------------------------------------------
         F_GETLK => {
+            // POSIX `fcntl(F_GETLK)` reports whether a lock that would
+            // block the request is held by **another process**. HyperHLE
+            // is a single guest process, so there is no external
+            // contender — per Apple `man 2 fcntl` we always report
+            // F_UNLCK after validating the request struct.
             let lock_ptr: MutPtr<flock> = args.start().next(env);
             let mut lock = env.mem.read(lock_ptr);
-            let requested = match resolve_lock_range(env, fd, &lock) {
-                Ok(r) => r,
-                Err(error_code) => {
-                    set_errno(env, error_code);
-                    return -1;
-                }
-            };
-            // Look up the path for this fd; if unknown (e.g. socket) report
-            // "no conflicting lock" — POSIX says F_GETLK only reports
-            // conflicts, and there can't be one we can detect.
-            let path_opt = env
-                .libc_state
-                .posix_io
-                .file_for_fd(fd)
-                .and_then(|f| f.path.clone());
-            let conflict = path_opt.and_then(|p| {
-                collect_locks_on_path(&env.libc_state.posix_io, &p, fd)
-                    .into_iter()
-                    .find(|other| requested.conflicts(other))
-            });
-            if let Some(c) = conflict {
-                lock.lock_type = c.lock_type;
-                lock.whence = SEEK_SET as i16;
-                lock.start = c.start;
-                lock.len = if c.end == i64::MAX {
-                    0
-                } else {
-                    c.end - c.start
-                };
-                // POSIX: l_pid is the pid of the lock holder. HyperHLE is a
-                // single-process emulator, so report our own pid.
-                lock.pid = std::process::id() as pid_t;
-            } else {
-                lock.lock_type = F_UNLCK;
+            if let Err(error_code) = resolve_lock_range(env, fd, &lock) {
+                set_errno(env, error_code);
+                return -1;
             }
+            lock.lock_type = F_UNLCK;
             env.mem.write(lock_ptr, lock);
         }
         F_SETLK | F_SETLKW => {
+            // POSIX advisory locks are owned by the process, not the fd:
+            // locks held by the same process **never** conflict with each
+            // other (`man 2 fcntl`, "File Locking"). HyperHLE is a single
+            // guest process, so there are no inter-process conflicts to
+            // detect. We still validate the request struct and track the
+            // lock per-fd so it is released on `close(2)`.
             let lock_ptr: MutPtr<flock> = args.start().next(env);
             let lock = env.mem.read(lock_ptr);
             let requested = match resolve_lock_range(env, fd, &lock) {
@@ -1009,57 +980,19 @@ fn fcntl(
                 }
             };
 
-            // F_UNLCK releases ranges; no conflict check needed.
-            if requested.lock_type == F_UNLCK {
-                if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
-                    release_range_from_locks(&mut file.locks, &requested);
-                }
-                log_dbg!(
-                    "fcntl({}, {}, F_UNLCK [{}, {}))",
-                    fd,
-                    cmd,
-                    requested.start,
-                    requested.end
-                );
-                return 0;
-            }
-
-            // For F_RDLCK / F_WRLCK, look for conflicting locks on the
-            // same file held by *other* fds (POSIX advisory locks are
-            // tracked per process — HyperHLE is single-process, so the
-            // closest analogue is "different fd referring to the same
-            // path").
-            let path_opt = env
-                .libc_state
-                .posix_io
-                .file_for_fd(fd)
-                .and_then(|f| f.path.clone());
-            if let Some(ref path) = path_opt {
-                let others = collect_locks_on_path(&env.libc_state.posix_io, path, fd);
-                if let Some(c) = others.iter().find(|o| requested.conflicts(o)) {
-                    // F_SETLKW would block until the conflict clears; we
-                    // are single-process and there are no other holders
-                    // to wait for, so report EAGAIN to be safe and match
-                    // F_SETLK's behaviour. POSIX permits returning
-                    // EDEADLK / EAGAIN here.
-                    log!(
-                        "fcntl({}, {}) cannot acquire {:?} on '{}': conflicts with {:?}",
-                        fd, cmd, requested, path, c
-                    );
-                    set_errno(env, EAGAIN);
-                    return -1;
-                }
-            }
-
-            // No conflicts: install the lock. If a prior lock already
-            // covers (some of) this range from the same fd, replace its
-            // type per POSIX semantics by first releasing the overlap.
             if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
-                release_range_from_locks(&mut file.locks, &requested);
-                file.locks.push(requested);
+                if requested.lock_type == F_UNLCK {
+                    release_range_from_locks(&mut file.locks, &requested);
+                } else {
+                    // Replace any existing lock on the overlapping range
+                    // (POSIX: a new lock from the same owner promotes /
+                    // demotes the existing one).
+                    release_range_from_locks(&mut file.locks, &requested);
+                    file.locks.push(requested);
+                }
             }
             log_dbg!(
-                "fcntl({}, {}, {:?} [{}, {})) acquired",
+                "fcntl({}, {}, {:?} [{}, {})) => 0",
                 fd,
                 cmd,
                 requested.lock_type,
@@ -1171,9 +1104,10 @@ fn fcntl(
 /// locking, as documented by Apple `man 2 flock`:
 /// <https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/flock.2.html>
 ///
-/// Like the `fcntl` locking above, HyperHLE is a single-process emulator so
-/// conflicts can only arise between different fds inside the guest. We track
-/// the whole-file lock state per fd and reject incompatible requests.
+/// `flock(2)` advisory locks only contend between *different* processes.
+/// HyperHLE is a single guest process, so any number of locks within the
+/// guest can coexist. We still validate the operation, track the lock
+/// state per fd for diagnostics, and release on `close(2)`.
 fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32 {
     set_errno(env, 0);
 
@@ -1182,9 +1116,7 @@ fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32
         return -1;
     }
 
-    let nonblock = (operation & LOCK_NB) != 0;
     let op = operation & !LOCK_NB;
-
     let new_state: Option<i16> = match op {
         LOCK_UN => None,
         LOCK_SH => Some(F_RDLCK),
@@ -1194,47 +1126,6 @@ fn flock(env: &mut Environment, fd: FileDescriptor, operation: FLockFlag) -> i32
             return -1;
         }
     };
-
-    let path_opt = env
-        .libc_state
-        .posix_io
-        .file_for_fd(fd)
-        .and_then(|f| f.path.clone());
-
-    if let Some(requested_type) = new_state {
-        let requested = LockRange {
-            start: 0,
-            end: i64::MAX,
-            lock_type: requested_type,
-        };
-        if let Some(ref path) = path_opt {
-            let others = collect_locks_on_path(&env.libc_state.posix_io, path, fd);
-            if let Some(c) = others.iter().find(|o| requested.conflicts(o)) {
-                if nonblock {
-                    log_dbg!(
-                        "flock({}, {}) would block on '{}' (conflict: {:?})",
-                        fd,
-                        operation,
-                        path,
-                        c
-                    );
-                    set_errno(env, EAGAIN);
-                    return -1;
-                } else {
-                    // We can't actually block — there are no other host
-                    // processes to wait for in HyperHLE. Treat as EAGAIN
-                    // so the guest can retry rather than getting stuck
-                    // forever waiting.
-                    log!(
-                        "flock({}, {}) would block on '{}' (conflict: {:?}); returning EAGAIN",
-                        fd, operation, path, c
-                    );
-                    set_errno(env, EAGAIN);
-                    return -1;
-                }
-            }
-        }
-    }
 
     if let Some(file) = env.libc_state.posix_io.file_for_fd(fd) {
         file.flock_state = new_state;
@@ -1438,38 +1329,6 @@ fn resolve_lock_range(
         end,
         lock_type,
     })
-}
-
-/// Collect a snapshot of all advisory locks currently held on the file at
-/// `path` by descriptors **other than** `excluded_fd`. Used to test new
-/// lock requests for conflicts under POSIX semantics.
-fn collect_locks_on_path(
-    posix: &State,
-    path: &str,
-    excluded_fd: FileDescriptor,
-) -> Vec<LockRange> {
-    let mut out = Vec::new();
-    for (idx, slot) in posix.files.iter().enumerate() {
-        let Some(other) = slot.as_ref() else {
-            continue;
-        };
-        let fd = file_idx_to_fd(idx);
-        if fd == excluded_fd {
-            continue;
-        }
-        if other.path.as_deref() != Some(path) {
-            continue;
-        }
-        out.extend(other.locks.iter().copied());
-        if let Some(t) = other.flock_state {
-            out.push(LockRange {
-                start: 0,
-                end: i64::MAX,
-                lock_type: t,
-            });
-        }
-    }
-    out
 }
 
 /// Drop the portion of every range in `locks` that overlaps `release`,
