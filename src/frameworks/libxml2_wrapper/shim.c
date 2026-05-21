@@ -63,7 +63,7 @@ void hxml_no_op_generic_error(void *ctx, const char *msg, ...) {
     va_end(ap);
 }
 
-void hxml_no_op_structured_error(void *ctx, void *err) {
+void hxml_no_op_structured_error(void *ctx, const xmlError *err) {
     (void)ctx;
     (void)err;
 }
