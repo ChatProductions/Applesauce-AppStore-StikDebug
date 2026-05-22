@@ -55,6 +55,7 @@ impl GLESContext for GLES1NativeContext {
         if self.gl_ctx.is_current() && self.is_loaded {
             return Box::new(GLES1Native {
                 _gl_lifetime: PhantomData,
+                pending_synthetic_error: std::cell::Cell::new(gles11::NO_ERROR),
                 pvrtc_native: self.pvrtc_native,
             });
         }
@@ -84,6 +85,7 @@ impl GLESContext for GLES1NativeContext {
         }
         Box::new(GLES1Native {
             _gl_lifetime: PhantomData,
+            pending_synthetic_error: std::cell::Cell::new(gles11::NO_ERROR),
             pvrtc_native: self.pvrtc_native,
         })
     }
@@ -96,6 +98,7 @@ impl GLESContext for GLES1NativeContext {
         if self.gl_ctx.is_current() && self.is_loaded {
             return Box::new(GLES1Native {
                 _gl_lifetime: PhantomData,
+                pending_synthetic_error: std::cell::Cell::new(gles11::NO_ERROR),
                 pvrtc_native: self.pvrtc_native,
             });
         }
@@ -109,6 +112,7 @@ impl GLESContext for GLES1NativeContext {
         }
         Box::new(GLES1Native {
             _gl_lifetime: PhantomData,
+            pending_synthetic_error: std::cell::Cell::new(gles11::NO_ERROR),
             pvrtc_native: self.pvrtc_native,
         })
     }
@@ -137,6 +141,18 @@ unsafe fn detect_pvrtc_support() -> bool {
 
 pub struct GLES1Native<'gl_ctx> {
     _gl_lifetime: PhantomData<&'gl_ctx ()>,
+    /// Synthetic error queue for OpenGL ES 2.0 entry points that are not
+    /// supported on a native ES 1.1 driver. When a guest app calls a
+    /// shader-pipeline entry point (e.g. `glCreateShader`, `glUseProgram`,
+    /// `glUniform1f`) on an ES 1.1 context, the ES 2.0 specification says the
+    /// implementation must report `GL_INVALID_OPERATION`. The native ES 1.1
+    /// driver wouldn't know about these calls at all — it never sees them —
+    /// so [`GLES1Native::GetError`] would return `GL_NO_ERROR` and the guest
+    /// would silently miss the failure. Instead we maintain a one-slot
+    /// pending-error queue here; the ES 2.0 overrides below store
+    /// `GL_INVALID_OPERATION` into it, and our `GetError` returns it (then
+    /// clears it) before falling back to the underlying driver's error queue.
+    pending_synthetic_error: std::cell::Cell<GLenum>,
     /// Mirror of [`GLES1NativeContext::pvrtc_native`]; copied at make_current
     /// time so the per-call `CompressedTexImage2D` path doesn't have to
     /// re-query `GL_EXTENSIONS`.
@@ -161,6 +177,13 @@ impl GLES for GLES1Native<'_> {
 
     // Generic state manipulation
     unsafe fn GetError(&mut self) -> GLenum {
+        // If a shader-pipeline ES 2.0 entry point was invoked on this
+        // ES 1.1-only backend, report the synthetic `GL_INVALID_OPERATION`
+        // before consulting the real driver's queue.
+        let synthetic = self.pending_synthetic_error.replace(gles11::NO_ERROR);
+        if synthetic != gles11::NO_ERROR {
+            return synthetic;
+        }
         gles11::GetError()
     }
     unsafe fn Enable(&mut self, cap: GLenum) {
@@ -1151,5 +1174,385 @@ impl GLES for GLES1Native<'_> {
     }
     unsafe fn UnmapBufferOES(&mut self, target: GLenum) -> GLboolean {
         gles11::UnmapBufferOES(target)
+    }
+
+    // ===== OpenGL ES 2.0 shader-pipeline entry points =====
+    //
+    // None of these exist on a strict ES 1.1 driver. The ES 2.0 / ES 1.1
+    // specifications agree that an implementation must report
+    // `GL_INVALID_OPERATION` for "operation not supported by this profile",
+    // so we route every entry point to [`record_es2_unsupported`] which:
+    //   1. flags `GL_INVALID_OPERATION` in the synthetic error queue (read by
+    //      our `GetError` override above), and
+    //   2. logs a one-shot warning that the guest app is mixing ES 1.1 and
+    //      ES 2.0 calls.
+    // Methods with non-`()` return types pick the standard "failure" sentinel
+    // value defined by the ES 2.0 spec: `0` for object names
+    // (`glCreateShader`, `glCreateProgram`), `-1` for locations
+    // (`glGetUniformLocation`, `glGetAttribLocation`), `GL_FALSE` for
+    // boolean queries (`glIsShader`, `glIsProgram`).
+    unsafe fn CreateShader(&mut self, _type_: GLenum) -> GLuint {
+        self.record_es2_unsupported("CreateShader");
+        0
+    }
+    unsafe fn DeleteShader(&mut self, _shader: GLuint) {
+        self.record_es2_unsupported("DeleteShader");
+    }
+    unsafe fn ShaderSource(
+        &mut self,
+        _shader: GLuint,
+        _count: GLsizei,
+        _string: *const *const GLchar,
+        _length: *const GLint,
+    ) {
+        self.record_es2_unsupported("ShaderSource");
+    }
+    unsafe fn CompileShader(&mut self, _shader: GLuint) {
+        self.record_es2_unsupported("CompileShader");
+    }
+    unsafe fn GetShaderiv(&mut self, _shader: GLuint, _pname: GLenum, _params: *mut GLint) {
+        self.record_es2_unsupported("GetShaderiv");
+    }
+    unsafe fn GetShaderInfoLog(
+        &mut self,
+        _shader: GLuint,
+        _maxLength: GLsizei,
+        _length: *mut GLsizei,
+        _infoLog: *mut GLchar,
+    ) {
+        self.record_es2_unsupported("GetShaderInfoLog");
+    }
+    unsafe fn IsShader(&mut self, _shader: GLuint) -> GLboolean {
+        self.record_es2_unsupported("IsShader");
+        gles11::FALSE
+    }
+    unsafe fn CreateProgram(&mut self) -> GLuint {
+        self.record_es2_unsupported("CreateProgram");
+        0
+    }
+    unsafe fn DeleteProgram(&mut self, _program: GLuint) {
+        self.record_es2_unsupported("DeleteProgram");
+    }
+    unsafe fn AttachShader(&mut self, _program: GLuint, _shader: GLuint) {
+        self.record_es2_unsupported("AttachShader");
+    }
+    unsafe fn DetachShader(&mut self, _program: GLuint, _shader: GLuint) {
+        self.record_es2_unsupported("DetachShader");
+    }
+    unsafe fn LinkProgram(&mut self, _program: GLuint) {
+        self.record_es2_unsupported("LinkProgram");
+    }
+    unsafe fn UseProgram(&mut self, _program: GLuint) {
+        self.record_es2_unsupported("UseProgram");
+    }
+    unsafe fn GetProgramiv(&mut self, _program: GLuint, _pname: GLenum, _params: *mut GLint) {
+        self.record_es2_unsupported("GetProgramiv");
+    }
+    unsafe fn GetProgramInfoLog(
+        &mut self,
+        _program: GLuint,
+        _maxLength: GLsizei,
+        _length: *mut GLsizei,
+        _infoLog: *mut GLchar,
+    ) {
+        self.record_es2_unsupported("GetProgramInfoLog");
+    }
+    unsafe fn IsProgram(&mut self, _program: GLuint) -> GLboolean {
+        self.record_es2_unsupported("IsProgram");
+        gles11::FALSE
+    }
+    unsafe fn ValidateProgram(&mut self, _program: GLuint) {
+        self.record_es2_unsupported("ValidateProgram");
+    }
+    unsafe fn BindAttribLocation(
+        &mut self,
+        _program: GLuint,
+        _index: GLuint,
+        _name: *const GLchar,
+    ) {
+        self.record_es2_unsupported("BindAttribLocation");
+    }
+    unsafe fn GetAttribLocation(&mut self, _program: GLuint, _name: *const GLchar) -> GLint {
+        self.record_es2_unsupported("GetAttribLocation");
+        -1
+    }
+    unsafe fn GetUniformLocation(&mut self, _program: GLuint, _name: *const GLchar) -> GLint {
+        self.record_es2_unsupported("GetUniformLocation");
+        -1
+    }
+    unsafe fn GetActiveAttrib(
+        &mut self,
+        _program: GLuint,
+        _index: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _size: *mut GLint,
+        _type_: *mut GLenum,
+        _name: *mut GLchar,
+    ) {
+        self.record_es2_unsupported("GetActiveAttrib");
+    }
+    unsafe fn GetActiveUniform(
+        &mut self,
+        _program: GLuint,
+        _index: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _size: *mut GLint,
+        _type_: *mut GLenum,
+        _name: *mut GLchar,
+    ) {
+        self.record_es2_unsupported("GetActiveUniform");
+    }
+    unsafe fn EnableVertexAttribArray(&mut self, _index: GLuint) {
+        self.record_es2_unsupported("EnableVertexAttribArray");
+    }
+    unsafe fn DisableVertexAttribArray(&mut self, _index: GLuint) {
+        self.record_es2_unsupported("DisableVertexAttribArray");
+    }
+    unsafe fn VertexAttribPointer(
+        &mut self,
+        _index: GLuint,
+        _size: GLint,
+        _type_: GLenum,
+        _normalized: GLboolean,
+        _stride: GLsizei,
+        _pointer: *const GLvoid,
+    ) {
+        self.record_es2_unsupported("VertexAttribPointer");
+    }
+    unsafe fn VertexAttrib1f(&mut self, _index: GLuint, _x: GLfloat) {
+        self.record_es2_unsupported("VertexAttrib1f");
+    }
+    unsafe fn VertexAttrib2f(&mut self, _index: GLuint, _x: GLfloat, _y: GLfloat) {
+        self.record_es2_unsupported("VertexAttrib2f");
+    }
+    unsafe fn VertexAttrib3f(&mut self, _index: GLuint, _x: GLfloat, _y: GLfloat, _z: GLfloat) {
+        self.record_es2_unsupported("VertexAttrib3f");
+    }
+    unsafe fn VertexAttrib4f(
+        &mut self,
+        _index: GLuint,
+        _x: GLfloat,
+        _y: GLfloat,
+        _z: GLfloat,
+        _w: GLfloat,
+    ) {
+        self.record_es2_unsupported("VertexAttrib4f");
+    }
+    unsafe fn VertexAttrib1fv(&mut self, _index: GLuint, _v: *const GLfloat) {
+        self.record_es2_unsupported("VertexAttrib1fv");
+    }
+    unsafe fn VertexAttrib2fv(&mut self, _index: GLuint, _v: *const GLfloat) {
+        self.record_es2_unsupported("VertexAttrib2fv");
+    }
+    unsafe fn VertexAttrib3fv(&mut self, _index: GLuint, _v: *const GLfloat) {
+        self.record_es2_unsupported("VertexAttrib3fv");
+    }
+    unsafe fn VertexAttrib4fv(&mut self, _index: GLuint, _v: *const GLfloat) {
+        self.record_es2_unsupported("VertexAttrib4fv");
+    }
+    unsafe fn Uniform1f(&mut self, _location: GLint, _v0: GLfloat) {
+        self.record_es2_unsupported("Uniform1f");
+    }
+    unsafe fn Uniform2f(&mut self, _location: GLint, _v0: GLfloat, _v1: GLfloat) {
+        self.record_es2_unsupported("Uniform2f");
+    }
+    unsafe fn Uniform3f(&mut self, _location: GLint, _v0: GLfloat, _v1: GLfloat, _v2: GLfloat) {
+        self.record_es2_unsupported("Uniform3f");
+    }
+    unsafe fn Uniform4f(
+        &mut self,
+        _location: GLint,
+        _v0: GLfloat,
+        _v1: GLfloat,
+        _v2: GLfloat,
+        _v3: GLfloat,
+    ) {
+        self.record_es2_unsupported("Uniform4f");
+    }
+    unsafe fn Uniform1i(&mut self, _location: GLint, _v0: GLint) {
+        self.record_es2_unsupported("Uniform1i");
+    }
+    unsafe fn Uniform2i(&mut self, _location: GLint, _v0: GLint, _v1: GLint) {
+        self.record_es2_unsupported("Uniform2i");
+    }
+    unsafe fn Uniform3i(&mut self, _location: GLint, _v0: GLint, _v1: GLint, _v2: GLint) {
+        self.record_es2_unsupported("Uniform3i");
+    }
+    unsafe fn Uniform4i(
+        &mut self,
+        _location: GLint,
+        _v0: GLint,
+        _v1: GLint,
+        _v2: GLint,
+        _v3: GLint,
+    ) {
+        self.record_es2_unsupported("Uniform4i");
+    }
+    unsafe fn Uniform1fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
+        self.record_es2_unsupported("Uniform1fv");
+    }
+    unsafe fn Uniform2fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
+        self.record_es2_unsupported("Uniform2fv");
+    }
+    unsafe fn Uniform3fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
+        self.record_es2_unsupported("Uniform3fv");
+    }
+    unsafe fn Uniform4fv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLfloat) {
+        self.record_es2_unsupported("Uniform4fv");
+    }
+    unsafe fn Uniform1iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
+        self.record_es2_unsupported("Uniform1iv");
+    }
+    unsafe fn Uniform2iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
+        self.record_es2_unsupported("Uniform2iv");
+    }
+    unsafe fn Uniform3iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
+        self.record_es2_unsupported("Uniform3iv");
+    }
+    unsafe fn Uniform4iv(&mut self, _location: GLint, _count: GLsizei, _value: *const GLint) {
+        self.record_es2_unsupported("Uniform4iv");
+    }
+    unsafe fn UniformMatrix2fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        self.record_es2_unsupported("UniformMatrix2fv");
+    }
+    unsafe fn UniformMatrix3fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        self.record_es2_unsupported("UniformMatrix3fv");
+    }
+    unsafe fn UniformMatrix4fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        self.record_es2_unsupported("UniformMatrix4fv");
+    }
+    unsafe fn BlendColor(&mut self, _r: GLclampf, _g: GLclampf, _b: GLclampf, _a: GLclampf) {
+        self.record_es2_unsupported("BlendColor");
+    }
+    unsafe fn BlendEquation(&mut self, _mode: GLenum) {
+        self.record_es2_unsupported("BlendEquation");
+    }
+    unsafe fn BlendEquationSeparate(&mut self, _modeRGB: GLenum, _modeAlpha: GLenum) {
+        self.record_es2_unsupported("BlendEquationSeparate");
+    }
+    unsafe fn BlendFuncSeparate(
+        &mut self,
+        _srcRGB: GLenum,
+        _dstRGB: GLenum,
+        _srcAlpha: GLenum,
+        _dstAlpha: GLenum,
+    ) {
+        self.record_es2_unsupported("BlendFuncSeparate");
+    }
+    unsafe fn StencilFuncSeparate(
+        &mut self,
+        _face: GLenum,
+        _func: GLenum,
+        _ref_: GLint,
+        _mask: GLuint,
+    ) {
+        self.record_es2_unsupported("StencilFuncSeparate");
+    }
+    unsafe fn StencilOpSeparate(
+        &mut self,
+        _face: GLenum,
+        _sfail: GLenum,
+        _dpfail: GLenum,
+        _dppass: GLenum,
+    ) {
+        self.record_es2_unsupported("StencilOpSeparate");
+    }
+    unsafe fn StencilMaskSeparate(&mut self, _face: GLenum, _mask: GLuint) {
+        self.record_es2_unsupported("StencilMaskSeparate");
+    }
+    unsafe fn GetVertexAttribiv(&mut self, _index: GLuint, _pname: GLenum, _params: *mut GLint) {
+        self.record_es2_unsupported("GetVertexAttribiv");
+    }
+    unsafe fn GetVertexAttribfv(&mut self, _index: GLuint, _pname: GLenum, _params: *mut GLfloat) {
+        self.record_es2_unsupported("GetVertexAttribfv");
+    }
+    unsafe fn GetVertexAttribPointerv(
+        &mut self,
+        _index: GLuint,
+        _pname: GLenum,
+        _pointer: *mut *mut GLvoid,
+    ) {
+        self.record_es2_unsupported("GetVertexAttribPointerv");
+    }
+    unsafe fn GetUniformiv(&mut self, _program: GLuint, _location: GLint, _params: *mut GLint) {
+        self.record_es2_unsupported("GetUniformiv");
+    }
+    unsafe fn GetUniformfv(&mut self, _program: GLuint, _location: GLint, _params: *mut GLfloat) {
+        self.record_es2_unsupported("GetUniformfv");
+    }
+    unsafe fn GetAttachedShaders(
+        &mut self,
+        _program: GLuint,
+        _maxCount: GLsizei,
+        _count: *mut GLsizei,
+        _shaders: *mut GLuint,
+    ) {
+        self.record_es2_unsupported("GetAttachedShaders");
+    }
+    unsafe fn GetShaderSource(
+        &mut self,
+        _shader: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _source: *mut GLchar,
+    ) {
+        self.record_es2_unsupported("GetShaderSource");
+    }
+    unsafe fn GetShaderPrecisionFormat(
+        &mut self,
+        _shadertype: GLenum,
+        _precisiontype: GLenum,
+        _range: *mut GLint,
+        _precision: *mut GLint,
+    ) {
+        self.record_es2_unsupported("GetShaderPrecisionFormat");
+    }
+    unsafe fn ShaderBinary(
+        &mut self,
+        _count: GLsizei,
+        _shaders: *const GLuint,
+        _binaryformat: GLenum,
+        _binary: *const GLvoid,
+        _length: GLsizei,
+    ) {
+        self.record_es2_unsupported("ShaderBinary");
+    }
+    // `glReleaseShaderCompiler` is a hint, not a stateful operation; the
+    // default `unsafe fn ReleaseShaderCompiler` in `gles_generic` already
+    // returns `()` cleanly so we don't need to override it.
+}
+
+impl<'gl_ctx> GLES1Native<'gl_ctx> {
+    /// Helper used by every `OpenGL ES 2.0` shader-pipeline override above
+    /// to flag a synthetic `GL_INVALID_OPERATION` and emit a one-shot
+    /// warning describing the offending call.
+    fn record_es2_unsupported(&self, fn_name: &str) {
+        log!(
+            "{} (OpenGL ES 2.0) called on a native ES 1.1 context; \
+             reporting GL_INVALID_OPERATION via glGetError as required by spec.",
+            fn_name
+        );
+        self.pending_synthetic_error
+            .set(gles11::INVALID_OPERATION);
     }
 }
