@@ -799,6 +799,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// `- (NSArray *)sortedArrayUsingComparator:(NSComparator)cmptr` —
+// per Apple's [NSArray Reference](https://developer.apple.com/documentation/foundation/nsarray/1411124-sortedarrayusingcomparator):
+// returns a new sorted array using the given NSComparator block. We
+// implement it by copying the receiver into a mutable array and
+// delegating to `-sortUsingComparator:` on the mutable copy, then
+// returning an autoreleased copy. This matches `-sortedArrayUsingSelector:`
+// above.
+- (id)sortedArrayUsingComparator:(id)comparator {
+    let new = msg![env; this mutableCopy];
+    () = msg![env; new sortUsingComparator:comparator];
+    autorelease(env, new)
+}
+
 @end
 
 // Special variant for use by CFArray with NULL callbacks: objects aren't
@@ -993,6 +1006,57 @@ pub const CLASSES: ClassExports = objc_classes! {
         &mut |(env, array), l, r| {
             let (l, r): (usize, usize) = (l.try_into().unwrap(), r.try_into().unwrap());
             let res: NSComparisonResult = msg_send(env, (array[l], comparator, array[r]));
+            res
+        },
+        &mut |(_, array), l, r| {
+            let (l, r): (usize, usize) = (l.try_into().unwrap(), r.try_into().unwrap());
+            array.swap(l, r);
+        },
+    );
+    let (env, _) = user_data;
+    env.objc.borrow_mut::<ArrayHostObject>(this).array = array;
+}
+
+// `- (void)sortUsingComparator:(NSComparator)cmptr` —
+// per Apple's [NSMutableArray Reference](https://developer.apple.com/documentation/foundation/nsmutablearray/1413612-sortusingcomparator):
+// sorts the receiver in place using the supplied NSComparator block.
+// `NSComparator` is `^NSComparisonResult(id obj1, id obj2)`. An ObjC
+// block on 32-bit iOS is laid out as:
+//     struct Block_layout {
+//         void *isa;            // word 0
+//         int flags;            // word 1
+//         int reserved;         // word 2
+//         void (*invoke)(...);  // word 3  <-- the function pointer
+//         struct Block_descriptor_1 *descriptor; // word 4
+//         /* captured variables follow */
+//     };
+// We therefore invoke the block by calling `block->invoke(block, obj1,
+// obj2)` with the standard ARM AAPCS calling convention. A nil block is
+// treated as "leave the array in its current order", mirroring how
+// Apple's runtime aborts with a NULL block call — touchHLE just logs
+// and returns to keep the guest alive.
+- (())sortUsingComparator:(id)block {
+    if block == nil {
+        log!("Warning: -[NSMutableArray sortUsingComparator:] called with nil block; leaving array unsorted");
+        return;
+    }
+    let invoke_ptr: u32 = env.mem.read(block.cast::<u32>() + 3u32);
+    if invoke_ptr == 0 {
+        log!("Warning: -[NSMutableArray sortUsingComparator:] block {:?} has NULL invoke pointer; leaving array unsorted", block);
+        return;
+    }
+    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
+
+    let host_object: &mut ArrayHostObject = env.objc.borrow_mut(this);
+    let mut array = std::mem::take(&mut host_object.array);
+    let len = array.len().try_into().unwrap();
+    let mut user_data = (env, &mut array);
+    qsort_generic(
+        &mut user_data,
+        len,
+        &mut |(env, array), l, r| {
+            let (l, r): (usize, usize) = (l.try_into().unwrap(), r.try_into().unwrap());
+            let res: NSComparisonResult = invoke.call_from_host(env, (block, array[l], array[r]));
             res
         },
         &mut |(_, array), l, r| {

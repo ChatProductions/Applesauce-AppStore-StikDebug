@@ -5,6 +5,7 @@
  */
 //! `Mach-O` related functions.
 
+use crate::abi::{CallFromHost, GuestFunction};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::string::strcmp;
 use crate::mem::{ConstPtr, GuestUSize, MutPtr, Ptr, SafeRead};
@@ -163,6 +164,63 @@ fn _dyld_get_image_vmaddr_slide(env: &mut Environment, image_index: u32) -> u32 
     // For the main binary (index 0) the slide is always 0 in touchHLE.
     // For dylibs we don't track the slide separately, return 0.
     0
+}
+
+/// `void _dyld_register_func_for_add_image(void (*func)(const struct mach_header *mh, intptr_t vmaddr_slide))`
+///
+/// Per Apple's [dyld(3) manpage](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html):
+///
+/// > The `_dyld_register_func_for_add_image` function registers the
+/// > specified function to be called when a new image is added (a
+/// > bundle or a dynamic shared library) to the program. When this
+/// > function is first called, it is called once for each image that
+/// > is currently part of the program.
+///
+/// touchHLE finishes loading every binary and dylib before guest code
+/// starts executing, and we do not support dynamic image load / unload
+/// at runtime, so the documented contract collapses to: "invoke the
+/// callback exactly once for every already-loaded image". We honour
+/// that here. Each call passes the image's mach_header pointer and a
+/// `vmaddr_slide` of 0 (touchHLE loads binaries at their preferred
+/// addresses).
+fn _dyld_register_func_for_add_image(env: &mut Environment, func: GuestFunction) {
+    if func.to_ptr().is_null() {
+        log!("Warning: _dyld_register_func_for_add_image(NULL) — ignored");
+        return;
+    }
+    log_dbg!(
+        "_dyld_register_func_for_add_image({:?}): invoking for {} already-loaded image(s).",
+        func,
+        env.bins.len()
+    );
+    // Snapshot the per-image data first because the callback runs guest
+    // code and `env.bins` may be borrowed during the call.
+    let images: Vec<u32> = env.bins.iter().map(|b| b.text_base).collect();
+    for mh in images {
+        // vmaddr_slide = 0 for the main binary, and we don't track per-dylib
+        // slides separately. This matches what `_dyld_get_image_vmaddr_slide`
+        // already returns and keeps the two APIs consistent.
+        let _: () = func.call_from_host(env, (mh, 0u32));
+    }
+}
+
+/// `void _dyld_register_func_for_remove_image(void (*func)(const struct mach_header *mh, intptr_t vmaddr_slide))`
+///
+/// Per Apple's [dyld(3) manpage](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/dyld.3.html):
+///
+/// > Functions registered with `_dyld_register_func_for_remove_image()`
+/// > are called after any terminators in an image are run and before
+/// > the image is un-memory-mapped.
+///
+/// touchHLE never unloads images — `dlclose` is a no-op in our runtime
+/// — so the callback would never fire. We accept the registration so
+/// that calling code does not treat the call as a failure, but the
+/// callback is intentionally never invoked.
+fn _dyld_register_func_for_remove_image(_env: &mut Environment, func: GuestFunction) {
+    log_dbg!(
+        "_dyld_register_func_for_remove_image({:?}): accepted; image removal never fires in touchHLE",
+        func
+    );
 }
 
 // MARK: - NX architecture info (mach-o/arch.h)
@@ -799,6 +857,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_dyld_get_image_header(_)),
     export_c_func!(_dyld_get_image_name(_)),
     export_c_func!(_dyld_get_image_vmaddr_slide(_)),
+    export_c_func!(_dyld_register_func_for_add_image(_)),
+    export_c_func!(_dyld_register_func_for_remove_image(_)),
     export_c_func!(NXGetArchInfoFromCpuType(_, _)),
     export_c_func!(NXGetArchInfoFromName(_)),
     export_c_func!(NXGetLocalArchInfo()),

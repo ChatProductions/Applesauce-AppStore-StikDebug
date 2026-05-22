@@ -1363,6 +1363,140 @@ pub fn class_replaceMethod(env: &mut crate::Environment, cls: Class, name: SEL) 
     ConstVoidPtr::null()
 }
 
+/// `BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types)`
+///
+/// Per Apple's [Objective-C Runtime Reference](https://developer.apple.com/documentation/objectivec/1418901-class_addmethod?language=objc):
+///
+/// > Adds a new method to a class with a given name and implementation.
+/// >
+/// > Returns `YES` if the method was added successfully, otherwise `NO`
+/// > (for example, the class already contains a method implementation
+/// > with that name).
+/// >
+/// > `class_addMethod` will add an override of a superclass's
+/// > implementation, but will not replace an existing implementation in
+/// > this class. To change an existing implementation, use
+/// > `method_setImplementation`.
+///
+/// We model `IMP` as a guest function pointer (the `Method` type returned
+/// by `class_getInstanceMethod` is touchHLE-specific and is not the same
+/// representation as `IMP`). The `types` string is captured into
+/// `guest_method_signatures` so that subsequent dispatch through
+/// `methodSignatureForSelector:` can honour it.
+pub fn class_addMethod(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: SEL,
+    imp: ConstVoidPtr,
+    types: ConstPtr<u8>,
+) -> bool {
+    if cls.is_null() || name.is_null() {
+        return false;
+    }
+    // Refuse to install a NULL IMP — calling it would crash the guest as
+    // soon as the selector is dispatched, and Apple's runtime treats it as
+    // a programmer error (the docs require `imp` to be a function pointer
+    // of type `IMP`).
+    if imp.is_null() {
+        log!(
+            "Warning: class_addMethod({:?}, {:?}, NULL imp, ...) — refusing to install NULL IMP",
+            cls,
+            name.as_str(&env.mem)
+        );
+        return false;
+    }
+
+    // Determine whether the receiver class already has an implementation
+    // for this selector. Apple's contract is that `class_addMethod` only
+    // succeeds when the method is NOT already defined on the receiver
+    // (overrides of superclasses ARE allowed, hence we don't walk up the
+    // chain here).
+    let already_defined = if let Some(host_obj) = env.objc.get_host_object(cls) {
+        host_obj
+            .as_any()
+            .downcast_ref::<ClassHostObject>()
+            .is_some_and(|c| c.methods.contains_key(&name))
+    } else {
+        false
+    };
+    if already_defined {
+        log_dbg!(
+            "class_addMethod({:?}, {:?}, ...) — method already defined on receiver, returning NO",
+            cls,
+            name.as_str(&env.mem)
+        );
+        return false;
+    }
+
+    // Treat the IMP as a guest function pointer. `IMP` on real Apple is
+    // `id (*)(id, SEL, ...)` — i.e. a C function pointer. Method names
+    // ending with `:` are encoded for the Thumb bit by the linker, so we
+    // pass the raw bits straight through.
+    let guest_imp =
+        crate::abi::GuestFunction::from_addr_with_thumb_bit(imp.to_bits());
+
+    // Install the new method. `borrow_mut::<ClassHostObject>` walks any
+    // host-object inheritance chain so this works for both classes and
+    // metaclasses (whose host objects are both `ClassHostObject`).
+    {
+        let class_obj = env.objc.borrow_mut::<ClassHostObject>(cls);
+        class_obj
+            .methods
+            .insert(name, super::methods::IMP::Guest(guest_imp));
+        if !types.is_null() {
+            class_obj.guest_method_signatures.insert(name, types);
+        }
+    }
+    log_dbg!(
+        "class_addMethod({:?}, {:?}, imp={:?}) — installed",
+        cls,
+        name.as_str(&env.mem),
+        imp
+    );
+    true
+}
+
+/// `Method class_getClassMethod(Class cls, SEL name)`
+///
+/// Per Apple's [Objective-C Runtime Reference](https://developer.apple.com/documentation/objectivec/1418680-class_getclassmethod?language=objc):
+///
+/// > Returns a pointer to the data structure describing the class method
+/// > identified by the given selector.
+/// >
+/// > Note: this function searches superclasses for implementations.
+///
+/// In touchHLE's simplified runtime the returned "Method" value is the
+/// class pointer itself (matching what `class_getInstanceMethod` returns).
+/// Class methods live on the metaclass, so we resolve the metaclass first
+/// and then walk its chain looking for the selector.
+pub fn class_getClassMethod(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: SEL,
+) -> ConstVoidPtr {
+    if cls.is_null() {
+        return ConstVoidPtr::null();
+    }
+    // The metaclass holds the class-method table. `ObjC::read_isa` of a
+    // class returns its metaclass.
+    let mut curr = crate::objc::ObjC::read_isa(cls, &env.mem);
+    while !curr.is_null() {
+        if let Some(host_obj) = env.objc.get_host_object(curr) {
+            if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+                if class_obj.methods.contains_key(&name) {
+                    return curr.cast_const().cast();
+                }
+            }
+        }
+        let next = env.objc.get_superclass(curr);
+        if next == curr {
+            break;
+        }
+        curr = next;
+    }
+    ConstVoidPtr::null()
+}
+
 pub fn objc_retain(env: &mut crate::Environment, obj: id) -> id {
     if !obj.is_null() {
         crate::objc::retain(env, obj);

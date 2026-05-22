@@ -277,7 +277,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_string = to_rust_string(env, key);
     if key_string.is_empty() || !key_string.is_ascii() {
         log!("Warning: setValue:forKey: key {:?} is empty or non-ASCII — calling setValue:forUndefinedKey:", key_string);
-        let sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
+        let sel = env
+            .objc
+            .register_host_selector("setValue:forUndefinedKey:".to_string(), &mut env.mem);
         let _: () = msg_send(env, (this, sel, value, key));
         return;
     }
@@ -297,7 +299,15 @@ pub const CLASSES: ClassExports = objc_classes! {
                 return;
             }
         }
-        let sel = env.objc.lookup_selector("setNilValueForKey:").unwrap();
+        // Per Apple's KVC contract: when -setValue:forKey: receives nil for
+        // a key that maps to a scalar (non-object) property, it must call
+        // -setNilValueForKey: on the receiver. The default NSObject impl of
+        // -setNilValueForKey: raises NSInvalidArgumentException. We register
+        // the selector defensively so the lookup never returns None even if
+        // no host class ever defined the method directly.
+        let sel = env
+            .objc
+            .register_host_selector("setNilValueForKey:".to_string(), &mut env.mem);
         let _: () = msg_send(env, (this, sel, key));
         return;
     }
@@ -325,7 +335,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    let access_sel = env.objc.lookup_selector("accessInstanceVariablesDirectly").unwrap();
+    let access_sel = env
+        .objc
+        .register_host_selector("accessInstanceVariablesDirectly".to_string(), &mut env.mem);
     let access_ivars: bool = msg_send(env, (class, access_sel));
     if access_ivars {
         if let Some(ivar_ptr) = env.objc
@@ -340,7 +352,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
-    let undef_sel = env.objc.lookup_selector("setValue:forUndefinedKey:").unwrap();
+    let undef_sel = env
+        .objc
+        .register_host_selector("setValue:forUndefinedKey:".to_string(), &mut env.mem);
     let _: () = msg_send(env, (this, undef_sel, value, key));
 }
 
@@ -376,6 +390,30 @@ pub const CLASSES: ClassExports = objc_classes! {
             DYNAMIC_KVC_STORAGE.push((target_bits, key_string.to_string(), value.to_bits()));
         }
     }
+}
+
+// Per Apple's NSKeyValueCoding (NSKeyValueCoding.h / Cocoa Key-Value
+// Coding Programming Guide): when -setValue:forKey: receives a nil
+// value for a key whose property is a non-object scalar (BOOL, NSInteger,
+// CGFloat, struct, …), the receiver is sent -setNilValueForKey:. The
+// default NSObject behaviour is to raise an NSInvalidArgumentException
+// with reason "[<Class> 0x… setNilValueForKey:]: could not set nil as
+// the value for the key <key>." We mirror that contract: log loudly so
+// the developer can diagnose the bad write, and do nothing else — most
+// iOS games rely on this being a non-fatal call (the surrounding code
+// catches the exception or guards against it).
+- (())setNilValueForKey:(id)key {
+    let class: Class = ObjC::read_isa(this, &env.mem);
+    let class_name_string = env.objc.get_class_name(class).to_owned();
+    let key_string = if key == nil {
+        "(null)".to_string()
+    } else {
+        to_rust_string(env, key).to_string()
+    };
+    log!(
+        "Warning: -[{} setNilValueForKey:@\"{}\"] on {:?}: nil assigned to a scalar property; ignored (Apple's default would raise NSInvalidArgumentException).",
+        class_name_string, key_string, this
+    );
 }
 
 - (bool)respondsToSelector:(SEL)selector {

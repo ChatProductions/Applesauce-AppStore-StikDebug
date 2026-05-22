@@ -33,17 +33,17 @@ mod synchronization;
 mod weak;
 
 pub use classes::{
-    class_copyIvarList, class_copyMethodList, class_copyPropertyList, class_copyProtocolList,
-    class_getInstanceMethod, class_getInstanceSize, class_getName, class_getProperty,
-    class_getSuperclass, class_replaceMethod, method_exchangeImplementations,
-    method_getImplementation, method_getTypeEncoding, method_setImplementation,
-    objc_allocateClassPair, objc_autoreleasePoolPop, objc_autoreleasePoolPush,
-    objc_autoreleaseReturnValue, objc_begin_catch, objc_classes, objc_copyClassNamesForImage,
-    objc_end_catch, objc_exception_throw, objc_getClass, objc_getMetaClass, objc_getProtocol,
-    objc_getRequiredClass, objc_lookUpClass, objc_readClassPair, objc_release, objc_retain,
-    objc_retainAutorelease, objc_retainAutoreleaseReturnValue, objc_retainAutoreleasedReturnValue,
-    object_getClass, object_getClassName, object_getIndexedIvars, protocol_getName, Class,
-    ClassExports, ClassTemplate,
+    class_addMethod, class_copyIvarList, class_copyMethodList, class_copyPropertyList,
+    class_copyProtocolList, class_getClassMethod, class_getInstanceMethod, class_getInstanceSize,
+    class_getName, class_getProperty, class_getSuperclass, class_replaceMethod,
+    method_exchangeImplementations, method_getImplementation, method_getTypeEncoding,
+    method_setImplementation, objc_allocateClassPair, objc_autoreleasePoolPop,
+    objc_autoreleasePoolPush, objc_autoreleaseReturnValue, objc_begin_catch, objc_classes,
+    objc_copyClassNamesForImage, objc_end_catch, objc_exception_throw, objc_getClass,
+    objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass, objc_readClassPair,
+    objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
+    objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
+    protocol_getName, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
@@ -249,6 +249,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getSuperclass(_)),
     export_c_func!(class_getInstanceSize(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
+    export_c_func!(class_getClassMethod(_, _)),
+    export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_copyPropertyList(_, _)),
     export_c_func!(class_copyMethodList(_, _)),

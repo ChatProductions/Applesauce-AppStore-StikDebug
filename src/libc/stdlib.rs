@@ -1245,6 +1245,33 @@ fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
     }
 }
 
+/// `ldiv_t` — return type of `ldiv`. Per the C99 standard and Apple's
+/// `<stdlib.h>` (`/usr/include/stdlib.h` on macOS): two `long` fields,
+/// `quot` then `rem`. On 32-bit iOS `long` is 32 bits, so the layout
+/// matches `div_t`. We keep a separate Rust type so callers see the
+/// correct type encoding.
+#[allow(non_camel_case_types)]
+#[derive(Debug)]
+#[repr(C, packed)]
+struct ldiv_t {
+    quot: i32,
+    rem: i32,
+}
+unsafe impl SafeRead for ldiv_t {}
+impl_GuestRet_for_large_struct!(ldiv_t);
+
+/// `ldiv_t ldiv(long numer, long denom)` — per Apple's manpage:
+/// computes both the quotient and remainder of dividing `numer` by
+/// `denom` in a single operation, returning the result in an `ldiv_t`
+/// struct. Behaviour is identical to `div` on 32-bit iOS where `long`
+/// is 32 bits wide.
+fn ldiv(_env: &mut Environment, numer: i32, denom: i32) -> ldiv_t {
+    ldiv_t {
+        quot: numer.wrapping_div(denom),
+        rem: numer.wrapping_rem(denom),
+    }
+}
+
 fn setxattr(
     env: &mut Environment,
     path: ConstPtr<u8>,
@@ -1471,6 +1498,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mbtowc_l(_, _, _, _)), // ОШИБКА БЫЛА ЗДЕСЬ (4 подчеркивания вместо 5)
     export_c_func!(putenv(_)),
     export_c_func!(div(_, _)),
+    export_c_func!(ldiv(_, _)),
     export_c_func!(setxattr(_, _, _, _, _, _)),
     export_c_func!(fsetxattr(_, _, _, _, _, _)),
     export_c_func!(getxattr(_, _, _, _, _, _)),
