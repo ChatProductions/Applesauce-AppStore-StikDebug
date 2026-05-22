@@ -292,6 +292,21 @@ fn glGetIntegerv(env: &mut Environment, pname: GLenum, params: MutPtr<GLint>) {
         }
     }
 }
+fn glGetFixedv(env: &mut Environment, pname: GLenum, params: MutPtr<GLfixed>) {
+    if env
+        .framework_state
+        .opengles
+        .current_ctx_for_thread(env.current_thread)
+        .is_none()
+    {
+        env.mem.write(params, 0);
+        return;
+    }
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 16);
+        unsafe { gles.GetFixedv(pname, params) };
+    });
+}
 fn glGetPointerv(env: &mut Environment, pname: GLenum, params: MutPtr<ConstVoidPtr>) {
     if env
         .framework_state
@@ -2309,6 +2324,43 @@ fn glGetShaderiv(env: &mut Environment, shader: GLuint, pname: GLenum, params: M
         }
     });
 }
+/// OpenGL ES 2.0 `glGetShaderSource`. Returns the source string previously
+/// uploaded via `glShaderSource` (which may have been translated to desktop
+/// GLSL on the host side, but apps that round-trip via this entry point are
+/// rare — the gles2_native backend returns the exact text the driver stored).
+/// <https://registry.khronos.org/OpenGL-Refpages/es2.0/xhtml/glGetShaderSource.xml>
+fn glGetShaderSource(
+    env: &mut Environment,
+    shader: GLuint,
+    bufSize: GLsizei,
+    length: MutPtr<GLsizei>,
+    source: MutPtr<GLubyte>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        if bufSize <= 0 {
+            if !length.is_null() {
+                mem.write(length, 0);
+            }
+            return;
+        }
+        let mut buf: Vec<u8> = vec![0u8; bufSize as usize];
+        let mut written: GLsizei = 0;
+        gles.GetShaderSource(shader, bufSize, &mut written, buf.as_mut_ptr().cast());
+        if !length.is_null() {
+            mem.write(length, written);
+        }
+        if !source.is_null() && written >= 0 {
+            // The driver writes a NUL terminator at `written` and may write up
+            // to `bufSize` bytes including the terminator. Copy what was
+            // produced (plus the terminator when there's room) into guest
+            // memory.
+            let count = written as usize + 1; // include trailing NUL
+            let count = count.min(buf.len()).min(bufSize as usize);
+            let dst = mem.ptr_at_mut(source, count.try_into().unwrap_or(0));
+            std::ptr::copy_nonoverlapping(buf.as_ptr(), dst, count);
+        }
+    });
+}
 fn glGetShaderInfoLog(
     env: &mut Environment,
     shader: GLuint,
@@ -2780,6 +2832,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetBooleanv(_, _)),
     export_c_func!(glGetFloatv(_, _)),
     export_c_func!(glGetIntegerv(_, _)),
+    export_c_func!(glGetFixedv(_, _)),
     export_c_func!(glGetPointerv(_, _)),
     export_c_func!(glGetTexEnviv(_, _, _)),
     export_c_func!(glGetTexEnvfv(_, _, _)),
@@ -2977,6 +3030,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glIsProgram(_)),
     export_c_func!(glGetShaderiv(_, _, _)),
     export_c_func!(glGetShaderInfoLog(_, _, _, _)),
+    export_c_func!(glGetShaderSource(_, _, _, _)),
     export_c_func!(glGetProgramiv(_, _, _)),
     export_c_func!(glGetProgramInfoLog(_, _, _, _)),
     export_c_func!(glGetActiveUniform(_, _, _, _, _, _, _)),

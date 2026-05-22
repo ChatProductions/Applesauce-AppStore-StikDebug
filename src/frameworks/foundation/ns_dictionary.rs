@@ -1070,11 +1070,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())addEntriesFromDictionary:(id)other { // NSDictionary *
-    let host_obj: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(other));
-    for (k, v) in host_obj.map.values().flatten() {
-        () = msg![env; this setObject:(*v) forKey:(*k)];
+    // Iterate `other` through the public NSDictionary API so this works for
+    // any subclass (CFDictionary, custom guest subclasses, …) — not only
+    // ones backed by a DictionaryHostObject. We collect keys first so the
+    // dictionary state can't be mutated mid-enumeration, and so it's safe
+    // when `other == this` (in which case the work is a self-no-op after the
+    // first pass anyway since every key already maps to its value).
+    if other == nil {
+        return;
     }
-    *env.objc.borrow_mut(other) = host_obj;
+    let mut keys: Vec<id> = Vec::new();
+    let key_enum: id = msg![env; other keyEnumerator];
+    if key_enum == nil {
+        return;
+    }
+    loop {
+        let next: id = msg![env; key_enum nextObject];
+        if next == nil {
+            break;
+        }
+        // Retain so the key cannot be deallocated between collection and
+        // use (e.g. by autorelease pools draining during the loop).
+        retain(env, next);
+        keys.push(next);
+    }
+    for key in keys {
+        let val: id = msg![env; other objectForKey:key];
+        if val != nil {
+            () = msg![env; this setObject:val forKey:key];
+        }
+        release(env, key);
+    }
 }
 
 - (id)description {

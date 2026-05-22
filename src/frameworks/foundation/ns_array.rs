@@ -761,6 +761,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     env.objc.borrow::<ArrayHostObject>(this).array[index as usize]
 }
+// Modern Objective-C subscripting bridge:
+//   id obj = array[idx];   // compiled to objectAtIndexedSubscript:
+// Defined on NSArray (iOS 6+ ObjC literals); semantics are identical to
+// `objectAtIndex:`, including out-of-bounds behaviour. We delegate via
+// `msg![]` rather than reaching into the host object so that subclasses
+// (e.g. CFArray, KVO-aware mutable subclasses) get the right behaviour.
+// <https://developer.apple.com/documentation/foundation/nsarray/1410519-objectatindexedsubscript>
+- (id)objectAtIndexedSubscript:(NSUInteger)index {
+    msg![env; this objectAtIndex:index]
+}
 
 - (id)description {
     build_description(env, this)
@@ -1083,6 +1093,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, obj);
     let object = std::mem::replace(&mut env.objc.borrow_mut::<ArrayHostObject>(this).array[index as usize], obj);
     release(env, object);
+}
+
+// Modern Objective-C subscripting bridge for mutable arrays:
+//   array[idx] = obj;     // compiled to setObject:atIndexedSubscript:
+// `index` may equal `count`, in which case the object is appended (matches
+// Apple's documented behaviour). Out-of-range indices fall back to a
+// warning rather than panicking the host so that broken guests don't crash
+// the whole emulator. Setting `nil` is treated like
+// `removeObjectAtIndex:`, mirroring real NSMutableArray semantics.
+// <https://developer.apple.com/documentation/foundation/nsmutablearray/1416687-setobject>
+- (())setObject:(id)obj atIndexedSubscript:(NSUInteger)index {
+    let len = env.objc.borrow::<ArrayHostObject>(this).array.len() as NSUInteger;
+    if obj == nil {
+        if (index as usize) < len as usize {
+            () = msg![env; this removeObjectAtIndex:index];
+        } else {
+            log!(
+                "Warning: NSMutableArray setObject:atIndexedSubscript: nil at out-of-range index {}",
+                index
+            );
+        }
+        return;
+    }
+    if index == len {
+        () = msg![env; this addObject:obj];
+    } else if index < len {
+        () = msg![env; this replaceObjectAtIndex:index withObject:obj];
+    } else {
+        log!(
+            "Warning: NSMutableArray setObject:atIndexedSubscript: index {} > count {}",
+            index, len
+        );
+    }
 }
 
 - (())removeLastObject {

@@ -23,8 +23,8 @@ use super::gl21compat_raw::types::*;
 use super::gles11_raw as gles11; // constants only
 use super::gles_generic::GLES;
 use super::util::{
-    fixed_to_float, matrix_fixed_to_float, try_decode_pvrtc, PalettedTextureFormat, ParamTable,
-    ParamType,
+    fixed_to_float, float_to_fixed, matrix_fixed_to_float, try_decode_pvrtc, PalettedTextureFormat,
+    ParamTable, ParamType,
 };
 use super::GLESContext;
 use crate::window::{GLContext, GLVersion, Window};
@@ -791,12 +791,52 @@ impl GLES for GLES1OnGL2<'_> {
         assert!(type_ == ParamType::Boolean);
         gl21::GetBooleanv(pname, params);
     }
-    // TODO: GetFixedv
     unsafe fn GetFloatv(&mut self, pname: GLenum, params: *mut GLfloat) {
         let (type_, _count) = GET_PARAMS.get_type_info(pname);
         // TODO: type conversion
         assert!(type_ == ParamType::Float || type_ == ParamType::FloatSpecial);
         gl21::GetFloatv(pname, params);
+    }
+    /// OpenGL ES 1.1 `glGetFixedv`. Desktop GL 2.1 does not have this entry
+    /// point, so we route the query to `GetFloatv` / `GetIntegerv` /
+    /// `GetBooleanv` based on the underlying parameter type and then convert
+    /// each component to the 16.16 fixed-point representation the guest
+    /// expects.
+    unsafe fn GetFixedv(&mut self, pname: GLenum, params: *mut GLfixed) {
+        let (type_, count) = GET_PARAMS.get_type_info(pname);
+        let count = usize::from(count.max(1));
+        match type_ {
+            ParamType::Float | ParamType::FloatSpecial => {
+                // OpenGL specifies float-to-fixed conversion as multiplication
+                // by 2^16; see the GLES 1.1 spec, "Data Conversions".
+                let mut tmp = [0f32; 16];
+                let slice = &mut tmp[..count];
+                gl21::GetFloatv(pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = float_to_fixed(v);
+                }
+            }
+            ParamType::Boolean => {
+                // GL_TRUE / GL_FALSE map to 1 / 0 (no 16.16 scaling).
+                let mut tmp = [0u8; 16];
+                let slice = &mut tmp[..count];
+                gl21::GetBooleanv(pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = if v != 0 { 1 } else { 0 };
+                }
+            }
+            _ => {
+                // Integer parameters are copied through verbatim: the GLES 1.1
+                // spec says fixed-point queries against integer state must
+                // not scale.
+                let mut tmp = [0i32; 16];
+                let slice = &mut tmp[..count];
+                gl21::GetIntegerv(pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = v as GLfixed;
+                }
+            }
+        }
     }
     unsafe fn GetIntegerv(&mut self, pname: GLenum, params: *mut GLint) {
         let (type_, _count) = GET_PARAMS.get_type_info(pname);

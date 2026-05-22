@@ -190,6 +190,9 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GetIntegerv(&mut self, pname: GLenum, params: *mut GLint) {
         gles11::GetIntegerv(pname, params)
     }
+    unsafe fn GetFixedv(&mut self, pname: GLenum, params: *mut GLfixed) {
+        gles11::GetFixedv(pname, params)
+    }
     unsafe fn GetTexEnviv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
         gles11::GetTexEnviv(target, pname, params)
     }
