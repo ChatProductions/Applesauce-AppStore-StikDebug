@@ -8,43 +8,45 @@ use crate::frameworks::foundation::{ns_array, ns_dictionary, ns_string, NSIntege
 use crate::objc::{autorelease, id, nil, release, retain, ClassExports, HostObject, NSZonePtr};
 use crate::{msg, objc_classes};
 
-/// Minimal IANA-zone → UTC-offset-seconds + abbreviation table.
-/// DST is not modelled; offsets are standard (winter) offsets.
-static ZONE_TABLE: &[(&str, i32, &str)] = &[
-    ("UTC", 0, "UTC"),
-    ("GMT", 0, "GMT"),
-    ("America/New_York", -18000, "EST"),
-    ("America/Chicago", -21600, "CST"),
-    ("America/Denver", -25200, "MST"),
-    ("America/Phoenix", -25200, "MST"),
-    ("America/Los_Angeles", -28800, "PST"),
-    ("America/Anchorage", -32400, "AKST"),
-    ("Pacific/Honolulu", -36000, "HST"),
-    ("Canada/Eastern", -18000, "EST"),
-    ("Canada/Central", -21600, "CST"),
-    ("Canada/Mountain", -25200, "MST"),
-    ("Canada/Pacific", -28800, "PST"),
-    ("Europe/London", 0, "GMT"),
-    ("Europe/Paris", 3600, "CET"),
-    ("Europe/Berlin", 3600, "CET"),
-    ("Europe/Warsaw", 3600, "CET"),
-    ("Europe/Helsinki", 7200, "EET"),
-    ("Europe/Moscow", 10800, "MSK"),
-    ("Asia/Kolkata", 19800, "IST"),
-    ("Asia/Shanghai", 28800, "CST"),
-    ("Asia/Tokyo", 32400, "JST"),
-    ("Asia/Seoul", 32400, "KST"),
-    ("Australia/Sydney", 36000, "AEST"),
+/// Minimal IANA-zone → UTC-offset-seconds + abbreviation + long-form
+/// (CLDR-style) name table. DST is not modelled; offsets are standard
+/// (winter) offsets. The long-form name is used by `localizedName:locale:`
+/// for the long `Standard` / `DaylightSaving` / `Generic` styles.
+static ZONE_TABLE: &[(&str, i32, &str, &str)] = &[
+    ("UTC", 0, "UTC", "Coordinated Universal Time"),
+    ("GMT", 0, "GMT", "Greenwich Mean Time"),
+    ("America/New_York", -18000, "EST", "Eastern Time"),
+    ("America/Chicago", -21600, "CST", "Central Time"),
+    ("America/Denver", -25200, "MST", "Mountain Time"),
+    ("America/Phoenix", -25200, "MST", "Mountain Standard Time"),
+    ("America/Los_Angeles", -28800, "PST", "Pacific Time"),
+    ("America/Anchorage", -32400, "AKST", "Alaska Time"),
+    ("Pacific/Honolulu", -36000, "HST", "Hawaii-Aleutian Time"),
+    ("Canada/Eastern", -18000, "EST", "Eastern Time"),
+    ("Canada/Central", -21600, "CST", "Central Time"),
+    ("Canada/Mountain", -25200, "MST", "Mountain Time"),
+    ("Canada/Pacific", -28800, "PST", "Pacific Time"),
+    ("Europe/London", 0, "GMT", "British Time"),
+    ("Europe/Paris", 3600, "CET", "Central European Time"),
+    ("Europe/Berlin", 3600, "CET", "Central European Time"),
+    ("Europe/Warsaw", 3600, "CET", "Central European Time"),
+    ("Europe/Helsinki", 7200, "EET", "Eastern European Time"),
+    ("Europe/Moscow", 10800, "MSK", "Moscow Time"),
+    ("Asia/Kolkata", 19800, "IST", "India Standard Time"),
+    ("Asia/Shanghai", 28800, "CST", "China Standard Time"),
+    ("Asia/Tokyo", 32400, "JST", "Japan Standard Time"),
+    ("Asia/Seoul", 32400, "KST", "Korean Standard Time"),
+    ("Australia/Sydney", 36000, "AEST", "Australian Eastern Time"),
     // Abbreviation aliases (looked up by abbreviation key)
-    ("EST", -18000, "EST"),
-    ("CST", -21600, "CST"),
-    ("MST", -25200, "MST"),
-    ("PST", -28800, "PST"),
-    ("JST", 32400, "JST"),
-    ("IST", 19800, "IST"),
-    ("CET", 3600, "CET"),
-    ("EET", 7200, "EET"),
-    ("MSK", 10800, "MSK"),
+    ("EST", -18000, "EST", "Eastern Standard Time"),
+    ("CST", -21600, "CST", "Central Standard Time"),
+    ("MST", -25200, "MST", "Mountain Standard Time"),
+    ("PST", -28800, "PST", "Pacific Standard Time"),
+    ("JST", 32400, "JST", "Japan Standard Time"),
+    ("IST", 19800, "IST", "India Standard Time"),
+    ("CET", 3600, "CET", "Central European Time"),
+    ("EET", 7200, "EET", "Eastern European Time"),
+    ("MSK", 10800, "MSK", "Moscow Time"),
 ];
 
 fn offset_for_name(name: &str) -> Option<i32> {
@@ -53,6 +55,10 @@ fn offset_for_name(name: &str) -> Option<i32> {
 
 fn abbr_for_name(name: &str) -> Option<&'static str> {
     ZONE_TABLE.iter().find(|r| r.0 == name).map(|r| r.2)
+}
+
+fn long_name_for_name(name: &str) -> Option<&'static str> {
+    ZONE_TABLE.iter().find(|r| r.0 == name).map(|r| r.3)
 }
 
 fn name_for_abbr(abbr: &str) -> Option<&'static str> {
@@ -165,7 +171,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // Collect unique abbreviations (first occurrence wins).
     let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    for &(iana, _, abbr) in ZONE_TABLE {
+    for &(iana, _, abbr, _) in ZONE_TABLE {
         if seen.insert(abbr) {
             keys_and_vals.push((
                 ns_string::get_static_str(env, abbr),
@@ -217,6 +223,89 @@ pub const CLASSES: ClassExports = objc_classes! {
 // (DST not modelled).
 - (id)abbreviationForDate:(id)date {
     msg![env; this abbreviation]
+}
+
+// `- (NSString *)localizedName:(NSTimeZoneNameStyle)style locale:(NSLocale *)locale`
+//
+// Returns a localized presentation name for this time zone in the given
+// `style`. touchHLE does not ship CLDR data, so the `locale` argument is
+// accepted for API compatibility (the requested locale is logged for debug
+// purposes) and the name is derived from the static [ZONE_TABLE] entry —
+// long styles return the human-friendly CLDR-style name (e.g. "Pacific
+// Time"), short styles return the IANA abbreviation (e.g. "PST"). When the
+// zone is not in the table, we fall back to a synthesised "GMT±HH:MM" name
+// matching what real Foundation does for offset-only zones.
+- (id)localizedName:(NSInteger)style locale:(id)locale {
+    let name_str = {
+        let tz = env.objc.borrow::<NSTimeZoneHostObject>(this).time_zone;
+        ns_string::to_rust_string(env, tz).into_owned()
+    };
+    let seconds_from_gmt = env
+        .objc
+        .borrow::<NSTimeZoneHostObject>(this)
+        .seconds_from_gmt;
+
+    if locale != nil {
+        log_dbg!(
+            "-[NSTimeZone localizedName:{} locale:{:?}] for zone {:?} (touchHLE ignores locale)",
+            style,
+            locale,
+            name_str,
+        );
+    }
+
+    let short_fallback = |seconds: i32| -> String {
+        let (sign, abs) = if seconds >= 0 {
+            ('+', seconds)
+        } else {
+            ('-', -seconds)
+        };
+        let h = abs / 3600;
+        let m = (abs % 3600) / 60;
+        format!("GMT{}{:02}:{:02}", sign, h, m)
+    };
+
+    // NSTimeZoneNameStyle values:
+    //   0 = Standard, 1 = ShortStandard, 2 = DaylightSaving,
+    //   3 = ShortDaylightSaving, 4 = Generic, 5 = ShortGeneric
+    let is_short = matches!(style, 1 | 3 | 5);
+    let is_dst = matches!(style, 2 | 3);
+
+    let name = if is_short {
+        match abbr_for_name(&name_str) {
+            Some(abbr) => abbr.to_string(),
+            None => short_fallback(seconds_from_gmt),
+        }
+    } else {
+        let base = long_name_for_name(&name_str)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                // No CLDR entry: prefer the IANA name, otherwise a synthetic
+                // offset name.
+                if name_str.is_empty() {
+                    short_fallback(seconds_from_gmt)
+                } else {
+                    name_str.clone()
+                }
+            });
+        if is_dst && !base.to_ascii_lowercase().contains("daylight") {
+            // For DST styles, swap "Standard" → "Daylight" if applicable,
+            // otherwise append the suffix. This is intentionally approximate
+            // since DST is not modelled.
+            if base.contains("Standard Time") {
+                base.replace("Standard Time", "Daylight Time")
+            } else if base.ends_with(" Time") {
+                base.replace(" Time", " Daylight Time")
+            } else {
+                format!("{} Daylight Time", base)
+            }
+        } else {
+            base
+        }
+    };
+
+    let ns = ns_string::from_rust_string(env, name);
+    autorelease(env, ns)
 }
 
 - (NSInteger)secondsFromGMT {

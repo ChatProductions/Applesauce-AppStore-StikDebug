@@ -482,18 +482,15 @@ pub const CONSTANTS: ConstantExports = &[
 ];
 
 // ---------------------------------------------------------------------------
-// C function: NSSetUncaughtExceptionHandler
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// C function: NSSetUncaughtExceptionHandler
+// C functions: NSSetUncaughtExceptionHandler / NSGetUncaughtExceptionHandler
 // ---------------------------------------------------------------------------
 
 /// Registers a last-chance exception handler. In touchHLE all unhandled
 /// exceptions are already converted to Rust panics or bypassed, but we
-/// save the handler address to maintain accurate guest state.
+/// save the handler address to maintain accurate guest state and so that
+/// `NSGetUncaughtExceptionHandler` can return whatever was last installed.
+/// <https://developer.apple.com/documentation/foundation/1409609-nssetuncaughtexceptionhandler>
 fn NSSetUncaughtExceptionHandler(env: &mut Environment, handler: MutVoidPtr) {
-    // Сохраняем переданный гостевым приложением обработчик в состояние
     env.framework_state
         .foundation
         .ns_exception
@@ -505,4 +502,26 @@ fn NSSetUncaughtExceptionHandler(env: &mut Environment, handler: MutVoidPtr) {
     );
 }
 
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(NSSetUncaughtExceptionHandler(_))];
+/// Returns the function pointer previously installed via
+/// `NSSetUncaughtExceptionHandler`, or `NULL` if no handler has been
+/// installed in this process. Apple crash-reporting libraries (PLCrashReporter,
+/// Crashlytics, Flurry, …) call this on init so they can chain to any
+/// existing handler instead of clobbering it.
+/// <https://developer.apple.com/documentation/foundation/1416853-nsgetuncaughtexceptionhandler>
+fn NSGetUncaughtExceptionHandler(env: &mut Environment) -> MutVoidPtr {
+    let handler = env
+        .framework_state
+        .foundation
+        .ns_exception
+        .uncaught_exception_handler;
+    log_dbg!(
+        "NSGetUncaughtExceptionHandler -> {:?}",
+        handler
+    );
+    handler
+}
+
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(NSSetUncaughtExceptionHandler(_)),
+    export_c_func!(NSGetUncaughtExceptionHandler()),
+];

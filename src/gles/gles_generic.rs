@@ -130,6 +130,9 @@ pub trait GLES {
     unsafe fn GetIntegerv(&mut self, pname: GLenum, params: *mut GLint) {
         unimplemented!("GetIntegerv not implemented by this backend")
     }
+    unsafe fn GetFixedv(&mut self, pname: GLenum, params: *mut GLfixed) {
+        unimplemented!("GetFixedv not implemented by this backend")
+    }
     unsafe fn GetTexEnviv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
         unimplemented!("GetTexEnviv not implemented by this backend")
     }

@@ -875,6 +875,15 @@ impl GLES for GLES2Native<'_> {
     ) {
         gles2::GetShaderInfoLog(shader, maxLength, length, infoLog)
     }
+    unsafe fn GetShaderSource(
+        &mut self,
+        shader: GLuint,
+        bufSize: GLsizei,
+        length: *mut GLsizei,
+        source: *mut GLchar,
+    ) {
+        gles2::GetShaderSource(shader, bufSize, length, source)
+    }
     unsafe fn IsShader(&mut self, shader: GLuint) -> GLboolean {
         gles2::IsShader(shader)
     }

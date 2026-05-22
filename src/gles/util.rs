@@ -17,6 +17,22 @@ pub fn fixed_to_float(fixed: GLfixed) -> GLfloat {
     ((fixed as f64) / ((1 << 16) as f64)) as f32
 }
 
+/// Convert a floating-point scalar to a fixed-point (16.16) scalar, saturating
+/// on overflow. Used to implement `glGetFixedv` on top of a backend that only
+/// exposes floating-point state.
+pub fn float_to_fixed(float: GLfloat) -> GLfixed {
+    let scaled = (float as f64) * ((1 << 16) as f64);
+    if scaled >= GLfixed::MAX as f64 {
+        GLfixed::MAX
+    } else if scaled <= GLfixed::MIN as f64 {
+        GLfixed::MIN
+    } else if scaled.is_nan() {
+        0
+    } else {
+        scaled.round() as GLfixed
+    }
+}
+
 /// Convert a fixed-point 4-by-4 matrix to floating-point.
 pub unsafe fn matrix_fixed_to_float(m: *const GLfixed) -> [GLfloat; 16] {
     let mut matrix = [0f32; 16];
