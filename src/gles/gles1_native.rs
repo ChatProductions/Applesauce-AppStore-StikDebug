@@ -222,6 +222,36 @@ impl GLES for GLES1Native<'_> {
     unsafe fn GetTexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
         gles11::GetTexEnvfv(target, pname, params)
     }
+    unsafe fn GetTexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        gles11::GetTexEnvxv(target, pname, params)
+    }
+    unsafe fn GetTexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
+        gles11::GetTexParameteriv(target, pname, params)
+    }
+    unsafe fn GetTexParameterfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
+        gles11::GetTexParameterfv(target, pname, params)
+    }
+    unsafe fn GetTexParameterxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        gles11::GetTexParameterxv(target, pname, params)
+    }
+    unsafe fn GetClipPlanef(&mut self, plane: GLenum, equation: *mut GLfloat) {
+        gles11::GetClipPlanef(plane, equation)
+    }
+    unsafe fn GetClipPlanex(&mut self, plane: GLenum, equation: *mut GLfixed) {
+        gles11::GetClipPlanex(plane, equation)
+    }
+    unsafe fn GetLightfv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfloat) {
+        gles11::GetLightfv(light, pname, params)
+    }
+    unsafe fn GetLightxv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfixed) {
+        gles11::GetLightxv(light, pname, params)
+    }
+    unsafe fn GetMaterialfv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfloat) {
+        gles11::GetMaterialfv(face, pname, params)
+    }
+    unsafe fn GetMaterialxv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfixed) {
+        gles11::GetMaterialxv(face, pname, params)
+    }
     unsafe fn GetPointerv(&mut self, pname: GLenum, params: *mut *const GLvoid) {
         gles11::GetPointerv(pname, params as *mut _ as *const _)
     }
@@ -529,6 +559,15 @@ impl GLES for GLES1Native<'_> {
         gles11::VertexPointer(size, type_, stride, pointer)
     }
 
+    unsafe fn PointSizePointerOES(
+        &mut self,
+        type_: GLenum,
+        stride: GLsizei,
+        pointer: *const GLvoid,
+    ) {
+        gles11::PointSizePointerOES(type_, stride, pointer)
+    }
+
     // Drawing
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
         gles11::DrawArrays(mode, first, count)
@@ -549,6 +588,46 @@ impl GLES for GLES1Native<'_> {
             }
         }
         gles11::DrawElements(mode, count, type_, indices)
+    }
+
+    // GL_OES_draw_texture
+    unsafe fn DrawTexsOES(&mut self, x: i16, y: i16, z: i16, width: i16, height: i16) {
+        gles11::DrawTexsOES(x, y, z, width, height)
+    }
+    unsafe fn DrawTexiOES(&mut self, x: GLint, y: GLint, z: GLint, width: GLint, height: GLint) {
+        gles11::DrawTexiOES(x, y, z, width, height)
+    }
+    unsafe fn DrawTexxOES(
+        &mut self,
+        x: GLfixed,
+        y: GLfixed,
+        z: GLfixed,
+        width: GLfixed,
+        height: GLfixed,
+    ) {
+        gles11::DrawTexxOES(x, y, z, width, height)
+    }
+    unsafe fn DrawTexfOES(
+        &mut self,
+        x: GLfloat,
+        y: GLfloat,
+        z: GLfloat,
+        width: GLfloat,
+        height: GLfloat,
+    ) {
+        gles11::DrawTexfOES(x, y, z, width, height)
+    }
+    unsafe fn DrawTexsvOES(&mut self, coords: *const i16) {
+        gles11::DrawTexsvOES(coords)
+    }
+    unsafe fn DrawTexivOES(&mut self, coords: *const GLint) {
+        gles11::DrawTexivOES(coords)
+    }
+    unsafe fn DrawTexxvOES(&mut self, coords: *const GLfixed) {
+        gles11::DrawTexxvOES(coords)
+    }
+    unsafe fn DrawTexfvOES(&mut self, coords: *const GLfloat) {
+        gles11::DrawTexfvOES(coords)
     }
 
     // Clearing
@@ -843,6 +922,34 @@ impl GLES for GLES1Native<'_> {
             border,
             image_size,
             data,
+        );
+    }
+
+    unsafe fn CompressedTexSubImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        image_size: GLsizei,
+        data: *const GLvoid,
+    ) {
+        // PVRTC sub-image updates aren't allowed by the IMG spec — Apple's
+        // ES 1.1 driver returns GL_INVALID_OPERATION too — but we forward
+        // anyway so the guest sees the expected error. Most apps never call
+        // this entry point.
+        if data.is_null() && image_size > 0 {
+            log!(
+                "Warning: GLES1Native::CompressedTexSubImage2D: NULL data with \
+                 non-zero image_size {image_size}; dropping call."
+            );
+            return;
+        }
+        gles11::CompressedTexSubImage2D(
+            target, level, xoffset, yoffset, width, height, format, image_size, data,
         );
     }
 

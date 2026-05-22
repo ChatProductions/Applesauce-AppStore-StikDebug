@@ -58,6 +58,12 @@ fn main() {
             "GL_OES_compressed_paletted_texture",
             "GL_OES_matrix_palette",
             "GL_OES_blend_subtract",
+            // Per-vertex point sizes — used by ES 1.1 particle/sprite code.
+            "GL_OES_point_size_array",
+            // Vertex array objects bound by ES 1.1 apps via the OES suffix
+            // are part of the OES_vertex_array_object extension; expose the
+            // entry points so native backends can forward them.
+            "GL_OES_vertex_array_object",
         ],
     )
     .write_bindings(GlobalGenerator, &mut file)
