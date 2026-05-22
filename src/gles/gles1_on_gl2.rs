@@ -857,6 +857,126 @@ impl GLES for GLES1OnGL2<'_> {
         assert_eq!(target, gl21::TEXTURE_ENV);
         gl21::GetTexEnvfv(target, pname, params);
     }
+    unsafe fn GetTexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        let (type_, count) = TEX_ENV_PARAMS.get_type_info(pname);
+        assert_eq!(target, gl21::TEXTURE_ENV);
+        // Desktop GL 2.1 doesn't have an `x`-typed `glGetTexEnv` entry point
+        // (fixed-point is ES-only), so query through the float/int path and
+        // convert per the ES 1.1 conversion rules.
+        match type_ {
+            ParamType::Float | ParamType::FloatSpecial => {
+                let mut tmp = [0f32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetTexEnvfv(target, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = float_to_fixed(v);
+                }
+            }
+            ParamType::Boolean => {
+                let mut tmp = [0i32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetTexEnviv(target, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = if v != 0 { 1 } else { 0 };
+                }
+            }
+            _ => {
+                let mut tmp = [0i32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetTexEnviv(target, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = v as GLfixed;
+                }
+            }
+        }
+    }
+    unsafe fn GetTexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
+        assert!(target == gl21::TEXTURE_2D);
+        TEX_PARAMS.assert_known_param(pname);
+        gl21::GetTexParameteriv(target, pname, params);
+    }
+    unsafe fn GetTexParameterfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
+        assert!(target == gl21::TEXTURE_2D);
+        TEX_PARAMS.assert_known_param(pname);
+        gl21::GetTexParameterfv(target, pname, params);
+    }
+    unsafe fn GetTexParameterxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        assert!(target == gl21::TEXTURE_2D);
+        let (type_, count) = TEX_PARAMS.get_type_info(pname);
+        match type_ {
+            ParamType::Float | ParamType::FloatSpecial => {
+                let mut tmp = [0f32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetTexParameterfv(target, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = float_to_fixed(v);
+                }
+            }
+            _ => {
+                let mut tmp = [0i32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetTexParameteriv(target, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = v as GLfixed;
+                }
+            }
+        }
+    }
+    unsafe fn GetClipPlanef(&mut self, plane: GLenum, equation: *mut GLfloat) {
+        // Desktop GL 2.1 only has the double-precision entry point.
+        let mut tmp = [0f64; 4];
+        gl21::GetClipPlane(plane, tmp.as_mut_ptr());
+        for (i, &v) in tmp.iter().enumerate() {
+            *equation.add(i) = v as GLfloat;
+        }
+    }
+    unsafe fn GetClipPlanex(&mut self, plane: GLenum, equation: *mut GLfixed) {
+        let mut tmp = [0f64; 4];
+        gl21::GetClipPlane(plane, tmp.as_mut_ptr());
+        for (i, &v) in tmp.iter().enumerate() {
+            *equation.add(i) = float_to_fixed(v as GLfloat);
+        }
+    }
+    unsafe fn GetLightfv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfloat) {
+        LIGHT_PARAMS.assert_known_param(pname);
+        gl21::GetLightfv(light, pname, params)
+    }
+    unsafe fn GetLightxv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfixed) {
+        let (type_, count) = LIGHT_PARAMS.get_type_info(pname);
+        match type_ {
+            ParamType::Float | ParamType::FloatSpecial => {
+                let mut tmp = [0f32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetLightfv(light, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = float_to_fixed(v);
+                }
+            }
+            _ => {
+                let mut tmp = [0i32; 16];
+                let slice = &mut tmp[..count as usize];
+                gl21::GetLightiv(light, pname, slice.as_mut_ptr());
+                for (i, &v) in slice.iter().enumerate() {
+                    *params.add(i) = v as GLfixed;
+                }
+            }
+        }
+    }
+    unsafe fn GetMaterialfv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfloat) {
+        assert!(face == gl21::FRONT || face == gl21::BACK);
+        MATERIAL_PARAMS.assert_known_param(pname);
+        gl21::GetMaterialfv(face, pname, params)
+    }
+    unsafe fn GetMaterialxv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfixed) {
+        assert!(face == gl21::FRONT || face == gl21::BACK);
+        let (_type, count) = MATERIAL_PARAMS.get_type_info(pname);
+        let mut tmp = [0f32; 16];
+        let slice = &mut tmp[..count as usize];
+        gl21::GetMaterialfv(face, pname, slice.as_mut_ptr());
+        for (i, &v) in slice.iter().enumerate() {
+            *params.add(i) = float_to_fixed(v);
+        }
+    }
     unsafe fn GetPointerv(&mut self, pname: GLenum, params: *mut *const GLvoid) {
         assert!(ARRAYS
             .iter()
@@ -1795,6 +1915,71 @@ impl GLES for GLES1OnGL2<'_> {
                 internalformat
             );
         }
+    }
+    unsafe fn CompressedTexSubImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        image_size: GLsizei,
+        data: *const GLvoid,
+    ) {
+        assert!(target == gl21::TEXTURE_2D);
+        assert!(level >= 0);
+        // PVRTC sub-image updates are very rare (Apple's OpenGL ES 1.1
+        // surface rejects them too), but if we ever see one we
+        // software-decode the entire sub-region to RGBA and use the
+        // uncompressed sub-image path. Paletted formats are not legal here
+        // per the OES_compressed_paletted_texture spec.
+        let data_slice = if data.is_null() {
+            &[][..]
+        } else {
+            std::slice::from_raw_parts(data.cast::<u8>(), image_size as usize)
+        };
+        let is_pvrtc_2bit = matches!(
+            format,
+            gles11::COMPRESSED_RGB_PVRTC_2BPPV1_IMG | gles11::COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
+        );
+        let is_pvrtc_4bit = matches!(
+            format,
+            gles11::COMPRESSED_RGB_PVRTC_4BPPV1_IMG | gles11::COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
+        );
+        if is_pvrtc_2bit || is_pvrtc_4bit {
+            let Ok(width_u) = u32::try_from(width) else {
+                log!(
+                    "Warning: CompressedTexSubImage2D: invalid width {width}; skipping."
+                );
+                return;
+            };
+            let Ok(height_u) = u32::try_from(height) else {
+                log!(
+                    "Warning: CompressedTexSubImage2D: invalid height {height}; skipping."
+                );
+                return;
+            };
+            let pixels =
+                crate::image::decode_pvrtc(data_slice, is_pvrtc_2bit, width_u, height_u);
+            gl21::TexSubImage2D(
+                target,
+                level,
+                xoffset,
+                yoffset,
+                width,
+                height,
+                gl21::RGBA,
+                gl21::UNSIGNED_BYTE,
+                pixels.as_ptr() as *const _,
+            );
+            return;
+        }
+        // Forward any format the desktop driver natively understands.
+        gl21::CompressedTexSubImage2D(
+            target, level, xoffset, yoffset, width, height, format, image_size, data,
+        )
     }
     unsafe fn CopyTexImage2D(
         &mut self,

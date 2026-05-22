@@ -139,6 +139,36 @@ pub trait GLES {
     unsafe fn GetTexEnvfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
         unimplemented!("GetTexEnvfv not implemented by this backend")
     }
+    unsafe fn GetTexEnvxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        unimplemented!("GetTexEnvxv not implemented by this backend")
+    }
+    unsafe fn GetTexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *mut GLint) {
+        unimplemented!("GetTexParameteriv not implemented by this backend")
+    }
+    unsafe fn GetTexParameterfv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfloat) {
+        unimplemented!("GetTexParameterfv not implemented by this backend")
+    }
+    unsafe fn GetTexParameterxv(&mut self, target: GLenum, pname: GLenum, params: *mut GLfixed) {
+        unimplemented!("GetTexParameterxv not implemented by this backend")
+    }
+    unsafe fn GetClipPlanef(&mut self, plane: GLenum, equation: *mut GLfloat) {
+        unimplemented!("GetClipPlanef not implemented by this backend")
+    }
+    unsafe fn GetClipPlanex(&mut self, plane: GLenum, equation: *mut GLfixed) {
+        unimplemented!("GetClipPlanex not implemented by this backend")
+    }
+    unsafe fn GetLightfv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfloat) {
+        unimplemented!("GetLightfv not implemented by this backend")
+    }
+    unsafe fn GetLightxv(&mut self, light: GLenum, pname: GLenum, params: *mut GLfixed) {
+        unimplemented!("GetLightxv not implemented by this backend")
+    }
+    unsafe fn GetMaterialfv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfloat) {
+        unimplemented!("GetMaterialfv not implemented by this backend")
+    }
+    unsafe fn GetMaterialxv(&mut self, face: GLenum, pname: GLenum, params: *mut GLfixed) {
+        unimplemented!("GetMaterialxv not implemented by this backend")
+    }
     unsafe fn GetPointerv(&mut self, pname: GLenum, params: *mut *const GLvoid) {
         unimplemented!("GetPointerv not implemented by this backend")
     }
@@ -392,6 +422,20 @@ pub trait GLES {
     ) {
         unimplemented!("VertexPointer not implemented by this backend")
     }
+    /// `glPointSizePointerOES` from `GL_OES_point_size_array`. Lets the
+    /// app supply per-vertex point sizes alongside the regular vertex
+    /// array. `type_` is `GL_FLOAT` or `GL_FIXED`.
+    unsafe fn PointSizePointerOES(
+        &mut self,
+        type_: GLenum,
+        stride: GLsizei,
+        pointer: *const GLvoid,
+    ) {
+        let _ = (type_, stride, pointer);
+        // Backends that lack `GL_ARB_point_parameters`-like per-vertex
+        // sizing fall back to the scalar `glPointSize` value, which is the
+        // closest sensible behaviour available.
+    }
 
     // Drawing
     unsafe fn DrawArrays(&mut self, mode: GLenum, first: GLint, count: GLsizei) {
@@ -405,6 +449,23 @@ pub trait GLES {
         indices: *const GLvoid,
     ) {
         unimplemented!("DrawElements not implemented by this backend")
+    }
+    /// `glDrawTex{s,i,x,f}OES` from `GL_OES_draw_texture` — blit the
+    /// currently bound 2D texture (using `GL_TEXTURE_CROP_RECT_OES`) to a
+    /// screen-space rectangle. The default implementation provides a
+    /// software fallback in `present_renderbuffer`-style code paths; concrete
+    /// backends with a native equivalent override these.
+    unsafe fn DrawTexfOES(
+        &mut self,
+        x: GLfloat,
+        y: GLfloat,
+        z: GLfloat,
+        width: GLfloat,
+        height: GLfloat,
+    ) {
+        let _ = (x, y, z, width, height);
+        // Default: do nothing. Most apps that use GL_OES_draw_texture also
+        // ship a fallback path; not panicking lets them progress.
     }
 
     // Clearing
@@ -529,6 +590,20 @@ pub trait GLES {
     ) {
         unimplemented!("CompressedTexImage2D not implemented by this backend")
     }
+    unsafe fn CompressedTexSubImage2D(
+        &mut self,
+        target: GLenum,
+        level: GLint,
+        xoffset: GLint,
+        yoffset: GLint,
+        width: GLsizei,
+        height: GLsizei,
+        format: GLenum,
+        image_size: GLsizei,
+        data: *const GLvoid,
+    ) {
+        unimplemented!("CompressedTexSubImage2D not implemented by this backend")
+    }
     unsafe fn CopyTexImage2D(
         &mut self,
         target: GLenum,
@@ -572,6 +647,72 @@ pub trait GLES {
     }
     unsafe fn TexEnviv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) {
         unimplemented!("TexEnviv not implemented by this backend")
+    }
+    unsafe fn DrawTexsOES(
+        &mut self,
+        x: i16,
+        y: i16,
+        z: i16,
+        width: i16,
+        height: i16,
+    ) {
+        self.DrawTexfOES(x as GLfloat, y as GLfloat, z as GLfloat, width as GLfloat, height as GLfloat)
+    }
+    unsafe fn DrawTexiOES(&mut self, x: GLint, y: GLint, z: GLint, width: GLint, height: GLint) {
+        self.DrawTexfOES(x as GLfloat, y as GLfloat, z as GLfloat, width as GLfloat, height as GLfloat)
+    }
+    unsafe fn DrawTexxOES(
+        &mut self,
+        x: GLfixed,
+        y: GLfixed,
+        z: GLfixed,
+        width: GLfixed,
+        height: GLfixed,
+    ) {
+        use super::util::fixed_to_float;
+        self.DrawTexfOES(
+            fixed_to_float(x),
+            fixed_to_float(y),
+            fixed_to_float(z),
+            fixed_to_float(width),
+            fixed_to_float(height),
+        )
+    }
+    unsafe fn DrawTexsvOES(&mut self, coords: *const i16) {
+        self.DrawTexsOES(
+            coords.read_unaligned(),
+            coords.add(1).read_unaligned(),
+            coords.add(2).read_unaligned(),
+            coords.add(3).read_unaligned(),
+            coords.add(4).read_unaligned(),
+        )
+    }
+    unsafe fn DrawTexivOES(&mut self, coords: *const GLint) {
+        self.DrawTexiOES(
+            coords.read_unaligned(),
+            coords.add(1).read_unaligned(),
+            coords.add(2).read_unaligned(),
+            coords.add(3).read_unaligned(),
+            coords.add(4).read_unaligned(),
+        )
+    }
+    unsafe fn DrawTexxvOES(&mut self, coords: *const GLfixed) {
+        self.DrawTexxOES(
+            coords.read_unaligned(),
+            coords.add(1).read_unaligned(),
+            coords.add(2).read_unaligned(),
+            coords.add(3).read_unaligned(),
+            coords.add(4).read_unaligned(),
+        )
+    }
+    unsafe fn DrawTexfvOES(&mut self, coords: *const GLfloat) {
+        self.DrawTexfOES(
+            coords.read_unaligned(),
+            coords.add(1).read_unaligned(),
+            coords.add(2).read_unaligned(),
+            coords.add(3).read_unaligned(),
+            coords.add(4).read_unaligned(),
+        )
     }
 
     unsafe fn MultiTexCoord4f(

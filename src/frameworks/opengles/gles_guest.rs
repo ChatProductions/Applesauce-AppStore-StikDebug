@@ -838,72 +838,189 @@ fn glVertexPointer(
     })
 }
 
-/// Per the OES_point_size_array extension spec:
-/// glPointSizePointerOES sets the pointer to an array of point sizes.
-/// type must be GL_FIXED or GL_FLOAT. stride specifies byte offset between
-/// consecutive point sizes. pointer is the address of the first element.
-///
-/// In our implementation we forward to the underlying GLES context which
-/// handles the vertex attribute state machine.
+/// `glPointSizePointerOES` (`GL_OES_point_size_array`). Forwards through the
+/// GLES trait so per-vertex point sizes are applied by backends that support
+/// them (native ES 1.1).
 fn glPointSizePointerOES(
-    _env: &mut Environment,
-    _type_: GLenum,
-    _stride: GLsizei,
-    _pointer: ConstVoidPtr,
+    env: &mut Environment,
+    type_: GLenum,
+    stride: GLsizei,
+    pointer: ConstVoidPtr,
 ) {
-    // OES_point_size_array is not wired through the host GLES trait, so this
-    // export is a no-op stub. Apps that rely on per-vertex point sizes (rare
-    // outside of particle systems) will fall back to the constant point size
-    // set via glPointSize.
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let pointer =
+            translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
+        gles.PointSizePointerOES(type_, stride, pointer)
+    })
 }
 
-/// Per OpenGL ES 1.1 spec section 3.7:
-/// glGetTexParameteriv returns texture parameter values for the specified target.
-/// pname can be: GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER,
-/// GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T, GL_GENERATE_MIPMAP
 fn glGetTexParameteriv(
     env: &mut Environment,
-    _target: GLenum,
-    _pname: GLenum,
+    target: GLenum,
+    pname: GLenum,
     params: MutPtr<GLint>,
 ) {
-    // The host GLES trait doesn't expose GetTexParameteriv. Return 0 (a valid
-    // GL_NONE / default-ish answer for the parameters Apple games typically
-    // query) so guest code that only checks "did the call succeed" still
-    // proceeds.
-    env.mem.write(params, 0);
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 1);
+        unsafe { gles.GetTexParameteriv(target, pname, params) }
+    })
+}
+fn glGetTexParameterfv(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 1);
+        unsafe { gles.GetTexParameterfv(target, pname, params) }
+    })
+}
+fn glGetTexParameterxv(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<GLfixed>,
+) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 1);
+        unsafe { gles.GetTexParameterxv(target, pname, params) }
+    })
+}
+fn glGetTexEnvxv(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<GLfixed>,
+) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 16);
+        unsafe { gles.GetTexEnvxv(target, pname, params) }
+    })
+}
+fn glGetClipPlanef(env: &mut Environment, plane: GLenum, equation: MutPtr<GLfloat>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let equation = mem.ptr_at_mut(equation, 4);
+        unsafe { gles.GetClipPlanef(plane, equation) }
+    })
+}
+fn glGetClipPlanex(env: &mut Environment, plane: GLenum, equation: MutPtr<GLfixed>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let equation = mem.ptr_at_mut(equation, 4);
+        unsafe { gles.GetClipPlanex(plane, equation) }
+    })
+}
+fn glGetLightfv(env: &mut Environment, light: GLenum, pname: GLenum, params: MutPtr<GLfloat>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 4);
+        unsafe { gles.GetLightfv(light, pname, params) }
+    })
+}
+fn glGetLightxv(env: &mut Environment, light: GLenum, pname: GLenum, params: MutPtr<GLfixed>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 4);
+        unsafe { gles.GetLightxv(light, pname, params) }
+    })
+}
+fn glGetMaterialfv(
+    env: &mut Environment,
+    face: GLenum,
+    pname: GLenum,
+    params: MutPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 4);
+        unsafe { gles.GetMaterialfv(face, pname, params) }
+    })
+}
+fn glGetMaterialxv(
+    env: &mut Environment,
+    face: GLenum,
+    pname: GLenum,
+    params: MutPtr<GLfixed>,
+) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let params = mem.ptr_at_mut(params, 4);
+        unsafe { gles.GetMaterialxv(face, pname, params) }
+    })
+}
+
+fn glCompressedTexSubImage2D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    xoffset: GLint,
+    yoffset: GLint,
+    width: GLsizei,
+    height: GLsizei,
+    format: GLenum,
+    image_size: GLsizei,
+    data: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let data = mem
+            .ptr_at(data.cast::<u8>(), image_size.try_into().unwrap())
+            .cast();
+        gles.CompressedTexSubImage2D(
+            target, level, xoffset, yoffset, width, height, format, image_size, data,
+        )
+    })
 }
 
 fn glDrawTexfOES(
-    _env: &mut Environment,
-    _x: GLfloat,
-    _y: GLfloat,
-    _z: GLfloat,
-    _width: GLfloat,
-    _height: GLfloat,
+    env: &mut Environment,
+    x: GLfloat,
+    y: GLfloat,
+    z: GLfloat,
+    width: GLfloat,
+    height: GLfloat,
 ) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.DrawTexfOES(x, y, z, width, height)
+    })
 }
 fn glDrawTexiOES(
-    _env: &mut Environment,
-    _x: GLint,
-    _y: GLint,
-    _z: GLint,
-    _width: GLint,
-    _height: GLint,
+    env: &mut Environment,
+    x: GLint,
+    y: GLint,
+    z: GLint,
+    width: GLint,
+    height: GLint,
 ) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.DrawTexiOES(x, y, z, width, height)
+    })
 }
 fn glDrawTexxOES(
-    _env: &mut Environment,
-    _x: GLfixed,
-    _y: GLfixed,
-    _z: GLfixed,
-    _width: GLfixed,
-    _height: GLfixed,
+    env: &mut Environment,
+    x: GLfixed,
+    y: GLfixed,
+    z: GLfixed,
+    width: GLfixed,
+    height: GLfixed,
 ) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.DrawTexxOES(x, y, z, width, height)
+    })
 }
-fn glDrawTexfvOES(_env: &mut Environment, _coords: ConstPtr<GLfloat>) {}
-fn glDrawTexivOES(_env: &mut Environment, _coords: ConstPtr<GLint>) {}
-fn glDrawTexxvOES(_env: &mut Environment, _coords: ConstPtr<GLfixed>) {}
+fn glDrawTexfvOES(env: &mut Environment, coords: ConstPtr<GLfloat>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let coords = mem.ptr_at(coords, 5);
+        unsafe { gles.DrawTexfvOES(coords) }
+    })
+}
+fn glDrawTexivOES(env: &mut Environment, coords: ConstPtr<GLint>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let coords = mem.ptr_at(coords, 5);
+        unsafe { gles.DrawTexivOES(coords) }
+    })
+}
+fn glDrawTexxvOES(env: &mut Environment, coords: ConstPtr<GLfixed>) {
+    with_ctx_and_mem(env, |gles, mem| {
+        let coords = mem.ptr_at(coords, 5);
+        unsafe { gles.DrawTexxvOES(coords) }
+    })
+}
 fn glRenderbufferStorageMultisampleAPPLE(
     env: &mut Environment,
     target: GLenum,
@@ -3864,6 +3981,16 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glVertexPointer(_, _, _, _)),
     export_c_func!(glPointSizePointerOES(_, _, _)),
     export_c_func!(glGetTexParameteriv(_, _, _)),
+    export_c_func!(glGetTexParameterfv(_, _, _)),
+    export_c_func!(glGetTexParameterxv(_, _, _)),
+    export_c_func!(glGetTexEnvxv(_, _, _)),
+    export_c_func!(glGetClipPlanef(_, _)),
+    export_c_func!(glGetClipPlanex(_, _)),
+    export_c_func!(glGetLightfv(_, _, _)),
+    export_c_func!(glGetLightxv(_, _, _)),
+    export_c_func!(glGetMaterialfv(_, _, _)),
+    export_c_func!(glGetMaterialxv(_, _, _)),
+    export_c_func!(glCompressedTexSubImage2D(_, _, _, _, _, _, _, _, _)),
     export_c_func!(glDrawTexfOES(_, _, _, _, _)),
     export_c_func!(glDrawTexiOES(_, _, _, _, _)),
     export_c_func!(glDrawTexxOES(_, _, _, _, _)),
