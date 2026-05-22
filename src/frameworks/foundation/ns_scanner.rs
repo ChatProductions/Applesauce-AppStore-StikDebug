@@ -88,6 +88,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<NSScannerHostObject>(this).to_be_skipped
 }
 
+- (())setCharactersToBeSkipped:(id)set { // NSCharacterSet *
+    // Per Apple's NSScanner documentation:
+    // https://developer.apple.com/documentation/foundation/nsscanner/1413024-characterstobeskipped
+    // "Characters to be skipped are skipped prior to the scan."
+    // Ownership: the scanner retains the new set and releases the old one
+    // (Foundation convention for Objective-C copy properties — real Apple
+    // copies, but for HLE retaining is behaviourally equivalent since the
+    // guest doesn't mutate the character set after assignment).
+    let old = env.objc.borrow::<NSScannerHostObject>(this).to_be_skipped;
+    retain(env, set);
+    env.objc.borrow_mut::<NSScannerHostObject>(this).to_be_skipped = set;
+    release(env, old);
+}
+
 - (bool)isAtEnd {
     skip_characters(env, this);
     let NSScannerHostObject { len, pos, .. } = env.objc.borrow::<NSScannerHostObject>(this);

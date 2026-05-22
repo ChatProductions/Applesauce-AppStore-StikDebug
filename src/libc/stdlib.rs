@@ -20,12 +20,77 @@ use std::str::FromStr;
 
 pub mod qsort;
 
-#[derive(Default)]
 pub struct State {
     rand: u32,
     random: u32,
     arc4random: u32,
+    /// 48-bit linear-congruential PRNG state shared by the `drand48`/`lrand48`/
+    /// `mrand48`/`seed48` family. Per the POSIX / Apple `drand48(3)` manpage
+    /// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/drand48.3.html>)
+    /// the generator is `X_{n+1} = (a * X_n + c) mod 2^48`, with default
+    /// `a = 0x5DEECE66D`, `c = 0xB`, and the documented initial seed of
+    /// `0x1234ABCD330E` until `srand48`/`seed48` are called.
+    drand48: Drand48State,
     pub atexit_handlers: Vec<GuestFunction>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            rand: 0,
+            random: 0,
+            arc4random: 0,
+            drand48: Drand48State::default(),
+            atexit_handlers: Vec::new(),
+        }
+    }
+}
+
+/// State for the POSIX `drand48`/`lrand48`/`mrand48` family. Mirrors what real
+/// libc keeps internally — a 48-bit state plus the multiplier `a` and addend
+/// `c` (modifiable via `lcong48`).
+#[derive(Copy, Clone)]
+struct Drand48State {
+    /// 48-bit `X_n`, stored in the low 48 bits of a `u64`.
+    state: u64,
+    /// 48-bit multiplier `a` (default `0x5DEECE66D`).
+    a: u64,
+    /// 48-bit addend `c` (default `0xB`).
+    c: u64,
+}
+
+impl Default for Drand48State {
+    fn default() -> Self {
+        Drand48State {
+            state: 0x1234_ABCD_330E,
+            a: 0x5DEE_CE66D,
+            c: 0xB,
+        }
+    }
+}
+
+impl Drand48State {
+    /// Advance `X_n` and return the new 48-bit value.
+    fn step(&mut self) -> u64 {
+        self.state = self.a.wrapping_mul(self.state).wrapping_add(self.c) & 0xFFFF_FFFF_FFFF;
+        self.state
+    }
+}
+
+/// Pack a `[u16; 3]` (little-endian, i.e. `xsubi[0]` is the lowest 16 bits) into
+/// a 48-bit integer. Matches the Apple-documented layout for the `xsubi` arrays
+/// taken by `seed48`, `erand48`, `nrand48`, `jrand48`.
+fn pack_xsubi(env: &Environment, xsubi: ConstPtr<u16>) -> u64 {
+    let lo = u64::from(env.mem.read(xsubi));
+    let mid = u64::from(env.mem.read(xsubi + 1));
+    let hi = u64::from(env.mem.read(xsubi + 2));
+    lo | (mid << 16) | (hi << 32)
+}
+
+fn write_xsubi(env: &mut Environment, xsubi: MutPtr<u16>, value: u64) {
+    env.mem.write(xsubi, (value & 0xFFFF) as u16);
+    env.mem.write(xsubi + 1, ((value >> 16) & 0xFFFF) as u16);
+    env.mem.write(xsubi + 2, ((value >> 32) & 0xFFFF) as u16);
 }
 
 fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
@@ -311,6 +376,242 @@ fn arc4random(env: &mut Environment) -> u32 {
     env.libc_state.stdlib.arc4random
 }
 
+// MARK: - drand48 family
+//
+// POSIX / Apple iPhone OS specification for these functions:
+// https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/drand48.3.html
+//
+// All of these share a 48-bit LCG state. `drand48`/`lrand48`/`mrand48` use the
+// implicit per-process state in `env.libc_state.stdlib.drand48`; the
+// `erand48`/`nrand48`/`jrand48` variants accept an explicit `xsubi` array
+// (three u16s, little-endian limbs).
+
+fn drand48(env: &mut Environment) -> f64 {
+    let next = env.libc_state.stdlib.drand48.step();
+    // Apple manpage: "drand48() and erand48() return non-negative,
+    // double-precision, floating-point values, uniformly distributed over the
+    // interval [0.0, 1.0)." 2^-48 gives exactly that distribution.
+    (next as f64) * (1.0_f64 / 281_474_976_710_656.0_f64)
+}
+
+fn erand48(env: &mut Environment, xsubi: MutPtr<u16>) -> f64 {
+    let mut local = Drand48State {
+        state: pack_xsubi(env, xsubi.cast_const()),
+        a: env.libc_state.stdlib.drand48.a,
+        c: env.libc_state.stdlib.drand48.c,
+    };
+    let next = local.step();
+    write_xsubi(env, xsubi, next);
+    (next as f64) * (1.0_f64 / 281_474_976_710_656.0_f64)
+}
+
+fn lrand48(env: &mut Environment) -> i32 {
+    // "lrand48() and nrand48() return non-negative, long integers,
+    // uniformly distributed over the interval [0, 2^31)" — take the high
+    // 31 bits of the 48-bit state, per the Apple manpage.
+    let next = env.libc_state.stdlib.drand48.step();
+    (next >> 17) as i32
+}
+
+fn nrand48(env: &mut Environment, xsubi: MutPtr<u16>) -> i32 {
+    let mut local = Drand48State {
+        state: pack_xsubi(env, xsubi.cast_const()),
+        a: env.libc_state.stdlib.drand48.a,
+        c: env.libc_state.stdlib.drand48.c,
+    };
+    let next = local.step();
+    write_xsubi(env, xsubi, next);
+    (next >> 17) as i32
+}
+
+fn mrand48(env: &mut Environment) -> i32 {
+    // "mrand48() and jrand48() return signed long integers uniformly
+    // distributed over the interval [-2^31, 2^31)." Take the high 32 bits
+    // of the 48-bit state and reinterpret as i32.
+    let next = env.libc_state.stdlib.drand48.step();
+    ((next >> 16) & 0xFFFF_FFFF) as u32 as i32
+}
+
+fn jrand48(env: &mut Environment, xsubi: MutPtr<u16>) -> i32 {
+    let mut local = Drand48State {
+        state: pack_xsubi(env, xsubi.cast_const()),
+        a: env.libc_state.stdlib.drand48.a,
+        c: env.libc_state.stdlib.drand48.c,
+    };
+    let next = local.step();
+    write_xsubi(env, xsubi, next);
+    ((next >> 16) & 0xFFFF_FFFF) as u32 as i32
+}
+
+fn srand48(env: &mut Environment, seedval: i32) {
+    // Apple manpage: "srand48() initializes the high-order 32 bits of the
+    // 48-bit X_i to the low-order 32 bits of the argument; the low-order
+    // 16 bits of X_i are set to the arbitrary value 330E_16." Reset
+    // multiplier/addend to their defaults, matching the spec.
+    let seed = (seedval as u32) as u64;
+    env.libc_state.stdlib.drand48 = Drand48State {
+        state: (seed << 16) | 0x330E,
+        a: 0x5DEE_CE66D,
+        c: 0xB,
+    };
+}
+
+fn seed48(env: &mut Environment, xsubi: MutPtr<u16>) -> MutPtr<u16> {
+    // "seed48() sets the value of the X_i to the 48-bit value specified in
+    // the argument, and returns a pointer to a 14-byte array containing the
+    // previous value of X_i." The Apple/POSIX contract uses a per-process
+    // internal buffer for the return value — emulate that by allocating it
+    // once and re-using the slot.
+    let previous = env.libc_state.stdlib.drand48.state;
+
+    let new_state = pack_xsubi(env, xsubi.cast_const());
+    env.libc_state.stdlib.drand48 = Drand48State {
+        state: new_state,
+        a: 0x5DEE_CE66D,
+        c: 0xB,
+    };
+
+    // Reuse a static guest-side buffer for the returned `unsigned short[3]`.
+    // POSIX guarantees the returned pointer is valid until the next call to
+    // `seed48`/`srand48`/`lcong48`. We mirror that contract by reallocating
+    // here — touchHLE's guest allocator keeps the pointer alive until the
+    // application explicitly frees it (which it must not, per POSIX).
+    let buf: MutPtr<u16> = env.mem.alloc(6).cast();
+    write_xsubi(env, buf, previous);
+    buf
+}
+
+// MARK: - mkstemp / mkdtemp (POSIX, Apple manpages)
+//
+// https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/mkstemp.3.html
+//
+// `mkstemp` takes a writable path template ending in `XXXXXX`, replaces the
+// trailing `X`s with random characters that make the name unique, creates the
+// file with `open(O_RDWR | O_CREAT | O_EXCL, 0600)` and returns the fd.
+// `mkdtemp` is the directory analogue.
+
+/// Characters used to fill the `XXXXXX` portion of the template, matching the
+/// Apple / BSD `mkstemp` implementation (uppercase + lowercase + digits).
+const MKTEMP_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+fn fill_template_xxxxxx(env: &mut Environment, template: MutPtr<u8>) -> Option<u32> {
+    let template_str = match env.mem.cstr_at_utf8(template.cast_const()) {
+        Ok(s) => s.to_owned(),
+        Err(_) => return None,
+    };
+    let len = template_str.len();
+    if len < 6
+        || !template_str.as_bytes()[len - 6..]
+            .iter()
+            .all(|&c| c == b'X')
+    {
+        // Apple manpage: "If the template doesn’t contain six trailing X's,
+        // -1 is returned and errno is set to EINVAL."
+        return None;
+    }
+    let suffix_offset = (len - 6) as u32;
+    for i in 0..6 {
+        // Drive randomness from arc4random so we don't perturb the
+        // user-visible drand48 state (which the guest may be sampling
+        // deterministically after `srand48`).
+        let r = arc4random(env);
+        let ch = MKTEMP_CHARS[(r as usize) % MKTEMP_CHARS.len()];
+        env.mem.write(template + suffix_offset + i, ch);
+    }
+    Some(suffix_offset)
+}
+
+fn mkstemp(env: &mut Environment, template: MutPtr<u8>) -> i32 {
+    use crate::libc::errno::{ENOENT, ENOTDIR};
+    set_errno(env, 0);
+
+    // Try a handful of randomisations before giving up, mirroring BSD libc's
+    // `_gettemp` (TMP_MAX is documented as at least 308,915,776 on real
+    // systems but games never need that many — touchHLE only needs to keep
+    // making progress in the rare case of a collision).
+    for _ in 0..128 {
+        if fill_template_xxxxxx(env, template).is_none() {
+            set_errno(env, EINVAL);
+            return -1;
+        }
+        // O_RDWR | O_CREAT | O_EXCL — same flag combination Darwin libc uses.
+        const O_RDWR: i32 = 0x0002;
+        const O_CREAT: i32 = 0x0200;
+        const O_EXCL: i32 = 0x0800;
+        let fd = crate::libc::posix_io::open_direct(
+            env,
+            template.cast_const(),
+            O_RDWR | O_CREAT | O_EXCL,
+        );
+        if fd >= 0 {
+            return fd;
+        }
+        // If the failure is a hard error (missing directory etc.) there is
+        // no point in retrying — propagate it.
+        let errno = crate::libc::errno::get_errno(env);
+        if errno == ENOENT || errno == ENOTDIR {
+            return -1;
+        }
+    }
+    set_errno(env, crate::libc::errno::EEXIST);
+    -1
+}
+
+fn mkdtemp(env: &mut Environment, template: MutPtr<u8>) -> MutPtr<u8> {
+    set_errno(env, 0);
+    for _ in 0..128 {
+        if fill_template_xxxxxx(env, template).is_none() {
+            set_errno(env, EINVAL);
+            return Ptr::null();
+        }
+        // Read the path, create the directory exclusively.
+        let path_str = match env.mem.cstr_at_utf8(template.cast_const()) {
+            Ok(s) => s.to_owned(),
+            Err(_) => {
+                set_errno(env, EINVAL);
+                return Ptr::null();
+            }
+        };
+        let guest_path = GuestPath::new(&path_str);
+        if env.fs.exists(guest_path) {
+            continue; // collision; reseed and try again
+        }
+        match env.fs.create_dir(guest_path) {
+            Ok(_) => return template,
+            Err(_) => continue,
+        }
+    }
+    set_errno(env, crate::libc::errno::EEXIST);
+    Ptr::null()
+}
+
+fn mktemp(env: &mut Environment, template: MutPtr<u8>) -> MutPtr<u8> {
+    // Apple manpage: "The mktemp() function is dangerous; its use is
+    // discouraged because it is racy. Use mkstemp() instead." We implement it
+    // anyway for guest binaries that link it — fill in the template but do
+    // NOT create the file, exactly as the historical contract requires.
+    set_errno(env, 0);
+    if fill_template_xxxxxx(env, template).is_none() {
+        set_errno(env, EINVAL);
+        return Ptr::null();
+    }
+    template
+}
+
+fn lcong48(env: &mut Environment, param: MutPtr<u16>) {
+    // "lcong48() allows full user control over the multiplier and addend
+    // terms in the formula." param is a `unsigned short[7]`: the first
+    // three limbs seed X_i, the next three (limbs 3..6) replace `a`, and
+    // the last (limb 6) replaces `c`.
+    let state = pack_xsubi(env, param.cast_const());
+    let a_lo = u64::from(env.mem.read(param + 3));
+    let a_mid = u64::from(env.mem.read(param + 4));
+    let a_hi = u64::from(env.mem.read(param + 5));
+    let a = a_lo | (a_mid << 16) | (a_hi << 32);
+    let c = u64::from(env.mem.read(param + 6));
+    env.libc_state.stdlib.drand48 = Drand48State { state, a, c };
+}
+
 fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let name_str = std::str::from_utf8(name_cstr).unwrap_or("");
@@ -322,11 +623,7 @@ fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
         // Adobe AIR queries MMGC_HEAP_*, Lua looks up LUA_PATH/CPATH,
         // CoreFoundation reads CFFIXED_USER_HOME etc. None of these are
         // errors, so we demote to debug-only.
-        log_dbg!(
-            "getenv({:?} ({:?})) => NULL (unset)",
-            name,
-            name_str
-        );
+        log_dbg!("getenv({:?} ({:?})) => NULL (unset)", name, name_str);
         return Ptr::null();
     };
     log_dbg!(
@@ -1130,6 +1427,19 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(arc4random()),
     export_c_func!(arc4random_stir()),
     export_c_func!(arc4random_addrandom()),
+    // drand48 family (POSIX / Apple iPhone OS manpage)
+    export_c_func!(drand48()),
+    export_c_func!(erand48(_)),
+    export_c_func!(lrand48()),
+    export_c_func!(nrand48(_)),
+    export_c_func!(mrand48()),
+    export_c_func!(jrand48(_)),
+    export_c_func!(srand48(_)),
+    export_c_func!(seed48(_)),
+    export_c_func!(lcong48(_)),
+    export_c_func!(mkstemp(_)),
+    export_c_func!(mkdtemp(_)),
+    export_c_func!(mktemp(_)),
     export_c_func!(getenv(_)),
     export_c_func!(setenv(_, _, _)),
     // <--- ИСПРАВЛЕНИЕ НА 3 АРГУМЕНТА ГОСТЯ

@@ -1489,18 +1489,15 @@ pub fn objc_allocateClassPair(
          not fully supported; installing an UnimplementedClass placeholder.",
         name_str
     );
-    env.objc.link_class(&name_str, /* is_metaclass: */ false, &mut env.mem)
+    env.objc
+        .link_class(&name_str, /* is_metaclass: */ false, &mut env.mem)
 }
 
 /// `Class objc_readClassPair(Class cls, const struct objc_image_info *info)` —
 /// iOS 8+ Swift-related helper. Apps from iOS 6/7 may import the
 /// symbol but rarely actually call it. Return the input class
 /// unchanged so any best-effort caller keeps working.
-pub fn objc_readClassPair(
-    _env: &mut crate::Environment,
-    cls: Class,
-    _info: ConstVoidPtr,
-) -> Class {
+pub fn objc_readClassPair(_env: &mut crate::Environment, cls: Class, _info: ConstVoidPtr) -> Class {
     cls
 }
 
@@ -1542,10 +1539,7 @@ pub fn objc_copyClassNamesForImage(
 /// extra bytes (see [objc_allocateClassPair]), so just return the
 /// object pointer itself; callers that try to use it as scratch space
 /// will get a no-op buffer rather than crashing on NULL.
-pub fn object_getIndexedIvars(
-    _env: &mut crate::Environment,
-    obj: id,
-) -> ConstVoidPtr {
+pub fn object_getIndexedIvars(_env: &mut crate::Environment, obj: id) -> ConstVoidPtr {
     obj.cast().cast_const()
 }
 
@@ -1574,6 +1568,141 @@ pub fn method_exchangeImplementations(
     );
 }
 
+/// `objc_property_t *class_copyPropertyList(Class cls, unsigned int *outCount)` —
+/// returns a NULL-terminated, malloc'd array of `objc_property_t` opaque
+/// pointers describing every declared `@property` in `cls` (not in its
+/// superclasses). Per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418553-class_copypropertylist>):
+///
+/// > You should use `free()` to free the array.
+/// > If the class declares no properties, the function returns `NULL` and
+/// > `*outCount` is `0`.
+///
+/// We model "declared properties" using the `ClassHostObject::properties`
+/// map populated by the runtime when a `@property` directive is processed
+/// for a class. Properties inherited from superclasses are intentionally
+/// excluded, matching real Apple behaviour.
+pub fn class_copyPropertyList(
+    env: &mut crate::Environment,
+    cls: Class,
+    out_count: crate::mem::MutPtr<u32>,
+) -> crate::mem::MutPtr<ConstVoidPtr> {
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    if cls.is_null() {
+        return Ptr::null();
+    }
+    // Collect property pointers WITHOUT walking the hierarchy — class_getProperty
+    // walks it (matching the documented `class_getProperty` semantics), but
+    // class_copyPropertyList must NOT, per Apple's runtime reference.
+    let entries: Vec<ConstVoidPtr> = if let Some(host_obj) = env.objc.get_host_object(cls) {
+        if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+            class_obj.properties.values().copied().collect()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    if entries.is_empty() {
+        return Ptr::null();
+    }
+    // Allocate a NULL-terminated array of `objc_property_t` in guest memory.
+    // The Apple manpage doesn't explicitly say it's NULL-terminated, but real
+    // libobjc returns a malloc'd array of exactly `*outCount` entries.
+    let total = (entries.len() as u32) * guest_size_of::<ConstVoidPtr>();
+    let buf: crate::mem::MutPtr<ConstVoidPtr> = env.mem.alloc(total).cast();
+    for (i, e) in entries.iter().enumerate() {
+        env.mem.write(buf + i as u32, *e);
+    }
+    if !out_count.is_null() {
+        env.mem.write(out_count, entries.len() as u32);
+    }
+    buf
+}
+
+/// `Method *class_copyMethodList(Class cls, unsigned int *outCount)` —
+/// returns a malloc'd array of `Method` pointers (one per instance method
+/// declared on `cls`). Per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418490-class_copymethodlist>):
+///
+/// > You must free the list with `free()`.
+/// > If `cls` declares no instance methods, returns `NULL` and `*outCount` is 0.
+///
+/// touchHLE's `class_getInstanceMethod` returns the class pointer (it
+/// doesn't model real `Method` structs), so we mirror that by writing the
+/// class pointer once per known selector — callers walking the array can
+/// still use the pointers with `method_getImplementation`/`method_setImplementation`
+/// or `class_replaceMethod`, which expect this same opaque representation.
+pub fn class_copyMethodList(
+    env: &mut crate::Environment,
+    cls: Class,
+    out_count: crate::mem::MutPtr<u32>,
+) -> crate::mem::MutPtr<ConstVoidPtr> {
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    if cls.is_null() {
+        return Ptr::null();
+    }
+    let count = if let Some(host_obj) = env.objc.get_host_object(cls) {
+        if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+            class_obj.methods.len()
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    if count == 0 {
+        return Ptr::null();
+    }
+    let total = (count as u32) * guest_size_of::<ConstVoidPtr>();
+    let buf: crate::mem::MutPtr<ConstVoidPtr> = env.mem.alloc(total).cast();
+    // We don't have a real `Method` struct, so reuse the class pointer for
+    // every entry, matching what `class_getInstanceMethod` already returns.
+    let class_as_method = ConstVoidPtr::from_bits(cls.to_bits());
+    for i in 0..count {
+        env.mem.write(buf + i as u32, class_as_method);
+    }
+    if !out_count.is_null() {
+        env.mem.write(out_count, count as u32);
+    }
+    buf
+}
+
+/// `Ivar *class_copyIvarList(Class cls, unsigned int *outCount)` — Apple's
+/// documented contract is the same NULL-terminated/malloc'd shape as the
+/// other `class_copy*List` calls. touchHLE doesn't model ivars as opaque
+/// `Ivar` structs (they're stored in a plain `host_object` map keyed by
+/// name), so we return NULL with `*outCount = 0`, which is the documented
+/// behaviour for a class that declares no ivars.
+pub fn class_copyIvarList(
+    env: &mut crate::Environment,
+    _cls: Class,
+    out_count: crate::mem::MutPtr<u32>,
+) -> crate::mem::MutPtr<ConstVoidPtr> {
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    Ptr::null()
+}
+
+/// `Protocol * __unsafe_unretained *class_copyProtocolList(Class cls, unsigned int *outCount)` —
+/// same shape. We don't model adopted protocols, so return NULL with
+/// `*outCount = 0`, which is also the spec-compliant answer for a class
+/// adopting no protocols.
+pub fn class_copyProtocolList(
+    env: &mut crate::Environment,
+    _cls: Class,
+    out_count: crate::mem::MutPtr<u32>,
+) -> crate::mem::MutPtr<ConstVoidPtr> {
+    if !out_count.is_null() {
+        env.mem.write(out_count, 0);
+    }
+    Ptr::null()
+}
 
 /// `objc_property_t class_getProperty(Class cls, const char *name)` —
 /// returns an opaque pointer to the property metadata for the named

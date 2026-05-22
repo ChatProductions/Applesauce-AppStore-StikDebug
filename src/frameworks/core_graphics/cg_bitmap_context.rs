@@ -106,6 +106,9 @@ pub fn CGBitmapContextCreate(
         font_size: 17.0,
         state_stack: Vec::new(),
         path_points: Vec::new(),
+        // Apple defaults: rendering intent unspecified = `kCGRenderingIntentDefault` (0).
+        rendering_intent: 0,
+        shadow: crate::frameworks::core_graphics::cg_context::CGShadowState::default(),
     };
 
     let isa = env

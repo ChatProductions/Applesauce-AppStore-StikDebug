@@ -157,6 +157,17 @@ pub fn set_errno(env: &mut Environment, val: i32) {
         .set_errno_for_thread(&mut env.mem, env.current_thread, val);
 }
 
+/// Helper to read the current thread's `errno`, mirroring the C `errno`
+/// macro. Not a libc export — used by other host code (e.g. `mkstemp`) to
+/// decide whether to retry after a failed I/O call.
+pub fn get_errno(env: &mut Environment) -> i32 {
+    let ptr = env
+        .libc_state
+        .errno
+        .errno_ptr_for_thread(&mut env.mem, env.current_thread);
+    env.mem.read(ptr)
+}
+
 fn __error(env: &mut Environment) -> MutPtr<i32> {
     env.libc_state
         .errno

@@ -28,8 +28,8 @@ use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::{self, to_rust_string};
 use crate::mem::{GuestUSize, Ptr};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter,
-    ClassExports, HostObject, ObjC,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    ObjC,
 };
 use crate::Environment;
 use std::collections::{HashMap, HashSet};
@@ -79,6 +79,27 @@ pub(super) struct CALayerHostObject {
     pub(super) anonymous_animations: HashSet<id>,
     pub(super) name: Option<String>,
     pub(super) mask: id,
+    /// `contentsGravity` — one of the `kCAGravity*` strings. Defaults to
+    /// `"resize"` per Apple's CALayer documentation:
+    /// <https://developer.apple.com/documentation/quartzcore/calayer/1410933-contentsgravity>
+    pub(super) contents_gravity: String,
+    /// `contentsRect` — sub-rectangle of the contents to draw, normalized
+    /// (`[0..1]`). Defaults to the unit rectangle `(0,0,1,1)`.
+    /// <https://developer.apple.com/documentation/quartzcore/calayer/1410893-contentsrect>
+    pub(super) contents_rect: CGRect,
+    /// `edgeAntialiasingMask` — bitmask of `CAEdgeAntialiasingMask` edges
+    /// (left/right/top/bottom). Stored verbatim so the property
+    /// round-trips through `-[CALayer edgeAntialiasingMask]`.
+    /// <https://developer.apple.com/documentation/quartzcore/calayer/1410868-edgeantialiasingmask>
+    pub(super) edge_antialiasing_mask: u32,
+    /// `minificationFilter` / `magnificationFilter` — one of
+    /// `kCAFilterLinear` / `kCAFilterNearest` / `kCAFilterTrilinear`.
+    /// Defaults to `kCAFilterLinear` per Apple's CALayer reference.
+    pub(super) minification_filter: String,
+    pub(super) magnification_filter: String,
+    /// `minificationFilterBias` — accepted for round-tripping. Defaults
+    /// to 0.0 per Apple's docs.
+    pub(super) minification_filter_bias: f32,
 }
 impl HostObject for CALayerHostObject {}
 
@@ -164,10 +185,7 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::NSString(kCAGravityBottom),
     ),
     ("_kCAGravityLeft", HostConstant::NSString(kCAGravityLeft)),
-    (
-        "_kCAGravityRight",
-        HostConstant::NSString(kCAGravityRight),
-    ),
+    ("_kCAGravityRight", HostConstant::NSString(kCAGravityRight)),
     (
         "_kCAGravityTopLeft",
         HostConstant::NSString(kCAGravityTopLeft),
@@ -227,6 +245,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         anonymous_animations: HashSet::new(),
         name: None,
         mask: nil,
+        contents_gravity: kCAGravityResize.to_owned(),
+        contents_rect: CGRect {
+            origin: CGPoint { x: 0.0, y: 0.0 },
+            size: CGSize { width: 1.0, height: 1.0 },
+        },
+        edge_antialiasing_mask: 0, // All edges disabled by default
+        minification_filter: kCAFilterLinear.to_owned(),
+        magnification_filter: kCAFilterLinear.to_owned(),
+        minification_filter_bias: 0.0,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -586,9 +613,60 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-- (())setEdgeAntialiasingMask:(u32)mask { todo_objc_setter!(this, mask); }
-- (())setMagnificationFilter:(id)filter { todo_objc_setter!(this, ns_string::to_rust_string(env, filter)); }
-- (())setMinificationFilter:(id)filter { todo_objc_setter!(this, ns_string::to_rust_string(env, filter)); }
+// Per Apple's CALayer reference:
+// https://developer.apple.com/documentation/quartzcore/calayer/1410868-edgeantialiasingmask
+- (())setEdgeAntialiasingMask:(u32)mask {
+    env.objc.borrow_mut::<CALayerHostObject>(this).edge_antialiasing_mask = mask;
+}
+- (u32)edgeAntialiasingMask {
+    env.objc.borrow::<CALayerHostObject>(this).edge_antialiasing_mask
+}
+
+// https://developer.apple.com/documentation/quartzcore/calayer/1410907-magnificationfilter
+- (())setMagnificationFilter:(id)filter {
+    let s = ns_string::to_rust_string(env, filter).into_owned();
+    env.objc.borrow_mut::<CALayerHostObject>(this).magnification_filter = s;
+}
+- (id)magnificationFilter {
+    let s = env.objc.borrow::<CALayerHostObject>(this).magnification_filter.clone();
+    ns_string::from_rust_string(env, s)
+}
+
+// https://developer.apple.com/documentation/quartzcore/calayer/1410898-minificationfilter
+- (())setMinificationFilter:(id)filter {
+    let s = ns_string::to_rust_string(env, filter).into_owned();
+    env.objc.borrow_mut::<CALayerHostObject>(this).minification_filter = s;
+}
+- (id)minificationFilter {
+    let s = env.objc.borrow::<CALayerHostObject>(this).minification_filter.clone();
+    ns_string::from_rust_string(env, s)
+}
+
+// https://developer.apple.com/documentation/quartzcore/calayer/1410933-contentsgravity
+- (())setContentsGravity:(id)gravity {
+    let s = ns_string::to_rust_string(env, gravity).into_owned();
+    env.objc.borrow_mut::<CALayerHostObject>(this).contents_gravity = s;
+}
+- (id)contentsGravity {
+    let s = env.objc.borrow::<CALayerHostObject>(this).contents_gravity.clone();
+    ns_string::from_rust_string(env, s)
+}
+
+// https://developer.apple.com/documentation/quartzcore/calayer/1410893-contentsrect
+- (())setContentsRect:(CGRect)rect {
+    env.objc.borrow_mut::<CALayerHostObject>(this).contents_rect = rect;
+    env.objc.borrow_mut::<CALayerHostObject>(this).gles_texture_is_up_to_date = false;
+}
+- (CGRect)contentsRect {
+    env.objc.borrow::<CALayerHostObject>(this).contents_rect
+}
+
+- (())setMinificationFilterBias:(f32)bias {
+    env.objc.borrow_mut::<CALayerHostObject>(this).minification_filter_bias = bias;
+}
+- (f32)minificationFilterBias {
+    env.objc.borrow::<CALayerHostObject>(this).minification_filter_bias
+}
 
 - (bool)containsPoint:(CGPoint)point {
     let bounds: CGRect = msg![env; this bounds];
