@@ -29,6 +29,10 @@ use std::marker::PhantomData;
 pub struct GLES3OnGL3Context {
     gl_ctx: GLContext,
     is_loaded: bool,
+    /// See [GLES3OnGL3::advertise_es3]. The `Context` factory variant for
+    /// OpenGL ES 2.0 ([`crate::gles::gles2_on_gl3::GLES2OnGL3Context`]) flips
+    /// this to `false`; the standard ES 3.0 path leaves it `true`.
+    advertise_es3: bool,
     /// Whether the underlying OpenGL ES 3.0 driver advertises
     /// `GL_IMG_texture_compression_pvrtc`. Apps shipped for iPhone OS use
     /// PVRTC textures pervasively (Apple's recommended compression format),
@@ -58,13 +62,7 @@ impl GLESContext for GLES3OnGL3Context {
     }
 
     fn new(window: &mut Window) -> Result<Self, String> {
-        Ok(Self {
-            gl_ctx: window.create_gl_context(GLVersion::GL33Core)?,
-            is_loaded: false,
-            pvrtc_native: false,
-            pvrtc_native_checked: false,
-            default_vao: 0,
-        })
+        Self::new_with_mode(window, /* advertise_es3= */ true)
     }
 
     fn make_current<'gl_ctx, 'win: 'gl_ctx>(
@@ -75,6 +73,7 @@ impl GLESContext for GLES3OnGL3Context {
             return Box::new(GLES3OnGL3 {
                 _gl_lifetime: PhantomData,
                 pvrtc_native: self.pvrtc_native,
+                advertise_es3: self.advertise_es3,
             });
         }
         unsafe {
@@ -99,6 +98,7 @@ impl GLESContext for GLES3OnGL3Context {
         Box::new(GLES3OnGL3 {
             _gl_lifetime: PhantomData,
             pvrtc_native: self.pvrtc_native,
+            advertise_es3: self.advertise_es3,
         })
     }
 
@@ -111,6 +111,7 @@ impl GLESContext for GLES3OnGL3Context {
             return Box::new(GLES3OnGL3 {
                 _gl_lifetime: PhantomData,
                 pvrtc_native: self.pvrtc_native,
+                advertise_es3: self.advertise_es3,
             });
         }
         make_current_fn(&self.gl_ctx);
@@ -126,11 +127,31 @@ impl GLESContext for GLES3OnGL3Context {
         Box::new(GLES3OnGL3 {
             _gl_lifetime: PhantomData,
             pvrtc_native: self.pvrtc_native,
+            advertise_es3: self.advertise_es3,
         })
     }
 }
 
 impl GLES3OnGL3Context {
+    /// Construct a fresh GL 3.3 Core context that will report itself as either
+    /// an OpenGL ES 3.0 driver (`advertise_es3 = true`) or an OpenGL ES 2.0
+    /// driver (`advertise_es3 = false`) via [`GLES::is_es3`].
+    ///
+    /// The actual GL context, namespace loading, default-VAO setup and PVRTC
+    /// support detection are identical in both modes — desktop GL 3.3 Core
+    /// exposes a strict superset of the ES 2.0 API surface, so the same code
+    /// path serves both EAGL `kEAGLRenderingAPIOpenGLES2` and `…ES3` requests.
+    pub fn new_with_mode(window: &mut Window, advertise_es3: bool) -> Result<Self, String> {
+        Ok(Self {
+            gl_ctx: window.create_gl_context(GLVersion::GL33Core)?,
+            is_loaded: false,
+            advertise_es3,
+            pvrtc_native: false,
+            pvrtc_native_checked: false,
+            default_vao: 0,
+        })
+    }
+
     /// Ensure a default Vertex Array Object is bound. Required by the
     /// Core profile, where there is no implicit VAO 0. We also
     /// `glEnable(GL_PROGRAM_POINT_SIZE)` so vertex shaders that write to
@@ -198,6 +219,15 @@ unsafe fn detect_pvrtc_support() -> bool {
 pub struct GLES3OnGL3<'gl_ctx> {
     _gl_lifetime: PhantomData<&'gl_ctx ()>,
     pvrtc_native: bool,
+    /// Whether this backend instance should advertise itself as OpenGL ES 3.0
+    /// via [`GLES::is_es3`]. The same desktop GL 3.3 Core code path serves
+    /// both OpenGL ES 2.0 and OpenGL ES 3.0 EAGL APIs — the [crate::gles::gles2_on_gl3::GLES2OnGL3Context]
+    /// fallback constructs instances with this flag set to `false`, so guest
+    /// apps that requested `kEAGLRenderingAPIOpenGLES2` keep seeing the
+    /// behaviour of an ES 2.0 driver (e.g. `glGetString(GL_VERSION)` returning
+    /// an ES 2.0 string, and the present path not assuming ES 3.0‑only entry
+    /// points are available even though the host driver would accept them).
+    advertise_es3: bool,
 }
 
 /// Returns `true` if `cap` is an ES 1.1 fixed-function capability that has
@@ -257,7 +287,7 @@ impl GLES for GLES3OnGL3<'_> {
         true
     }
     fn is_es3(&self) -> bool {
-        true
+        self.advertise_es3
     }
 
     unsafe fn driver_description(&self) -> String {
