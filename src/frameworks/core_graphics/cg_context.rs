@@ -984,7 +984,7 @@ pub fn CGContextDrawLinearGradient(
     cg_bitmap_context::fill_rect(env, context, rect, false);
 }
 
-fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
+pub fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
     if context.is_null() {
         return;
     }
@@ -1016,7 +1016,7 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
     CGFontRetain(env, font);
 }
 
-fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
+pub fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
     if context.is_null() {
         return;
     }

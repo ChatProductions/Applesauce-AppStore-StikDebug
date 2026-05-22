@@ -511,6 +511,59 @@ pub const CLASSES: ClassExports = objc_classes! {
                                    error:error]
 }
 
+// `- (BOOL)createDirectoryAtURL:(NSURL *)url
+//        withIntermediateDirectories:(BOOL)createIntermediates
+//                         attributes:(NSDictionary<NSFileAttributeKey,id> *)attributes
+//                              error:(NSError **)error;`
+// Per Apple's [NSFileManager Reference](https://developer.apple.com/documentation/foundation/nsfilemanager/1415371-createdirectoryaturl):
+// the URL-flavoured variant of `-createDirectoryAtPath:...`. Apple
+// requires that the URL be a file URL. We extract the path via
+// `-[NSURL path]` and forward to the path-based implementation, which
+// already handles every documented case (existing directory, parent
+// missing, intermediate creation, attribute application).
+- (bool)createDirectoryAtURL:(id)url
+   withIntermediateDirectories:(bool)create_intermediates
+                    attributes:(id)attributes
+                         error:(MutPtr<id>)error {
+    if url == nil {
+        if !error.is_null() {
+            let domain = get_static_str(env, NSCocoaErrorDomain);
+            let ns_error = msg_class![env; NSError alloc];
+            let ns_error = msg![env; ns_error initWithDomain:domain code:NSFileReadNoSuchFileError userInfo:nil];
+            env.mem.write(error, ns_error);
+        }
+        return false;
+    }
+    let path: id = msg![env; url path];
+    msg![env; this createDirectoryAtPath:path
+             withIntermediateDirectories:create_intermediates
+                              attributes:attributes
+                                   error:error]
+}
+
+// `- (NSArray<NSURL *> *)URLsForDirectory:(NSSearchPathDirectory)directory
+//                              inDomains:(NSSearchPathDomainMask)domainMask;`
+// Per Apple's [NSFileManager Reference](https://developer.apple.com/documentation/foundation/nsfilemanager/1407726-urlsfordirectory):
+// returns NSURL representations of the directories matched by
+// `NSSearchPathForDirectoriesInDomains`. We call the latter (which
+// already returns the correct paths for every documented
+// `NSSearchPathDirectory`) and lift each path into a file URL via
+// `+[NSURL fileURLWithPath:]`, preserving order.
+- (id)URLsForDirectory:(NSSearchPathDirectory)directory
+             inDomains:(NSSearchPathDomainMask)domain_mask {
+    let paths: id = NSSearchPathForDirectoriesInDomains(env, directory, domain_mask, true);
+    let count: NSUInteger = msg![env; paths count];
+    let mut urls: Vec<id> = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let path: id = msg![env; paths objectAtIndex:i];
+        let url_class = env.objc.get_known_class("NSURL", &mut env.mem);
+        let url: id = msg![env; url_class fileURLWithPath:path];
+        urls.push(url);
+    }
+    let array = ns_array::from_vec(env, urls);
+    autorelease(env, array)
+}
+
 - (bool)createDirectoryAtPath:(id)path
   withIntermediateDirectories:(bool)with_intermediates
                  attributes:(id)_attributes

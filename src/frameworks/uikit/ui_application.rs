@@ -483,6 +483,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: ignoring registerForRemoteNotificationTypes:{}", types);
 }
 
+// `- (UIRemoteNotificationType)enabledRemoteNotificationTypes` —
+// per Apple's [UIApplication Reference](https://developer.apple.com/documentation/uikit/uiapplication/1623060-enabledremotenotificationtypes):
+// the bitmask of remote notification types the user has explicitly
+// enabled in Settings. touchHLE has no system Settings UI and no real
+// push notification subsystem, so no notification types are enabled —
+// the documented value for this state is `UIRemoteNotificationTypeNone`
+// (0). Returning this lets apps using the iOS 3.0–7.x API path skip
+// their push-registration branch without crashing.
+- (UIRemoteNotificationType)enabledRemoteNotificationTypes {
+    0 // UIRemoteNotificationTypeNone
+}
+
 - (NSInteger)applicationIconBadgeNumber {
     0 // default value
 }

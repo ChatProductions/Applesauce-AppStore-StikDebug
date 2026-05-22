@@ -565,6 +565,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     res
 }
 
+// `- (BOOL)writeToURL:(NSURL *)url atomically:(BOOL)atomically` —
+// per Apple's [NSDictionary Reference](https://developer.apple.com/documentation/foundation/nsdictionary/1414800-writetourl):
+// the URL-flavoured analogue of `-writeToFile:atomically:`. Apple's
+// documented contract: the URL must be a file URL, and the dictionary
+// must contain only property-list types. We pull the path out of the
+// URL with `-[NSURL path]` and delegate to the existing path-based
+// implementation, which already serialises via
+// `NSPropertyListSerialization` and writes through `-[NSData writeToFile:atomically:]`.
+- (bool)writeToURL:(id)url
+        atomically:(bool)atomically {
+    if url == nil {
+        return false;
+    }
+    let path: id = msg![env; url path];
+    msg![env; this writeToFile:path atomically:atomically]
+}
+
 // TODO
 
 - (id)valueForKey:(id)key { // NSString*

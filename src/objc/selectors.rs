@@ -75,6 +75,12 @@ impl SEL {
     pub fn is_null(self) -> bool {
         self.0.is_null()
     }
+    /// A null/sentinel SEL. Useful for places that need a "no selector"
+    /// value (e.g. block-based notification observers don't carry a
+    /// selector, but still flow through the same Observer struct).
+    pub const fn null() -> Self {
+        SEL(Ptr::null())
+    }
 }
 
 unsafe impl SafeRead for SEL {}

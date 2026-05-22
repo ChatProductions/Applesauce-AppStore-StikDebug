@@ -899,6 +899,36 @@ fn __vsnprintf_chk(
     vsnprintf(env, s, maxlen, format, ap)
 }
 
+/// `int __snprintf_chk(char *str, size_t maxlen, int flag, size_t strlen,
+///                     const char *format, ...)` — the `_FORTIFY_SOURCE`
+/// wrapper around `snprintf` emitted by Apple's libc / clang when an iOS
+/// app is built with hardening. `strlen` is the compiler-known size of the
+/// destination buffer; `maxlen` is the user-supplied `n` parameter. The
+/// real runtime aborts the process with `__chk_fail()` when `maxlen >
+/// strlen`. For touchHLE we log loudly and clamp `maxlen` so we don't take
+/// down the host process, then delegate to the underlying `vsnprintf`.
+fn __snprintf_chk(
+    env: &mut Environment,
+    s: MutPtr<u8>,
+    maxlen: GuestUSize,
+    _flag: i32,
+    strlen: GuestUSize,
+    format: ConstPtr<u8>,
+    args: DotDotDot,
+) -> i32 {
+    let effective_maxlen = if strlen != 0 && maxlen > strlen {
+        log!(
+            "Warning: __snprintf_chk: maxlen ({}) > strlen ({}); clamping to strlen (real libc would abort with __chk_fail).",
+            maxlen, strlen
+        );
+        strlen
+    } else {
+        maxlen
+    };
+    set_errno(env, 0);
+    vsnprintf(env, s, effective_maxlen, format, args.start())
+}
+
 fn __vsprintf_chk(
     env: &mut Environment,
     s: MutPtr<u8>,
@@ -2002,6 +2032,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vprintf(_, _)),
     export_c_func!(vsnprintf(_, _, _, _)),
     export_c_func!(__vsnprintf_chk(_, _, _, _, _, _)),
+    export_c_func!(__snprintf_chk(_, _, _, _, _, _)),
     export_c_func!(vsprintf(_, _, _)),
     export_c_func!(__vsprintf_chk(_, _, _, _, _, _)),
     export_c_func!(__sprintf_chk(_, _, _, _, _)),

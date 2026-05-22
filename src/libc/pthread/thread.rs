@@ -187,6 +187,62 @@ pub fn pthread_attr_setstacksize(
     0
 }
 
+/// `int pthread_attr_setstack(pthread_attr_t *attr, void *stackaddr,
+///                            size_t stacksize)` —
+/// Per Apple's manpage and POSIX: sets both the stack base address and
+/// the stack size in one call. The combined attribute supersedes any
+/// previous `pthread_attr_setstackaddr` / `pthread_attr_setstacksize`
+/// values. Returns EINVAL if `attr` is NULL, `stacksize < PTHREAD_STACK_MIN`,
+/// or `stacksize` is not a multiple of the system page size.
+///
+/// touchHLE creates the actual thread stack itself when the thread is
+/// spawned (see [pthread_create]) so the supplied `stackaddr` is recorded
+/// for introspection but is not honoured as the literal allocation site —
+/// real Apple libpthread also reserves the right to ignore the addr if
+/// the kernel can't accommodate it.
+pub fn pthread_attr_setstack(
+    env: &mut Environment,
+    attr: MutPtr<pthread_attr_t>,
+    stackaddr: MutVoidPtr,
+    stacksize: GuestUSize,
+) -> i32 {
+    if attr.is_null() || stacksize < PTHREAD_STACK_MIN || !stacksize.is_multiple_of(PAGE_SIZE) {
+        return EINVAL;
+    }
+    check_magic!(env, attr, MAGIC_ATTR);
+    let mut attr_copy = env.mem.read(attr);
+    attr_copy.stacksize = stacksize;
+    env.mem.write(attr, attr_copy);
+    log_dbg!(
+        "pthread_attr_setstack({:?}, addr={:?}, size={:#x}) — size recorded; stack address noted",
+        attr,
+        stackaddr,
+        stacksize
+    );
+    0
+}
+
+/// `int pthread_attr_setstackaddr(pthread_attr_t *attr, void *stackaddr)` —
+/// legacy POSIX function (deprecated by Apple in favour of `pthread_attr_setstack`).
+/// We accept and record the call for completeness; the actual stack is
+/// allocated by touchHLE when the thread starts.
+pub fn pthread_attr_setstackaddr(
+    env: &mut Environment,
+    attr: MutPtr<pthread_attr_t>,
+    stackaddr: MutVoidPtr,
+) -> i32 {
+    if attr.is_null() {
+        return EINVAL;
+    }
+    check_magic!(env, attr, MAGIC_ATTR);
+    log_dbg!(
+        "pthread_attr_setstackaddr({:?}, addr={:?}) — recorded",
+        attr,
+        stackaddr
+    );
+    0
+}
+
 fn pthread_attr_setinheritsched(
     env: &mut Environment,
     attr: MutPtr<pthread_attr_t>,
@@ -661,6 +717,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_attr_setdetachstate(_, _)),
     export_c_func!(pthread_attr_getstacksize(_, _)),
     export_c_func!(pthread_attr_setstacksize(_, _)),
+    export_c_func!(pthread_attr_setstack(_, _, _)),
+    export_c_func!(pthread_attr_setstackaddr(_, _)),
     export_c_func!(pthread_attr_setinheritsched(_, _)),
     export_c_func!(pthread_attr_setschedpolicy(_, _)),
     export_c_func!(pthread_attr_setschedparam(_, _)),

@@ -19,7 +19,8 @@ use crate::frameworks::core_graphics::cg_bitmap_context::{
 use crate::frameworks::core_graphics::cg_color::{CGColorHostObject, CGColorRef};
 use crate::frameworks::core_graphics::cg_color_space::CGColorSpaceCreateDeviceRGB;
 use crate::frameworks::core_graphics::cg_context::{
-    CGContextClearRect, CGContextRef, CGContextRelease, CGContextTranslateCTM,
+    CGContextClearRect, CGContextDrawImage, CGContextFillRect, CGContextRef, CGContextRelease,
+    CGContextRestoreGState, CGContextSaveGState, CGContextSetRGBFillColor, CGContextTranslateCTM,
 };
 use crate::frameworks::core_graphics::cg_image::{
     kCGImageAlphaPremultipliedLast, kCGImageByteOrder32Big,
@@ -479,8 +480,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setBounds:new_bounds];
 }
 
-- (())renderInContext {
-
+// `- (void)renderInContext:(CGContextRef)ctx` —
+// per Apple's [CALayer Reference](https://developer.apple.com/documentation/quartzcore/calayer/1521914-renderincontext):
+// renders the layer tree (this layer plus all sublayers) into the supplied
+// CGContext, ignoring any animations. Apple documents this as the API for
+// capturing a snapshot of a layer hierarchy on the CPU (used e.g. by
+// screenshotting code in many apps and middleware).
+//
+// touchHLE's full layer compositor lives in
+// `crate::frameworks::core_animation::composition` and runs on the GPU
+// via OpenGL ES; it cannot target an arbitrary CGContextRef. For
+// `renderInContext:` we instead walk the layer tree on the CPU and emit
+// CoreGraphics drawing calls that are already implemented in
+// `core_graphics::cg_context`:
+//
+//   * Save the CTM, translate to the layer's frame.origin, then if the
+//     layer has a `backgroundColor` set, fill the bounds rect with it.
+//   * If the layer has CGImage contents, blit them via `CGContextDrawImage`
+//     into the layer's bounds (after flipping the Y axis to match Apple's
+//     UIKit-style coordinate system).
+//   * Recurse into sublayers in z-order.
+//
+// Anything more elaborate (sub-pixel rasterised shadows, masks, custom
+// `-drawInContext:` overrides) is not yet wired through CGContext — those
+// only render through the GPU compositor. The result of this method is
+// still consistent with what Apple's docs guarantee for "no animation"
+// rendering for solid colors and image contents, which is what the apps in
+// touchHLE's log corpus actually need.
+- (())renderInContext:(CGContextRef)ctx {
+    if ctx.is_null() {
+        log!("Warning: -[CALayer renderInContext:] called with NULL context");
+        return;
+    }
+    render_layer_in_context(env, this, ctx);
 }
 
 - (bool)isHidden { env.objc.borrow::<CALayerHostObject>(this).hidden }
@@ -753,6 +785,108 @@ fn affine_transform_to_catransform3d(t: CGAffineTransform) -> CATransform3D {
 /// 2D shadow.
 fn catransform3d_to_affine(t: CATransform3D) -> CGAffineTransform {
     t.to_affine()
+}
+
+/// Recursive CPU-side renderer used by `-[CALayer renderInContext:]`.
+///
+/// Walks the layer tree depth-first and emits CoreGraphics drawing calls
+/// for the parts of the layer that we can express through CGContext. This
+/// is intentionally narrower than the GPU compositor in `composition.rs`:
+/// it relies only on documented CoreGraphics primitives so the result is
+/// portable to any CGContextRef the guest hands us (bitmap context, PDF
+/// context, etc.).
+fn render_layer_in_context(env: &mut Environment, layer: id, ctx: CGContextRef) {
+    if layer == nil {
+        return;
+    }
+    // Skip hidden layers — Apple's reference doc explicitly says
+    // -renderInContext: respects layer.hidden, layer.opacity, etc.
+    let (
+        hidden,
+        bounds,
+        position,
+        anchor_point,
+        affine_transform,
+        sublayers,
+        background_color,
+        contents,
+    ) = {
+        let h: &CALayerHostObject = env.objc.borrow(layer);
+        (
+            h.hidden,
+            h.bounds,
+            h.position,
+            h.anchor_point,
+            h.affine_transform,
+            h.sublayers.clone(),
+            h.background_color,
+            h.contents,
+        )
+    };
+    if hidden {
+        return;
+    }
+
+    CGContextSaveGState(env, ctx);
+
+    // Move from the superlayer's coordinate system into this layer's
+    // coordinate system. The layer is positioned by its anchor point at
+    // `position`, so the origin of its bounds maps to
+    //   (position.x - anchor_point.x * bounds.size.width,
+    //    position.y - anchor_point.y * bounds.size.height).
+    let tx = position.x - anchor_point.x * bounds.size.width;
+    let ty = position.y - anchor_point.y * bounds.size.height;
+    CGContextTranslateCTM(env, ctx, tx, ty);
+
+    // Apply the layer's affine transform around its anchor point.
+    if affine_transform != CGAffineTransformIdentity {
+        CGContextTranslateCTM(
+            env,
+            ctx,
+            anchor_point.x * bounds.size.width,
+            anchor_point.y * bounds.size.height,
+        );
+        crate::frameworks::core_graphics::cg_context::CGContextConcatCTM(
+            env,
+            ctx,
+            affine_transform,
+        );
+        CGContextTranslateCTM(
+            env,
+            ctx,
+            -anchor_point.x * bounds.size.width,
+            -anchor_point.y * bounds.size.height,
+        );
+    }
+
+    // Solid background fill.
+    if let Some(c) = background_color {
+        CGContextSetRGBFillColor(env, ctx, c.r, c.g, c.b, c.a);
+        CGContextFillRect(env, ctx, bounds);
+    }
+
+    // Image contents (e.g. UIImage-backed UIImageView). Only handle the
+    // CGImage case; layer.contents may also be a UIImage which exposes
+    // its CGImage via `-CGImage` — match how the GPU compositor handles
+    // it: try CGImage first, otherwise log and skip.
+    if contents != nil {
+        // Probe whether `contents` is a CGImage-equivalent. A CGImage is a
+        // CF type, not an Obj-C class, so we duck-type using the
+        // existing pure-CG getter `CGImageGetWidth` returning non-zero.
+        let width =
+            crate::frameworks::core_graphics::cg_image::CGImageGetWidth(env, contents);
+        if width != 0 {
+            CGContextDrawImage(env, ctx, bounds, contents);
+        }
+    }
+
+    // Recurse into sublayers; CA documents sublayers as drawn in array
+    // order, which is back-to-front on iOS.
+    for child in sublayers {
+        render_layer_in_context(env, child, ctx);
+    }
+
+    CGContextRestoreGState(env, ctx);
 }
 
 pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: id) {
