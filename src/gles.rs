@@ -67,17 +67,23 @@ pub mod gles1_native;
 pub mod gles1_on_gl2;
 pub mod gles2_glsl;
 pub mod gles2_native;
+pub mod gles3_native;
+pub mod gles3_on_gl3;
 mod gles_generic;
 pub mod present;
 mod util;
 use touchHLE_gl_bindings::gl21compat as gl21compat_raw;
+use touchHLE_gl_bindings::gl33core as gl33core_raw;
 pub use touchHLE_gl_bindings::gles11 as gles11_raw;
 pub use touchHLE_gl_bindings::gles2 as gles2_raw;
+pub use touchHLE_gl_bindings::gles30 as gles30_raw;
 
 use crate::environment::Environment;
 use gles1_native::GLES1NativeContext;
 use gles1_on_gl2::GLES1OnGL2Context;
 use gles2_native::GLES2NativeContext;
+use gles3_native::GLES3NativeContext;
+use gles3_on_gl3::GLES3OnGL3Context;
 pub use gles_generic::GLESContext;
 pub use gles_generic::GLES;
 
@@ -172,6 +178,46 @@ pub fn create_gles2_ctx(env: &mut Environment) -> Box<dyn GLESContext> {
                 boxed
             }
             Err(err) => panic!("Couldn't create OpenGL ES 2.0 context: {}", err),
+        }
+    })
+}
+
+/// Try to create an OpenGL ES 3.0 context, panicking on failure.
+///
+/// This is the entry point used by [crate::frameworks::opengles::eagl] when
+/// `EAGLContext initWithAPI:` is called with `kEAGLRenderingAPIOpenGLES3` (=
+/// 3). It tries the native ES 3.0 backend first — the only thing that works
+/// on Android and on desktop drivers configured for an ES context — and
+/// falls back to the desktop GL 3.3 Core translation backend on hosts
+/// without a native ES 3.0 driver (most x86 Linux/macOS desktops).
+pub fn create_gles3_ctx(env: &mut Environment) -> Box<dyn GLESContext> {
+    env.on_parent_stack_in_coroutine(|window, _options| {
+        assert!(window.on_main_stack());
+        log!("Creating an OpenGL ES 3.0 context:");
+
+        log!("Trying: {}", GLES3NativeContext::description());
+        match GLES3NativeContext::new(window) {
+            Ok(ctx) => {
+                log!("=> Success!");
+                let boxed: Box<dyn GLESContext> = Box::new(ctx);
+                return boxed;
+            }
+            Err(err) => {
+                log!("=> Failed: {}.", err);
+            }
+        }
+
+        log!(
+            "Trying: {} (used for OpenGL ES 3.0)",
+            GLES3OnGL3Context::description()
+        );
+        match GLES3OnGL3Context::new(window) {
+            Ok(ctx) => {
+                log!("=> Success!");
+                let boxed: Box<dyn GLESContext> = Box::new(ctx);
+                boxed
+            }
+            Err(err) => panic!("Couldn't create OpenGL ES 3.0 context: {}", err),
         }
     })
 }

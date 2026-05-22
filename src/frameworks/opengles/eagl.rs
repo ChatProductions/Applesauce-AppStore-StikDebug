@@ -16,7 +16,9 @@ use crate::frameworks::uikit;
 use crate::gles::gles11_raw as gles11; // constants only
 use crate::gles::gles11_raw::types::*;
 use crate::gles::present::{present_frame, FpsCounter};
-use crate::gles::{create_gles1_ctx, create_gles2_ctx, gles1_on_gl2, GLESContext, GLES};
+use crate::gles::{
+    create_gles1_ctx, create_gles2_ctx, create_gles3_ctx, gles1_on_gl2, GLESContext, GLES,
+};
 use crate::mem::MutPtr;
 use crate::objc::{id, msg, nil, objc_classes, release, retain, ClassExports, HostObject};
 use crate::options::Options;
@@ -56,7 +58,6 @@ pub const CONSTANTS: ConstantExports = &[
 type EAGLRenderingAPI = u32;
 const kEAGLRenderingAPIOpenGLES1: EAGLRenderingAPI = 1;
 const kEAGLRenderingAPIOpenGLES2: EAGLRenderingAPI = 2;
-#[allow(dead_code)]
 const kEAGLRenderingAPIOpenGLES3: EAGLRenderingAPI = 3;
 
 /// Resolve the EAGL rendering API the host should actually create a context
@@ -133,9 +134,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithAPI:(EAGLRenderingAPI)api sharegroup:(id)group {
-    if api != kEAGLRenderingAPIOpenGLES1 && api != kEAGLRenderingAPIOpenGLES2 {
+    if api != kEAGLRenderingAPIOpenGLES1
+        && api != kEAGLRenderingAPIOpenGLES2
+        && api != kEAGLRenderingAPIOpenGLES3
+    {
         log!(
-            "TODO: App requested EAGL initWithAPI:{} sharegroup:{:?}, returning nil as we only support API 1 and 2",
+            "App requested EAGL initWithAPI:{} sharegroup:{:?}, returning nil as we only support APIs 1, 2 and 3",
             api,
             group
         );
@@ -160,10 +164,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let effective_api = effective_eagl_api(api, env.options.prefer_gles2_context);
 
-    let mut gles_ins = if effective_api == kEAGLRenderingAPIOpenGLES2 {
-        create_gles2_ctx(env)
-    } else {
-        create_gles1_ctx(env)
+    let mut gles_ins = match effective_api {
+        kEAGLRenderingAPIOpenGLES3 => create_gles3_ctx(env),
+        kEAGLRenderingAPIOpenGLES2 => create_gles2_ctx(env),
+        _ => create_gles1_ctx(env),
     };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
@@ -182,9 +186,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithAPI:(EAGLRenderingAPI)api {
-    if api != kEAGLRenderingAPIOpenGLES1 && api != kEAGLRenderingAPIOpenGLES2 {
+    if api != kEAGLRenderingAPIOpenGLES1
+        && api != kEAGLRenderingAPIOpenGLES2
+        && api != kEAGLRenderingAPIOpenGLES3
+    {
         log!(
-            "TODO: App requested EAGL initWithAPI:{}, returning nil as we only support API 1 and 2",
+            "App requested EAGL initWithAPI:{}, returning nil as we only support APIs 1, 2 and 3",
             api
         );
         return nil;
@@ -192,10 +199,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let effective_api = effective_eagl_api(api, env.options.prefer_gles2_context);
 
-    let mut gles_ins = if effective_api == kEAGLRenderingAPIOpenGLES2 {
-        create_gles2_ctx(env)
-    } else {
-        create_gles1_ctx(env)
+    let mut gles_ins = match effective_api {
+        kEAGLRenderingAPIOpenGLES3 => create_gles3_ctx(env),
+        kEAGLRenderingAPIOpenGLES2 => create_gles2_ctx(env),
+        _ => create_gles1_ctx(env),
     };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
