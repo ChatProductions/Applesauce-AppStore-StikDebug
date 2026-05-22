@@ -1264,4 +1264,871 @@ pub trait GLES {
     ) {
         log_once!("ShaderBinary (OpenGL ES 2.0) not supported by this backend [stubbed]");
     }
+
+    // ===== OpenGL ES 3.0 entry points =====
+    //
+    // The methods below correspond 1:1 to the OpenGL ES 3.0 specification
+    // entry points that are new vs. ES 2.0 (plus a few that have ES-2
+    // OES-extension equivalents — those keep their pre-existing entries
+    // above and gain unsuffixed core variants here).
+    //
+    // Backends that do not implement OpenGL ES 3.0 inherit a default that
+    // log-once warns and returns the type's default value, mirroring the
+    // existing ES 2.0 stub convention. The dedicated `gles3_native` and
+    // `gles3_on_gl3` backends override every single one with a real
+    // pass-through call to the underlying driver — i.e. these are *not*
+    // stubs at the level the guest app interacts with.
+
+    /// Returns `true` if this backend implements OpenGL ES 3.0 (or higher).
+    /// Used by `gles_guest` to gate ES-3-only entry points.
+    fn is_es3(&self) -> bool {
+        false
+    }
+
+    // -- Vertex array objects (promoted from OES_vertex_array_object) --
+    unsafe fn IsVertexArray(&mut self, _array: GLuint) -> GLboolean {
+        log_once!("IsVertexArray (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn BindVertexArray(&mut self, _array: GLuint) {
+        log_once!("BindVertexArray (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn DeleteVertexArrays(&mut self, _n: GLsizei, _arrays: *const GLuint) {
+        log_once!("DeleteVertexArrays (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GenVertexArrays(&mut self, _n: GLsizei, _arrays: *mut GLuint) {
+        log_once!("GenVertexArrays (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Buffer object operations (3.0) --
+    unsafe fn MapBufferRange(
+        &mut self,
+        _target: GLenum,
+        _offset: GLintptr,
+        _length: GLsizeiptr,
+        _access: GLbitfield,
+    ) -> *mut GLvoid {
+        log_once!("MapBufferRange (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        std::ptr::null_mut()
+    }
+    unsafe fn FlushMappedBufferRange(
+        &mut self,
+        _target: GLenum,
+        _offset: GLintptr,
+        _length: GLsizeiptr,
+    ) {
+        log_once!(
+            "FlushMappedBufferRange (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetBufferPointerv(
+        &mut self,
+        _target: GLenum,
+        _pname: GLenum,
+        _params: *mut *mut GLvoid,
+    ) {
+        log_once!("GetBufferPointerv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetBufferParameteri64v(
+        &mut self,
+        _target: GLenum,
+        _pname: GLenum,
+        _params: *mut i64,
+    ) {
+        log_once!(
+            "GetBufferParameteri64v (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn CopyBufferSubData(
+        &mut self,
+        _readTarget: GLenum,
+        _writeTarget: GLenum,
+        _readOffset: GLintptr,
+        _writeOffset: GLintptr,
+        _size: GLsizeiptr,
+    ) {
+        log_once!("CopyBufferSubData (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn BindBufferBase(&mut self, _target: GLenum, _index: GLuint, _buffer: GLuint) {
+        log_once!("BindBufferBase (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn BindBufferRange(
+        &mut self,
+        _target: GLenum,
+        _index: GLuint,
+        _buffer: GLuint,
+        _offset: GLintptr,
+        _size: GLsizeiptr,
+    ) {
+        log_once!("BindBufferRange (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn UnmapBuffer(&mut self, _target: GLenum) -> GLboolean {
+        log_once!("UnmapBuffer (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+
+    // -- 3D textures and immutable storage --
+    unsafe fn TexImage3D(
+        &mut self,
+        _target: GLenum,
+        _level: GLint,
+        _internalformat: GLint,
+        _width: GLsizei,
+        _height: GLsizei,
+        _depth: GLsizei,
+        _border: GLint,
+        _format: GLenum,
+        _type_: GLenum,
+        _pixels: *const GLvoid,
+    ) {
+        log_once!("TexImage3D (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn TexSubImage3D(
+        &mut self,
+        _target: GLenum,
+        _level: GLint,
+        _xoffset: GLint,
+        _yoffset: GLint,
+        _zoffset: GLint,
+        _width: GLsizei,
+        _height: GLsizei,
+        _depth: GLsizei,
+        _format: GLenum,
+        _type_: GLenum,
+        _pixels: *const GLvoid,
+    ) {
+        log_once!("TexSubImage3D (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn CopyTexSubImage3D(
+        &mut self,
+        _target: GLenum,
+        _level: GLint,
+        _xoffset: GLint,
+        _yoffset: GLint,
+        _zoffset: GLint,
+        _x: GLint,
+        _y: GLint,
+        _width: GLsizei,
+        _height: GLsizei,
+    ) {
+        log_once!("CopyTexSubImage3D (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn CompressedTexImage3D(
+        &mut self,
+        _target: GLenum,
+        _level: GLint,
+        _internalformat: GLenum,
+        _width: GLsizei,
+        _height: GLsizei,
+        _depth: GLsizei,
+        _border: GLint,
+        _imageSize: GLsizei,
+        _data: *const GLvoid,
+    ) {
+        log_once!(
+            "CompressedTexImage3D (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn CompressedTexSubImage3D(
+        &mut self,
+        _target: GLenum,
+        _level: GLint,
+        _xoffset: GLint,
+        _yoffset: GLint,
+        _zoffset: GLint,
+        _width: GLsizei,
+        _height: GLsizei,
+        _depth: GLsizei,
+        _format: GLenum,
+        _imageSize: GLsizei,
+        _data: *const GLvoid,
+    ) {
+        log_once!(
+            "CompressedTexSubImage3D (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn TexStorage2D(
+        &mut self,
+        _target: GLenum,
+        _levels: GLsizei,
+        _internalformat: GLenum,
+        _width: GLsizei,
+        _height: GLsizei,
+    ) {
+        log_once!("TexStorage2D (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn TexStorage3D(
+        &mut self,
+        _target: GLenum,
+        _levels: GLsizei,
+        _internalformat: GLenum,
+        _width: GLsizei,
+        _height: GLsizei,
+        _depth: GLsizei,
+    ) {
+        log_once!("TexStorage3D (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Framebuffer / renderbuffer (3.0) --
+    unsafe fn BlitFramebuffer(
+        &mut self,
+        _srcX0: GLint,
+        _srcY0: GLint,
+        _srcX1: GLint,
+        _srcY1: GLint,
+        _dstX0: GLint,
+        _dstY0: GLint,
+        _dstX1: GLint,
+        _dstY1: GLint,
+        _mask: GLbitfield,
+        _filter: GLenum,
+    ) {
+        log_once!("BlitFramebuffer (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn RenderbufferStorageMultisample(
+        &mut self,
+        _target: GLenum,
+        _samples: GLsizei,
+        _internalformat: GLenum,
+        _width: GLsizei,
+        _height: GLsizei,
+    ) {
+        log_once!(
+            "RenderbufferStorageMultisample (OpenGL ES 3.0) not supported by this backend \
+             [stubbed]"
+        );
+    }
+    unsafe fn FramebufferTextureLayer(
+        &mut self,
+        _target: GLenum,
+        _attachment: GLenum,
+        _texture: GLuint,
+        _level: GLint,
+        _layer: GLint,
+    ) {
+        log_once!(
+            "FramebufferTextureLayer (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn InvalidateFramebuffer(
+        &mut self,
+        _target: GLenum,
+        _numAttachments: GLsizei,
+        _attachments: *const GLenum,
+    ) {
+        log_once!(
+            "InvalidateFramebuffer (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn InvalidateSubFramebuffer(
+        &mut self,
+        _target: GLenum,
+        _numAttachments: GLsizei,
+        _attachments: *const GLenum,
+        _x: GLint,
+        _y: GLint,
+        _width: GLsizei,
+        _height: GLsizei,
+    ) {
+        log_once!(
+            "InvalidateSubFramebuffer (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn ReadBuffer(&mut self, _src: GLenum) {
+        log_once!("ReadBuffer (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn DrawBuffers(&mut self, _n: GLsizei, _bufs: *const GLenum) {
+        log_once!("DrawBuffers (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn DrawRangeElements(
+        &mut self,
+        _mode: GLenum,
+        _start: GLuint,
+        _end: GLuint,
+        _count: GLsizei,
+        _type_: GLenum,
+        _indices: *const GLvoid,
+    ) {
+        log_once!("DrawRangeElements (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ClearBufferiv(
+        &mut self,
+        _buffer: GLenum,
+        _drawbuffer: GLint,
+        _value: *const GLint,
+    ) {
+        log_once!("ClearBufferiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ClearBufferuiv(
+        &mut self,
+        _buffer: GLenum,
+        _drawbuffer: GLint,
+        _value: *const GLuint,
+    ) {
+        log_once!("ClearBufferuiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ClearBufferfv(
+        &mut self,
+        _buffer: GLenum,
+        _drawbuffer: GLint,
+        _value: *const GLfloat,
+    ) {
+        log_once!("ClearBufferfv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ClearBufferfi(
+        &mut self,
+        _buffer: GLenum,
+        _drawbuffer: GLint,
+        _depth: GLfloat,
+        _stencil: GLint,
+    ) {
+        log_once!("ClearBufferfi (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Query objects --
+    unsafe fn GenQueries(&mut self, _n: GLsizei, _ids: *mut GLuint) {
+        log_once!("GenQueries (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn DeleteQueries(&mut self, _n: GLsizei, _ids: *const GLuint) {
+        log_once!("DeleteQueries (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn IsQuery(&mut self, _id: GLuint) -> GLboolean {
+        log_once!("IsQuery (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn BeginQuery(&mut self, _target: GLenum, _id: GLuint) {
+        log_once!("BeginQuery (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn EndQuery(&mut self, _target: GLenum) {
+        log_once!("EndQuery (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetQueryiv(&mut self, _target: GLenum, _pname: GLenum, _params: *mut GLint) {
+        log_once!("GetQueryiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetQueryObjectuiv(&mut self, _id: GLuint, _pname: GLenum, _params: *mut GLuint) {
+        log_once!("GetQueryObjectuiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Sampler objects --
+    unsafe fn GenSamplers(&mut self, _count: GLsizei, _samplers: *mut GLuint) {
+        log_once!("GenSamplers (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn DeleteSamplers(&mut self, _count: GLsizei, _samplers: *const GLuint) {
+        log_once!("DeleteSamplers (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn IsSampler(&mut self, _sampler: GLuint) -> GLboolean {
+        log_once!("IsSampler (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn BindSampler(&mut self, _unit: GLuint, _sampler: GLuint) {
+        log_once!("BindSampler (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn SamplerParameteri(&mut self, _sampler: GLuint, _pname: GLenum, _param: GLint) {
+        log_once!("SamplerParameteri (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn SamplerParameteriv(
+        &mut self,
+        _sampler: GLuint,
+        _pname: GLenum,
+        _params: *const GLint,
+    ) {
+        log_once!(
+            "SamplerParameteriv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn SamplerParameterf(
+        &mut self,
+        _sampler: GLuint,
+        _pname: GLenum,
+        _param: GLfloat,
+    ) {
+        log_once!("SamplerParameterf (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn SamplerParameterfv(
+        &mut self,
+        _sampler: GLuint,
+        _pname: GLenum,
+        _params: *const GLfloat,
+    ) {
+        log_once!(
+            "SamplerParameterfv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetSamplerParameteriv(
+        &mut self,
+        _sampler: GLuint,
+        _pname: GLenum,
+        _params: *mut GLint,
+    ) {
+        log_once!(
+            "GetSamplerParameteriv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetSamplerParameterfv(
+        &mut self,
+        _sampler: GLuint,
+        _pname: GLenum,
+        _params: *mut GLfloat,
+    ) {
+        log_once!(
+            "GetSamplerParameterfv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+
+    // -- Transform feedback --
+    unsafe fn BeginTransformFeedback(&mut self, _primitiveMode: GLenum) {
+        log_once!(
+            "BeginTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn EndTransformFeedback(&mut self) {
+        log_once!(
+            "EndTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn BindTransformFeedback(&mut self, _target: GLenum, _id: GLuint) {
+        log_once!(
+            "BindTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn DeleteTransformFeedbacks(&mut self, _n: GLsizei, _ids: *const GLuint) {
+        log_once!(
+            "DeleteTransformFeedbacks (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GenTransformFeedbacks(&mut self, _n: GLsizei, _ids: *mut GLuint) {
+        log_once!(
+            "GenTransformFeedbacks (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn IsTransformFeedback(&mut self, _id: GLuint) -> GLboolean {
+        log_once!(
+            "IsTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+        0
+    }
+    unsafe fn PauseTransformFeedback(&mut self) {
+        log_once!(
+            "PauseTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn ResumeTransformFeedback(&mut self) {
+        log_once!(
+            "ResumeTransformFeedback (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn TransformFeedbackVaryings(
+        &mut self,
+        _program: GLuint,
+        _count: GLsizei,
+        _varyings: *const *const GLchar,
+        _bufferMode: GLenum,
+    ) {
+        log_once!(
+            "TransformFeedbackVaryings (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetTransformFeedbackVarying(
+        &mut self,
+        _program: GLuint,
+        _index: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _size: *mut GLsizei,
+        _type_: *mut GLenum,
+        _name: *mut GLchar,
+    ) {
+        log_once!(
+            "GetTransformFeedbackVarying (OpenGL ES 3.0) not supported by this backend \
+             [stubbed]"
+        );
+    }
+
+    // -- Integer vertex attributes --
+    unsafe fn VertexAttribIPointer(
+        &mut self,
+        _index: GLuint,
+        _size: GLint,
+        _type_: GLenum,
+        _stride: GLsizei,
+        _pointer: *const GLvoid,
+    ) {
+        log_once!(
+            "VertexAttribIPointer (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetVertexAttribIiv(
+        &mut self,
+        _index: GLuint,
+        _pname: GLenum,
+        _params: *mut GLint,
+    ) {
+        log_once!(
+            "GetVertexAttribIiv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetVertexAttribIuiv(
+        &mut self,
+        _index: GLuint,
+        _pname: GLenum,
+        _params: *mut GLuint,
+    ) {
+        log_once!(
+            "GetVertexAttribIuiv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn VertexAttribI4i(
+        &mut self,
+        _index: GLuint,
+        _x: GLint,
+        _y: GLint,
+        _z: GLint,
+        _w: GLint,
+    ) {
+        log_once!("VertexAttribI4i (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn VertexAttribI4ui(
+        &mut self,
+        _index: GLuint,
+        _x: GLuint,
+        _y: GLuint,
+        _z: GLuint,
+        _w: GLuint,
+    ) {
+        log_once!(
+            "VertexAttribI4ui (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn VertexAttribI4iv(&mut self, _index: GLuint, _v: *const GLint) {
+        log_once!("VertexAttribI4iv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn VertexAttribI4uiv(&mut self, _index: GLuint, _v: *const GLuint) {
+        log_once!(
+            "VertexAttribI4uiv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+
+    // -- Integer uniforms --
+    unsafe fn Uniform1ui(&mut self, _location: GLint, _v0: GLuint) {
+        log_once!("Uniform1ui (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform2ui(&mut self, _location: GLint, _v0: GLuint, _v1: GLuint) {
+        log_once!("Uniform2ui (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform3ui(&mut self, _location: GLint, _v0: GLuint, _v1: GLuint, _v2: GLuint) {
+        log_once!("Uniform3ui (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform4ui(
+        &mut self,
+        _location: GLint,
+        _v0: GLuint,
+        _v1: GLuint,
+        _v2: GLuint,
+        _v3: GLuint,
+    ) {
+        log_once!("Uniform4ui (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform1uiv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _value: *const GLuint,
+    ) {
+        log_once!("Uniform1uiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform2uiv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _value: *const GLuint,
+    ) {
+        log_once!("Uniform2uiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform3uiv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _value: *const GLuint,
+    ) {
+        log_once!("Uniform3uiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn Uniform4uiv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _value: *const GLuint,
+    ) {
+        log_once!("Uniform4uiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetUniformuiv(
+        &mut self,
+        _program: GLuint,
+        _location: GLint,
+        _params: *mut GLuint,
+    ) {
+        log_once!("GetUniformuiv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn UniformMatrix2x3fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix2x3fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn UniformMatrix3x2fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix3x2fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn UniformMatrix2x4fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix2x4fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn UniformMatrix4x2fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix4x2fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn UniformMatrix3x4fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix3x4fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn UniformMatrix4x3fv(
+        &mut self,
+        _location: GLint,
+        _count: GLsizei,
+        _transpose: GLboolean,
+        _value: *const GLfloat,
+    ) {
+        log_once!(
+            "UniformMatrix4x3fv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+
+    // -- Uniform blocks --
+    unsafe fn GetUniformIndices(
+        &mut self,
+        _program: GLuint,
+        _uniformCount: GLsizei,
+        _uniformNames: *const *const GLchar,
+        _uniformIndices: *mut GLuint,
+    ) {
+        log_once!(
+            "GetUniformIndices (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetActiveUniformsiv(
+        &mut self,
+        _program: GLuint,
+        _uniformCount: GLsizei,
+        _uniformIndices: *const GLuint,
+        _pname: GLenum,
+        _params: *mut GLint,
+    ) {
+        log_once!(
+            "GetActiveUniformsiv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetUniformBlockIndex(
+        &mut self,
+        _program: GLuint,
+        _uniformBlockName: *const GLchar,
+    ) -> GLuint {
+        log_once!(
+            "GetUniformBlockIndex (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+        0xFFFF_FFFF // GL_INVALID_INDEX
+    }
+    unsafe fn GetActiveUniformBlockiv(
+        &mut self,
+        _program: GLuint,
+        _uniformBlockIndex: GLuint,
+        _pname: GLenum,
+        _params: *mut GLint,
+    ) {
+        log_once!(
+            "GetActiveUniformBlockiv (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn GetActiveUniformBlockName(
+        &mut self,
+        _program: GLuint,
+        _uniformBlockIndex: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _uniformBlockName: *mut GLchar,
+    ) {
+        log_once!(
+            "GetActiveUniformBlockName (OpenGL ES 3.0) not supported by this backend \
+             [stubbed]"
+        );
+    }
+    unsafe fn UniformBlockBinding(
+        &mut self,
+        _program: GLuint,
+        _uniformBlockIndex: GLuint,
+        _uniformBlockBinding: GLuint,
+    ) {
+        log_once!(
+            "UniformBlockBinding (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+
+    // -- Instanced rendering --
+    unsafe fn DrawArraysInstanced(
+        &mut self,
+        _mode: GLenum,
+        _first: GLint,
+        _count: GLsizei,
+        _instanceCount: GLsizei,
+    ) {
+        log_once!(
+            "DrawArraysInstanced (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn DrawElementsInstanced(
+        &mut self,
+        _mode: GLenum,
+        _count: GLsizei,
+        _type_: GLenum,
+        _indices: *const GLvoid,
+        _instanceCount: GLsizei,
+    ) {
+        log_once!(
+            "DrawElementsInstanced (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+    unsafe fn VertexAttribDivisor(&mut self, _index: GLuint, _divisor: GLuint) {
+        log_once!(
+            "VertexAttribDivisor (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
+
+    // -- Sync objects --
+    unsafe fn FenceSync(&mut self, _condition: GLenum, _flags: GLbitfield) -> usize {
+        log_once!("FenceSync (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn IsSync(&mut self, _sync: usize) -> GLboolean {
+        log_once!("IsSync (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn DeleteSync(&mut self, _sync: usize) {
+        log_once!("DeleteSync (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ClientWaitSync(
+        &mut self,
+        _sync: usize,
+        _flags: GLbitfield,
+        _timeout: u64,
+    ) -> GLenum {
+        log_once!("ClientWaitSync (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        0
+    }
+    unsafe fn WaitSync(&mut self, _sync: usize, _flags: GLbitfield, _timeout: u64) {
+        log_once!("WaitSync (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetSynciv(
+        &mut self,
+        _sync: usize,
+        _pname: GLenum,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _values: *mut GLint,
+    ) {
+        log_once!("GetSynciv (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- 64-bit / indexed getters --
+    unsafe fn GetInteger64v(&mut self, _pname: GLenum, _data: *mut i64) {
+        log_once!("GetInteger64v (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetIntegeri_v(&mut self, _target: GLenum, _index: GLuint, _data: *mut GLint) {
+        log_once!("GetIntegeri_v (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetInteger64i_v(&mut self, _target: GLenum, _index: GLuint, _data: *mut i64) {
+        log_once!("GetInteger64i_v (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Program binary --
+    unsafe fn ProgramParameteri(&mut self, _program: GLuint, _pname: GLenum, _value: GLint) {
+        log_once!("ProgramParameteri (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn ProgramBinary(
+        &mut self,
+        _program: GLuint,
+        _binaryFormat: GLenum,
+        _binary: *const GLvoid,
+        _length: GLsizei,
+    ) {
+        log_once!("ProgramBinary (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+    unsafe fn GetProgramBinary(
+        &mut self,
+        _program: GLuint,
+        _bufSize: GLsizei,
+        _length: *mut GLsizei,
+        _binaryFormat: *mut GLenum,
+        _binary: *mut GLvoid,
+    ) {
+        log_once!("GetProgramBinary (OpenGL ES 3.0) not supported by this backend [stubbed]");
+    }
+
+    // -- Misc 3.0 --
+    unsafe fn GetStringi(&mut self, _name: GLenum, _index: GLuint) -> *const GLubyte {
+        log_once!("GetStringi (OpenGL ES 3.0) not supported by this backend [stubbed]");
+        std::ptr::null()
+    }
+    unsafe fn GetFragDataLocation(
+        &mut self,
+        _program: GLuint,
+        _name: *const GLchar,
+    ) -> GLint {
+        log_once!(
+            "GetFragDataLocation (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+        -1
+    }
+    unsafe fn GetInternalformativ(
+        &mut self,
+        _target: GLenum,
+        _internalformat: GLenum,
+        _pname: GLenum,
+        _bufSize: GLsizei,
+        _params: *mut GLint,
+    ) {
+        log_once!(
+            "GetInternalformativ (OpenGL ES 3.0) not supported by this backend [stubbed]"
+        );
+    }
 }

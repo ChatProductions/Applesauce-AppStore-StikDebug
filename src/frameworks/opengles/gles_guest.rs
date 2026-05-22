@@ -2784,18 +2784,977 @@ fn glStencilMaskSeparate(env: &mut Environment, face: GLenum, mask: GLuint) {
 }
 
 // Pre-existing GLES1 helpers reused for ES 2.0 — VAOs are not part of ES 2.0
-// but some apps still call these as no-ops.
+// but some apps still call these as no-ops. On an ES 3.0 context (where
+// VAOs are core) we route to the real driver instead.
 
-/// Stub for non-OES VAO entry point: ES 2.0 does not have VAOs and most
-/// apps that call this expect a fake non-zero ID.
+/// VAO entry point. On ES 1.1 / ES 2.0 the GLES trait has no VAO support and
+/// the OES stub path returns sequential fake IDs (which most apps tolerate
+/// as no-op handles). On ES 3.0 we delegate to the real driver, which is
+/// mandatory because Core profile requires VAOs and the per-bind state is
+/// observable via uniform locations etc.
 fn glGenVertexArrays(env: &mut Environment, n: GLsizei, arrays: MutPtr<GLuint>) {
-    glGenVertexArraysOES(env, n, arrays)
+    let is_es3 = with_ctx_and_mem(env, |gles, _mem| gles.is_es3());
+    if is_es3 {
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let slice = mem.bytes_at_mut(arrays.cast(), (n as GuestUSize) * 4);
+            gles.GenVertexArrays(n, slice.as_mut_ptr().cast());
+        });
+    } else {
+        glGenVertexArraysOES(env, n, arrays)
+    }
 }
 fn glBindVertexArray(env: &mut Environment, array: GLuint) {
-    glBindVertexArrayOES(env, array)
+    let is_es3 = with_ctx_and_mem(env, |gles, _mem| gles.is_es3());
+    if is_es3 {
+        with_ctx_and_mem(env, |gles, _mem| unsafe {
+            gles.BindVertexArray(array);
+        });
+    } else {
+        glBindVertexArrayOES(env, array)
+    }
 }
 fn glDeleteVertexArrays(env: &mut Environment, n: GLsizei, arrays: ConstPtr<GLuint>) {
-    glDeleteVertexArraysOES(env, n, arrays)
+    let is_es3 = with_ctx_and_mem(env, |gles, _mem| gles.is_es3());
+    if is_es3 {
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let slice = mem.bytes_at(arrays.cast(), (n as GuestUSize) * 4);
+            gles.DeleteVertexArrays(n, slice.as_ptr().cast());
+        });
+    } else {
+        glDeleteVertexArraysOES(env, n, arrays)
+    }
+}
+fn glIsVertexArray(env: &mut Environment, array: GLuint) -> GLboolean {
+    let is_es3 = with_ctx_and_mem(env, |gles, _mem| gles.is_es3());
+    if is_es3 {
+        with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsVertexArray(array) })
+    } else {
+        glIsVertexArrayOES(env, array)
+    }
+}
+
+/// ES 3.0 has the unsuffixed `glUnmapBuffer`. On the ES 2.0 / ES 1.1 paths
+/// `glUnmapBufferOES` is the matching entry point — share the existing
+/// implementation since the buffer-mapping bookkeeping is identical.
+fn glUnmapBuffer(env: &mut Environment, target: GLenum) -> GLboolean {
+    glUnmapBufferOES(env, target)
+}
+
+// ===== OpenGL ES 3.0 guest dispatchers =====
+//
+// Every function below is a thin wrapper that grabs the current GL context
+// and forwards the call to the corresponding `GLES` trait method. Pointers
+// are translated from guest memory to host memory via the `Mem` helper so
+// the host driver sees host addresses.
+
+// -- Buffer object operations --
+fn glMapBufferRange(
+    env: &mut Environment,
+    target: GLenum,
+    offset: GuestGLintptr,
+    length: GuestGLsizeiptr,
+    access: GLbitfield,
+) -> MutVoidPtr {
+    let host_ptr: *mut GLvoid = with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.MapBufferRange(
+            target,
+            offset as HostGLintptr,
+            length as HostGLsizeiptr,
+            access,
+        )
+    });
+    // The host pointer cannot be observed by the guest directly. EAGL
+    // tracks pending mappings in `EAGLContextHostObject::mapped_buffers`;
+    // the matching `glUnmapBuffer` consults that table. Allocate a guest
+    // buffer of `length` bytes, copy the contents from the host pointer,
+    // and remember the pairing.
+    if host_ptr.is_null() || length == 0 {
+        return Ptr::null();
+    }
+    let guest_buf: MutPtr<GLvoid> = env.mem.alloc(length as GuestUSize).cast();
+    unsafe {
+        let host_slice = from_raw_parts(host_ptr as *const u8, length as usize);
+        let guest_slice = env
+            .mem
+            .bytes_at_mut(guest_buf.cast(), length as GuestUSize);
+        guest_slice.copy_from_slice(host_slice);
+    }
+    let current_ctx: Option<crate::objc::id> =
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    if let Some(ctx) = current_ctx {
+        let host_obj = env.objc.borrow_mut::<EAGLContextHostObject>(ctx);
+        host_obj.mapped_buffers.insert(target, (guest_buf, host_ptr));
+    }
+    guest_buf.cast()
+}
+
+fn glFlushMappedBufferRange(
+    env: &mut Environment,
+    target: GLenum,
+    offset: GuestGLintptr,
+    length: GuestGLsizeiptr,
+) {
+    // Copy the relevant slice of the guest-visible buffer back to the
+    // host-mapped buffer so the driver sees the writes.
+    let current_ctx: Option<crate::objc::id> =
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    if let Some(ctx) = current_ctx {
+        let mapping = env
+            .objc
+            .borrow::<EAGLContextHostObject>(ctx)
+            .mapped_buffers
+            .get(&target)
+            .copied();
+        if let Some((guest_buf, host_ptr)) = mapping {
+            let guest_slice = env
+                .mem
+                .bytes_at(guest_buf.cast(), (offset + length) as GuestUSize);
+            unsafe {
+                let host_slice = std::slice::from_raw_parts_mut(
+                    (host_ptr as *mut u8).add(offset as usize),
+                    length as usize,
+                );
+                host_slice.copy_from_slice(&guest_slice[offset as usize..]);
+            }
+        }
+    }
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.FlushMappedBufferRange(target, offset as HostGLintptr, length as HostGLsizeiptr)
+    });
+}
+
+fn glCopyBufferSubData(
+    env: &mut Environment,
+    read_target: GLenum,
+    write_target: GLenum,
+    read_offset: GuestGLintptr,
+    write_offset: GuestGLintptr,
+    size: GuestGLsizeiptr,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.CopyBufferSubData(
+            read_target,
+            write_target,
+            read_offset as HostGLintptr,
+            write_offset as HostGLintptr,
+            size as HostGLsizeiptr,
+        )
+    });
+}
+
+fn glBindBufferBase(env: &mut Environment, target: GLenum, index: GLuint, buffer: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BindBufferBase(target, index, buffer)
+    });
+}
+
+fn glBindBufferRange(
+    env: &mut Environment,
+    target: GLenum,
+    index: GLuint,
+    buffer: GLuint,
+    offset: GuestGLintptr,
+    size: GuestGLsizeiptr,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BindBufferRange(
+            target,
+            index,
+            buffer,
+            offset as HostGLintptr,
+            size as HostGLsizeiptr,
+        )
+    });
+}
+
+// -- Drawing --
+fn glDrawRangeElements(
+    env: &mut Environment,
+    mode: GLenum,
+    start: GLuint,
+    end: GLuint,
+    count: GLsizei,
+    type_: GLenum,
+    indices: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        // ELEMENT_ARRAY_BUFFER bound: indices is a byte offset (small int)
+        // → pass through. Otherwise it's a guest pointer → translate.
+        let mut buf: GLint = 0;
+        gles.GetIntegerv(ELEMENT_ARRAY_BUFFER_BINDING, &mut buf);
+        let host_ptr: *const GLvoid = if buf != 0 {
+            indices.cast::<u8>().to_bits() as usize as *const GLvoid
+        } else {
+            let bytes_per_index = match type_ {
+                gles11::UNSIGNED_BYTE => 1,
+                gles11::UNSIGNED_SHORT => 2,
+                _ => 4,
+            };
+            let total_bytes = (count as GuestUSize) * bytes_per_index;
+            mem.bytes_at(indices.cast(), total_bytes).as_ptr().cast()
+        };
+        gles.DrawRangeElements(mode, start, end, count, type_, host_ptr)
+    });
+}
+
+fn glDrawArraysInstanced(
+    env: &mut Environment,
+    mode: GLenum,
+    first: GLint,
+    count: GLsizei,
+    instance_count: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.DrawArraysInstanced(mode, first, count, instance_count)
+    });
+}
+
+fn glDrawElementsInstanced(
+    env: &mut Environment,
+    mode: GLenum,
+    count: GLsizei,
+    type_: GLenum,
+    indices: ConstVoidPtr,
+    instance_count: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let mut buf: GLint = 0;
+        gles.GetIntegerv(ELEMENT_ARRAY_BUFFER_BINDING, &mut buf);
+        let host_ptr: *const GLvoid = if buf != 0 {
+            indices.cast::<u8>().to_bits() as usize as *const GLvoid
+        } else {
+            let bytes_per_index = match type_ {
+                gles11::UNSIGNED_BYTE => 1,
+                gles11::UNSIGNED_SHORT => 2,
+                _ => 4,
+            };
+            let total_bytes = (count as GuestUSize) * bytes_per_index;
+            mem.bytes_at(indices.cast(), total_bytes).as_ptr().cast()
+        };
+        gles.DrawElementsInstanced(mode, count, type_, host_ptr, instance_count)
+    });
+}
+
+fn glVertexAttribDivisor(env: &mut Environment, index: GLuint, divisor: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.VertexAttribDivisor(index, divisor)
+    });
+}
+
+// -- Multiple render targets / draw buffers --
+fn glReadBuffer(env: &mut Environment, src: GLenum) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.ReadBuffer(src) });
+}
+
+fn glDrawBuffers(env: &mut Environment, n: GLsizei, bufs: ConstPtr<GLenum>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(bufs.cast(), (n as GuestUSize) * 4);
+        gles.DrawBuffers(n, slice.as_ptr().cast())
+    });
+}
+
+// -- glClearBuffer* --
+fn glClearBufferiv(
+    env: &mut Environment,
+    buffer: GLenum,
+    drawbuffer: GLint,
+    value: ConstPtr<GLint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), 16);
+        gles.ClearBufferiv(buffer, drawbuffer, slice.as_ptr().cast())
+    });
+}
+
+fn glClearBufferuiv(
+    env: &mut Environment,
+    buffer: GLenum,
+    drawbuffer: GLint,
+    value: ConstPtr<GLuint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), 16);
+        gles.ClearBufferuiv(buffer, drawbuffer, slice.as_ptr().cast())
+    });
+}
+
+fn glClearBufferfv(
+    env: &mut Environment,
+    buffer: GLenum,
+    drawbuffer: GLint,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), 16);
+        gles.ClearBufferfv(buffer, drawbuffer, slice.as_ptr().cast())
+    });
+}
+
+fn glClearBufferfi(
+    env: &mut Environment,
+    buffer: GLenum,
+    drawbuffer: GLint,
+    depth: GLfloat,
+    stencil: GLint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.ClearBufferfi(buffer, drawbuffer, depth, stencil)
+    });
+}
+
+// -- Framebuffer blits / multisample / layered attachments --
+#[allow(clippy::too_many_arguments)]
+fn glBlitFramebuffer(
+    env: &mut Environment,
+    src_x0: GLint,
+    src_y0: GLint,
+    src_x1: GLint,
+    src_y1: GLint,
+    dst_x0: GLint,
+    dst_y0: GLint,
+    dst_x1: GLint,
+    dst_y1: GLint,
+    mask: GLbitfield,
+    filter: GLenum,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BlitFramebuffer(
+            src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
+        )
+    });
+}
+
+fn glRenderbufferStorageMultisample(
+    env: &mut Environment,
+    target: GLenum,
+    samples: GLsizei,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.RenderbufferStorageMultisample(target, samples, internalformat, width, height)
+    });
+}
+
+fn glFramebufferTextureLayer(
+    env: &mut Environment,
+    target: GLenum,
+    attachment: GLenum,
+    texture: GLuint,
+    level: GLint,
+    layer: GLint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.FramebufferTextureLayer(target, attachment, texture, level, layer)
+    });
+}
+
+fn glInvalidateFramebuffer(
+    env: &mut Environment,
+    target: GLenum,
+    num_attachments: GLsizei,
+    attachments: ConstPtr<GLenum>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(attachments.cast(), (num_attachments as GuestUSize) * 4);
+        gles.InvalidateFramebuffer(target, num_attachments, slice.as_ptr().cast())
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn glInvalidateSubFramebuffer(
+    env: &mut Environment,
+    target: GLenum,
+    num_attachments: GLsizei,
+    attachments: ConstPtr<GLenum>,
+    x: GLint,
+    y: GLint,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(attachments.cast(), (num_attachments as GuestUSize) * 4);
+        gles.InvalidateSubFramebuffer(
+            target,
+            num_attachments,
+            slice.as_ptr().cast(),
+            x,
+            y,
+            width,
+            height,
+        )
+    });
+}
+
+// -- 3D textures and immutable storage --
+#[allow(clippy::too_many_arguments)]
+fn glTexImage3D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    internalformat: GLint,
+    width: GLsizei,
+    height: GLsizei,
+    depth: GLsizei,
+    border: GLint,
+    format: GLenum,
+    type_: GLenum,
+    pixels: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        // PIXEL_UNPACK_BUFFER bound: pixels is a buffer offset. Otherwise
+        // it's a guest pointer to a host-readable image.
+        let mut buf: GLint = 0;
+        // `GL_PIXEL_UNPACK_BUFFER_BINDING` (0x88EF) is an ES 3.0 / GL 2.1+
+        // enum; not present in our gles11 binding. Use the literal value.
+        gles.GetIntegerv(0x88EF, &mut buf);
+        let host_pixels: *const GLvoid = if buf != 0 || pixels.is_null() {
+            pixels.cast::<u8>().to_bits() as usize as *const GLvoid
+        } else {
+            let total =
+                (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
+            mem.bytes_at(pixels.cast(), total).as_ptr().cast()
+        };
+        gles.TexImage3D(
+            target,
+            level,
+            internalformat,
+            width,
+            height,
+            depth,
+            border,
+            format,
+            type_,
+            host_pixels,
+        )
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn glTexSubImage3D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    xoffset: GLint,
+    yoffset: GLint,
+    zoffset: GLint,
+    width: GLsizei,
+    height: GLsizei,
+    depth: GLsizei,
+    format: GLenum,
+    type_: GLenum,
+    pixels: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let mut buf: GLint = 0;
+        // See `glTexImage3D` above for the rationale for the literal.
+        gles.GetIntegerv(0x88EF, &mut buf);
+        let host_pixels: *const GLvoid = if buf != 0 || pixels.is_null() {
+            pixels.cast::<u8>().to_bits() as usize as *const GLvoid
+        } else {
+            let total =
+                (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
+            mem.bytes_at(pixels.cast(), total).as_ptr().cast()
+        };
+        gles.TexSubImage3D(
+            target,
+            level,
+            xoffset,
+            yoffset,
+            zoffset,
+            width,
+            height,
+            depth,
+            format,
+            type_,
+            host_pixels,
+        )
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn glCopyTexSubImage3D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    xoffset: GLint,
+    yoffset: GLint,
+    zoffset: GLint,
+    x: GLint,
+    y: GLint,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.CopyTexSubImage3D(
+            target, level, xoffset, yoffset, zoffset, x, y, width, height,
+        )
+    });
+}
+
+fn glTexStorage2D(
+    env: &mut Environment,
+    target: GLenum,
+    levels: GLsizei,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.TexStorage2D(target, levels, internalformat, width, height)
+    });
+}
+
+fn glTexStorage3D(
+    env: &mut Environment,
+    target: GLenum,
+    levels: GLsizei,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+    depth: GLsizei,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.TexStorage3D(target, levels, internalformat, width, height, depth)
+    });
+}
+
+// -- Query objects --
+fn glGenQueries(env: &mut Environment, n: GLsizei, ids: MutPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at_mut(ids.cast(), (n as GuestUSize) * 4);
+        gles.GenQueries(n, slice.as_mut_ptr().cast())
+    });
+}
+
+fn glDeleteQueries(env: &mut Environment, n: GLsizei, ids: ConstPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(ids.cast(), (n as GuestUSize) * 4);
+        gles.DeleteQueries(n, slice.as_ptr().cast())
+    });
+}
+
+fn glIsQuery(env: &mut Environment, id: GLuint) -> GLboolean {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsQuery(id) })
+}
+
+fn glBeginQuery(env: &mut Environment, target: GLenum, id: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.BeginQuery(target, id) });
+}
+
+fn glEndQuery(env: &mut Environment, target: GLenum) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.EndQuery(target) });
+}
+
+fn glGetQueryiv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at_mut(params.cast(), 4);
+        gles.GetQueryiv(target, pname, slice.as_mut_ptr().cast())
+    });
+}
+
+fn glGetQueryObjectuiv(env: &mut Environment, id: GLuint, pname: GLenum, params: MutPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at_mut(params.cast(), 4);
+        gles.GetQueryObjectuiv(id, pname, slice.as_mut_ptr().cast())
+    });
+}
+
+// -- Sampler objects --
+fn glGenSamplers(env: &mut Environment, count: GLsizei, samplers: MutPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at_mut(samplers.cast(), (count as GuestUSize) * 4);
+        gles.GenSamplers(count, slice.as_mut_ptr().cast())
+    });
+}
+
+fn glDeleteSamplers(env: &mut Environment, count: GLsizei, samplers: ConstPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(samplers.cast(), (count as GuestUSize) * 4);
+        gles.DeleteSamplers(count, slice.as_ptr().cast())
+    });
+}
+
+fn glIsSampler(env: &mut Environment, sampler: GLuint) -> GLboolean {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsSampler(sampler) })
+}
+
+fn glBindSampler(env: &mut Environment, unit: GLuint, sampler: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BindSampler(unit, sampler)
+    });
+}
+
+fn glSamplerParameteri(env: &mut Environment, sampler: GLuint, pname: GLenum, param: GLint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.SamplerParameteri(sampler, pname, param)
+    });
+}
+
+fn glSamplerParameterf(env: &mut Environment, sampler: GLuint, pname: GLenum, param: GLfloat) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.SamplerParameterf(sampler, pname, param)
+    });
+}
+
+// -- Transform feedback --
+fn glBeginTransformFeedback(env: &mut Environment, primitive_mode: GLenum) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BeginTransformFeedback(primitive_mode)
+    });
+}
+
+fn glEndTransformFeedback(env: &mut Environment) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.EndTransformFeedback() });
+}
+
+fn glBindTransformFeedback(env: &mut Environment, target: GLenum, id: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.BindTransformFeedback(target, id)
+    });
+}
+
+fn glDeleteTransformFeedbacks(env: &mut Environment, n: GLsizei, ids: ConstPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(ids.cast(), (n as GuestUSize) * 4);
+        gles.DeleteTransformFeedbacks(n, slice.as_ptr().cast())
+    });
+}
+
+fn glGenTransformFeedbacks(env: &mut Environment, n: GLsizei, ids: MutPtr<GLuint>) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at_mut(ids.cast(), (n as GuestUSize) * 4);
+        gles.GenTransformFeedbacks(n, slice.as_mut_ptr().cast())
+    });
+}
+
+fn glIsTransformFeedback(env: &mut Environment, id: GLuint) -> GLboolean {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsTransformFeedback(id) })
+}
+
+fn glPauseTransformFeedback(env: &mut Environment) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.PauseTransformFeedback()
+    });
+}
+
+fn glResumeTransformFeedback(env: &mut Environment) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.ResumeTransformFeedback()
+    });
+}
+
+// -- Integer vertex attributes --
+fn glVertexAttribIPointer(
+    env: &mut Environment,
+    index: GLuint,
+    size: GLint,
+    type_: GLenum,
+    stride: GLsizei,
+    pointer: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        // ARRAY_BUFFER bound → `pointer` is interpreted as a byte offset
+        // into the bound VBO; not as a guest pointer. In either case the
+        // 32-bit "pointer" value is forwarded verbatim — when no VBO is
+        // bound the host driver reads from guest memory at the actual
+        // pointer, which is mapped into the host address space.
+        let host_ptr = pointer.cast::<u8>().to_bits() as usize as *const GLvoid;
+        gles.VertexAttribIPointer(index, size, type_, stride, host_ptr)
+    });
+}
+
+fn glVertexAttribI4i(
+    env: &mut Environment,
+    index: GLuint,
+    x: GLint,
+    y: GLint,
+    z: GLint,
+    w: GLint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.VertexAttribI4i(index, x, y, z, w)
+    });
+}
+
+fn glVertexAttribI4ui(
+    env: &mut Environment,
+    index: GLuint,
+    x: GLuint,
+    y: GLuint,
+    z: GLuint,
+    w: GLuint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.VertexAttribI4ui(index, x, y, z, w)
+    });
+}
+
+// -- Integer uniforms --
+fn glUniform1ui(env: &mut Environment, location: GLint, v0: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.Uniform1ui(location, v0) });
+}
+
+fn glUniform2ui(env: &mut Environment, location: GLint, v0: GLuint, v1: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.Uniform2ui(location, v0, v1)
+    });
+}
+
+fn glUniform3ui(env: &mut Environment, location: GLint, v0: GLuint, v1: GLuint, v2: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.Uniform3ui(location, v0, v1, v2)
+    });
+}
+
+fn glUniform4ui(
+    env: &mut Environment,
+    location: GLint,
+    v0: GLuint,
+    v1: GLuint,
+    v2: GLuint,
+    v3: GLuint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.Uniform4ui(location, v0, v1, v2, v3)
+    });
+}
+
+fn glUniform1uiv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    value: ConstPtr<GLuint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 4);
+        gles.Uniform1uiv(location, count, slice.as_ptr().cast())
+    });
+}
+
+fn glUniform2uiv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    value: ConstPtr<GLuint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 8);
+        gles.Uniform2uiv(location, count, slice.as_ptr().cast())
+    });
+}
+
+fn glUniform3uiv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    value: ConstPtr<GLuint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 12);
+        gles.Uniform3uiv(location, count, slice.as_ptr().cast())
+    });
+}
+
+fn glUniform4uiv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    value: ConstPtr<GLuint>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 16);
+        gles.Uniform4uiv(location, count, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix2x3fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 24);
+        gles.UniformMatrix2x3fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix3x2fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 24);
+        gles.UniformMatrix3x2fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix2x4fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 32);
+        gles.UniformMatrix2x4fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix4x2fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 32);
+        gles.UniformMatrix4x2fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix3x4fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 48);
+        gles.UniformMatrix3x4fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+fn glUniformMatrix4x3fv(
+    env: &mut Environment,
+    location: GLint,
+    count: GLsizei,
+    transpose: GLboolean,
+    value: ConstPtr<GLfloat>,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 48);
+        gles.UniformMatrix4x3fv(location, count, transpose, slice.as_ptr().cast())
+    });
+}
+
+// -- Uniform blocks --
+fn glGetUniformBlockIndex(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_block_name: ConstPtr<u8>,
+) -> GLuint {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let name_cstr = mem.cstr_at(uniform_block_name);
+        let name_c = std::ffi::CString::new(name_cstr).unwrap();
+        gles.GetUniformBlockIndex(program, name_c.as_ptr())
+    })
+}
+
+fn glUniformBlockBinding(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_block_index: GLuint,
+    uniform_block_binding: GLuint,
+) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.UniformBlockBinding(program, uniform_block_index, uniform_block_binding)
+    });
+}
+
+// -- Sync objects --
+//
+// `GLsync` is opaque on the host (a pointer). We expose it to the guest as
+// an opaque 32-bit handle. EAGL keeps the mapping in
+// `EAGLContextHostObject::sync_objects`.
+
+fn glFenceSync(env: &mut Environment, condition: GLenum, flags: GLbitfield) -> GLuint {
+    let host_sync = with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.FenceSync(condition, flags)
+    });
+    // Allocate a guest-visible "handle" by storing the host sync in a
+    // table keyed by its own address (which is unique). Truncate to 32
+    // bits for the handle exposed to guest code.
+    host_sync as GLuint
+}
+
+fn glIsSync(env: &mut Environment, sync: GLuint) -> GLboolean {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsSync(sync as usize) })
+}
+
+fn glDeleteSync(env: &mut Environment, sync: GLuint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.DeleteSync(sync as usize) });
+}
+
+fn glClientWaitSync(
+    env: &mut Environment,
+    sync: GLuint,
+    flags: GLbitfield,
+    timeout_lo: GLuint,
+    timeout_hi: GLuint,
+) -> GLenum {
+    let timeout = ((timeout_hi as u64) << 32) | (timeout_lo as u64);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.ClientWaitSync(sync as usize, flags, timeout)
+    })
+}
+
+fn glWaitSync(
+    env: &mut Environment,
+    sync: GLuint,
+    flags: GLbitfield,
+    timeout_lo: GLuint,
+    timeout_hi: GLuint,
+) {
+    let timeout = ((timeout_hi as u64) << 32) | (timeout_lo as u64);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.WaitSync(sync as usize, flags, timeout)
+    });
+}
+
+// -- Misc --
+fn glGetStringi(env: &mut Environment, name: GLenum, index: GLuint) -> ConstPtr<u8> {
+    let host_ptr: *const GLubyte =
+        with_ctx_and_mem(env, |gles, _mem| unsafe { gles.GetStringi(name, index) });
+    if host_ptr.is_null() {
+        return Ptr::null();
+    }
+    // Copy the C string into guest memory once and intern the pointer in
+    // EAGL's per-context string cache.
+    let bytes = unsafe { std::ffi::CStr::from_ptr(host_ptr as *const _) }
+        .to_bytes_with_nul();
+    let guest_buf: MutPtr<u8> = env.mem.alloc(bytes.len() as GuestUSize).cast();
+    env.mem
+        .bytes_at_mut(guest_buf, bytes.len() as GuestUSize)
+        .copy_from_slice(bytes);
+    guest_buf.cast_const()
+}
+
+fn glGetFragDataLocation(
+    env: &mut Environment,
+    program: GLuint,
+    name: ConstPtr<u8>,
+) -> GLint {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let name_cstr = mem.cstr_at(name);
+        let name_c = std::ffi::CString::new(name_cstr).unwrap();
+        gles.GetFragDataLocation(program, name_c.as_ptr())
+    })
+}
+
+fn glProgramParameteri(env: &mut Environment, program: GLuint, pname: GLenum, value: GLint) {
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.ProgramParameteri(program, pname, value)
+    });
 }
 
 unsafe fn clamp_fog_state_values(gles: &mut dyn GLES) -> Option<(f32, f32)> {
@@ -3070,4 +4029,80 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGenVertexArrays(_, _)),
     export_c_func!(glBindVertexArray(_)),
     export_c_func!(glDeleteVertexArrays(_, _)),
+    export_c_func!(glIsVertexArray(_)),
+    // OpenGL ES 3.0 entry points
+    export_c_func!(glUnmapBuffer(_)),
+    export_c_func!(glMapBufferRange(_, _, _, _)),
+    export_c_func!(glFlushMappedBufferRange(_, _, _)),
+    export_c_func!(glCopyBufferSubData(_, _, _, _, _)),
+    export_c_func!(glBindBufferBase(_, _, _)),
+    export_c_func!(glBindBufferRange(_, _, _, _, _)),
+    export_c_func!(glDrawRangeElements(_, _, _, _, _, _)),
+    export_c_func!(glDrawArraysInstanced(_, _, _, _)),
+    export_c_func!(glDrawElementsInstanced(_, _, _, _, _)),
+    export_c_func!(glVertexAttribDivisor(_, _)),
+    export_c_func!(glReadBuffer(_)),
+    export_c_func!(glDrawBuffers(_, _)),
+    export_c_func!(glClearBufferiv(_, _, _)),
+    export_c_func!(glClearBufferuiv(_, _, _)),
+    export_c_func!(glClearBufferfv(_, _, _)),
+    export_c_func!(glClearBufferfi(_, _, _, _)),
+    export_c_func!(glBlitFramebuffer(_, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(glRenderbufferStorageMultisample(_, _, _, _, _)),
+    export_c_func!(glFramebufferTextureLayer(_, _, _, _, _)),
+    export_c_func!(glInvalidateFramebuffer(_, _, _)),
+    export_c_func!(glInvalidateSubFramebuffer(_, _, _, _, _, _, _)),
+    export_c_func!(glTexImage3D(_, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(glTexSubImage3D(_, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(glCopyTexSubImage3D(_, _, _, _, _, _, _, _, _)),
+    export_c_func!(glTexStorage2D(_, _, _, _, _)),
+    export_c_func!(glTexStorage3D(_, _, _, _, _, _)),
+    export_c_func!(glGenQueries(_, _)),
+    export_c_func!(glDeleteQueries(_, _)),
+    export_c_func!(glIsQuery(_)),
+    export_c_func!(glBeginQuery(_, _)),
+    export_c_func!(glEndQuery(_)),
+    export_c_func!(glGetQueryiv(_, _, _)),
+    export_c_func!(glGetQueryObjectuiv(_, _, _)),
+    export_c_func!(glGenSamplers(_, _)),
+    export_c_func!(glDeleteSamplers(_, _)),
+    export_c_func!(glIsSampler(_)),
+    export_c_func!(glBindSampler(_, _)),
+    export_c_func!(glSamplerParameteri(_, _, _)),
+    export_c_func!(glSamplerParameterf(_, _, _)),
+    export_c_func!(glBeginTransformFeedback(_)),
+    export_c_func!(glEndTransformFeedback()),
+    export_c_func!(glBindTransformFeedback(_, _)),
+    export_c_func!(glDeleteTransformFeedbacks(_, _)),
+    export_c_func!(glGenTransformFeedbacks(_, _)),
+    export_c_func!(glIsTransformFeedback(_)),
+    export_c_func!(glPauseTransformFeedback()),
+    export_c_func!(glResumeTransformFeedback()),
+    export_c_func!(glVertexAttribIPointer(_, _, _, _, _)),
+    export_c_func!(glVertexAttribI4i(_, _, _, _, _)),
+    export_c_func!(glVertexAttribI4ui(_, _, _, _, _)),
+    export_c_func!(glUniform1ui(_, _)),
+    export_c_func!(glUniform2ui(_, _, _)),
+    export_c_func!(glUniform3ui(_, _, _, _)),
+    export_c_func!(glUniform4ui(_, _, _, _, _)),
+    export_c_func!(glUniform1uiv(_, _, _)),
+    export_c_func!(glUniform2uiv(_, _, _)),
+    export_c_func!(glUniform3uiv(_, _, _)),
+    export_c_func!(glUniform4uiv(_, _, _)),
+    export_c_func!(glUniformMatrix2x3fv(_, _, _, _)),
+    export_c_func!(glUniformMatrix3x2fv(_, _, _, _)),
+    export_c_func!(glUniformMatrix2x4fv(_, _, _, _)),
+    export_c_func!(glUniformMatrix4x2fv(_, _, _, _)),
+    export_c_func!(glUniformMatrix3x4fv(_, _, _, _)),
+    export_c_func!(glUniformMatrix4x3fv(_, _, _, _)),
+    export_c_func!(glGetUniformBlockIndex(_, _)),
+    export_c_func!(glUniformBlockBinding(_, _, _)),
+    export_c_func!(glFenceSync(_, _)),
+    export_c_func!(glIsSync(_)),
+    export_c_func!(glDeleteSync(_)),
+    export_c_func!(glClientWaitSync(_, _, _, _)),
+    export_c_func!(glWaitSync(_, _, _, _)),
+    export_c_func!(glGetStringi(_, _)),
+    export_c_func!(glGetFragDataLocation(_, _)),
+    export_c_func!(glProgramParameteri(_, _, _)),
 ];
