@@ -48,7 +48,7 @@ const MACH_RCV_TIMEOUT: mach_msg_option_t = 0x00000100;
 
 #[allow(clippy::too_many_arguments)]
 fn mach_msg(
-    _env: &mut Environment,
+    env: &mut Environment,
     msg: MutVoidPtr, // TODO: use MutPtr<mach_msg_header_t>,
     option: mach_msg_option_t,
     send_size: mach_msg_size_t,
@@ -57,6 +57,7 @@ fn mach_msg(
     timeout: mach_msg_timeout_t,
     notify: mach_port_name_t,
 ) -> mach_msg_return_t {
+    log_once!("TODO: mach_msg send/rcv");
     log_dbg!(
         "mach_msg({:?}, option=0x{:x}, send={}, rcv={}, rcv_name=0x{:x}, timeout={}, notify=0x{:x})",
         msg,
@@ -76,11 +77,19 @@ fn mach_msg(
     // "always return KERN_SUCCESS" stub.
     //
     // Instead, when the caller asks to *receive* a message we honour the
-    // requested timeout (sleeping on the host thread) and return success
-    // with the message buffer untouched. With a zeroed header Mono's
-    // exception dispatcher treats this as "no message of interest" and
-    // loops again, which gives the same end-user behaviour as the previous
-    // stub but without burning a CPU core.
+    // requested timeout and return success with the message buffer
+    // untouched. With a zeroed header Mono's exception dispatcher treats
+    // this as "no message of interest" and loops again, which gives the
+    // same end-user behaviour as the previous stub but without burning a
+    // CPU core.
+    //
+    // IMPORTANT: touchHLE runs every guest thread as a coroutine on the
+    // same host OS thread. Calling `std::thread::sleep` here would block
+    // **all** other guest threads (including the Unity main thread), so
+    // Mono apps would appear to freeze immediately after the exception
+    // thread is spawned. We must therefore use `env.sleep`, which yields
+    // cooperatively via `ThreadBlock::Sleeping` and lets other threads run
+    // while this one waits.
     if option & MACH_RCV_MSG != 0 {
         let wait_ms: u64 = if option & MACH_RCV_TIMEOUT != 0 {
             // `timeout` is documented as milliseconds; cap at ~5s so we
@@ -88,12 +97,12 @@ fn mach_msg(
             (timeout as u64).min(5_000)
         } else {
             // No explicit timeout means "wait forever". We can't truly
-            // block (no other thread will ever post), so doze for 100ms
-            // and return success — the caller will loop back in.
+            // block (no other thread will ever post), so doze cooperatively
+            // for 100ms and return success — the caller will loop back in.
             100
         };
         if wait_ms > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+            env.sleep(std::time::Duration::from_millis(wait_ms));
         }
         return KERN_SUCCESS;
     }
