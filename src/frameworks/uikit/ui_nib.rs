@@ -11,6 +11,7 @@
 //!
 //! - GitHub user 0xced's [reverse-engineering of UIClassSwapper](https://gist.github.com/0xced/45daf79b62ad6a20be1c).
 
+use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::ns_string::{get_static_str, to_rust_string};
 use crate::frameworks::foundation::{ns_string, NSUInteger};
 use crate::frameworks::uikit::ui_view::ui_control::UIControlEvents;
@@ -21,6 +22,27 @@ use crate::objc::{
     release, retain, Class, ClassExports, HostObject,
 };
 use crate::Environment;
+
+// Per Apple's UINib loading documentation, the `options` dictionary passed to
+// `-[UINib instantiateWithOwner:options:]` recognises a single documented key:
+// `UINibExternalObjects`. Older binaries (FaceFighter and a handful of other
+// iPhone OS 3.x apps) instead import the private `UINibProxiedObjectsKey`
+// constant; if it's missing the dyld stub silently resolves to NULL and the
+// app crashes when looking up its proxied objects. Expose the constant as a
+// host NSString so dyld can fix up the non-lazy import.
+pub const UINibProxiedObjectsKey: &str = "UINibProxiedObjectsKey";
+pub const UINibExternalObjects: &str = "UINibExternalObjects";
+
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_UINibProxiedObjectsKey",
+        HostConstant::NSString(UINibProxiedObjectsKey),
+    ),
+    (
+        "_UINibExternalObjects",
+        HostConstant::NSString(UINibExternalObjects),
+    ),
+];
 
 #[derive(Default)]
 struct UINibHostObject {

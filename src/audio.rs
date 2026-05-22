@@ -128,9 +128,38 @@ impl AudioFile {
 
     // Extracted parse_inner to fix E0599 and removed duplicate read_from_vec
     fn parse_inner(bytes: Vec<u8>) -> Result<AudioFileInner, AudioFileOpenError> {
-        if hound::WavReader::new(Cursor::new(&bytes)).is_ok() {
-            let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
-            return Ok(AudioFileInner::Wave(reader));
+        // Only accept WAV files that the rest of the pipeline (`audio_description`
+        // and the integer-sample `read_bytes` branch) can losslessly serve.
+        // touchHLE's downstream WAVE consumers (Audio Queue / OpenAL decode in
+        // `audio_toolbox::audio_queue::decode_buffer`) emit 8-bit or 16-bit LPCM
+        // only, so anything else (24-bit Int, 32-bit Int, 32-bit Float per
+        // Microsoft WAVE / IEEE-Float specification — see Apple's Core Audio
+        // Format spec which mirrors the same bit depths,
+        // https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_chunks/CAF_chunks.html)
+        // must be transcoded. Symphonia handles those WAVE variants natively and
+        // produces 16-bit interleaved PCM, which is what the
+        // `AudioFileInner::Symphonia` branch expects. This replaces the previous
+        // `assert!(matches!(bits_per_sample, 8 | 16))` panic that took down the
+        // host whenever a guest opened, e.g., a 32-bit float WAV soundtrack
+        // (`blocksPremium/game loop v3.wav` from log+2).
+        if let Ok(reader) = hound::WavReader::new(Cursor::new(&bytes)) {
+            let spec = reader.spec();
+            if matches!(spec.bits_per_sample, 8 | 16)
+                && spec.sample_format == hound::SampleFormat::Int
+            {
+                let reader = hound::WavReader::new(Cursor::new(bytes)).unwrap();
+                return Ok(AudioFileInner::Wave(reader));
+            }
+            log!(
+                "AudioFile: WAVE with bits_per_sample={} sample_format={:?} cannot be served directly; \
+                 transcoding via Symphonia.",
+                spec.bits_per_sample,
+                spec.sample_format,
+            );
+            // Fall through to the Symphonia path below — Symphonia's WAV
+            // demuxer (`symphonia-bundle-flac`/`symphonia-format-wav`) supports
+            // every PCM WAVE bit depth Apple's iPhone-OS Core Audio accepts
+            // and produces the i16 stream the rest of the pipeline expects.
         }
 
         if is_adts_aac(&bytes) {
@@ -184,8 +213,14 @@ impl AudioFile {
                     bits_per_sample,
                     sample_format,
                 } = wave_reader.spec();
-                assert!(matches!(bits_per_sample, 8 | 16));
-                assert!(sample_format == hound::SampleFormat::Int);
+                // `parse_inner` already routes anything other than 8-/16-bit
+                // PCM through Symphonia, so reaching this branch with another
+                // spec would mean a regression in `parse_inner`. Keep these as
+                // `debug_assert!` so a release build can still serve a sensible
+                // description if invariants are ever loosened.
+                debug_assert!(matches!(bits_per_sample, 8 | 16));
+                debug_assert!(sample_format == hound::SampleFormat::Int);
+                let _ = sample_format;
 
                 AudioDescription {
                     sample_rate: sample_rate.into(),

@@ -45,6 +45,7 @@ pub mod ns_exception;
 pub mod ns_file_handle;
 pub mod ns_file_manager;
 pub mod ns_host;
+pub mod ns_http_cookie_storage;
 pub mod ns_index_path;
 pub mod ns_input_stream;
 pub mod ns_invocation;
@@ -366,10 +367,7 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // names themselves, which is what real iOS uses internally and what
     // any sane comparison (CFEqual / isEqualToString:) relies on).
     // -----------------------------------------------------------------
-    (
-        "_NSFontAttributeName",
-        HostConstant::NSString("NSFont"),
-    ),
+    ("_NSFontAttributeName", HostConstant::NSString("NSFont")),
     (
         "_NSForegroundColorAttributeName",
         HostConstant::NSString("NSColor"),
@@ -390,14 +388,8 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSStrokeWidthAttributeName",
         HostConstant::NSString("NSStrokeWidth"),
     ),
-    (
-        "_NSShadowAttributeName",
-        HostConstant::NSString("NSShadow"),
-    ),
-    (
-        "_NSKernAttributeName",
-        HostConstant::NSString("NSKern"),
-    ),
+    ("_NSShadowAttributeName", HostConstant::NSString("NSShadow")),
+    ("_NSKernAttributeName", HostConstant::NSString("NSKern")),
     (
         "_NSLigatureAttributeName",
         HostConstant::NSString("NSLigature"),
@@ -446,22 +438,13 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSAttachmentAttributeName",
         HostConstant::NSString("NSAttachment"),
     ),
-    (
-        "_NSLinkAttributeName",
-        HostConstant::NSString("NSLink"),
-    ),
+    ("_NSLinkAttributeName", HostConstant::NSString("NSLink")),
     // -----------------------------------------------------------------
     // KVO change-dictionary keys.
     // _NSKeyValueChangeNewKey is exported from objc::CONSTANTS already.
     // -----------------------------------------------------------------
-    (
-        "_NSKeyValueChangeKindKey",
-        HostConstant::NSString("kind"),
-    ),
-    (
-        "_NSKeyValueChangeOldKey",
-        HostConstant::NSString("old"),
-    ),
+    ("_NSKeyValueChangeKindKey", HostConstant::NSString("kind")),
+    ("_NSKeyValueChangeOldKey", HostConstant::NSString("old")),
     (
         "_NSKeyValueChangeIndexesKey",
         HostConstant::NSString("indexes"),
@@ -659,6 +642,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_time_zone::CLASSES,
         ns_ubiquitous_key_value_store::CLASSES,
         ns_undo_manager::CLASSES,
+        ns_http_cookie_storage::CLASSES,
         ns_url::CLASSES,
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,
@@ -696,6 +680,7 @@ pub struct State {
     ns_calendar: ns_calendar::State,
     pub ns_exception: ns_exception::State,
     ns_file_manager: ns_file_manager::State,
+    ns_http_cookie_storage: ns_http_cookie_storage::State,
     ns_locale: ns_locale::State,
     ns_notification_center: ns_notification_center::State,
     ns_null: ns_null::State,

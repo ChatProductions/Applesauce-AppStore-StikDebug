@@ -72,6 +72,39 @@ pub(super) struct CGContextHostObject {
     pub(super) state_stack: Vec<CGContextState>,
     // Path accumulator (points only — no real path rendering yet).
     pub(super) path_points: Vec<CGPoint>,
+    /// Current rendering intent for the fill color space. Set by
+    /// `CGContextSetRenderingIntent`; defaults to `kCGRenderingIntentDefault`
+    /// per Apple's "Core Graphics – Color Spaces" documentation.
+    pub(super) rendering_intent: i32,
+    /// Current shadow state: (offset_x, offset_y, blur, color_rgba). When
+    /// blur is zero, no shadow is drawn (matching Apple's CGContext docs).
+    pub(super) shadow: CGShadowState,
+}
+
+/// State for shadow operations. Stored verbatim on the host object so that
+/// `CGContextSaveGState`/`RestoreGState` can preserve it across drawing
+/// blocks, mirroring real Quartz behaviour.
+#[derive(Clone, Copy)]
+pub struct CGShadowState {
+    pub enabled: bool,
+    pub offset_x: CGFloat,
+    pub offset_y: CGFloat,
+    pub blur: CGFloat,
+    pub color: (CGFloat, CGFloat, CGFloat, CGFloat),
+}
+
+impl Default for CGShadowState {
+    fn default() -> Self {
+        // Apple defaults: black shadow, alpha 1/3, see
+        // <https://developer.apple.com/documentation/coregraphics/1455324-cgcontextsetshadow>.
+        CGShadowState {
+            enabled: false,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            blur: 0.0,
+            color: (0.0, 0.0, 0.0, 1.0 / 3.0),
+        }
+    }
 }
 impl HostObject for CGContextHostObject {}
 
@@ -90,6 +123,8 @@ pub(super) struct CGContextState {
     pub transform: CGAffineTransform,
     pub font: CGFontRef,
     pub font_size: CGFloat,
+    pub rendering_intent: i32,
+    pub shadow: CGShadowState,
 }
 
 pub(super) enum CGContextSubclass {
@@ -244,22 +279,123 @@ fn CGContextSetBlendMode(env: &mut Environment, context: CGContextRef, mode: i32
 }
 
 fn CGContextSetShadow(
-    _env: &mut Environment,
-    _context: CGContextRef,
-    _offset: super::CGSize,
-    _blur: CGFloat,
+    env: &mut Environment,
+    context: CGContextRef,
+    offset: super::CGSize,
+    blur: CGFloat,
 ) {
-    log!("CGContextSetShadow: stubbed");
+    if context.is_null() {
+        return;
+    }
+    // Per Apple's CGContext documentation:
+    // "Sets the shadow drawing parameters... Specify a positive blur value
+    // to draw the shadow with a blurred edge; a blur of 0.0 produces no
+    // blur." The default shadow color when no explicit color is passed is
+    // "black with 1/3 alpha".
+    // https://developer.apple.com/documentation/coregraphics/1454559-cgcontextsetshadow
+    let host = env.objc.borrow_mut::<CGContextHostObject>(context);
+    host.shadow = CGShadowState {
+        enabled: true,
+        offset_x: offset.width,
+        offset_y: offset.height,
+        blur,
+        color: (0.0, 0.0, 0.0, 1.0 / 3.0),
+    };
 }
 
 fn CGContextSetShadowWithColor(
-    _env: &mut Environment,
-    _context: CGContextRef,
-    _offset: super::CGSize,
-    _blur: CGFloat,
-    _color: CGColorRef,
+    env: &mut Environment,
+    context: CGContextRef,
+    offset: super::CGSize,
+    blur: CGFloat,
+    color: CGColorRef,
 ) {
-    log!("CGContextSetShadowWithColor: stubbed");
+    if context.is_null() {
+        return;
+    }
+    // Per Apple:
+    // "If the color parameter is NULL, then shadowing is disabled."
+    // https://developer.apple.com/documentation/coregraphics/1456225-cgcontextsetshadowwithcolor
+    if color.is_null() {
+        env.objc
+            .borrow_mut::<CGContextHostObject>(context)
+            .shadow
+            .enabled = false;
+        return;
+    }
+    let rgba = cg_color::to_rgba(&env.objc, color);
+    let host = env.objc.borrow_mut::<CGContextHostObject>(context);
+    host.shadow = CGShadowState {
+        enabled: true,
+        offset_x: offset.width,
+        offset_y: offset.height,
+        blur,
+        color: rgba,
+    };
+}
+
+fn CGContextSetFillColorSpace(
+    env: &mut Environment,
+    context: CGContextRef,
+    color_space: CFTypeRef,
+) {
+    if context.is_null() {
+        return;
+    }
+    // Per Apple's CGContextSetFillColorSpace documentation:
+    // "When you call this function, two things happen:
+    //   1. Core Graphics assigns the specified color space to the current
+    //      fill color space in the graphics state.
+    //   2. Core Graphics sets the fill color to a default value that's
+    //      appropriate for the color space."
+    // https://developer.apple.com/documentation/coregraphics/1455380-cgcontextsetfillcolorspace
+    //
+    // touchHLE always works in device RGB internally — switching color
+    // spaces would require reimplementing Quartz's CIE colour pipeline,
+    // which is out of scope. Instead, reset the fill colour to the
+    // device-RGB default (opaque black), matching what real Quartz does
+    // when you switch to any RGB-family color space. This preserves the
+    // visible behaviour for the most common cases (kCGColorSpaceGenericRGB,
+    // kCGColorSpaceDeviceRGB) and degrades to the same default for
+    // others.
+    let _ = color_space; // retained by the caller; we don't track ownership
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .rgb_fill_color = (0.0, 0.0, 0.0, 1.0);
+}
+
+fn CGContextSetStrokeColorSpace(
+    env: &mut Environment,
+    context: CGContextRef,
+    color_space: CFTypeRef,
+) {
+    if context.is_null() {
+        return;
+    }
+    // Same rationale as CGContextSetFillColorSpace.
+    // https://developer.apple.com/documentation/coregraphics/1455379-cgcontextsetstrokecolorspace
+    let _ = color_space;
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .rgb_stroke_color = (0.0, 0.0, 0.0, 1.0);
+}
+
+fn CGContextSetRenderingIntent(env: &mut Environment, context: CGContextRef, intent: i32) {
+    if context.is_null() {
+        return;
+    }
+    // Per Apple's "CGColorRenderingIntent" reference:
+    // https://developer.apple.com/documentation/coregraphics/cgcolorrenderingintent
+    // - kCGRenderingIntentDefault (0)
+    // - kCGRenderingIntentAbsoluteColorimetric (1)
+    // - kCGRenderingIntentRelativeColorimetric (2)
+    // - kCGRenderingIntentPerceptual (3)
+    // - kCGRenderingIntentSaturation (4)
+    // We don't perform any CMS, so just record the chosen intent so that
+    // round-tripping via CGContextGetState/RestoreState preserves it.
+    env.objc
+        .borrow_mut::<CGContextHostObject>(context)
+        .rendering_intent = intent;
 }
 
 // MARK: - Stroking rects / ellipses
@@ -867,6 +1003,8 @@ fn CGContextSaveGState(env: &mut Environment, context: CGContextRef) {
         transform: h.transform,
         font: h.font,
         font_size: h.font_size,
+        rendering_intent: h.rendering_intent,
+        shadow: h.shadow,
     };
     env.objc
         .borrow_mut::<CGContextHostObject>(context)
@@ -905,6 +1043,8 @@ fn CGContextRestoreGState(env: &mut Environment, context: CGContextRef) {
         host.transform = state.transform;
         host.font = state.font;
         host.font_size = state.font_size;
+        host.rendering_intent = state.rendering_intent;
+        host.shadow = state.shadow;
     } else {
         log!("Warning: CGContextRestoreGState: stack underflow");
     }
@@ -1249,5 +1389,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetBlendMode(_, _)),
     export_c_func!(CGContextSetShadow(_, _, _)),
     export_c_func!(CGContextSetShadowWithColor(_, _, _, _)),
+    export_c_func!(CGContextSetFillColorSpace(_, _)),
+    export_c_func!(CGContextSetStrokeColorSpace(_, _)),
+    export_c_func!(CGContextSetRenderingIntent(_, _)),
     export_c_func!(CGContextDrawLinearGradient(_, _, _, _, _)),
 ];

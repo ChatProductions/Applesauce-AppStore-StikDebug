@@ -12,8 +12,7 @@ pub mod ui_text_view;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, impl_HostObject_with_superclass, msg, nil, objc_classes, todo_objc_setter, ClassExports,
-    NSZonePtr, SEL,
+    id, impl_HostObject_with_superclass, msg, nil, objc_classes, ClassExports, NSZonePtr, SEL,
 };
 
 type UIScrollViewIndicatorStyle = NSInteger;
@@ -46,6 +45,10 @@ pub struct UIScrollViewHostObject {
     decelerates: bool,
     scrolls_to_top: bool,             // (с прошлого фикса)
     can_cancel_content_touches: bool, // <-- ДОБАВЛЕНО
+    /// `UIScrollViewIndicatorStyle` — specifies the look of the scroll
+    /// indicators. Per Apple's UIScrollView reference:
+    /// https://developer.apple.com/documentation/uikit/uiscrollview/1619615-indicatorstyle
+    indicator_style: UIScrollViewIndicatorStyle,
 }
 impl_HostObject_with_superclass!(UIScrollViewHostObject);
 
@@ -83,6 +86,7 @@ impl Default for UIScrollViewHostObject {
             decelerates: true,
             scrolls_to_top: true,
             can_cancel_content_touches: true, // <-- ДОБАВЛЕНО
+            indicator_style: 0,               // UIScrollViewIndicatorStyleDefault
         }
     }
 }
@@ -215,8 +219,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIScrollViewHostObject>(this).shows_vertical_scroll_indicator = value;
 }
 
+- (UIScrollViewIndicatorStyle)indicatorStyle {
+    env.objc.borrow::<UIScrollViewHostObject>(this).indicator_style
+}
 - (())setIndicatorStyle:(UIScrollViewIndicatorStyle)style {
-    todo_objc_setter!(this, style);
+    // Apple defines:
+    // - UIScrollViewIndicatorStyleDefault (0)
+    // - UIScrollViewIndicatorStyleBlack (1)
+    // - UIScrollViewIndicatorStyleWhite (2)
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).indicator_style = style;
 }
 
 - (())flashScrollIndicators {

@@ -12,6 +12,7 @@ use super::{ns_string, ns_timer, NSTimeInterval};
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::environment::ThreadId;
 use crate::frameworks::audio_toolbox::audio_queue::{handle_audio_queue, AudioQueueRef};
+use crate::frameworks::audio_toolbox::audio_services::tick_system_sound_completions;
 use crate::frameworks::audio_toolbox::audio_unit::{render_audio_unit, AudioUnit};
 use crate::frameworks::core_animation::ca_transaction;
 use crate::frameworks::core_foundation::cf_run_loop::{
@@ -370,6 +371,13 @@ pub fn run_run_loop(
         for audio_unit in audio_units_tmp.drain(..) {
             render_audio_unit(env, audio_unit);
         }
+
+        // Process Audio Services completion callbacks. Apple's
+        // `AudioServicesAddSystemSoundCompletion` fires its registered
+        // routine on the run loop that owned it; touchHLE only models a
+        // single run loop, so we poll OpenAL source state once per tick
+        // and dispatch finished completions here.
+        tick_system_sound_completions(env);
 
         if is_main_run_loop {
             media_player::handle_players(env);

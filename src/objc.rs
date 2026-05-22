@@ -33,6 +33,7 @@ mod synchronization;
 mod weak;
 
 pub use classes::{
+    class_copyIvarList, class_copyMethodList, class_copyPropertyList, class_copyProtocolList,
     class_getInstanceMethod, class_getInstanceSize, class_getName, class_getProperty,
     class_getSuperclass, class_replaceMethod, method_exchangeImplementations,
     method_getImplementation, method_getTypeEncoding, method_setImplementation,
@@ -40,9 +41,9 @@ pub use classes::{
     objc_autoreleaseReturnValue, objc_begin_catch, objc_classes, objc_copyClassNamesForImage,
     objc_end_catch, objc_exception_throw, objc_getClass, objc_getMetaClass, objc_getProtocol,
     objc_getRequiredClass, objc_lookUpClass, objc_readClassPair, objc_release, objc_retain,
-    objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
-    objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName,
-    object_getIndexedIvars, protocol_getName, Class, ClassExports, ClassTemplate,
+    objc_retainAutorelease, objc_retainAutoreleaseReturnValue, objc_retainAutoreleasedReturnValue,
+    object_getClass, object_getClassName, object_getIndexedIvars, protocol_getName, Class,
+    ClassExports, ClassTemplate,
 };
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
@@ -249,6 +250,10 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceSize(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(class_getProperty(_, _)),
+    export_c_func!(class_copyPropertyList(_, _)),
+    export_c_func!(class_copyMethodList(_, _)),
+    export_c_func!(class_copyIvarList(_, _)),
+    export_c_func!(class_copyProtocolList(_, _)),
     export_c_func!(class_replaceMethod(_, _)),
     export_c_func!(method_getImplementation(_, _)),
     export_c_func!(method_setImplementation(_, _)),
