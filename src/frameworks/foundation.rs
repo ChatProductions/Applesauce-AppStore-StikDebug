@@ -339,6 +339,19 @@ fn ui_view_no_intrinsic_metric(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+/// `NSURLSessionTransferSizeUnknown` is declared as
+/// `FOUNDATION_EXPORT const int64_t NSURLSessionTransferSizeUnknown`, with
+/// the literal value `-1LL`. Apps test
+/// `task.countOfBytesExpectedToReceive == NSURLSessionTransferSizeUnknown`
+/// to detect when the server didn't send a `Content-Length`. See
+/// <https://developer.apple.com/documentation/foundation/nsurlsessiontransfersizeunknown>.
+/// The symbol is an 8-byte little-endian `-1`.
+fn ns_url_session_transfer_size_unknown(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
+    env.mem.write(ptr, (-1i64) as u64);
+    ptr.cast().cast_const()
+}
+
 pub const STUB_CONSTANTS: ConstantExports = &[
     // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
     // from foundation::ns_error::CONSTANTS; not duplicated here.
@@ -743,6 +756,54 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_NSUbiquityIdentityDidChangeNotification",
         HostConstant::NSString("NSUbiquityIdentityDidChangeNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // NSURLSession constants. iOS 7+ networking. Apps occasionally link
+    // these on iOS 4-targeted bundles when they ship "legacy + modern"
+    // dual-stack networking code. Per
+    // <https://developer.apple.com/documentation/foundation/nsurlsession>
+    // and <https://developer.apple.com/documentation/foundation/url_loading_system>,
+    // the *Identifier* / *Notification* strings are exported as
+    // `NSString *const` whose literal value matches the symbol name; the
+    // sentinel `NSURLSessionTransferSizeUnknown` is an `int64_t` = -1.
+    // -----------------------------------------------------------------
+    (
+        "_NSURLSessionTransferSizeUnknown",
+        HostConstant::Custom(ns_url_session_transfer_size_unknown),
+    ),
+    (
+        "_NSURLSessionDownloadTaskResumeData",
+        HostConstant::NSString("NSURLSessionDownloadTaskResumeData"),
+    ),
+    (
+        "_NSURLSessionUploadTaskResponseBodyKey",
+        HostConstant::NSString("NSURLSessionUploadTaskResponseBodyKey"),
+    ),
+    (
+        "_NSURLSessionTaskPriorityLow",
+        HostConstant::NSString("NSURLSessionTaskPriorityLow"),
+    ),
+    (
+        "_NSURLSessionTaskPriorityDefault",
+        HostConstant::NSString("NSURLSessionTaskPriorityDefault"),
+    ),
+    (
+        "_NSURLSessionTaskPriorityHigh",
+        HostConstant::NSString("NSURLSessionTaskPriorityHigh"),
+    ),
+    // -----------------------------------------------------------------
+    // NSUserActivity constants. iOS 8+ Handoff API. Like the
+    // NSURLSession constants above, some bundles reference these even
+    // when targeting an older OS version, so dyld needs them to
+    // resolve. Per
+    // <https://developer.apple.com/documentation/foundation/nsuseractivity>,
+    // `NSUserActivityTypeBrowsingWeb` is a special activity type that the
+    // OS uses to indicate the user is browsing a URL in Safari, and the
+    // literal string value is the symbol name itself.
+    // -----------------------------------------------------------------
+    (
+        "_NSUserActivityTypeBrowsingWeb",
+        HostConstant::NSString("NSUserActivityTypeBrowsingWeb"),
     ),
 ];
 

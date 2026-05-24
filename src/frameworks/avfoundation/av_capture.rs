@@ -37,11 +37,51 @@ use crate::objc::{
 // through Mach-O symbol lookup (e.g. `extern NSString * const AVMediaTypeVideo`)
 // which `dyld::HostConstant::NSString` handles.
 
-// AVMediaType.h
+// AVMediaType.h — per Apple's
+// <https://developer.apple.com/documentation/avfoundation/avmediatype>.
+// The literal value of `AVMediaTypeVideo` etc. is the corresponding QuickTime
+// FourCC ("vide", "soun", ...). Apps compare these by pointer or via
+// `[NSString isEqualToString:]`, so the only requirement is that each
+// constant resolves to a distinct, non-NULL NSString.
 pub const AVMediaTypeVideo: &str = "vide";
 pub const AVMediaTypeAudio: &str = "soun";
 pub const AVMediaTypeText: &str = "text";
 pub const AVMediaTypeMuxed: &str = "muxx";
+pub const AVMediaTypeClosedCaption: &str = "clcp";
+pub const AVMediaTypeSubtitle: &str = "sbtl";
+pub const AVMediaTypeTimecode: &str = "tmcd";
+pub const AVMediaTypeMetadata: &str = "meta";
+pub const AVMediaTypeMetadataObject: &str = "meta-object";
+pub const AVMediaTypeDepthData: &str = "dpth";
+
+// AVMediaFormat.h — `AVMediaCharacteristic*` per Apple's
+// <https://developer.apple.com/documentation/avfoundation/avmediacharacteristic>.
+// These tag a `AVMediaSelectionOption` / `AVAssetTrack` with a high-level
+// purpose (audible, visual, legible, ...). The string value is the literal
+// reverse-DNS identifier Apple ships ("public.audio", "public.visual", ...).
+pub const AVMediaCharacteristicVisual: &str = "public.visual";
+pub const AVMediaCharacteristicAudible: &str = "public.audible";
+pub const AVMediaCharacteristicLegible: &str = "public.legible";
+pub const AVMediaCharacteristicFrameBased: &str = "public.frame-based";
+pub const AVMediaCharacteristicIsMainProgramContent: &str =
+    "public.main-program-content";
+pub const AVMediaCharacteristicIsAuxiliaryContent: &str =
+    "public.auxiliary-content";
+pub const AVMediaCharacteristicContainsOnlyForcedSubtitles: &str =
+    "public.subtitles.forced-only";
+pub const AVMediaCharacteristicTranscribesSpokenDialogForAccessibility: &str =
+    "public.accessibility.transcribes-spoken-dialog";
+pub const AVMediaCharacteristicDescribesMusicAndSoundForAccessibility: &str =
+    "public.accessibility.describes-music-and-sound";
+pub const AVMediaCharacteristicEasyToRead: &str = "public.easy-to-read";
+pub const AVMediaCharacteristicDescribesVideoForAccessibility: &str =
+    "public.accessibility.describes-video";
+pub const AVMediaCharacteristicLanguageTranslation: &str =
+    "public.translation";
+pub const AVMediaCharacteristicDubbedTranslation: &str =
+    "public.translation.dubbed";
+pub const AVMediaCharacteristicVoiceOverTranslation: &str =
+    "public.translation.voice-over";
 
 // AVCaptureSession presets.
 pub const AVCaptureSessionPresetPhoto: &str = "AVCaptureSessionPresetPhoto";
@@ -208,6 +248,94 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_AVMetadataObjectTypeUPCECode",
         HostConstant::NSString(AVMetadataObjectTypeUPCECode),
+    ),
+    // Additional AVMediaType members.
+    (
+        "_AVMediaTypeClosedCaption",
+        HostConstant::NSString(AVMediaTypeClosedCaption),
+    ),
+    (
+        "_AVMediaTypeSubtitle",
+        HostConstant::NSString(AVMediaTypeSubtitle),
+    ),
+    (
+        "_AVMediaTypeTimecode",
+        HostConstant::NSString(AVMediaTypeTimecode),
+    ),
+    (
+        "_AVMediaTypeMetadata",
+        HostConstant::NSString(AVMediaTypeMetadata),
+    ),
+    (
+        "_AVMediaTypeMetadataObject",
+        HostConstant::NSString(AVMediaTypeMetadataObject),
+    ),
+    (
+        "_AVMediaTypeDepthData",
+        HostConstant::NSString(AVMediaTypeDepthData),
+    ),
+    // AVMediaCharacteristic.
+    (
+        "_AVMediaCharacteristicVisual",
+        HostConstant::NSString(AVMediaCharacteristicVisual),
+    ),
+    (
+        "_AVMediaCharacteristicAudible",
+        HostConstant::NSString(AVMediaCharacteristicAudible),
+    ),
+    (
+        "_AVMediaCharacteristicLegible",
+        HostConstant::NSString(AVMediaCharacteristicLegible),
+    ),
+    (
+        "_AVMediaCharacteristicFrameBased",
+        HostConstant::NSString(AVMediaCharacteristicFrameBased),
+    ),
+    (
+        "_AVMediaCharacteristicIsMainProgramContent",
+        HostConstant::NSString(AVMediaCharacteristicIsMainProgramContent),
+    ),
+    (
+        "_AVMediaCharacteristicIsAuxiliaryContent",
+        HostConstant::NSString(AVMediaCharacteristicIsAuxiliaryContent),
+    ),
+    (
+        "_AVMediaCharacteristicContainsOnlyForcedSubtitles",
+        HostConstant::NSString(AVMediaCharacteristicContainsOnlyForcedSubtitles),
+    ),
+    (
+        "_AVMediaCharacteristicTranscribesSpokenDialogForAccessibility",
+        HostConstant::NSString(
+            AVMediaCharacteristicTranscribesSpokenDialogForAccessibility,
+        ),
+    ),
+    (
+        "_AVMediaCharacteristicDescribesMusicAndSoundForAccessibility",
+        HostConstant::NSString(
+            AVMediaCharacteristicDescribesMusicAndSoundForAccessibility,
+        ),
+    ),
+    (
+        "_AVMediaCharacteristicEasyToRead",
+        HostConstant::NSString(AVMediaCharacteristicEasyToRead),
+    ),
+    (
+        "_AVMediaCharacteristicDescribesVideoForAccessibility",
+        HostConstant::NSString(
+            AVMediaCharacteristicDescribesVideoForAccessibility,
+        ),
+    ),
+    (
+        "_AVMediaCharacteristicLanguageTranslation",
+        HostConstant::NSString(AVMediaCharacteristicLanguageTranslation),
+    ),
+    (
+        "_AVMediaCharacteristicDubbedTranslation",
+        HostConstant::NSString(AVMediaCharacteristicDubbedTranslation),
+    ),
+    (
+        "_AVMediaCharacteristicVoiceOverTranslation",
+        HostConstant::NSString(AVMediaCharacteristicVoiceOverTranslation),
     ),
 ];
 

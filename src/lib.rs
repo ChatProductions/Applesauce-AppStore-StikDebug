@@ -258,12 +258,28 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     echo!();
 
     if let Some(version) = minimum_os_version {
-        let (major, minor_etc) = version.split_once('.').unwrap();
-        let minor = minor_etc
-            .split_once('.')
-            .map_or(minor_etc, |(minor, _etc)| minor);
-        let major: u32 = major.parse().unwrap();
-        let minor: u32 = minor.parse().unwrap();
+        // Apple's `MinimumOSVersion` Info.plist key follows the standard
+        // dotted version format (`MAJOR[.MINOR[.PATCH]]`). Some apps ship
+        // with just `"7"`, others with `"7.0"`, others with `"7.0.0"` or
+        // even `"6.1.3"` — see Apple's
+        // <https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/iPhoneOSKeys.html#//apple_ref/doc/uid/TP40009252-SW33>.
+        // Previously we required at least one `.` separator and would
+        // `unwrap()` the resulting Option, which panicked when the value
+        // was a bare integer (e.g. Swordigo's iPhone OS bundle declares
+        // `MinimumOSVersion = 7`). Parse defensively instead and treat any
+        // non-numeric / unparseable component as zero, matching how dyld
+        // itself tolerates malformed plists.
+        let (major_str, minor_str) = match version.split_once('.') {
+            Some((maj, rest)) => {
+                let minor_str = rest
+                    .split_once('.')
+                    .map_or(rest, |(minor, _patch)| minor);
+                (maj, minor_str)
+            }
+            None => (version, "0"),
+        };
+        let major: u32 = major_str.parse().unwrap_or(0);
+        let minor: u32 = minor_str.parse().unwrap_or(0);
         if major > 4 || (major == 4 && minor > 0) {
             echo!("Warning: app requires OS version {}. Only apps for iOS 4.0 and earlier are currently supported.", version);
         }

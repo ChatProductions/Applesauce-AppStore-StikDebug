@@ -87,13 +87,34 @@ const AVAudioSessionRouteChangeReasonRouteConfigurationChange: AVAudioSessionRou
 
 // MARK: - Port types
 
+// Per Apple's
+// <https://developer.apple.com/documentation/avfaudio/avaudiosessionport>,
+// each `AVAudioSessionPort*` constant is a `NSString *` whose literal value
+// is the bare port-type identifier ("Speaker", "Headphones", ...). Apps use
+// `[portDescription.portType isEqualToString:AVAudioSessionPortHeadphones]`,
+// so the only requirement is that each constant resolves to a distinct,
+// non-NULL NSString with the correct iOS-canonical spelling.
 pub const AVAudioSessionPortBuiltInSpeaker: &str = "Speaker";
 pub const AVAudioSessionPortBuiltInReceiver: &str = "Receiver";
 pub const AVAudioSessionPortBuiltInMic: &str = "MicrophoneBuiltIn";
 pub const AVAudioSessionPortHeadphones: &str = "Headphones";
+pub const AVAudioSessionPortHeadsetMic: &str = "MicrophoneWired";
+pub const AVAudioSessionPortLineIn: &str = "LineIn";
+pub const AVAudioSessionPortLineOut: &str = "LineOut";
 pub const AVAudioSessionPortBluetoothA2DP: &str = "BluetoothA2DPOutput";
 pub const AVAudioSessionPortBluetoothLE: &str = "BluetoothLEOutput";
 pub const AVAudioSessionPortBluetoothHFP: &str = "BluetoothHFP";
+pub const AVAudioSessionPortUSBAudio: &str = "USBAudio";
+pub const AVAudioSessionPortHDMI: &str = "HDMI";
+pub const AVAudioSessionPortAirPlay: &str = "AirPlay";
+pub const AVAudioSessionPortCarAudio: &str = "CarAudio";
+pub const AVAudioSessionPortAVB: &str = "AVB";
+pub const AVAudioSessionPortDisplayPort: &str = "DisplayPort";
+pub const AVAudioSessionPortFireWire: &str = "FireWire";
+pub const AVAudioSessionPortPCI: &str = "PCI";
+pub const AVAudioSessionPortThunderbolt: &str = "Thunderbolt";
+pub const AVAudioSessionPortVirtual: &str = "Virtual";
+pub const AVAudioSessionPortContinuityMicrophone: &str = "ContinuityMicrophone";
 
 pub const CONSTANTS: ConstantExports = &[
     // Categories
@@ -228,6 +249,62 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_AVAudioSessionPortBluetoothHFP",
         HostConstant::NSString(AVAudioSessionPortBluetoothHFP),
+    ),
+    (
+        "_AVAudioSessionPortHeadsetMic",
+        HostConstant::NSString(AVAudioSessionPortHeadsetMic),
+    ),
+    (
+        "_AVAudioSessionPortLineIn",
+        HostConstant::NSString(AVAudioSessionPortLineIn),
+    ),
+    (
+        "_AVAudioSessionPortLineOut",
+        HostConstant::NSString(AVAudioSessionPortLineOut),
+    ),
+    (
+        "_AVAudioSessionPortUSBAudio",
+        HostConstant::NSString(AVAudioSessionPortUSBAudio),
+    ),
+    (
+        "_AVAudioSessionPortHDMI",
+        HostConstant::NSString(AVAudioSessionPortHDMI),
+    ),
+    (
+        "_AVAudioSessionPortAirPlay",
+        HostConstant::NSString(AVAudioSessionPortAirPlay),
+    ),
+    (
+        "_AVAudioSessionPortCarAudio",
+        HostConstant::NSString(AVAudioSessionPortCarAudio),
+    ),
+    (
+        "_AVAudioSessionPortAVB",
+        HostConstant::NSString(AVAudioSessionPortAVB),
+    ),
+    (
+        "_AVAudioSessionPortDisplayPort",
+        HostConstant::NSString(AVAudioSessionPortDisplayPort),
+    ),
+    (
+        "_AVAudioSessionPortFireWire",
+        HostConstant::NSString(AVAudioSessionPortFireWire),
+    ),
+    (
+        "_AVAudioSessionPortPCI",
+        HostConstant::NSString(AVAudioSessionPortPCI),
+    ),
+    (
+        "_AVAudioSessionPortThunderbolt",
+        HostConstant::NSString(AVAudioSessionPortThunderbolt),
+    ),
+    (
+        "_AVAudioSessionPortVirtual",
+        HostConstant::NSString(AVAudioSessionPortVirtual),
+    ),
+    (
+        "_AVAudioSessionPortContinuityMicrophone",
+        HostConstant::NSString(AVAudioSessionPortContinuityMicrophone),
     ),
 ];
 

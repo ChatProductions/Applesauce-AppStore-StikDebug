@@ -62,6 +62,23 @@ pub const kCFStreamSSLPeerName: &str = "kCFStreamSSLPeerName";
 pub const kCFStreamSSLCertificates: &str = "kCFStreamSSLCertificates";
 pub const kCFStreamSSLIsServer: &str = "kCFStreamSSLIsServer";
 pub const kCFStreamPropertySocketSecurityLevel: &str = "kCFStreamPropertySocketSecurityLevel";
+// iOS 5+ post-handshake property keys, per Apple's
+// <https://developer.apple.com/documentation/cfnetwork/cfstream/cfstream-constants>.
+// `kCFStreamPropertySSLPeerCertificates` returns the peer's certificate chain
+// once the TLS handshake has completed; `kCFStreamPropertySSLPeerTrust` is
+// the associated `SecTrustRef`; `kCFStreamPropertySSLContext` exposes the
+// underlying `SSLContextRef`.
+pub const kCFStreamPropertySSLPeerCertificates: &str = "kCFStreamPropertySSLPeerCertificates";
+pub const kCFStreamPropertySSLPeerTrust: &str = "kCFStreamPropertySSLPeerTrust";
+pub const kCFStreamPropertySSLContext: &str = "kCFStreamPropertySSLContext";
+// Stream-socket security-level option values, per
+// <https://developer.apple.com/documentation/cfnetwork/cfsocketstream>.
+pub const kCFStreamSocketSecurityLevelNone: &str = "kCFStreamSocketSecurityLevelNone";
+pub const kCFStreamSocketSecurityLevelSSLv2: &str = "kCFStreamSocketSecurityLevelSSLv2";
+pub const kCFStreamSocketSecurityLevelSSLv3: &str = "kCFStreamSocketSecurityLevelSSLv3";
+pub const kCFStreamSocketSecurityLevelTLSv1: &str = "kCFStreamSocketSecurityLevelTLSv1";
+pub const kCFStreamSocketSecurityLevelNegotiatedSSL: &str =
+    "kCFStreamSocketSecurityLevelNegotiatedSSL";
 
 pub const CONSTANTS: ConstantExports = &[
     (
@@ -152,6 +169,40 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCFStreamNetworkServiceTypeVoice",
         HostConstant::NSString("kCFStreamNetworkServiceTypeVoice"),
+    ),
+    // Post-handshake SSL/TLS property keys.
+    (
+        "_kCFStreamPropertySSLPeerCertificates",
+        HostConstant::NSString(kCFStreamPropertySSLPeerCertificates),
+    ),
+    (
+        "_kCFStreamPropertySSLPeerTrust",
+        HostConstant::NSString(kCFStreamPropertySSLPeerTrust),
+    ),
+    (
+        "_kCFStreamPropertySSLContext",
+        HostConstant::NSString(kCFStreamPropertySSLContext),
+    ),
+    // Socket security-level option values.
+    (
+        "_kCFStreamSocketSecurityLevelNone",
+        HostConstant::NSString(kCFStreamSocketSecurityLevelNone),
+    ),
+    (
+        "_kCFStreamSocketSecurityLevelSSLv2",
+        HostConstant::NSString(kCFStreamSocketSecurityLevelSSLv2),
+    ),
+    (
+        "_kCFStreamSocketSecurityLevelSSLv3",
+        HostConstant::NSString(kCFStreamSocketSecurityLevelSSLv3),
+    ),
+    (
+        "_kCFStreamSocketSecurityLevelTLSv1",
+        HostConstant::NSString(kCFStreamSocketSecurityLevelTLSv1),
+    ),
+    (
+        "_kCFStreamSocketSecurityLevelNegotiatedSSL",
+        HostConstant::NSString(kCFStreamSocketSecurityLevelNegotiatedSSL),
     ),
 ];
 
