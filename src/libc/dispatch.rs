@@ -131,6 +131,32 @@ fn dispatch_once(
     }
 }
 
+/// `dispatch_once_f(dispatch_once_t *predicate, void *context, dispatch_function_t work)`
+///
+/// The function-pointer variant of `dispatch_once`. Apple documents it
+/// in `<dispatch/once.h>` and uses it heavily inside the libdispatch
+/// "C interface" thunks emitted by clang for non-block once-init code.
+/// Semantics match `dispatch_once`: the `work` function is invoked at
+/// most once for each `predicate` address, with `context` passed as its
+/// single argument. <https://developer.apple.com/documentation/dispatch/1452833-dispatch_once_f>
+fn dispatch_once_f(
+    env: &mut Environment,
+    predicate: MutPtr<dispatch_once_t>,
+    context: MutVoidPtr,
+    work: GuestFunction,
+) {
+    let token_addr = predicate.to_bits();
+    if env.libc_state.dispatch.once_tokens.contains(&token_addr) {
+        return;
+    }
+    env.libc_state.dispatch.once_tokens.insert(token_addr);
+    env.mem.write(predicate, -1i32); // ~0 == done on Apple platforms
+
+    if work.addr_with_thumb_bit() != 0 {
+        let _: () = work.call_from_host(env, (context,));
+    }
+}
+
 // MARK: - Queue creation / retrieval
 
 fn dispatch_get_main_queue(env: &mut Environment) -> dispatch_queue_t {
@@ -561,6 +587,7 @@ fn call_void_block(env: &mut Environment, block: dispatch_block_t) {
 pub const FUNCTIONS: FunctionExports = &[
     // once
     export_c_func!(dispatch_once(_, _)),
+    export_c_func!(dispatch_once_f(_, _, _)),
     // queues
     export_c_func!(dispatch_get_main_queue()),
     export_c_func!(dispatch_get_global_queue(_, _)),

@@ -87,6 +87,80 @@ pub const CONSTANTS: ConstantExports = &[
         "_NSISO8601Calendar",
         HostConstant::NSString(NSISO8601Calendar),
     ),
+    // -----------------------------------------------------------------
+    // iOS 8+ `NSCalendarIdentifier*` constants. Apple `NSCalendar.h`
+    // declares them as `FOUNDATION_EXPORT NSCalendarIdentifier const`
+    // where `NSCalendarIdentifier` is `NSString *`. The literal value
+    // of each constant is the same canonical CFCalendar identifier as
+    // its iOS 4–era counterpart (and is what `CFCalendarCreateWithIdentifier`
+    // accepts), so apps mixing the new and old names compare equal.
+    // <https://developer.apple.com/documentation/foundation/nscalendaridentifier>
+    // -----------------------------------------------------------------
+    (
+        "_NSCalendarIdentifierGregorian",
+        HostConstant::NSString(NSGregorianCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierBuddhist",
+        HostConstant::NSString(NSBuddhistCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierPersian",
+        HostConstant::NSString(NSPersianCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierIslamic",
+        HostConstant::NSString(NSIslamicCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierHebrew",
+        HostConstant::NSString(NSHebrewCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierIslamicCivil",
+        HostConstant::NSString(NSIslamicCivilCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierJapanese",
+        HostConstant::NSString(NSJapaneseCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierRepublicOfChina",
+        HostConstant::NSString(NSRepublicOfChinaCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierChinese",
+        HostConstant::NSString(NSChineseCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierIndian",
+        HostConstant::NSString(NSIndianCalendar),
+    ),
+    (
+        "_NSCalendarIdentifierISO8601",
+        HostConstant::NSString(NSISO8601Calendar),
+    ),
+    // Additional calendars added in iOS 8+ (Coptic and Ethiopic).
+    (
+        "_NSCalendarIdentifierCoptic",
+        HostConstant::NSString("coptic"),
+    ),
+    (
+        "_NSCalendarIdentifierEthiopicAmeteMihret",
+        HostConstant::NSString("ethiopic"),
+    ),
+    (
+        "_NSCalendarIdentifierEthiopicAmeteAlem",
+        HostConstant::NSString("ethiopic-amete-alem"),
+    ),
+    (
+        "_NSCalendarIdentifierIslamicTabular",
+        HostConstant::NSString("islamic-tbla"),
+    ),
+    (
+        "_NSCalendarIdentifierIslamicUmmAlQura",
+        HostConstant::NSString("islamic-umalqura"),
+    ),
 ];
 
 #[derive(Default)]

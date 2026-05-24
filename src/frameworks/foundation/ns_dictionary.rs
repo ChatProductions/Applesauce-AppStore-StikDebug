@@ -748,6 +748,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     res
 }
 
+// Objective-C 2.0 subscripting: `dict[key]` lowers to a call to
+// `-objectForKeyedSubscript:`. Apple's NSDictionary forwards directly to
+// `-objectForKey:`. See
+// <https://developer.apple.com/documentation/foundation/nsdictionary/1408301-objectforkeyedsubscript>.
+- (id)objectForKeyedSubscript:(id)key {
+    msg![env; this objectForKey:key]
+}
+
 - (id)allKeys {
     all_keys_common(env, this)
 }
@@ -955,6 +963,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     let res = host_obj.lookup(env, key);
     *env.objc.borrow_mut(this) = host_obj;
     res
+}
+
+// Objective-C 2.0 dictionary subscripting:
+//   `dict[key]`        → `-objectForKeyedSubscript:`
+//   `dict[key] = obj`  → `-setObject:forKeyedSubscript:`
+// Apple's reference implementation forwards both to the keyed
+// `-objectForKey:` / `-setObject:forKey:` family; if `obj` is nil the
+// setter removes the key instead. See
+// <https://developer.apple.com/documentation/foundation/nsmutabledictionary/1410865-setobject>.
+- (id)objectForKeyedSubscript:(id)key {
+    msg![env; this objectForKey:key]
+}
+
+- (())setObject:(id)object forKeyedSubscript:(id)key {
+    if object == nil {
+        () = msg![env; this removeObjectForKey:key];
+    } else {
+        () = msg![env; this setObject:object forKey:key];
+    }
 }
 
 // NSCoding implementation

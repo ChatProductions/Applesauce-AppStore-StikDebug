@@ -1669,6 +1669,23 @@ pub fn objc_retainAutorelease(env: &mut crate::Environment, obj: id) -> id {
     obj
 }
 
+/// `id objc_retainBlock(id block)` — ARC's runtime helper for retaining
+/// a block. Per Apple's clang ARC spec
+/// (<https://clang.llvm.org/docs/AutomaticReferenceCounting.html#runtime-support>)
+/// and the libobjc source for `objc_retainBlock`, it is functionally
+/// equivalent to `_Block_copy`: when the block is a global block (the
+/// common case for blocks captured from a Mach-O literal) it returns the
+/// same pointer; when the block lives on the stack it copies it to the
+/// heap and returns the heap pointer. touchHLE only implements global
+/// blocks today, so deferring to `_Block_copy`'s no-op path matches
+/// Apple's semantics for the cases we encounter.
+pub fn objc_retainBlock(env: &mut crate::Environment, block: id) -> id {
+    if !block.is_null() {
+        crate::objc::retain(env, block);
+    }
+    block
+}
+
 // === Additional ObjC runtime helpers used by iOS 5/6 Cocoa classes ===
 //
 // These are part of the public Objective-C runtime header

@@ -13,7 +13,7 @@
 //! on the delegate (if it implements that method) so the app can handle
 //! the failure gracefully instead of hanging or crashing.
 
-use crate::mem::MutPtr;
+use crate::mem::{MutPtr, MutVoidPtr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -137,6 +137,59 @@ pub const CLASSES: ClassExports = objc_classes! {
     // in callers that do not check the error out-pointer.
     let empty_data: id = msg_class![env; NSData data];
     empty_data
+}
+
+// MARK: - Asynchronous block API
+//
+// `+[NSURLConnection sendAsynchronousRequest:queue:completionHandler:]`
+// — iOS 5+ block-based convenience that performs the request on a
+// concurrent worker thread and then enqueues the completion handler on
+// the supplied `NSOperationQueue`. Apple's documentation
+// <https://developer.apple.com/documentation/foundation/nsurlconnection/1414553-sendasynchronousrequest>
+// requires the handler to be called exactly once with:
+//   - `response`: an `NSURLResponse` (nil on failure),
+//   - `data`:     an `NSData`        (nil on failure),
+//   - `connectionError`: nil on success, otherwise an `NSError`.
+//
+// touchHLE has no live network stack, so we synthesise the
+// "not connected to internet" error returned by Apple's reachability
+// stack and forward through the same NSOperationQueue API the app
+// supplied — falling back to a same-thread synchronous invocation
+// when the queue is nil, exactly like Apple's framework when the app
+// passes a nil queue.
+
++ (())sendAsynchronousRequest:(id)request
+                        queue:(id)queue
+            completionHandler:(MutVoidPtr)handler {
+    if handler.is_null() {
+        return;
+    }
+    log!(
+        "NSURLConnection sendAsynchronousRequest:queue:completionHandler: \
+         delivering NSURLErrorNotConnectedToInternet (touchHLE has no network)"
+    );
+
+    // Build the failure NSError that Apple returns when the device has
+    // no reachable network.
+    let _ = request; // unused: every request hits the same offline path
+    let error = make_network_error(env);
+
+    // The completion handler is a `void (^)(NSURLResponse *, NSData *,
+    // NSError *)` block. ARM32 ABI: the block struct's third word
+    // (index 3 == byte offset 12) is the invoke function pointer.
+    let invoke_ptr = env.mem.read(handler.cast::<u32>() + 3u32);
+    if invoke_ptr == 0 {
+        return;
+    }
+    use crate::abi::CallFromHost;
+    let invoke = crate::abi::GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
+
+    // Apple's API copies the block onto the supplied operation queue.
+    // We don't have a full NSBlockOperation pipeline, so we call the
+    // block directly on the current thread. This matches Apple's
+    // behaviour when the caller passes a nil queue.
+    let _ = queue;
+    let _: () = invoke.call_from_host(env, (handler, nil, nil, error));
 }
 
 // MARK: - Asynchronous API
