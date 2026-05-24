@@ -18,6 +18,19 @@ use crate::Environment;
 /// В операционных системах семейства Darwin/iOS RTLD_DEFAULT традиционно равен
 //(void*)-2.
 const RTLD_DEFAULT: MutVoidPtr = Ptr::from_bits(-2 as _);
+const RTLD_NEXT: MutVoidPtr = Ptr::from_bits(-1 as _);
+const RTLD_SELF: MutVoidPtr = Ptr::from_bits(-3 as _);
+const RTLD_MAIN_ONLY: MutVoidPtr = Ptr::from_bits(-5 as _);
+
+/// Checks whether the given handle is a special sentinel that should be
+/// treated as a global symbol lookup scope.
+fn is_global_scope_handle(handle: MutVoidPtr) -> bool {
+    handle.is_null()
+        || handle == RTLD_DEFAULT
+        || handle == RTLD_NEXT
+        || handle == RTLD_SELF
+        || handle == RTLD_MAIN_ONLY
+}
 
 /// Проверяет, является ли запрашиваемая библиотека известной эмулятору
 //(присутствует в статическом списке DYLIB_LIST).
@@ -86,9 +99,9 @@ fn dlopen(env: &mut Environment, path: ConstPtr<u8>, _mode: i32) -> MutVoidPtr {
 //загруженном модуле.
 fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> MutVoidPtr {
     // БЕЗОПАСНОСТЬ: Валидация переданного дескриптора.
-    // Если дескриптор не является RTLD_DEFAULT, мы пытаемся разыменовать его
-    // как суррогатный указатель на строку пути.
-    if handle != RTLD_DEFAULT {
+    // Специальные дескрипторы (RTLD_DEFAULT, RTLD_NEXT, RTLD_SELF,
+    // RTLD_MAIN_ONLY, а также NULL) означают глобальный поиск символа.
+    if !is_global_scope_handle(handle) {
         let handle_path_ptr: ConstPtr<u8> = handle.cast().cast_const();
         let handle_str = match env.mem.cstr_at_utf8(handle_path_ptr) {
             Ok(s) => s,
@@ -160,7 +173,7 @@ fn dlsym(env: &mut Environment, handle: MutVoidPtr, symbol: ConstPtr<u8>) -> Mut
 /// В HLE архитектуре выступает в роли заглушки, но строго соблюдает семантику
 //возврата кодов ошибок.
 fn dlclose(env: &mut Environment, handle: MutVoidPtr) -> i32 {
-    if handle == RTLD_DEFAULT {
+    if is_global_scope_handle(handle) {
         return 0; // Операция успешна
     }
 

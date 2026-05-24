@@ -721,7 +721,18 @@ pub const CLASSES: ClassExports = objc_classes! {
                   forKey:(id)_key        // NSURLResourceKey
                    error:(MutPtr<id>)_err // NSError**
 {
-    false
+    let key_str = to_rust_string(env, _key);
+    if key_str == "NSURLIsExcludedFromBackupKey" {
+        // touchHLE does not implement iCloud backup, so excluding a file from
+        // it is a no-op. Returning YES matches the real implementation's
+        // success path when the file exists and the key is supported.
+        log_dbg!("NSURL setResourceValue:forKey:NSURLIsExcludedFromBackupKey — no-op, returning YES");
+        return true;
+    }
+    // For other resource keys, we still return YES to avoid breaking apps
+    // that set metadata we cannot persist on all host filesystems.
+    log_dbg!("NSURL setResourceValue:forKey:{} — unhandled, returning YES", key_str);
+    true
 }
 
 // MARK: - File system representation

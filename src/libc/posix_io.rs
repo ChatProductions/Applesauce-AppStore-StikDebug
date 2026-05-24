@@ -418,8 +418,10 @@ pub fn read(
             if bytes_read == 0 {
                 log_dbg!("read({:?}, {:?}, {:#x}) => 0 (EOF)", fd, buffer, size);
             } else if bytes_read < buffer_slice.len() {
-                log!(
-                    "Warning: read({:?}, {:?}, {:#x}) read only {:#x} bytes",
+                // POSIX read(2) returning fewer bytes than requested is normal
+                // (e.g., near EOF or for non-regular files). Demote to debug log.
+                log_dbg!(
+                    "read({:?}, {:?}, {:#x}) read only {:#x} bytes",
                     fd,
                     buffer,
                     size,

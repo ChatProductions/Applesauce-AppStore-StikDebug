@@ -10,7 +10,7 @@
 use crate::dyld::FunctionExports;
 use crate::libc::mach::core_types::natural_t;
 use crate::libc::mach::port::mach_port_t;
-use crate::libc::mach::thread_info::{kern_return_t, mach_msg_type_number_t, KERN_SUCCESS};
+use crate::libc::mach::thread_info::{kern_return_t, mach_msg_type_number_t, KERN_INVALID_ARGUMENT, KERN_SUCCESS};
 use crate::mem::{guest_size_of, MutPtr, SafeRead, PAGE_SIZE};
 use crate::{export_c_func, Environment};
 
@@ -188,8 +188,22 @@ fn clock_get_time(
             }
         }
         other => {
-            log!("clock_get_time: unknown clock_serv port {:#010x}", other);
-            (0, 0)
+            if other == 0 {
+                log_dbg!("clock_get_time: called with MACH_PORT_NULL (0)");
+            } else {
+                log_dbg!("clock_get_time: unknown clock_serv port {:#010x}", other);
+            }
+            // Per Mach documentation, an invalid clock service port should
+            // return KERN_INVALID_ARGUMENT. We still zero the output to avoid
+            // leaving garbage in guest memory for callers that ignore errors.
+            env.mem.write(
+                cur_time,
+                mach_timespec_t {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+            );
+            return KERN_INVALID_ARGUMENT;
         }
     };
     env.mem.write(
