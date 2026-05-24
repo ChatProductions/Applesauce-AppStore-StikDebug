@@ -69,6 +69,7 @@ pub mod ns_property_list_serialization;
 pub mod ns_regular_expression;
 pub mod ns_run_loop;
 pub mod ns_scanner;
+pub mod ns_hash_table;
 pub mod ns_set;
 pub mod ns_sort_descriptor;
 pub mod ns_string;
@@ -805,6 +806,190 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSUserActivityTypeBrowsingWeb",
         HostConstant::NSString("NSUserActivityTypeBrowsingWeb"),
     ),
+    // -----------------------------------------------------------------
+    // `NSHTTPCookie` property-dictionary keys. Apple declares them in
+    // `<Foundation/NSHTTPCookie.h>` as `NSString *const`; the literal
+    // values match Apple's headers (some are short legacy strings, see
+    // `<https://developer.apple.com/documentation/foundation/nshttpcookie>`).
+    // -----------------------------------------------------------------
+    (
+        "_NSHTTPCookieExpires",
+        HostConstant::NSString("Expires"),
+    ),
+    (
+        "_NSHTTPCookieName",
+        HostConstant::NSString("Name"),
+    ),
+    (
+        "_NSHTTPCookieValue",
+        HostConstant::NSString("Value"),
+    ),
+    (
+        "_NSHTTPCookieDomain",
+        HostConstant::NSString("Domain"),
+    ),
+    (
+        "_NSHTTPCookiePath",
+        HostConstant::NSString("Path"),
+    ),
+    (
+        "_NSHTTPCookieSecure",
+        HostConstant::NSString("Secure"),
+    ),
+    (
+        "_NSHTTPCookieDiscard",
+        HostConstant::NSString("Discard"),
+    ),
+    (
+        "_NSHTTPCookieMaximumAge",
+        HostConstant::NSString("Max-Age"),
+    ),
+    (
+        "_NSHTTPCookieComment",
+        HostConstant::NSString("Comment"),
+    ),
+    (
+        "_NSHTTPCookieCommentURL",
+        HostConstant::NSString("CommentURL"),
+    ),
+    (
+        "_NSHTTPCookieOriginURL",
+        HostConstant::NSString("OriginURL"),
+    ),
+    (
+        "_NSHTTPCookiePort",
+        HostConstant::NSString("Port"),
+    ),
+    (
+        "_NSHTTPCookieManagerCookiesChangedNotification",
+        HostConstant::NSString("NSHTTPCookieManagerCookiesChangedNotification"),
+    ),
+    (
+        "_NSHTTPCookieManagerAcceptPolicyChangedNotification",
+        HostConstant::NSString("NSHTTPCookieManagerAcceptPolicyChangedNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // `NSURL` resource-value keys introduced in iOS 5+. Apple
+    // `NSURL.h` declares them as `NSString * const`. The literal value
+    // of each constant is its own symbol name. Apps fetch them via
+    // `getResourceValue:forKey:error:` / `setResourceValue:forKey:error:`.
+    // <https://developer.apple.com/documentation/foundation/nsurl/resource_keys>
+    // -----------------------------------------------------------------
+    (
+        "_NSURLPathKey",
+        HostConstant::NSString("NSURLPathKey"),
+    ),
+    (
+        "_NSURLNameKey",
+        HostConstant::NSString("NSURLNameKey"),
+    ),
+    (
+        "_NSURLLocalizedNameKey",
+        HostConstant::NSString("NSURLLocalizedNameKey"),
+    ),
+    (
+        "_NSURLIsRegularFileKey",
+        HostConstant::NSString("NSURLIsRegularFileKey"),
+    ),
+    (
+        "_NSURLIsDirectoryKey",
+        HostConstant::NSString("NSURLIsDirectoryKey"),
+    ),
+    (
+        "_NSURLIsSymbolicLinkKey",
+        HostConstant::NSString("NSURLIsSymbolicLinkKey"),
+    ),
+    (
+        "_NSURLIsVolumeKey",
+        HostConstant::NSString("NSURLIsVolumeKey"),
+    ),
+    (
+        "_NSURLIsHiddenKey",
+        HostConstant::NSString("NSURLIsHiddenKey"),
+    ),
+    (
+        "_NSURLIsAliasFileKey",
+        HostConstant::NSString("NSURLIsAliasFileKey"),
+    ),
+    (
+        "_NSURLFileSizeKey",
+        HostConstant::NSString("NSURLFileSizeKey"),
+    ),
+    (
+        "_NSURLFileAllocatedSizeKey",
+        HostConstant::NSString("NSURLFileAllocatedSizeKey"),
+    ),
+    (
+        "_NSURLCreationDateKey",
+        HostConstant::NSString("NSURLCreationDateKey"),
+    ),
+    (
+        "_NSURLContentAccessDateKey",
+        HostConstant::NSString("NSURLContentAccessDateKey"),
+    ),
+    (
+        "_NSURLContentModificationDateKey",
+        HostConstant::NSString("NSURLContentModificationDateKey"),
+    ),
+    (
+        "_NSURLAttributeModificationDateKey",
+        HostConstant::NSString("NSURLAttributeModificationDateKey"),
+    ),
+    (
+        "_NSURLLinkCountKey",
+        HostConstant::NSString("NSURLLinkCountKey"),
+    ),
+    (
+        "_NSURLTypeIdentifierKey",
+        HostConstant::NSString("NSURLTypeIdentifierKey"),
+    ),
+    (
+        "_NSURLLocalizedTypeDescriptionKey",
+        HostConstant::NSString("NSURLLocalizedTypeDescriptionKey"),
+    ),
+    (
+        "_NSURLLabelNumberKey",
+        HostConstant::NSString("NSURLLabelNumberKey"),
+    ),
+    (
+        "_NSURLLabelColorKey",
+        HostConstant::NSString("NSURLLabelColorKey"),
+    ),
+    (
+        "_NSURLLocalizedLabelKey",
+        HostConstant::NSString("NSURLLocalizedLabelKey"),
+    ),
+    (
+        "_NSURLEffectiveIconKey",
+        HostConstant::NSString("NSURLEffectiveIconKey"),
+    ),
+    (
+        "_NSURLCustomIconKey",
+        HostConstant::NSString("NSURLCustomIconKey"),
+    ),
+    (
+        "_NSURLParentDirectoryURLKey",
+        HostConstant::NSString("NSURLParentDirectoryURLKey"),
+    ),
+    (
+        "_NSURLVolumeURLKey",
+        HostConstant::NSString("NSURLVolumeURLKey"),
+    ),
+    (
+        "_NSURLFileResourceTypeKey",
+        HostConstant::NSString("NSURLFileResourceTypeKey"),
+    ),
+    // -----------------------------------------------------------------
+    // `NSXMLParserErrorDomain` — the error domain used by NSError
+    // userInfo from `<Foundation/NSXMLParser.h>`. Apple ships this as
+    // `FOUNDATION_EXPORT NSString * const`; the literal value is the
+    // constant name itself.
+    // <https://developer.apple.com/documentation/foundation/nsxmlparsererrordomain>
+    // -----------------------------------------------------------------
+    (
+        "_NSXMLParserErrorDomain",
+        HostConstant::NSString("NSXMLParserErrorDomain"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -856,6 +1041,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_regular_expression::CLASSES,
         ns_run_loop::CLASSES,
         ns_scanner::CLASSES,
+        ns_hash_table::CLASSES,
         ns_set::CLASSES,
         ns_sort_descriptor::CLASSES,
         ns_string::CLASSES,

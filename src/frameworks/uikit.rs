@@ -96,6 +96,46 @@ fn ui_scroll_view_deceleration_rate_fast(env: &mut Environment) -> ConstVoidPtr 
     ptr.cast().cast_const()
 }
 
+// UIFontWeight* — CGFloat constants on the Core Text font-weight axis.
+// Apple `UIFont.h` declares them as
+// `UIKIT_EXTERN const UIFontWeight UIFontWeightUltraLight ...`;
+// the numeric values match the public CTFontDescriptor weight axis
+// (range -1.0…1.0, with `Regular` == 0.0). See
+// <https://developer.apple.com/documentation/uikit/uifontweight>.
+fn write_cgfloat(env: &mut Environment, value: f32) -> ConstVoidPtr {
+    let ptr: MutPtr<u32> = env.mem.alloc(4).cast();
+    env.mem.write(ptr, value.to_bits());
+    ptr.cast().cast_const()
+}
+
+fn ui_font_weight_ultralight(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, -0.8)
+}
+fn ui_font_weight_thin(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, -0.6)
+}
+fn ui_font_weight_light(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, -0.4)
+}
+fn ui_font_weight_regular(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.0)
+}
+fn ui_font_weight_medium(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.23)
+}
+fn ui_font_weight_semibold(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.3)
+}
+fn ui_font_weight_bold(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.4)
+}
+fn ui_font_weight_heavy(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.56)
+}
+fn ui_font_weight_black(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, 0.62)
+}
+
 pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIBackgroundTaskInvalid",
@@ -437,6 +477,227 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UITableViewSelectionDidChangeNotification",
         HostConstant::NSString("UITableViewSelectionDidChangeNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // UIContentSizeCategory (iOS 7+ Dynamic Type). Apple `UIApplication.h`
+    // declares each as `UIKIT_EXTERN NSString * const`; the literal
+    // value matches the constant's name. Apps compare against them with
+    // `isEqualToString:` and use them as keys / userInfo values for
+    // `UIContentSizeCategoryDidChangeNotification`.
+    // <https://developer.apple.com/documentation/uikit/uicontentsizecategory>
+    // -----------------------------------------------------------------
+    (
+        "_UIContentSizeCategoryUnspecified",
+        HostConstant::NSString("_UICTContentSizeCategoryUnspecified"),
+    ),
+    (
+        "_UIContentSizeCategoryExtraSmall",
+        HostConstant::NSString("UICTContentSizeCategoryXS"),
+    ),
+    (
+        "_UIContentSizeCategorySmall",
+        HostConstant::NSString("UICTContentSizeCategoryS"),
+    ),
+    (
+        "_UIContentSizeCategoryMedium",
+        HostConstant::NSString("UICTContentSizeCategoryM"),
+    ),
+    (
+        "_UIContentSizeCategoryLarge",
+        HostConstant::NSString("UICTContentSizeCategoryL"),
+    ),
+    (
+        "_UIContentSizeCategoryExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryXL"),
+    ),
+    (
+        "_UIContentSizeCategoryExtraExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryXXL"),
+    ),
+    (
+        "_UIContentSizeCategoryExtraExtraExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryXXXL"),
+    ),
+    (
+        "_UIContentSizeCategoryAccessibilityMedium",
+        HostConstant::NSString("UICTContentSizeCategoryAccessibilityM"),
+    ),
+    (
+        "_UIContentSizeCategoryAccessibilityLarge",
+        HostConstant::NSString("UICTContentSizeCategoryAccessibilityL"),
+    ),
+    (
+        "_UIContentSizeCategoryAccessibilityExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryAccessibilityXL"),
+    ),
+    (
+        "_UIContentSizeCategoryAccessibilityExtraExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryAccessibilityXXL"),
+    ),
+    (
+        "_UIContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+        HostConstant::NSString("UICTContentSizeCategoryAccessibilityXXXL"),
+    ),
+    (
+        "_UIContentSizeCategoryDidChangeNotification",
+        HostConstant::NSString("UIContentSizeCategoryDidChangeNotification"),
+    ),
+    (
+        "_UIContentSizeCategoryNewValueKey",
+        HostConstant::NSString("UIContentSizeCategoryNewValueKey"),
+    ),
+    // -----------------------------------------------------------------
+    // UIFontDescriptor attribute dictionary keys (iOS 7+). Apple
+    // `UIFontDescriptor.h` declares them as `UIKIT_EXTERN NSString *
+    // const`. Used as dictionary keys in
+    // `[UIFontDescriptor fontDescriptorWithFontAttributes:]`.
+    // <https://developer.apple.com/documentation/uikit/uifontdescriptor>
+    // -----------------------------------------------------------------
+    (
+        "_UIFontDescriptorFamilyAttribute",
+        HostConstant::NSString("NSFontFamilyAttribute"),
+    ),
+    (
+        "_UIFontDescriptorNameAttribute",
+        HostConstant::NSString("NSFontNameAttribute"),
+    ),
+    (
+        "_UIFontDescriptorFaceAttribute",
+        HostConstant::NSString("NSFontFaceAttribute"),
+    ),
+    (
+        "_UIFontDescriptorSizeAttribute",
+        HostConstant::NSString("NSFontSizeAttribute"),
+    ),
+    (
+        "_UIFontDescriptorVisibleNameAttribute",
+        HostConstant::NSString("NSFontVisibleNameAttribute"),
+    ),
+    (
+        "_UIFontDescriptorMatrixAttribute",
+        HostConstant::NSString("NSFontMatrixAttribute"),
+    ),
+    (
+        "_UIFontDescriptorCharacterSetAttribute",
+        HostConstant::NSString("NSCTFontCharacterSetAttribute"),
+    ),
+    (
+        "_UIFontDescriptorCascadeListAttribute",
+        HostConstant::NSString("NSCTFontCascadeListAttribute"),
+    ),
+    (
+        "_UIFontDescriptorTraitsAttribute",
+        HostConstant::NSString("NSCTFontTraitsAttribute"),
+    ),
+    (
+        "_UIFontDescriptorFixedAdvanceAttribute",
+        HostConstant::NSString("NSCTFontFixedAdvanceAttribute"),
+    ),
+    (
+        "_UIFontDescriptorFeatureSettingsAttribute",
+        HostConstant::NSString("NSCTFontFeatureSettingsAttribute"),
+    ),
+    (
+        "_UIFontDescriptorTextStyleAttribute",
+        HostConstant::NSString("NSCTFontUIUsageAttribute"),
+    ),
+    (
+        "_UIFontSymbolicTrait",
+        HostConstant::NSString("NSCTFontSymbolicTrait"),
+    ),
+    (
+        "_UIFontWeightTrait",
+        HostConstant::NSString("NSCTFontWeightTrait"),
+    ),
+    (
+        "_UIFontWidthTrait",
+        HostConstant::NSString("NSCTFontWidthTrait"),
+    ),
+    (
+        "_UIFontSlantTrait",
+        HostConstant::NSString("NSCTFontSlantTrait"),
+    ),
+    // UIFontWeight* constants (CGFloat). Apple `UIFont.h` declares them
+    // as `UIKIT_EXTERN const UIFontWeight`. The numeric values are
+    // the canonical Core Text font-weight axis values; apps thread
+    // them through `+[UIFont systemFontOfSize:weight:]`.
+    // <https://developer.apple.com/documentation/uikit/uifontweight>
+    (
+        "_UIFontWeightUltraLight",
+        HostConstant::Custom(ui_font_weight_ultralight),
+    ),
+    (
+        "_UIFontWeightThin",
+        HostConstant::Custom(ui_font_weight_thin),
+    ),
+    (
+        "_UIFontWeightLight",
+        HostConstant::Custom(ui_font_weight_light),
+    ),
+    (
+        "_UIFontWeightRegular",
+        HostConstant::Custom(ui_font_weight_regular),
+    ),
+    (
+        "_UIFontWeightMedium",
+        HostConstant::Custom(ui_font_weight_medium),
+    ),
+    (
+        "_UIFontWeightSemibold",
+        HostConstant::Custom(ui_font_weight_semibold),
+    ),
+    (
+        "_UIFontWeightBold",
+        HostConstant::Custom(ui_font_weight_bold),
+    ),
+    (
+        "_UIFontWeightHeavy",
+        HostConstant::Custom(ui_font_weight_heavy),
+    ),
+    (
+        "_UIFontWeightBlack",
+        HostConstant::Custom(ui_font_weight_black),
+    ),
+    // -----------------------------------------------------------------
+    // UITrackingRunLoopMode — the run-loop mode entered while tracking
+    // a `UIControl` interaction (button, slider, …). Apple
+    // `UIApplication.h` declares it as
+    // `UIKIT_EXTERN NSRunLoopMode const`. Apps pass it to
+    // `+[NSRunLoop runMode:beforeDate:]` to keep their UI responsive
+    // during touch tracking. The literal value matches Apple's headers.
+    // <https://developer.apple.com/documentation/uikit/uitrackingrunloopmode>
+    // -----------------------------------------------------------------
+    (
+        "_UITrackingRunLoopMode",
+        HostConstant::NSString("UITrackingRunLoopMode"),
+    ),
+    // -----------------------------------------------------------------
+    // UIApplication launch-options dictionary keys (continued, iOS 8+).
+    // <https://developer.apple.com/documentation/uikit/uiapplication/launchoptionskey>
+    // -----------------------------------------------------------------
+    (
+        "_UIApplicationLaunchOptionsUserActivityDictionaryKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsUserActivityDictionary"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsUserActivityTypeKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsUserActivityType"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsCloudKitShareMetadataKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsCloudKitShareMetadataKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsBluetoothCentralsKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsBluetoothCentralsKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsBluetoothPeripheralsKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsBluetoothPeripheralsKey"),
+    ),
+    (
+        "_UIApplicationLaunchOptionsShortcutItemKey",
+        HostConstant::NSString("UIApplicationLaunchOptionsShortcutItemKey"),
     ),
 ];
 

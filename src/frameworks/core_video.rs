@@ -82,6 +82,48 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCVPixelBufferMemoryAllocatorKey",
         HostConstant::NSString(kCVPixelBufferMemoryAllocatorKey),
     ),
+    // -----------------------------------------------------------------
+    // `kCVPixelBufferMetalCompatibilityKey` (iOS 8+). Apple
+    // `CVPixelBuffer.h` declares it as `extern const CFStringRef`. The
+    // literal value of the published key is `MetalCompatibility`; apps
+    // use it as a `pixelBufferAttributes` dictionary key, so the only
+    // requirement is that it remains a unique CFStringRef.
+    // <https://developer.apple.com/documentation/corevideo/kcvpixelbuffermetalcompatibilitykey>
+    // -----------------------------------------------------------------
+    (
+        "_kCVPixelBufferMetalCompatibilityKey",
+        HostConstant::NSString("MetalCompatibility"),
+    ),
+    // -----------------------------------------------------------------
+    // CVImageBuffer attachment / matrix keys. Apple `CVImageBuffer.h`.
+    // Apps store and read them via
+    // `CVBufferSetAttachment` / `CVBufferGetAttachment`.
+    // <https://developer.apple.com/documentation/corevideo/kcvimagebufferycbcrmatrixkey>
+    // -----------------------------------------------------------------
+    (
+        "_kCVImageBufferYCbCrMatrixKey",
+        HostConstant::NSString("YCbCrMatrix"),
+    ),
+    (
+        "_kCVImageBufferYCbCrMatrix_ITU_R_601_4",
+        HostConstant::NSString("ITU_R_601_4"),
+    ),
+    (
+        "_kCVImageBufferYCbCrMatrix_ITU_R_709_2",
+        HostConstant::NSString("ITU_R_709_2"),
+    ),
+    (
+        "_kCVImageBufferYCbCrMatrix_SMPTE_240M_1995",
+        HostConstant::NSString("SMPTE_240M_1995"),
+    ),
+    (
+        "_kCVImageBufferColorPrimariesKey",
+        HostConstant::NSString("ColorPrimaries"),
+    ),
+    (
+        "_kCVImageBufferTransferFunctionKey",
+        HostConstant::NSString("TransferFunction"),
+    ),
 ];
 
 // Структура для управления pixel buffer в памяти гостя

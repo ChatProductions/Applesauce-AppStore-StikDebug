@@ -39,6 +39,15 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_AVPlayerItemFailedToPlayToEndTimeNotification",
         HostConstant::NSString("AVPlayerItemFailedToPlayToEndTimeNotification"),
     ),
+    // userInfo key for `AVPlayerItemFailedToPlayToEndTimeNotification`,
+    // pointing at the `NSError` describing the failure. Apple
+    // `AVPlayerItem.h` declares it as `AVF_EXPORT NSString *const`; the
+    // literal value matches the symbol name.
+    // <https://developer.apple.com/documentation/avfoundation/avplayeritemfailedtoplaytoendtimeerrorkey>
+    (
+        "_AVPlayerItemFailedToPlayToEndTimeErrorKey",
+        HostConstant::NSString("AVPlayerItemFailedToPlayToEndTimeErrorKey"),
+    ),
     (
         "_AVPlayerItemPlaybackStalledNotification",
         HostConstant::NSString("AVPlayerItemPlaybackStalledNotification"),

@@ -136,6 +136,19 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithFrame:frame]
 }
 
+// `-[UITableViewCell initWithFrame:reuseIdentifier:]` is the iOS 2.x
+// designated initializer, deprecated in iOS 3.0 in favour of
+// `-initWithStyle:reuseIdentifier:`. The header (UIKit's
+// `UITableViewCell.h`) still ships the symbol, and several legacy 32-bit
+// games (e.g. Cooking Fever, Dungeon Shooter) call it. Apple's reference
+// implementation routes it through the frame-only initializer and
+// records the reuse identifier — the reuse identifier itself is held by
+// the cell so that `+[UITableView dequeueReusableCellWithIdentifier:]`
+// can later match it. <https://developer.apple.com/documentation/uikit/uitableviewcell/1623200-initwithframe>
+- (id)initWithFrame:(CGRect)frame reuseIdentifier:(id)_identifier {
+    msg![env; this initWithFrame:frame]
+}
+
 - (id)initWithCoder:(id)coder {
     let this: id = msg_super![env; this initWithCoder:coder];
     // При загрузке из NIB contentView обычно уже внутри (как под-вьюха).

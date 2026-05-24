@@ -10,7 +10,7 @@ use super::cg_color_space::{
 };
 use super::cg_data_provider::{self, CGDataProviderRef};
 use super::CGFloat;
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
 use crate::image::Image;
@@ -721,4 +721,172 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGImageSourceCopyPropertiesAtIndex(_, _, _)),
     export_c_func!(CGImageSourceCopyProperties(_, _)),
     export_c_func!(CGImageSourceCreateThumbnailAtIndex(_, _, _)),
+];
+
+/// `CGImageProperty*` / `kCGImageDestination*` / `kCGImageSource*` are
+/// `extern const CFStringRef` keys published by `ImageIO.framework`.
+/// touchHLE has no live ImageIO pipeline, but apps embed references to
+/// these symbols in their non-lazy symbol pointer table — usually to
+/// read EXIF / GIF / PNG / JPEG metadata back from images they decoded
+/// elsewhere — so we publish them as CFString placeholders matching
+/// Apple's literal keys. With these in place dictionary-key identity
+/// comparisons (e.g. `dict[(__bridge id)kCGImagePropertyOrientation]`)
+/// continue to work, even if the dictionary itself is empty.
+/// <https://developer.apple.com/documentation/imageio/image_properties>
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_kCGImagePropertyPixelWidth",
+        HostConstant::NSString("PixelWidth"),
+    ),
+    (
+        "_kCGImagePropertyPixelHeight",
+        HostConstant::NSString("PixelHeight"),
+    ),
+    (
+        "_kCGImagePropertyOrientation",
+        HostConstant::NSString("Orientation"),
+    ),
+    (
+        "_kCGImagePropertyDPIWidth",
+        HostConstant::NSString("DPIWidth"),
+    ),
+    (
+        "_kCGImagePropertyDPIHeight",
+        HostConstant::NSString("DPIHeight"),
+    ),
+    (
+        "_kCGImagePropertyDepth",
+        HostConstant::NSString("Depth"),
+    ),
+    (
+        "_kCGImagePropertyColorModel",
+        HostConstant::NSString("ColorModel"),
+    ),
+    (
+        "_kCGImagePropertyHasAlpha",
+        HostConstant::NSString("HasAlpha"),
+    ),
+    (
+        "_kCGImagePropertyIsFloat",
+        HostConstant::NSString("IsFloat"),
+    ),
+    (
+        "_kCGImagePropertyIsIndexed",
+        HostConstant::NSString("IsIndexed"),
+    ),
+    (
+        "_kCGImagePropertyProfileName",
+        HostConstant::NSString("ProfileName"),
+    ),
+    (
+        "_kCGImagePropertyFileSize",
+        HostConstant::NSString("FileSize"),
+    ),
+    // Format-specific subdictionary keys.
+    (
+        "_kCGImagePropertyJFIFDictionary",
+        HostConstant::NSString("{JFIF}"),
+    ),
+    (
+        "_kCGImagePropertyJFIFIsProgressive",
+        HostConstant::NSString("IsProgressive"),
+    ),
+    (
+        "_kCGImagePropertyJFIFVersion",
+        HostConstant::NSString("JFIFVersion"),
+    ),
+    (
+        "_kCGImagePropertyJFIFXDensity",
+        HostConstant::NSString("XDensity"),
+    ),
+    (
+        "_kCGImagePropertyJFIFYDensity",
+        HostConstant::NSString("YDensity"),
+    ),
+    (
+        "_kCGImagePropertyJFIFDensityUnit",
+        HostConstant::NSString("DensityUnit"),
+    ),
+    (
+        "_kCGImagePropertyGIFDictionary",
+        HostConstant::NSString("{GIF}"),
+    ),
+    (
+        "_kCGImagePropertyGIFLoopCount",
+        HostConstant::NSString("LoopCount"),
+    ),
+    (
+        "_kCGImagePropertyGIFDelayTime",
+        HostConstant::NSString("DelayTime"),
+    ),
+    (
+        "_kCGImagePropertyGIFUnclampedDelayTime",
+        HostConstant::NSString("UnclampedDelayTime"),
+    ),
+    (
+        "_kCGImagePropertyGIFHasGlobalColorMap",
+        HostConstant::NSString("HasGlobalColorMap"),
+    ),
+    (
+        "_kCGImagePropertyGIFImageColorMap",
+        HostConstant::NSString("ImageColorMap"),
+    ),
+    (
+        "_kCGImagePropertyPNGDictionary",
+        HostConstant::NSString("{PNG}"),
+    ),
+    (
+        "_kCGImagePropertyPNGInterlaceType",
+        HostConstant::NSString("InterlaceType"),
+    ),
+    (
+        "_kCGImagePropertyPNGGamma",
+        HostConstant::NSString("Gamma"),
+    ),
+    (
+        "_kCGImagePropertyPNGsRGBIntent",
+        HostConstant::NSString("sRGBIntent"),
+    ),
+    (
+        "_kCGImagePropertyPNGChromaticities",
+        HostConstant::NSString("Chromaticities"),
+    ),
+    // ImageDestination options.
+    (
+        "_kCGImageDestinationLossyCompressionQuality",
+        HostConstant::NSString("kCGImageDestinationLossyCompressionQuality"),
+    ),
+    (
+        "_kCGImageDestinationBackgroundColor",
+        HostConstant::NSString("kCGImageDestinationBackgroundColor"),
+    ),
+    // ImageSource options.
+    (
+        "_kCGImageSourceShouldCache",
+        HostConstant::NSString("kCGImageSourceShouldCache"),
+    ),
+    (
+        "_kCGImageSourceShouldAllowFloat",
+        HostConstant::NSString("kCGImageSourceShouldAllowFloat"),
+    ),
+    (
+        "_kCGImageSourceCreateThumbnailFromImageIfAbsent",
+        HostConstant::NSString("kCGImageSourceCreateThumbnailFromImageIfAbsent"),
+    ),
+    (
+        "_kCGImageSourceCreateThumbnailFromImageAlways",
+        HostConstant::NSString("kCGImageSourceCreateThumbnailFromImageAlways"),
+    ),
+    (
+        "_kCGImageSourceThumbnailMaxPixelSize",
+        HostConstant::NSString("kCGImageSourceThumbnailMaxPixelSize"),
+    ),
+    (
+        "_kCGImageSourceCreateThumbnailWithTransform",
+        HostConstant::NSString("kCGImageSourceCreateThumbnailWithTransform"),
+    ),
+    (
+        "_kCGImageSourceTypeIdentifierHint",
+        HostConstant::NSString("kCGImageSourceTypeIdentifierHint"),
+    ),
 ];

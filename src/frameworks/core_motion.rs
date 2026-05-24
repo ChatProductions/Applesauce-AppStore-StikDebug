@@ -421,6 +421,37 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<CMMotionManagerHostObject>(this).device_motion_active
 }
 
+// `-[CMMotionManager isMagnetometerActive]` — per
+// <https://developer.apple.com/documentation/coremotion/cmmotionmanager/1616080-magnetometeractive>.
+// touchHLE never enables the magnetometer (we report `isMagnetometerAvailable`
+// as `NO`), so this always returns `NO`. Apple's documentation requires
+// the property be queryable even when the hardware is absent.
+- (bool)isMagnetometerActive {
+    false
+}
+
+// Companion symmetric APIs for the magnetometer-pull-mode API. Apple
+// documents `startMagnetometerUpdates` / `stopMagnetometerUpdates` and
+// the `magnetometerData` accessor in
+// <https://developer.apple.com/documentation/coremotion/cmmotionmanager>.
+// With no hardware backing we still acknowledge the calls so that apps
+// guarding magnetometer use behind `isMagnetometerAvailable` continue to
+// run without crashing if they call these unconditionally.
+- (())startMagnetometerUpdates {
+}
+- (())stopMagnetometerUpdates {
+}
+- (())startMagnetometerUpdatesToQueue:(id)_queue withHandler:(id)_handler {
+}
+- (id)magnetometerData {
+    nil
+}
+- (())setMagnetometerUpdateInterval:(f64)_interval {
+}
+- (f64)magnetometerUpdateInterval {
+    0.0
+}
+
 // =========================================================================
 // Data accessors (pull mode)
 // Per Apple: Returns the latest sample of accelerometer/gyro/motion data,

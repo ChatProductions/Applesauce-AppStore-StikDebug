@@ -203,4 +203,13 @@ pub const CONSTANTS: ConstantExports = &[
         "_kUTTypeObjectiveCSource",
         HostConstant::NSString("public.objective-c-source"),
     ),
+    // `kUTTypeTagSpecificationKey` is the dictionary key used by
+    // `UTTypeCreateAllIdentifiersForTag()` / `UTTypeCopyDeclaration()`
+    // to look up the type's tag specification (filename extensions,
+    // MIME types, etc.). The literal value matches Apple's headers.
+    // <https://developer.apple.com/documentation/coreservices/kuttypetagspecificationkey>
+    (
+        "_kUTTypeTagSpecificationKey",
+        HostConstant::NSString("UTTypeTagSpecification"),
+    ),
 ];
