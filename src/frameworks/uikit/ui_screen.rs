@@ -125,6 +125,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; NSArray new]
 }
 
+// Apple's
+// <https://developer.apple.com/documentation/uikit/uiscreen/1617815-setcurrentmode>
+// (now deprecated, was originally on UIScreen but in iOS 5+ Apple moved
+// resolution control to UIScreenMode itself). The setter is documented as
+// a no-op on screens that have only a single supported mode, which is
+// the case for every device we emulate (a single fixed framebuffer).
+// Accept the call so apps that probe / try to set the mode at launch
+// don't get a "doesNotRecognizeSelector" log spam.
+- (())setCurrentMode:(id)_mode {
+    log_dbg!("[UIScreen setCurrentMode:] ignored; we emulate a single fixed display mode.");
+}
+
 - (CGFloat)overscanCompensationInsets {
     // UIEdgeInsetsZero as four floats would need a custom return type.
     // Return 0.0 as a stand-in; the real return type is UIEdgeInsets.

@@ -420,19 +420,69 @@ fn unarchive_obj(env: &mut Environment, unarchiver: id, idx: u32) -> id {
         );
         return nil;
     };
-    let class_name = object.class_name(host_obj.archive.class_names()).name();
-    log_dbg!(
-        "Unarchiving object of a class '{}' at index {}",
-        class_name,
-        idx
-    );
-    let class = {
-        // get_known_class needs &mut ObjC, so we can't call it
-        // while holding a reference to the class name, since it
-        // is ultimately owned by ObjC via the host object
-        let class_name = class_name.to_string();
-        env.objc.get_known_class(&class_name, &mut env.mem)
+    // Resolve the "best available" class for this NIB entry. Apple's
+    // NIB archive format (used by both legacy XIBs and iOS 5+ storyboards)
+    // attaches an ordered list of *fallback class names* to each entry, so
+    // that a designer can ship a NIB referencing e.g. `_UIVisualEffectView`
+    // but still work on older iOS versions that only know `UIView`. The
+    // runtime's documented behaviour (see Apple's
+    // <https://developer.apple.com/documentation/uikit/uinib> and
+    // <https://developer.apple.com/documentation/foundation/nscoder>) is:
+    //
+    //   1. Try the primary class name.
+    //   2. If `NSClassFromString(primary)` is nil, walk the fallbacks in
+    //      order and use the first one that resolves.
+    //   3. If everything fails, install a placeholder and keep going.
+    //
+    // Modern Xcode emits NIBs where the primary `name` field is *empty*
+    // when the class is purely opt-in / iOS-version-gated; everything that
+    // matters is in the fallback list. Previously we just unconditionally
+    // looked up the primary name, which meant we tried to instantiate the
+    // class literally called `""` and printed the
+    // `Warning: get_known_class called with a garbage/empty class name ("")`
+    // message users see on storyboard apps. Honour the fallbacks list
+    // instead.
+    // First snapshot the primary + fallback names out of the archive so we
+    // can drop the `host_obj` borrow before calling into `env.objc`.
+    let (primary_class_name, fallback_class_names): (String, Vec<String>) = {
+        let class_name_entry = object.class_name(host_obj.archive.class_names());
+        let primary = class_name_entry.name().to_string();
+        let fallbacks: Vec<String> = class_name_entry
+            .fallback_classes(host_obj.archive.class_names())
+            .iter()
+            .map(|c| c.name().to_string())
+            .collect();
+        (primary, fallbacks)
     };
+    // Walk the candidate list and pick the first name that's actually
+    // registered / has a host implementation. If nothing resolves, pick
+    // the first non-empty name we have so the placeholder warning is at
+    // least usable; only fall through to the (possibly empty) primary as
+    // a last resort.
+    let chosen_class_name: String = {
+        let mut chosen: Option<String> = None;
+        let candidates: Vec<&str> = std::iter::once(primary_class_name.as_str())
+            .chain(fallback_class_names.iter().map(|s| s.as_str()))
+            .filter(|s| !s.is_empty())
+            .collect();
+        for name in &candidates {
+            if env.objc.try_get_known_class(name, &mut env.mem).is_some() {
+                chosen = Some(name.to_string());
+                break;
+            }
+        }
+        chosen
+            .or_else(|| candidates.first().map(|s| s.to_string()))
+            .unwrap_or_else(|| primary_class_name.clone())
+    };
+    log_dbg!(
+        "Unarchiving object at index {} (primary class '{}', fallbacks {:?}, chosen '{}')",
+        idx,
+        primary_class_name,
+        fallback_class_names,
+        chosen_class_name
+    );
+    let class = env.objc.get_known_class(&chosen_class_name, &mut env.mem);
 
     let host_obj = borrow_host_obj(env, unarchiver);
     // reborrow

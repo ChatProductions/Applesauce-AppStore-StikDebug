@@ -46,6 +46,16 @@ pub struct UITextViewHostObject {
     autocapitalization_type: NSInteger,
     autocorrection_type: NSInteger,
     data_detector_types: NSUInteger,
+    /// Per Apple's
+    /// <https://developer.apple.com/documentation/uikit/uiresponder/1621119-inputaccessoryview>
+    /// and <https://developer.apple.com/documentation/uikit/uiresponder/1621072-inputview>,
+    /// every `UIResponder` (and therefore every UITextView) supports
+    /// `inputView` / `inputAccessoryView` — strong-ish references to
+    /// auxiliary views shown above the keyboard. We store the pointer
+    /// the app hands us so the getter returns the same object the
+    /// setter took, exactly like the documented contract.
+    input_accessory_view: id,
+    input_view: id,
 }
 impl_HostObject_with_superclass!(UITextViewHostObject);
 
@@ -64,6 +74,8 @@ impl Default for UITextViewHostObject {
             autocapitalization_type: 0,
             autocorrection_type: 0,
             data_detector_types: 0,
+            input_accessory_view: nil,
+            input_view: nil,
         }
     }
 }
@@ -297,6 +309,31 @@ pub const CLASSES: ClassExports = objc_classes! {
                                          withFont:font
                                     lineBreakMode:UILineBreakModeTailTruncation
                                         alignment:text_alignment];
+}
+
+// MARK: - UIResponder input-accessory / input-view properties.
+
+- (id)inputAccessoryView {
+    env.objc.borrow::<UITextViewHostObject>(this).input_accessory_view
+}
+- (())setInputAccessoryView:(id)view {
+    let old = env.objc.borrow::<UITextViewHostObject>(this).input_accessory_view;
+    if old != view {
+        retain(env, view);
+        if old != nil { release(env, old); }
+        env.objc.borrow_mut::<UITextViewHostObject>(this).input_accessory_view = view;
+    }
+}
+- (id)inputView {
+    env.objc.borrow::<UITextViewHostObject>(this).input_view
+}
+- (())setInputView:(id)view {
+    let old = env.objc.borrow::<UITextViewHostObject>(this).input_view;
+    if old != view {
+        retain(env, view);
+        if old != nil { release(env, old); }
+        env.objc.borrow_mut::<UITextViewHostObject>(this).input_view = view;
+    }
 }
 
 @end

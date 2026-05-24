@@ -381,6 +381,193 @@ pub const CONSTANTS: ConstantExports = &[
     ("_kABPersonURLProperty", HostConstant::NullPtr),
     ("_kABPersonRelatedNamesProperty", HostConstant::NullPtr),
     ("_kABPersonSocialProfileProperty", HostConstant::NullPtr),
+    // -----------------------------------------------------------------
+    // ABPerson "generic" labels. Apple ships these as `CFStringRef`
+    // constants in `<AddressBook/ABPerson.h>`. The literal value of each
+    // is the iOS-canonical underscore-escaped tag (e.g. `_$!<Home>!$_`),
+    // which is what `ABMultiValueCopyLabelAtIndex` returns and what
+    // `[label isEqualToString:kABHomeLabel]` looks for.
+    // <https://developer.apple.com/documentation/addressbook/abperson>.
+    // -----------------------------------------------------------------
+    ("_kABHomeLabel", HostConstant::NSString("_$!<Home>!$_")),
+    ("_kABWorkLabel", HostConstant::NSString("_$!<Work>!$_")),
+    ("_kABOtherLabel", HostConstant::NSString("_$!<Other>!$_")),
+    // Phone labels.
+    (
+        "_kABPersonPhoneMobileLabel",
+        HostConstant::NSString("_$!<Mobile>!$_"),
+    ),
+    (
+        "_kABPersonPhoneIPhoneLabel",
+        HostConstant::NSString("iPhone"),
+    ),
+    (
+        "_kABPersonPhoneMainLabel",
+        HostConstant::NSString("_$!<Main>!$_"),
+    ),
+    (
+        "_kABPersonPhoneHomeFAXLabel",
+        HostConstant::NSString("_$!<HomeFAX>!$_"),
+    ),
+    (
+        "_kABPersonPhoneWorkFAXLabel",
+        HostConstant::NSString("_$!<WorkFAX>!$_"),
+    ),
+    (
+        "_kABPersonPhoneOtherFAXLabel",
+        HostConstant::NSString("_$!<OtherFAX>!$_"),
+    ),
+    (
+        "_kABPersonPhonePagerLabel",
+        HostConstant::NSString("_$!<Pager>!$_"),
+    ),
+    // URL / HomePage label.
+    (
+        "_kABPersonHomePageLabel",
+        HostConstant::NSString("_$!<HomePage>!$_"),
+    ),
+    // Address multi-value dictionary keys. Apple documents these as the
+    // exact lowercase tags `Street`, `City`, etc.
+    (
+        "_kABPersonAddressStreetKey",
+        HostConstant::NSString("Street"),
+    ),
+    (
+        "_kABPersonAddressCityKey",
+        HostConstant::NSString("City"),
+    ),
+    (
+        "_kABPersonAddressStateKey",
+        HostConstant::NSString("State"),
+    ),
+    (
+        "_kABPersonAddressZIPKey",
+        HostConstant::NSString("ZIP"),
+    ),
+    (
+        "_kABPersonAddressCountryKey",
+        HostConstant::NSString("Country"),
+    ),
+    (
+        "_kABPersonAddressCountryCodeKey",
+        HostConstant::NSString("CountryCode"),
+    ),
+    // Instant-message multi-value dictionary keys.
+    (
+        "_kABPersonInstantMessageServiceKey",
+        HostConstant::NSString("service"),
+    ),
+    (
+        "_kABPersonInstantMessageUsernameKey",
+        HostConstant::NSString("username"),
+    ),
+    // Instant-message service identifiers (a small subset).
+    (
+        "_kABPersonInstantMessageServiceAIM",
+        HostConstant::NSString("AIM"),
+    ),
+    (
+        "_kABPersonInstantMessageServiceICQ",
+        HostConstant::NSString("ICQ"),
+    ),
+    (
+        "_kABPersonInstantMessageServiceJabber",
+        HostConstant::NSString("Jabber"),
+    ),
+    (
+        "_kABPersonInstantMessageServiceMSN",
+        HostConstant::NSString("MSN"),
+    ),
+    (
+        "_kABPersonInstantMessageServiceYahoo",
+        HostConstant::NSString("Yahoo"),
+    ),
+    // Social-profile multi-value dictionary keys.
+    (
+        "_kABPersonSocialProfileServiceKey",
+        HostConstant::NSString("service"),
+    ),
+    (
+        "_kABPersonSocialProfileURLKey",
+        HostConstant::NSString("url"),
+    ),
+    (
+        "_kABPersonSocialProfileUsernameKey",
+        HostConstant::NSString("username"),
+    ),
+    (
+        "_kABPersonSocialProfileUserIdentifierKey",
+        HostConstant::NSString("identifier"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceTwitter",
+        HostConstant::NSString("twitter"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceFacebook",
+        HostConstant::NSString("facebook"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceFlickr",
+        HostConstant::NSString("flickr"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceLinkedIn",
+        HostConstant::NSString("linkedin"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceMyspace",
+        HostConstant::NSString("myspace"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceSinaWeibo",
+        HostConstant::NSString("sinaweibo"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceTencentWeibo",
+        HostConstant::NSString("tencentweibo"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceYelp",
+        HostConstant::NSString("yelp"),
+    ),
+    (
+        "_kABPersonSocialProfileServiceGameCenter",
+        HostConstant::NSString("gamecenter"),
+    ),
+    // Sources/source-related notification names.
+    (
+        "_ABAddressBookErrorDomain",
+        HostConstant::NSString("ABAddressBookErrorDomain"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayProperty",
+        HostConstant::NullPtr,
+    ),
+    (
+        "_kABPersonAlternateBirthdayCalendarIdentifierKey",
+        HostConstant::NSString("calendaridentifier"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayEraKey",
+        HostConstant::NSString("era"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayYearKey",
+        HostConstant::NSString("year"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayMonthKey",
+        HostConstant::NSString("month"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayIsLeapMonthKey",
+        HostConstant::NSString("leapmonth"),
+    ),
+    (
+        "_kABPersonAlternateBirthdayDayKey",
+        HostConstant::NSString("day"),
+    ),
 ];
 
 pub const DYLIB: HostDylib = HostDylib {

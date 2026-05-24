@@ -363,7 +363,9 @@ impl Allocator {
         }
     }
 
-    /// This is used for realloc
+    /// Used by `realloc` — logs a warning when given a non-malloc pointer,
+    /// because realloc'ing a non-heap pointer is undefined behaviour on the
+    /// guest side and almost always indicates a real bug.
     pub fn find_allocated_size(&mut self, base: VAddr) -> GuestUSize {
         let Some(size) = self.used_chunks.get_size_with_base(base) else {
             log!(
@@ -373,6 +375,19 @@ impl Allocator {
             return 0;
         };
         size.get()
+    }
+
+    /// Silent variant of [`find_allocated_size`] for callers such as
+    /// `malloc_size(3)` where Apple's documented contract is to *quietly*
+    /// return 0 for any pointer that isn't the base of a malloc-managed
+    /// allocation (see
+    /// <https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/MallocDebug.html>
+    /// and the `malloc_size(3)` manpage in the macOS / iOS SDK). Apps that
+    /// hand `malloc_size` a stack pointer, a `__DATA` symbol, or an interior
+    /// pointer routinely rely on this behaviour, so spamming a warning for
+    /// every such call (as we used to) is both incorrect and noisy.
+    pub fn try_find_allocated_size(&self, base: VAddr) -> Option<GuestUSize> {
+        self.used_chunks.get_size_with_base(base).map(|s| s.get())
     }
 
     /// Returns whether `base` is currently a live allocation (the exact base

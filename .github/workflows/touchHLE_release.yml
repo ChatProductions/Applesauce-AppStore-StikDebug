@@ -55,8 +55,50 @@ jobs:
         run: cargo build --target x86_64-apple-darwin --release  
         env:  
           CMAKE: ${{ github.workspace }}/vendor/cmake/bin/cmake  
-      - name: Create .app bundle  
-        run: cd dev-scripts && ./make-macos-bundle.sh ../target/x86_64-apple-darwin/release/touchHLE "`cargo run --package touchHLE_version`" "`cargo run --package touchHLE_version -- --branding`" && mkdir touchHLE-dmg-src && mv *.app touchHLE-dmg-src/ && hdiutil create -volname touchHLE -srcfolder touchHLE-dmg-src touchHLE.dmg && mv touchHLE.dmg ..  
+      - name: Create .app bundle and DMG
+        # `hdiutil create` periodically fails on the `macos-15-arm64` GitHub
+        # Actions runners with `hdiutil: create failed - Resource busy` when
+        # Spotlight (`mds`/`mds_stores`) decides to index `touchHLE-dmg-src`
+        # at the same moment hdiutil tries to snapshot it, or when a stale
+        # `/Volumes/touchHLE` from a previous run hasn't fully detached.
+        # Mirror the workaround Apple documents in TN2065 / `hdiutil(1)` —
+        # detach any stray attachment, pass `-ov` so an existing image is
+        # overwritten cleanly, and retry a few times. See
+        # <https://developer.apple.com/library/archive/technotes/tn2065/_index.html>.
+        run: |
+          set -eu
+          cd dev-scripts
+          ./make-macos-bundle.sh \
+            ../target/x86_64-apple-darwin/release/touchHLE \
+            "`cargo run --package touchHLE_version`" \
+            "`cargo run --package touchHLE_version -- --branding`"
+          mkdir touchHLE-dmg-src
+          mv *.app touchHLE-dmg-src/
+          # Forbid Spotlight from indexing the staging folder so it can't
+          # race with hdiutil for an exclusive handle.
+          touch touchHLE-dmg-src/.metadata_never_index || true
+          # Tear down any stale mount left over from a previous run.
+          if [ -d "/Volumes/touchHLE" ]; then
+            hdiutil detach -force "/Volumes/touchHLE" || true
+          fi
+          # Retry hdiutil up to 5 times with growing back-off.
+          attempt=1
+          max_attempts=5
+          until hdiutil create -ov -volname touchHLE \
+              -srcfolder touchHLE-dmg-src touchHLE.dmg; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "hdiutil create still failed after $max_attempts attempts" >&2
+              exit 1
+            fi
+            sleep_secs=$((attempt * 5))
+            echo "hdiutil create failed (attempt $attempt); retrying in ${sleep_secs}s" >&2
+            if [ -d "/Volumes/touchHLE" ]; then
+              hdiutil detach -force "/Volumes/touchHLE" || true
+            fi
+            sleep "$sleep_secs"
+            attempt=$((attempt + 1))
+          done
+          mv touchHLE.dmg ..
       - uses: actions/upload-artifact@v4  
         with:  
           name: touchHLE_macOS_x86_64  

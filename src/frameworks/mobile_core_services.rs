@@ -64,4 +64,143 @@ pub const CONSTANTS: ConstantExports = &[
     ),
     ("_kUTTypeJPEG", HostConstant::NSString("public.jpeg")),
     ("_kUTTypePNG", HostConstant::NSString("public.png")),
+    // Additional UTType identifiers covering the common image, audio,
+    // video and document formats Apple ships with the OS. Values are
+    // taken from <https://developer.apple.com/documentation/uniformtypeidentifiers/uttype/system-declared-uniform-type-identifiers>.
+    ("_kUTTypeGIF", HostConstant::NSString("com.compuserve.gif")),
+    ("_kUTTypeTIFF", HostConstant::NSString("public.tiff")),
+    ("_kUTTypeBMP", HostConstant::NSString("com.microsoft.bmp")),
+    ("_kUTTypeICO", HostConstant::NSString("com.microsoft.ico")),
+    (
+        "_kUTTypeJPEG2000",
+        HostConstant::NSString("public.jpeg-2000"),
+    ),
+    (
+        "_kUTTypeAppleICNS",
+        HostConstant::NSString("com.apple.icns"),
+    ),
+    (
+        "_kUTTypeQuickTimeImage",
+        HostConstant::NSString("com.apple.quicktime-image"),
+    ),
+    (
+        "_kUTTypeQuickTimeMovie",
+        HostConstant::NSString("com.apple.quicktime-movie"),
+    ),
+    ("_kUTTypeMPEG", HostConstant::NSString("public.mpeg")),
+    (
+        "_kUTTypeMPEG4",
+        HostConstant::NSString("public.mpeg-4"),
+    ),
+    (
+        "_kUTTypeMPEG4Audio",
+        HostConstant::NSString("public.mpeg-4-audio"),
+    ),
+    (
+        "_kUTTypeAppleProtectedMPEG4Audio",
+        HostConstant::NSString("com.apple.protected-mpeg-4-audio"),
+    ),
+    (
+        "_kUTTypeAppleProtectedMPEG4Video",
+        HostConstant::NSString("com.apple.protected-mpeg-4-video"),
+    ),
+    (
+        "_kUTTypeMP3",
+        HostConstant::NSString("public.mp3"),
+    ),
+    (
+        "_kUTTypeAVIMovie",
+        HostConstant::NSString("public.avi"),
+    ),
+    (
+        "_kUTTypeAudiovisualContent",
+        HostConstant::NSString("public.audiovisual-content"),
+    ),
+    (
+        "_kUTTypeWaveformAudio",
+        HostConstant::NSString("com.microsoft.waveform-audio"),
+    ),
+    (
+        "_kUTTypeAIFFAudio",
+        HostConstant::NSString("public.aiff-audio"),
+    ),
+    (
+        "_kUTTypeAUAudio",
+        HostConstant::NSString("public.au-audio"),
+    ),
+    (
+        "_kUTTypeMIDIAudio",
+        HostConstant::NSString("public.midi-audio"),
+    ),
+    // Content/format/abstract types.
+    ("_kUTTypeContent", HostConstant::NSString("public.content")),
+    ("_kUTTypeItem", HostConstant::NSString("public.item")),
+    (
+        "_kUTTypeArchive",
+        HostConstant::NSString("public.archive"),
+    ),
+    (
+        "_kUTTypeFolder",
+        HostConstant::NSString("public.folder"),
+    ),
+    (
+        "_kUTTypeDirectory",
+        HostConstant::NSString("public.directory"),
+    ),
+    (
+        "_kUTTypeApplication",
+        HostConstant::NSString("com.apple.application"),
+    ),
+    (
+        "_kUTTypeBundle",
+        HostConstant::NSString("com.apple.bundle"),
+    ),
+    (
+        "_kUTTypeFramework",
+        HostConstant::NSString("com.apple.framework"),
+    ),
+    (
+        "_kUTTypeExecutable",
+        HostConstant::NSString("public.executable"),
+    ),
+    // Document types.
+    ("_kUTTypeUTF8PlainText", HostConstant::NSString("public.utf8-plain-text")),
+    (
+        "_kUTTypeUTF16PlainText",
+        HostConstant::NSString("public.utf16-plain-text"),
+    ),
+    ("_kUTTypeRTF", HostConstant::NSString("public.rtf")),
+    ("_kUTTypeHTML", HostConstant::NSString("public.html")),
+    ("_kUTTypeXML", HostConstant::NSString("public.xml")),
+    ("_kUTTypeJSON", HostConstant::NSString("public.json")),
+    (
+        "_kUTTypePropertyList",
+        HostConstant::NSString("com.apple.property-list"),
+    ),
+    (
+        "_kUTTypeXMLPropertyList",
+        HostConstant::NSString("com.apple.xml-property-list"),
+    ),
+    (
+        "_kUTTypeBinaryPropertyList",
+        HostConstant::NSString("com.apple.binary-property-list"),
+    ),
+    ("_kUTTypePDF", HostConstant::NSString("com.adobe.pdf")),
+    (
+        "_kUTTypeVCard",
+        HostConstant::NSString("public.vcard"),
+    ),
+    // VCS / source / build artefacts occasionally referenced by IDE-style apps.
+    (
+        "_kUTTypeSourceCode",
+        HostConstant::NSString("public.source-code"),
+    ),
+    (
+        "_kUTTypeCSource",
+        HostConstant::NSString("public.c-source"),
+    ),
+    (
+        "_kUTTypeObjectiveCSource",
+        HostConstant::NSString("public.objective-c-source"),
+    ),
 ];

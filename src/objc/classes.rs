@@ -325,7 +325,30 @@ impl ClassHostObject {
             _base_properties,
             ..
         } = mem.read(data);
-        let name = mem.cstr_at_utf8(name).unwrap().to_string();
+        // Apple's Objective-C 2.0 runtime stores `class_rw_t.name` as a
+        // pointer to a NUL-terminated UTF-8 C string in `__objc_classname`
+        // (see <objc/runtime.h> and `class_getName`). Some real-world
+        // binaries — especially FairPlay-encrypted IPAs that were only
+        // partially decrypted by tools like Clutch, or Mach-O files whose
+        // `__TEXT` segment was clobbered — end up with `name` pointing at
+        // bytes that aren't valid UTF-8. Previously we panicked with
+        // `cstr_at_utf8().unwrap()`; mirror the real runtime instead, which
+        // logs the corruption and falls back to a synthetic name derived
+        // from the class pointer so the rest of the runtime stays usable.
+        let name = match mem.cstr_at_utf8(name) {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                log!(
+                    "Warning: ClassHostObject::from_bin: class at {:?} has an unreadable (non-UTF-8) name at {:?}; using a synthetic placeholder.",
+                    class,
+                    name,
+                );
+                format!(
+                    "_touchHLE_UnreadableClass_{:08x}",
+                    class.to_bits()
+                )
+            }
+        };
 
         let mut host_object = ClassHostObject {
             name,
@@ -366,7 +389,14 @@ fn substitute_classes(
 ) -> Option<(Box<FakeClass>, Box<FakeClass>)> {
     let class_t { data, .. } = mem.read(class.cast());
     let class_rw_t { name, .. } = mem.read(data);
-    let name = mem.cstr_at_utf8(name).unwrap();
+    // If the class name bytes aren't valid UTF-8 the metadata is almost
+    // certainly corrupt / still-encrypted (see comment in
+    // `ClassHostObject::from_bin`). Don't try to fake-substitute such a
+    // class — let the normal loader path log a warning and create a stub
+    // host object instead of panicking here.
+    let Ok(name) = mem.cstr_at_utf8(name) else {
+        return None;
+    };
     // Substitute classes that seem to be from various third-party advertising
     // or social network SDKs.
     if !(name.starts_with("AdMob")
@@ -397,8 +427,22 @@ fn substitute_classes(
             name: metaclass_name,
             ..
         } = mem.read(data);
-        let metaclass_name = mem.cstr_at_utf8(metaclass_name).unwrap();
-        assert!(name == metaclass_name);
+        // Same defensive handling as the class-name read above. In Apple's
+        // runtime, `class_getName(cls) == class_getName(object_getClass(cls))`,
+        // but a corrupt binary can violate that invariant; an `assert!`
+        // here would crash the whole emulator over what is really just
+        // malformed input. Skip the substitution instead.
+        let Ok(metaclass_name) = mem.cstr_at_utf8(metaclass_name) else {
+            return None;
+        };
+        if name != metaclass_name {
+            log!(
+                "Warning: substitute_classes: class name {:?} != metaclass name {:?}; skipping substitution.",
+                name,
+                metaclass_name,
+            );
+            return None;
+        }
     }
 
     log!(
@@ -878,7 +922,20 @@ impl ObjC {
             let cat_ptr = mem.read(base + i);
             let data = mem.read(cat_ptr);
 
-            let name = mem.cstr_at_utf8(data.name).unwrap();
+            // `category_t` is `#[repr(C, packed)]`, so `data.name` can't be
+            // borrowed directly (unaligned). Copy out the pointer first.
+            let name_ptr = data.name;
+            let name = match mem.cstr_at_utf8(name_ptr) {
+                Ok(s) => s,
+                Err(_) => {
+                    log!(
+                        "Warning: register_bin_categories: category at {:?} has an unreadable (non-UTF-8) name at {:?}; skipping.",
+                        cat_ptr,
+                        name_ptr,
+                    );
+                    continue;
+                }
+            };
             let class = data.class;
             let metaclass = Self::read_isa(class, mem);
             for (class, methods) in [
