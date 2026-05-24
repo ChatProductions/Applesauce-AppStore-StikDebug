@@ -377,11 +377,44 @@ impl MachO {
                             true
                         }
                         "__DATA" => true,
+                        // `__RESTRICT` is a one-section segment Apple's
+                        // linker emits to mark a binary as non-injectable
+                        // (it disables `DYLD_INSERT_LIBRARIES` and the
+                        // task-port debugging path in dyld). It contains a
+                        // `__restrict` C-string section; the segment is
+                        // documented in Apple's open-source dyld
+                        // (`dyld/src/ImageLoaderMachO.cpp`) and xnu's
+                        // `bsd/kern/mach_loader.c`. We don't enforce that
+                        // policy in HLE, so treat the segment as a regular
+                        // read-only data segment without spamming a warning.
+                        "__RESTRICT" => true,
                         _ => {
                             log!("Warning: Unexpected segment name: {}", segname);
                             true
                         }
                     };
+
+                    // Apple's xnu kernel (`bsd/kern/mach_loader.c`,
+                    // `parse_machfile()` → `load_segment()`) explicitly
+                    // skips `LC_SEGMENT` commands whose `vmsize == 0` —
+                    // they reserve no address space and have no data.
+                    // Some shipping iOS binaries (e.g. games containing a
+                    // dummy `__RESTRICT` segment from older linkers) emit
+                    // zero-vmsize segments; reserving 0 bytes used to
+                    // panic our allocator (`NonZeroU32::new(0).unwrap()`
+                    // in `Chunk::new`), so honour the kernel's contract
+                    // and silently ignore them here.
+                    if load_me && vmsize == 0 {
+                        log_dbg!(
+                            "Skipping zero-vmsize segment {} at {:#x} (matches xnu mach_loader.c behaviour)",
+                            segname,
+                            vmaddr + slide
+                        );
+                        all_sections.extend_from_slice(&sections);
+                        segment_offsets.push(vmaddr);
+                        last_segment_end = last_segment_end.max(vmaddr + slide);
+                        continue;
+                    }
 
                     if load_me {
                         log_dbg!(

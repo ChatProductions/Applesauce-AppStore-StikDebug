@@ -14,8 +14,8 @@
 
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use super::{CFIndex, CFTypeRef};
-use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutPtr, Ptr};
 use crate::objc::{id, msg, msg_class, nil};
 use crate::Environment;
 
@@ -247,6 +247,35 @@ pub fn CFSetRemoveAllValues(env: &mut Environment, set: CFMutableSetRef) {
     }
     () = msg![env; set removeAllObjects];
 }
+
+/// Non-lazy export of `kCFTypeSetCallBacks`, Apple's CoreFoundation
+/// canonical callbacks for `CFSet` storing CF-types
+/// (retain/release/equal/hash). The real implementation lives in
+/// CoreFoundation and forwards retain/release to `CFRetain`/`CFRelease`,
+/// equality to `CFEqual`, and hashing to `CFHash`. Our `NSSet`-backed
+/// `CFSet` doesn't actually invoke these callbacks (it uses Objective-C
+/// retain/release/hash directly), but apps that read the struct (or
+/// take its address) still need a valid pointer with the documented
+/// `{version, retain, release, copyDescription, equal, hash}` layout.
+///
+/// We satisfy the contract by allocating a zero-initialised `CFSetCallBacks`
+/// — every function pointer is NULL, which CoreFoundation documents
+/// (`<CoreFoundation/CFSet.h>`) as "use default behaviour", and our
+/// `CFSetCreateMutable` already ignores the actual callbacks anyway.
+pub const CONSTANTS: ConstantExports = &[(
+    "_kCFTypeSetCallBacks",
+    HostConstant::Custom(|env| {
+        let cb = CFSetCallBacks {
+            version: 0,
+            retain: Ptr::null(),
+            release: Ptr::null(),
+            copy_description: Ptr::null(),
+            equal: Ptr::null(),
+            hash: Ptr::null(),
+        };
+        env.mem.alloc_and_write(cb).cast_void().cast_const()
+    }),
+)];
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFSetCreate(_, _, _, _)),

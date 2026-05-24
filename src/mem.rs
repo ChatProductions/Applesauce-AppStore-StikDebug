@@ -983,7 +983,22 @@ impl Mem {
 
     /// Permanently mark a region of address space as being unusable to the
     /// memory allocator.
+    ///
+    /// A zero-byte reservation is a documented no-op: it matches what xnu's
+    /// `mach_loader.c` does when handed a `LC_SEGMENT` whose `vmsize == 0`
+    /// (the kernel reserves no address space, the segment is silently
+    /// ignored). We mirror that here so the allocator's `Chunk` invariant —
+    /// every chunk must contain at least one byte — is preserved even when
+    /// callers (Mach-O loader, `dyld::do_initial_linking`, etc.) hand us a
+    /// degenerate request.
     pub fn reserve(&mut self, base: VAddr, size: GuestUSize) {
+        if size == 0 {
+            log_dbg!(
+                "Mem::reserve({:#x}, 0) — no-op (matches xnu mach_loader.c)",
+                base
+            );
+            return;
+        }
         self.allocator.reserve(allocator::Chunk::new(base, size));
     }
 }

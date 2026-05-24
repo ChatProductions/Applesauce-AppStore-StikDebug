@@ -6,10 +6,10 @@
  */
 //! `netdb.h` — host/service name resolution stubs.
 
-use crate::dyld::FunctionExports;
+use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
 use crate::export_c_func;
 use crate::libc::sys::socket::{sockaddr, AF_INET, SOCK_DGRAM, SOCK_STREAM};
-use crate::mem::{guest_size_of, ConstPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
+use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
 use std::net::ToSocketAddrs;
 use std::ops::Add;
@@ -60,8 +60,43 @@ const AF_INET_NBO: u16 = ((AF_INET as u16) << 8) | ((AF_INET as u16) >> 8);
 pub struct State {
     /// Raw guest address of the persistent `hostent` block.
     pub dummy_hostent_ptr: u32,
-    /// h_errno — set by gethostbyname/gethostbyaddr.
+    /// Cached host-side mirror of the guest `h_errno` cell. Kept in sync
+    /// with `h_errno_cell` so that Rust code can read the most-recently-set
+    /// value without going through `env.mem`.
     pub h_errno: i32,
+    /// Address (in guest memory) of the persistent `int h_errno;` cell
+    /// exported by libSystem. Apple's `netdb.h` declares `h_errno` as
+    /// `extern int h_errno;` and ships a real storage slot in libsystem;
+    /// `__h_errno_location()` returns the same pointer on every call.
+    /// We lazily allocate one 4-byte cell on first access and re-use it
+    /// for both the non-lazy `_h_errno` symbol and `__h_errno_location`.
+    pub h_errno_cell: Option<MutPtr<i32>>,
+}
+
+/// Returns the guest-memory pointer to the persistent `h_errno` cell,
+/// allocating it on first use. Apple's libsystem exposes `h_errno` as
+/// a real global; this helper guarantees we hand out the *same* address
+/// every time, which is required by code that compares the pointer
+/// returned from `__h_errno_location()` across calls (and by anything
+/// that resolves the non-lazy `_h_errno` symbol).
+pub fn h_errno_ptr(env: &mut Environment) -> MutPtr<i32> {
+    if let Some(ptr) = env.libc_state.netdb.h_errno_cell {
+        return ptr;
+    }
+    let ptr: MutPtr<i32> = env.mem.alloc(guest_size_of::<i32>()).cast();
+    env.mem.write(ptr, env.libc_state.netdb.h_errno);
+    env.libc_state.netdb.h_errno_cell = Some(ptr);
+    ptr
+}
+
+/// Sets `h_errno` per Apple's `netdb.h` semantics: updates both the
+/// host-side mirror and the persistent guest cell so that guest code
+/// reading the cell directly (e.g. via `_h_errno`) sees the new value.
+pub fn set_h_errno(env: &mut Environment, value: i32) {
+    env.libc_state.netdb.h_errno = value;
+    if let Some(ptr) = env.libc_state.netdb.h_errno_cell {
+        env.mem.write(ptr, value);
+    }
 }
 
 /// Real in-memory layout of `struct hostent` on 32-bit iOS/macOS.
@@ -243,7 +278,7 @@ fn resolve_hostname_ipv4(hostname: &str) -> Option<[u8; 4]> {
 }
 
 fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
-    env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
+    set_h_errno(env, H_ERRNO_SUCCESS);
     let hostname = if name.is_null() {
         "localhost".to_string()
     } else {
@@ -264,7 +299,7 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
                         "gethostbyname(\"{}\"): network disabled -> HOST_NOT_FOUND",
                         hostname
                     );
-                    env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
+                    set_h_errno(env, H_ERRNO_HOST_NOT_FOUND);
                     return MutPtr::null();
                 }
                 // Ask the host OS resolver for an A record.
@@ -285,7 +320,7 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
                             "gethostbyname(\"{}\"): host resolver failed -> HOST_NOT_FOUND",
                             hostname
                         );
-                        env.libc_state.netdb.h_errno = H_ERRNO_HOST_NOT_FOUND;
+                        set_h_errno(env, H_ERRNO_HOST_NOT_FOUND);
                         return MutPtr::null();
                     }
                 }
@@ -312,7 +347,7 @@ fn gethostbyname(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
 fn gethostbyname2(env: &mut Environment, name: ConstPtr<u8>, af: i32) -> MutPtr<u8> {
     if af != AF_INET {
         log!("gethostbyname2: unsupported address family {}", af);
-        env.libc_state.netdb.h_errno = H_ERRNO_NO_RECOVERY;
+        set_h_errno(env, H_ERRNO_NO_RECOVERY);
         return MutPtr::null();
     }
     gethostbyname(env, name)
@@ -324,10 +359,10 @@ fn gethostbyaddr(
     len: socklen_t,
     type_: i32,
 ) -> MutPtr<u8> {
-    env.libc_state.netdb.h_errno = H_ERRNO_SUCCESS;
+    set_h_errno(env, H_ERRNO_SUCCESS);
     if type_ != AF_INET || len < 4 {
         log!("gethostbyaddr: unsupported family {} or len {}", type_, len);
-        env.libc_state.netdb.h_errno = H_ERRNO_NO_RECOVERY;
+        set_h_errno(env, H_ERRNO_NO_RECOVERY);
         return MutPtr::null();
     }
 
@@ -672,16 +707,15 @@ fn getnameinfo(
 // MARK: - h_errno
 
 fn __h_errno_location(env: &mut Environment) -> MutPtr<i32> {
-    // Return a pointer to h_errno in libc state — we embed it in a small
-    // guest allocation and update it on each call.
-    // For simplicity, allocate once and reuse.
-    static mut H_ERRNO_ADDR: u32 = 0;
-    // We can't use a real static for guest memory, so allocate on first call.
-    let addr = env.libc_state.netdb.h_errno;
-    // Allocate a 4-byte guest cell each call (leaking — tiny, rare).
-    let ptr: MutPtr<i32> = env.mem.alloc(4).cast();
-    env.mem.write(ptr, addr);
-    ptr
+    // Apple's `netdb.h` (`__h_errno_location` is the thread-local accessor
+    // used by the macro `#define h_errno (*__h_errno_location())`) must
+    // return a stable pointer to the *single* `h_errno` cell so that
+    // `&h_errno` is well-defined and the value survives across calls.
+    // Allocating a fresh cell each call — as a previous revision did —
+    // breaks `errno`-style code (`*__h_errno_location() = 0;`) because
+    // the next read sees a stale address. Funnel everyone through
+    // `h_errno_ptr` which allocates once and caches in `State`.
+    h_errno_ptr(env)
 }
 
 // MARK: - gai_strerror
@@ -715,3 +749,13 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__h_errno_location()),
     export_c_func!(gai_strerror(_)),
 ];
+
+/// Non-lazy symbol export for `extern int h_errno;` as declared in
+/// `<netdb.h>` (and historically by libresolv). Apps that bypass the
+/// macro and reference the global directly (e.g. some POSIX C wrappers
+/// emitted by older toolchains, sqlite's optional DNS helper) get the
+/// stable cell allocated in `State::h_errno_cell`.
+pub const CONSTANTS: ConstantExports = &[(
+    "_h_errno",
+    HostConstant::Custom(|env| -> ConstVoidPtr { h_errno_ptr(env).cast().cast_const() }),
+)];

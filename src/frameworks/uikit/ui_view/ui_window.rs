@@ -448,9 +448,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 };
 
-/// Window life-cycle notifications
-/// TODO: more notifications
+/// Window life-cycle notifications.
+///
+/// Apple `UIWindow.h` declares each name as
+/// `UIKIT_EXTERN NSNotificationName const ...`. The literal value
+/// posted to `NSNotificationCenter` is the symbol's own name, which is
+/// what `-[NSNotificationCenter addObserver:selector:name:object:]`
+/// compares against with `-[NSString isEqualToString:]`.
+///
+/// References:
+/// * Apple [UIWindow notifications](https://developer.apple.com/documentation/uikit/uiwindow)
 const UIWindowDidBecomeKeyNotification: &str = "UIWindowDidBecomeKeyNotification";
+const UIWindowDidResignKeyNotification: &str = "UIWindowDidResignKeyNotification";
+const UIWindowDidBecomeHiddenNotification: &str = "UIWindowDidBecomeHiddenNotification";
+const UIWindowDidBecomeVisibleNotification: &str = "UIWindowDidBecomeVisibleNotification";
 /// Keyboard notifications
 /// TODO: more keyboard notifications
 pub const UIKeyboardWillShowNotification: &str = "UIKeyboardWillShowNotification";
@@ -463,6 +474,18 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_UIWindowDidBecomeKeyNotification",
         HostConstant::NSString(UIWindowDidBecomeKeyNotification),
+    ),
+    (
+        "_UIWindowDidResignKeyNotification",
+        HostConstant::NSString(UIWindowDidResignKeyNotification),
+    ),
+    (
+        "_UIWindowDidBecomeHiddenNotification",
+        HostConstant::NSString(UIWindowDidBecomeHiddenNotification),
+    ),
+    (
+        "_UIWindowDidBecomeVisibleNotification",
+        HostConstant::NSString(UIWindowDidBecomeVisibleNotification),
     ),
     // _UIKeyboardWillShowNotification, _UIKeyboardDidShowNotification,
     // _UIKeyboardWillHideNotification, _UIKeyboardDidHideNotification and
