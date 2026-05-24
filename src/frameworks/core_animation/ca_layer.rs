@@ -154,6 +154,52 @@ pub const kCAGravityTopRight: &str = "topRight";
 pub const kCAGravityBottomLeft: &str = "bottomLeft";
 pub const kCAGravityBottomRight: &str = "bottomRight";
 
+// CAShapeLayer line cap / line join constants. Apple's QuartzCore
+// headers (`CAShapeLayer.h`) declare these as
+// `CA_EXTERN NSString * const kCALineCap*` / `kCALineJoin*`. The literal
+// values are the same strings the framework uses internally and the
+// ones that `-[CAShapeLayer setLineCap:]` and similar setters compare
+// against with `-[NSString isEqualToString:]`.
+//
+// References:
+// * Apple [`CAShapeLayer.lineCap`](https://developer.apple.com/documentation/quartzcore/cashapelayer/1521905-linecap)
+// * Apple [`CAShapeLayer.lineJoin`](https://developer.apple.com/documentation/quartzcore/cashapelayer/1521918-linejoin)
+// * Apple [`CAShapeLayer.fillRule`](https://developer.apple.com/documentation/quartzcore/cashapelayer/1522146-fillrule)
+pub const kCALineCapButt: &str = "butt";
+pub const kCALineCapRound: &str = "round";
+pub const kCALineCapSquare: &str = "square";
+pub const kCALineJoinMiter: &str = "miter";
+pub const kCALineJoinRound: &str = "round";
+pub const kCALineJoinBevel: &str = "bevel";
+pub const kCAFillRuleNonZero: &str = "non-zero";
+pub const kCAFillRuleEvenOdd: &str = "even-odd";
+
+// CATransition types / subtypes. From `CATransition.h`. Used by
+// `setType:` / `setSubtype:` on CATransition.
+pub const kCATransitionFade: &str = "fade";
+pub const kCATransitionMoveIn: &str = "moveIn";
+pub const kCATransitionPush: &str = "push";
+pub const kCATransitionReveal: &str = "reveal";
+pub const kCATransitionFromRight: &str = "fromRight";
+pub const kCATransitionFromLeft: &str = "fromLeft";
+pub const kCATransitionFromTop: &str = "fromTop";
+pub const kCATransitionFromBottom: &str = "fromBottom";
+
+// CAValueFunction names. From `CAValueFunction.h`. These identify
+// channel-component functions used when binding scalar animations to
+// matrix transform components (e.g. `rotation.x`, `translation.y`).
+pub const kCAValueFunctionRotateX: &str = "rotateX";
+pub const kCAValueFunctionRotateY: &str = "rotateY";
+pub const kCAValueFunctionRotateZ: &str = "rotateZ";
+pub const kCAValueFunctionScale: &str = "scale";
+pub const kCAValueFunctionScaleX: &str = "scaleX";
+pub const kCAValueFunctionScaleY: &str = "scaleY";
+pub const kCAValueFunctionScaleZ: &str = "scaleZ";
+pub const kCAValueFunctionTranslate: &str = "translate";
+pub const kCAValueFunctionTranslateX: &str = "translateX";
+pub const kCAValueFunctionTranslateY: &str = "translateY";
+pub const kCAValueFunctionTranslateZ: &str = "translateZ";
+
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
     (
@@ -202,6 +248,108 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCAGravityBottomRight",
         HostConstant::NSString(kCAGravityBottomRight),
+    ),
+    ("_kCALineCapButt", HostConstant::NSString(kCALineCapButt)),
+    ("_kCALineCapRound", HostConstant::NSString(kCALineCapRound)),
+    (
+        "_kCALineCapSquare",
+        HostConstant::NSString(kCALineCapSquare),
+    ),
+    (
+        "_kCALineJoinMiter",
+        HostConstant::NSString(kCALineJoinMiter),
+    ),
+    (
+        "_kCALineJoinRound",
+        HostConstant::NSString(kCALineJoinRound),
+    ),
+    (
+        "_kCALineJoinBevel",
+        HostConstant::NSString(kCALineJoinBevel),
+    ),
+    (
+        "_kCAFillRuleNonZero",
+        HostConstant::NSString(kCAFillRuleNonZero),
+    ),
+    (
+        "_kCAFillRuleEvenOdd",
+        HostConstant::NSString(kCAFillRuleEvenOdd),
+    ),
+    (
+        "_kCATransitionFade",
+        HostConstant::NSString(kCATransitionFade),
+    ),
+    (
+        "_kCATransitionMoveIn",
+        HostConstant::NSString(kCATransitionMoveIn),
+    ),
+    (
+        "_kCATransitionPush",
+        HostConstant::NSString(kCATransitionPush),
+    ),
+    (
+        "_kCATransitionReveal",
+        HostConstant::NSString(kCATransitionReveal),
+    ),
+    (
+        "_kCATransitionFromRight",
+        HostConstant::NSString(kCATransitionFromRight),
+    ),
+    (
+        "_kCATransitionFromLeft",
+        HostConstant::NSString(kCATransitionFromLeft),
+    ),
+    (
+        "_kCATransitionFromTop",
+        HostConstant::NSString(kCATransitionFromTop),
+    ),
+    (
+        "_kCATransitionFromBottom",
+        HostConstant::NSString(kCATransitionFromBottom),
+    ),
+    (
+        "_kCAValueFunctionRotateX",
+        HostConstant::NSString(kCAValueFunctionRotateX),
+    ),
+    (
+        "_kCAValueFunctionRotateY",
+        HostConstant::NSString(kCAValueFunctionRotateY),
+    ),
+    (
+        "_kCAValueFunctionRotateZ",
+        HostConstant::NSString(kCAValueFunctionRotateZ),
+    ),
+    (
+        "_kCAValueFunctionScale",
+        HostConstant::NSString(kCAValueFunctionScale),
+    ),
+    (
+        "_kCAValueFunctionScaleX",
+        HostConstant::NSString(kCAValueFunctionScaleX),
+    ),
+    (
+        "_kCAValueFunctionScaleY",
+        HostConstant::NSString(kCAValueFunctionScaleY),
+    ),
+    (
+        "_kCAValueFunctionScaleZ",
+        HostConstant::NSString(kCAValueFunctionScaleZ),
+    ),
+    (
+        "_kCAValueFunctionTranslate",
+        HostConstant::NSString(kCAValueFunctionTranslate),
+    ),
+    (
+        "_kCAValueFunctionTranslateX",
+        HostConstant::NSString(kCAValueFunctionTranslateX),
+    ),
+    (
+        "_kCAValueFunctionTranslateY",
+        HostConstant::NSString(kCAValueFunctionTranslateY),
+    ),
+    (
+        "_kCAValueFunctionTranslateZ",
+        HostConstant::NSString(kCAValueFunctionTranslateZ),
     ),
 ];
 pub const CLASSES: ClassExports = objc_classes! {

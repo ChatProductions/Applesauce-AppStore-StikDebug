@@ -683,6 +683,67 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSURLErrorBackgroundTaskCancelledReasonKey",
         HostConstant::NSString("NSURLErrorBackgroundTaskCancelledReasonKey"),
     ),
+    // -----------------------------------------------------------------
+    // NSUserDefaults / NSUndoManager / NSHTTPCookie / NSUbiquity
+    // notification names. Apple declares these as
+    // `FOUNDATION_EXPORT NSNotificationName const ...` in their public
+    // headers. The literal value of each constant is its own symbol
+    // name — that is the value posted to `NSNotificationCenter`.
+    //
+    // References:
+    // * Apple [NSUserDefaultsDidChangeNotification](https://developer.apple.com/documentation/foundation/userdefaults/didchangenotification)
+    // * Apple [NSUndoManager notifications](https://developer.apple.com/documentation/foundation/undomanager)
+    // * Apple [NSHTTPCookieVersion](https://developer.apple.com/documentation/foundation/nshttpcookie)
+    // * Apple [NSUbiquityIdentityDidChangeNotification](https://developer.apple.com/documentation/foundation/nsubiquityidentitydidchangenotification)
+    // -----------------------------------------------------------------
+    (
+        "_NSUserDefaultsDidChangeNotification",
+        HostConstant::NSString("NSUserDefaultsDidChangeNotification"),
+    ),
+    (
+        "_NSUndoManagerCheckpointNotification",
+        HostConstant::NSString("NSUndoManagerCheckpointNotification"),
+    ),
+    (
+        "_NSUndoManagerDidOpenUndoGroupNotification",
+        HostConstant::NSString("NSUndoManagerDidOpenUndoGroupNotification"),
+    ),
+    (
+        "_NSUndoManagerDidCloseUndoGroupNotification",
+        HostConstant::NSString("NSUndoManagerDidCloseUndoGroupNotification"),
+    ),
+    (
+        "_NSUndoManagerDidUndoChangeNotification",
+        HostConstant::NSString("NSUndoManagerDidUndoChangeNotification"),
+    ),
+    (
+        "_NSUndoManagerDidRedoChangeNotification",
+        HostConstant::NSString("NSUndoManagerDidRedoChangeNotification"),
+    ),
+    (
+        "_NSUndoManagerWillUndoChangeNotification",
+        HostConstant::NSString("NSUndoManagerWillUndoChangeNotification"),
+    ),
+    (
+        "_NSUndoManagerWillRedoChangeNotification",
+        HostConstant::NSString("NSUndoManagerWillRedoChangeNotification"),
+    ),
+    (
+        "_NSUndoManagerWillCloseUndoGroupNotification",
+        HostConstant::NSString("NSUndoManagerWillCloseUndoGroupNotification"),
+    ),
+    // `NSHTTPCookieVersion` is declared in `<Foundation/NSHTTPCookie.h>`
+    // as a cookie-property dictionary key whose literal value is
+    // `"Version"`. Apple's CFNetwork uses it to read the cookie's
+    // RFC-2965 version field.
+    (
+        "_NSHTTPCookieVersion",
+        HostConstant::NSString("Version"),
+    ),
+    (
+        "_NSUbiquityIdentityDidChangeNotification",
+        HostConstant::NSString("NSUbiquityIdentityDidChangeNotification"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

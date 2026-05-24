@@ -718,6 +718,66 @@ const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
     "UIApplicationLaunchOptionsRemoteNotificationKey";
 const UIApplicationDidReceiveMemoryWarningNotification: &str =
     "UIApplicationDidReceiveMemoryWarningNotification";
+
+// Apple `UIApplication.h` declares these as
+// `UIKIT_EXTERN NSNotificationName const ...` (and `NSString * const` in
+// older SDKs). The exact literal values are what Apple uses for
+// notification posting and dictionary keys; matching them lets observer
+// registration via `-[NSNotificationCenter addObserver:selector:name:object:]`
+// resolve correctly.
+//
+// References:
+// * Apple [UIApplication notification names](https://developer.apple.com/documentation/uikit/uiapplication)
+// * Apple [Launch options keys](https://developer.apple.com/documentation/uikit/uiapplication/launchoptionskey)
+// * Apple [Status-bar related notifications](https://developer.apple.com/documentation/uikit/uiapplicationdidchangestatusbarframenotification)
+const UIApplicationProtectedDataDidBecomeAvailable: &str =
+    "UIApplicationProtectedDataDidBecomeAvailable";
+const UIApplicationProtectedDataWillBecomeUnavailable: &str =
+    "UIApplicationProtectedDataWillBecomeUnavailable";
+const UIApplicationSignificantTimeChangeNotification: &str =
+    "UIApplicationSignificantTimeChangeNotification";
+const UIApplicationDidChangeStatusBarFrameNotification: &str =
+    "UIApplicationDidChangeStatusBarFrameNotification";
+const UIApplicationWillChangeStatusBarFrameNotification: &str =
+    "UIApplicationWillChangeStatusBarFrameNotification";
+const UIApplicationDidChangeStatusBarOrientationNotification: &str =
+    "UIApplicationDidChangeStatusBarOrientationNotification";
+const UIApplicationWillChangeStatusBarOrientationNotification: &str =
+    "UIApplicationWillChangeStatusBarOrientationNotification";
+const UIApplicationStatusBarFrameUserInfoKey: &str = "UIApplicationStatusBarFrameUserInfoKey";
+const UIApplicationStatusBarOrientationUserInfoKey: &str =
+    "UIApplicationStatusBarOrientationUserInfoKey";
+const UIApplicationBackgroundFetchIntervalMinimum: &str =
+    "UIApplicationBackgroundFetchIntervalMinimum";
+const UIApplicationBackgroundFetchIntervalNever: &str =
+    "UIApplicationBackgroundFetchIntervalNever";
+// Launch options keys — Apple `UIApplication.h` (`UIApplicationLaunchOptionsKey`).
+const UIApplicationLaunchOptionsURLKey: &str = "UIApplicationLaunchOptionsURLKey";
+const UIApplicationLaunchOptionsSourceApplicationKey: &str =
+    "UIApplicationLaunchOptionsSourceApplicationKey";
+const UIApplicationLaunchOptionsAnnotationKey: &str = "UIApplicationLaunchOptionsAnnotationKey";
+const UIApplicationLaunchOptionsLocalNotificationKey: &str =
+    "UIApplicationLaunchOptionsLocalNotificationKey";
+const UIApplicationLaunchOptionsLocationKey: &str = "UIApplicationLaunchOptionsLocationKey";
+const UIApplicationLaunchOptionsNewsstandDownloadsKey: &str =
+    "UIApplicationLaunchOptionsNewsstandDownloadsKey";
+const UIApplicationLaunchOptionsBluetoothCentralsKey: &str =
+    "UIApplicationLaunchOptionsBluetoothCentralsKey";
+const UIApplicationLaunchOptionsBluetoothPeripheralsKey: &str =
+    "UIApplicationLaunchOptionsBluetoothPeripheralsKey";
+const UIApplicationLaunchOptionsShortcutItemKey: &str = "UIApplicationLaunchOptionsShortcutItemKey";
+// `UIApplicationOpenSettingsURLString` from `UIApplication.h`. iOS apps
+// pass this to `-[UIApplication openURL:]` to open the system Settings
+// app at their own page; the literal value is `"app-settings:"` per
+// Apple's docs (<https://developer.apple.com/documentation/uikit/uiapplicationopensettingsurlstring>).
+const UIApplicationOpenSettingsURLString: &str = "app-settings:";
+// Newer (iOS 9) open-URL option keys — `UIApplicationOpenURLOptionsKey`.
+const UIApplicationOpenURLOptionsSourceApplicationKey: &str =
+    "UIApplicationOpenURLOptionsSourceApplicationKey";
+const UIApplicationOpenURLOptionsAnnotationKey: &str = "UIApplicationOpenURLOptionsAnnotationKey";
+const UIApplicationOpenURLOptionsOpenInPlaceKey: &str = "UIApplicationOpenURLOptionsOpenInPlaceKey";
+const UIApplicationOpenURLOptionUniversalLinksOnly: &str =
+    "UIApplicationOpenURLOptionUniversalLinksOnly";
 pub const CONSTANTS: ConstantExports = &[
     (
         "_UIApplicationDidFinishLaunchingNotification",
@@ -750,6 +810,106 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_UIApplicationLaunchOptionsRemoteNotificationKey",
         HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
+    ),
+    (
+        "_UIApplicationProtectedDataDidBecomeAvailable",
+        HostConstant::NSString(UIApplicationProtectedDataDidBecomeAvailable),
+    ),
+    (
+        "_UIApplicationProtectedDataWillBecomeUnavailable",
+        HostConstant::NSString(UIApplicationProtectedDataWillBecomeUnavailable),
+    ),
+    (
+        "_UIApplicationSignificantTimeChangeNotification",
+        HostConstant::NSString(UIApplicationSignificantTimeChangeNotification),
+    ),
+    (
+        "_UIApplicationDidChangeStatusBarFrameNotification",
+        HostConstant::NSString(UIApplicationDidChangeStatusBarFrameNotification),
+    ),
+    (
+        "_UIApplicationWillChangeStatusBarFrameNotification",
+        HostConstant::NSString(UIApplicationWillChangeStatusBarFrameNotification),
+    ),
+    (
+        "_UIApplicationDidChangeStatusBarOrientationNotification",
+        HostConstant::NSString(UIApplicationDidChangeStatusBarOrientationNotification),
+    ),
+    (
+        "_UIApplicationWillChangeStatusBarOrientationNotification",
+        HostConstant::NSString(UIApplicationWillChangeStatusBarOrientationNotification),
+    ),
+    (
+        "_UIApplicationStatusBarFrameUserInfoKey",
+        HostConstant::NSString(UIApplicationStatusBarFrameUserInfoKey),
+    ),
+    (
+        "_UIApplicationStatusBarOrientationUserInfoKey",
+        HostConstant::NSString(UIApplicationStatusBarOrientationUserInfoKey),
+    ),
+    (
+        "_UIApplicationBackgroundFetchIntervalMinimum",
+        HostConstant::NSString(UIApplicationBackgroundFetchIntervalMinimum),
+    ),
+    (
+        "_UIApplicationBackgroundFetchIntervalNever",
+        HostConstant::NSString(UIApplicationBackgroundFetchIntervalNever),
+    ),
+    (
+        "_UIApplicationLaunchOptionsURLKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsURLKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsSourceApplicationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsSourceApplicationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsAnnotationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsAnnotationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocalNotificationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocalNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsNewsstandDownloadsKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsNewsstandDownloadsKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsBluetoothCentralsKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsBluetoothCentralsKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsBluetoothPeripheralsKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsBluetoothPeripheralsKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsShortcutItemKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsShortcutItemKey),
+    ),
+    (
+        "_UIApplicationOpenSettingsURLString",
+        HostConstant::NSString(UIApplicationOpenSettingsURLString),
+    ),
+    (
+        "_UIApplicationOpenURLOptionsSourceApplicationKey",
+        HostConstant::NSString(UIApplicationOpenURLOptionsSourceApplicationKey),
+    ),
+    (
+        "_UIApplicationOpenURLOptionsAnnotationKey",
+        HostConstant::NSString(UIApplicationOpenURLOptionsAnnotationKey),
+    ),
+    (
+        "_UIApplicationOpenURLOptionsOpenInPlaceKey",
+        HostConstant::NSString(UIApplicationOpenURLOptionsOpenInPlaceKey),
+    ),
+    (
+        "_UIApplicationOpenURLOptionUniversalLinksOnly",
+        HostConstant::NSString(UIApplicationOpenURLOptionUniversalLinksOnly),
     ),
 ];
 pub const FUNCTIONS: FunctionExports = &[export_c_func!(UIApplicationMain(_, _, _, _))];

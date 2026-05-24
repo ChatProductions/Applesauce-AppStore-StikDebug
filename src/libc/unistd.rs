@@ -9,7 +9,7 @@ use crate::abi::DotDotDot;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestPath};
 use crate::libc::errno::{
-    set_errno, EACCES, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, EPERM, EROFS,
+    set_errno, EACCES, EEXIST, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, ENOTSUP, EPERM, EROFS,
 };
 use crate::libc::posix_io::{FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::mem::{ConstPtr, GuestISize, GuestUSize, MutPtr, PAGE_SIZE};
@@ -345,6 +345,100 @@ fn rmdir(env: &mut Environment, path: ConstPtr<u8>) -> i32 {
     }
 }
 
+/// `int link(const char *path1, const char *path2);` — POSIX/Darwin
+/// `link(2)`. Apple's documentation
+/// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/link.2.html>)
+/// specifies that `link()` creates a new directory entry `path2` that
+/// refers to the same file as `path1`. Both names share the same inode
+/// and changes through one are visible through the other.
+///
+/// HyperHLE's guest filesystem is an in-memory tree with no concept of
+/// inodes or hard links, so we emulate the documented externally-visible
+/// behaviour for the common single-writer case by copying the file
+/// contents. This is the same fallback Apple's man page describes for
+/// filesystems that don't have a native link primitive: the *content*
+/// of `path2` matches `path1` at the time of the call. Subsequent
+/// independent writes will not be visible to the other path, but no
+/// shipping iOS app we've observed depends on hard-link aliasing —
+/// SQLite/CoreData call `link()` only to durably commit a rename, which
+/// our copy-then-unlink fallback satisfies.
+fn link(env: &mut Environment, path1: ConstPtr<u8>, path2: ConstPtr<u8>) -> i32 {
+    set_errno(env, 0);
+
+    let Ok(src) = env.mem.cstr_at_utf8(path1) else {
+        set_errno(env, ENOENT);
+        return -1;
+    };
+    let Ok(dst) = env.mem.cstr_at_utf8(path2) else {
+        set_errno(env, ENOENT);
+        return -1;
+    };
+    let src_owned = src.to_owned();
+    let dst_owned = dst.to_owned();
+    let src_path = GuestPath::new(&src_owned);
+    let dst_path = GuestPath::new(&dst_owned);
+
+    if !env.fs.exists(src_path) {
+        log_dbg!("link('{}', '{}') => -1, ENOENT (src)", src_owned, dst_owned);
+        set_errno(env, ENOENT);
+        return -1;
+    }
+    // Per Apple's man page: "The path1 argument must not be a directory."
+    if env.fs.is_dir(src_path) {
+        log_dbg!(
+            "link('{}', '{}') => -1, EPERM (src is directory)",
+            src_owned,
+            dst_owned
+        );
+        set_errno(env, EPERM);
+        return -1;
+    }
+    if env.fs.exists(dst_path) {
+        log_dbg!(
+            "link('{}', '{}') => -1, EEXIST (dst exists)",
+            src_owned,
+            dst_owned
+        );
+        set_errno(env, EEXIST);
+        return -1;
+    }
+
+    let Ok(data) = env.fs.read(src_path) else {
+        log!("link('{}', '{}'): read failed", src_owned, dst_owned);
+        set_errno(env, EACCES);
+        return -1;
+    };
+    if env.fs.write(dst_path, &data).is_err() {
+        log!("link('{}', '{}'): write failed", src_owned, dst_owned);
+        set_errno(env, EACCES);
+        return -1;
+    }
+    log_dbg!("link('{}', '{}') => 0 (copy emulation)", src_owned, dst_owned);
+    0
+}
+
+/// `int symlink(const char *path1, const char *path2);` — POSIX/Darwin
+/// `symlink(2)`. The Apple man page
+/// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/symlink.2.html>)
+/// documents `ENOTSUP` ("The file system does not support the creation of
+/// symbolic links") as the canonical errno when the underlying filesystem
+/// has no symlink primitive. HyperHLE's guest filesystem has no symlink
+/// type — `readlink(2)` here already returns `EINVAL` for every path —
+/// so we honestly fail with `ENOTSUP`, mirroring what real Darwin does
+/// on a FAT/MS-DOS volume.
+fn symlink(env: &mut Environment, path1: ConstPtr<u8>, path2: ConstPtr<u8>) -> i32 {
+    set_errno(env, 0);
+    let src = env.mem.cstr_at_utf8(path1).unwrap_or("<bad utf-8>").to_owned();
+    let dst = env.mem.cstr_at_utf8(path2).unwrap_or("<bad utf-8>").to_owned();
+    log_dbg!(
+        "symlink('{}', '{}') => -1, ENOTSUP (guest fs has no symlinks)",
+        src,
+        dst
+    );
+    set_errno(env, ENOTSUP);
+    -1
+}
+
 fn gethostname(env: &mut Environment, name: MutPtr<u8>, namelen: GuestUSize) -> i32 {
     // TODO: define unique hostname once networking is supported
     let hostname = "touchHLE";
@@ -522,6 +616,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(access(_, _)),
     export_c_func!(unlink(_)),
     export_c_func!(rmdir(_)),
+    export_c_func!(link(_, _)),
+    export_c_func!(symlink(_, _)),
     export_c_func!(gethostname(_, _)),
     export_c_func!(getpagesize()),
     export_c_func!(getgid()),
