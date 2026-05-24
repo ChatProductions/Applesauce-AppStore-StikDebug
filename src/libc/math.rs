@@ -7,7 +7,7 @@
 //! `math.h`
 
 use crate::abi::{impl_GuestRet_for_large_struct, GuestArg};
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::libc::errno::set_errno;
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::Environment;
@@ -965,3 +965,23 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__fixunsdfdi(_)),
     export_c_func!(_ZN9SingletonI12TimerManagerE11getInstanceEv()),
 ];
+
+/// `<fenv.h>` constants.
+///
+/// Per Apple's `fenv.h`, `FE_DFL_ENV` is a macro defined as
+/// `((const fenv_t *)-1)` and the linker resolves the underlying
+/// `__FE_DFL_ENV` symbol to a sentinel `fenv_t` representing the
+/// "default" floating-point environment. The actual storage is
+/// referenced by the libm helpers `fegetenv()` / `fesetenv()`. For
+/// touchHLE's purposes we expose a zero-filled 8-byte `fenv_t`
+/// (matching ARMv7's `__fpu_control` + reserved layout): apps that
+/// pass `FE_DFL_ENV` to `fesetenv` will get the default environment
+/// (all flags clear, round-to-nearest).
+pub const CONSTANTS: ConstantExports = &[(
+    "___FE_DFL_ENV",
+    HostConstant::Custom(|env| {
+        let p: crate::mem::MutPtr<u64> = env.mem.alloc(8).cast();
+        env.mem.write(p, 0u64);
+        crate::mem::Ptr::from_bits(p.to_bits())
+    }),
+)];

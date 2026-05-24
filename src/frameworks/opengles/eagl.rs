@@ -35,6 +35,11 @@ pub const kEAGLDrawablePropertyColorFormat: &str = "ColorFormat";
 pub const kEAGLDrawablePropertyRetainedBacking: &str = "RetainedBacking";
 pub const kEAGLColorFormatRGBA8: &str = "RGBA8";
 pub const kEAGLColorFormatRGB565: &str = "RGB565";
+/// `kEAGLColorFormatSRGBA8` — sRGB 8888 EAGL color format, added in
+/// iOS 7. Apps that supply this string in `drawableProperties` are
+/// requesting a sRGB-encoded color renderbuffer (per
+/// `EAGLDrawable.h`).
+pub const kEAGLColorFormatSRGBA8: &str = "SRGBA8";
 
 pub const CONSTANTS: ConstantExports = &[
     (
@@ -52,6 +57,10 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kEAGLColorFormatRGB565",
         HostConstant::NSString(kEAGLColorFormatRGB565),
+    ),
+    (
+        "_kEAGLColorFormatSRGBA8",
+        HostConstant::NSString(kEAGLColorFormatSRGBA8),
     ),
 ];
 

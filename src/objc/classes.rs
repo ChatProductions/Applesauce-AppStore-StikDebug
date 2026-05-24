@@ -1568,6 +1568,24 @@ pub fn objc_release(env: &mut crate::Environment, obj: id) -> id {
     obj
 }
 
+/// `void _objc_deallocOnMainThreadHelper(void *context)` — used by libobjc
+/// in conjunction with `dispatch_async_f(dispatch_get_main_queue(), …)` to
+/// release a `-finalize`/`-dealloc`-ing object back on the main thread when
+/// the runtime detects the object is being released on a background thread.
+/// The context argument is the `id` to release. See
+/// `objc4-866.9/runtime/NSObject.mm` (`_objc_deallocOnMainThreadHelper`).
+///
+/// Forwarding to `objc_release` is correct because touchHLE serialises the
+/// guest's execution on a single host thread; "release on the main thread"
+/// reduces to "release now".
+#[allow(non_snake_case)]
+pub fn __objc_deallocOnMainThreadHelper(env: &mut crate::Environment, context: MutVoidPtr) {
+    let obj: id = Ptr::from_bits(context.to_bits());
+    if !obj.is_null() {
+        crate::objc::release(env, obj);
+    }
+}
+
 pub fn ___objc_personality_v0(
     _env: &mut crate::Environment,
     version: i32,

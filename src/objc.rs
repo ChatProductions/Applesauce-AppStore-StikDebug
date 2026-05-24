@@ -43,7 +43,7 @@ pub use classes::{
     objc_copyClassNamesForImage, objc_end_catch, objc_exception_throw, objc_getClass,
     objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass, objc_readClassPair,
     objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
-    objc_retainBlock,
+    objc_retainBlock, __objc_deallocOnMainThreadHelper,
     objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
     protocol_getName, Class, ClassExports, ClassTemplate,
 };
@@ -278,4 +278,5 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(protocol_getName(_)),
     export_c_func!(objc_copyClassNamesForImage(_, _)),
     export_c_func!(object_getIndexedIvars(_)),
+    export_c_func!(__objc_deallocOnMainThreadHelper(_)),
 ];

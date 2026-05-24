@@ -496,6 +496,105 @@ fn vDSP_vclr(
     }
 }
 
+/// `vImage_Buffer` — vImage's universal pixel buffer descriptor.
+/// Layout from `<Accelerate/vImage.h>` (32-bit ARM):
+///   - `void *data`        (4B)
+///   - `vImagePixelCount height` (4B; `unsigned long` == 32-bit on ARM32)
+///   - `vImagePixelCount width`  (4B)
+///   - `size_t rowBytes`         (4B)
+#[repr(C, packed)]
+#[derive(Copy, Clone, Default)]
+struct VImageBuffer {
+    data: u32,      // guest pointer
+    height: u32,
+    width: u32,
+    row_bytes: u32,
+}
+unsafe impl SafeRead for VImageBuffer {}
+
+/// vImage error codes, per `<Accelerate/vImage_Types.h>`.
+const KV_IMAGE_NO_ERROR: i32 = 0;
+const KV_IMAGE_NULL_POINTER_ARGUMENT: i32 = -21772;
+const KV_IMAGE_INVALID_PARAMETER: i32 = -21767;
+
+/// `vImage_Error vImageConvert_AnyToAny(const vImageConverterRef converter,
+///                                      const vImage_Buffer *srcs[],
+///                                      const vImage_Buffer *dests[],
+///                                      void *tempBuffer,
+///                                      vImage_Flags flags)` — vImage
+/// "universal" pixel-format converter. See
+/// <https://developer.apple.com/documentation/accelerate/1533487-vimageconvert_anytoany>.
+///
+/// touchHLE does not implement `vImageConverter_CreateWithCGImageFormat`
+/// (the factory that produces non-null converter refs), so any call here
+/// arrives with `converter == NULL`. Apple's documentation says this is
+/// `kvImageNullPointerArgument` (-21772) and apps that build vImage
+/// pipelines for optional features (sRGB conversion, scaling) fall
+/// back to their slow path when they observe this code.
+#[allow(non_snake_case)]
+fn vImageConvert_AnyToAny(
+    _env: &mut Environment,
+    converter: MutVoidPtr,
+    srcs: ConstPtr<u32>,
+    dests: ConstPtr<u32>,
+    _temp_buffer: MutVoidPtr,
+    _flags: u32,
+) -> i32 {
+    if converter.is_null() {
+        return KV_IMAGE_NULL_POINTER_ARGUMENT;
+    }
+    if srcs.is_null() || dests.is_null() {
+        return KV_IMAGE_NULL_POINTER_ARGUMENT;
+    }
+    KV_IMAGE_INVALID_PARAMETER
+}
+
+/// `vImage_Error vImageCopyBuffer(const vImage_Buffer *src,
+///                                const vImage_Buffer *dest,
+///                                size_t pixelSize, vImage_Flags flags)`
+/// — copies `src` to `dest` exactly when both buffers have matching
+/// dimensions. Apple's libvImage uses this internally for many
+/// "AnyToAny" conversions where source and destination formats match.
+#[allow(non_snake_case)]
+fn vImageCopyBuffer(
+    env: &mut Environment,
+    src: ConstPtr<VImageBuffer>,
+    dest: ConstPtr<VImageBuffer>,
+    pixel_size: u32,
+    _flags: u32,
+) -> i32 {
+    if src.is_null() || dest.is_null() {
+        return KV_IMAGE_NULL_POINTER_ARGUMENT;
+    }
+    let s = env.mem.read(src);
+    let d = env.mem.read(dest);
+    let src_height = s.height;
+    let src_width = s.width;
+    let src_row_bytes = s.row_bytes;
+    let src_data = s.data;
+    let dst_height = d.height;
+    let dst_width = d.width;
+    let dst_row_bytes = d.row_bytes;
+    let dst_data = d.data;
+    if src_width != dst_width || src_height != dst_height {
+        return KV_IMAGE_INVALID_PARAMETER;
+    }
+    let line_bytes = (src_width as u64) * (pixel_size as u64);
+    let line_bytes = line_bytes.min(src_row_bytes as u64).min(dst_row_bytes as u64) as u32;
+    for y in 0..src_height {
+        let src_row = src_data + y * src_row_bytes;
+        let dst_row = dst_data + y * dst_row_bytes;
+        let bytes: Vec<u8> = env
+            .mem
+            .bytes_at(crate::mem::Ptr::<u8, false>::from_bits(src_row), line_bytes)
+            .to_vec();
+        env.mem
+            .bytes_at_mut(crate::mem::Ptr::<u8, true>::from_bits(dst_row), line_bytes)
+            .copy_from_slice(&bytes);
+    }
+    KV_IMAGE_NO_ERROR
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vDSP_create_fftsetup(_, _)),
     export_c_func!(vDSP_destroy_fftsetup(_)),
@@ -514,4 +613,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(vDSP_vmul(_, _, _, _, _, _, _)),
     export_c_func!(vDSP_vfill(_, _, _, _)),
     export_c_func!(vDSP_vclr(_, _, _)),
+    export_c_func!(vImageConvert_AnyToAny(_, _, _, _, _)),
+    export_c_func!(vImageCopyBuffer(_, _, _, _)),
 ];

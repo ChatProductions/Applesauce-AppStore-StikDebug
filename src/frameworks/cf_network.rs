@@ -187,6 +187,24 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCFErrorDomainCFNetwork",
         HostConstant::NSString("kCFErrorDomainCFNetwork"),
     ),
+    // CFHost.h: userInfo keys carried by errors returned by
+    // CFHostStartInfoResolution() / CFHostStartReachabilityInfo().
+    (
+        "_kCFGetAddrInfoFailureKey",
+        HostConstant::NSString("kCFGetAddrInfoFailureKey"),
+    ),
+    (
+        "_kCFSOCKSStatusErrorKey",
+        HostConstant::NSString("kCFSOCKSStatusErrorKey"),
+    ),
+    (
+        "_kCFSOCKSVersionKey",
+        HostConstant::NSString("kCFSOCKSVersionKey"),
+    ),
+    (
+        "_kCFFTPStatusCodeKey",
+        HostConstant::NSString("kCFFTPStatusCodeKey"),
+    ),
     // CFHTTPMessage / CFHTTPAuthentication property keys (kCFHTTP*).
     ("_kCFHTTPVersion1_0", HostConstant::NSString("HTTP/1.0")),
     ("_kCFHTTPVersion1_1", HostConstant::NSString("HTTP/1.1")),

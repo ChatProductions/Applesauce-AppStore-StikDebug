@@ -2533,6 +2533,62 @@ fn xmlMemoryDump(_env: &mut Environment) -> i32 {
     unsafe { xml::xmlMemoryDump() }
 }
 
+/// `int xmlInitMemory(void)` — initialises libxml2's allocator
+/// overrides. The function is deprecated upstream (the allocator
+/// table is now initialised on first use), but iOS 5/6 apps built
+/// against libxml2 2.7.x still call it explicitly during startup.
+/// libxml2 returns 0 on success.
+#[allow(non_snake_case)]
+fn xmlInitMemory(_env: &mut Environment) -> i32 {
+    unsafe { xml::xmlInitMemory() }
+}
+
+/// `void xmlCleanupMemory(void)` — releases module-private allocator
+/// state. Mirrors `xmlCleanupParser()` in the lifecycle pairing
+/// (`xmlInitMemory` ↔ `xmlCleanupMemory`). Documented at
+/// <https://gnome.pages.gitlab.gnome.org/libxml2/devhelp/libxml2-xmlmemory.html>.
+#[allow(non_snake_case)]
+fn xmlCleanupMemory(_env: &mut Environment) {
+    unsafe { xml::xmlCleanupMemory() };
+}
+
+/// `double xmlXPathCastToNumber(xmlXPathObjectPtr val)` — XPath 1.0
+/// §4.4 number-conversion. Forwarded verbatim to libxml2 so all four
+/// XPath object types (number/boolean/node-set/string) round-trip
+/// identically to Apple's libxml2.
+#[allow(non_snake_case)]
+fn xmlXPathCastToNumber(_env: &mut Environment, obj: u32) -> f64 {
+    let p = h2xpath_obj(obj);
+    if p.is_null() {
+        return f64::NAN;
+    }
+    unsafe { xml::xmlXPathCastToNumber(p) }
+}
+
+/// `int xmlXPathCastToBoolean(xmlXPathObjectPtr val)` — XPath 1.0
+/// §4.3 boolean-conversion.
+#[allow(non_snake_case)]
+fn xmlXPathCastToBoolean(_env: &mut Environment, obj: u32) -> i32 {
+    let p = h2xpath_obj(obj);
+    if p.is_null() {
+        return 0;
+    }
+    unsafe { xml::xmlXPathCastToBoolean(p) }
+}
+
+/// `xmlChar *xmlXPathCastToString(xmlXPathObjectPtr val)` — XPath 1.0
+/// §4.2 string-conversion. Returned string is xmlMalloc'd and
+/// transferred to guest memory.
+#[allow(non_snake_case)]
+fn xmlXPathCastToString(env: &mut Environment, obj: u32) -> u32 {
+    let p = h2xpath_obj(obj);
+    if p.is_null() {
+        return 0;
+    }
+    let r = unsafe { xml::xmlXPathCastToString(p) };
+    take_xml_chars(env, r)
+}
+
 #[allow(non_snake_case)]
 fn xmlFree(env: &mut Environment, ptr: u32) {
     // If the guest is freeing one of our object handles, drop it from the
@@ -2577,6 +2633,27 @@ fn xmlEncodeSpecialChars(env: &mut Environment, doc: u32, s: u32) -> u32 {
 pub const CONSTANTS: ConstantExports = &[
     ("_xmlIndentTreeOutput", HostConstant::NullPtr),
     ("_xmlSaveNoEmptyTags", HostConstant::NullPtr),
+    // `xmlError xmlLastError` (libxml2 ≥ 2.6) — a struct, not a pointer,
+    // declared `extern xmlError xmlLastError` in `libxml/xmlerror.h`.
+    // Apps that read its fields directly (rare) expect the storage to
+    // exist; calling `xmlGetLastError()` is the supported API. We
+    // expose a zero-filled block sized per libxml2 2.7.x's `xmlError`
+    // layout on 32-bit ARM (sizeof = 80 bytes: code/level/line/int1/int2
+    // = 5×u32 (20) + domain (4) + message/file/str1/str2/str3 (5×ptr =
+    // 20) + node/ctxt (2×ptr = 8) + padding = round to 80). We over-
+    // allocate to 256 bytes to be safe against any libxml2 version
+    // that grows the struct.
+    (
+        "_xmlLastError",
+        HostConstant::Custom(|env| {
+            let p = env.mem.alloc(256);
+            let bytes = env.mem.bytes_at_mut(p.cast(), 256);
+            for b in bytes.iter_mut() {
+                *b = 0;
+            }
+            p.cast_const()
+        }),
+    ),
 ];
 
 const FUNCTIONS: FunctionExports = &[
@@ -2602,6 +2679,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlCheckVersion(_)),
     export_c_func!(xmlSAXUserParseMemory(_, _, _, _)),
     export_c_func!(xmlMemoryDump()),
+    export_c_func!(xmlInitMemory()),
+    export_c_func!(xmlCleanupMemory()),
     // ---- tree ----
     export_c_func!(xmlNewDoc(_)),
     export_c_func!(xmlFreeDoc(_)),
@@ -2705,6 +2784,9 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(xmlXPathCompiledEval(_, _)),
     export_c_func!(xmlXPathFreeObject(_)),
     export_c_func!(xmlXPathSetContextNode(_, _)),
+    export_c_func!(xmlXPathCastToNumber(_)),
+    export_c_func!(xmlXPathCastToBoolean(_)),
+    export_c_func!(xmlXPathCastToString(_)),
     // (helpers exposed for guest code that doesn't reach into struct layout)
     export_c_func!(xmlXPathObjectGetType(_)),
     export_c_func!(xmlXPathObjectGetBool(_)),

@@ -238,6 +238,8 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &CORE_DATA,
     &CAPTIVE_NETWORK,
     &ACCELERATE,
+    &frameworks::core_text::DYLIB,
+    &frameworks::core_bluetooth::DYLIB,
 ];
 
 #[cfg(test)]

@@ -64,6 +64,8 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         netdb::CONSTANTS,
         stdio::CONSTANTS,
         mach::init::CONSTANTS,
+        math::CONSTANTS,
+        signal::CONSTANTS,
         ssp::CONSTANTS,
     ],
     function_exports: &[
