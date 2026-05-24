@@ -371,7 +371,31 @@ pub const CLASSES: ClassExports = objc_classes! {
             return false;
         };
         unsafe {
+            // Clear any pre-existing error so we can detect failure of the
+            // storage allocation reliably.
+            while gles.GetError() != gles11::NO_ERROR {}
             gles.RenderbufferStorageOES(target, internalformat, width.try_into().unwrap(), height.try_into().unwrap());
+            if gles.GetError() != gles11::NO_ERROR {
+                // RGBA8 is optional in OpenGL ES 1.1 Common Profile (requires
+                // OES_rgb8_rgba8). Fall back to RGBA4 (0x8056) which is
+                // required by OES_framebuffer_object.
+                const GL_RGBA4: gles11::types::GLenum = 0x8056;
+                gles.RenderbufferStorageOES(
+                    target,
+                    GL_RGBA4,
+                    width.try_into().unwrap(),
+                    height.try_into().unwrap(),
+                );
+                if gles.GetError() != gles11::NO_ERROR {
+                    log!(
+                        "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
+                         failed to allocate renderbuffer storage (tried RGBA8 and RGBA4)",
+                        target,
+                        drawable
+                    );
+                    return false;
+                }
+            }
             let mut renderbuffer = 0;
             gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut renderbuffer);
             renderbuffer as _

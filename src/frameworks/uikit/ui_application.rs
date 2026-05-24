@@ -354,12 +354,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     false
 }
 
-- (())beginBackgroundTaskWithExpirationHandler:(id)_handler {
-    log!("UIApplication beginBackgroundTaskWithExpirationHandler: stubbed");
+- (NSUInteger)beginBackgroundTaskWithExpirationHandler:(id)_handler {
+    log_dbg!("UIApplication beginBackgroundTaskWithExpirationHandler");
+    // Per Apple docs, this returns a UIBackgroundTaskIdentifier (NSUInteger).
+    // A non-zero value indicates a valid task. touchHLE does not implement
+    // background execution, so we return a fixed sentinel identifier.
+    1
 }
 
 - (())endBackgroundTask:(NSUInteger)_task {
-    log!("UIApplication endBackgroundTask: stubbed");
+    log_dbg!("UIApplication endBackgroundTask: {}", _task);
 }
 
 - (NSUInteger)backgroundTimeRemaining {
