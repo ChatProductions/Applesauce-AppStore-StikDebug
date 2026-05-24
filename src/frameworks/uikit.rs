@@ -295,6 +295,113 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIScrollViewDecelerationRateFast",
         HostConstant::Custom(ui_scroll_view_deceleration_rate_fast),
     ),
+    // -----------------------------------------------------------------
+    // UIScreen disconnect notification (paired with the existing
+    // UIScreenDidConnectNotification above), per
+    // <https://developer.apple.com/documentation/uikit/uiscreen/1617835-disconnect>.
+    // -----------------------------------------------------------------
+    (
+        "_UIScreenDidDisconnectNotification",
+        HostConstant::NSString("UIScreenDidDisconnectNotification"),
+    ),
+    (
+        "_UIScreenModeDidChangeNotification",
+        HostConstant::NSString("UIScreenModeDidChangeNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // UIApplication time-change notification, per
+    // <https://developer.apple.com/documentation/uikit/uiapplication/1622987-significanttimechangenotification>.
+    // -----------------------------------------------------------------
+    (
+        "_UIApplicationSignificantTimeChangeNotification",
+        HostConstant::NSString("UIApplicationSignificantTimeChangeNotification"),
+    ),
+    (
+        "_UIApplicationBackgroundRefreshStatusDidChangeNotification",
+        HostConstant::NSString("UIApplicationBackgroundRefreshStatusDidChangeNotification"),
+    ),
+    (
+        "_UIApplicationUserDidTakeScreenshotNotification",
+        HostConstant::NSString("UIApplicationUserDidTakeScreenshotNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // UIAccessibility traits (iOS 5+, NSString in practice though the
+    // header declares them as UIAccessibilityTraits / uint64_t. The dyld
+    // linker only requires a non-NULL pointer at the relocation site.
+    // <https://developer.apple.com/documentation/uikit/uiaccessibilitytraits>
+    // -----------------------------------------------------------------
+    (
+        "_UIAccessibilityTraitImage",
+        HostConstant::NSString("UIAccessibilityTraitImage"),
+    ),
+    (
+        "_UIAccessibilityTraitAllowsDirectInteraction",
+        HostConstant::NSString("UIAccessibilityTraitAllowsDirectInteraction"),
+    ),
+    // -----------------------------------------------------------------
+    // UIActivityType identifiers (iOS 6+, NSString constants),
+    // <https://developer.apple.com/documentation/uikit/uiactivitytype>.
+    // -----------------------------------------------------------------
+    (
+        "_UIActivityTypePostToFacebook",
+        HostConstant::NSString("com.apple.UIKit.activity.PostToFacebook"),
+    ),
+    (
+        "_UIActivityTypePostToTwitter",
+        HostConstant::NSString("com.apple.UIKit.activity.PostToTwitter"),
+    ),
+    (
+        "_UIActivityTypePostToWeibo",
+        HostConstant::NSString("com.apple.UIKit.activity.PostToWeibo"),
+    ),
+    (
+        "_UIActivityTypeMessage",
+        HostConstant::NSString("com.apple.UIKit.activity.Message"),
+    ),
+    (
+        "_UIActivityTypeMail",
+        HostConstant::NSString("com.apple.UIKit.activity.Mail"),
+    ),
+    (
+        "_UIActivityTypePrint",
+        HostConstant::NSString("com.apple.UIKit.activity.Print"),
+    ),
+    (
+        "_UIActivityTypeCopyToPasteboard",
+        HostConstant::NSString("com.apple.UIKit.activity.CopyToPasteboard"),
+    ),
+    (
+        "_UIActivityTypeAssignToContact",
+        HostConstant::NSString("com.apple.UIKit.activity.AssignToContact"),
+    ),
+    (
+        "_UIActivityTypeSaveToCameraRoll",
+        HostConstant::NSString("com.apple.UIKit.activity.SaveToCameraRoll"),
+    ),
+    (
+        "_UIActivityTypeAddToReadingList",
+        HostConstant::NSString("com.apple.UIKit.activity.AddToReadingList"),
+    ),
+    // -----------------------------------------------------------------
+    // UICollectionView supplementary view kinds (NSString constants),
+    // <https://developer.apple.com/documentation/uikit/uicollectionview>.
+    // -----------------------------------------------------------------
+    (
+        "_UICollectionElementKindSectionHeader",
+        HostConstant::NSString("UICollectionElementKindSectionHeader"),
+    ),
+    (
+        "_UICollectionElementKindSectionFooter",
+        HostConstant::NSString("UICollectionElementKindSectionFooter"),
+    ),
+    // -----------------------------------------------------------------
+    // UIDocument state-change notification (iOS 5+),
+    // <https://developer.apple.com/documentation/uikit/uidocument>.
+    // -----------------------------------------------------------------
+    (
+        "_UIDocumentStateChangedNotification",
+        HostConstant::NSString("UIDocumentStateChangedNotification"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

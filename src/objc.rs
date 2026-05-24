@@ -35,9 +35,10 @@ mod weak;
 pub use classes::{
     class_addMethod, class_copyIvarList, class_copyMethodList, class_copyPropertyList,
     class_copyProtocolList, class_getClassMethod, class_getInstanceMethod, class_getInstanceSize,
-    class_getName, class_getProperty, class_getSuperclass, class_replaceMethod,
-    method_exchangeImplementations, method_getImplementation, method_getTypeEncoding,
-    method_setImplementation, objc_allocateClassPair, objc_autoreleasePoolPop,
+    class_getMethodImplementation, class_getMethodImplementation_stret, class_getName,
+    class_getProperty, class_getSuperclass, class_replaceMethod, method_exchangeImplementations,
+    method_getImplementation, method_getTypeEncoding, method_setImplementation, objc_storeStrong,
+    objc_allocateClassPair, objc_autoreleasePoolPop,
     objc_autoreleasePoolPush, objc_autoreleaseReturnValue, objc_begin_catch, objc_classes,
     objc_copyClassNamesForImage, objc_end_catch, objc_exception_throw, objc_getClass,
     objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass, objc_readClassPair,
@@ -261,6 +262,9 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(method_setImplementation(_, _)),
     export_c_func!(method_getTypeEncoding(_, _)),
     export_c_func!(method_exchangeImplementations(_, _)),
+    export_c_func!(class_getMethodImplementation(_, _)),
+    export_c_func!(class_getMethodImplementation_stret(_, _)),
+    export_c_func!(objc_storeStrong(_, _)),
     export_c_func!(___objc_personality_v0(_, _, _, _, _)),
     // Additional ObjC runtime helpers needed by iOS 5/6 binaries.
     export_c_func!(class_getName(_)),

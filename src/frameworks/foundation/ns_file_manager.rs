@@ -76,6 +76,16 @@ pub const NSFileImmutable: &str = "NSFileImmutable";
 pub const NSFileAppendOnly: &str = "NSFileAppendOnly";
 pub const NSFileBusy: &str = "NSFileBusy";
 
+// Data Protection keys (iOS 4.0+, NSFileManager attribute keys; see
+// <https://developer.apple.com/documentation/foundation/nsfileprotectionkey>
+// and `NSFileManager.h`).
+pub const NSFileProtectionKey: &str = "NSFileProtectionKey";
+pub const NSFileProtectionNone: &str = "NSFileProtectionNone";
+pub const NSFileProtectionComplete: &str = "NSFileProtectionComplete";
+pub const NSFileProtectionCompleteUnlessOpen: &str = "NSFileProtectionCompleteUnlessOpen";
+pub const NSFileProtectionCompleteUntilFirstUserAuthentication: &str =
+    "NSFileProtectionCompleteUntilFirstUserAuthentication";
+
 // File type values
 pub const NSFileTypeDirectory: &str = "NSFileTypeDirectory";
 pub const NSFileTypeRegular: &str = "NSFileTypeRegular";
@@ -191,6 +201,28 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_NSFileHFSCreatorCode",
         HostConstant::NSString("NSFileHFSCreatorCode"),
+    ),
+    // Data Protection keys (NSFileManager attribute keys for `setAttributes:`,
+    // <https://developer.apple.com/documentation/foundation/nsfileprotectionkey>).
+    (
+        "_NSFileProtectionKey",
+        HostConstant::NSString(NSFileProtectionKey),
+    ),
+    (
+        "_NSFileProtectionNone",
+        HostConstant::NSString(NSFileProtectionNone),
+    ),
+    (
+        "_NSFileProtectionComplete",
+        HostConstant::NSString(NSFileProtectionComplete),
+    ),
+    (
+        "_NSFileProtectionCompleteUnlessOpen",
+        HostConstant::NSString(NSFileProtectionCompleteUnlessOpen),
+    ),
+    (
+        "_NSFileProtectionCompleteUntilFirstUserAuthentication",
+        HostConstant::NSString(NSFileProtectionCompleteUntilFirstUserAuthentication),
     ),
 ];
 

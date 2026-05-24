@@ -363,4 +363,40 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCFStreamErrorDomainNetDB",
         HostConstant::Custom(|env| env.mem.alloc_and_write(12i32).cast().cast_const()),
     ),
+    // -----------------------------------------------------------------
+    // CFNetwork proxy-settings dictionary keys, per
+    // <https://developer.apple.com/documentation/cfnetwork/kcfnetworkproxieshttpenable>.
+    // -----------------------------------------------------------------
+    (
+        "_kCFNetworkProxiesHTTPEnable",
+        HostConstant::NSString("HTTPEnable"),
+    ),
+    (
+        "_kCFNetworkProxiesHTTPProxy",
+        HostConstant::NSString("HTTPProxy"),
+    ),
+    (
+        "_kCFNetworkProxiesHTTPPort",
+        HostConstant::NSString("HTTPPort"),
+    ),
+    (
+        "_kCFNetworkProxiesHTTPSEnable",
+        HostConstant::NSString("HTTPSEnable"),
+    ),
+    (
+        "_kCFNetworkProxiesHTTPSProxy",
+        HostConstant::NSString("HTTPSProxy"),
+    ),
+    (
+        "_kCFNetworkProxiesHTTPSPort",
+        HostConstant::NSString("HTTPSPort"),
+    ),
+    (
+        "_kCFNetworkProxiesProxyAutoConfigEnable",
+        HostConstant::NSString("ProxyAutoConfigEnable"),
+    ),
+    (
+        "_kCFNetworkProxiesProxyAutoConfigURLString",
+        HostConstant::NSString("ProxyAutoConfigURLString"),
+    ),
 ];

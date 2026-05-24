@@ -248,6 +248,58 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_AVAssetExportPresetPassthrough",
         HostConstant::NSString("AVAssetExportPresetPassthrough"),
     ),
+    // -----------------------------------------------------------------
+    // AVCaptureSession preset names (additional, iOS 5+).
+    // <https://developer.apple.com/documentation/avfoundation/avcapturesessionpresetiframe960x540>
+    // -----------------------------------------------------------------
+    (
+        "_AVCaptureSessionPresetiFrame960x540",
+        HostConstant::NSString("AVCaptureSessionPresetiFrame960x540"),
+    ),
+    (
+        "_AVCaptureSessionPresetiFrame1280x720",
+        HostConstant::NSString("AVCaptureSessionPresetiFrame1280x720"),
+    ),
+    // -----------------------------------------------------------------
+    // AVAudioFormat / AVAudio settings dictionary keys.
+    // <https://developer.apple.com/documentation/avfoundation/avaudiosettings>
+    // -----------------------------------------------------------------
+    (
+        "_AVChannelLayoutKey",
+        HostConstant::NSString("AVChannelLayoutKey"),
+    ),
+    // -----------------------------------------------------------------
+    // AVURLAsset init option keys.
+    // <https://developer.apple.com/documentation/avfoundation/avurlassetpreferprecisedurationandtimingkey>
+    // -----------------------------------------------------------------
+    (
+        "_AVURLAssetPreferPreciseDurationAndTimingKey",
+        HostConstant::NSString("AVURLAssetPreferPreciseDurationAndTimingKey"),
+    ),
+    (
+        "_AVURLAssetReferenceRestrictionsKey",
+        HostConstant::NSString("AVURLAssetReferenceRestrictionsKey"),
+    ),
+    // -----------------------------------------------------------------
+    // AVVideoProfileLevel / AVVideoCodec constants.
+    // <https://developer.apple.com/documentation/avfoundation/avvideoprofilelevelh264main31>
+    // -----------------------------------------------------------------
+    (
+        "_AVVideoProfileLevelH264Main31",
+        HostConstant::NSString("H264_Main_3_1"),
+    ),
+    (
+        "_AVVideoProfileLevelH264Baseline30",
+        HostConstant::NSString("H264_Baseline_3_0"),
+    ),
+    (
+        "_AVVideoProfileLevelH264Baseline31",
+        HostConstant::NSString("H264_Baseline_3_1"),
+    ),
+    (
+        "_AVVideoProfileLevelH264High40",
+        HostConstant::NSString("H264_High_4_0"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

@@ -583,6 +583,106 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSFileHandleNotificationFileHandleItem",
         HostConstant::NSString("NSFileHandleNotificationFileHandleItem"),
     ),
+    // -----------------------------------------------------------------
+    // NSMetadataQuery item / scope / notification keys.
+    // <https://developer.apple.com/documentation/foundation/nsmetadataquery>
+    // -----------------------------------------------------------------
+    (
+        "_NSMetadataQueryDidFinishGatheringNotification",
+        HostConstant::NSString("NSMetadataQueryDidFinishGatheringNotification"),
+    ),
+    (
+        "_NSMetadataQueryDidUpdateNotification",
+        HostConstant::NSString("NSMetadataQueryDidUpdateNotification"),
+    ),
+    (
+        "_NSMetadataQueryDidStartGatheringNotification",
+        HostConstant::NSString("NSMetadataQueryDidStartGatheringNotification"),
+    ),
+    (
+        "_NSMetadataQueryGatheringProgressNotification",
+        HostConstant::NSString("NSMetadataQueryGatheringProgressNotification"),
+    ),
+    (
+        "_NSMetadataQueryUbiquitousDocumentsScope",
+        HostConstant::NSString("NSMetadataQueryUbiquitousDocumentsScope"),
+    ),
+    (
+        "_NSMetadataQueryUbiquitousDataScope",
+        HostConstant::NSString("NSMetadataQueryUbiquitousDataScope"),
+    ),
+    (
+        "_NSMetadataItemURLKey",
+        HostConstant::NSString("kMDItemURL"),
+    ),
+    (
+        "_NSMetadataItemFSNameKey",
+        HostConstant::NSString("kMDItemFSName"),
+    ),
+    (
+        "_NSMetadataItemFSContentChangeDateKey",
+        HostConstant::NSString("kMDItemFSContentChangeDate"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemIsDownloadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsDownloadedKey"),
+    ),
+    // -----------------------------------------------------------------
+    // NSURL ubiquity / iCloud item attribute keys, per
+    // <https://developer.apple.com/documentation/foundation/nsurl>
+    // -----------------------------------------------------------------
+    (
+        "_NSURLIsUbiquitousItemKey",
+        HostConstant::NSString("NSURLIsUbiquitousItemKey"),
+    ),
+    (
+        "_NSURLUbiquitousItemIsDownloadedKey",
+        HostConstant::NSString("NSURLUbiquitousItemIsDownloadedKey"),
+    ),
+    (
+        "_NSURLUbiquitousItemIsDownloadingKey",
+        HostConstant::NSString("NSURLUbiquitousItemIsDownloadingKey"),
+    ),
+    (
+        "_NSURLUbiquitousItemIsUploadedKey",
+        HostConstant::NSString("NSURLUbiquitousItemIsUploadedKey"),
+    ),
+    (
+        "_NSURLUbiquitousItemIsUploadingKey",
+        HostConstant::NSString("NSURLUbiquitousItemIsUploadingKey"),
+    ),
+    (
+        "_NSURLUbiquitousItemHasUnresolvedConflictsKey",
+        HostConstant::NSString("NSURLUbiquitousItemHasUnresolvedConflictsKey"),
+    ),
+    // -----------------------------------------------------------------
+    // NSUbiquitousKeyValueStore notification keys.
+    // <https://developer.apple.com/documentation/foundation/nsubiquitouskeyvaluestore>
+    // -----------------------------------------------------------------
+    (
+        "_NSUbiquitousKeyValueStoreChangeReasonKey",
+        HostConstant::NSString("NSUbiquitousKeyValueStoreChangeReasonKey"),
+    ),
+    (
+        "_NSUbiquitousKeyValueStoreChangedKeysKey",
+        HostConstant::NSString("NSUbiquitousKeyValueStoreChangedKeysKey"),
+    ),
+    (
+        "_NSUbiquitousKeyValueStoreDidChangeExternallyNotification",
+        HostConstant::NSString("NSUbiquitousKeyValueStoreDidChangeExternallyNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // NSProcessInfo / NSURLError additional userInfo keys.
+    // <https://developer.apple.com/documentation/foundation/nsprocessinfo>
+    // -----------------------------------------------------------------
+    (
+        "_NSProcessInfoPowerStateDidChangeNotification",
+        HostConstant::NSString("NSProcessInfoPowerStateDidChangeNotification"),
+    ),
+    (
+        "_NSURLErrorBackgroundTaskCancelledReasonKey",
+        HostConstant::NSString("NSURLErrorBackgroundTaskCancelledReasonKey"),
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

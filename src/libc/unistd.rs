@@ -5,6 +5,7 @@
  */
 //! Miscellaneous parts of `unistd.h`
 
+use crate::abi::DotDotDot;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestPath};
 use crate::libc::errno::{
@@ -457,7 +458,59 @@ fn chmod(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
     0
 }
 
+// Darwin/XNU `<sys/syscall.h>` selector numbers used by the few syscalls
+// touchHLE knows how to implement directly. The full list is enormous; we
+// only enumerate the ones we resolve here.
+const SYS_THREAD_SELFID: i32 = 372;
+const SYS_GETPID: i32 = 20;
+const SYS_GETPPID: i32 = 39;
+const SYS_GETUID: i32 = 24;
+const SYS_GETEUID: i32 = 25;
+const SYS_GETGID: i32 = 47;
+const SYS_GETEGID: i32 = 43;
+
+/// `long syscall(int number, ...);`
+///
+/// Per the Apple `syscall(2)` man page
+/// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/syscall.2.html>):
+///
+/// > `syscall()` performs the system call whose assembly language
+/// > interface has the specified `number` with the specified arguments.
+/// > Symbolic constants for system calls can be found in the header
+/// > file `<sys/syscall.h>`. On error, `syscall()` returns -1 and sets
+/// > `errno` to indicate the error.
+///
+/// In touchHLE there is no host kernel sitting beneath the guest — every
+/// syscall would have to be intercepted at the libsystem layer. We
+/// honour the very small subset that iOS apps occasionally reach via
+/// `syscall(SYS_thread_selfid)` etc, and return `-1` with `errno = ENOSYS`
+/// for every other selector, which is exactly the contract Apple's
+/// kernel uses for selectors the host doesn't implement.
+fn syscall(env: &mut Environment, number: i32, _args: DotDotDot) -> i32 {
+    log_dbg!("syscall({}) called", number);
+    match number {
+        SYS_GETPID => self::getpid(env),
+        SYS_GETPPID => self::getppid(env),
+        SYS_GETUID => self::getuid(env) as i32,
+        SYS_GETEUID => self::geteuid(env) as i32,
+        SYS_GETGID => self::getgid(env) as i32,
+        SYS_GETEGID => self::getegid(env) as i32,
+        SYS_THREAD_SELFID => {
+            // Stable per-thread integer ID. touchHLE numbers threads
+            // from 0 upward; the kernel's thread-id space is opaque to
+            // userspace, so the only contract is non-zero unique IDs.
+            (env.current_thread as i32) + 1
+        }
+        _ => {
+            log!("Warning: syscall({}) unimplemented; returning -1/ENOSYS", number);
+            set_errno(env, ENOSYS);
+            -1
+        }
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(syscall(_, _)),
     export_c_func!(sleep(_)),
     export_c_func!(usleep(_)),
     export_c_func!(getpid()),
