@@ -196,7 +196,10 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
         match specifier {
             // Integer specifiers
             b'c' => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for non-numeric conversions; per real
+                // printf implementations (glibc / Apple libSystem) it is
+                // silently ignored rather than aborting.
+                let _ = prepend_sign;
 
                 // Если передали %lc, обрабатываем как широкий символ (аналог
                 // %C)
@@ -218,7 +221,9 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             // Apple extension?
             // Seemingly works in both NSLog and printf.
             b'C' => {
-                assert!(!prepend_sign);
+                // '+' flag is ignored for the (Apple-extension) wide-char
+                // conversion — see note for %c above.
+                let _ = prepend_sign;
                 // Убрали assert!(length_modifier.is_none());
                 let c: unichar = args.next(env);
                 assert!(pad_char == ' ' && pad_width == 0);
@@ -257,7 +262,9 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 }
             }
             b'S' => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for string conversions; ignore it
+                // rather than aborting (matches glibc / Apple behaviour).
+                let _ = prepend_sign;
                 // Убрали assert!(length_modifier.is_none());
                 // TODO: support other locales
                 let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
@@ -317,7 +324,9 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 res.extend_from_slice(s.as_bytes());
             }
             b'@' if NS_LOG => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for Cocoa's %@ object conversion;
+                // ignore it instead of aborting.
+                let _ = prepend_sign;
                 // Убрали assert!(length_modifier.is_none());
                 let object: id = args.next(env);
                 // TODO: use localized description if available?
@@ -333,7 +342,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             b'o' => {
                 // Octal specifier
-                assert!(!prepend_sign);
+                // '+' flag is undefined for unsigned conversions; ignore it.
+                let _ = prepend_sign;
                 let uint: u64 = if length_modifier == Some("ll") {
                     args.next(env)
                 } else if length_modifier == Some("hh") {
@@ -379,7 +389,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 }
             }
             b'x' => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for unsigned conversions; ignore it.
+                let _ = prepend_sign;
                 let uint: u64 = if length_modifier == Some("ll") {
                     args.next(env)
                 } else if length_modifier == Some("hh") {
@@ -437,7 +448,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 }
             }
             b'X' => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for unsigned conversions; ignore it.
+                let _ = prepend_sign;
                 let uint: u64 = if length_modifier == Some("ll") {
                     args.next(env)
                 } else if length_modifier == Some("hh") {
@@ -495,7 +507,8 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 }
             }
             b'p' => {
-                assert!(!prepend_sign);
+                // '+' flag is undefined for pointer conversions; ignore it.
+                let _ = prepend_sign;
                 // Убрали assert!(length_modifier.is_none());
                 let ptr: MutVoidPtr = args.next(env);
                 // '%p' is implementation defined,
@@ -515,23 +528,22 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
             }
             // Float specifiers
             b'f' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
                 let formatted = f_format(float, pad_width, pad_char, precision, left_justified);
+                let formatted = apply_float_sign(&formatted, float, prepend_sign);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'e' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 let precision = precision.unwrap_or(6);
                 let formatted = e_format(float, pad_width, pad_char, precision, left_justified);
+                let formatted = apply_float_sign(&formatted, float, prepend_sign);
                 res.extend_from_slice(formatted.as_bytes());
             }
             b'g' => {
-                assert!(!prepend_sign);
                 let float: f64 = args.next(env);
                 let pad_width = pad_width as usize;
                 // Reference https://en.cppreference.com/w/c/io/vfprintf
@@ -578,10 +590,13 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                     } else {
                         trimmed_result.to_string()
                     };
+                    let trimmed_result =
+                        apply_float_sign(&trimmed_result, float, prepend_sign);
                     res.extend_from_slice(trimmed_result.as_bytes());
                 } else {
                     let precision: usize = (P - 1).try_into().unwrap();
                     let formatted = e_format(float, pad_width, pad_char, precision, left_justified);
+                    let formatted = apply_float_sign(&formatted, float, prepend_sign);
                     res.extend_from_slice(formatted.as_bytes());
                 }
             }
@@ -591,6 +606,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let precision = precision.unwrap_or(6);
                 let s = format!("{float:.precision$}").to_uppercase();
                 let s = apply_pad(&s, pad_width, pad_char, left_justified);
+                let s = apply_float_sign(&s, float, prepend_sign);
                 res.extend_from_slice(s.as_bytes());
             }
             b'E' => {
@@ -599,6 +615,7 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 let precision = precision.unwrap_or(6);
                 let s =
                     e_format(float, pad_width, pad_char, precision, left_justified).to_uppercase();
+                let s = apply_float_sign(&s, float, prepend_sign);
                 res.extend_from_slice(s.as_bytes());
             }
             b'G' => {
@@ -620,18 +637,21 @@ pub fn printf_inner<const NS_LOG: bool, F: Fn(&Mem, GuestUSize) -> u8>(
                 } else {
                     e_format(float, pad_width, pad_char, (p - 1) as usize, left_justified)
                 };
-                res.extend_from_slice(s.to_uppercase().as_bytes());
+                let s = apply_float_sign(&s.to_uppercase(), float, prepend_sign);
+                res.extend_from_slice(s.as_bytes());
             }
             b'a' => {
                 let float: f64 = args.next(env);
                 let s = format!("{:e}", float).replace('e', "p");
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
+                let s = apply_float_sign(&s, float, prepend_sign);
                 res.extend_from_slice(s.as_bytes());
             }
             b'A' => {
                 let float: f64 = args.next(env);
                 let s = format!("{:e}", float).replace('e', "P").to_uppercase();
                 let s = apply_pad(&s, pad_width as usize, pad_char, left_justified);
+                let s = apply_float_sign(&s, float, prepend_sign);
                 res.extend_from_slice(s.as_bytes());
             }
             b'n' => {
@@ -750,6 +770,49 @@ fn apply_pad(s: &str, pad_width: usize, pad_char: char, left_justified: bool) ->
     } else {
         format!("{s:>pad_width$}")
     }
+}
+
+/// Apply the `+` flag for a signed floating-point conversion.
+///
+/// Per C99 §7.19.6.1 / Apple's printf(3) manual, the `+` flag forces a sign
+/// character to always be placed before a value produced by a signed
+/// conversion. The width-padding has already been applied, so we splice the
+/// `+` in front of the first non-space character (preserving any leading
+/// padding that was already added for right-justified output).
+fn apply_float_sign(formatted: &str, value: f64, prepend_sign: bool) -> String {
+    if !prepend_sign {
+        return formatted.to_string();
+    }
+    // The value is already negative-prefixed by Rust's float formatter; only
+    // act on non-negative values (including +0.0 and NaN, which Apple's
+    // printf treats as positive).
+    if value.is_sign_negative() {
+        return formatted.to_string();
+    }
+    // Find the first non-space character; if the string was right-justified
+    // with spaces we want to put the '+' immediately before the digits and
+    // consume one leading space so the overall field width is preserved.
+    if let Some(first_non_space) = formatted.find(|c: char| c != ' ') {
+        if first_non_space > 0 {
+            // Replace one leading space with '+'.
+            let mut out = String::with_capacity(formatted.len());
+            out.push_str(&formatted[..first_non_space - 1]);
+            out.push('+');
+            out.push_str(&formatted[first_non_space..]);
+            return out;
+        }
+        // No leading spaces — prepend '+'. This may grow the field by 1,
+        // which matches glibc/Apple behaviour when width <= len.
+        let mut out = String::with_capacity(formatted.len() + 1);
+        out.push('+');
+        out.push_str(formatted);
+        return out;
+    }
+    // String is entirely whitespace (shouldn't happen for a real number).
+    let mut out = String::with_capacity(formatted.len() + 1);
+    out.push('+');
+    out.push_str(formatted);
+    out
 }
 
 fn apply_int_pad(
