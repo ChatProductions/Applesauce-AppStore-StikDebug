@@ -279,6 +279,13 @@ extern "C" {
     pub fn hxml_free(ptr: *mut c_void);
     pub fn xmlMalloc(size: usize) -> *mut c_void;
     pub fn xmlMemoryDump() -> c_int;
+    /// `xmlInitMemory(void)` — initialises libxml2's allocator override
+    /// table. Deprecated upstream (the runtime now initialises lazily),
+    /// but apps built against older libxml2 still call it.
+    pub fn xmlInitMemory() -> c_int;
+    /// `xmlCleanupMemory(void)` — releases any module-private state held
+    /// by the libxml2 allocator. See `libxml/xmlmemory.h`.
+    pub fn xmlCleanupMemory();
 
     // ------------------------ xmlChar string utilities ------------------
     pub fn xmlStrdup(s: *const xmlChar) -> *mut xmlChar;
@@ -578,6 +585,13 @@ extern "C" {
     pub fn xmlXPathNodeSetCreate(node: *mut xmlNode) -> *mut xmlNodeSet;
     pub fn xmlXPathFreeNodeSet(set: *mut xmlNodeSet);
     pub fn xmlXPathSetContextNode(node: *mut xmlNode, ctx: *mut xmlXPathContext) -> c_int;
+    /// `xmlXPathCastToNumber(const xmlXPathObjectPtr val) -> double` —
+    /// XPath 1.0 §4.4 number conversion: numbers pass through unchanged,
+    /// booleans map to 1/0, node-sets to the number value of the first
+    /// node in document order, strings via `xmlXPathCastStringToNumber`.
+    pub fn xmlXPathCastToNumber(val: *mut xmlXPathObject) -> c_double;
+    pub fn xmlXPathCastToString(val: *mut xmlXPathObject) -> *mut xmlChar;
+    pub fn xmlXPathCastToBoolean(val: *mut xmlXPathObject) -> c_int;
 
     // ------------------------ XInclude / XPointer -----------------------
     pub fn xmlXIncludeProcess(doc: *mut xmlDoc) -> c_int;

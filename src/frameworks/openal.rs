@@ -15,7 +15,7 @@ use crate::audio::openal::al_types::*;
 use crate::audio::openal::alc_types::*;
 use crate::audio::openal::{
     OpenAL, OpenALContext, ALC_DEVICE_SPECIFIER, ALC_FREQUENCY, ALC_MONO_SOURCES, ALC_REFRESH,
-    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_RENDERER, AL_VENDOR, AL_VERSION,
+    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_NO_ERROR, AL_RENDERER, AL_VENDOR, AL_VERSION,
 };
 use crate::dyld::{export_c_func, FunctionExports, HostDylib};
 use crate::libc::string::strcmp;
@@ -60,6 +60,11 @@ pub struct State {
     /// (apps like Galaxy On Fire destroy the context, then query its device,
     /// then close the device).
     destroyed_context_devices: HashMap<MutPtr<GuestALCcontext>, MutPtr<GuestALCdevice>>,
+    /// Last value passed to `alcMacOSXRenderingQuality`. Zero means the
+    /// app never set one, in which case `alcMacOSXGetRenderingQuality`
+    /// returns the documented iPhone OS default of
+    /// `ALC_IPHONE_SPATIAL_RENDERING_QUALITY_HIGH` (2).
+    pub macosx_rendering_quality: ALint,
 }
 impl State {
     fn get(env: &mut Environment) -> &mut Self {
@@ -1187,43 +1192,262 @@ fn alSpeedOfSound(env: &mut Environment, value: ALfloat) {
 // regular gameplay code paths and crash the emulator on what should be a
 // soft failure.
 
+/// `alcGetEnumValue(device, enumName)` — per the OpenAL 1.1 spec §6.3.4
+/// the enum-name → enum-int lookup is delegated to the implementation.
+/// We forward to the host OpenAL Soft so that standard tokens (e.g.
+/// `ALC_FREQUENCY`) resolve correctly. Apple-extension tokens that the
+/// host doesn't know fall back to 0 (the spec-mandated "no match"
+/// sentinel) just as on Apple's stock implementation.
 fn alcGetEnumValue(
-    _env: &mut Environment,
-    _device: MutPtr<GuestALCdevice>,
+    env: &mut Environment,
+    device: MutPtr<GuestALCdevice>,
     enum_name: ConstPtr<u8>,
 ) -> ALenum {
-    log!(
-        "Warning: alcGetEnumValue({:?}) is a stub, returning 0",
-        enum_name
-    );
-    0
+    let host_device = *State::get(env).devices.get(&device).unwrap_or(&std::ptr::null_mut());
+    let Ok(s) = env.mem.cstr_at_utf8(enum_name) else {
+        log!("Warning: alcGetEnumValue({:?}): name is not valid UTF-8, returning 0", enum_name);
+        return 0;
+    };
+    let cs = match CString::new(s) {
+        Ok(cs) => cs,
+        Err(_) => return 0,
+    };
+    let res = unsafe { al::alcGetEnumValue(host_device, cs.as_ptr()) };
+    log_dbg!("alcGetEnumValue({:?}) => {:#x}", s, res);
+    res
 }
+
+/// `alcGetIntegerv(device, param, size, values)` — per OpenAL 1.1 §6.3.4
+/// returns the host-side integer attribute(s) for `param`. We forward to
+/// host OpenAL Soft whenever the guest passed a non-null device handle
+/// that we recognise (so e.g. ALC_FREQUENCY/ALC_REFRESH/ALC_SYNC/
+/// ALC_MAJOR_VERSION/ALC_MINOR_VERSION/ALC_ATTRIBUTES_SIZE/
+/// ALC_ALL_ATTRIBUTES/ALC_CAPTURE_SAMPLES all resolve to real values).
+/// When the device is NULL or unknown only the version queries
+/// (ALC_MAJOR_VERSION = 0x1000, ALC_MINOR_VERSION = 0x1001) are valid
+/// per the spec; we still forward those to the host.
 fn alcGetIntegerv(
     env: &mut Environment,
-    _device: MutPtr<GuestALCdevice>,
+    device: MutPtr<GuestALCdevice>,
     param: ALenum,
     size: ALCsizei,
     values: MutPtr<ALCint>,
 ) {
-    log!(
-        "Warning: alcGetIntegerv({:#x}, size={}) is a stub, zero-filling",
-        param,
-        size
+    if values.is_null() || size <= 0 {
+        return;
+    }
+    let host_device = State::get(env)
+        .devices
+        .get(&device)
+        .copied()
+        .unwrap_or(std::ptr::null_mut());
+    let n = size as usize;
+    let mut buf: Vec<ALCint> = vec![0; n];
+    unsafe { al::alcGetIntegerv(host_device, param, size, buf.as_mut_ptr()) };
+    for (i, v) in buf.iter().enumerate() {
+        env.mem.write(values + (i as u32) * 4, *v);
+    }
+    log_dbg!(
+        "alcGetIntegerv({:?}, {:#x}, {}) => {:?}",
+        device, param, size, buf
     );
-    if !values.is_null() && size > 0 {
-        let n = size as u32;
-        let dst = env.mem.bytes_at_mut(values.cast(), n * 4);
-        for b in dst.iter_mut() {
-            *b = 0;
+}
+
+/// `alcIsExtensionPresent(device, extName)` — forwards to the host
+/// OpenAL Soft (OpenAL 1.1 §6.3.3). Apple's documented OpenAL
+/// extension strings ("ALC_EXT_ASA", "ALC_EXT_MAC_OSX", etc.) aren't
+/// advertised by stock OpenAL Soft, which is consistent with running
+/// on a non-Apple device — apps that probe for them and gracefully
+/// degrade will simply skip the affected code paths.
+fn alcIsExtensionPresent(
+    env: &mut Environment,
+    device: MutPtr<GuestALCdevice>,
+    ext_name: ConstPtr<u8>,
+) -> ALCboolean {
+    let host_device = State::get(env)
+        .devices
+        .get(&device)
+        .copied()
+        .unwrap_or(std::ptr::null_mut());
+    let Ok(s) = env.mem.cstr_at_utf8(ext_name) else {
+        return 0;
+    };
+    let cs = match CString::new(s) {
+        Ok(cs) => cs,
+        Err(_) => return 0,
+    };
+    let res = unsafe { al::alcIsExtensionPresent(host_device, cs.as_ptr()) };
+    log_dbg!("alcIsExtensionPresent({:?}) => {}", s, res);
+    res
+}
+
+// === Apple OpenAL extensions ===
+//
+// References:
+// - oalSourceNotifications_OALExtensions.h (Apple, OpenAL Source
+//   Notifications Extension) — declares `alSourceAddNotification` /
+//   `alSourceRemoveNotification` plus the AL_QUEUE_HAS_LOOPED enum
+//   (0x9000) used as `notificationID`.
+// - oalMacOSX_OALExtensions.h (Apple, OpenAL Mac OS X Extensions) —
+//   declares the Apple Sound API (ASA) `alcASAGet*`/`alcASASet*` family
+//   plus `alcMacOSXRenderingQuality` / `alcMacOSXGetRenderingQuality`.
+// - <https://developer.apple.com/library/archive/technotes/tn2199/_index.html>
+//
+// touchHLE backs onto stock OpenAL Soft, which doesn't implement these
+// Apple-specific extensions. Per the extension specifications the
+// canonical "not supported" return is AL_NO_ERROR / 0 with the
+// requested data left zeroed — apps detect feature presence via
+// `alIsExtensionPresent("AL_EXT_SOURCE_NOTIFICATIONS")` /
+// `alcIsExtensionPresent(device, "ALC_EXT_ASA")` before configuring
+// these properties, so a benign no-op is the spec-compliant fallback.
+
+/// `ALenum alSourceAddNotification(ALuint sid, ALuint notificationID,
+///                                 alSourceNotificationProc proc,
+///                                 ALvoid *userData)` (Apple).
+///
+/// Registers a callback for source-state notifications such as
+/// `AL_QUEUE_HAS_LOOPED` (0x9000) and `AL_BUFFERS_PROCESSED` (0x1016).
+/// Apple's headers specify a return of `AL_NO_ERROR` on success.
+fn alSourceAddNotification(
+    _env: &mut Environment,
+    sid: ALuint,
+    notification_id: ALuint,
+    _proc: MutVoidPtr,
+    _user_data: MutVoidPtr,
+) -> ALenum {
+    log_dbg!(
+        "alSourceAddNotification(sid={}, notificationID={:#x}) — no-op (stock OpenAL Soft)",
+        sid,
+        notification_id
+    );
+    al::AL_NO_ERROR
+}
+
+/// `ALvoid alSourceRemoveNotification(ALuint sid, ALuint notificationID,
+///                                    alSourceNotificationProc proc,
+///                                    ALvoid *userData)` (Apple).
+fn alSourceRemoveNotification(
+    _env: &mut Environment,
+    sid: ALuint,
+    notification_id: ALuint,
+    _proc: MutVoidPtr,
+    _user_data: MutVoidPtr,
+) {
+    log_dbg!(
+        "alSourceRemoveNotification(sid={}, notificationID={:#x}) — no-op",
+        sid,
+        notification_id
+    );
+}
+
+/// `ALenum alcASAGetSource(const ALuint property, ALuint source,
+///                         ALvoid *data, ALuint *dataSize)` (Apple).
+///
+/// ASA == Apple Sound API. Properties include
+/// `ALC_ASA_REVERB_ON` (0x1) / `_ROOM_TYPE` (0x2) / `_PRESET` (0x3) /
+/// `_OCCLUSION` (0x4) / `_OBSTRUCTION` (0x5).
+fn alcASAGetSource(
+    env: &mut Environment,
+    property: ALuint,
+    source: ALuint,
+    data: MutVoidPtr,
+    data_size: MutPtr<ALuint>,
+) -> ALenum {
+    log_dbg!(
+        "alcASAGetSource(property={:#x}, source={}) — unsupported, zeroing out",
+        property,
+        source
+    );
+    // Per Apple's headers, write 0 / leave size at 0 when the
+    // property is unknown. We zero the destination buffer if the
+    // caller told us its size.
+    if !data_size.is_null() {
+        let n = env.mem.read(data_size);
+        if !data.is_null() && n > 0 {
+            let dst = env.mem.bytes_at_mut(data.cast(), n);
+            for b in dst.iter_mut() {
+                *b = 0;
+            }
         }
     }
+    al::AL_NO_ERROR
 }
-fn alcIsExtensionPresent(
+
+/// `ALenum alcASASetSource(const ALuint property, ALuint source,
+///                         ALvoid *data, ALuint dataSize)` (Apple).
+fn alcASASetSource(
     _env: &mut Environment,
-    _device: MutPtr<GuestALCdevice>,
-    _extName: ConstPtr<u8>,
-) -> ALCboolean {
-    0
+    property: ALuint,
+    source: ALuint,
+    _data: MutVoidPtr,
+    _data_size: ALuint,
+) -> ALenum {
+    log_dbg!(
+        "alcASASetSource(property={:#x}, source={}) — no-op",
+        property,
+        source
+    );
+    al::AL_NO_ERROR
+}
+
+/// `ALenum alcASAGetListener(const ALuint property, ALvoid *data,
+///                           ALuint *dataSize)` (Apple).
+fn alcASAGetListener(
+    env: &mut Environment,
+    property: ALuint,
+    data: MutVoidPtr,
+    data_size: MutPtr<ALuint>,
+) -> ALenum {
+    log_dbg!(
+        "alcASAGetListener(property={:#x}) — unsupported, zeroing out",
+        property
+    );
+    if !data_size.is_null() {
+        let n = env.mem.read(data_size);
+        if !data.is_null() && n > 0 {
+            let dst = env.mem.bytes_at_mut(data.cast(), n);
+            for b in dst.iter_mut() {
+                *b = 0;
+            }
+        }
+    }
+    al::AL_NO_ERROR
+}
+
+/// `ALenum alcASASetListener(const ALuint property, ALvoid *data,
+///                           ALuint dataSize)` (Apple).
+fn alcASASetListener(
+    _env: &mut Environment,
+    property: ALuint,
+    _data: MutVoidPtr,
+    _data_size: ALuint,
+) -> ALenum {
+    log_dbg!("alcASASetListener(property={:#x}) — no-op", property);
+    al::AL_NO_ERROR
+}
+
+/// `ALvoid alcMacOSXRenderingQuality(const ALint quality)` (Apple).
+///
+/// Selects the spatial-rendering quality:
+/// `ALC_IPHONE_SPATIAL_RENDERING_QUALITY_LOW` (1) /
+/// `ALC_IPHONE_SPATIAL_RENDERING_QUALITY_HIGH` (2). On stock OpenAL
+/// Soft the rendering pipeline is configured at device-open time and
+/// can't be changed on the fly, so we just remember the request and
+/// hand it back to `alcMacOSXGetRenderingQuality`.
+fn alcMacOSXRenderingQuality(env: &mut Environment, quality: ALint) {
+    log_dbg!("alcMacOSXRenderingQuality({}) — remembered", quality);
+    env.framework_state.openal.macosx_rendering_quality = quality;
+}
+
+/// `ALint alcMacOSXGetRenderingQuality()` (Apple).
+fn alcMacOSXGetRenderingQuality(env: &mut Environment) -> ALint {
+    // Default: high quality, matching iPhone OS 4.x's documented value.
+    let q = env.framework_state.openal.macosx_rendering_quality;
+    if q == 0 {
+        0x0002 // ALC_IPHONE_SPATIAL_RENDERING_QUALITY_HIGH
+    } else {
+        q
+    }
 }
 fn alGetBufferf(env: &mut Environment, _buffer: ALuint, param: ALenum, value: MutPtr<ALfloat>) {
     log!(
@@ -1405,4 +1629,14 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(alSourceStopv(_, _)),
     export_c_func!(alSourceRewindv(_, _)),
     export_c_func!(alSpeedOfSound(_)),
+    // Apple OpenAL extensions — see `oalSourceNotifications_OALExtensions.h`
+    // and `oalMacOSX_OALExtensions.h`.
+    export_c_func!(alSourceAddNotification(_, _, _, _)),
+    export_c_func!(alSourceRemoveNotification(_, _, _, _)),
+    export_c_func!(alcASAGetSource(_, _, _, _)),
+    export_c_func!(alcASASetSource(_, _, _, _)),
+    export_c_func!(alcASAGetListener(_, _, _)),
+    export_c_func!(alcASASetListener(_, _, _)),
+    export_c_func!(alcMacOSXRenderingQuality(_)),
+    export_c_func!(alcMacOSXGetRenderingQuality()),
 ];

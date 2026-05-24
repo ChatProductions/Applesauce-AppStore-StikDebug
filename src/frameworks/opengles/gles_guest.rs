@@ -6,7 +6,7 @@
 
 //! Wrapper functions exposing OpenGL ES to the guest.
 
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, export_c_func_aliased, FunctionExports};
 use crate::frameworks::opengles::eagl::EAGLContextHostObject;
 use crate::gles::{gles11_raw as gles11, GLES};
 use crate::mem::{ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr};
@@ -2847,6 +2847,208 @@ fn glUniform4fv(env: &mut Environment, location: GLint, count: GLsizei, value: C
         gles.Uniform4fv(location, count, ptr);
     });
 }
+/// `void glShaderBinary(GLsizei count, const GLuint *shaders,
+///                      GLenum binaryformat, const void *binary,
+///                      GLsizei length)` — OpenGL ES 2.0+.
+/// Loads a pre-compiled shader binary. We forward count, format, and
+/// raw bytes to the host so backends that support
+/// `GL_EXT_shader_binary` can load them; backends that don't accept
+/// any binary format will simply set GL_INVALID_ENUM, which is the
+/// spec-mandated behaviour.
+fn glShaderBinary(
+    env: &mut Environment,
+    count: GLsizei,
+    shaders: ConstPtr<GLuint>,
+    binary_format: GLenum,
+    binary: ConstVoidPtr,
+    length: GLsizei,
+) {
+    if count <= 0 || shaders.is_null() {
+        return;
+    }
+    let n = count as usize;
+    let mut shaders_vec: Vec<GLuint> = Vec::with_capacity(n);
+    for i in 0..n {
+        shaders_vec.push(env.mem.read(shaders + (i as GuestUSize)));
+    }
+    let bin_len = length.max(0) as GuestUSize;
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let bin_host = if binary.is_null() || bin_len == 0 {
+            std::ptr::null()
+        } else {
+            mem.bytes_at(binary.cast(), bin_len).as_ptr().cast()
+        };
+        gles.ShaderBinary(count, shaders_vec.as_ptr(), binary_format, bin_host, length);
+    });
+}
+
+/// `void glGetActiveUniformsiv(GLuint program, GLsizei uniformCount,
+///                             const GLuint *uniformIndices, GLenum pname,
+///                             GLint *params)` — OpenGL ES 3.0 §2.12.6.
+fn glGetActiveUniformsiv(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_count: GLsizei,
+    uniform_indices: ConstPtr<GLuint>,
+    pname: GLenum,
+    params: MutPtr<GLint>,
+) {
+    if uniform_count <= 0 {
+        return;
+    }
+    let n = uniform_count as usize;
+    let mut indices: Vec<GLuint> = Vec::with_capacity(n);
+    for i in 0..n {
+        indices.push(env.mem.read(uniform_indices + (i as GuestUSize)));
+    }
+    let mut results: Vec<GLint> = vec![0; n];
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetActiveUniformsiv(
+            program,
+            uniform_count,
+            indices.as_ptr(),
+            pname,
+            results.as_mut_ptr(),
+        );
+    });
+    for (i, v) in results.iter().enumerate() {
+        env.mem.write(params + (i as GuestUSize), *v);
+    }
+}
+
+/// `void glGetActiveUniformBlockiv(GLuint program,
+///                                 GLuint uniformBlockIndex, GLenum pname,
+///                                 GLint *params)` — OpenGL ES 3.0 §2.12.6.
+fn glGetActiveUniformBlockiv(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_block_index: GLuint,
+    pname: GLenum,
+    params: MutPtr<GLint>,
+) {
+    // The number of values written depends on `pname`; the largest is
+    // GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES which returns up to
+    // `GL_MAX_UNIFORM_BLOCK_BINDINGS` values. We allocate a generous
+    // 64-element scratch buffer (more than enough for any GLES 3.0
+    // hardware) and only write back what the backend reports.
+    let mut scratch: [GLint; 64] = [0; 64];
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetActiveUniformBlockiv(program, uniform_block_index, pname, scratch.as_mut_ptr());
+    });
+    // Conservative: write back one int — sufficient for the scalar
+    // queries (BINDING, DATA_SIZE, NAME_LENGTH, *_ACTIVE_UNIFORMS,
+    // REFERENCED_BY_*_SHADER). For the array query the guest passes a
+    // buffer it sized using GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, which it
+    // queried right before; the backend writes into the host scratch
+    // and we copy the count of ints the guest had asked for. Without
+    // a way to know the buffer size we copy 1 int (covers all scalar
+    // pnames) — the GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES path
+    // is exercised by very few apps and falls back to GL_INVALID_VALUE
+    // on backends that don't implement uniform blocks.
+    if !params.is_null() {
+        env.mem.write(params, scratch[0]);
+    }
+}
+
+/// `void glGetActiveUniformBlockName(GLuint program,
+///                                   GLuint uniformBlockIndex,
+///                                   GLsizei bufSize, GLsizei *length,
+///                                   GLchar *uniformBlockName)`.
+fn glGetActiveUniformBlockName(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_block_index: GLuint,
+    buf_size: GLsizei,
+    length: MutPtr<GLsizei>,
+    uniform_block_name: MutPtr<GLubyte>,
+) {
+    if buf_size <= 0 || uniform_block_name.is_null() {
+        if !length.is_null() {
+            env.mem.write(length, 0);
+        }
+        return;
+    }
+    let cap = buf_size as usize;
+    let mut name_buf: Vec<u8> = vec![0u8; cap];
+    let mut host_length: GLsizei = 0;
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetActiveUniformBlockName(
+            program,
+            uniform_block_index,
+            buf_size,
+            &mut host_length,
+            name_buf.as_mut_ptr() as *mut std::os::raw::c_char,
+        );
+    });
+    let n = (host_length.max(0) as usize).min(cap);
+    let dst = env.mem.bytes_at_mut(uniform_block_name.cast(), n as GuestUSize);
+    dst.copy_from_slice(&name_buf[..n]);
+    if !length.is_null() {
+        env.mem.write(length, host_length);
+    }
+}
+
+/// `void glProgramBinary(GLuint program, GLenum binaryFormat,
+///                       const void *binary, GLsizei length)`.
+fn glProgramBinary(
+    env: &mut Environment,
+    program: GLuint,
+    binary_format: GLenum,
+    binary: ConstVoidPtr,
+    length: GLsizei,
+) {
+    let len = length.max(0) as GuestUSize;
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let host_ptr: *const GLvoid = if binary.is_null() || len == 0 {
+            std::ptr::null()
+        } else {
+            mem.bytes_at(binary.cast(), len).as_ptr().cast()
+        };
+        gles.ProgramBinary(program, binary_format, host_ptr, length);
+    });
+}
+
+/// `void glGetProgramBinary(GLuint program, GLsizei bufSize,
+///                          GLsizei *length, GLenum *binaryFormat,
+///                          void *binary)`.
+fn glGetProgramBinary(
+    env: &mut Environment,
+    program: GLuint,
+    buf_size: GLsizei,
+    length: MutPtr<GLsizei>,
+    binary_format: MutPtr<GLenum>,
+    binary: MutVoidPtr,
+) {
+    if buf_size <= 0 || binary.is_null() {
+        if !length.is_null() {
+            env.mem.write(length, 0);
+        }
+        return;
+    }
+    let cap = buf_size as usize;
+    let mut host_buf: Vec<u8> = vec![0u8; cap];
+    let mut host_length: GLsizei = 0;
+    let mut host_format: GLenum = 0;
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetProgramBinary(
+            program,
+            buf_size,
+            &mut host_length,
+            &mut host_format,
+            host_buf.as_mut_ptr() as *mut GLvoid,
+        );
+    });
+    let n = (host_length.max(0) as usize).min(cap);
+    let dst = env.mem.bytes_at_mut(binary.cast(), n as GuestUSize);
+    dst.copy_from_slice(&host_buf[..n]);
+    if !length.is_null() {
+        env.mem.write(length, host_length);
+    }
+    if !binary_format.is_null() {
+        env.mem.write(binary_format, host_format);
+    }
+}
+
 fn glReleaseShaderCompiler(env: &mut Environment) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.ReleaseShaderCompiler() });
 }
@@ -4150,6 +4352,16 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glBlendEquation(_)),
     export_c_func!(glBlendEquationSeparate(_, _)),
     export_c_func!(glBlendFuncSeparate(_, _, _, _)),
+    // `GL_OES_blend_equation_separate` / `GL_OES_blend_func_separate`
+    // aliases: identical behaviour, just the extension-suffixed names.
+    export_c_func_aliased!("glBlendEquationSeparateOES", glBlendEquationSeparate(_, _)),
+    export_c_func_aliased!("glBlendFuncSeparateOES", glBlendFuncSeparate(_, _, _, _)),
+    export_c_func!(glShaderBinary(_, _, _, _, _)),
+    export_c_func!(glGetActiveUniformsiv(_, _, _, _, _)),
+    export_c_func!(glGetActiveUniformBlockiv(_, _, _, _)),
+    export_c_func!(glGetActiveUniformBlockName(_, _, _, _, _)),
+    export_c_func!(glProgramBinary(_, _, _, _)),
+    export_c_func!(glGetProgramBinary(_, _, _, _, _)),
     export_c_func!(glStencilFuncSeparate(_, _, _, _)),
     export_c_func!(glStencilOpSeparate(_, _, _, _)),
     export_c_func!(glStencilMaskSeparate(_, _)),

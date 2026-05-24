@@ -77,6 +77,15 @@ extern "C" {
     pub fn alcGetError(device: *mut ALCdevice) -> ALCenum;
 
     pub fn alcGetString(device: *mut ALCdevice, param: ALCenum) -> *const ALCchar;
+
+    pub fn alcGetIntegerv(
+        device: *mut ALCdevice,
+        param: ALCenum,
+        size: ALCsizei,
+        values: *mut ALCint,
+    );
+    pub fn alcIsExtensionPresent(device: *mut ALCdevice, extName: *const ALCchar) -> ALCboolean;
+    pub fn alcGetEnumValue(device: *mut ALCdevice, enumName: *const ALCchar) -> ALCenum;
 }
 
 // === al.h ===
