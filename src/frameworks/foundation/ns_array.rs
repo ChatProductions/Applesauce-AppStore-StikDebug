@@ -401,6 +401,67 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// Apple's
+// <https://developer.apple.com/documentation/foundation/nsarray/1415846-enumerateobjectsusingblock>:
+// iterates the receiver and, for each element, calls the supplied
+// `void (^)(id obj, NSUInteger idx, BOOL *stop)` block in order. The
+// block can write `*stop = YES;` to break out of the enumeration. The
+// `BOOL *stop` argument is *always* a pointer to a freshly-zeroed
+// `BOOL` provided by the caller — never a re-used storage location.
+- (())enumerateObjectsUsingBlock:(MutVoidPtr)block {
+    let opts: NSUInteger = 0;
+    () = msg![env; this enumerateObjectsWithOptions:opts usingBlock:block];
+}
+
+// Apple's
+// <https://developer.apple.com/documentation/foundation/nsarray/1415349-enumerateobjectswithoptions>.
+// `NSEnumerationOptions` is a bitmask:
+//   NSEnumerationConcurrent = 1 << 0
+//   NSEnumerationReverse    = 1 << 1
+// We deliberately ignore `NSEnumerationConcurrent` (we always enumerate
+// serially, which is allowed: the docs say concurrent enumeration is
+// merely *available* on platforms that support it).
+- (())enumerateObjectsWithOptions:(NSUInteger)opts usingBlock:(MutVoidPtr)block {
+    const NS_ENUMERATION_REVERSE: NSUInteger = 1 << 1;
+    if block.is_null() {
+        return;
+    }
+    let invoke_ptr_addr: MutPtr<u32> =
+        Ptr::from_bits(block.to_bits() + 12);
+    let invoke_addr: u32 = env.mem.read(invoke_ptr_addr);
+    if invoke_addr == 0 {
+        log!(
+            "Warning: enumerateObjectsWithOptions:usingBlock: block at {:?} \
+             has NULL invoke pointer; skipping.",
+            block
+        );
+        return;
+    }
+    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    let block_arg: crate::mem::ConstVoidPtr = block.cast_const();
+    // `BOOL` on iOS is one byte. We allocate a 4-byte slot because the
+    // ARMv7 ABI passes / returns small values widened to a word, and
+    // returning the unused tail to the heap costs nothing.
+    let stop_ptr: MutPtr<u8> = env.mem.alloc(4).cast();
+    env.mem.write(stop_ptr, 0u8);
+
+    let count: NSUInteger = msg![env; this count];
+    let reverse = (opts & NS_ENUMERATION_REVERSE) != 0;
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let idx: NSUInteger = if reverse { count - 1 - i } else { i };
+        let obj: id = msg![env; this objectAtIndex:idx];
+        <GuestFunction as CallFromHost<(), (crate::mem::ConstVoidPtr, id, NSUInteger, MutPtr<u8>)>>::call_from_host(
+            &invoke, env, (block_arg, obj, idx, stop_ptr),
+        );
+        if env.mem.read(stop_ptr) != 0 {
+            break;
+        }
+        i += 1;
+    }
+    env.mem.free(stop_ptr.cast());
+}
+
 - (id)valueForKey:(id)key { // NSString*
     let count: NSUInteger = msg![env; this count];
     let mut result = Vec::with_capacity(count as usize);

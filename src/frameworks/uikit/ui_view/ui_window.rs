@@ -444,6 +444,25 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this_layer convertPoint:point toLayer:other_layer]
 }
 
+// Apple's
+// <https://developer.apple.com/documentation/uikit/uiwindow/1621597-screen>:
+// `screen` returns the `UIScreen` the window is currently displayed on,
+// and the documented setter (`setScreen:`) is used by apps that wish to
+// move a window to an external display. We emulate a single main screen
+// only, so the getter always returns `+[UIScreen mainScreen]` and the
+// setter is a no-op that just acknowledges the call to keep the
+// "doesNotRecognizeSelector" warning from firing on apps that
+// unconditionally call `window.screen = UIScreen.mainScreen` during
+// `application:didFinishLaunchingWithOptions:`.
+- (id)screen {
+    msg_class![env; UIScreen mainScreen]
+}
+- (())setScreen:(id)_screen {
+    log_dbg!(
+        "[UIWindow setScreen:] ignored; touchHLE only emulates the main screen."
+    );
+}
+
 @end
 
 };

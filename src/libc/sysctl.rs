@@ -14,12 +14,21 @@ use crate::libc::sysctl::SysInfoType::String;
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
 use crate::Environment;
 
-static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 24] = [
+static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 28] = [
     // Generic CPU, I/O
     ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
     ((6,2), "hw.model" , String(b"M68AP")),
     ((6,3), "hw.ncpu" , SysInfoType::Int32(1)),
     ((6,25), "hw.activecpu" , SysInfoType::Int32(1)), // Активные ядра
+    // Physical / logical CPU counters introduced in 10.5 / iOS 4 and
+    // documented in `<sys/sysctl.h>`. iPhone 1/2G/3G are single-core, so
+    // every counter reads back as 1 — matching what a real iOS 4 device
+    // returns for these names (see Apple's
+    // <https://developer.apple.com/library/archive/documentation/Darwin/Conceptual/KernelProgramming/sysctl/sysctl.html>).
+    ((0,0), "hw.physicalcpu" , SysInfoType::Int32(1)),
+    ((0,0), "hw.physicalcpu_max", SysInfoType::Int32(1)),
+    ((0,0), "hw.logicalcpu" , SysInfoType::Int32(1)),
+    ((0,0), "hw.logicalcpu_max" , SysInfoType::Int32(1)),
     ((0,0), "hw.cputype" , SysInfoType::Int32(12)),
     ((0,0), "hw.cpusubtype" , SysInfoType::Int32(6)),
     ((6,15), "hw.cpufrequency" , SysInfoType::Int64(412000000)),

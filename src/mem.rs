@@ -846,8 +846,22 @@ impl Mem {
         ptr
     }
 
-    pub fn malloc_size(&mut self, ptr: ConstVoidPtr) -> GuestUSize {
-        self.allocator.find_allocated_size(ptr.to_bits())
+    /// Implements Apple's documented `malloc_size(3)` contract: returns the
+    /// size of the memory block that backs the allocation pointed to by
+    /// `ptr`, or `0` if `ptr` is `NULL` or doesn't belong to any block
+    /// allocated through malloc. This is deliberately a *silent* lookup —
+    /// it's perfectly normal for apps to call `malloc_size` on arbitrary
+    /// pointers (interior pointers, `__DATA` symbols, stack addresses,
+    /// etc.) and treat a `0` result as "this isn't a heap allocation",
+    /// so we must not flood the log when it happens. See
+    /// <https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/MallocDebug.html>.
+    pub fn malloc_size(&self, ptr: ConstVoidPtr) -> GuestUSize {
+        if ptr.is_null() {
+            return 0;
+        }
+        self.allocator
+            .try_find_allocated_size(ptr.to_bits())
+            .unwrap_or(0)
     }
 
     /// Returns whether `addr` is the exact base of a live allocation. Used to
