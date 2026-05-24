@@ -123,6 +123,38 @@ pub fn CFURLGetTypeID(env: &mut Environment) -> CFTypeID {
     class.to_bits() as CFTypeID
 }
 
+/// `CFStringRef CFCopyDescription(CFTypeRef cf);`
+///
+/// Per the Core Foundation reference
+/// (<https://developer.apple.com/documentation/corefoundation/1521252-cfcopydescription>):
+///
+/// > Returns the textual description of a Core Foundation object.
+/// > If `cf` is a CF type that has a registered copyDescription callback,
+/// > the callback is invoked. Otherwise the result is a synthetic string
+/// > such as `<CFType 0x… [allocator]>{contents = …}`. Ownership follows
+/// > the **Create Rule** — the caller owns the returned string and must
+/// > release it.
+///
+/// On the touchHLE side every CF type is toll-free-bridged to an
+/// Objective-C object, so the canonical implementation just forwards to
+/// the object's `-description` selector (which Foundation overrides for
+/// every concrete subclass) and retains the result so the caller has the
+/// expected +1 reference count. `nil` is propagated through unchanged
+/// because Apple's implementation likewise tolerates a NULL input on
+/// recent OS releases.
+pub fn CFCopyDescription(env: &mut Environment, cf: CFTypeRef) -> CFTypeRef {
+    if cf.is_null() {
+        return crate::objc::nil;
+    }
+    let desc: CFTypeRef = msg![env; cf description];
+    if desc.is_null() {
+        return crate::objc::nil;
+    }
+    // CF Create Rule: caller owns the return. -description returns an
+    // autoreleased NSString, so retain it before handing it out.
+    objc::retain(env, desc)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFRetain(_)),
     export_c_func!(CFRelease(_)),
@@ -137,4 +169,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFBooleanGetTypeID()),
     export_c_func!(CFDataGetTypeID()),
     export_c_func!(CFURLGetTypeID()),
+    export_c_func!(CFCopyDescription(_)),
 ];

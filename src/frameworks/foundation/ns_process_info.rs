@@ -4,13 +4,62 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 //! `NSProcessInfo`.
+//!
+//! Apple references used:
+//! - <https://developer.apple.com/documentation/foundation/nsprocessinfo>
+//! - <https://developer.apple.com/documentation/foundation/nsoperatingsystemversion>
+//! - `Foundation/NSProcessInfo.h` declares `NSOperatingSystemVersion` as a
+//!   struct of three `NSInteger` fields (`majorVersion`, `minorVersion`,
+//!   `patchVersion`).
+//!
+//! On 32-bit iOS `NSInteger` is `int32_t` (4 bytes), so the struct is 12
+//! bytes total and is returned by value via the AAPCS struct-return ABI
+//! (i.e. via the stret variant of `objc_msgSend`).
 
 use super::NSTimeInterval;
+use crate::abi::{impl_GuestRet_for_large_struct, GuestArg};
 use crate::frameworks::foundation::ns_string;
 use crate::libc::mach::host::PHYSICAL_MEMORY;
+use crate::mem::SafeRead;
 use crate::objc::{id, msg, msg_class, objc_classes, ClassExports};
 use crate::Environment;
 use std::time::Instant;
+
+/// `NSOperatingSystemVersion` from `Foundation/NSProcessInfo.h`.
+///
+/// ```c
+/// typedef struct {
+///     NSInteger majorVersion;
+///     NSInteger minorVersion;
+///     NSInteger patchVersion;
+/// } NSOperatingSystemVersion;
+/// ```
+///
+/// On 32-bit iOS, `NSInteger` is a 32-bit signed integer.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[repr(C, packed)]
+pub struct NSOperatingSystemVersion {
+    pub major: i32,
+    pub minor: i32,
+    pub patch: i32,
+}
+unsafe impl SafeRead for NSOperatingSystemVersion {}
+impl_GuestRet_for_large_struct!(NSOperatingSystemVersion);
+impl GuestArg for NSOperatingSystemVersion {
+    const REG_COUNT: usize = 3;
+    fn from_regs(regs: &[u32]) -> Self {
+        NSOperatingSystemVersion {
+            major: GuestArg::from_regs(&regs[0..1]),
+            minor: GuestArg::from_regs(&regs[1..2]),
+            patch: GuestArg::from_regs(&regs[2..3]),
+        }
+    }
+    fn to_regs(self, regs: &mut [u32]) {
+        self.major.to_regs(&mut regs[0..1]);
+        self.minor.to_regs(&mut regs[1..2]);
+        self.patch.to_regs(&mut regs[2..3]);
+    }
+}
 
 #[derive(Default)]
 pub struct State {
@@ -30,9 +79,14 @@ fn assert_process_info_singleton(env: &mut Environment, this: id) {
 }
 
 /// Fake OS version used when the app queries the host system version.
-const OS_VERSION_MAJOR: u64 = 12;
-const OS_VERSION_MINOR: u64 = 0;
-const OS_VERSION_PATCH: u64 = 0;
+///
+/// touchHLE targets early iPhone OS apps; we report iOS 12.0.0 so that any
+/// iOS 8+ feature gate (which is the floor for many third-party SDKs that
+/// query `operatingSystemVersion`) passes without triggering the
+/// "unsupported version" path inside the app.
+const OS_VERSION_MAJOR: i32 = 12;
+const OS_VERSION_MINOR: i32 = 0;
+const OS_VERSION_PATCH: i32 = 0;
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -138,17 +192,24 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - OS version
 // =========================================================================
 
-// Returns an NSOperatingSystemVersion struct {major, minor, patch} packed
-// into three consecutive NSUInteger fields. We return it as three separate
-// values via an opaque struct id — most callers use
-// isOperatingSystemAtLeastVersion: instead.
-- (id)operatingSystemVersion {
+// `- (NSOperatingSystemVersion)operatingSystemVersion` (iOS 8+).
+//
+// Documented at
+// <https://developer.apple.com/documentation/foundation/nsprocessinfo/1410031-operatingsystemversion>.
+//
+// The selector returns `NSOperatingSystemVersion` *by value*. Because the
+// struct is larger than the AAPCS register-return limit (4 bytes on
+// 32-bit ARM), the compiler emits `objc_msgSend_stret`, passing a hidden
+// pointer in `r0` for the struct destination. Returning `id` here (as the
+// old stub did) caused the receiver to be mis-mapped to that destination
+// pointer, which produced the assertion failure observed in Bloons TD 5.
+- (NSOperatingSystemVersion)operatingSystemVersion {
     assert_process_info_singleton(env, this);
-    log!(
-        "TODO: [NSProcessInfo operatingSystemVersion] — returning nil \
-         (use isOperatingSystemAtLeastVersion: instead)"
-    );
-    crate::objc::nil
+    NSOperatingSystemVersion {
+        major: OS_VERSION_MAJOR,
+        minor: OS_VERSION_MINOR,
+        patch: OS_VERSION_PATCH,
+    }
 }
 
 - (id)operatingSystemVersionString {
@@ -161,19 +222,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_class![env; NSString stringWithUTF8String:cstr]
 }
 
-// NSOperatingSystemVersion is {major: NSInteger, minor: NSInteger, patch:
-// NSInteger}.
-// We receive it as three stacked guest integers; Objective-C ABI passes structs
-// by value on the stack after the implicit (self, _cmd) arguments, so we model
-// it as three separate NSUInteger parameters here.
-- (bool)isOperatingSystemAtLeastVersion:(u64)major
-                                  minor:(u64)minor
-                                  patch:(u64)patch {
+// `- (BOOL)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version`
+// (iOS 8+).
+//
+// Documented at
+// <https://developer.apple.com/documentation/foundation/nsprocessinfo/1417380-isoperatingsystematleastversion>.
+//
+// Takes a single `NSOperatingSystemVersion` struct by value. On 32-bit
+// ARM AAPCS the 12-byte struct is split across `r2`, `r3` and one stack
+// slot (after the implicit `self`/`_cmd`). The previous declaration used
+// three separate `u64` parameters with the wrong selector
+// (`...:minor:patch:`), so it was unreachable from real apps.
+- (bool)isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion)version {
     assert_process_info_singleton(env, this);
-    let (maj, min, pat) = (OS_VERSION_MAJOR, OS_VERSION_MINOR, OS_VERSION_PATCH);
-    if major != maj { return major < maj; }
-    if minor != min { return minor < min; }
-    patch <= pat
+    let NSOperatingSystemVersion { major, minor, patch } = version;
+    if major != OS_VERSION_MAJOR { return major < OS_VERSION_MAJOR; }
+    if minor != OS_VERSION_MINOR { return minor < OS_VERSION_MINOR; }
+    patch <= OS_VERSION_PATCH
 }
 
 // =========================================================================

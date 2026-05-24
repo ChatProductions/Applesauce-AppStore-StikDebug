@@ -26,6 +26,7 @@ pub mod errno;
 pub mod fnmatch;
 mod generic_char;
 pub mod glob;
+pub mod globals;
 pub mod ifaddrs;
 pub mod keymgr;
 pub mod libkern;
@@ -49,6 +50,7 @@ pub mod sys;
 pub mod sysctl;
 pub mod time;
 pub mod unistd;
+pub mod uuid;
 pub mod wchar;
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -58,6 +60,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[
         ctype::CONSTANTS,
         dispatch::CONSTANTS,
+        globals::CONSTANTS,
         stdio::CONSTANTS,
         mach::init::CONSTANTS,
         ssp::CONSTANTS,
@@ -103,6 +106,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         pthread::key::FUNCTIONS,
         pthread::mutex::FUNCTIONS,
         pthread::once::FUNCTIONS,
+        pthread::rwlock::FUNCTIONS,
         pthread::thread::FUNCTIONS,
         sched::FUNCTIONS,
         semaphore::FUNCTIONS,
@@ -123,6 +127,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         sysctl::FUNCTIONS,
         time::FUNCTIONS,
         unistd::FUNCTIONS,
+        uuid::FUNCTIONS,
         wchar::FUNCTIONS,
     ],
 };

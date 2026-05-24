@@ -21,7 +21,7 @@ use super::{
     CFTypeRef,
 };
 use crate::abi::{DotDotDot, VaList};
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, unichar, NSNotFound, NSRange, NSUInteger};
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 use crate::objc::{id, msg, msg_class, nil};
@@ -1880,6 +1880,77 @@ fn compose_pair(a: char, b: char) -> Option<char> {
         _ => None,
     }
 }
+
+/// CFStringTransform built-in transform identifier constants. Apple
+/// publishes these as `CFStringRef` globals (`kCFStringTransform…`) in
+/// `<CoreFoundation/CFString.h>`; see
+/// <https://developer.apple.com/documentation/corefoundation/kcfstringtransformtolatin>.
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_kCFStringTransformStripCombiningMarks",
+        HostConstant::NSString(kCFStringTransformStripCombiningMarks),
+    ),
+    (
+        "_kCFStringTransformToLatin",
+        HostConstant::NSString(kCFStringTransformToLatin),
+    ),
+    (
+        "_kCFStringTransformFullwidthHalfwidth",
+        HostConstant::NSString(kCFStringTransformFullwidthHalfwidth),
+    ),
+    (
+        "_kCFStringTransformLatinKatakana",
+        HostConstant::NSString(kCFStringTransformLatinKatakana),
+    ),
+    (
+        "_kCFStringTransformLatinHiragana",
+        HostConstant::NSString(kCFStringTransformLatinHiragana),
+    ),
+    (
+        "_kCFStringTransformHiraganaKatakana",
+        HostConstant::NSString(kCFStringTransformHiraganaKatakana),
+    ),
+    (
+        "_kCFStringTransformMandarinLatin",
+        HostConstant::NSString(kCFStringTransformMandarinLatin),
+    ),
+    (
+        "_kCFStringTransformLatinHangul",
+        HostConstant::NSString(kCFStringTransformLatinHangul),
+    ),
+    (
+        "_kCFStringTransformLatinArabic",
+        HostConstant::NSString(kCFStringTransformLatinArabic),
+    ),
+    (
+        "_kCFStringTransformLatinHebrew",
+        HostConstant::NSString(kCFStringTransformLatinHebrew),
+    ),
+    (
+        "_kCFStringTransformLatinThai",
+        HostConstant::NSString(kCFStringTransformLatinThai),
+    ),
+    (
+        "_kCFStringTransformLatinCyrillic",
+        HostConstant::NSString(kCFStringTransformLatinCyrillic),
+    ),
+    (
+        "_kCFStringTransformLatinGreek",
+        HostConstant::NSString(kCFStringTransformLatinGreek),
+    ),
+    (
+        "_kCFStringTransformToXMLHex",
+        HostConstant::NSString(kCFStringTransformToXMLHex),
+    ),
+    (
+        "_kCFStringTransformToUnicodeName",
+        HostConstant::NSString(kCFStringTransformToUnicodeName),
+    ),
+    (
+        "_kCFStringTransformStripDiacritics",
+        HostConstant::NSString(kCFStringTransformStripDiacritics),
+    ),
+];
 
 pub const FUNCTIONS: FunctionExports = &[
     // Lifecycle

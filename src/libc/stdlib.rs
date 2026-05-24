@@ -183,6 +183,84 @@ fn NSZoneFree(env: &mut Environment, _zone: MutVoidPtr, ptr: MutVoidPtr) {
     env.mem.free(ptr)
 }
 
+/// `int posix_memalign(void **memptr, size_t alignment, size_t size);`
+///
+/// Per the [POSIX manpage](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/posix_memalign.3.html):
+///
+/// > The function `posix_memalign()` allocates `size` bytes of memory such
+/// > that the allocation's base address is a multiple of `alignment`, and
+/// > returns the allocation in the value pointed to by `memptr`. […]
+/// > `alignment` must be a power of 2 at least as large as `sizeof(void *)`.
+/// > Returns zero on success, otherwise returns one of the error values
+/// > listed below. The value of `errno` is not set on these errors.
+/// > `[EINVAL]` The `alignment` parameter is not a power of 2 at least as
+/// >            large as `sizeof(void *)`.
+/// > `[ENOMEM]` Memory allocation error.
+///
+/// The touchHLE heap (see `src/mem/allocator.rs`) already returns 16-byte
+/// aligned chunks. Apple's libmalloc also guarantees that on iOS. So for the
+/// common alignments (≤16) this is just `malloc`. For larger alignments
+/// (e.g. page-sized buffers requested by some crypto libraries) we
+/// over-allocate, slide the user pointer forward, and stash the original
+/// allocation address in the word immediately preceding the returned
+/// pointer so `free()` can find it again.
+fn posix_memalign(
+    env: &mut Environment,
+    memptr: MutPtr<MutVoidPtr>,
+    alignment: GuestUSize,
+    size: GuestUSize,
+) -> i32 {
+    if memptr.is_null() {
+        return EINVAL;
+    }
+    let ptr_align: GuestUSize = std::mem::size_of::<u32>() as GuestUSize;
+    if alignment < ptr_align || !alignment.is_power_of_two() {
+        return EINVAL;
+    }
+    // touchHLE's allocator naturally aligns to at least 16 bytes.
+    const NATURAL_ALIGN: GuestUSize = 16;
+    if alignment <= NATURAL_ALIGN {
+        let p = malloc(env, size);
+        if p.is_null() {
+            return crate::libc::errno::ENOMEM;
+        }
+        env.mem.write(memptr, p);
+        return 0;
+    }
+    // Over-allocate so that we definitely have room for an aligned slice
+    // plus a 4-byte header storing the original allocation pointer.
+    let header: GuestUSize = std::mem::size_of::<u32>() as GuestUSize;
+    let Some(over) = size.checked_add(alignment).and_then(|s| s.checked_add(header)) else {
+        return crate::libc::errno::ENOMEM;
+    };
+    let raw = env.mem.alloc(over);
+    if raw.is_null() {
+        return crate::libc::errno::ENOMEM;
+    }
+    let raw_bits = raw.to_bits();
+    // Align up to `alignment` while leaving at least `header` bytes free
+    // before the aligned address for our bookkeeping word.
+    let aligned_bits = (raw_bits + header + alignment - 1) & !(alignment - 1);
+    debug_assert!(aligned_bits >= raw_bits + header);
+    let aligned: MutVoidPtr = MutVoidPtr::from_bits(aligned_bits);
+    let header_ptr: MutPtr<u32> = MutPtr::from_bits(aligned_bits - header);
+    env.mem.write(header_ptr, raw_bits);
+    env.mem.write(memptr, aligned);
+    0
+}
+
+/// `void *valloc(size_t size);` — page-size aligned allocation. Equivalent
+/// to `posix_memalign(&p, getpagesize(), size)`.
+fn valloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
+    // Same page size touchHLE reports via `_NSGetExecutablePath` etc.
+    const PAGE_SIZE: GuestUSize = 4096;
+    let mut out: MutPtr<MutVoidPtr> = env.mem.alloc(4).cast();
+    let rc = posix_memalign(env, out, PAGE_SIZE, size);
+    let ptr = if rc == 0 { env.mem.read(out) } else { MutVoidPtr::null() };
+    env.mem.free(out.cast());
+    ptr
+}
+
 fn realloc(env: &mut Environment, ptr: MutVoidPtr, mut size: GuestUSize) -> MutVoidPtr {
     set_errno(env, 0);
     if ptr.is_null() {
@@ -1441,6 +1519,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(realloc(_, _)),
     export_c_func!(reallocf(_, _)),
     export_c_func!(free(_)),
+    export_c_func!(posix_memalign(_, _, _)),
+    export_c_func!(valloc(_)),
     export_c_func!(atexit(_)),
     export_c_func!(atoi(_)),
     export_c_func!(atol(_)),

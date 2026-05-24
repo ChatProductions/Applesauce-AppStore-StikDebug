@@ -1531,6 +1531,79 @@ pub fn ___objc_personality_v0(
     // _URC_FATAL_PHASE1_ERROR
     3
 }
+/// `void objc_storeStrong(id *location, id obj)` — ARC's strong-store
+/// runtime helper. The clang ARC specification
+/// (<https://clang.llvm.org/docs/AutomaticReferenceCounting.html#runtime-support>)
+/// describes the canonical implementation as:
+///
+/// ```text
+/// id prev = *location;
+/// if (prev == obj) return;
+/// objc_retain(obj);
+/// *location = obj;
+/// objc_release(prev);
+/// ```
+///
+/// This is what the Apple objc runtime ships as `objc_storeStrong`. We
+/// implement it line-by-line so the reference counts of both the old
+/// and new objects stay consistent with how a non-ARC manual
+/// retain/release would have managed them.
+pub fn objc_storeStrong(
+    env: &mut crate::Environment,
+    location: crate::mem::MutPtr<id>,
+    obj: id,
+) {
+    if location.is_null() {
+        return;
+    }
+    let prev = env.mem.read(location);
+    if prev == obj {
+        return;
+    }
+    if !obj.is_null() {
+        crate::objc::retain(env, obj);
+    }
+    env.mem.write(location, obj);
+    if !prev.is_null() {
+        crate::objc::release(env, prev);
+    }
+}
+
+/// `IMP class_getMethodImplementation(Class cls, SEL name)` — Objective-C
+/// runtime helper. Per Apple's reference
+/// (<https://developer.apple.com/documentation/objectivec/1418811-class_getmethodimplementation>):
+///
+/// > Returns the function pointer that would be called if a particular
+/// > message were sent to an instance of a class. The function returned
+/// > might be a function internal to the runtime instead of an actual
+/// > method implementation. For example, if instances of `cls` do not
+/// > respond to `name`, the function returned will be part of the
+/// > runtime's message forwarding machinery.
+///
+/// touchHLE doesn't model `_objc_msgForward`; if the selector isn't
+/// implemented we return a NULL pointer, which the caller is expected
+/// to compare against and skip the dispatch (Apple binaries doing
+/// `IMP imp = class_getMethodImplementation(cls, sel); if (imp) imp(…)`
+/// behave correctly with this).
+pub fn class_getMethodImplementation(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: crate::objc::SEL,
+) -> ConstVoidPtr {
+    method_getImplementation(env, cls, name)
+}
+
+/// `IMP class_getMethodImplementation_stret(Class cls, SEL name)` — same
+/// as above but for selectors whose return type uses `objc_msgSend_stret`
+/// (large struct returns). The IMP slot is the same in touchHLE.
+pub fn class_getMethodImplementation_stret(
+    env: &mut crate::Environment,
+    cls: Class,
+    name: crate::objc::SEL,
+) -> ConstVoidPtr {
+    method_getImplementation(env, cls, name)
+}
+
 pub fn objc_retainAutorelease(env: &mut crate::Environment, obj: id) -> id {
     if !obj.is_null() {
         crate::objc::retain(env, obj);

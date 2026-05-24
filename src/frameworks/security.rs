@@ -867,6 +867,54 @@ pub const CONSTANTS: ConstantExports = &[
         "_kSecPublicKeyAttrs",
         HostConstant::NSString("kSecPublicKeyAttrs"),
     ),
+    // -----------------------------------------------------------------
+    // Key class attribute and its three values, per
+    // <https://developer.apple.com/documentation/security/ksecattrkeyclass>.
+    // -----------------------------------------------------------------
+    (
+        "_kSecAttrKeyClass",
+        HostConstant::NSString("kSecAttrKeyClass"),
+    ),
+    (
+        "_kSecAttrKeyClassPublic",
+        HostConstant::NSString("kSecAttrKeyClassPublic"),
+    ),
+    (
+        "_kSecAttrKeyClassPrivate",
+        HostConstant::NSString("kSecAttrKeyClassPrivate"),
+    ),
+    (
+        "_kSecAttrKeyClassSymmetric",
+        HostConstant::NSString("kSecAttrKeyClassSymmetric"),
+    ),
+    // -----------------------------------------------------------------
+    // SecItemImport / SecItemExport input keys, per
+    // <https://developer.apple.com/documentation/security/secitemimport_secitemexport>.
+    // -----------------------------------------------------------------
+    (
+        "_kSecImportExportPassphrase",
+        HostConstant::NSString("passphrase"),
+    ),
+    (
+        "_kSecImportItemIdentity",
+        HostConstant::NSString("identity"),
+    ),
+    (
+        "_kSecImportItemLabel",
+        HostConstant::NSString("label"),
+    ),
+    (
+        "_kSecImportItemKeyID",
+        HostConstant::NSString("keyid"),
+    ),
+    (
+        "_kSecImportItemTrust",
+        HostConstant::NSString("trust"),
+    ),
+    (
+        "_kSecImportItemCertChain",
+        HostConstant::NSString("chain"),
+    ),
 ];
 
 // =========================================================================

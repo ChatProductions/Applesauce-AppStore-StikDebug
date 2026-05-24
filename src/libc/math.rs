@@ -6,11 +6,58 @@
  */
 //! `math.h`
 
+use crate::abi::{impl_GuestRet_for_large_struct, GuestArg};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::errno::set_errno;
-use crate::mem::{ConstPtr, MutPtr};
+use crate::mem::{ConstPtr, MutPtr, SafeRead};
 use crate::Environment;
 use std::num::FpCategory;
+
+/// Apple's `__float2` type from `<math.h>`:
+///
+/// ```c
+/// typedef struct { float __sinval; float __cosval; } __float2;
+/// ```
+///
+/// Returned by `__sincosf_stret`. On 32-bit ARM AAPCS the 8-byte composite
+/// is passed back to the caller via the implicit stret pointer.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[repr(C, packed)]
+pub struct Float2 {
+    pub sinval: f32,
+    pub cosval: f32,
+}
+unsafe impl SafeRead for Float2 {}
+impl_GuestRet_for_large_struct!(Float2);
+impl GuestArg for Float2 {
+    const REG_COUNT: usize = 2;
+    fn from_regs(regs: &[u32]) -> Self {
+        Float2 {
+            sinval: GuestArg::from_regs(&regs[0..1]),
+            cosval: GuestArg::from_regs(&regs[1..2]),
+        }
+    }
+    fn to_regs(self, regs: &mut [u32]) {
+        self.sinval.to_regs(&mut regs[0..1]);
+        self.cosval.to_regs(&mut regs[1..2]);
+    }
+}
+
+/// Apple's `__double2` type from `<math.h>`:
+///
+/// ```c
+/// typedef struct { double __sinval; double __cosval; } __double2;
+/// ```
+///
+/// Returned by `__sincos_stret`.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[repr(C, packed)]
+pub struct Double2 {
+    pub sinval: f64,
+    pub cosval: f64,
+}
+unsafe impl SafeRead for Double2 {}
+impl_GuestRet_for_large_struct!(Double2);
 
 // TODO: move to `fenv.h`
 type FERoundingDirection = i32;
@@ -71,6 +118,57 @@ fn tanf(env: &mut Environment, arg: f32) -> f32 {
     // TODO: handle errno properly
     set_errno(env, 0);
     arg.tan()
+}
+
+// `void sincos(double x, double *sin, double *cos);`
+// `void sincosf(float x, float *sin, float *cos);`
+//
+// Apple exposes both as a small optimisation over calling `sin`/`cos`
+// separately. See `Apple/Libm: e_sin.c` and `<math.h>`.
+fn sincos(env: &mut Environment, x: f64, sin_out: MutPtr<f64>, cos_out: MutPtr<f64>) {
+    set_errno(env, 0);
+    if !sin_out.is_null() {
+        env.mem.write(sin_out, x.sin());
+    }
+    if !cos_out.is_null() {
+        env.mem.write(cos_out, x.cos());
+    }
+}
+fn sincosf(env: &mut Environment, x: f32, sin_out: MutPtr<f32>, cos_out: MutPtr<f32>) {
+    set_errno(env, 0);
+    if !sin_out.is_null() {
+        env.mem.write(sin_out, x.sin());
+    }
+    if !cos_out.is_null() {
+        env.mem.write(cos_out, x.cos());
+    }
+}
+
+// `__float2 __sincosf_stret(float x);` (Apple-specific, libm).
+// `__double2 __sincos_stret(double x);` (Apple-specific, libm).
+//
+// These return `{sin(x), cos(x)}` packed into the appropriate composite
+// type. Per Apple's libm headers, these are intended as a faster
+// alternative when the caller needs both values at once. The compiler
+// can also lower a paired `sin`/`cos` call into the stret variant.
+//
+// The leading `_` in the exported symbol matches the C-mangling convention
+// (`___sincosf_stret` shows up in dyld as `__sincosf_stret`).
+#[allow(non_snake_case)]
+fn __sincosf_stret(env: &mut Environment, x: f32) -> Float2 {
+    set_errno(env, 0);
+    Float2 {
+        sinval: x.sin(),
+        cosval: x.cos(),
+    }
+}
+#[allow(non_snake_case)]
+fn __sincos_stret(env: &mut Environment, x: f64) -> Double2 {
+    set_errno(env, 0);
+    Double2 {
+        sinval: x.sin(),
+        cosval: x.cos(),
+    }
 }
 
 fn asin(env: &mut Environment, arg: f64) -> f64 {
@@ -752,6 +850,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fabs(_)),
     // Trigonometric functions
     export_c_func!(sin(_)),
+    export_c_func!(sincos(_, _, _)),
+    export_c_func!(sincosf(_, _, _)),
+    export_c_func!(__sincosf_stret(_)),
+    export_c_func!(__sincos_stret(_)),
     export_c_func!(sinf(_)),
     export_c_func!(cos(_)),
     export_c_func!(cosf(_)),
