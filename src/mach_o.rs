@@ -388,6 +388,9 @@ impl MachO {
                         // policy in HLE, so treat the segment as a regular
                         // read-only data segment without spamming a warning.
                         "__RESTRICT" => true,
+                        // `__S3E_DATA` is a data segment used by the Marmalade SDK
+                        // (formerly Airplay SDK), which some older iOS games link with.
+                        "__S3E_DATA" => true,
                         _ => {
                             log!("Warning: Unexpected segment name: {}", segname);
                             true
