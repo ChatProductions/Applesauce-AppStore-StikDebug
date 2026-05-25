@@ -77,13 +77,14 @@ fn send_actions(env: &mut Environment, this: id, event: id, control_event: UICon
         .map(|&(target, action, _for_control_events)| (target, action))
         .collect();
 
-    log_dbg!(
-        "Control event {:#x} in control {:?} for event {:?} — {} matching target(s)",
-        control_event,
-        this,
-        event,
-        action_targets.len(),
-    );
+    if !action_targets.is_empty() {
+        log!(
+            "UIControl {:?} dispatching {} action(s) for control event mask {:#x}",
+            this,
+            action_targets.len(),
+            control_event,
+        );
+    }
 
     for (target, action) in action_targets {
         assert!(target != nil); // TODO

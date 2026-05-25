@@ -386,7 +386,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             .objc
             .lookup_selector(&selector)
             .unwrap_or_else(|| env.objc.register_host_selector(selector.clone(), &mut env.mem));
-        log_dbg!(
+        log!(
             "UIRuntimeEventConnection: [{:?} addTarget:{:?} action:{} forControlEvents:{:#x}]",
             source,
             destination,
