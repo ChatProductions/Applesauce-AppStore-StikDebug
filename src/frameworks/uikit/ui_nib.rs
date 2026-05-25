@@ -373,12 +373,34 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UIRuntimeEventConnectionHostObject { superclass: _, event_mask } = env.objc.borrow(this);
 
     if source != nil && destination != nil && label != nil {
-        let selector = to_rust_string(env, label);
-        if let Some(action) = env.objc.lookup_selector(&selector) {
-            () = msg![env; source addTarget:destination action:action forControlEvents:event_mask];
-        } else {
-            log!("touchHLE Warning: UIRuntimeEventConnection missing selector '{}', skipping.", selector);
-        }
+        let selector = to_rust_string(env, label).into_owned();
+        // `lookup_selector` only finds selectors that the binary or some
+        // already-loaded host class has registered. Storyboard-only
+        // selectors (e.g. an `IBAction` that is reached purely through a
+        // nib connection and never appears as a literal `@selector(...)`
+        // in the binary's selref section) are not guaranteed to be
+        // pre-registered, so fall back to allocating a new SEL on the
+        // fly. The selector string is owned by the connection's label
+        // NSString, but `register_host_selector` makes its own C copy.
+        let action = env
+            .objc
+            .lookup_selector(&selector)
+            .unwrap_or_else(|| env.objc.register_host_selector(selector.clone(), &mut env.mem));
+        log_dbg!(
+            "UIRuntimeEventConnection: [{:?} addTarget:{:?} action:{} forControlEvents:{:#x}]",
+            source,
+            destination,
+            selector,
+            event_mask,
+        );
+        () = msg![env; source addTarget:destination action:action forControlEvents:event_mask];
+    } else {
+        log!(
+            "Warning: UIRuntimeEventConnection skipping connect — source={:?} destination={:?} label={:?}",
+            source,
+            destination,
+            label,
+        );
     }
 }
 

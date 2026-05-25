@@ -271,7 +271,22 @@ impl Environment {
         // should be handled before creating the window because handling of
         // window rotation after-the-fact is somewhat glitchy.
         // This also ensures the splash screen is correctly oriented.
-        if options.initial_orientation == window::DeviceOrientation::Portrait {
+        //
+        // Only force a non-portrait orientation when the app explicitly
+        // does NOT advertise portrait support. Storyboard apps (and any
+        // other modern UIKit binary) routinely declare every orientation
+        // they can run in via `UISupportedInterfaceOrientations`, and
+        // picking the first non-portrait entry would force them into
+        // landscape even when portrait is perfectly fine. Apple's own
+        // launch logic uses portrait by default whenever it's listed, so
+        // mirror that.
+        let portrait_supported = bundle
+            .supported_interface_orientations()
+            .iter()
+            .any(|&o| o == "UIInterfaceOrientationPortrait");
+        if options.initial_orientation == window::DeviceOrientation::Portrait
+            && !portrait_supported
+        {
             if let Some(&non_portrait_orientation) = bundle
                 .supported_interface_orientations()
                 .iter()

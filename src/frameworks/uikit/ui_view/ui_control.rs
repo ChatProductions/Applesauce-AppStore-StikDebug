@@ -70,19 +70,20 @@ const UIControlStateSelected: UIControlState = 1 << 2;
 const UIControlStateFocused: UIControlState = 1 << 3;
 
 fn send_actions(env: &mut Environment, this: id, event: id, control_event: UIControlEvents) {
-    log_dbg!(
-        "Control event {:?} in control {:?} for event {:?}",
-        control_event,
-        this,
-        event,
-    );
-
     let UIControlHostObject { action_targets, .. } = env.objc.borrow(this);
     let action_targets: Vec<_> = action_targets
         .iter()
         .filter(|&(_target, _action, for_control_events)| (for_control_events & control_event) != 0)
         .map(|&(target, action, _for_control_events)| (target, action))
         .collect();
+
+    log_dbg!(
+        "Control event {:#x} in control {:?} for event {:?} — {} matching target(s)",
+        control_event,
+        this,
+        event,
+        action_targets.len(),
+    );
 
     for (target, action) in action_targets {
         assert!(target != nil); // TODO
