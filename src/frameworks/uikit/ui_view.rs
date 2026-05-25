@@ -654,6 +654,23 @@ pub const CLASSES: ClassExports = objc_classes! {
         () = msg![env; this addSubview:subview];
     }
 
+    {
+        let view_class: Class = msg![env; this class];
+        let class_name = env.objc.get_class_name(view_class).to_owned();
+        let final_frame: CGRect = msg![env; this frame];
+        let user_int: bool = msg![env; this isUserInteractionEnabled];
+        let hidden: bool = msg![env; this isHidden];
+        log!(
+            "UIView initWithCoder finished: {} {:?} frame={:?} userInteraction={} hidden={} subviews={}",
+            class_name,
+            this,
+            final_frame,
+            user_int,
+            hidden,
+            subview_count,
+        );
+    }
+
     this
 }
 

@@ -300,7 +300,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation NSString: NSObject
 
 + (id)allocWithZone:(NSZonePtr)zone {
-    assert!(this == env.objc.get_known_class("NSString", &mut env.mem));
+    // Apple ships a small family of `NSString` subclasses (e.g.
+    // `NSLocalizableString`) that share the same private concrete
+    // backing store. Their `+alloc` ends up here through normal
+    // subclass-method inheritance, which would historically have
+    // tripped a strict identity check on `NSString`. Always delegate
+    // to the concrete backing store regardless of which subclass we
+    // were sent to so storyboard-decoded string subclasses can be
+    // constructed without rewriting their `+allocWithZone:`.
     msg_class![env; _touchHLE_NSString allocWithZone:zone]
 }
 

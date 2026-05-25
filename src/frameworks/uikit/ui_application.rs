@@ -594,6 +594,59 @@ pub(super) fn UIApplicationMain(
             }
         };
 
+        // UIMainStoryboardFile (iOS 5+) replaces NSMainNibFile for modern
+        // apps. When present, the documented launch flow is:
+        //   1. Load the named storyboard.
+        //   2. Create a UIWindow sized to the main screen's bounds.
+        //   3. Instantiate the storyboard's initial view controller.
+        //   4. Set that view controller as the window's rootViewController.
+        //   5. Send -makeKeyAndVisible to the window.
+        //   6. Assign the window to the app delegate's `window` property
+        //      via KVC (Apple's UIApplicationMain does this so app
+        //      delegates can return the window from `-window` without any
+        //      manual wiring inside `application:didFinishLaunchingWithOptions:`).
+        let storyboard_name = env
+            .bundle
+            .main_storyboard_filename(device_family)
+            .map(str::to_owned);
+        if let Some(storyboard_name) = storyboard_name {
+            let storyboard_name_ns = from_rust_string(env, storyboard_name.clone());
+            let storyboard_class = env.objc.get_known_class("UIStoryboard", &mut env.mem);
+            let storyboard: id =
+                msg![env; storyboard_class storyboardWithName:storyboard_name_ns bundle:nil];
+            release(env, storyboard_name_ns);
+
+            if storyboard != nil {
+                let initial_vc: id = msg![env; storyboard instantiateInitialViewController];
+                if initial_vc != nil {
+                    let screen: id = msg_class![env; UIScreen mainScreen];
+                    let bounds: CGRect = msg![env; screen bounds];
+                    let window: id = msg_class![env; UIWindow alloc];
+                    let window: id = msg![env; window initWithFrame:bounds];
+
+                    let _: () = msg![env; window setRootViewController:initial_vc];
+                    let _: () = msg![env; window makeKeyAndVisible];
+
+                    let delegate: id = msg![env; ui_application delegate];
+                    if delegate != nil {
+                        let window_key: id = get_static_str(env, "window");
+                        let _: () = msg![env; delegate setValue:window forKey:window_key];
+                    }
+                } else {
+                    log!(
+                        "Warning: storyboard {:?} has no initial view controller; \
+                         skipping window setup.",
+                        storyboard_name,
+                    );
+                }
+            } else {
+                log!(
+                    "Warning: couldn't load main storyboard {:?}.",
+                    storyboard_name
+                );
+            }
+        }
+
         let _: () = msg![env; pool drain];
         ui_application
     };

@@ -269,7 +269,18 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         } else {
             let f: CGRect = msg![env;
                 view frame];
-            log_dbg!("Found view {:?} with frame {:?} for touch", view, f);
+            let view_class: crate::objc::Class = msg![env; view class];
+            let class_name = env.objc.get_class_name(view_class).to_owned();
+            let lx = location_in_window.x;
+            let ly = location_in_window.y;
+            log!(
+                "Touch at ({}, {}) hit {} {:?} with frame {:?}",
+                lx,
+                ly,
+                class_name,
+                view,
+                f,
+            );
         }
 
         let is_multi_touch_enabled: bool = msg![env; view isMultipleTouchEnabled];
