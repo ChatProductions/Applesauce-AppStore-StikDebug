@@ -1049,12 +1049,32 @@ fn glResolveMultisampleFramebufferAPPLE(env: &mut Environment) {
     })
 }
 fn glDiscardFramebufferEXT(
-    _env: &mut Environment,
+    env: &mut Environment,
     _target: GLenum,
     _numAttachments: GLsizei,
     _attachments: ConstPtr<GLenum>,
 ) {
+    with_ctx_and_mem(env, |_gles, _mem| {
+        // GL_EXT_discard_framebuffer is a hint; safe to ignore.
+    })
 }
+
+/// `glPushGroupMarkerEXT` — debug marker from `GL_EXT_debug_marker`.
+/// No-op on hosts that don't expose the extension.
+fn glPushGroupMarkerEXT(
+    _env: &mut Environment,
+    _length: GLsizei,
+    _marker: ConstPtr<u8>,
+) {
+    // Debug markers are hints; safe to ignore.
+}
+
+/// `glPopGroupMarkerEXT` — debug marker from `GL_EXT_debug_marker`.
+/// No-op on hosts that don't expose the extension.
+fn glPopGroupMarkerEXT(_env: &mut Environment) {
+    // Debug markers are hints; safe to ignore.
+}
+
 fn glBindVertexArrayOES(_env: &mut Environment, _array: GLuint) {}
 fn glDeleteVertexArraysOES(_env: &mut Environment, _n: GLsizei, _arrays: ConstPtr<GLuint>) {}
 fn glGenVertexArraysOES(env: &mut Environment, n: GLsizei, arrays: MutPtr<GLuint>) {
@@ -4202,6 +4222,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glRenderbufferStorageMultisampleAPPLE(_, _, _, _, _)),
     export_c_func!(glResolveMultisampleFramebufferAPPLE()),
     export_c_func!(glDiscardFramebufferEXT(_, _, _)),
+    export_c_func!(glPushGroupMarkerEXT(_, _)),
+    export_c_func!(glPopGroupMarkerEXT()),
     export_c_func!(glBindVertexArrayOES(_)),
     export_c_func!(glDeleteVertexArraysOES(_, _)),
     export_c_func!(glGenVertexArraysOES(_, _)),

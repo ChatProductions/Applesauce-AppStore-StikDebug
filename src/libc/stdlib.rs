@@ -454,6 +454,27 @@ fn arc4random(env: &mut Environment) -> u32 {
     env.libc_state.stdlib.arc4random
 }
 
+/// `arc4random_uniform(upper_bound)` — returns a uniformly distributed
+/// random number less than `upper_bound`.
+///
+/// Per Apple manpage: "arc4random_uniform() is recommended over
+/// constructions like `arc4random() % upper_bound` as it avoids
+/// modulo bias when the upper bound is not a power of two."
+fn arc4random_uniform(env: &mut Environment, upper_bound: u32) -> u32 {
+    if upper_bound == 0 {
+        return 0;
+    }
+    // Rejection sampling to eliminate modulo bias.
+    // Compute the largest multiple of upper_bound that fits in u32.
+    let limit = u32::MAX - (u32::MAX % upper_bound);
+    loop {
+        let r = arc4random(env);
+        if r < limit {
+            return r % upper_bound;
+        }
+    }
+}
+
 // MARK: - drand48 family
 //
 // POSIX / Apple iPhone OS specification for these functions:
@@ -1532,6 +1553,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(srandom(_)),
     export_c_func!(random()),
     export_c_func!(arc4random()),
+    export_c_func!(arc4random_uniform(_)),
     export_c_func!(arc4random_stir()),
     export_c_func!(arc4random_addrandom()),
     // drand48 family (POSIX / Apple iPhone OS manpage)
