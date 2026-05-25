@@ -12,7 +12,7 @@ use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::{NSInteger, NSUInteger};
-use crate::objc::{autorelease, id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 use crate::Environment;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -311,14 +311,6 @@ pub const CLASSES: ClassExports = objc_classes! {
        Some(b) => a.kind == b.kind && (a.size - b.size).abs() < 0.001,
        None    => false,
    }
-}
-
-// hash
-- (NSUInteger)hash {
-   let host_object = env.objc.borrow::<UIFontHostObject>(this);
-   let kind_idx = host_object.kind as u32;
-   let size_bits = host_object.size.to_bits();
-   super::super::frameworks::foundation::hash_helper(&(kind_idx, size_bits))
 }
 
 // fontDescriptor (iOS 7+) — return nil; apps should check before using
