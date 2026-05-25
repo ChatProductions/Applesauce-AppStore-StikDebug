@@ -18,7 +18,7 @@ use crate::frameworks::carbon_core::OSStatus;
 use crate::frameworks::core_audio_types::{
     debug_fourcc, fourcc, kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian,
     kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger,
-    kAudioFormatLinearPCM, AudioStreamBasicDescription, AudioTimeStamp,
+    kAudioFormatLinearPCM, kAudioFormatMPEGLayer3, AudioStreamBasicDescription, AudioTimeStamp,
 };
 use crate::frameworks::core_foundation::cf_run_loop::{
     kCFRunLoopCommonModes, CFRunLoopGetMain, CFRunLoopMode, CFRunLoopRef,
@@ -792,6 +792,15 @@ fn AudioQueueSetOfflineRenderFormat(
 }
 
 pub fn log_if_broken_audio_format(format: &AudioStreamBasicDescription) {
+    // Compressed formats (MPEG Layer III, AAC) intentionally use
+    // zero for `bytes_per_packet`, `bytes_per_frame` and
+    // `bits_per_channel` because their packets are variable-size and
+    // their PCM frame width is not known until decode. Skip the
+    // PCM-shape sanity check for them.
+    if format.format_id == kAudioFormatMPEGLayer3 {
+        return;
+    }
+
     let bytes_per_channel = format.bits_per_channel / 8;
     let expected_bytes_per_packet = format.bytes_per_frame * format.frames_per_packet;
     let expected_bytes_per_frame = format.channels_per_frame * bytes_per_channel;
@@ -826,6 +835,16 @@ pub fn is_supported_audio_format(format: &AudioStreamBasicDescription) -> bool {
                 && (format_flags & kAudioFormatFlagIsBigEndian) == 0
                 && (format_flags & kAudioFormatFlagIsFloat) == 0
         }
+        // MPEG-1 / MPEG-2 Layer III. Apple's documentation for
+        // `kAudioFormatMPEGLayer3` (see
+        // <https://developer.apple.com/documentation/coreaudiotypes/kaudioformatmpeglayer3>)
+        // says the format is compressed: `bytes_per_packet`,
+        // `bytes_per_frame` and `bits_per_channel` are conventionally 0
+        // because each MPEG audio frame is variable-size and decompresses
+        // to 1152 PCM frames (`frames_per_packet`). We support mono /
+        // stereo at any sample rate; symphonia handles the actual
+        // decoding in `decode_buffer`.
+        kAudioFormatMPEGLayer3 => channels_per_frame == 1 || channels_per_frame == 2,
         _ => false,
     }
 }
@@ -1010,6 +1029,44 @@ pub fn decode_buffer(
             };
 
             (f, format.sample_rate as ALsizei, processed_data)
+        }
+        kAudioFormatMPEGLayer3 => {
+            // Decode the buffer's worth of raw MPEG-1/2 Layer III frames
+            // via symphonia (the same decoder we use for `AudioFile`
+            // / `ExtAudioFile` MP3 sources). MP3 packets in
+            // AudioQueueEnqueueBuffer are typically frame-aligned per the
+            // contract of `AudioFileStreamParseBytes` /
+            // `AudioFileReadPackets`, so feeding the slice as a single
+            // raw MP3 stream works in practice. Frames that straddle
+            // buffer boundaries are dropped by symphonia and logged at
+            // debug level — better than letting AudioQueueStart fail.
+            let cursor = std::io::Cursor::new(data_slice.to_vec());
+            let Ok(decoded) = crate::audio::symphonia_formats::decode_symphonia_to_pcm(cursor)
+            else {
+                let sample_rate = format.sample_rate;
+                log!(
+                    "Warning: decode_buffer: MP3 chunk could not be decoded; \
+                     returning empty mono16 buffer."
+                );
+                return (
+                    al::AL_FORMAT_MONO16,
+                    sample_rate.max(8000.0) as ALsizei,
+                    Vec::new(),
+                );
+            };
+            let al_format = match decoded.channels {
+                1 => al::AL_FORMAT_MONO16,
+                2 => al::AL_FORMAT_STEREO16,
+                other => {
+                    log!(
+                        "Warning: decode_buffer: MP3 produced unsupported \
+                         channel count {}; downmixing to mono.",
+                        other
+                    );
+                    al::AL_FORMAT_MONO16
+                }
+            };
+            (al_format, decoded.sample_rate as ALsizei, decoded.bytes)
         }
         _ => {
             // Copy values out of the packed struct before formatting to

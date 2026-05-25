@@ -10,7 +10,7 @@
 mod caf_decoder;
 mod ima4;
 pub mod openal;
-mod symphonia_formats;
+pub mod symphonia_formats;
 
 pub use ima4::decode_ima4;
 
