@@ -19,7 +19,9 @@
 //! classes that are both (considering Objective-C's support for inheritance,
 //! categories and dynamic class editing).
 
-use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
+use crate::dyld::{
+    export_c_func, export_c_func_aliased, ConstantExports, FunctionExports, HostConstant, HostDylib,
+};
 use crate::MutexId;
 use std::collections::{HashMap, HashSet};
 
@@ -278,5 +280,13 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(protocol_getName(_)),
     export_c_func!(objc_copyClassNamesForImage(_, _)),
     export_c_func!(object_getIndexedIvars(_)),
-    export_c_func!(__objc_deallocOnMainThreadHelper(_)),
+    // `_objc_deallocOnMainThreadHelper` (one leading underscore in the C
+    // name) is exported by libobjc as the Mach-O symbol
+    // `__objc_deallocOnMainThreadHelper` (two leading underscores). The
+    // Rust function uses two leading underscores so that the alias above
+    // matches the Mach-O symbol exactly.
+    export_c_func_aliased!(
+        "_objc_deallocOnMainThreadHelper",
+        __objc_deallocOnMainThreadHelper(_)
+    ),
 ];
