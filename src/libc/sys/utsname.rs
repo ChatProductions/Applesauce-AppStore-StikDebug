@@ -38,10 +38,10 @@ fn uname(env: &mut Environment, name: MutPtr<utsname>) -> i32 {
     let nodename = b"touchHLE\0";
     uts_name.nodename[..nodename.len()].copy_from_slice(nodename);
     // Same as sysctlbyname 'kern.osrelease'
-    let release = b"10.0.0d3\0";
+    let release = b"13.0.0\0";
     uts_name.release[..release.len()].copy_from_slice(release);
     // Same as sysctlbyname 'kern.osversion'
-    let version = b"8A293\0"; // iOS 4.0 build
+    let version = b"10B141\0"; // iOS 6.1 build
     uts_name.version[..version.len()].copy_from_slice(version);
     // Same as sysctlbyname 'hw.machine' — depends on emulated device family
     let machine_str = env.window().device_family().machine_name();

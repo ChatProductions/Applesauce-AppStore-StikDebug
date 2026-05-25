@@ -20,7 +20,7 @@
 //! * `<mach/vm_param.h>` for `vm_page_size` / `vm_page_mask`.
 
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::mem::{ConstPtr, ConstVoidPtr, Ptr};
+use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, MutPtr, Ptr};
 use crate::Environment;
 
 /// `extern char **environ;` — base of the program's environment vector.
@@ -44,15 +44,48 @@ fn environ_ptr(env: &mut Environment) -> ConstVoidPtr {
 /// On Apple platforms `tzset(3)` populates this; we ship UTC by
 /// default (value 0). The address resolves to a `long` storage cell.
 fn timezone_ptr(env: &mut Environment) -> ConstVoidPtr {
-    let value: i32 = 0;
-    env.mem.alloc_and_write(value).cast().cast_const()
+    let ptr: MutPtr<i32> = env.mem.alloc_and_write(0i32);
+    env.libc_state.time.timezone_global_ptr = Some(ptr);
+    ptr.cast().cast_const()
 }
 
 /// `extern int daylight;` — boolean flag set by `tzset(3)` when DST is
 /// observed in the current TZ. UTC has no DST → 0.
 fn daylight_ptr(env: &mut Environment) -> ConstVoidPtr {
-    let value: i32 = 0;
-    env.mem.alloc_and_write(value).cast().cast_const()
+    let ptr: MutPtr<i32> = env.mem.alloc_and_write(0i32);
+    env.libc_state.time.daylight_global_ptr = Some(ptr);
+    ptr.cast().cast_const()
+}
+
+/// `extern char *tzname[2];` — timezone names set by `tzset(3)`.
+/// We allocate a two-slot array and two 32-byte name buffers in guest
+/// memory, then point the array elements at the buffers. `tzset()`
+/// updates the buffer contents and array pointers later.
+fn tzname_ptr(env: &mut Environment) -> ConstVoidPtr {
+    let arr_ptr: MutPtr<ConstPtr<u8>> =
+        env.mem.alloc(2 * guest_size_of::<ConstPtr<u8>>()).cast();
+    env.libc_state.time.tzname_array_ptr = Some(arr_ptr);
+
+    let std_buf: MutPtr<u8> = env.mem.alloc(32).cast();
+    let buf = env.mem.bytes_at_mut(std_buf, 32);
+    buf.fill(0);
+    buf[0] = b'G';
+    buf[1] = b'M';
+    buf[2] = b'T';
+    env.libc_state.time.tzname_std_ptr = Some(std_buf);
+
+    let dst_buf: MutPtr<u8> = env.mem.alloc(32).cast();
+    let buf = env.mem.bytes_at_mut(dst_buf, 32);
+    buf.fill(0);
+    buf[0] = b'G';
+    buf[1] = b'M';
+    buf[2] = b'T';
+    env.libc_state.time.tzname_dst_ptr = Some(dst_buf);
+
+    env.mem.write(arr_ptr, std_buf.cast_const());
+    env.mem.write(arr_ptr + 1, dst_buf.cast_const());
+
+    arr_ptr.cast_void().cast_const()
 }
 
 /// `extern vm_size_t vm_page_size;` — 4 KiB on all 32-bit iOS devices.
@@ -79,6 +112,7 @@ pub const CONSTANTS: ConstantExports = &[
     ("_environ", HostConstant::Custom(environ_ptr)),
     ("_timezone", HostConstant::Custom(timezone_ptr)),
     ("_daylight", HostConstant::Custom(daylight_ptr)),
+    ("_tzname", HostConstant::Custom(tzname_ptr)),
     ("_vm_page_size", HostConstant::Custom(vm_page_size_ptr)),
     ("_vm_page_mask", HostConstant::Custom(vm_page_mask_ptr)),
     ("_vm_page_shift", HostConstant::Custom(vm_page_shift_ptr)),

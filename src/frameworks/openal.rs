@@ -137,32 +137,31 @@ macro_rules! try_get_context {
 
 fn alcOpenDevice(env: &mut Environment, devicename: ConstPtr<u8>) -> MutPtr<GuestALCdevice> {
     if !devicename.is_null() {
-        // Если имя устройства не равно null, мы проверяем, соответствует ли оно
-        // тому,
-        // которое было получено при вызове alcGetString(NULL,
-        // ALC_DEVICE_SPECIFIER).
-        // Если нет, возвращаем NULL.
-
+        // ObjectAL and some other audio libraries pass a non-NULL
+        // device specifier obtained from `alcGetString`. If it doesn't
+        // match the default device name, we used to return NULL, but on
+        // some Android builds OpenAL Soft advertises a different name
+        // than the one ObjectAL expects, breaking audio init. Be
+        // lenient: log a warning and try the default device anyway.
         let d_name = alcGetString(env, Ptr::null(), ALC_DEVICE_SPECIFIER);
         if strcmp(env, d_name, devicename) != 0 {
             log!(
-                "Неподдерживаемое имя устройства {:?}, поддерживается {:?}. Возвращаем NULL",
+                "Warning: alcOpenDevice requested name {:?} differs from default {:?}; opening default anyway",
                 env.mem.cstr_at_utf8(devicename),
                 env.mem.cstr_at_utf8(d_name)
             );
-            // NB: do NOT free `d_name` here — `alcGetString` now caches
-            // its return values in `State::strings_cache` and reuses the
-            // same guest pointer on subsequent calls (per OpenAL 1.1
-            // §6.3.5). Freeing it would leave a dangling pointer in the
-            // cache.
-            return Ptr::null();
         }
     }
 
-    let res = unsafe { al::alcOpenDevice(std::ptr::null()) };
+    let mut res = unsafe { al::alcOpenDevice(std::ptr::null()) };
     if res.is_null() {
-        log_dbg!("alcOpenDevice(NULL) вернул NULL");
-        return Ptr::null();
+        log!("alcOpenDevice(NULL) failed, trying \"No Output\" fallback");
+        let null_name = b"No Output\0";
+        res = unsafe { al::alcOpenDevice(null_name.as_ptr() as *const _) };
+        if res.is_null() {
+            log!("alcOpenDevice(\"No Output\") also failed, returning NULL");
+            return Ptr::null();
+        }
     }
 
     let guest_res = env.mem.alloc_and_write(GuestALCdevice { _filler: 0 });

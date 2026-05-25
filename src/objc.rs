@@ -19,7 +19,9 @@
 //! classes that are both (considering Objective-C's support for inheritance,
 //! categories and dynamic class editing).
 
-use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant, HostDylib};
+use crate::dyld::{
+    export_c_func, export_c_func_aliased, ConstantExports, FunctionExports, HostConstant, HostDylib,
+};
 use crate::MutexId;
 use std::collections::{HashMap, HashSet};
 
@@ -36,12 +38,14 @@ pub use classes::{
     class_addMethod, class_copyIvarList, class_copyMethodList, class_copyPropertyList,
     class_copyProtocolList, class_getClassMethod, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getMethodImplementation_stret, class_getName,
-    class_getProperty, class_getSuperclass, class_replaceMethod, method_exchangeImplementations,
+    class_getProperty, class_getSuperclass, class_replaceMethod, class_setSuperclass,
+    method_exchangeImplementations,
     method_getImplementation, method_getTypeEncoding, method_setImplementation, objc_storeStrong,
     objc_allocateClassPair, objc_autoreleasePoolPop,
     objc_autoreleasePoolPush, objc_autoreleaseReturnValue, objc_begin_catch, objc_classes,
-    objc_copyClassNamesForImage, objc_end_catch, objc_exception_throw, objc_getClass,
-    objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass, objc_readClassPair,
+    objc_copyClassNamesForImage, objc_disposeClassPair, objc_end_catch, objc_exception_throw,
+    objc_getClass, objc_getMetaClass, objc_getProtocol, objc_getRequiredClass, objc_lookUpClass,
+    objc_readClassPair, objc_registerClassPair,
     objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
     objc_retainBlock, __objc_deallocOnMainThreadHelper,
     objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
@@ -274,9 +278,20 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_getRequiredClass(_)),
     export_c_func!(objc_allocateClassPair(_, _, _)),
     export_c_func!(objc_readClassPair(_, _)),
+    export_c_func!(objc_registerClassPair(_)),
+    export_c_func!(objc_disposeClassPair(_)),
+    export_c_func!(class_setSuperclass(_, _)),
     export_c_func!(objc_getProtocol(_)),
     export_c_func!(protocol_getName(_)),
     export_c_func!(objc_copyClassNamesForImage(_, _)),
     export_c_func!(object_getIndexedIvars(_)),
-    export_c_func!(__objc_deallocOnMainThreadHelper(_)),
+    // `_objc_deallocOnMainThreadHelper` (one leading underscore in the C
+    // name) is exported by libobjc as the Mach-O symbol
+    // `__objc_deallocOnMainThreadHelper` (two leading underscores). The
+    // Rust function uses two leading underscores so that the alias above
+    // matches the Mach-O symbol exactly.
+    export_c_func_aliased!(
+        "_objc_deallocOnMainThreadHelper",
+        __objc_deallocOnMainThreadHelper(_)
+    ),
 ];

@@ -79,6 +79,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// `+ (UIColor *)colorWithCIColor:(CIColor *)ciColor` — toll-free
+// bridge from CoreImage. Per Apple's docs, components on the CIColor
+// are interpreted in the CIColor's colour space, which defaults to
+// `kCGColorSpaceDeviceRGB` (sRGB on iOS). Returns a UIColor with
+// equivalent RGBA components.
+// <https://developer.apple.com/documentation/uikit/uicolor/1621941-colorwithcicolor>
++ (id)colorWithCIColor:(id)ci_color {
+    if ci_color == nil {
+        return nil;
+    }
+    let (r, g, b, a) =
+        crate::frameworks::core_image::ci_color_components(env, ci_color);
+    let new: id = msg![env; this alloc];
+    let new: id = msg![env; new initWithRed:r green:g blue:b alpha:a];
+    autorelease(env, new)
+}
+
 + (id)colorWithRed:(CGFloat)r
              green:(CGFloat)g
               blue:(CGFloat)b

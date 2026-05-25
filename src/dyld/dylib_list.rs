@@ -76,12 +76,14 @@ pub const ADDRESS_BOOK_UI: super::HostDylib = super::HostDylib {
     function_exports: &[frameworks::address_book_ui::FUNCTIONS],
 };
 
-// Social (stub — no real share-sheet implementation yet, but we resolve
-// the SLServiceType* string constants so the linker doesn't leave them NULL)
+// Social — exposes the `SLServiceType*` string identifiers plus a real
+// `SLComposeViewController` whose `+isAvailableForServiceType:` always
+// returns `NO` (touchHLE has no Accounts framework, so per Apple's docs
+// every service is genuinely unavailable).
 pub const SOCIAL: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/Social.framework/Social",
     aliases: &[],
-    class_exports: &[],
+    class_exports: &[frameworks::social::CLASSES],
     constant_exports: &[frameworks::social::CONSTANTS],
     function_exports: &[frameworks::social::FUNCTIONS],
 };
@@ -150,7 +152,7 @@ pub const AD_SUPPORT: super::HostDylib = super::HostDylib {
 pub const CORE_IMAGE: super::HostDylib = super::HostDylib {
     path: "/System/Library/Frameworks/CoreImage.framework/CoreImage",
     aliases: &[],
-    class_exports: &[],
+    class_exports: &[frameworks::core_image::CLASSES],
     constant_exports: &[frameworks::core_image::CONSTANTS],
     function_exports: &[frameworks::core_image::FUNCTIONS],
 };
@@ -240,6 +242,8 @@ pub const DYLIB_LIST: &[&super::HostDylib] = &[
     &ACCELERATE,
     &frameworks::core_text::DYLIB,
     &frameworks::core_bluetooth::DYLIB,
+    &frameworks::gl_kit::DYLIB,
+    &frameworks::image_io::DYLIB,
 ];
 
 #[cfg(test)]

@@ -50,6 +50,8 @@ pub mod core_video;
 pub mod foundation;
 pub mod game_controller;
 pub mod game_kit;
+pub mod gl_kit;
+pub mod image_io;
 pub mod libbz2;
 pub mod libicucore;
 pub mod libsqlite3;
@@ -73,6 +75,7 @@ pub struct State {
     audio_toolbox: audio_toolbox::State,
     avfoundation: avfoundation::State,
     core_animation: core_animation::State,
+    core_foundation: core_foundation::State,
     foundation: foundation::State,
     pub game_kit: game_kit::State,
     pub store_kit: store_kit::State,
