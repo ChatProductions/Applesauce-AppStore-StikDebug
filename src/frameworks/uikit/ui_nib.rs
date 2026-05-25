@@ -52,6 +52,11 @@ struct UINibHostObject {
     bundle: id,
     /// File's Owner (weak, non-retaining)
     file_owner: id,
+    /// External objects table (NSDictionary<NSString*, id>*), set during
+    /// `-instantiateWithOwner:options:` when the caller passes
+    /// `UINibExternalObjects` / `UINibProxiedObjectsKey`. Non-retained:
+    /// the caller owns the dictionary for the duration of the call.
+    external_objects: id,
 }
 impl HostObject for UINibHostObject {}
 
@@ -91,7 +96,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(UINibHostObject {
         nib_name,
         bundle,
-        file_owner: nil
+        file_owner: nil,
+        external_objects: nil,
     });
 
     let new = env.objc.alloc_object(this, host_object, &mut env.mem);
@@ -112,7 +118,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)instantiateWithOwner:(id)owner options:(id)options {
     assert!(owner != nil);
-    assert!(options == nil); // TODO: implement options handling
+
+    // Apple's UINib loading documentation: the only documented `options`
+    // key is `UINibExternalObjects`; many older binaries also use the
+    // private `UINibProxiedObjectsKey`. Both map proxy identifiers to
+    // real objects so that `UIProxyObject` references in the nib resolve
+    // to host-supplied placeholders (e.g. for storyboard view loading).
+    let mut external_objects: id = nil;
+    if options != nil {
+        let key_proxied = get_static_str(env, UINibProxiedObjectsKey);
+        external_objects = msg![env; options objectForKey:key_proxied];
+        if external_objects == nil {
+            let key_external = get_static_str(env, UINibExternalObjects);
+            external_objects = msg![env; options objectForKey:key_external];
+        }
+    }
 
     let bundle = env.objc.borrow::<UINibHostObject>(this).bundle;
     let nib_name = env.objc.borrow::<UINibHostObject>(this).nib_name;
@@ -148,7 +168,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let nib_path = to_rust_string(env, path).to_string();
     assert!(env.objc.borrow::<UINibHostObject>(this).file_owner == nil);
-    env.objc.borrow_mut::<UINibHostObject>(this).file_owner = owner;
+    {
+        let host = env.objc.borrow_mut::<UINibHostObject>(this);
+        host.file_owner = owner;
+        host.external_objects = external_objects;
+    }
 
     let top_level_objects = if let Ok(unarchiver) = load_nib_file(env, this, GuestPathBuf::from(nib_path)) {
         let top_level_objects_key = get_static_str(env, "UINibTopLevelObjectsKey");
@@ -170,7 +194,11 @@ pub const CLASSES: ClassExports = objc_classes! {
         nil
     };
 
-    env.objc.borrow_mut::<UINibHostObject>(this).file_owner = nil;
+    {
+        let host = env.objc.borrow_mut::<UINibHostObject>(this);
+        host.file_owner = nil;
+        host.external_objects = nil;
+    }
     top_level_objects
 }
 
@@ -181,20 +209,44 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)initWithCoder:(id)coder {
     let id_key = get_static_str(env, "UIProxiedObjectIdentifier");
     let id_nss: id = msg![env; coder decodeObjectForKey:id_key];
-    let id = to_rust_string(env, id_nss);
+    let id = to_rust_string(env, id_nss).into_owned();
 
-    if id == "IBFilesOwner" {
-        let delegate: id = msg![env; coder delegate];
+    // Try the external objects table first. This is how storyboards (and
+    // anything passing `UINibExternalObjects`/`UINibProxiedObjectsKey` to
+    // `-[UINib instantiateWithOwner:options:]`) supply real instances for
+    // arbitrary proxy identifiers — most notably `UIStoryboardPlaceholder`.
+    let delegate: id = msg![env; coder delegate];
+    if delegate != nil {
+        let external = env.objc.borrow::<UINibHostObject>(delegate).external_objects;
+        if external != nil {
+            let replacement: id = msg![env; external objectForKey:id_nss];
+            if replacement != nil {
+                release(env, this);
+                return retain(env, replacement);
+            }
+        }
+    }
+
+    if id == "IBFilesOwner" || id.starts_with("UpstreamPlaceholder-") {
+        // `UpstreamPlaceholder-*` identifiers are emitted by Xcode's
+        // storyboard compiler for connections that reach *out* of a
+        // scene nib into its enclosing context — typically the view
+        // controller that owns the view nib being loaded. The runtime
+        // passes that controller as the nib's file's owner, so the
+        // upstream placeholder and `IBFilesOwner` resolve to the same
+        // object.
         if delegate != nil {
             let file_owner = env.objc.borrow::<UINibHostObject>(delegate).file_owner;
             if file_owner != nil {
-                return file_owner;
+                release(env, this);
+                return retain(env, file_owner);
             }
         }
 
-        log!("touchHLE Warning: IBFilesOwner requested but file_owner is nil! Returning dummy.");
+        log!("touchHLE Warning: {} requested but file_owner is nil! Returning dummy.", id);
         let ns_object_class = env.objc.get_known_class("NSObject", &mut env.mem);
         let dummy: id = msg![env; ns_object_class alloc];
+        release(env, this);
         msg![env; dummy init]
     } else if id == "IBFirstResponder" {
         log!("touchHLE: Bypassing IBFirstResponder replacement with dummy NSObject");
@@ -382,6 +434,24 @@ fn load_nib_file(env: &mut Environment, ui_nib: id, path: GuestPathBuf) -> Resul
         let keyed_path = format!("{}/keyedobjects.nib", path.as_str());
         let keyed_path_str = ns_string::from_rust_string(env, keyed_path);
         ns_data = msg_class![env; NSData dataWithContentsOfFile:keyed_path_str];
+    }
+
+    // Современный формат, используемый storyboards и xibs из iOS 8+: внутри
+    // NIB-каталога лежит файл `objects-8.0+.nib`. Попробуем его раньше
+    // старого `objects.nib`, потому что новые проекты часто содержат и тот
+    // и другой, и формат 8.0+ предпочтительнее.
+    if ns_data == nil {
+        let modern_path = format!("{}/objects-8.0+.nib", path.as_str());
+        let modern_path_str = ns_string::from_rust_string(env, modern_path);
+        ns_data = msg_class![env; NSData dataWithContentsOfFile:modern_path_str];
+    }
+
+    // Готовая «рантайм»-копия (используется ibtool при компиляции
+    // storyboardc — обычно идентичная objects-8.0+.nib).
+    if ns_data == nil {
+        let runtime_path = format!("{}/runtime.nib", path.as_str());
+        let runtime_path_str = ns_string::from_rust_string(env, runtime_path);
+        ns_data = msg_class![env; NSData dataWithContentsOfFile:runtime_path_str];
     }
 
     // Запасной старый формат - objects.nib

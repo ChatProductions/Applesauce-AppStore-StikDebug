@@ -58,6 +58,15 @@ pub(crate) struct UIViewControllerHostObject {
     modal_transition_style: UIModalTransitionStyle,
     modal_presentation_style: UIModalPresentationStyle,
     editing: bool,
+    /// When non-empty, the path (relative to the bundle resource path)
+    /// at which the storyboardc directory lives. Storyboard-instantiated
+    /// view controllers store the path so `-loadView` knows to load the
+    /// view nib from inside the storyboardc.
+    pub(crate) storyboard_view_nib_dir: String,
+    /// Back-pointer to the `UIStoryboard*` that produced this view
+    /// controller (retained). `nil` when the VC was instantiated outside
+    /// of a storyboard.
+    pub(crate) storyboard: id,
 }
 impl HostObject for UIViewControllerHostObject {}
 
@@ -138,18 +147,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UIViewControllerHostObject {
-        view, nib_name, bundle, title, presented_view_controller, ..
-    } = env.objc.borrow(this);
+    let (view, nib_name, bundle, title, presented, storyboard) = {
+        let h = env.objc.borrow::<UIViewControllerHostObject>(this);
+        (h.view, h.nib_name, h.bundle, h.title, h.presented_view_controller, h.storyboard)
+    };
     if view != nil { release(env, view); }
     if nib_name != nil { release(env, nib_name); }
     if bundle != nil { release(env, bundle); }
     if title != nil { release(env, title); }
-    if presented_view_controller != nil { release(env, presented_view_controller); }
+    if presented != nil { release(env, presented); }
     // presenting_view_controller is a non-retained back-pointer; do not
     // release.
     let navigation_item = env.objc.borrow::<UIViewControllerHostObject>(this).navigation_item;
     if navigation_item != nil { release(env, navigation_item); }
+    if storyboard != nil { release(env, storyboard); }
 
     env.objc.dealloc_object(this, &mut env.mem);
 }
@@ -170,6 +181,54 @@ pub const CLASSES: ClassExports = objc_classes! {
     let mut bundle: id = msg![env; this nibBundle];
     if bundle == nil {
         bundle = msg_class![env; NSBundle mainBundle];
+    }
+
+    // For storyboard-instantiated view controllers, the view nib lives
+    // inside the storyboardc directory rather than at the bundle root.
+    // Construct the full bundle-relative path before handing it off to
+    // `+[UINib nibWithNibName:bundle:]` so its normal resource search
+    // picks the right file.
+    let storyboard_dir = env
+        .objc
+        .borrow::<UIViewControllerHostObject>(this)
+        .storyboard_view_nib_dir
+        .clone();
+    if !storyboard_dir.is_empty() && nib_name != nil {
+        let nib_name_rust = to_rust_string(env, nib_name).into_owned();
+        // The compiled storyboardc stores per-device variants of the view
+        // nib as `<name>~iphone.nib` / `<name>~ipad.nib` next to the
+        // universal `<name>.nib`. Probe both — `+[UINib
+        // nibWithNibName:bundle:]` goes through NSBundle which only
+        // automatically applies device suffixes at the bundle root, not
+        // for files nested inside storyboardc subdirectories.
+        let device_suffix = match env.options.device_family {
+            Some(crate::window::DeviceFamily::iPad) => "~ipad",
+            Some(
+                crate::window::DeviceFamily::iPhone | crate::window::DeviceFamily::iPhone5,
+            ) => "~iphone",
+            None => "",
+        };
+        let mut candidates: Vec<String> = Vec::new();
+        if !nib_name_rust.starts_with(&storyboard_dir) {
+            candidates.push(format!(
+                "{}/{}{}",
+                storyboard_dir, nib_name_rust, device_suffix,
+            ));
+            candidates.push(format!("{}/{}", storyboard_dir, nib_name_rust));
+        } else {
+            candidates.push(nib_name_rust.clone());
+        }
+        for candidate in &candidates {
+            let candidate_ns = from_rust_string(env, candidate.clone());
+            let nib: id = msg_class![env; UINib nibWithNibName:candidate_ns bundle:bundle];
+            release(env, candidate_ns);
+            if nib != nil {
+                () = msg![env; nib instantiateWithOwner:this options:nil];
+                if env.objc.borrow::<UIViewControllerHostObject>(this).view != nil {
+                    return;
+                }
+            }
+        }
     }
 
     if nib_name != nil {
@@ -196,6 +255,35 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setView:(id)new_view { // UIView*
+    // When loading a storyboard scene nib, the scene's outlet connection
+    // for `view` sends `setView:` with a `UIStoryboardPlaceholder` rather
+    // than a real `UIView`. The placeholder acts as a marker: we capture
+    // the storyboardc directory it carries, but do NOT store the
+    // placeholder as the actual view. Once the storyboard machinery
+    // finishes wiring things up, `-view` will trigger `-loadView`, which
+    // can now resolve the view nib relative to that directory.
+    if new_view != nil {
+        let placeholder_class = env.objc.get_known_class(
+            "UIStoryboardPlaceholder",
+            &mut env.mem,
+        );
+        let view_class: Class = msg![env; new_view class];
+        if env.objc.class_is_subclass_of(view_class, placeholder_class) {
+            let storyboardc_dir_ns = env
+                .objc
+                .borrow::<crate::frameworks::uikit::ui_storyboard
+                    ::UIStoryboardPlaceholderHostObject>(new_view)
+                .storyboardc_relative_dir;
+            if storyboardc_dir_ns != nil {
+                let dir = to_rust_string(env, storyboardc_dir_ns).into_owned();
+                env.objc
+                    .borrow_mut::<UIViewControllerHostObject>(this)
+                    .storyboard_view_nib_dir = dir;
+            }
+            return;
+        }
+    }
+
     let host_obj = env.objc.borrow_mut::<UIViewControllerHostObject>(this);
     let old_view = std::mem::replace(&mut host_obj.view, new_view);
     if old_view != nil {
@@ -210,6 +298,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     if old_view != nil {
         release(env, old_view);
     }
+}
+
+- (id)storyboard {
+    env.objc.borrow::<UIViewControllerHostObject>(this).storyboard
 }
 
 - (id)view {
@@ -734,4 +826,34 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
     }
 
     nil
+}
+
+// Helpers used by `ui_storyboard.rs` to attach storyboard state to a
+// freshly-instantiated view controller. They live here so the
+// `UIViewControllerHostObject` private fields don't have to be exposed.
+
+/// Attach the storyboardc directory (bundle-relative) that should be
+/// consulted when the view controller's `-loadView` looks up its view
+/// nib. Promoted from a `UIStoryboardPlaceholder` that was set as the
+/// view via the scene nib's outlet connection.
+pub(crate) fn promote_storyboard_placeholder(
+    env: &mut Environment,
+    vc: id,
+    storyboardc_relative_dir: &str,
+) {
+    let host = env.objc.borrow_mut::<UIViewControllerHostObject>(vc);
+    if host.storyboard_view_nib_dir.is_empty() {
+        host.storyboard_view_nib_dir = storyboardc_relative_dir.to_string();
+    }
+}
+
+/// Set the `UIStoryboard*` back-pointer on the view controller. The
+/// storyboard is retained so the view controller can be returned without
+/// the user having to keep a reference to it themselves.
+pub(crate) fn set_storyboard(env: &mut Environment, vc: id, storyboard: id) {
+    if storyboard != nil { retain(env, storyboard); }
+    let host = env.objc.borrow_mut::<UIViewControllerHostObject>(vc);
+    let old = host.storyboard;
+    host.storyboard = storyboard;
+    if old != nil { release(env, old); }
 }

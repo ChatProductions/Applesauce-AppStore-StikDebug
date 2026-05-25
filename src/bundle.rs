@@ -365,6 +365,31 @@ impl Bundle {
             .map(|v| v.as_string().unwrap())
     }
 
+    /// The value of `UIMainStoryboardFile` (or its `~ipad` device-specific
+    /// variant) from `Info.plist`, if any. This is the modern (iOS 5+)
+    /// replacement for `NSMainNibFile`: the value is the base name (without
+    /// extension) of a compiled storyboard found in the bundle resources
+    /// (e.g. `Main` resolves to `Base.lproj/Main~iphone.storyboardc/` on
+    /// iPhone).
+    pub fn main_storyboard_filename(
+        &self,
+        device_family: Option<DeviceFamily>,
+    ) -> Option<&str> {
+        if let Some(device_family) = device_family {
+            if device_family == DeviceFamily::iPad
+                && self.plist.get("UIMainStoryboardFile~ipad").is_some()
+            {
+                return self
+                    .plist
+                    .get("UIMainStoryboardFile~ipad")
+                    .map(|v| v.as_string().unwrap());
+            }
+        }
+        self.plist
+            .get("UIMainStoryboardFile")
+            .map(|v| v.as_string().unwrap())
+    }
+
     pub fn supported_interface_orientations(&self) -> Vec<&str> {
         // Apple's Bundle Resources documentation
         // (https://developer.apple.com/documentation/bundleresources/information-property-list/uisupportedinterfaceorientations)
