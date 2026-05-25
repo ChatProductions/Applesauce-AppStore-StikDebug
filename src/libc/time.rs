@@ -165,18 +165,20 @@ fn query_host_timezone() -> (i32, i32, String, String) {
             "GMT".to_string()
         };
 
+        // Compute `has_dst` first so we can still inspect both names
+        // before the `(std_name, dst_name)` match consumes them.
+        let has_dst = if current_zone != other_zone || isdst > 0 || other_tm.tm_isdst > 0 {
+            1
+        } else {
+            0
+        };
+
         let (std_name, dst_name) = if current_zone == other_zone {
             (current_zone.clone(), current_zone)
         } else if isdst > 0 {
             (other_zone, current_zone)
         } else {
             (current_zone, other_zone)
-        };
-
-        let has_dst = if current_zone != other_zone || isdst > 0 || other_tm.tm_isdst > 0 {
-            1
-        } else {
-            0
         };
 
         (offset, has_dst, std_name, dst_name)
@@ -465,19 +467,24 @@ fn mktime(env: &mut Environment, tm: MutPtr<tm>) -> time_t {
 
     #[cfg(unix)]
     {
-        let mut host_tm = ::libc::tm {
-            tm_sec: tm_value.tm_sec,
-            tm_min: tm_value.tm_min,
-            tm_hour: tm_value.tm_hour,
-            tm_mday: tm_value.tm_mday,
-            tm_mon: tm_value.tm_mon,
-            tm_year: tm_value.tm_year,
-            tm_wday: tm_value.tm_wday,
-            tm_yday: tm_value.tm_yday,
-            tm_isdst: tm_value.tm_isdst,
-            tm_gmtoff: 0,
-            tm_zone: std::ptr::null(),
-        };
+        // `::libc::tm` is platform-specific (different field count and
+        // different mutability of `tm_zone` between Linux and macOS), so
+        // zero-initialise the whole struct and then set only the portable
+        // fields explicitly. `mktime` is documented (POSIX, Apple
+        // <https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/mktime.3.html>)
+        // to read only `tm_year`/`tm_mon`/`tm_mday`/`tm_hour`/`tm_min`/`tm_sec`/`tm_isdst`
+        // and re-derive everything else, so leaving the platform-private
+        // fields at zero is safe.
+        let mut host_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+        host_tm.tm_sec = tm_value.tm_sec;
+        host_tm.tm_min = tm_value.tm_min;
+        host_tm.tm_hour = tm_value.tm_hour;
+        host_tm.tm_mday = tm_value.tm_mday;
+        host_tm.tm_mon = tm_value.tm_mon;
+        host_tm.tm_year = tm_value.tm_year;
+        host_tm.tm_wday = tm_value.tm_wday;
+        host_tm.tm_yday = tm_value.tm_yday;
+        host_tm.tm_isdst = tm_value.tm_isdst;
         let res = unsafe { ::libc::mktime(&mut host_tm) } as time_t;
 
         let guest_tm = tm {
