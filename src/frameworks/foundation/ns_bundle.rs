@@ -229,6 +229,15 @@ pub const CLASSES: ClassExports = objc_classes! {
             return path;
         }
     }
+    // Base.lproj is Apple's Base internationalization fallback used by
+    // storyboards and other resources that don't have a per-language copy.
+    {
+        let lproj_ns: id = ns_string::get_static_str(env, "Base.lproj");
+        let path = path_for_resource_helper(env, this, name, lproj_ns, directory, extension);
+        if path != nil {
+            return path;
+        }
+    }
     nil
 }
 
@@ -673,6 +682,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Fallback to English.
     for lproj in ["English.lproj", "en.lproj"] {
         let lproj_ns: id = ns_string::get_static_str(env, lproj);
+        let path = path_for_resource_helper(env, this, name, lproj_ns, directory, extension);
+        if path != nil {
+            return path;
+        }
+    }
+    // Base.lproj is Apple's Base internationalization fallback used by
+    // storyboards and other resources that don't have a per-language copy.
+    {
+        let lproj_ns: id = ns_string::get_static_str(env, "Base.lproj");
         let path = path_for_resource_helper(env, this, name, lproj_ns, directory, extension);
         if path != nil {
             return path;
