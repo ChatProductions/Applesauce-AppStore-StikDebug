@@ -969,16 +969,20 @@ pub const FUNCTIONS: FunctionExports = &[
 /// `<fenv.h>` constants.
 ///
 /// Per Apple's `fenv.h`, `FE_DFL_ENV` is a macro defined as
-/// `((const fenv_t *)-1)` and the linker resolves the underlying
-/// `__FE_DFL_ENV` symbol to a sentinel `fenv_t` representing the
-/// "default" floating-point environment. The actual storage is
-/// referenced by the libm helpers `fegetenv()` / `fesetenv()`. For
-/// touchHLE's purposes we expose a zero-filled 8-byte `fenv_t`
-/// (matching ARMv7's `__fpu_control` + reserved layout): apps that
-/// pass `FE_DFL_ENV` to `fesetenv` will get the default environment
-/// (all flags clear, round-to-nearest).
+/// `((const fenv_t *)&_FE_DFL_ENV)`, where `_FE_DFL_ENV` is the
+/// C-level external sentinel object. With the Mach-O assembler's
+/// leading-underscore convention this becomes the dynamic-loader
+/// symbol `__FE_DFL_ENV` (two leading underscores). See
+/// <https://developer.apple.com/documentation/kernel/fenv_h> and
+/// the Open Group `fenv.h` reference
+/// <https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/fenv.h.html>.
+///
+/// touchHLE exposes a zero-filled 8-byte `fenv_t` (matching ARMv7's
+/// `__fpu_control` + reserved layout): apps that pass `FE_DFL_ENV`
+/// to `fesetenv` will get the default environment (all flags clear,
+/// round-to-nearest).
 pub const CONSTANTS: ConstantExports = &[(
-    "___FE_DFL_ENV",
+    "__FE_DFL_ENV",
     HostConstant::Custom(|env| {
         let p: crate::mem::MutPtr<u64> = env.mem.alloc(8).cast();
         env.mem.write(p, 0u64);
