@@ -14,6 +14,7 @@
 
 pub mod ad_banner_view;
 pub mod fb_session; // <--- ДОБАВЬ ЭТУ СТРОКУ СЮДА
+pub mod gk_challenge_event_handler;
 pub mod gk_leaderboard_view_controller;
 pub mod gk_local_player;
 mod gk_score;
@@ -27,15 +28,14 @@ use crate::dyld::{ConstantExports, HostConstant};
 /// matchmaking). Apps compare against it with
 /// `[error.domain isEqualToString:GKErrorDomain]` to filter
 /// GameKit-specific failures, so the literal must match Apple's.
-pub const CONSTANTS: ConstantExports = &[(
-    "_GKErrorDomain",
-    HostConstant::NSString("GKErrorDomain"),
-)];
+pub const CONSTANTS: ConstantExports =
+    &[("_GKErrorDomain", HostConstant::NSString("GKErrorDomain"))];
 
 /// Per-process state for the GameKit framework.
 #[derive(Default)]
 pub struct State {
     pub local_player: gk_local_player::State,
+    pub challenge_event_handler: gk_challenge_event_handler::State,
 }
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -44,6 +44,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     class_exports: &[
         ad_banner_view::CLASSES,
         fb_session::CLASSES, // <--- И ДОБАВЬ ЭТУ СТРОКУ СЮДА
+        gk_challenge_event_handler::CLASSES,
         gk_leaderboard_view_controller::CLASSES,
         gk_local_player::CLASSES,
         gk_score::CLASSES,

@@ -103,6 +103,31 @@ pub(super) struct UIViewHostObject {
     /// keeping a list is enough to avoid `Unknown selector` panics in
     /// games that wire pinch/pan/tap recognizers up at startup.
     gesture_recognizers: Vec<id>,
+    // ----- UIAccessibility informal protocol (NSObject category in real
+    // iOS, but in practice only meaningful for views). All properties
+    // default per Apple's documented behaviour for plain `UIView`:
+    // <https://developer.apple.com/documentation/objectivec/nsobject/uiaccessibility>
+    /// `BOOL isAccessibilityElement` — default `NO` for plain UIView.
+    is_accessibility_element: bool,
+    /// `UIAccessibilityTraits accessibilityTraits` (uint64_t bitmask).
+    /// Default is `UIAccessibilityTraitNone` (0).
+    accessibility_traits: u64,
+    /// `NSString *accessibilityLabel` — retained; default `nil`.
+    accessibility_label: id,
+    /// `NSString *accessibilityHint` — retained; default `nil`.
+    accessibility_hint: id,
+    /// `NSString *accessibilityValue` — retained; default `nil`.
+    accessibility_value: id,
+    /// `NSString *accessibilityIdentifier` (from UIAccessibilityIdentification).
+    accessibility_identifier: id,
+    /// `NSString *accessibilityLanguage` — BCP-47 language tag; default `nil`.
+    accessibility_language: id,
+    /// `BOOL accessibilityElementsHidden` (iOS 5+); default `NO`.
+    accessibility_elements_hidden: bool,
+    /// `BOOL accessibilityViewIsModal` (iOS 5+); default `NO`.
+    accessibility_view_is_modal: bool,
+    /// `BOOL shouldGroupAccessibilityChildren` (iOS 6+); default `NO`.
+    should_group_accessibility_children: bool,
 }
 impl HostObject for UIViewHostObject {}
 impl Default for UIViewHostObject {
@@ -126,6 +151,16 @@ impl Default for UIViewHostObject {
             clips_to_bounds: false,
             is_uncontrolled: false,
             gesture_recognizers: Vec::new(),
+            is_accessibility_element: false,
+            accessibility_traits: 0,
+            accessibility_label: nil,
+            accessibility_hint: nil,
+            accessibility_value: nil,
+            accessibility_identifier: nil,
+            accessibility_language: nil,
+            accessibility_elements_hidden: false,
+            accessibility_view_is_modal: false,
+            should_group_accessibility_children: false,
         }
     }
 }
@@ -668,6 +703,128 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)isExclusiveTouch { env.objc.borrow::<UIViewHostObject>(this).exclusive_touch }
 - (())setExclusiveTouch:(bool)exclusive { env.objc.borrow_mut::<UIViewHostObject>(this).exclusive_touch = exclusive; }
 
+// MARK: - UIAccessibility informal protocol
+//
+// In Apple's framework UIAccessibility is declared as an `NSObject`
+// category, so every `NSObject` answers these selectors. In practice
+// only views set them — Unity in particular calls
+// `setIsAccessibilityElement:` / `setAccessibilityTraits:` on its
+// `UnityView` at start-up. We back the state on `UIViewHostObject`
+// and follow Apple's documented "retain (copy)" / "assign" semantics:
+// <https://developer.apple.com/documentation/objectivec/nsobject/uiaccessibility>
+
+- (bool)isAccessibilityElement {
+    env.objc.borrow::<UIViewHostObject>(this).is_accessibility_element
+}
+- (())setIsAccessibilityElement:(bool)flag {
+    env.objc.borrow_mut::<UIViewHostObject>(this).is_accessibility_element = flag;
+}
+
+- (u64)accessibilityTraits {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_traits
+}
+- (())setAccessibilityTraits:(u64)traits {
+    env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_traits = traits;
+}
+
+- (id)accessibilityLabel {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_label
+}
+- (())setAccessibilityLabel:(id)label {
+    // Apple's docs declare this as `copy` (since iOS 5+), so deep-copy
+    // the string rather than just retaining it. `copy` on an immutable
+    // NSString just retains; on NSMutableString it makes a snapshot.
+    let new_label: id = if label == nil { nil } else { msg![env; label copy] };
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_label,
+        new_label,
+    );
+    release(env, old);
+}
+
+- (id)accessibilityHint {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_hint
+}
+- (())setAccessibilityHint:(id)hint {
+    let new_hint: id = if hint == nil { nil } else { msg![env; hint copy] };
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_hint,
+        new_hint,
+    );
+    release(env, old);
+}
+
+- (id)accessibilityValue {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_value
+}
+- (())setAccessibilityValue:(id)value {
+    let new_value: id = if value == nil { nil } else { msg![env; value copy] };
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_value,
+        new_value,
+    );
+    release(env, old);
+}
+
+- (id)accessibilityIdentifier {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_identifier
+}
+- (())setAccessibilityIdentifier:(id)identifier {
+    let new_id: id = if identifier == nil { nil } else { msg![env; identifier copy] };
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_identifier,
+        new_id,
+    );
+    release(env, old);
+}
+
+- (id)accessibilityLanguage {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_language
+}
+- (())setAccessibilityLanguage:(id)language {
+    let new_lang: id = if language == nil { nil } else { msg![env; language copy] };
+    let old = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_language,
+        new_lang,
+    );
+    release(env, old);
+}
+
+- (bool)accessibilityElementsHidden {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_elements_hidden
+}
+- (())setAccessibilityElementsHidden:(bool)hidden {
+    env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_elements_hidden = hidden;
+}
+
+- (bool)accessibilityViewIsModal {
+    env.objc.borrow::<UIViewHostObject>(this).accessibility_view_is_modal
+}
+- (())setAccessibilityViewIsModal:(bool)modal {
+    env.objc.borrow_mut::<UIViewHostObject>(this).accessibility_view_is_modal = modal;
+}
+
+- (bool)shouldGroupAccessibilityChildren {
+    env.objc.borrow::<UIViewHostObject>(this).should_group_accessibility_children
+}
+- (())setShouldGroupAccessibilityChildren:(bool)should {
+    env.objc.borrow_mut::<UIViewHostObject>(this).should_group_accessibility_children = should;
+}
+
+// `UIAccessibilityContainer` informal protocol — `UIView` returns
+// these no-op defaults in real iOS when nothing has been customised.
+- (id)accessibilityElements { nil }
+- (())setAccessibilityElements:(id)_elements {
+    // Apple's UIView ignores the setter unless a subclass overrides
+    // -accessibilityElements; we follow suit.
+}
+- (crate::frameworks::foundation::NSInteger)accessibilityElementCount { 0 }
+- (id)accessibilityElementAtIndex:(crate::frameworks::foundation::NSInteger)_index { nil }
+- (crate::frameworks::foundation::NSInteger)indexOfAccessibilityElement:(id)_element {
+    // NSNotFound on iOS 32-bit == NSIntegerMax.
+    crate::frameworks::foundation::NSInteger::MAX
+}
+
 - (())layoutSubviews {
     // Apple docs: "The default implementation uses any constraints you have
     // set to determine the size and position of any subviews." For legacy
@@ -1010,8 +1167,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let UIViewHostObject { layer, subviews, gesture_recognizers, .. } =
-        std::mem::take(env.objc.borrow_mut(this));
+    let UIViewHostObject {
+        layer, subviews, gesture_recognizers,
+        accessibility_label, accessibility_hint, accessibility_value,
+        accessibility_identifier, accessibility_language,
+        ..
+    } = std::mem::take(env.objc.borrow_mut(this));
     release(env, layer);
 
     for subview in subviews {
@@ -1020,6 +1181,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     for r in gesture_recognizers { release(env, r); }
+
+    // UIAccessibility informal protocol: properties are documented as
+    // "copy" / "retain" — release them on teardown to match
+    // <https://developer.apple.com/documentation/objectivec/nsobject/uiaccessibility>.
+    release(env, accessibility_label);
+    release(env, accessibility_hint);
+    release(env, accessibility_value);
+    release(env, accessibility_identifier);
+    release(env, accessibility_language);
 
     let state = &mut env.framework_state.uikit.ui_view.views;
     if let Some(pos) = state.iter().position(|&v| v == this) {
@@ -1342,7 +1512,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
-
 
 // MARK: - Block-invocation helpers
 //

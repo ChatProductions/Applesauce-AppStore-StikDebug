@@ -621,6 +621,76 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this objectForKey:file_type_key]
 }
 
+// Apple's
+// <https://developer.apple.com/documentation/foundation/nsdictionary/1415900-enumeratekeysandobjectsusingblo>:
+// invokes the supplied
+// `void (^)(id key, id obj, BOOL *stop)` block once per entry. The
+// caller may write `*stop = YES;` to abort the enumeration early.
+// Each entry's iteration uses a fresh, zero-initialised `BOOL *stop`
+// slot owned by the runtime (never reused storage), and the
+// enumeration order is unspecified — matching Apple's documented
+// behaviour for plain `NSDictionary`.
+- (())enumerateKeysAndObjectsUsingBlock:(MutPtr<u8>)block {
+    let opts: NSUInteger = 0;
+    () = msg![env; this enumerateKeysAndObjectsWithOptions:opts usingBlock:block];
+}
+
+// Apple's
+// <https://developer.apple.com/documentation/foundation/nsdictionary/1408008-enumeratekeysandobjectswithopti>.
+// `NSEnumerationOptions` is a bitmask:
+//   NSEnumerationConcurrent = 1 << 0
+//   NSEnumerationReverse    = 1 << 1
+// `NSEnumerationReverse` is documented as having no effect on plain
+// `NSDictionary` (which has no defined order), and we always enumerate
+// serially — both behaviours match Apple's runtime.
+- (())enumerateKeysAndObjectsWithOptions:(NSUInteger)_opts usingBlock:(MutPtr<u8>)block {
+    if block.is_null() {
+        return;
+    }
+    // Apple Block ABI: the third word (offset +12) of the block struct
+    // is the `invoke` function pointer for the underlying C function.
+    // See <https://clang.llvm.org/docs/Block-ABI-Apple.html>.
+    let invoke_ptr_addr: MutPtr<u32> =
+        Ptr::from_bits(block.to_bits() + 12);
+    let invoke_addr: u32 = env.mem.read(invoke_ptr_addr);
+    if invoke_addr == 0 {
+        log!(
+            "Warning: enumerateKeysAndObjectsWithOptions:usingBlock: block \
+             at {:?} has NULL invoke pointer; skipping.",
+            block
+        );
+        return;
+    }
+    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    let block_arg: crate::mem::ConstVoidPtr =
+        Ptr::from_bits(block.to_bits()).cast_const();
+
+    // `BOOL` on iOS is one byte; we allocate a 4-byte slot because the
+    // ARMv7 AAPCS widens small values to a word when passed by pointer
+    // and the unused tail costs nothing.
+    let stop_ptr: MutPtr<u8> = env.mem.alloc(4).cast();
+    env.mem.write(stop_ptr, 0u8);
+
+    // Snapshot the keys first: the block is allowed to mutate the
+    // receiver if it is a `NSMutableDictionary`, and Apple's runtime
+    // takes a snapshot up-front.
+    let keys_array: id = msg![env; this allKeys];
+    let count: NSUInteger = msg![env; keys_array count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let key: id = msg![env; keys_array objectAtIndex:i];
+        let obj: id = msg![env; this objectForKey:key];
+        <GuestFunction as CallFromHost<(), (crate::mem::ConstVoidPtr, id, id, MutPtr<u8>)>>::call_from_host(
+            &invoke, env, (block_arg, key, obj, stop_ptr),
+        );
+        if env.mem.read(stop_ptr) != 0 {
+            break;
+        }
+        i += 1;
+    }
+    env.mem.free(stop_ptr.cast());
+}
+
 @end
 
 // NSMutableDictionary is an abstract class. A subclass must provide everything
