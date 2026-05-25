@@ -18,6 +18,7 @@
 
 pub mod cf_allocator;
 pub mod cf_array;
+pub mod cf_binary_heap;
 pub mod cf_bundle;
 pub mod cf_data;
 pub mod cf_dictionary;
@@ -80,6 +81,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         cf_url::FUNCTIONS,
         cf_uuid::FUNCTIONS,
         time::FUNCTIONS,
+        cf_binary_heap::FUNCTIONS,
     ],
 };
 
@@ -99,6 +101,11 @@ use crate::objc::id;
 use crate::{export_c_func, impl_GuestRet_for_large_struct, msg};
 
 pub const kCFNotFound: CFIndex = -1;
+
+#[derive(Default)]
+pub struct State {
+    pub cf_binary_heap: cf_binary_heap::CFBinaryHeapState,
+}
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]

@@ -41,17 +41,17 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 28] = [
     ((0,0), "hw.l2cachesize", SysInfoType::Int32(0)),
     ((0,0), "hw.l3cachesize", SysInfoType::Int32(0)),
 
-    ((1, 14), "kern.osversion", String(b"5A347")),
-    ((6,5), "hw.physmem" , SysInfoType::Int32(121634816)),
-    ((6,6), "hw.usermem" , SysInfoType::Int32(93564928)),
-    ((6,24), "hw.memsize" , SysInfoType::Int32(121634816)),
+    ((1, 14), "kern.osversion", String(b"10B141")),
+    ((6,5), "hw.physmem" , SysInfoType::Int32(536870912)),
+    ((6,6), "hw.usermem" , SysInfoType::Int32(402653184)),
+    ((6,24), "hw.memsize" , SysInfoType::Int32(536870912)),
     ((6,7), "hw.pagesize" , SysInfoType::Int32(PAGE_SIZE as i32)),
     // High kernel limits
     ((1,1), "kern.ostype" , String(b"Darwin")),
-    ((1,2), "kern.osrelease" , String(b"10.4.0")),
-    ((1,3), "kern.osversion" , String(b"8A293")),
+    ((1,2), "kern.osrelease" , String(b"13.0.0")),
+    ((1,3), "kern.osversion" , String(b"10B141")),
     ((1,10), "kern.hostname" , String(b"touchHLE")),
-    ((1,4), "kern.version" , String(b"Darwin Kernel Version 10.4.0: Thu Jun 10 14:26:58 PDT 2010; root:xnu-1504.58.2~1/RELEASE_ARM_S5L8900X")),
+    ((1,4), "kern.version" , String(b"Darwin Kernel Version 13.0.0: Wed Jun 13 16:55:00 PDT 2012; root:xnu-2107.7.55~11/RELEASE_ARM_S5L8920X")),
     ((1,21), "kern.boottime" , SysInfoType::Int64(1600000000)),
 ];
 

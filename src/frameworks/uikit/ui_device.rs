@@ -141,7 +141,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     ns_string::get_static_str(env, "iPhone OS")
 }
 - (id)systemVersion {
-    ns_string::get_static_str(env, "2.0")
+    ns_string::get_static_str(env, "6.1")
 }
 - (id)uniqueIdentifier {
     ns_string::get_static_str(env, "touchHLEdevice..........................")
