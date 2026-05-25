@@ -13,18 +13,26 @@
 //! referenced constants. Real GLKit rendering classes are not implemented.
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
-use crate::mem::ConstVoidPtr;
+use crate::mem::{ConstVoidPtr, SafeRead};
 use crate::Environment;
 
 // GLKMatrix4Identity — 4x4 identity matrix of 32-bit floats (16 × 4 = 64 bytes).
 // Layout matches Apple's `_GLKMatrix4 { float m[16]; }`.
+#[repr(C)]
+struct GLKMatrix4 {
+    m: [f32; 16],
+}
+unsafe impl SafeRead for GLKMatrix4 {}
+
 fn glk_matrix4_identity(env: &mut Environment) -> ConstVoidPtr {
-    let identity: [f32; 16] = [
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0,
-    ];
+    let identity = GLKMatrix4 {
+        m: [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ],
+    };
     env.mem.alloc_and_write(identity).cast_void().cast_const()
 }
 
