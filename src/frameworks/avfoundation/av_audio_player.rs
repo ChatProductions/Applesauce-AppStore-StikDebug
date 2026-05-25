@@ -15,9 +15,10 @@ use crate::frameworks::audio_toolbox::audio_file::{
     AudioFileID, AudioFileOpenURL, AudioFileReadPackets,
 };
 use crate::frameworks::audio_toolbox::audio_queue::{
-    kAudioQueueParam_Volume, AudioQueueAllocateBuffer, AudioQueueBufferRef, AudioQueueDispose,
-    AudioQueueEnqueueBuffer, AudioQueueGetParameter, AudioQueueNewOutput, AudioQueueOutputCallback,
-    AudioQueuePause, AudioQueueRef, AudioQueueSetParameter, AudioQueueStart, AudioQueueStop,
+    kAudioQueueParam_Pan, kAudioQueueParam_Volume, AudioQueueAllocateBuffer, AudioQueueBufferRef,
+    AudioQueueDispose, AudioQueueEnqueueBuffer, AudioQueueGetParameter, AudioQueueNewOutput,
+    AudioQueueOutputCallback, AudioQueuePause, AudioQueueRef, AudioQueueSetParameter,
+    AudioQueueStart, AudioQueueStop,
 };
 use crate::frameworks::carbon_core::eofErr;
 use crate::frameworks::core_audio_types::AudioStreamBasicDescription;
@@ -53,6 +54,9 @@ struct AVAudioPlayerHostObject {
     current_packet: i64,
     set_current_time: NSTimeInterval,
     volume: f32,
+    /// Stereo pan; matches `AVAudioPlayer.pan` from `AVAudioPlayer.h`.
+    /// Range -1.0 (full left) … 1.0 (full right). Default 0.0.
+    pan: f32,
     is_playing: bool,
     num_of_loops: NSInteger,
     delegate: id,
@@ -82,6 +86,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         current_packet: 0,
         set_current_time: 0.0,
         volume: 1.0,
+        pan: 0.0,
         is_playing: false,
         num_of_loops: 0,
         delegate: nil,
@@ -158,6 +163,33 @@ pub const CLASSES: ClassExports = objc_classes! {
     host_object.volume = volume;
     if let Some(aq_ref) = host_object.audio_queue {
         let status = AudioQueueSetParameter(env, aq_ref, kAudioQueueParam_Volume, volume);
+        assert_eq!(status, 0);
+    }
+}
+
+// `AVAudioPlayer.pan` (iOS 4.0+) — stereo panning. Apple documents the
+// range as -1.0 (full left) to 1.0 (full right) with 0.0 centered.
+// <https://developer.apple.com/documentation/avfaudio/avaudioplayer/1387672-pan>
+- (f32)pan {
+    let host_object = env.objc.borrow::<AVAudioPlayerHostObject>(this);
+    let aq_ref = host_object.audio_queue;
+    if aq_ref.is_none() {
+        return host_object.pan;
+    }
+    let tmp: MutPtr<f32> = env.mem.alloc(guest_size_of::<f32>()).cast();
+    let status = AudioQueueGetParameter(env, aq_ref.unwrap(), kAudioQueueParam_Pan, tmp);
+    assert_eq!(status, 0);
+    let res = env.mem.read(tmp);
+    env.mem.free(tmp.cast());
+    res
+}
+
+- (())setPan:(f32)pan {
+    let pan = pan.clamp(-1.0, 1.0);
+    let host_object = env.objc.borrow_mut::<AVAudioPlayerHostObject>(this);
+    host_object.pan = pan;
+    if let Some(aq_ref) = host_object.audio_queue {
+        let status = AudioQueueSetParameter(env, aq_ref, kAudioQueueParam_Pan, pan);
         assert_eq!(status, 0);
     }
 }
@@ -308,6 +340,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         current_packet: 0,
         set_current_time: 0.0,
         volume: 1.0,
+        pan: 0.0,
         is_playing: false,
         delegate,         // Переносим в новый объект
         metering_enabled,

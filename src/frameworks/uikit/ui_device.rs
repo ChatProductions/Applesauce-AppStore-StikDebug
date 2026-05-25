@@ -9,7 +9,7 @@
 
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::{ns_string, NSInteger};
-use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, TrivialHostObject};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, TrivialHostObject};
 use crate::window::{get_battery_status, BatteryState, DeviceOrientation};
 
 pub const UIDeviceOrientationDidChangeNotification: &str =
@@ -51,6 +51,8 @@ pub struct State {
     battery_monitoring_enabled: bool,
     proximity_monitoring_enabled: bool,
     generates_device_orientation_notifications: bool,
+    /// Lazily-initialised NSUUID returned by `-identifierForVendor`.
+    identifier_for_vendor: Option<id>,
 }
 
 pub const CONSTANTS: ConstantExports = &[
@@ -71,6 +73,30 @@ pub const CONSTANTS: ConstantExports = &[
         HostConstant::NSString(UIDeviceProximityStateDidChangeNotification),
     ),
 ];
+
+/// Deterministic UUIDv5 (SHA-1, RFC 4122 §4.3) of `vendor` under the
+/// pre-defined "URL" namespace. Used by `-identifierForVendor` so the same
+/// vendor string always yields the same NSUUID.
+fn uuid_v5_for_vendor(vendor: &str) -> [u8; 16] {
+    // RFC 4122 §C — URL namespace UUID.
+    const URL_NS: [u8; 16] = [
+        0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30,
+        0xc8,
+    ];
+    use sha1::{Digest, Sha1};
+    let mut h = Sha1::new();
+    h.update(URL_NS);
+    h.update(b"ios-vendor:");
+    h.update(vendor.as_bytes());
+    let digest = h.finalize();
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    // Set version 5 (bits 12-15 of time_hi_and_version).
+    bytes[6] = (bytes[6] & 0x0F) | 0x50;
+    // Set variant (RFC 4122) — top two bits of clock_seq_hi = 10.
+    bytes[8] = (bytes[8] & 0x3F) | 0x80;
+    bytes
+}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -145,6 +171,51 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (id)uniqueIdentifier {
     ns_string::get_static_str(env, "touchHLEdevice..........................")
+}
+
+// `-identifierForVendor` (iOS 6.0+) — `NSUUID *` that uniquely identifies the
+// device to the app's vendor. Apple guarantees the value is stable for all
+// apps from the same vendor while at least one is installed; touchHLE has
+// no system-wide install database, so we derive a deterministic UUIDv5 from
+// the vendor prefix of the app's bundle identifier. Same vendor → same
+// UUID across launches; different vendors → different UUIDs.
+// <https://developer.apple.com/documentation/uikit/uidevice/1620059-identifierforvendor>
+- (id)identifierForVendor { // NSUUID*
+    if let Some(existing) =
+        env.framework_state.uikit.ui_device.identifier_for_vendor
+    {
+        return existing;
+    }
+    let bundle_id = env.bundle.bundle_identifier().to_owned();
+    // Vendor scope = first two dot-separated components of the bundle id
+    // (e.g. `com.example.MyApp` → `com.example`). Falls back to the full
+    // bundle id if there are fewer than two components.
+    let vendor: String = {
+        let mut parts = bundle_id.split('.');
+        match (parts.next(), parts.next()) {
+            (Some(a), Some(b)) => format!("{}.{}", a, b),
+            _ => bundle_id.clone(),
+        }
+    };
+    let bytes = uuid_v5_for_vendor(&vendor);
+    let uuid_str = format!(
+        "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+        bytes[0],  bytes[1],  bytes[2],  bytes[3],
+        bytes[4],  bytes[5],
+        bytes[6],  bytes[7],
+        bytes[8],  bytes[9],
+        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+    );
+    let ns_uuid_str = ns_string::from_rust_string(env, uuid_str);
+    let uuid: id = msg_class![env; NSUUID alloc];
+    let uuid: id = msg![env; uuid initWithUUIDString:ns_uuid_str];
+    crate::objc::release(env, ns_uuid_str);
+    if uuid == nil {
+        return nil;
+    }
+    crate::objc::retain(env, uuid);
+    env.framework_state.uikit.ui_device.identifier_for_vendor = Some(uuid);
+    uuid
 }
 
 // MARK: - Idiom
