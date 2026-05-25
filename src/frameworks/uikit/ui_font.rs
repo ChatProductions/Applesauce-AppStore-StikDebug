@@ -303,14 +303,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // isEqual: compares name + size
 - (bool)isEqual:(id)other {
-   if this == other { return true; }
-   if other == nil  { return false; }
-   let a = env.objc.borrow::<UIFontHostObject>(this);
-   let b_opt = env.objc.try_borrow::<UIFontHostObject>(other);
-   match b_opt {
-       Some(b) => a.kind == b.kind && (a.size - b.size).abs() < 0.001,
-       None    => false,
-   }
+    if this == other { return true; }
+    if other == nil  { return false; }
+    // Check that `other` is actually a UIFont before borrowing.
+    let ui_font_class = env.objc.get_known_class("UIFont", &mut env.mem);
+    let other_class: id = msg![env; other class];
+    let is_font: bool = msg![env; other_class isSubclassOfClass:ui_font_class];
+    if !is_font { return false; }
+    let (a_kind, a_size) = {
+        let a = env.objc.borrow::<UIFontHostObject>(this);
+        (a.kind, a.size)
+    };
+    let (b_kind, b_size) = {
+        let b = env.objc.borrow::<UIFontHostObject>(other);
+        (b.kind, b.size)
+    };
+    a_kind == b_kind && (a_size - b_size).abs() < 0.001
 }
 
 // fontDescriptor (iOS 7+) — return nil; apps should check before using
