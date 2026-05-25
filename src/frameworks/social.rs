@@ -20,6 +20,39 @@
 //! identifiers.
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
+use crate::objc::{id, nil, objc_classes, ClassExports};
+
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+// `SLComposeViewController` (iOS 6.0+). Presents the system share sheet
+// for a given service. touchHLE has no UIKit presentation pipeline and no
+// Settings-app account configuration, so following Apple's documented
+// contract we report every service as unavailable. Apps then take their
+// "service is not configured" code path instead of crashing on
+// `[SLComposeViewController alloc]` / `setInitialText:`.
+// <https://developer.apple.com/documentation/social/slcomposeviewcontroller>
+@implementation SLComposeViewController: UIViewController
+
+// `+ (BOOL)isAvailableForServiceType:(NSString *)serviceType` — `YES` if
+// the user is signed into the requested service. touchHLE has no Accounts
+// framework, so always `NO`.
++ (bool)isAvailableForServiceType:(id)_service_type {
+    false
+}
+
+// `+ (SLComposeViewController *)composeViewControllerForServiceType:(NSString *)serviceType`
+// — Apple's docs explicitly note this returns `nil` when the service is
+// unavailable. Since `+isAvailableForServiceType:` always reports `NO`,
+// this returns `nil` too.
++ (id)composeViewControllerForServiceType:(id)_service_type {
+    nil
+}
+
+@end
+
+};
 
 pub const CONSTANTS: ConstantExports = &[
     (

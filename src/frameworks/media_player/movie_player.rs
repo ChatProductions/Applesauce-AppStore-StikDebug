@@ -182,6 +182,22 @@ const MPMovieMediaTypesAvailableNotification: &str = "MPMovieMediaTypesAvailable
 const MPMovieSourceTypeAvailableNotification: &str = "MPMovieSourceTypeAvailableNotification";
 const MPMoviePlayerPlaybackDidFinishReasonUserInfoKey: &str =
     "MPMoviePlayerPlaybackDidFinishReasonUserInfoKey";
+// `MPMediaPlayback` (a protocol adopted by `MPMoviePlayerController`)
+// posts this notification when `-isPreparedToPlay` flips. Declared in
+// `MPMediaPlayback.h`, iOS 3.2+. Canonical NSString value matches the
+// symbol name, see
+// <https://developer.apple.com/documentation/mediaplayer/mpmediaplaybackispreparedtoplaydidchangenotification>.
+const MPMediaPlaybackIsPreparedToPlayDidChangeNotification: &str =
+    "MPMediaPlaybackIsPreparedToPlayDidChangeNotification";
+// `requestThumbnailImagesAtTimes:timeOption:` result-delivery
+// notification + `userInfo` keys. Declared in `MPMoviePlayerController.h`
+// (iOS 3.2+, deprecated in 9.0). See
+// <https://developer.apple.com/documentation/mediaplayer/mpmovieplayerthumbnailimagerequestdidfinishnotification>.
+const MPMoviePlayerThumbnailImageRequestDidFinishNotification: &str =
+    "MPMoviePlayerThumbnailImageRequestDidFinishNotification";
+const MPMoviePlayerThumbnailImageKey: &str = "MPMoviePlayerThumbnailImageKey";
+const MPMoviePlayerThumbnailErrorKey: &str = "MPMoviePlayerThumbnailErrorKey";
+const MPMoviePlayerThumbnailTimeKey: &str = "MPMoviePlayerThumbnailTimeKey";
 
 /// `NSNotificationName` values and other constants.
 pub const CONSTANTS: ConstantExports = &[
@@ -248,6 +264,26 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_MPMovieSourceTypeAvailableNotification",
         HostConstant::NSString(MPMovieSourceTypeAvailableNotification),
+    ),
+    (
+        "_MPMediaPlaybackIsPreparedToPlayDidChangeNotification",
+        HostConstant::NSString(MPMediaPlaybackIsPreparedToPlayDidChangeNotification),
+    ),
+    (
+        "_MPMoviePlayerThumbnailImageRequestDidFinishNotification",
+        HostConstant::NSString(MPMoviePlayerThumbnailImageRequestDidFinishNotification),
+    ),
+    (
+        "_MPMoviePlayerThumbnailImageKey",
+        HostConstant::NSString(MPMoviePlayerThumbnailImageKey),
+    ),
+    (
+        "_MPMoviePlayerThumbnailErrorKey",
+        HostConstant::NSString(MPMoviePlayerThumbnailErrorKey),
+    ),
+    (
+        "_MPMoviePlayerThumbnailTimeKey",
+        HostConstant::NSString(MPMoviePlayerThumbnailTimeKey),
     ),
 ];
 

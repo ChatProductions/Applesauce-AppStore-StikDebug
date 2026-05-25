@@ -23,6 +23,7 @@ pub mod dispatch;
 pub mod dlfcn;
 pub mod dns_sd;
 pub mod errno;
+pub mod execinfo;
 pub mod fnmatch;
 mod generic_char;
 pub mod glob;
@@ -81,6 +82,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         dlfcn::FUNCTIONS,
         dns_sd::FUNCTIONS,
         errno::FUNCTIONS,
+        execinfo::FUNCTIONS,
         fnmatch::FUNCTIONS,
         glob::FUNCTIONS,
         ifaddrs::FUNCTIONS,

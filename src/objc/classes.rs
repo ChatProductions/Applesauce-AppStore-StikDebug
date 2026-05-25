@@ -1800,6 +1800,39 @@ pub fn objc_readClassPair(_env: &mut crate::Environment, cls: Class, _info: Cons
     cls
 }
 
+/// `void objc_registerClassPair(Class cls)` — finalise the registration
+/// of a dynamically created class. touchHLE's [`objc_allocateClassPair`]
+/// already inserts the class into the runtime tables; the matching
+/// `register` call is therefore a no-op that just publishes the class.
+/// <https://developer.apple.com/documentation/objectivec/1418414-objc_registerclasspair>
+pub fn objc_registerClassPair(_env: &mut crate::Environment, _cls: Class) {}
+
+/// `void objc_disposeClassPair(Class cls)` — destroys a class created
+/// with [`objc_allocateClassPair`] that has not yet been registered.
+/// touchHLE doesn't reclaim class storage, so we just drop the reference
+/// on the floor (Apple's runtime is also lazy about this for very small
+/// allocations).
+/// <https://developer.apple.com/documentation/objectivec/1418912-objc_disposeclasspair>
+pub fn objc_disposeClassPair(_env: &mut crate::Environment, _cls: Class) {}
+
+/// `Class class_setSuperclass(Class cls, Class newSuper)` — deprecated
+/// since OS X 10.5 but still exported by libobjc and used by older
+/// hooking libraries. Returns the previous superclass and rewrites the
+/// class's inheritance chain in-place.
+/// <https://developer.apple.com/documentation/objectivec/1418687-class_setsuperclass>
+pub fn class_setSuperclass(
+    env: &mut crate::Environment,
+    cls: Class,
+    new_super: Class,
+) -> Class {
+    if cls.is_null() {
+        return nil;
+    }
+    let old = env.objc.get_superclass(cls);
+    env.objc.borrow_mut::<ClassHostObject>(cls).superclass = new_super;
+    old
+}
+
 /// `Protocol *objc_getProtocol(const char *name)` — touchHLE doesn't
 /// model protocols separately; return nil so any defensive
 /// `if (proto)` check skips the protocol-specific path.

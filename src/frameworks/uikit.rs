@@ -136,6 +136,74 @@ fn ui_font_weight_black(env: &mut Environment) -> ConstVoidPtr {
     write_cgfloat(env, 0.62)
 }
 
+// `UIAccessibilityTraits` is `uint64_t` (declared in Apple's
+// `UIAccessibility.h`). The dyld slot for each trait constant must hold a
+// pointer to an `8`-byte value the guest can dereference; using an `NSString`
+// would put the wrong bit pattern there and bitwise-OR'ing traits would yield
+// garbage.
+fn write_uiaccessibility_trait(env: &mut Environment, value: u64) -> ConstVoidPtr {
+    let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
+    env.mem.write(ptr, value);
+    ptr.cast().cast_const()
+}
+
+// Bit positions per Apple's public `UIAccessibility.h` header
+// (`UIAccessibilityTraitButton` is `(1 << 0)`, etc.).
+fn uia_trait_none(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 0)
+}
+fn uia_trait_button(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 0)
+}
+fn uia_trait_link(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 1)
+}
+fn uia_trait_search_field(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 2)
+}
+fn uia_trait_image(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 3)
+}
+fn uia_trait_selected(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 4)
+}
+fn uia_trait_plays_sound(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 5)
+}
+fn uia_trait_keyboard_key(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 6)
+}
+fn uia_trait_static_text(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 7)
+}
+fn uia_trait_summary_element(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 8)
+}
+fn uia_trait_not_enabled(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 9)
+}
+fn uia_trait_updates_frequently(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 10)
+}
+fn uia_trait_starts_media_session(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 11)
+}
+fn uia_trait_adjustable(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 12)
+}
+fn uia_trait_allows_direct_interaction(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 13)
+}
+fn uia_trait_causes_page_turn(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 14)
+}
+fn uia_trait_header(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 15)
+}
+fn uia_trait_tab_bar(env: &mut Environment) -> ConstVoidPtr {
+    write_uiaccessibility_trait(env, 1 << 18)
+}
+
 pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIBackgroundTaskInvalid",
@@ -365,18 +433,137 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         HostConstant::NSString("UIApplicationUserDidTakeScreenshotNotification"),
     ),
     // -----------------------------------------------------------------
-    // UIAccessibility traits (iOS 5+, NSString in practice though the
-    // header declares them as UIAccessibilityTraits / uint64_t. The dyld
-    // linker only requires a non-NULL pointer at the relocation site.
+    // UIAccessibility traits (iOS 3.0+). Declared as
+    // `UIKIT_EXTERN const UIAccessibilityTraits UIAccessibilityTrait*` in
+    // Apple's `UIAccessibility.h`, where `UIAccessibilityTraits` is
+    // `uint64_t`. Bit positions match the header so guests can OR them
+    // together.
     // <https://developer.apple.com/documentation/uikit/uiaccessibilitytraits>
     // -----------------------------------------------------------------
     (
+        "_UIAccessibilityTraitNone",
+        HostConstant::Custom(uia_trait_none),
+    ),
+    (
+        "_UIAccessibilityTraitButton",
+        HostConstant::Custom(uia_trait_button),
+    ),
+    (
+        "_UIAccessibilityTraitLink",
+        HostConstant::Custom(uia_trait_link),
+    ),
+    (
+        "_UIAccessibilityTraitSearchField",
+        HostConstant::Custom(uia_trait_search_field),
+    ),
+    (
         "_UIAccessibilityTraitImage",
-        HostConstant::NSString("UIAccessibilityTraitImage"),
+        HostConstant::Custom(uia_trait_image),
+    ),
+    (
+        "_UIAccessibilityTraitSelected",
+        HostConstant::Custom(uia_trait_selected),
+    ),
+    (
+        "_UIAccessibilityTraitPlaysSound",
+        HostConstant::Custom(uia_trait_plays_sound),
+    ),
+    (
+        "_UIAccessibilityTraitKeyboardKey",
+        HostConstant::Custom(uia_trait_keyboard_key),
+    ),
+    (
+        "_UIAccessibilityTraitStaticText",
+        HostConstant::Custom(uia_trait_static_text),
+    ),
+    (
+        "_UIAccessibilityTraitSummaryElement",
+        HostConstant::Custom(uia_trait_summary_element),
+    ),
+    (
+        "_UIAccessibilityTraitNotEnabled",
+        HostConstant::Custom(uia_trait_not_enabled),
+    ),
+    (
+        "_UIAccessibilityTraitUpdatesFrequently",
+        HostConstant::Custom(uia_trait_updates_frequently),
+    ),
+    (
+        "_UIAccessibilityTraitStartsMediaSession",
+        HostConstant::Custom(uia_trait_starts_media_session),
+    ),
+    (
+        "_UIAccessibilityTraitAdjustable",
+        HostConstant::Custom(uia_trait_adjustable),
     ),
     (
         "_UIAccessibilityTraitAllowsDirectInteraction",
-        HostConstant::NSString("UIAccessibilityTraitAllowsDirectInteraction"),
+        HostConstant::Custom(uia_trait_allows_direct_interaction),
+    ),
+    (
+        "_UIAccessibilityTraitCausesPageTurn",
+        HostConstant::Custom(uia_trait_causes_page_turn),
+    ),
+    (
+        "_UIAccessibilityTraitHeader",
+        HostConstant::Custom(uia_trait_header),
+    ),
+    (
+        "_UIAccessibilityTraitTabBar",
+        HostConstant::Custom(uia_trait_tab_bar),
+    ),
+    // -----------------------------------------------------------------
+    // UIFontTextStyle (iOS 7+). Declared as
+    // `UIKIT_EXTERN UIFontTextStyle const UIFontTextStyle*` in Apple's
+    // `UIFontDescriptor.h`, where `UIFontTextStyle` is
+    // `NSString * NS_TYPED_ENUM`. The string values are passed back to
+    // `+[UIFont preferredFontForTextStyle:]` to obtain a dynamic-type
+    // appropriate font.
+    // <https://developer.apple.com/documentation/uikit/uifonttextstyle>
+    // -----------------------------------------------------------------
+    (
+        "_UIFontTextStyleLargeTitle",
+        HostConstant::NSString("UICTFontTextStyleTitle0"),
+    ),
+    (
+        "_UIFontTextStyleTitle1",
+        HostConstant::NSString("UICTFontTextStyleTitle1"),
+    ),
+    (
+        "_UIFontTextStyleTitle2",
+        HostConstant::NSString("UICTFontTextStyleTitle2"),
+    ),
+    (
+        "_UIFontTextStyleTitle3",
+        HostConstant::NSString("UICTFontTextStyleTitle3"),
+    ),
+    (
+        "_UIFontTextStyleHeadline",
+        HostConstant::NSString("UICTFontTextStyleHeadline"),
+    ),
+    (
+        "_UIFontTextStyleSubheadline",
+        HostConstant::NSString("UICTFontTextStyleSubhead"),
+    ),
+    (
+        "_UIFontTextStyleBody",
+        HostConstant::NSString("UICTFontTextStyleBody"),
+    ),
+    (
+        "_UIFontTextStyleCallout",
+        HostConstant::NSString("UICTFontTextStyleCallout"),
+    ),
+    (
+        "_UIFontTextStyleFootnote",
+        HostConstant::NSString("UICTFontTextStyleFootnote"),
+    ),
+    (
+        "_UIFontTextStyleCaption1",
+        HostConstant::NSString("UICTFontTextStyleCaption1"),
+    ),
+    (
+        "_UIFontTextStyleCaption2",
+        HostConstant::NSString("UICTFontTextStyleCaption2"),
     ),
     // -----------------------------------------------------------------
     // UIActivityType identifiers (iOS 6+, NSString constants),

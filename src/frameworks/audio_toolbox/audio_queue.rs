@@ -61,6 +61,8 @@ struct AudioQueueHostObject {
     /// Weak reference
     run_loop: CFRunLoopRef,
     volume: f32,
+    /// Stereo pan, -1.0 (full left) .. 1.0 (full right), 0.0 (centered).
+    pan: f32,
     buffers: Vec<AudioQueueBufferRef>,
     /// There is also a queue of OpenAL buffers, which must be kept in sync:
     /// the nth item in this queue must also be the nth item in the OpenAL
@@ -125,6 +127,9 @@ pub type AudioQueueOutputCallback = GuestFunction;
 
 type AudioQueueParameterID = u32;
 pub const kAudioQueueParam_Volume: AudioQueueParameterID = 1;
+// `kAudioQueueParam_Pan` per Apple's `AudioQueue.h`. Range -1.0 (full left)
+// to 1.0 (full right). Mirrors `AVAudioPlayer.pan`.
+pub const kAudioQueueParam_Pan: AudioQueueParameterID = 13;
 
 type AudioQueueParameterValue = f32;
 
@@ -223,6 +228,7 @@ pub fn AudioQueueNewOutput(
         callback_user_data: in_user_data,
         run_loop: in_callback_run_loop,
         volume: 1.0,
+        pan: 0.0,
         buffers: Vec::new(),
         buffer_queue: VecDeque::new(),
         is_running: AudioQueueIsRunning::Stopped,
@@ -261,6 +267,34 @@ pub fn AudioQueueNewOutput(
     0 // success
 }
 
+/// Apply the queue's pan to its OpenAL source. Pan is implemented per Apple's
+/// AudioToolbox semantics: -1.0 = full left, 0.0 = centered, 1.0 = full
+/// right. We place the source on the x-axis with a small forward offset so
+/// that the listener (default at origin facing -z) hears it equally loud at
+/// pan 0 and panned at ±1.
+// Standard OpenAL enum values (al.h). They are missing from the local
+// `openal_soft_wrapper::al_defines` re-export but are part of the public
+// 1.1 ABI, see <https://www.openal.org/documentation/openal-1.1-specification.pdf>.
+const AL_SOURCE_RELATIVE: ALenum = 0x202;
+const AL_POSITION: ALenum = 0x1004;
+const AL_TRUE_I32: ALint = 1;
+
+fn apply_al_pan(context: &OpenAL<'_>, al_source: ALuint, pan: f32) {
+    let pan = pan.clamp(-1.0, 1.0);
+    // Keep source relative to the listener so head tracking can't drift.
+    unsafe {
+        context.Sourcei(al_source, AL_SOURCE_RELATIVE, AL_TRUE_I32);
+        context.Source3f(
+            al_source,
+            AL_POSITION,
+            pan,
+            0.0,
+            -(1.0 - pan * pan).sqrt().max(0.0),
+        );
+        assert!(context.GetError() == 0);
+    }
+}
+
 pub fn AudioQueueGetParameter(
     env: &mut Environment,
     in_aq: AudioQueueRef,
@@ -269,20 +303,6 @@ pub fn AudioQueueGetParameter(
 ) -> OSStatus {
     return_if_null!(in_aq);
 
-    // Only kAudioQueueParam_Volume is implemented; other parameters
-    // gracefully report 0 instead of crashing. Real Audio Queue
-    // Services returns kAudioQueueErr_InvalidParameter (-66670) in this
-    // case, which we approximate with kAudioQueueErr_InvalidProperty.
-    if in_param_id != kAudioQueueParam_Volume {
-        log!(
-            "Warning: AudioQueueGetParameter: unsupported param id {}; \
-             returning 0.",
-            in_param_id
-        );
-        env.mem.write(out_value, 0.0);
-        return kAudioQueueErr_InvalidProperty;
-    }
-
     let state = State::get(&mut env.framework_state);
 
     let host_object = match state.audio_queues.get_mut(&in_aq) {
@@ -290,9 +310,28 @@ pub fn AudioQueueGetParameter(
         None => return 0,
     };
 
-    env.mem.write(out_value, host_object.volume);
-
-    0 // success
+    match in_param_id {
+        kAudioQueueParam_Volume => {
+            env.mem.write(out_value, host_object.volume);
+            0
+        }
+        kAudioQueueParam_Pan => {
+            env.mem.write(out_value, host_object.pan);
+            0
+        }
+        // Real Audio Queue Services returns kAudioQueueErr_InvalidParameter
+        // (-66670) in this case, which we approximate with
+        // kAudioQueueErr_InvalidProperty.
+        _ => {
+            log!(
+                "Warning: AudioQueueGetParameter: unsupported param id {}; \
+                 returning 0.",
+                in_param_id
+            );
+            env.mem.write(out_value, 0.0);
+            kAudioQueueErr_InvalidProperty
+        }
+    }
 }
 
 pub fn AudioQueueSetParameter(
@@ -310,26 +349,52 @@ pub fn AudioQueueSetParameter(
         None => return 0,
     };
 
-    host_object.volume = in_value;
-    log_dbg!(
-        "AudioQueueSetParameter kAudioQueueParam_Volume is set to {}",
-        host_object.volume
-    );
-
-    if let Some(al_source) = host_object.al_source {
-        let context = env
-            .framework_state
-            .audio_toolbox
-            .make_al_context_current(&mut env.openal_manager);
-
-        let in_value = in_value.clamp(0.0, 1.0);
-
-        unsafe {
-            context.Sourcef(al_source, al::AL_MAX_GAIN, in_value);
+    match in_param_id {
+        kAudioQueueParam_Volume => {
+            host_object.volume = in_value;
+            let al_source = host_object.al_source;
+            log_dbg!(
+                "AudioQueueSetParameter kAudioQueueParam_Volume is set to {}",
+                in_value
+            );
+            if let Some(al_source) = al_source {
+                let context = env
+                    .framework_state
+                    .audio_toolbox
+                    .make_al_context_current(&mut env.openal_manager);
+                let clamped = in_value.clamp(0.0, 1.0);
+                unsafe {
+                    context.Sourcef(al_source, al::AL_MAX_GAIN, clamped);
+                }
+            }
+            0
+        }
+        kAudioQueueParam_Pan => {
+            let clamped = in_value.clamp(-1.0, 1.0);
+            host_object.pan = clamped;
+            let al_source = host_object.al_source;
+            log_dbg!(
+                "AudioQueueSetParameter kAudioQueueParam_Pan is set to {}",
+                clamped
+            );
+            if let Some(al_source) = al_source {
+                let context = env
+                    .framework_state
+                    .audio_toolbox
+                    .make_al_context_current(&mut env.openal_manager);
+                apply_al_pan(&context, al_source, clamped);
+            }
+            0
+        }
+        _ => {
+            log!(
+                "Warning: AudioQueueSetParameter: unsupported param id {}; \
+                 ignoring.",
+                in_param_id
+            );
+            kAudioQueueErr_InvalidProperty
         }
     }
-
-    0 // success
 }
 
 fn AudioQueueAllocateBufferWithPacketDescriptions(
@@ -1111,6 +1176,7 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
 
     if host_object.al_source.is_none() {
         let volume = host_object.volume.clamp(0.0, 1.0);
+        let pan = host_object.pan.clamp(-1.0, 1.0);
         let mut al_source = 0;
 
         unsafe {
@@ -1118,6 +1184,7 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
             context.Sourcef(al_source, al::AL_MAX_GAIN, volume);
             assert!(context.GetError() == 0);
         };
+        apply_al_pan(&context, al_source, pan);
         host_object.al_source = Some(al_source);
     }
     let al_source = host_object.al_source.unwrap();
@@ -1668,6 +1735,7 @@ pub fn AudioQueueNewInput(
         callback_user_data: in_user_data,
         run_loop: in_callback_run_loop,
         volume: 1.0,
+        pan: 0.0,
         buffers: Vec::new(),
         buffer_queue: VecDeque::new(),
         is_running: AudioQueueIsRunning::Stopped,
