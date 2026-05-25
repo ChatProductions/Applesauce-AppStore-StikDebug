@@ -386,7 +386,7 @@ CFTimeInterval CACurrentMediaTime();
 + (void)setAnimationDuration:(CFTimeInterval)duration;
 + (id)animationTimingFunction;
 + (void)setAnimationTimingFunction:
-   (CAMediaTimingFunction *)animation_timing_function;
+    (CAMediaTimingFunction *)animation_timing_function;
 @end
 
 // UIKit
