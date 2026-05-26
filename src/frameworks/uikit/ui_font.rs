@@ -12,7 +12,7 @@ use crate::frameworks::core_graphics::cg_bitmap_context::CGBitmapContextDrawer;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{autorelease, id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 use crate::Environment;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -129,6 +129,84 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// preferredFontForTextStyle: (iOS 7+) — sizes per Apple's documented
+// defaults for the Large content size category. See:
+// https://developer.apple.com/documentation/uikit/uifont/textstyle
++ (id)preferredFontForTextStyle:(id)style { // NSString*
+    let style_name = if style != nil {
+        to_rust_string(env, style).into_owned()
+    } else {
+        String::new()
+    };
+    let (size, bold) = match style_name.as_str() {
+        "UICTFontTextStyleLargeTitle" | "UIFontTextStyleLargeTitle" => (34.0, false),
+        "UICTFontTextStyleTitle0"     | "UIFontTextStyleTitle1"     => (28.0, false),
+        "UICTFontTextStyleTitle1"     | "UIFontTextStyleTitle2"     => (22.0, false),
+        "UICTFontTextStyleTitle2"     | "UIFontTextStyleTitle3"     => (20.0, false),
+        "UICTFontTextStyleHeadline"   | "UIFontTextStyleHeadline"   => (17.0, true),
+        "UICTFontTextStyleBody"       | "UIFontTextStyleBody"       => (17.0, false),
+        "UICTFontTextStyleCallout"    | "UIFontTextStyleCallout"    => (16.0, false),
+        "UICTFontTextStyleSubhead"    | "UIFontTextStyleSubheadline"=> (15.0, false),
+        "UICTFontTextStyleFootnote"   | "UIFontTextStyleFootnote"   => (13.0, false),
+        "UICTFontTextStyleCaption1"   | "UIFontTextStyleCaption1"   => (12.0, false),
+        "UICTFontTextStyleCaption2"   | "UIFontTextStyleCaption2"   => (11.0, false),
+        // Apple's docs: an unknown style falls back to Body size.
+        _ => (17.0, false),
+    };
+    if bold {
+        msg_class![env; UIFont boldSystemFontOfSize:(size as CGFloat)]
+    } else {
+        msg_class![env; UIFont systemFontOfSize:(size as CGFloat)]
+    }
+}
+
+// familyNames / fontNamesForFamilyName: — these enumerate every font family
+// the emulator can serve. The three families below cover Apple's documented
+// iPhone OS 2.x default set (Helvetica, Times New Roman, Courier New) which
+// is what touchHLE actually has fallback glyph tables for.
++ (id)familyNames {
+    let names = ["Courier New", "Helvetica", "Times New Roman"];
+    let arr: id = msg_class![env; NSMutableArray new];
+    for name in names {
+        let ns = get_static_str(env, name);
+        let _: () = msg![env; arr addObject:ns];
+    }
+    autorelease(env, arr)
+}
+
++ (id)fontNamesForFamilyName:(id)family_name { // NSString*
+    if family_name == nil { return nil; }
+    let s = to_rust_string(env, family_name).into_owned();
+    let names: &[&str] = match s.as_str() {
+        "Courier New" => &[
+            "CourierNewPSMT",
+            "CourierNewPS-BoldMT",
+            "CourierNewPS-ItalicMT",
+            "CourierNewPS-BoldItalicMT",
+        ],
+        "Helvetica" => &[
+            "Helvetica",
+            "Helvetica-Bold",
+            "Helvetica-Oblique",
+            "Helvetica-BoldOblique",
+        ],
+        "Times New Roman" => &[
+            "TimesNewRomanPSMT",
+            "TimesNewRomanPS-BoldMT",
+            "TimesNewRomanPS-ItalicMT",
+            "TimesNewRomanPS-BoldItalicMT",
+        ],
+        // Apple returns an empty array for unknown families; matching that.
+        _ => &[],
+    };
+    let arr: id = msg_class![env; NSMutableArray new];
+    for &name in names {
+        let ns = get_static_str(env, name);
+        let _: () = msg![env; arr addObject:ns];
+    }
+    autorelease(env, arr)
+}
+
 + (id)italicSystemFontOfSize:(CGFloat)size {
     let host_object = UIFontHostObject {
         size,
@@ -181,6 +259,101 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIFontHostObject>(this).kind = kind;
 
     this
+}
+
+// MARK: - Typography metrics
+//
+// These are derived from the underlying font's ascent and the documented
+// proportions for the iOS system fonts (Helvetica / Helvetica Neue). For
+// fonts where we don't have native metrics they are approximations rather
+// than measured values.
+
+- (CGFloat)capHeight {
+    let (size, kind) = {
+        let host_object = env.objc.borrow::<UIFontHostObject>(this);
+        (host_object.size, host_object.kind)
+    };
+    let font = env.framework_state.uikit.ui_font.get_font_by_kind(kind);
+    // Cap height is typically ~73% of the ascent for Helvetica-family fonts.
+    (font.ascent(size) * 0.73).round()
+}
+
+- (CGFloat)xHeight {
+    let (size, kind) = {
+        let host_object = env.objc.borrow::<UIFontHostObject>(this);
+        (host_object.size, host_object.kind)
+    };
+    let font = env.framework_state.uikit.ui_font.get_font_by_kind(kind);
+    // X-height is typically ~54% of the ascent for Helvetica-family fonts.
+    (font.ascent(size) * 0.54).round()
+}
+
+- (CGFloat)underlinePosition {
+    // Apple specifies a negative offset from the baseline. For Helvetica at
+    // 17pt the documented value is approximately -1.7; we generalize that
+    // as -ceil(pointSize / 10), clamped so the absolute value is at least 1.
+    let size = env.objc.borrow::<UIFontHostObject>(this).size;
+    -(size * 0.1).round().max(1.0)
+}
+
+- (CGFloat)underlineThickness {
+    // Roughly 1/14 of the point size, minimum 1pt — matches what iOS
+    // reports for Helvetica.
+    let size = env.objc.borrow::<UIFontHostObject>(this).size;
+    (size / 14.0).round().max(1.0)
+}
+
+- (CGFloat)italicAngle {
+    let kind = env.objc.borrow::<UIFontHostObject>(this).kind;
+    match kind {
+        FontKind::SansItalic
+        | FontKind::SansBoldItalic
+        | FontKind::SerifItalic
+        | FontKind::SerifBoldItalic
+        | FontKind::MonoItalic
+        | FontKind::MonoBoldItalic => -12.0, // degrees, matches Helvetica-Oblique
+        _ => 0.0,
+    }
+}
+
+// NSCopying — UIFont is immutable, so `-copy` returns `self` retained, the
+// same shortcut Apple documents.
+- (id)copyWithZone:(NSZonePtr)_zone {
+    crate::objc::retain(env, this)
+}
+
+- (id)description {
+    let (size, kind) = {
+        let host_object = env.objc.borrow::<UIFontHostObject>(this);
+        (host_object.size, host_object.kind)
+    };
+    let name = font_kind_to_name(kind);
+    let s = format!(
+        "<UICTFont: {:?}; font-family: \"{}\"; font-weight: normal; \
+         font-style: normal; font-size: {} pt>",
+        this, name, size
+    );
+    let ns = from_rust_string(env, s);
+    autorelease(env, ns)
+}
+
+- (bool)isEqual:(id)other {
+    if this == other { return true; }
+    if other == nil  { return false; }
+    // Check that `other` is actually a UIFont before borrowing.
+    let ui_font_class = env.objc.get_known_class("UIFont", &mut env.mem);
+    let other_class: id = msg![env; other class];
+    let is_font: bool = msg![env; other_class isSubclassOfClass:ui_font_class];
+    if !is_font { return false; }
+    let (a_kind, a_size) = {
+        let a = env.objc.borrow::<UIFontHostObject>(this);
+        (a.kind, a.size)
+    };
+    let (b_kind, b_size) = {
+        let b = env.objc.borrow::<UIFontHostObject>(other);
+        (b.kind, b.size)
+    };
+    a_kind == b_kind && (a_size - b_size).abs() < 0.001
 }
 
 - (CGFloat)pointSize {

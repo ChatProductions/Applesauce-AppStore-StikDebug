@@ -50,6 +50,7 @@ extern kern_return_t thread_info(mach_port_t target_act, natural_t flavor,
 int test_AutoreleasePool(void);    // AutoReleasePoolTest.m
 int test_CGAffineTransform(void);  // CGAffineTransform.c
 int test_RespondsToSelector(void); // RespondsToSelector.m
+int test_Initialize(void);         // Initialize.m
 
 #ifndef DEFINE_ME_WHEN_BUILDING_ON_MACOS
 int test_cpp_virtual_inheritance(void); // CppVirtualInheritance.cpp
@@ -529,6 +530,41 @@ int test_vsnprintf() {
     return -52;
   }
   free(str);
+  // Test %ls (wide string, C locale)
+  str = str_format("%ls", L"hello");
+  if (strcmp(str, "hello") != 0) {
+    free(str);
+    return -53;
+  }
+  free(str);
+  // Test %ls with ASCII-only wide string
+  str = str_format("%ls", L"foo bar");
+  if (strcmp(str, "foo bar") != 0) {
+    free(str);
+    return -54;
+  }
+  free(str);
+  // Test %ls with empty wide string
+  str = str_format("%ls", L"");
+  if (strcmp(str, "") != 0) {
+    free(str);
+    return -55;
+  }
+  free(str);
+  // Test %ls NULL
+  str = str_format("%ls", (wchar_t *)NULL);
+  if (strcmp(str, "(null)") != 0) {
+    free(str);
+    return -56;
+  }
+  free(str);
+  // Test %ls embedded in a larger format string
+  str = str_format("pre-%ls-post", L"mid");
+  if (strcmp(str, "pre-mid-post") != 0) {
+    free(str);
+    return -57;
+  }
+  free(str);
 
   return 0;
 }
@@ -713,6 +749,145 @@ int test_sscanf() {
   matched = sscanf("123", "%3[a-z]", str);
   if (matched != 0)
     return -55;
+  // %hu (unsigned short) edge cases
+  unsigned short us, us2;
+  matched = sscanf("0", "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -56;
+  matched = sscanf("65535", "%hu", &us);
+  if (!(matched == 1 && us == 65535))
+    return -57;
+  // Truncation: 65536 wraps to 0 as unsigned short
+  matched = sscanf("65536", "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -58;
+  // Truncation: 65537 wraps to 1 as unsigned short
+  matched = sscanf("65537", "%hu", &us);
+  if (!(matched == 1 && us == 1))
+    return -59;
+  matched = sscanf("100 200", "%hu %hu", &us, &us2);
+  if (!(matched == 2 && us == 100 && us2 == 200))
+    return -60;
+  // width limits the conversion
+  matched = sscanf("12345", "%3hu", &us);
+  if (!(matched == 1 && us == 123))
+    return -61;
+  // %hhu (unsigned char) edge cases
+  unsigned char uc, uc2;
+  matched = sscanf("0", "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -62;
+  matched = sscanf("255", "%hhu", &uc);
+  if (!(matched == 1 && uc == 255))
+    return -63;
+  // Truncation: 256 wraps to 0 as unsigned char
+  matched = sscanf("256", "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -64;
+  // Truncation: 257 wraps to 1 as unsigned char
+  matched = sscanf("257", "%hhu", &uc);
+  if (!(matched == 1 && uc == 1))
+    return -65;
+  matched = sscanf("10 20", "%hhu %hhu", &uc, &uc2);
+  if (!(matched == 2 && uc == 10 && uc2 == 20))
+    return -66;
+  // width limits the conversion
+  matched = sscanf("12345", "%2hhu", &uc);
+  if (!(matched == 1 && uc == 12))
+    return -67;
+  // Overflow above UINT_MAX: per C semantics, the input is parsed as
+  // a wide unsigned and only the low bits are stored, so 0x100000000
+  // gives 0 in both u16 and u8.
+  matched = sscanf("4294967296", "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -68;
+  matched = sscanf("4294967296", "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -69;
+  // %hx (unsigned short, hex) truncation
+  matched = sscanf("ffff", "%hx", &us);
+  if (!(matched == 1 && us == 0xFFFF))
+    return -70;
+  // Truncation: 0x10000 wraps to 0 as unsigned short
+  matched = sscanf("10000", "%hx", &us);
+  if (!(matched == 1 && us == 0))
+    return -71;
+  // Truncation: 0x10001 wraps to 1 as unsigned short
+  matched = sscanf("10001", "%hx", &us);
+  if (!(matched == 1 && us == 1))
+    return -72;
+  // %hhx (unsigned char, hex) truncation
+  matched = sscanf("ff", "%hhx", &uc);
+  if (!(matched == 1 && uc == 0xFF))
+    return -73;
+  // Truncation: 0x100 wraps to 0 as unsigned char
+  matched = sscanf("100", "%hhx", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -74;
+  // Truncation: 0x101 wraps to 1 as unsigned char
+  matched = sscanf("101", "%hhx", &uc);
+  if (!(matched == 1 && uc == 1))
+    return -75;
+  // %hd (signed short) edge cases
+  short ss, ss2;
+  matched = sscanf("0", "%hd", &ss);
+  if (!(matched == 1 && ss == 0))
+    return -76;
+  matched = sscanf("32767", "%hd", &ss);
+  if (!(matched == 1 && ss == 32767))
+    return -77;
+  matched = sscanf("-32768", "%hd", &ss);
+  if (!(matched == 1 && ss == -32768))
+    return -78;
+  // Truncation: 32768 wraps to -32768 as signed short
+  matched = sscanf("32768", "%hd", &ss);
+  if (!(matched == 1 && ss == -32768))
+    return -79;
+  // Truncation: -32769 wraps to 32767 as signed short
+  matched = sscanf("-32769", "%hd", &ss);
+  if (!(matched == 1 && ss == 32767))
+    return -80;
+  matched = sscanf("-100 200", "%hd %hd", &ss, &ss2);
+  if (!(matched == 2 && ss == -100 && ss2 == 200))
+    return -81;
+  // width limits the conversion
+  matched = sscanf("12345", "%3hd", &ss);
+  if (!(matched == 1 && ss == 123))
+    return -82;
+  // width counts the sign character
+  matched = sscanf("-12345", "%4hd", &ss);
+  if (!(matched == 1 && ss == -123))
+    return -83;
+  // %hhd (signed char) edge cases
+  signed char sc, sc2;
+  matched = sscanf("0", "%hhd", &sc);
+  if (!(matched == 1 && sc == 0))
+    return -84;
+  matched = sscanf("127", "%hhd", &sc);
+  if (!(matched == 1 && sc == 127))
+    return -85;
+  matched = sscanf("-128", "%hhd", &sc);
+  if (!(matched == 1 && sc == -128))
+    return -86;
+  // Truncation: 128 wraps to -128 as signed char
+  matched = sscanf("128", "%hhd", &sc);
+  if (!(matched == 1 && sc == -128))
+    return -87;
+  // Truncation: -129 wraps to 127 as signed char
+  matched = sscanf("-129", "%hhd", &sc);
+  if (!(matched == 1 && sc == 127))
+    return -88;
+  matched = sscanf("-10 20", "%hhd %hhd", &sc, &sc2);
+  if (!(matched == 2 && sc == -10 && sc2 == 20))
+    return -89;
+  // width limits the conversion
+  matched = sscanf("12345", "%2hhd", &sc);
+  if (!(matched == 1 && sc == 12))
+    return -90;
+  // width counts the sign character
+  matched = sscanf("-12345", "%3hhd", &sc);
+  if (!(matched == 1 && sc == -12))
+    return -91;
   return 0;
 }
 
@@ -2307,6 +2482,218 @@ int test_fscanf_new() {
   matched = fscanf(file, "%g", &f);
   if (!(matched == 1 && f == 123.0f))
     return -44;
+  SKIP_LINE(file);
+
+  // %hu (unsigned short) edge cases
+  unsigned short us, us2;
+  matched = fscanf(file, "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -45;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hu", &us);
+  if (!(matched == 1 && us == 65535))
+    return -46;
+  SKIP_LINE(file);
+
+  // Truncation: 65536 wraps to 0 as unsigned short
+  matched = fscanf(file, "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -47;
+  SKIP_LINE(file);
+
+  // Truncation: 65537 wraps to 1 as unsigned short
+  matched = fscanf(file, "%hu", &us);
+  if (!(matched == 1 && us == 1))
+    return -48;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hu %hu", &us, &us2);
+  if (!(matched == 2 && us == 100 && us2 == 200))
+    return -49;
+  SKIP_LINE(file);
+
+  // width limits the conversion
+  matched = fscanf(file, "%3hu", &us);
+  if (!(matched == 1 && us == 123))
+    return -50;
+  SKIP_LINE(file);
+
+  // %hhu (unsigned char) edge cases
+  unsigned char uc, uc2;
+  matched = fscanf(file, "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -51;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhu", &uc);
+  if (!(matched == 1 && uc == 255))
+    return -52;
+  SKIP_LINE(file);
+
+  // Truncation: 256 wraps to 0 as unsigned char
+  matched = fscanf(file, "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -53;
+  SKIP_LINE(file);
+
+  // Truncation: 257 wraps to 1 as unsigned char
+  matched = fscanf(file, "%hhu", &uc);
+  if (!(matched == 1 && uc == 1))
+    return -54;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhu %hhu", &uc, &uc2);
+  if (!(matched == 2 && uc == 10 && uc2 == 20))
+    return -55;
+  SKIP_LINE(file);
+
+  // width limits the conversion
+  matched = fscanf(file, "%2hhu", &uc);
+  if (!(matched == 1 && uc == 12))
+    return -56;
+  SKIP_LINE(file);
+
+  // Overflow above UINT_MAX: per C semantics, the input is parsed as
+  // a wide unsigned and only the low bits are stored, so 0x100000000
+  // gives 0 in both u16 and u8.
+  matched = fscanf(file, "%hu", &us);
+  if (!(matched == 1 && us == 0))
+    return -57;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhu", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -58;
+  SKIP_LINE(file);
+
+  // %hx (unsigned short, hex) truncation
+  matched = fscanf(file, "%hx", &us);
+  if (!(matched == 1 && us == 0xFFFF))
+    return -59;
+  SKIP_LINE(file);
+
+  // Truncation: 0x10000 wraps to 0 as unsigned short
+  matched = fscanf(file, "%hx", &us);
+  if (!(matched == 1 && us == 0))
+    return -60;
+  SKIP_LINE(file);
+
+  // Truncation: 0x10001 wraps to 1 as unsigned short
+  matched = fscanf(file, "%hx", &us);
+  if (!(matched == 1 && us == 1))
+    return -61;
+  SKIP_LINE(file);
+
+  // %hhx (unsigned char, hex) truncation
+  matched = fscanf(file, "%hhx", &uc);
+  if (!(matched == 1 && uc == 0xFF))
+    return -62;
+  SKIP_LINE(file);
+
+  // Truncation: 0x100 wraps to 0 as unsigned char
+  matched = fscanf(file, "%hhx", &uc);
+  if (!(matched == 1 && uc == 0))
+    return -63;
+  SKIP_LINE(file);
+
+  // Truncation: 0x101 wraps to 1 as unsigned char
+  matched = fscanf(file, "%hhx", &uc);
+  if (!(matched == 1 && uc == 1))
+    return -64;
+  SKIP_LINE(file);
+
+  // %hd (signed short) edge cases
+  short ss, ss2;
+  matched = fscanf(file, "%hd", &ss);
+  if (!(matched == 1 && ss == 0))
+    return -65;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hd", &ss);
+  if (!(matched == 1 && ss == 32767))
+    return -66;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hd", &ss);
+  if (!(matched == 1 && ss == -32768))
+    return -67;
+  SKIP_LINE(file);
+
+  // Truncation: 32768 wraps to -32768 as signed short
+  matched = fscanf(file, "%hd", &ss);
+  if (!(matched == 1 && ss == -32768))
+    return -68;
+  SKIP_LINE(file);
+
+  // Truncation: -32769 wraps to 32767 as signed short
+  matched = fscanf(file, "%hd", &ss);
+  if (!(matched == 1 && ss == 32767))
+    return -69;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hd %hd", &ss, &ss2);
+  if (!(matched == 2 && ss == -100 && ss2 == 200))
+    return -70;
+  SKIP_LINE(file);
+
+  // width limits the conversion
+  matched = fscanf(file, "%3hd", &ss);
+  if (!(matched == 1 && ss == 123))
+    return -71;
+  SKIP_LINE(file);
+
+  // width counts the sign character
+  matched = fscanf(file, "%4hd", &ss);
+  if (!(matched == 1 && ss == -123))
+    return -72;
+  SKIP_LINE(file);
+
+  // %hhd (signed char) edge cases
+  signed char sc, sc2;
+  matched = fscanf(file, "%hhd", &sc);
+  if (!(matched == 1 && sc == 0))
+    return -73;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhd", &sc);
+  if (!(matched == 1 && sc == 127))
+    return -74;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhd", &sc);
+  if (!(matched == 1 && sc == -128))
+    return -75;
+  SKIP_LINE(file);
+
+  // Truncation: 128 wraps to -128 as signed char
+  matched = fscanf(file, "%hhd", &sc);
+  if (!(matched == 1 && sc == -128))
+    return -76;
+  SKIP_LINE(file);
+
+  // Truncation: -129 wraps to 127 as signed char
+  matched = fscanf(file, "%hhd", &sc);
+  if (!(matched == 1 && sc == 127))
+    return -77;
+  SKIP_LINE(file);
+
+  matched = fscanf(file, "%hhd %hhd", &sc, &sc2);
+  if (!(matched == 2 && sc == -10 && sc2 == 20))
+    return -78;
+  SKIP_LINE(file);
+
+  // width limits the conversion
+  matched = fscanf(file, "%2hhd", &sc);
+  if (!(matched == 1 && sc == 12))
+    return -79;
+  SKIP_LINE(file);
+
+  // width counts the sign character
+  matched = fscanf(file, "%3hhd", &sc);
+  if (!(matched == 1 && sc == -12))
+    return -80;
+  SKIP_LINE(file);
 
   fclose(file);
   return 0;
@@ -2452,6 +2839,272 @@ int test_fwrite() {
   }
   return 0;
 }
+
+// === flockfile / funlockfile tests ===
+
+int test_flockfile_basic() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  flockfile(file);
+  funlockfile(file);
+
+  fclose(file);
+  return 0;
+}
+
+// flockfile is required to be recursive: the same thread may acquire the
+// lock multiple times and must release it the same number of times.
+int test_flockfile_recursive() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  flockfile(file);
+  flockfile(file);
+  flockfile(file);
+  funlockfile(file);
+  funlockfile(file);
+  funlockfile(file);
+
+  // After unlocking the matching number of times, the stream must be
+  // available again, so ftrylockfile must succeed.
+  if (ftrylockfile(file) != 0) {
+    fclose(file);
+    return -2;
+  }
+  funlockfile(file);
+
+  fclose(file);
+  return 0;
+}
+
+int test_ftrylockfile_unlocked() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  if (ftrylockfile(file) != 0) {
+    fclose(file);
+    return -2;
+  }
+  funlockfile(file);
+
+  fclose(file);
+  return 0;
+}
+
+struct ftrylockfile_args {
+  FILE *file;
+  int result;
+};
+
+void *ftrylockfile_other_thread(void *arg) {
+  struct ftrylockfile_args *a = arg;
+  a->result = ftrylockfile(a->file);
+  // If we somehow obtained the lock (we shouldn't), release it so the
+  // main thread is not left blocked.
+  if (a->result == 0)
+    funlockfile(a->file);
+  return NULL;
+}
+
+// When a stream is locked by one thread, ftrylockfile from another thread
+// must fail (return non-zero).
+int test_ftrylockfile_locked_by_other_thread() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  flockfile(file);
+
+  struct ftrylockfile_args args = {file, -1};
+  pthread_t p;
+  if (pthread_create(&p, NULL, ftrylockfile_other_thread, &args) != 0) {
+    funlockfile(file);
+    fclose(file);
+    return -2;
+  }
+  if (pthread_join(p, NULL) != 0) {
+    funlockfile(file);
+    fclose(file);
+    return -3;
+  }
+
+  funlockfile(file);
+  fclose(file);
+
+  if (args.result == 0)
+    return -4;
+  return 0;
+}
+
+struct flockfile_blocking_args {
+  FILE *file;
+  pthread_mutex_t *mu;
+  pthread_cond_t *cv;
+  int *started;
+  int *acquired;
+};
+
+void *flockfile_blocking_thread(void *arg) {
+  struct flockfile_blocking_args *a = arg;
+
+  // Announce that we are about to attempt flockfile, so the main thread
+  // does not have to rely on a sleep to know we have made progress.
+  pthread_mutex_lock(a->mu);
+  *(a->started) = 1;
+  pthread_cond_signal(a->cv);
+  pthread_mutex_unlock(a->mu);
+
+  // This call must block until the main thread releases the stream lock.
+  flockfile(a->file);
+
+  pthread_mutex_lock(a->mu);
+  *(a->acquired) = 1;
+  pthread_cond_signal(a->cv);
+  pthread_mutex_unlock(a->mu);
+
+  funlockfile(a->file);
+  return NULL;
+}
+
+// flockfile must block another thread until the lock is released by the
+// thread that currently owns it.
+int test_flockfile_blocks_other_thread() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  pthread_mutex_t mu;
+  if (pthread_mutex_init(&mu, NULL) != 0) {
+    fclose(file);
+    return -2;
+  }
+  pthread_cond_t cv;
+  if (pthread_cond_init(&cv, NULL) != 0) {
+    pthread_mutex_destroy(&mu);
+    fclose(file);
+    return -3;
+  }
+
+  int started = 0;
+  int acquired = 0;
+  struct flockfile_blocking_args args = {file, &mu, &cv, &started, &acquired};
+
+  flockfile(file);
+
+  pthread_t p;
+  if (pthread_create(&p, NULL, flockfile_blocking_thread, &args) != 0) {
+    funlockfile(file);
+    pthread_cond_destroy(&cv);
+    pthread_mutex_destroy(&mu);
+    fclose(file);
+    return -4;
+  }
+
+  // Wait until the worker thread has reached the point right before
+  // flockfile, then yield so the scheduler can run it into the blocking
+  // call.
+  pthread_mutex_lock(&mu);
+  while (!started)
+    pthread_cond_wait(&cv, &mu);
+  pthread_mutex_unlock(&mu);
+  sched_yield();
+
+  pthread_mutex_lock(&mu);
+  int acquired_before_unlock = acquired;
+  pthread_mutex_unlock(&mu);
+
+  funlockfile(file);
+
+  // Once we have released the stream lock, the worker must eventually be
+  // able to acquire it. Wait for that signal rather than for thread join
+  // so that a hang in flockfile is attributed to this assertion.
+  pthread_mutex_lock(&mu);
+  while (!acquired)
+    pthread_cond_wait(&cv, &mu);
+  pthread_mutex_unlock(&mu);
+
+  if (pthread_join(p, NULL) != 0) {
+    pthread_cond_destroy(&cv);
+    pthread_mutex_destroy(&mu);
+    fclose(file);
+    return -5;
+  }
+
+  pthread_cond_destroy(&cv);
+  pthread_mutex_destroy(&mu);
+  fclose(file);
+
+  if (acquired_before_unlock != 0)
+    return -6;
+  if (acquired != 1)
+    return -7;
+  return 0;
+}
+
+// flockfile is most commonly used to make a sequence of stdio calls atomic
+// from the perspective of other threads. Verify that the main stdio entry
+// points work normally while the current thread holds the stream lock.
+int test_flockfile_io_while_locked() {
+  FILE *file = fopen("TestApp", "r");
+  if (file == NULL)
+    return -1;
+
+  flockfile(file);
+
+  // ftello must succeed and report the initial position.
+  if (ftello(file) != 0) {
+    funlockfile(file);
+    fclose(file);
+    return -2;
+  }
+
+  // fread must succeed and advance the position.
+  char buf[8];
+  size_t n = fread(buf, 1, sizeof(buf), file);
+  if (n != sizeof(buf)) {
+    funlockfile(file);
+    fclose(file);
+    return -3;
+  }
+  if (ftello(file) != (off_t)sizeof(buf)) {
+    funlockfile(file);
+    fclose(file);
+    return -4;
+  }
+
+  // fseeko must succeed and reset the position.
+  if (fseeko(file, 0, SEEK_SET) != 0) {
+    funlockfile(file);
+    fclose(file);
+    return -5;
+  }
+  if (ftello(file) != 0) {
+    funlockfile(file);
+    fclose(file);
+    return -6;
+  }
+
+  // feof / clearerr / fflush / fileno must not abort while the lock is
+  // held by the calling thread.
+  (void)feof(file);
+  clearerr(file);
+  (void)fflush(file);
+  if (fileno(file) < 0) {
+    funlockfile(file);
+    fclose(file);
+    return -7;
+  }
+
+  funlockfile(file);
+  fclose(file);
+  return 0;
+}
+
+// === end flockfile / funlockfile tests ===
 
 int test_open() {
   int fd;
@@ -4768,6 +5421,52 @@ int test_NSInvocation_pointer() {
 }
 @end
 
+@interface IntCoderObject : NSObject {
+@public
+  int value;
+}
+@end
+
+@implementation IntCoderObject
+- (instancetype)initWithValue:(int)v {
+  self = [super init];
+  value = v;
+  return self;
+}
+
+- (void)encodeWithCoder:(NSCoder *)coder {
+  [coder encodeInt:value forKey:[NSString stringWithUTF8String:"value"]];
+}
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+  self = [super init];
+  value = [coder decodeIntForKey:[NSString stringWithUTF8String:"value"]];
+  return self;
+}
+@end
+
+int test_NSKeyedArchiver_encodeIntForKey() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  int values[] = {12345, 0, -1, -12345, 0x7FFFFFFF, -0x80000000};
+  int count = sizeof(values) / sizeof(int);
+
+  for (int i = 0; i < count; i++) {
+    IntCoderObject *obj = [[IntCoderObject alloc] initWithValue:values[i]];
+    NSData *archivedData = [NSKeyedArchiver archivedDataWithRootObject:obj];
+    IntCoderObject *unarchivedObj =
+        [NSKeyedUnarchiver unarchiveObjectWithData:archivedData];
+
+    if (unarchivedObj->value != values[i]) {
+      [pool drain];
+      return -(i + 1);
+    }
+  }
+
+  [pool drain];
+  return 0;
+}
+
 int test_NSKeyedArchiver_NSKeyedUnarchiver() {
   NSAutoreleasePool *pool = [NSAutoreleasePool new];
   char buffer[100];
@@ -4791,6 +5490,73 @@ int test_NSKeyedArchiver_NSKeyedUnarchiver() {
   if (unarchivedObj->badKeyBuffer != NULL) {
     return -4;
   }
+  [pool drain];
+  return 0;
+}
+
+int test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  NSArray *fruits =
+      [NSArray arrayWithObjects:[NSString stringWithUTF8String:"apple"],
+                                [NSString stringWithUTF8String:"banana"],
+                                [NSString stringWithUTF8String:"cherry"], nil];
+  NSArray *colors =
+      [NSArray arrayWithObjects:[NSString stringWithUTF8String:"red"],
+                                [NSString stringWithUTF8String:"green"],
+                                [NSString stringWithUTF8String:"blue"], nil];
+  NSArray *values = [NSArray arrayWithObjects:fruits, colors, nil];
+  NSArray *keys =
+      [NSArray arrayWithObjects:[NSString stringWithUTF8String:"fruits"],
+                                [NSString stringWithUTF8String:"colors"], nil];
+  NSDictionary *dict = [NSDictionary dictionaryWithObjects:values forKeys:keys];
+
+  NSData *archivedData = [NSKeyedArchiver archivedDataWithRootObject:dict];
+  NSDictionary *unarchivedDict =
+      [NSKeyedUnarchiver unarchiveObjectWithData:archivedData];
+
+  if (![unarchivedDict isKindOfClass:[NSDictionary class]]) {
+    [pool drain];
+    return -1;
+  }
+  if ([unarchivedDict count] != [dict count]) {
+    [pool drain];
+    return -2;
+  }
+  if (![unarchivedDict isEqualToDictionary:dict]) {
+    [pool drain];
+    return -3;
+  }
+
+  NSArray *unarchivedFruits =
+      [unarchivedDict objectForKey:[NSString stringWithUTF8String:"fruits"]];
+  if (![unarchivedFruits isKindOfClass:[NSArray class]]) {
+    [pool drain];
+    return -4;
+  }
+  if (![unarchivedFruits isEqualToArray:fruits]) {
+    [pool drain];
+    return -5;
+  }
+
+  NSArray *unarchivedColors =
+      [unarchivedDict objectForKey:[NSString stringWithUTF8String:"colors"]];
+  if (![unarchivedColors isKindOfClass:[NSArray class]]) {
+    [pool drain];
+    return -6;
+  }
+  if (![unarchivedColors isEqualToArray:colors]) {
+    [pool drain];
+    return -7;
+  }
+
+  for (NSUInteger i = 0; i < [unarchivedFruits count]; i++) {
+    if (![[unarchivedFruits objectAtIndex:i] isKindOfClass:[NSString class]]) {
+      [pool drain];
+      return -8;
+    }
+  }
+
   [pool drain];
   return 0;
 }
@@ -5049,6 +5815,178 @@ int test_NSNumber_stringValue() {
   return 0;
 }
 
+@interface NotificationObserver : NSObject {
+@public
+  int receivedCount;
+  id lastNotification;
+}
+- (void)handleNotification:(NSNotification *)notification;
+@end
+
+@implementation NotificationObserver
+- (void)handleNotification:(NSNotification *)notification {
+  receivedCount++;
+  [lastNotification release];
+  lastNotification = [notification retain];
+}
+- (void)dealloc {
+  [lastNotification release];
+  [super dealloc];
+}
+@end
+
+// When name is nil, the observer should receive notifications of any name.
+int test_NSNotificationCenter_addObserver_nilName() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  NotificationObserver *observer = [NotificationObserver new];
+  SEL sel = NSSelectorFromString(
+      [NSString stringWithUTF8String:"handleNotification:"]);
+
+  [center addObserver:observer selector:sel name:nil object:nil];
+
+  [center postNotificationName:[NSString stringWithUTF8String:"FirstName"]
+                        object:nil];
+  if (observer->receivedCount != 1) {
+    [center removeObserver:observer];
+    [observer release];
+    [pool drain];
+    return -1;
+  }
+
+  [center postNotificationName:[NSString stringWithUTF8String:"SecondName"]
+                        object:nil];
+  if (observer->receivedCount != 2) {
+    [center removeObserver:observer];
+    [observer release];
+    [pool drain];
+    return -2;
+  }
+
+  // The last notification's name should match the most recently posted one.
+  NSString *lastName = [observer->lastNotification name];
+  NSString *expectedName = [NSString stringWithUTF8String:"SecondName"];
+  if (![lastName isEqualToString:expectedName]) {
+    [center removeObserver:observer];
+    [observer release];
+    [pool drain];
+    return -3;
+  }
+
+  [center removeObserver:observer];
+  [observer release];
+  [pool drain];
+  return 0;
+}
+
+// When name is nil but object is specified, only notifications from that
+// sender (with any name) should be delivered to the observer.
+int test_NSNotificationCenter_addObserver_nilName_withObject() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  NotificationObserver *observer = [NotificationObserver new];
+  SEL sel = NSSelectorFromString(
+      [NSString stringWithUTF8String:"handleNotification:"]);
+
+  NSObject *sender = [NSObject new];
+  NSObject *otherSender = [NSObject new];
+
+  [center addObserver:observer selector:sel name:nil object:sender];
+
+  // Notification from the matching sender should be delivered, regardless of
+  // the notification's name.
+  [center postNotificationName:[NSString stringWithUTF8String:"AnyName"]
+                        object:sender];
+  if (observer->receivedCount != 1) {
+    [center removeObserver:observer];
+    [sender release];
+    [otherSender release];
+    [observer release];
+    [pool drain];
+    return -1;
+  }
+
+  // Notification from a different sender should be filtered out, even though
+  // name is nil.
+  [center postNotificationName:[NSString stringWithUTF8String:"AnyName"]
+                        object:otherSender];
+  if (observer->receivedCount != 1) {
+    [center removeObserver:observer];
+    [sender release];
+    [otherSender release];
+    [observer release];
+    [pool drain];
+    return -2;
+  }
+
+  // A different notification name from the matching sender should still be
+  // delivered.
+  [center postNotificationName:[NSString stringWithUTF8String:"OtherName"]
+                        object:sender];
+  if (observer->receivedCount != 2) {
+    [center removeObserver:observer];
+    [sender release];
+    [otherSender release];
+    [observer release];
+    [pool drain];
+    return -3;
+  }
+
+  [center removeObserver:observer];
+  [sender release];
+  [otherSender release];
+  [observer release];
+  [pool drain];
+  return 0;
+}
+
+// An observer registered with name=nil should be properly unregistered by
+// removeObserver:, so it must not receive any further notifications.
+int test_NSNotificationCenter_addObserver_nilName_removeObserver() {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  NotificationObserver *observer = [NotificationObserver new];
+  SEL sel = NSSelectorFromString(
+      [NSString stringWithUTF8String:"handleNotification:"]);
+
+  [center addObserver:observer selector:sel name:nil object:nil];
+
+  [center postNotificationName:[NSString stringWithUTF8String:"BeforeRemove"]
+                        object:nil];
+  if (observer->receivedCount != 1) {
+    [center removeObserver:observer];
+    [observer release];
+    [pool drain];
+    return -1;
+  }
+
+  [center removeObserver:observer];
+
+  [center postNotificationName:[NSString stringWithUTF8String:"AfterRemove"]
+                        object:nil];
+  if (observer->receivedCount != 1) {
+    [observer release];
+    [pool drain];
+    return -2;
+  }
+
+  // Posting under a different name after removal should not deliver either.
+  [center postNotificationName:[NSString stringWithUTF8String:"OtherName"]
+                        object:nil];
+  if (observer->receivedCount != 1) {
+    [observer release];
+    [pool drain];
+    return -3;
+  }
+
+  [observer release];
+  [pool drain];
+  return 0;
+}
+
 // clang-format off
 #define FUNC_DEF(func)                                                         \
   { &func, #func }
@@ -5095,6 +6033,12 @@ struct {
     FUNC_DEF(test_mbstowcs),
     FUNC_DEF(test_CFMutableString),
     FUNC_DEF(test_fwrite),
+    FUNC_DEF(test_flockfile_basic),
+    FUNC_DEF(test_flockfile_recursive),
+    FUNC_DEF(test_ftrylockfile_unlocked),
+    FUNC_DEF(test_ftrylockfile_locked_by_other_thread),
+    FUNC_DEF(test_flockfile_blocks_other_thread),
+    FUNC_DEF(test_flockfile_io_while_locked),
     FUNC_DEF(test_open),
     FUNC_DEF(test_close),
     FUNC_DEF(test_cond_var),
@@ -5133,7 +6077,9 @@ struct {
     FUNC_DEF(test_strptime),
     FUNC_DEF(test_strftime),
     FUNC_DEF(test_RespondsToSelector),
+    FUNC_DEF(test_NSKeyedArchiver_encodeIntForKey),
     FUNC_DEF(test_NSKeyedArchiver_NSKeyedUnarchiver),
+    FUNC_DEF(test_NSKeyedArchiver_NSDictionary_of_NSArray_of_NSStrings),
     FUNC_DEF(test_AutoreleasePool),
     FUNC_DEF(test_NSNumber_stringValue),
     FUNC_DEF(test_NSMethodSignature),
@@ -5141,6 +6087,10 @@ struct {
     FUNC_DEF(test_NSInvocation_invokeWithTarget),
     FUNC_DEF(test_NSInvocation_retainArguments),
     FUNC_DEF(test_NSInvocation_pointer),
+    FUNC_DEF(test_Initialize),
+    FUNC_DEF(test_NSNotificationCenter_addObserver_nilName),
+    FUNC_DEF(test_NSNotificationCenter_addObserver_nilName_withObject),
+    FUNC_DEF(test_NSNotificationCenter_addObserver_nilName_removeObserver),
 };
 // clang-format on
 

@@ -93,9 +93,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("Applying game-specific hack for Cut the Rope: ignoring addObserver:selector:name:object: for fetchUpdateNotification:");
         return;
     }
-    // TODO: handle case where name is nil
-    // Usually a static string, so no real copy will happen
-    let name = ns_string::to_rust_string(env, name);
+    // Per Apple: `name = nil` means "match notifications of any name from
+    // `object`". We store nil-name observers under the empty-string key and
+    // merge them in at `-postNotification:` time.
+    let name: Cow<'static, str> = if name == nil {
+        Cow::Borrowed("")
+    } else {
+        ns_string::to_rust_string(env, name)
+    };
 
     log_dbg!(
         "[(NSNotificationCenter*){:?} addObserver:{:?} selector:{:?} name:{:?} object:{:?}",
@@ -251,18 +256,39 @@ pub const CLASSES: ClassExports = objc_classes! {
         notification,
     );
 
-    let name: id = msg![env; notification name];
-    // Usually a static string, so no real copy will happen
-    let name = ns_string::to_rust_string(env, name);
+    let name_id: id = msg![env; notification name];
+    // Usually a static string, so no real copy will happen.
+    let name: Cow<'static, str> = if name_id == nil {
+        Cow::Borrowed("")
+    } else {
+        ns_string::to_rust_string(env, name_id)
+    };
 
     let notification_poster: id = msg![env; notification object];
 
     log_dbg!("Notification is a {:?} posted by {:?}", name, notification_poster);
 
-    let host_obj = env.objc.borrow_mut::<NSNotificationCenterHostObject>(this);
-    let Some(observers) = host_obj.observers.get(&name).cloned() else {
-        return;
+    // Collect observers matching this notification: those registered for
+    // exactly this name plus those registered with `name = nil` (stored
+    // under the empty-string key). Both buckets are filtered by the
+    // `object` predicate inside the dispatch loop below.
+    let observers: Vec<Observer> = {
+        let host_obj = env.objc.borrow::<NSNotificationCenterHostObject>(this);
+        let mut merged: Vec<Observer> = Vec::new();
+        if let Some(named) = host_obj.observers.get(&name) {
+            merged.extend(named.iter().cloned());
+        }
+        // Avoid double-dispatching when the notification's own name is "".
+        if !name.is_empty() {
+            if let Some(any_name) = host_obj.observers.get(&Cow::Borrowed("")) {
+                merged.extend(any_name.iter().cloned());
+            }
+        }
+        merged
     };
+    if observers.is_empty() {
+        return;
+    }
     for Observer { observer, selector, object, block } in observers {
         // The object argument is a filter for which notification sources the
         // observer is interested in.
