@@ -975,6 +975,24 @@ impl GLES for GLES2Native<'_> {
         stride: GLsizei,
         pointer: *const GLvoid,
     ) {
+        // GL_HALF_FLOAT_OES (0x8D61) is the ES 2.0 OES-extension token for
+        // 16-bit floats in vertex attributes (GL_OES_vertex_half_float).
+        // In ES 3.0+ and desktop OpenGL the core token is GL_HALF_FLOAT
+        // (0x140B) — a different numeric value.  AMD's native GLES 3.x
+        // driver on Windows only accepts the core token, so passing 0x8D61
+        // yields GL_INVALID_ENUM every frame, breaking the stage render.
+        // We translate here so that apps using GLES 2.0 half-float vertex
+        // data (e.g. the Supercell SC3D engine used by Brawl Stars) work
+        // correctly on any host driver.
+        //
+        // Reference: https://registry.khronos.org/OpenGL/extensions/OES/OES_vertex_half_float.txt
+        const GL_HALF_FLOAT_OES: GLenum = 0x8D61;
+        const GL_HALF_FLOAT: GLenum = 0x140B;
+        let type_ = if type_ == GL_HALF_FLOAT_OES {
+            GL_HALF_FLOAT
+        } else {
+            type_
+        };
         gles2::VertexAttribPointer(index, size, type_, normalized, stride, pointer)
     }
     unsafe fn VertexAttrib1f(&mut self, index: GLuint, x: GLfloat) {
