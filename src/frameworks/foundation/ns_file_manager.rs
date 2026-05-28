@@ -233,7 +233,14 @@ fn NSSearchPathForDirectoriesInDomains(
     expand_tilde: bool,
 ) -> id {
     // Only user domain supported for now
-    if domain_mask != NSUserDomainMask && domain_mask != NSAllDomainsMask {
+    // On iOS the "local domain" resolves to the same location as the user domain.
+    // Accept NSLocalDomainMask without a warning. Any other mask is legitimately
+    // unsupported — log a warning but continue with user-domain paths (best effort).
+    // Reference: <https://developer.apple.com/documentation/foundation/1417717-nssearchpathfordirectoriesindoma>
+    if domain_mask != NSUserDomainMask
+        && domain_mask != NSLocalDomainMask
+        && domain_mask != NSAllDomainsMask
+    {
         log!(
             "Warning: NSSearchPathForDirectoriesInDomains called with unsupported domain_mask: {}",
             domain_mask
