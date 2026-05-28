@@ -353,6 +353,56 @@ fn ns_url_session_transfer_size_unknown(env: &mut Environment) -> ConstVoidPtr {
     ptr.cast().cast_const()
 }
 
+/// `kCMTimeRangeZero` — `CMTimeRange` (48 bytes) of all-zero bytes.
+///
+/// From `<CoreMedia/CMTime.h>`: `CMTimeRange = { CMTime start; CMTime
+/// duration; }`. `CMTime` is `{ int64 value; int32 timescale; uint32 flags;
+/// int64 epoch }` (=24 bytes), so the
+fn kcm_timetime_range_zero(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u8> = env.mem.alloc(48).cast();
+    env.mem.bytes_at_mut(ptr, 48).fill(0);
+    ptr.cast().cast_const()
+}
+
+/// `matrix_identity_float4x4` — 4×4 identity matrix in column-major f32 order.
+///
+/// From `<simd/matrix.h>`: 16× f32 in column-major order per Apple's simd.h
+/// convention, with 1.0f at the four diagonal positions (offsets 0, 5, 10,
+/// 15 in the 16-element matrix, i.e. byte offsets 0, 20, 40, 60).
+fn matrix_identity_float4x4(env: &mut Environment) -> ConstVoidPtr {
+    let base: MutPtr<u8> = env.mem.alloc(64).cast();
+    env.mem.bytes_at_mut(base, 64).fill(0);
+    // Write 1.0f32 at column-major diagonal positions: byte offsets 0, 20, 40, 60.
+    for &offset in &[0u32, 20, 40, 60] {
+        let p: MutPtr<f32> = MutPtr::from_bits(base.to_bits() + offset);
+        env.mem.write(p, 1.0f32);
+    }
+    base.cast().cast_const()
+}
+
+/// `UILayoutFittingCompressedSize` — `CGSize{0,0}` (8 bytes of zero) per
+/// Apple's `<UIKit/UIGeometry.h>`. This is the value AutoLayout uses
+/// when asking a view for its minimum size.
+fn ui_layout_fitting_compressed_size(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u8> = env.mem.alloc(8).cast();
+    env.mem.bytes_at_mut(ptr, 8).fill(0);
+    ptr.cast().cast_const()
+}
+
+/// `UILayoutFittingExpandedSize` — CGSize with two `CGFLOAT_MAX` values.
+///
+/// From `<UIKit/UIGeometry.h>`: `UILayoutFittingExpandedSize` uses
+/// `CGFLOAT_MAX` (i.e. `f32::MAX`) for both width and height.
+fn ui_layout_fitting_expanded_size(env: &mut Environment) -> ConstVoidPtr {
+    let base: MutPtr<u8> = env.mem.alloc(8).cast();
+    env.mem.bytes_at_mut(base, 8).fill(0);
+    for &offset in &[0u32, 4] {
+        let p: MutPtr<f32> = MutPtr::from_bits(base.to_bits() + offset);
+        env.mem.write(p, f32::MAX);
+    }
+    base.cast().cast_const()
+}
+
 pub const STUB_CONSTANTS: ConstantExports = &[
     // _NSLocalizedFailureReasonErrorKey and _NSURLErrorDomain are exported
     // from foundation::ns_error::CONSTANTS; not duplicated here.
@@ -1140,6 +1190,95 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_NSXMLParserErrorDomain",
         HostConstant::NSString("NSXMLParserErrorDomain"),
+    ),
+    // -----------------------------------------------------------------
+    // AVFoundation notification constants.
+    // From <AVFoundation/AVPlayerItem.h>: the value of these constants
+    // is exactly the constant name.
+    // -----------------------------------------------------------------
+    (
+        "AVPlayerItemTimeJumpedNotification",
+        HostConstant::NSString("AVPlayerItemTimeJumpedNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // Photos framework constants.
+    // -----------------------------------------------------------------
+    (
+        "PHImageErrorKey",
+        HostConstant::NSString("PHImageErrorKey"),
+    ),
+    // -----------------------------------------------------------------
+    // StoreKit framework constants.
+    // -----------------------------------------------------------------
+    (
+        "SKReceiptPropertyIsExpired",
+        HostConstant::NSString("SKReceiptPropertyIsExpired"),
+    ),
+    (
+        "SKReceiptPropertyIsRevoked",
+        HostConstant::NSString("SKReceiptPropertyIsRevoked"),
+    ),
+    (
+        "SKReceiptPropertyIsVolumePurchase",
+        HostConstant::NSString("SKReceiptPropertyIsVolumePurchase"),
+    ),
+    (
+        "SKStoreProductParameterProductIdentifier",
+        HostConstant::NSString("SKStoreProductParameterProductIdentifier"),
+    ),
+    // -----------------------------------------------------------------
+    // UIKit accessibility/input constants.
+    // -----------------------------------------------------------------
+    (
+        "UIAccessibilityScreenChangedNotification",
+        HostConstant::NSString("UIAccessibilityScreenChangedNotification"),
+    ),
+    (
+        "UITextInputCurrentInputModeDidChangeNotification",
+        HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // ImageIO constants.
+    // -----------------------------------------------------------------
+    (
+        "kCGImagePropertyExifDictionary",
+        HostConstant::NSString("{Exif}"),
+    ),
+    // -----------------------------------------------------------------
+    // Security constants.
+    // -----------------------------------------------------------------
+    (
+        "kSecAttrIsPermanent",
+        HostConstant::NSString("isper"),
+    ),
+    (
+        "kSecUseAuthenticationUI",
+        HostConstant::NSString("u_AuthUI"),
+    ),
+    (
+        "kSecUseAuthenticationUIFail",
+        HostConstant::NSString("u_AuthUIF"),
+    ),
+    // -----------------------------------------------------------------
+    // CMTime constants.
+    // -----------------------------------------------------------------
+    (
+        "kCMTimeRangeZero",
+        HostConstant::Custom(kcm_timetime_range_zero),
+    ),
+    // -----------------------------------------------------------------
+    // simd constants.
+    // -----------------------------------------------------------------
+    (
+        "matrix_identity_float4x4",
+        HostConstant::Custom(matrix_identity_float4x4),
+    ),
+    // -----------------------------------------------------------------
+    // sqlite3 constants.
+    // -----------------------------------------------------------------
+    (
+        "sqlite3_temp_directory",
+        HostConstant::NullPtr,
     ),
 ];
 
