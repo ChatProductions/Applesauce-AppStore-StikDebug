@@ -81,6 +81,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
++ (())attemptRotationToDeviceOrientation {
+    // Apple docs (UIViewController Class Reference):
+    //   "Attempts to rotate all windows to the orientation of the device.
+    //    Some view controllers may want to use app-specific conditions to
+    //    determine what interface orientations are supported. If your view
+    //    controller does this, when those conditions change your app should
+    //    call this class method. The system immediately attempts to rotate
+    //    to the new orientation."
+    //
+    // touchHLE does not currently perform live device-orientation
+    // rotations — the window is pinned to the orientation the app launched
+    // in. Re-querying supported orientations would therefore not result in
+    // any change, so the documented behavior reduces to a no-op for our
+    // host. We still log the call so app authors can see that their hook
+    // ran in case they wire up rotation handling later.
+    log_dbg!(
+        "+[UIViewController attemptRotationToDeviceOrientation]: no live \
+         rotation system; treating as a no-op."
+    );
+}
+
 - (id)navigationController {
     env.objc.borrow::<UIViewControllerHostObject>(this).navigation_controller
 }

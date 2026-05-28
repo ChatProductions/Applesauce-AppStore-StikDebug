@@ -200,6 +200,12 @@ pub const kCAValueFunctionTranslateX: &str = "translateX";
 pub const kCAValueFunctionTranslateY: &str = "translateY";
 pub const kCAValueFunctionTranslateZ: &str = "translateZ";
 
+// CALayer action key constants. From `CALayer.h`. Apps look up implicit
+// animations under these keys in a layer's `actions` dictionary (or via
+// `-[CALayer actionForKey:]`). The string values are exactly the key names.
+pub const kCAOnOrderIn: &str = "onOrderIn";
+pub const kCAOnOrderOut: &str = "onOrderOut";
+
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
     (
@@ -307,6 +313,8 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCATransitionFromBottom",
         HostConstant::NSString(kCATransitionFromBottom),
     ),
+    ("_kCAOnOrderIn", HostConstant::NSString(kCAOnOrderIn)),
+    ("_kCAOnOrderOut", HostConstant::NSString(kCAOnOrderOut)),
     (
         "_kCAValueFunctionRotateX",
         HostConstant::NSString(kCAValueFunctionRotateX),
@@ -704,6 +712,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)needsDisplay { env.objc.borrow::<CALayerHostObject>(this).needs_display }
 - (())setNeedsDisplay { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true; }
+
+- (())setNeedsDisplayInRect:(CGRect)_invalid_rect {
+    // Apple docs (CALayer Reference):
+    //   "Marks the region within the specified rectangle as needing to be
+    //    updated. ... You should call this method when the layer's contents
+    //    have changed and need to be redrawn."
+    //
+    // We currently track invalidation at whole-layer granularity rather
+    // than per-rect, so the documented conservative thing is to mark the
+    // entire layer as needing display. This still produces correct output
+    // (just at the cost of a full -displayLayer:/-drawLayer:inContext:
+    // round-trip instead of a partial one) and matches the iOS
+    // documentation's wording that "calling setNeedsDisplay(in:) with the
+    // bounds of the layer is equivalent to calling setNeedsDisplay()".
+    env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true;
+}
 
 - (bool)needsDisplayOnBoundsChange { env.objc.borrow::<CALayerHostObject>(this).needs_display_on_bounds_change }
 - (())setNeedsDisplayOnBoundsChange:(bool)value { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display_on_bounds_change = value; }

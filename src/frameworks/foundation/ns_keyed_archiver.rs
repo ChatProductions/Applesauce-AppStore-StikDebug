@@ -33,6 +33,13 @@ struct NSKeyedArchiverHostObject {
     current_key: Option<Uid>,
     /// map of id => Uid
     already_archived: HashMap<id, Uid>,
+    /// Scratch dictionary that receives writes attempted after `finishEncoding`
+    /// has been called. Apple's docs state that any `encode...` invocation
+    /// after `finishEncoding` raises `NSInvalidArgumentException`; rather than
+    /// risk crashing the guest by raising an exception from inside the
+    /// archiver, we log a warning and silently discard the write. This field
+    /// keeps the borrow signatures of the helpers stable.
+    discarded_scope: Dictionary,
 }
 impl HostObject for NSKeyedArchiverHostObject {}
 
@@ -57,7 +64,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         plist,
         encoded_data: nil,
         current_key: None,
-        already_archived
+        already_archived,
+        discarded_scope: Dictionary::new(),
     }), &mut env.mem)
 }
 
@@ -291,12 +299,29 @@ fn normalize_key(env: &mut Environment, key: id) -> Option<String> {
 }
 
 fn get_value_to_encode_for_current_key(env: &mut Environment, archiver: id) -> &mut Dictionary {
-    assert_eq!(
-        env.objc
-            .borrow::<NSKeyedArchiverHostObject>(archiver)
-            .encoded_data,
-        nil
-    );
+    // Apple's docs (Archives and Serializations Programming Guide,
+    // "NSKeyedArchiver Class Reference") explicitly state that any
+    // `encodeObject:forKey:`-style call made after `-finishEncoding` raises
+    // an NSInvalidArgumentException. Mirror the intent without crashing the
+    // emulator: detect the post-finish state, warn loudly, and hand the
+    // caller a scratch dictionary whose contents are thrown away. This keeps
+    // misbehaving apps alive instead of panicking the assert that lived here
+    // previously.
+    if env
+        .objc
+        .borrow::<NSKeyedArchiverHostObject>(archiver)
+        .encoded_data
+        != nil
+    {
+        log!(
+            "Warning: NSKeyedArchiver: encode method called after \
+             -finishEncoding (Apple raises NSInvalidArgumentException). \
+             Discarding the value to keep the guest alive."
+        );
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
+        host_object.discarded_scope.clear();
+        return &mut host_object.discarded_scope;
+    }
     let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
     match host_object.current_key {
         Some(uid) => host_object

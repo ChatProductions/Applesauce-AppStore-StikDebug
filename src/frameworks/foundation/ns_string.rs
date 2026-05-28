@@ -1062,6 +1062,65 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; file_manager fileSystemRepresentationWithPath:this]
 }
 
+- (bool)getFileSystemRepresentation:(MutPtr<u8>)buffer
+                          maxLength:(NSUInteger)max_length {
+    // Apple docs (NSString — "Working with Paths"):
+    // "Returns a Boolean value indicating whether the receiver can fit in
+    //  `maxLength` bytes, in the file-system representation. The buffer is
+    //  filled with the C-string in a format suitable for use with file-
+    //  system calls. Returns NO if `maxLength` would be exceeded (the
+    //  buffer contents are unspecified in that case)."
+    //
+    // On Darwin the file system representation is UTF-8 normalized to HFS+
+    // canonical form (NFD-ish). We don't perform Unicode normalization
+    // because our backing fs already operates on raw UTF-8, matching
+    // NSFileManager's `-fileSystemRepresentationWithPath:` above.
+    if buffer.is_null() {
+        return false;
+    }
+    let bytes = to_rust_string(env, this).into_owned().into_bytes();
+    // `maxLength` includes the room required for the terminating NUL, per
+    // the documented behavior of related getCString:maxLength: methods.
+    if (bytes.len() as u64) + 1 > max_length as u64 {
+        log_dbg!(
+            "-[NSString getFileSystemRepresentation:maxLength:]: \
+             string of {} bytes does not fit in buffer of {} bytes; \
+             returning NO without writing.",
+            bytes.len(),
+            max_length,
+        );
+        return false;
+    }
+    for (i, byte) in bytes.iter().enumerate() {
+        env.mem.write(buffer + i as GuestUSize, *byte);
+    }
+    env.mem.write(buffer + bytes.len() as GuestUSize, 0u8);
+    true
+}
+
+// Pragmatic compatibility shim — NOT in Apple's documented NSString API.
+//
+// A number of iPhone OS 2.x / 3.x applications shipped a small NSString
+// category (often as part of utility libraries like BBFramework, an
+// in-house "NSString+Path" helper, or copy-pasted ASIHTTPRequest code)
+// that forwards `fileExistsAtPath:` to NSFileManager. When the binary's
+// __objc_selrefs / __objc_methname section contains non-UTF-8 entries
+// — typical for partially-decrypted IPAs — `register_bin_categories`
+// skips the entry and the app then spams the runtime with thousands of
+// "_touchHLE_NSString does not respond to selector fileExistsAtPath:"
+// warnings while silently getting the wrong answer.
+//
+// Implementing the same forward as a host method on NSString gives the
+// correct semantics (file existence at `path`) and eliminates the log
+// flood. If the app's own category registers successfully, it takes
+// precedence over this implementation (per Apple's documented category
+// override behavior) so we don't change observable behavior for
+// correctly-loaded apps.
+- (bool)fileExistsAtPath:(id)path { // NSString *
+    let file_manager: id = msg_class![env; NSFileManager defaultManager];
+    msg![env; file_manager fileExistsAtPath:path]
+}
+
 - (id)stringByAddingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
     let str = to_rust_string(env, this);
     let bytes: std::borrow::Cow<[u8]> = match encoding {
@@ -1176,6 +1235,41 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (CGSize)drawAtPoint:(CGPoint)point forWidth:(CGFloat)width withFont:(id)font lineBreakMode:(UILineBreakMode)line_break_mode {
     let text = to_rust_string(env, this);
     ui_font::draw_at_point(env, font, &text, point, Some((width, line_break_mode)))
+}
+
+- (CGSize)drawAtPoint:(CGPoint)point
+            forWidth:(CGFloat)width
+             withFont:(id)font
+             fontSize:(CGFloat)font_size
+        lineBreakMode:(UILineBreakMode)line_break_mode
+   baselineAdjustment:(NSInteger)baseline_adjustment {
+    // Apple's UIStringDrawing.h: deprecated in iOS 7 but valid for the
+    // iPhone OS 2.x / 3.x applications touchHLE targets. The method draws
+    // the receiver into the current graphics context starting at `point`,
+    // bounded to `width`, with the font rescaled toward `fontSize` (never
+    // larger than the supplied font's pointSize) and using the given
+    // `lineBreakMode` / `baselineAdjustment` heuristics.
+    //
+    // Our `ui_font::draw_at_point` already handles the constrain-to-width
+    // path, so we just derive a sized copy of the font via
+    // `-[UIFont fontWithSize:]` (matching what UILabel does internally) and
+    // forward. The baselineAdjustment values
+    // (UIBaselineAdjustmentAlignBaselines=0, AlignCenters=1, None=2) shift
+    // the rendered baseline within the line box; since our renderer always
+    // pins to the line's baseline we honor the dominant case (0) directly
+    // and log the other two for visibility instead of silently misrendering.
+    if baseline_adjustment != 0 {
+        log_dbg!(
+            "-[NSString drawAtPoint:forWidth:withFont:fontSize:\
+             lineBreakMode:baselineAdjustment:]: baseline adjustment {} \
+             not yet differentiated from default (0); rendering with \
+             baseline alignment.",
+            baseline_adjustment,
+        );
+    }
+    let scaled_font: id = msg![env; font fontWithSize:font_size];
+    let text = to_rust_string(env, this);
+    ui_font::draw_at_point(env, scaled_font, &text, point, Some((width, line_break_mode)))
 }
 
 - (CGSize)drawInRect:(CGRect)rect withFont:(id)font {

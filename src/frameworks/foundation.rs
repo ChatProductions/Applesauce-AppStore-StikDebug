@@ -571,6 +571,157 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("kCFStreamSocketSecurityLevelNegotiatedSSL"),
     ),
     // -----------------------------------------------------------------
+    // NSStream SOCKS-proxy configuration keys (CFNetwork bridge).
+    // The values are the CFNetwork string names Apple's bridge layer
+    // uses internally (see <CFNetwork/CFSocketStream.h> and
+    // NSStream.h).
+    // -----------------------------------------------------------------
+    (
+        "_NSStreamSOCKSProxyConfigurationKey",
+        HostConstant::NSString("kCFStreamPropertySOCKSProxy"),
+    ),
+    (
+        "_NSStreamSOCKSProxyHostKey",
+        HostConstant::NSString("SOCKSProxy"),
+    ),
+    (
+        "_NSStreamSOCKSProxyPortKey",
+        HostConstant::NSString("SOCKSPort"),
+    ),
+    (
+        "_NSStreamSOCKSProxyVersionKey",
+        HostConstant::NSString("kCFStreamPropertySOCKSVersion"),
+    ),
+    (
+        "_NSStreamSOCKSProxyUserKey",
+        HostConstant::NSString("SOCKSUser"),
+    ),
+    (
+        "_NSStreamSOCKSProxyPasswordKey",
+        HostConstant::NSString("SOCKSPassword"),
+    ),
+    // SOCKS version sentinels.
+    (
+        "_NSStreamSOCKSProxyVersion4",
+        HostConstant::NSString("kCFStreamSocketSOCKSVersion4"),
+    ),
+    (
+        "_NSStreamSOCKSProxyVersion5",
+        HostConstant::NSString("kCFStreamSocketSOCKSVersion5"),
+    ),
+    // -----------------------------------------------------------------
+    // NSStream network service type keys (telephony hints).
+    // -----------------------------------------------------------------
+    (
+        "_NSStreamNetworkServiceType",
+        HostConstant::NSString("kCFStreamNetworkServiceType"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVoIP",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoIP"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVideo",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVideo"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeBackground",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeBackground"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVoice",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoice"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeCallSignaling",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeCallSignaling"),
+    ),
+    // -----------------------------------------------------------------
+    // NSAttributedString HTML/RTF import attribute keys
+    // (see UIKit's NSAttributedString.h "loading" category).
+    // -----------------------------------------------------------------
+    (
+        "_NSDocumentTypeDocumentAttribute",
+        HostConstant::NSString("DocumentType"),
+    ),
+    (
+        "_NSCharacterEncodingDocumentAttribute",
+        HostConstant::NSString("CharacterEncoding"),
+    ),
+    (
+        "_NSDefaultAttributesDocumentAttribute",
+        HostConstant::NSString("DefaultAttributes"),
+    ),
+    ("_NSHTMLTextDocumentType", HostConstant::NSString("NSHTML")),
+    (
+        "_NSPlainTextDocumentType",
+        HostConstant::NSString("NSPlainText"),
+    ),
+    ("_NSRTFTextDocumentType", HostConstant::NSString("NSRTF")),
+    (
+        "_NSRTFDTextDocumentType",
+        HostConstant::NSString("NSRTFD"),
+    ),
+    // -----------------------------------------------------------------
+    // NSProgress kind constants (NSProgress.h).
+    // -----------------------------------------------------------------
+    (
+        "_NSProgressKindFile",
+        HostConstant::NSString("NSProgressKindFile"),
+    ),
+    // -----------------------------------------------------------------
+    // CFError userInfo keys (CFError.h). They share storage with the
+    // toll-free-bridged NSError userInfo dictionary, so the documented
+    // literal values are exactly the NS*-prefixed names.
+    // -----------------------------------------------------------------
+    (
+        "_kCFErrorDescriptionKey",
+        HostConstant::NSString("NSDescription"),
+    ),
+    (
+        "_kCFErrorLocalizedDescriptionKey",
+        HostConstant::NSString("NSLocalizedDescription"),
+    ),
+    (
+        "_kCFErrorLocalizedFailureReasonKey",
+        HostConstant::NSString("NSLocalizedFailureReason"),
+    ),
+    (
+        "_kCFErrorLocalizedRecoverySuggestionKey",
+        HostConstant::NSString("NSLocalizedRecoverySuggestion"),
+    ),
+    (
+        "_kCFErrorUnderlyingErrorKey",
+        HostConstant::NSString("NSUnderlyingError"),
+    ),
+    (
+        "_kCFErrorURLKey",
+        HostConstant::NSString("NSURL"),
+    ),
+    (
+        "_kCFErrorFilePathKey",
+        HostConstant::NSString("NSFilePath"),
+    ),
+    // -----------------------------------------------------------------
+    // CFProxySupport.h: proxy dictionary key constants.
+    // -----------------------------------------------------------------
+    (
+        "_kCFProxyTypeAutoConfigurationJavaScript",
+        HostConstant::NSString("kCFProxyTypeAutoConfigurationJavaScript"),
+    ),
+    (
+        "_kCFProxyAutoConfigurationJavaScriptKey",
+        HostConstant::NSString("kCFProxyAutoConfigurationJavaScriptKey"),
+    ),
+    (
+        "_kCFProxyUsernameKey",
+        HostConstant::NSString("kCFProxyUsernameKey"),
+    ),
+    (
+        "_kCFProxyPasswordKey",
+        HostConstant::NSString("kCFProxyPasswordKey"),
+    ),
+    // -----------------------------------------------------------------
     // NSFileHandle notification names / userInfo keys.
     // -----------------------------------------------------------------
     (

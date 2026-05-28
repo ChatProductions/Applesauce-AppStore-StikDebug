@@ -1317,6 +1317,37 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+- (())setNeedsDisplayInRect:(CGRect)invalid_rect {
+    // Apple docs (UIView Reference, "Drawing and Updating the View"):
+    //   "Marks the specified rectangle of the receiver as needing to be
+    //    redrawn. invalidRect: The rectangular region of the receiver to
+    //    mark as invalid; it should be specified in the coordinate system
+    //    of the receiver."
+    //
+    // The view delegates the dirty rectangle to its backing CALayer; the
+    // next display cycle will only repaint the union of pending invalid
+    // rects (CALayer.setNeedsDisplayInRect: is documented to coalesce).
+    // We keep the same fast-out as -setNeedsDisplay: if neither -drawRect:
+    // nor -drawLayer:inContext: is overridden by this view's class, there
+    // is nothing to repaint and we can save the layer round-trip.
+    let this_class = ObjC::read_isa(this, &env.mem);
+    let ui_view_class = env.objc.get_known_class("UIView", &mut env.mem);
+
+    let draw_layer_sel = env.objc.lookup_selector("drawLayer:inContext:").unwrap();
+    let draw_rect_sel = env.objc.lookup_selector("drawRect:").unwrap();
+
+    if !(env.objc.class_overrides_method_of_superclass(this_class, draw_rect_sel, ui_view_class)
+        || env
+            .objc
+            .class_overrides_method_of_superclass(this_class, draw_layer_sel, ui_view_class))
+    {
+        return;
+    }
+
+    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    () = msg![env; layer setNeedsDisplayInRect:invalid_rect]
+}
+
 - (())setNeedsLayout { }
 
 - (CGRect)bounds {
