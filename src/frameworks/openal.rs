@@ -802,8 +802,8 @@ fn alDeleteSources(env: &mut Environment, n: ALsizei, sources: ConstPtr<ALuint>)
     };
     let sources = env.mem.ptr_at(sources, n_usize);
     let Some(context) = State::try_make_current(env) else {
-        log!(
-            "Попытка вызова alDeleteSources({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
+        log_dbg!(
+            "alDeleteSources({}, {:?}) called with no active context {:?} — no-op per OpenAL spec",
             n,
             sources,
             State::get(env).current_ctx
@@ -1063,8 +1063,8 @@ fn alDeleteBuffers(env: &mut Environment, n: ALsizei, buffers: ConstPtr<ALuint>)
     };
     let buffers = env.mem.ptr_at(buffers, n_usize);
     let Some(context) = State::try_make_current(env) else {
-        log!(
-            "Попытка вызова alDeleteBuffers({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
+        log_dbg!(
+            "alDeleteBuffers({}, {:?}) called with no active context {:?} — no-op per OpenAL spec",
             n,
             buffers,
             State::get(env).current_ctx

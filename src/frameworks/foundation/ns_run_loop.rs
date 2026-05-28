@@ -54,6 +54,10 @@ pub(crate) struct NSRunLoopHostObject {
     /// Strong references to `NSTimer*` in no particular order. Timers are owned
     /// by the run loop. The timer must remove itself when invalidated.
     timers: Vec<id>,
+    /// Strong references to `CFRunLoopSourceRef` objects (toll-free bridged
+    /// via `_touchHLE_CFRunLoopSource`) currently registered in this run
+    /// loop, per Apple's CFRunLoopAddSource semantics.
+    pub(crate) sources: Vec<id>,
     /// Set by CFRunLoopStop; cleared at the start of the next run.
     pub(crate) stopped: bool,
 }
@@ -440,6 +444,7 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
             audio_units: Vec::new(),
             audio_queues: Vec::new(),
             timers: Vec::new(),
+            sources: Vec::new(),
             stopped: false,
         });
         // TODO: is it OK to allocate static object for all threads,

@@ -770,6 +770,16 @@ impl Dyld {
                     mem.write(p + 15, 1u8);
                 }
                 p.cast().cast_const()
+            } else if name == "_objc_ehtype_vtable" {
+                // Apple libobjc (objc4) ships `objc_ehtype_vtable` as the
+                // Itanium-ABI C++ typeinfo vtable shared by every
+                // per-class `__objc_ehtype` struct used in Objective-C++
+                // `@catch (ObjCClass *)` blocks. touchHLE's `__cxa_throw`
+                // is a no-op (we never actually unwind), so the vtable is
+                // not consulted for type matching — but t
+                let p: MutPtr<u32> = mem.alloc(4).cast();
+                mem.write(p, 0);
+                p.cast().cast_const()
             } else if name == "_NDR_record" {
                 // MIG `NDR_record` is a 12-byte transfer-syntax descriptor
                 // that's part of the (unused-by-touchHLE) Mach IPC stack.
