@@ -19,6 +19,12 @@ struct CADisplayLinkHostObject {
     paused: bool,
     target: id,
     selector: Option<SEL>,
+    /// Number of frames between fires. Apple's CADisplayLink documentation
+    /// describes `frameInterval` as the number of frames that must pass
+    /// before the display link notifies the target again; the default is 1
+    /// and the value must be `>= 1`.
+    /// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648526-frameinterval>
+    frame_interval: NSInteger,
 }
 impl HostObject for CADisplayLinkHostObject {}
 
@@ -29,7 +35,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation CADisplayLink: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    env.objc.alloc_object(this, Box::new(CADisplayLinkHostObject::default()), &mut env.mem)
+    let mut host = CADisplayLinkHostObject::default();
+    // Per Apple's docs, the default frameInterval is 1.
+    host.frame_interval = 1;
+    env.objc.alloc_object(this, Box::new(host), &mut env.mem)
 }
 
 + (id)displayLinkWithTarget:(id)target selector:(SEL)sel {
@@ -112,12 +121,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<CADisplayLinkHostObject>(this).paused = paused;
 }
 
+- (NSInteger)frameInterval {
+    env.objc.borrow::<CADisplayLinkHostObject>(this).frame_interval
+}
+
 - (())setFrameInterval:(NSInteger)frameInterval {
     log_dbg!("[(CADisplayLink*){:?} setFrameInterval:{}]", this, frameInterval);
 
-    // Предотвращаем деление на 0 или отрицательные значения (безопаснее, чем
-    // assert)
+    // Apple docs state the value must be >= 1; clamp to keep guests alive
+    // rather than raising NSInvalidArgumentException.
     let safe_interval = frameInterval.max(1);
+    env.objc.borrow_mut::<CADisplayLinkHostObject>(this).frame_interval = safe_interval;
     let interval = safe_interval as f64 / 60.0;
 
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;

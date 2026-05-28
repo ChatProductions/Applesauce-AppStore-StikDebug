@@ -49,7 +49,7 @@ pub use classes::{
     objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
     objc_retainBlock, __objc_deallocOnMainThreadHelper,
     objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
-    protocol_getName, Class, ClassExports, ClassTemplate,
+    protocol_getName, objc_getClassList, protocol_conformsToProtocol, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
@@ -411,6 +411,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_setSuperclass(_, _)),
     export_c_func!(objc_getProtocol(_)),
     export_c_func!(protocol_getName(_)),
+    export_c_func!(objc_getClassList(_, _)),
+    export_c_func!(protocol_conformsToProtocol(_, _)),
     export_c_func!(objc_copyClassNamesForImage(_, _)),
     export_c_func!(object_getIndexedIvars(_)),
     // `_objc_deallocOnMainThreadHelper` (one leading underscore in the C

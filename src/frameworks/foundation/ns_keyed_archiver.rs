@@ -235,6 +235,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     scope.insert(key, Value::Data(data));
 }
 
+// MARK: - Non-keyed coding compatibility
+//
+// Apple's "Archives and Serializations Programming Guide" notes that
+// `NSKeyedArchiver` supports the older non-keyed NSCoder API by
+// auto-generating sequential keys (`$0`, `$1`, ...) within the current
+// encoding scope. Implementing these keeps NSCoding subclasses that
+// fall back to the non-keyed path working — for example NSNumber's
+// internal encoder, and a number of third-party SDKs (e.g. analytics
+// libraries that hand the archiver an opaque payload object).
+- (())encodeObject:(id)object { // NSCoding *
+    let key = next_positional_key(env, this);
+    encode_object_for_key(env, this, object, key);
+}
+
+// `encodeConditionalObject:` is meant to record a weak reference that
+// only gets serialized if the object is also archived elsewhere
+// unconditionally. Apple's docs explicitly call out that any subclass
+// "that does not support conditional encoding" must behave as
+// `encodeObject:`. NSKeyedArchiver provides true conditional encoding
+// only through the `forKey:` variant; the non-keyed flavour therefore
+// degrades to the same behaviour as `encodeObject:`.
+- (())encodeConditionalObject:(id)object { // NSCoding *
+    let key = next_positional_key(env, this);
+    encode_object_for_key(env, this, object, key);
+}
+
 - (())finishEncoding {
     let plist = &env.objc.borrow::<NSKeyedArchiverHostObject>(this).plist;
     let mut buffer = Vec::new();
@@ -401,6 +427,23 @@ fn encode_object(env: &mut Environment, archiver: id, object: id) -> Uid {
         }
 
         new_uid
+    }
+}
+
+/// Returns the next unused positional key (`"$0"`, `"$1"`, ...) inside
+/// the archiver's current encoding scope. Used by the non-keyed
+/// `encodeObject:` and `encodeValueOfObjCType:at:` paths so that
+/// fall-through NSCoder callers receive Apple-compatible auto-generated
+/// keys instead of clobbering each other.
+fn next_positional_key(env: &mut Environment, archiver: id) -> String {
+    let scope = get_value_to_encode_for_current_key(env, archiver);
+    let mut idx: u32 = 0;
+    loop {
+        let candidate = format!("${}", idx);
+        if !scope.contains_key(&candidate) {
+            return candidate;
+        }
+        idx += 1;
     }
 }
 
