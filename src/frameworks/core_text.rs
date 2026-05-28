@@ -33,7 +33,38 @@
 //! - `CTFontDescriptor.h`, `CTFont.h`, `CTFontTraits.h`,
 //!   `CTStringAttributes.h` (Apple SDK).
 
-use crate::dyld::{ConstantExports, HostConstant, HostDylib};
+use crate::dyld::{ConstantExports, FunctionExports, HostConstant, HostDylib, export_c_func};
+use crate::Environment;
+use crate::frameworks::core_graphics::CGFloat;
+use crate::mem::ConstVoidPtr;
+
+
+/// Opaque CoreText font reference.
+pub type CTFontRef = crate::objc::id;
+
+/// `CTFontRef CTFontCreateWithGraphicsFont(CGFontRef graphicsFont,
+///     CGFloat size, const CGAffineTransform *matrix,
+///     CTFontDescriptorRef attributes)`
+///
+/// Creates a CTFont from a CGFont.  CoreText glyph layout and metric queries
+/// are not currently implemented; returning NULL allows callers that check for
+/// nil to fall back gracefully (typically to UIKit text rendering).
+///
+/// Reference: <https://developer.apple.com/documentation/coretext/1509694-ctfontcreatewithgraphicsfont>
+fn CTFontCreateWithGraphicsFont(
+    _env: &mut Environment,
+    _graphics_font: crate::mem::ConstVoidPtr,  // CGFontRef (opaque)
+    _size: CGFloat,
+    _matrix: ConstVoidPtr,                       // const CGAffineTransform*
+    _attributes: crate::objc::id,               // CTFontDescriptorRef
+) -> CTFontRef {
+    log_dbg!("CTFontCreateWithGraphicsFont: returning NULL (not implemented)");
+    crate::objc::nil
+}
+
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(CTFontCreateWithGraphicsFont(_, _, _, _)),
+];
 
 pub const CONSTANTS: ConstantExports = &[
     // CTFontDescriptor.h
@@ -263,5 +294,5 @@ pub const DYLIB: HostDylib = HostDylib {
     aliases: &[],
     class_exports: &[],
     constant_exports: &[CONSTANTS],
-    function_exports: &[],
+    function_exports: &[FUNCTIONS],
 };
