@@ -38,7 +38,7 @@ pub use classes::{
     class_addMethod, class_copyIvarList, class_copyMethodList, class_copyPropertyList,
     class_copyProtocolList, class_getClassMethod, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getMethodImplementation_stret, class_getName,
-    class_getProperty, class_getSuperclass, class_replaceMethod, class_setSuperclass,
+    class_getProperty, class_getSuperclass, class_replaceMethod, class_respondsToSelector, class_setSuperclass,
     method_exchangeImplementations,
     method_getImplementation, method_getTypeEncoding, method_setImplementation, objc_storeStrong,
     objc_allocateClassPair, objc_autoreleasePoolPop,
@@ -76,6 +76,7 @@ use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setPropert
 use properties::{
     objc_setProperty_atomic_copy, objc_setProperty_nonatomic, objc_setProperty_nonatomic_copy,
 };
+use properties::objc_setProperty_atomic;
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -357,6 +358,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_setProperty(_, _, _, _, _, _)),
     export_c_func!(objc_setProperty_nonatomic_copy(_, _, _, _)),
     export_c_func!(objc_setProperty_atomic_copy(_, _, _, _)),
+    export_c_func!(objc_setProperty_atomic(_, _, _, _)),
     export_c_func!(objc_copyStruct(_, _, _, _, _)),
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
@@ -382,6 +384,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceSize(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(class_getClassMethod(_, _)),
+    export_c_func!(class_respondsToSelector(_, _)),
     export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_copyPropertyList(_, _)),

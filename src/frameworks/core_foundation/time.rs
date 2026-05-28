@@ -115,7 +115,7 @@ pub fn CFAbsoluteTimeGetGregorianDate(
         log!("Warning: CFAbsoluteTimeGetGregorianDate: non-GMT timezone ignored");
     }
     let time64 = apple_epoch()
-        .add(Duration::from_secs_f64(at))
+        .add(crate::frameworks::foundation::ns_time_interval_to_duration_or_zero(at))
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();

@@ -32,6 +32,8 @@ pub struct UILabelHostObject {
     line_break_mode: UILineBreakMode,
     number_of_lines: NSInteger,
     enabled: bool,
+    shadow_color: id,
+    shadow_offset: CGSize,
 }
 impl_HostObject_with_superclass!(UILabelHostObject);
 
@@ -47,6 +49,12 @@ impl Default for UILabelHostObject {
             line_break_mode: UILineBreakModeTailTruncation,
             number_of_lines: 1,
             enabled: true,
+            // Apple's documented defaults for UILabel:
+            // - shadowColor: nil (no shadow drawn)
+            // - shadowOffset: { width: 0, height: -1 } (one point above the
+            //   baseline, mirroring UIKit's behaviour on iOS 2.x–6.x).
+            shadow_color: nil,
+            shadow_offset: CGSize { width: 0.0, height: -1.0 },
         }
     }
 }
@@ -133,15 +141,41 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
-    let &UILabelHostObject { text, font, text_color, highlighted_text_color, .. } = env.objc.borrow(this);
+    let &UILabelHostObject { text, font, text_color, highlighted_text_color, shadow_color, .. } = env.objc.borrow(this);
     release(env, text);
     release(env, font);
     release(env, text_color);
     release(env, highlighted_text_color);
+    release(env, shadow_color);
     msg_super![env; this dealloc]
 }
 
-- (id)shadowOffset { nil }
+// MARK: - Shadow (UILabel + UIStringDrawing semantics)
+//
+// Apple documentation:
+//   - https://developer.apple.com/documentation/uikit/uilabel/1620539-shadowcolor
+//   - https://developer.apple.com/documentation/uikit/uilabel/1620546-shadowoffset
+//
+// `shadowColor` is a retained `UIColor` (nil = no shadow). `shadowOffset` is
+// a `CGSize` whose `height` is in *UIKit* coordinates: a negative value pulls
+// the shadow above the baseline (the iPhone OS default is { 0, -1 }).
+
+- (id)shadowColor { env.objc.borrow::<UILabelHostObject>(this).shadow_color }
+- (())setShadowColor:(id)new_color {
+    let old_color = std::mem::replace(
+        &mut env.objc.borrow_mut::<UILabelHostObject>(this).shadow_color,
+        new_color,
+    );
+    retain(env, new_color);
+    release(env, old_color);
+    () = msg![env; this setNeedsDisplay];
+}
+
+- (CGSize)shadowOffset { env.objc.borrow::<UILabelHostObject>(this).shadow_offset }
+- (())setShadowOffset:(CGSize)new_offset {
+    env.objc.borrow_mut::<UILabelHostObject>(this).shadow_offset = new_offset;
+    () = msg![env; this setNeedsDisplay];
+}
 
 - (id)text { env.objc.borrow::<UILabelHostObject>(this).text }
 - (())setText:(id)new_text {
@@ -198,8 +232,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg_super![env; this setBackgroundColor:color]
 }
 
-- (())setShadowColor:(id)color { todo_objc_setter!(this, color); }
-- (())setShadowOffset:(CGSize)value { todo_objc_setter!(this, value); }
 - (())setOpaque:(bool)_opaque { }
 
 - (UITextAlignment)textAlignment { env.objc.borrow::<UILabelHostObject>(this).text_alignment }
@@ -278,7 +310,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let context = UIGraphicsGetCurrentContext(env);
 
     let &mut UILabelHostObject {
-        text, font, text_color, text_alignment, line_break_mode, number_of_lines, ..
+        text, font, text_color, text_alignment, line_break_mode, number_of_lines, shadow_color, shadow_offset, ..
     } = env.objc.borrow_mut(this);
 
     if text == nil || font == nil || text_color == nil { return; }
@@ -286,21 +318,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     let len: NSUInteger = msg![env; text length];
     if len == 0 { return; }
 
-    let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
-    CGContextSetRGBFillColor(env, context, r, g, b, a);
-
     let single_line = number_of_lines == 1;
 
-    let calculated_size: CGSize;
-    if single_line {
-        calculated_size = msg![env; text sizeWithFont:font];
+    let calculated_size: CGSize = if single_line {
+        msg![env; text sizeWithFont:font]
     } else {
-        calculated_size = msg![env; text sizeWithFont:font
-                  constrainedToSize:(bounds.size)
-                      lineBreakMode:line_break_mode];
-    }
+        msg![env; text sizeWithFont:font
+              constrainedToSize:(bounds.size)
+                  lineBreakMode:line_break_mode]
+    };
 
-    let rect = CGRect {
+    let base_rect = CGRect {
         origin: CGPoint {
             x: bounds.origin.x,
             y: bounds.origin.y + (bounds.size.height - calculated_size.height) / 2.0,
@@ -308,20 +336,56 @@ pub const CLASSES: ClassExports = objc_classes! {
         size: CGSize { width: bounds.size.width, height: calculated_size.height },
     };
 
+    let x_offset = match text_alignment {
+        UITextAlignmentLeft => 0.0,
+        UITextAlignmentCenter => 0.5,
+        UITextAlignmentRight => 1.0,
+        _ => 0.0,
+    };
+    let base_point = CGPoint {
+        x: base_rect.origin.x + x_offset * (bounds.size.width - calculated_size.width),
+        y: base_rect.origin.y,
+    };
+
+    // Pass 1 — shadow. Apple's UILabel paints the text once at
+    // (origin + shadowOffset) using shadowColor, then paints the foreground
+    // text on top. The shadow pass uses the same line-break/alignment
+    // policy as the foreground pass so multi-line labels stay aligned.
+    // See: https://developer.apple.com/documentation/uikit/uilabel/1620539-shadowcolor
+    if shadow_color != nil {
+        let (sr, sg, sb, sa) = ui_color::get_rgba(&env.objc, shadow_color);
+        CGContextSetRGBFillColor(env, context, sr, sg, sb, sa);
+
+        let shadow_point = CGPoint {
+            x: base_point.x + shadow_offset.width,
+            y: base_point.y + shadow_offset.height,
+        };
+        let shadow_rect = CGRect {
+            origin: CGPoint {
+                x: base_rect.origin.x + shadow_offset.width,
+                y: base_rect.origin.y + shadow_offset.height,
+            },
+            size: base_rect.size,
+        };
+
+        if single_line {
+            let _size: CGSize = msg![env; text drawAtPoint:shadow_point withFont:font];
+        } else {
+            let _size: CGSize = msg![env; text drawInRect:shadow_rect
+                             withFont:font
+                        lineBreakMode:line_break_mode
+                            alignment:text_alignment];
+        }
+    }
+
+    // Pass 2 — foreground text in the label's textColor.
+    let (r, g, b, a) = ui_color::get_rgba(&env.objc, text_color);
+    CGContextSetRGBFillColor(env, context, r, g, b, a);
+
     if single_line {
-        let x_offset = match text_alignment {
-            UITextAlignmentLeft => 0.0,
-            UITextAlignmentCenter => 0.5,
-            UITextAlignmentRight => 1.0,
-            _ => 0.0,
-        };
-        let point = CGPoint {
-            x: rect.origin.x + x_offset * (bounds.size.width - calculated_size.width),
-            y: rect.origin.y
-        };
-        let _size: CGSize = msg![env; text drawAtPoint:point withFont:font];
+        let _size: CGSize = msg![env; text drawAtPoint:base_point withFont:font];
     } else {
-        let _size: CGSize = msg![env; text drawInRect:rect
+        let _size: CGSize = msg![env; text drawInRect:base_rect
                          withFont:font
                     lineBreakMode:line_break_mode
                         alignment:text_alignment];

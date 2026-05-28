@@ -44,6 +44,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
+// `+ (BOOL)canSendTweet` — Apple: "Returns whether the user has access to
+// Twitter on the device." Real iPhone OS gates this on the user having
+// added a Twitter account in Settings → Twitter (iOS 5+). touchHLE has
+// no Accounts framework backing and no system Twitter login, so we
+// report `NO`; apps then take their documented "Twitter is not
+// configured" branch instead of crashing inside `+[TWTweetComposeViewController alloc]`.
+// https://developer.apple.com/documentation/twitter/twtweetcomposeviewcontroller/1622184-cansendtweet
++ (bool)canSendTweet {
+    false
+}
+
 - (id)init {
     this
 }
@@ -57,16 +68,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, handler);
     env.objc.dealloc_object(this, &mut env.mem)
 }
-
-// ВНИМАНИЕ: Метод + (bool)canSendTweet закомментирован.
-// Макрос objc_classes! в текущей версии эмулятора не поддерживает
-// классовые методы без аргументов (выдает ошибку "no rules expected +").
-/*
-// Указываем игре, что устройство "может" отправлять твиты
-+ (bool)canSendTweet {
-    true
-}
-*/
 
 // MARK: Настройка контента
 
