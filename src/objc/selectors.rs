@@ -15,6 +15,7 @@
 //! - Apple's [The Objective-C Programming Language](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjectiveC/Chapters/ocSelectors.html)
 
 use std::collections::HashMap;
+use std::sync::{OnceLock, Mutex};
 
 use super::ObjC;
 use crate::abi::{GuestArg, GuestRet};
@@ -143,11 +144,7 @@ impl ObjC {
         let sel_str = match mem.cstr_at_utf8(sel_cstr) {
             Ok(s) => s,
             Err(_) => {
-                log!(
-                    "Warning: skipping bin selector at {:?}: \
-                     not valid UTF-8",
-                    sel_cstr
-                );
+                warn_non_utf8_selector_once(sel_cstr);
                 return None;
             }
         };
@@ -337,4 +334,19 @@ pub(super) fn sel_registerName(env: &mut Environment, name: ConstPtr<u8>) -> SEL
 
     let name_str = name_str.to_string();
     env.objc.register_host_selector(name_str, &mut env.mem)
+}
+
+fn warn_non_utf8_selector_once(sel_cstr: ConstPtr<u8>) {
+    use std::collections::HashSet;
+    static SEEN: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let addr = sel_cstr.to_bits();
+    let mut guard = seen.lock().unwrap();
+    if guard.insert(addr) {
+        log!(
+            "Warning: skipping bin selector at {:?}: not valid UTF-8 \
+             (further occurrences at this address will be silenced)",
+            sel_cstr
+        );
+    }
 }
