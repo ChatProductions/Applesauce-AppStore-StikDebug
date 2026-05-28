@@ -1315,6 +1315,36 @@ fn CGContextShowGlyphs(
     CGContextShowGlyphsAtPoint(env, context, 0.0, 0.0, glyphs, count);
 }
 
+
+/// `void CGContextSetAllowsFontSubpixelPositioning(CGContextRef c, bool allow)`
+///
+/// Controls whether subpixel font positioning is used.  On the emulated
+/// screen there is no physical sub-pixel grid to exploit, so this is a
+/// no-op.  Exporting the symbol eliminates the "unimplemented function"
+/// warning produced by apps that call it unconditionally.
+///
+/// Reference: <https://developer.apple.com/documentation/coregraphics/1454839-cgcontextsetallowsfontsubpixelpo>
+fn CGContextSetAllowsFontSubpixelPositioning(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _allows: bool,
+) {
+}
+
+/// `void CGContextSetShouldSubpixelQuantizeFonts(CGContextRef c, bool should)`
+///
+/// Controls whether font glyph metrics are quantised to sub-pixel
+/// boundaries.  No-op for the same reasons as
+/// `CGContextSetAllowsFontSubpixelPositioning`.
+///
+/// Reference: <https://developer.apple.com/documentation/coregraphics/1455671-cgcontextsetshouldsub pixelquanti>
+fn CGContextSetShouldSubpixelQuantizeFonts(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _should: bool,
+) {
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -1393,4 +1423,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetStrokeColorSpace(_, _)),
     export_c_func!(CGContextSetRenderingIntent(_, _)),
     export_c_func!(CGContextDrawLinearGradient(_, _, _, _, _)),
+    export_c_func!(CGContextSetAllowsFontSubpixelPositioning(_, _)),
+    export_c_func!(CGContextSetShouldSubpixelQuantizeFonts(_, _)),
 ];
