@@ -4119,6 +4119,49 @@ unsafe fn restore_fog_state_values(gles: &mut dyn GLES, from_backup: Option<(f32
     }
 }
 
+
+/// `void glLabelObjectEXT(GLenum type, GLuint object, GLsizei length, const GLchar *label)`
+///
+/// Part of GL_EXT_debug_label.  Labels an OpenGL ES object for debugging
+/// purposes.  The label is used only by GPU debugging tools (Instruments,
+/// RenderDoc) and has no effect on rendering.  We expose a no-op
+/// implementation so that apps which unconditionally call this extension
+/// function no longer trigger the "unimplemented function" warning.
+///
+/// Reference: <https://registry.khronos.org/OpenGL/extensions/EXT/EXT_debug_label.txt>
+fn glLabelObjectEXT(
+    _env: &mut Environment,
+    _type_: GLenum,
+    _object: GLuint,
+    _length: GLsizei,
+    _label: ConstPtr<u8>,
+) {
+    // No-op: debug labels have no functional impact.
+}
+
+/// `void glGetObjectLabelEXT(GLenum type, GLuint object, GLsizei bufSize,
+///                            GLsizei *length, GLchar *label)`
+///
+/// Retrieves the debug label previously set by glLabelObjectEXT.  Since we
+/// do not store labels, we return an empty string.
+///
+/// Reference: <https://registry.khronos.org/OpenGL/extensions/EXT/EXT_debug_label.txt>
+fn glGetObjectLabelEXT(
+    env: &mut Environment,
+    _type_: GLenum,
+    _object: GLuint,
+    buf_size: GLsizei,
+    length: MutPtr<GLsizei>,
+    label: MutPtr<u8>,
+) {
+    if !label.is_null() && buf_size > 0 {
+        env.mem.write(label, 0u8);
+    }
+    if !length.is_null() {
+        env.mem.write(length, 0);
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetError()),
     export_c_func!(glEnable(_)),
@@ -4466,4 +4509,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetStringi(_, _)),
     export_c_func!(glGetFragDataLocation(_, _)),
     export_c_func!(glProgramParameteri(_, _, _)),
+    // GL_EXT_debug_label — debug-label extension, no-op implementations.
+    // Reference: <https://registry.khronos.org/OpenGL/extensions/EXT/EXT_debug_label.txt>
+    export_c_func!(glLabelObjectEXT(_, _, _, _)),
+    export_c_func!(glGetObjectLabelEXT(_, _, _, _, _)),
 ];
