@@ -377,7 +377,9 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         Value::Data(buffer_slice.to_vec())
     } else if env.objc.class_is_subclass_of(class, date_class) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
+        let time = apple_epoch().add(
+            crate::frameworks::foundation::ns_time_interval_to_duration_or_zero(date.time_interval),
+        );
         Value::Date(time.into())
     } else {
         log!(

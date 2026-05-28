@@ -130,7 +130,8 @@ pub(super) fn handle_accelerometer(env: &mut Environment) -> Option<Instant> {
     let delegate = state.delegate?;
 
     let ns_interval = state.update_interval.unwrap_or(DEFAULT_UPDATE_INTERVAL);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    let rust_interval =
+        crate::frameworks::foundation::ns_time_interval_to_duration_or_zero(ns_interval);
 
     let now = Instant::now();
     if let Some(due_by) = state.due_by {

@@ -1297,6 +1297,46 @@ pub fn class_getInstanceMethod(
     ConstVoidPtr::null()
 }
 
+/// `BOOL class_respondsToSelector(Class cls, SEL sel)`
+///
+/// Apple: "Returns a Boolean value that indicates whether instances of a
+/// class respond to a particular selector." Walks the class chain and
+/// reports YES if any class in that chain implements `sel`.
+/// <https://developer.apple.com/documentation/objectivec/1418555-class_respondstoselector>
+///
+/// Per the documentation `class_respondsToSelector(Nil, …)` returns NO and
+/// `class_respondsToSelector(cls, NULL)` also returns NO. Mirroring the
+/// real runtime here avoids the previous return-0 stub silently breaking
+/// guests that use this entry point to gate optional behaviour
+/// (e.g. `class_respondsToSelector([NSString class], @selector(...))` for
+/// runtime-availability checks in older SDKs).
+pub fn class_respondsToSelector(
+    env: &mut crate::Environment,
+    cls: Class,
+    sel: SEL,
+) -> bool {
+    if cls.is_null() || sel.is_null() {
+        return false;
+    }
+
+    let mut curr = cls;
+    while !curr.is_null() {
+        if let Some(host_obj) = env.objc.get_host_object(curr) {
+            if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+                if class_obj.methods.contains_key(&sel) {
+                    return true;
+                }
+            }
+        }
+        let next = env.objc.get_superclass(curr);
+        if next == curr {
+            break;
+        }
+        curr = next;
+    }
+    false
+}
+
 pub fn method_getImplementation(
     env: &mut crate::Environment,
     cls: Class,

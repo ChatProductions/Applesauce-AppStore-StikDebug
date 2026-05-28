@@ -15,6 +15,7 @@ use super::ca_layer::CALayerHostObject;
 use crate::frameworks::core_animation::animation;
 use crate::frameworks::core_graphics::cg_color::CGColorHostObject;
 use crate::frameworks::core_graphics::{cg_bitmap_context, cg_image, CGFloat, CGRect};
+use crate::frameworks::foundation::ns_time_interval_to_duration_or_zero;
 use crate::gles::gles11_raw as gles11; // constants only
 use crate::gles::gles11_raw::types::*;
 use crate::gles::present::{present_frame, FpsCounter};
@@ -108,12 +109,20 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         if advance_by > 1 {
             log_dbg!("Warning: compositor is lagging. It is overdue by {}s and has missed {} interval(s)!", overdue_by.as_secs_f64(), advance_by - 1);
         }
-        let advance_by = Duration::from_secs_f64(interval)
+        let advance_by = ns_time_interval_to_duration_or_zero(interval)
             .checked_mul(advance_by)
-            .unwrap();
-        Some(recomposite_next.checked_add(advance_by).unwrap())
+            .unwrap_or(Duration::ZERO);
+        Some(recomposite_next.checked_add(advance_by).unwrap_or(recomposite_next))
     } else {
-        Some(now.checked_add(Duration::from_secs_f64(interval)).unwrap())
+        // Apple's NSTimer/CADisplayLink "missed deadline" handling is
+        // tolerant of bogus intervals: if the guest hands us a negative
+        // or NaN value (seen with games that compute frameInterval from
+        // an uninitialised float), we treat it as "fire immediately"
+        // instead of panicking inside `Duration::from_secs_f64`.
+        Some(
+            now.checked_add(ns_time_interval_to_duration_or_zero(interval))
+                .unwrap_or(now),
+        )
     };
     env.framework_state
         .core_animation

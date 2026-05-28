@@ -158,7 +158,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // 2. Засыпаем с таймаутом
-    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+    let until = std::time::Instant::now()
+        + super::ns_time_interval_to_duration_or_zero(ti);
     env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
     // 3. Проверяем, проснулись ли мы сами (таймаут) или нас разбудили
@@ -340,7 +341,8 @@ pub const CLASSES: ClassExports = objc_classes! {
             host.waiting_threads.push_back((current_thread, Some(condition)));
         }
 
-        let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+        let until = std::time::Instant::now()
+            + super::ns_time_interval_to_duration_or_zero(ti);
         env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
         // Удаляем себя из очереди, если мы проснулись по таймауту

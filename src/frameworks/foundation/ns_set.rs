@@ -402,6 +402,27 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+// Apple: "Adds to the receiving set each object contained in a given array
+// that is not already a member." (NSMutableSet addObjectsFromArray:).
+// https://developer.apple.com/documentation/foundation/nsmutableset/1408015-addobjectsfromarray
+//
+// We tolerate `nil` (real Foundation crashes, but every other touchHLE
+// container path tolerates nil to keep flaky games alive), and use indexed
+// access rather than fast enumeration because some guest array
+// implementations don't implement -objectEnumerator yet.
+- (())addObjectsFromArray:(id)array { // NSArray *
+    if array == nil {
+        return;
+    }
+    let count: NSUInteger = msg![env; array count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let object: id = msg![env; array objectAtIndex:i];
+        () = msg![env; this addObject:object];
+        i += 1;
+    }
+}
+
 @end
 
 };

@@ -386,6 +386,30 @@ pub(super) fn objc_setProperty_nonatomic(
     objc_setProperty(env, this, _cmd, offset, value, /* atomic: */ false, /* should_copy: */ 0)
 }
 
+/// Optimised atomic, retain-property setter. Compilers emit
+/// `_objc_setProperty_atomic` instead of the generic
+/// `_objc_setProperty(…, atomic=true, should_copy=0)` for autosynthesised
+/// `@property (atomic, retain)` / `@property (atomic, strong)` setters
+/// (i.e. the default atomic kind when no explicit `nonatomic` is given).
+/// touchHLE previously installed a return-0 stub for this entry point,
+/// which silently dropped every assignment on atomic properties and led to
+/// guest crashes when the property was later read back as nil.
+///
+/// Note the argument order: `(self, _cmd, newValue, offset)` — the
+/// optimised variants put the value *before* the offset, the opposite of
+/// the generic [objc_setProperty]. See Apple's open-source
+/// `objc4/runtime/Accessors.subproj/objc-accessors.mm` for the canonical
+/// definition.
+pub(super) fn objc_setProperty_atomic(
+    env: &mut Environment,
+    this: id,
+    _cmd: SEL,
+    value: id,
+    offset: GuestISize,
+) {
+    objc_setProperty(env, this, _cmd, offset, value, /* atomic: */ true, /* should_copy: */ 0)
+}
+
 /// Optimised non-atomic, copy-property setter. Mid-iOS-6+ compilers emit
 /// `_objc_setProperty_nonatomic_copy` instead of the generic
 /// `_objc_setProperty(…, atomic=false, should_copy=1)` for autosynthesised
