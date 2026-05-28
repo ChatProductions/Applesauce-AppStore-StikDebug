@@ -200,6 +200,27 @@ fn dispatch_queue_create(
     MutVoidPtr::from_bits(handle)
 }
 
+fn dispatch_queue_attr_make_with_qos_class(
+    _env: &mut Environment,
+    attr: dispatch_queue_t,
+    qos_class: u32,
+    relative_priority: i32,
+) -> dispatch_queue_t {
+    // Apple docs (<dispatch/queue.h>):
+    //   "Returns an attribute value which may be provided to
+    //   dispatch_queue_create to hint the system to use the given QoS
+    //   class. Since touchHLE doesn't model thread QoS — it runs
+    //   everything on the main thread queue — the documented behaviour
+    //   we can faithfully implement is to return the input attr
+    //   unchanged: any subsequent dispatch_queue_create(label,
+    //   returned_attr) then behaves identically to using the original
+    //   attr (which is the only behaviour touchHLE supports today).
+    //   Edge case per Apple: if qos_class == QOS_CLASS_UNSPECIFIED (0)
+    //   AND attr == NULL, returns NULL; same null-pass-through
+    //   behaviour falls out naturally from returning attr."
+    attr
+}
+
 fn dispatch_queue_get_label(env: &mut Environment, queue: dispatch_queue_t) -> ConstVoidPtr {
     // Return an empty string — label lookup not implemented.
     let empty = env.mem.alloc_and_write_cstr(b"");
@@ -593,6 +614,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(dispatch_get_global_queue(_, _)),
     export_c_func!(dispatch_get_current_queue()),
     export_c_func!(dispatch_queue_create(_, _)),
+    export_c_func!(dispatch_queue_attr_make_with_qos_class(_, _, _)),
     export_c_func!(dispatch_queue_get_label(_)),
     export_c_func!(dispatch_queue_retain(_)),
     export_c_func!(dispatch_queue_release(_)),

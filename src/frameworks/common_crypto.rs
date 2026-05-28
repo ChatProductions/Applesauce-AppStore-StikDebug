@@ -1142,11 +1142,192 @@ fn CC_SHA512(env: &mut Environment, data: ConstVoidPtr, len: GuestUSize, md: Mut
     md
 }
 
+// MARK: - Incremental SHA-family helpers (CommonDigest.h)
+//
+// Apple's CommonDigest.h declares the following triplet for each of SHA1,
+// SHA224, SHA256, SHA384 and SHA512:
+//
+//     int CC_SHAxxx_Init   (CC_SHAxxx_CTX *c);
+//     int CC_SHAxxx_Update (CC_SHAxxx_CTX *c, const void *data, CC_LONG len);
+//     int CC_SHAxxx_Final  (unsigned char *md, CC_SHAxxx_CTX *c);
+//
+// All three return 1 on success, 0 on failure. The CTX struct is opaque to
+// the caller — guests treat it as an arbitrary fixed-size buffer they only
+// pass back to subsequent calls — so we don't need to mirror Apple's exact
+// internal layout. Instead we stamp a sentinel in the first 4 bytes so
+// Update/Final can validate that the ctx was previously Init'd, and stash
+// the actual sha1::Sha1 / sha2::Sha256 / sha2::Sha512 state in a host-side
+// table keyed by the guest ctx pointer. This gives a real, correct
+// incremental SHA implementation (not a stub) without any reverse-engineered
+// SHA round code.
+
+use sha1::Sha1;
+use sha2::{Digest as Sha2Digest, Sha224, Sha256, Sha384, Sha512};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+enum ShaState {
+    S1(Sha1),
+    S224(Sha224),
+    S256(Sha256),
+    S384(Sha384),
+    S512(Sha512),
+}
+
+impl ShaState {
+    fn update(&mut self, data: &[u8]) {
+        match self {
+            ShaState::S1(h) => sha1::Digest::update(h, data),
+            ShaState::S224(h) => Sha2Digest::update(h, data),
+            ShaState::S256(h) => Sha2Digest::update(h, data),
+            ShaState::S384(h) => Sha2Digest::update(h, data),
+            ShaState::S512(h) => Sha2Digest::update(h, data),
+        }
+    }
+    fn finalize_into(self, out: &mut [u8]) {
+        match self {
+            ShaState::S1(h) => out.copy_from_slice(&h.finalize()),
+            ShaState::S224(h) => out.copy_from_slice(&h.finalize()),
+            ShaState::S256(h) => out.copy_from_slice(&h.finalize()),
+            ShaState::S384(h) => out.copy_from_slice(&h.finalize()),
+            ShaState::S512(h) => out.copy_from_slice(&h.finalize()),
+        }
+    }
+}
+
+const SHA_INIT_SENTINEL: u32 = 0xCAFE_C0DE;
+
+fn sha_state_table() -> &'static Mutex<HashMap<u32, ShaState>> {
+    static T: OnceLock<Mutex<HashMap<u32, ShaState>>> = OnceLock::new();
+    T.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn sha_init(env: &mut Environment, c: MutVoidPtr, state: ShaState) -> i32 {
+    if c.is_null() {
+        return 0;
+    }
+    env.mem
+        .write(c.cast::<u32>(), SHA_INIT_SENTINEL.to_le());
+    sha_state_table()
+        .lock()
+        .unwrap()
+        .insert(c.to_bits(), state);
+    1
+}
+
+fn sha_update_inner(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    if c.is_null() {
+        return 0;
+    }
+    let sentinel = u32::from_le(env.mem.read(c.cast::<u32>()));
+    if sentinel != SHA_INIT_SENTINEL {
+        return 0;
+    }
+    if len == 0 || data.is_null() {
+        return 1;
+    }
+    let bytes = read_guest_bytes(env, data, len);
+    let mut table = sha_state_table().lock().unwrap();
+    if let Some(state) = table.get_mut(&c.to_bits()) {
+        state.update(&bytes);
+        1
+    } else {
+        0
+    }
+}
+
+fn sha_final_inner(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr, digest_len: usize) -> i32 {
+    if md.is_null() || c.is_null() {
+        return 0;
+    }
+    let sentinel = u32::from_le(env.mem.read(c.cast::<u32>()));
+    if sentinel != SHA_INIT_SENTINEL {
+        return 0;
+    }
+    // Clear sentinel so a subsequent Update/Final on the same ctx fails
+    // until Init is called again — matches Apple's "context is consumed"
+    // semantics.
+    env.mem.write(c.cast::<u32>(), 0u32.to_le());
+    let state = sha_state_table().lock().unwrap().remove(&c.to_bits());
+    if let Some(state) = state {
+        let mut out = vec![0u8; digest_len];
+        state.finalize_into(&mut out);
+        write_digest(env, md, &out);
+        1
+    } else {
+        0
+    }
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA1_Init(env: &mut Environment, c: MutVoidPtr) -> i32 {
+    sha_init(env, c, ShaState::S1(Sha1::new()))
+}
+#[allow(non_snake_case)]
+fn CC_SHA1_Update(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    sha_update_inner(env, c, data, len)
+}
+#[allow(non_snake_case)]
+fn CC_SHA1_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 {
+    sha_final_inner(env, md, c, 20)
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA224_Init(env: &mut Environment, c: MutVoidPtr) -> i32 {
+    sha_init(env, c, ShaState::S224(Sha224::new()))
+}
+#[allow(non_snake_case)]
+fn CC_SHA224_Update(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    sha_update_inner(env, c, data, len)
+}
+#[allow(non_snake_case)]
+fn CC_SHA224_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 {
+    sha_final_inner(env, md, c, 28)
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA256_Init(env: &mut Environment, c: MutVoidPtr) -> i32 {
+    sha_init(env, c, ShaState::S256(Sha256::new()))
+}
+#[allow(non_snake_case)]
+fn CC_SHA256_Update(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    sha_update_inner(env, c, data, len)
+}
+#[allow(non_snake_case)]
+fn CC_SHA256_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 {
+    sha_final_inner(env, md, c, 32)
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA384_Init(env: &mut Environment, c: MutVoidPtr) -> i32 {
+    sha_init(env, c, ShaState::S384(Sha384::new()))
+}
+#[allow(non_snake_case)]
+fn CC_SHA384_Update(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    sha_update_inner(env, c, data, len)
+}
+#[allow(non_snake_case)]
+fn CC_SHA384_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 {
+    sha_final_inner(env, md, c, 48)
+}
+
+#[allow(non_snake_case)]
+fn CC_SHA512_Init(env: &mut Environment, c: MutVoidPtr) -> i32 {
+    sha_init(env, c, ShaState::S512(Sha512::new()))
+}
+#[allow(non_snake_case)]
+fn CC_SHA512_Update(env: &mut Environment, c: MutVoidPtr, data: ConstVoidPtr, len: GuestUSize) -> i32 {
+    sha_update_inner(env, c, data, len)
+}
+#[allow(non_snake_case)]
+fn CC_SHA512_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 {
+    sha_final_inner(env, md, c, 64)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
     export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)),
     export_c_func!(CCHmac(_, _, _, _, _, _)),
-    // Исправленное количество аргументов (исключая env):
     export_c_func!(CC_MD5_Init(_)),         // Было (_, _), нужно (_)
     export_c_func!(CC_MD5_Update(_, _, _)), // Было (_, _, _, _), нужно (_, _, _)
     export_c_func!(CC_MD5_Final(_, _)),     // Было (_, _, _), нужно (_, _)
@@ -1158,6 +1339,21 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_SHA384(_, _, _)),
     export_c_func!(CC_SHA512(_, _, _)),
                                             // SecItem* helpers are exported from frameworks::security; not duplicated.
+    export_c_func!(CC_SHA1_Init(_)),
+    export_c_func!(CC_SHA1_Update(_, _, _)),
+    export_c_func!(CC_SHA1_Final(_, _)),
+    export_c_func!(CC_SHA224_Init(_)),
+    export_c_func!(CC_SHA224_Update(_, _, _)),
+    export_c_func!(CC_SHA224_Final(_, _)),
+    export_c_func!(CC_SHA256_Init(_)),
+    export_c_func!(CC_SHA256_Update(_, _, _)),
+    export_c_func!(CC_SHA256_Final(_, _)),
+    export_c_func!(CC_SHA384_Init(_)),
+    export_c_func!(CC_SHA384_Update(_, _, _)),
+    export_c_func!(CC_SHA384_Final(_, _)),
+    export_c_func!(CC_SHA512_Init(_)),
+    export_c_func!(CC_SHA512_Update(_, _, _)),
+    export_c_func!(CC_SHA512_Final(_, _)),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {

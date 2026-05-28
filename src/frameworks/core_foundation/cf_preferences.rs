@@ -89,11 +89,38 @@ fn CFPreferencesAppSynchronize(env: &mut Environment, app_id: CFStringRef) -> bo
 }
 
 pub const kCFPreferencesCurrentApplication: &str = "kCFPreferencesCurrentApplication";
+pub const kCFPreferencesAnyApplication: &str = "kCFPreferencesAnyApplication";
+pub const kCFPreferencesAnyHost: &str = "kCFPreferencesAnyHost";
+pub const kCFPreferencesCurrentHost: &str = "kCFPreferencesCurrentHost";
+pub const kCFPreferencesAnyUser: &str = "kCFPreferencesAnyUser";
+pub const kCFPreferencesCurrentUser: &str = "kCFPreferencesCurrentUser";
 
-pub const CONSTANTS: ConstantExports = &[(
-    "_kCFPreferencesCurrentApplication",
-    HostConstant::NSString(kCFPreferencesCurrentApplication),
-)];
+pub const CONSTANTS: ConstantExports = &[
+    (
+        "_kCFPreferencesCurrentApplication",
+        HostConstant::NSString(kCFPreferencesCurrentApplication),
+    ),
+    (
+        "_kCFPreferencesAnyApplication",
+        HostConstant::NSString(kCFPreferencesAnyApplication),
+    ),
+    (
+        "_kCFPreferencesAnyHost",
+        HostConstant::NSString(kCFPreferencesAnyHost),
+    ),
+    (
+        "_kCFPreferencesCurrentHost",
+        HostConstant::NSString(kCFPreferencesCurrentHost),
+    ),
+    (
+        "_kCFPreferencesAnyUser",
+        HostConstant::NSString(kCFPreferencesAnyUser),
+    ),
+    (
+        "_kCFPreferencesCurrentUser",
+        HostConstant::NSString(kCFPreferencesCurrentUser),
+    ),
+];
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFPreferencesCopyAppValue(_, _)),

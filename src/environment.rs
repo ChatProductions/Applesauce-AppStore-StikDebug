@@ -1619,6 +1619,29 @@ impl Environment {
                     );
                 }
 
+                // Pathological self-loop: when LR (with Thumb bit cleared)
+                // points right back at the UDF we just trapped on, branching
+                // to LR would re-enter the trap and burn through BYPASS_LIMIT
+                // until the emulator panics. This shape shows up when a
+                // framework stub returns the address of its own UDF as the
+                // return target (e.g. PC=0x5cc86, LR=0x5cc87). Skip past the
+                // faulting instruction instead so the guest makes forward
+                // progress, and clear the bypass counter since we're no
+                // longer bypassing the same site.
+                if (lr & !1) == pc {
+                    log_no_panic!(
+                        "Warning: UndefinedInstruction self-loop at {:#x} \
+                         (LR={:#x} re-enters the same UDF). Advancing past \
+                         the faulting instruction instead of branching to LR.",
+                        pc,
+                        lr
+                    );
+                    self.cpu.regs_mut()[cpu::Cpu::PC] = pc.wrapping_add(instruction_len);
+                    self.udf_bypass_last = None;
+                    self.udf_bypass_count = 0;
+                    return;
+                }
+
                 // Instead of skipping forward through garbage data, pretend the
                 // faulting function returned to its caller.
                 self.cpu.branch(GuestFunction::from_addr_with_thumb_bit(lr));
@@ -1777,7 +1800,28 @@ impl Environment {
         );
         unsafe {
             self.threads[self.current_thread].blocked_by = thread_block;
-            let yielder = self.yielder.as_ref().unwrap();
+            // The yielder is set up by `with_yielder` when a coroutine starts
+            // executing this thread. If we ever reach `yield_thread` without
+            // an active yielder (for example when host code invokes us
+            // synchronously before the main coroutine has been entered), we
+            // have no coroutine to suspend into. Previously `unwrap()` here
+            // panicked the entire emulator; instead, log loudly and clear
+            // the block so the host-side caller can keep going. This is the
+            // best we can do without a host stack to unwind to.
+            let yielder = match self.yielder.as_ref() {
+                Some(yielder) => yielder,
+                None => {
+                    log_no_panic!(
+                        "Warning: yield_thread called on thread {} with no \
+                         active yielder (block={:?}). Treating as no-op so \
+                         the host caller can continue.",
+                        self.current_thread,
+                        self.threads[self.current_thread].blocked_by,
+                    );
+                    self.threads[self.current_thread].blocked_by = ThreadBlock::NotBlocked;
+                    return;
+                }
+            };
             self.yielder = std::ptr::null();
             let panic_cell = self.panic_cell.clone();
             let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

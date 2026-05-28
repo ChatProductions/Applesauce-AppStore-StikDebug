@@ -13,7 +13,7 @@ use crate::abi::DotDotDot;
 use crate::environment::Environment;
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 /// Belongs to _touchHLE_NSSet
@@ -213,6 +213,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithSet:(id)other { // NSSet*
+    // Apple docs (NSSet "Creating a Set"): "Returns a newly initialized set
+    // using the objects from another given set." The objects are NOT copied
+    // — they're retained, exactly like -initWithArray:.
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_set(env, other, false);
+    this
+}
+
+- (id)initWithSet:(id)other copyItems:(bool)copy_items { // NSSet*
+    // Apple docs: when `flag` is YES, each object is sent -copyWithZone:nil
+    // and the copy is added to the new set (objects must conform to
+    // NSCopying — non-conforming objects raise NSInvalidArgumentException).
+    env.objc.borrow_mut::<SetHostObject>(this).dict =
+        set_from_set(env, other, copy_items);
+    this
+}
+
 - (())dealloc {
     std::mem::take(&mut env.objc.borrow_mut::<SetHostObject>(this).dict).release(env);
     env.objc.dealloc_object(this, &mut env.mem)
@@ -308,6 +325,23 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithArray:(id)array { // NSArray*
     env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_array(env, array);
+    this
+}
+
+- (id)initWithSet:(id)other { // NSSet*
+    // Apple docs (NSSet "Creating a Set"): "Returns a newly initialized set
+    // using the objects from another given set." The objects are NOT copied
+    // — they're retained, exactly like -initWithArray:.
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_set(env, other, false);
+    this
+}
+
+- (id)initWithSet:(id)other copyItems:(bool)copy_items { // NSSet*
+    // Apple docs: when `flag` is YES, each object is sent -copyWithZone:nil
+    // and the copy is added to the new set (objects must conform to
+    // NSCopying — non-conforming objects raise NSInvalidArgumentException).
+    env.objc.borrow_mut::<SetHostObject>(this).dict =
+        set_from_set(env, other, copy_items);
     this
 }
 
@@ -459,6 +493,40 @@ fn set_from_array(env: &mut Environment, array: id) -> DictionaryHostObject {
     for i in 0..count {
         let object: id = msg![env; array objectAtIndex:i];
         dict.insert(env, object, null, /* copy_key: */ false);
+    }
+    dict
+}
+
+/// Build a [DictionaryHostObject] populated with the contents of `other`,
+/// reached through the public NSSet API so subclasses work transparently.
+/// When `copy_items` is true, each object is sent `-copyWithZone:nil` and the
+/// returned copy is inserted instead of the original, matching the documented
+/// behavior of `-[NSSet initWithSet:copyItems:]`.
+fn set_from_set(env: &mut Environment, other: id, copy_items: bool) -> DictionaryHostObject {
+    let mut dict = <DictionaryHostObject as Default>::default();
+    if other == nil {
+        return dict;
+    }
+    let null: id = msg_class![env; NSNull null];
+    let enumerator: id = msg![env; other objectEnumerator];
+    if enumerator == nil {
+        return dict;
+    }
+    loop {
+        let next: id = msg![env; enumerator nextObject];
+        if next == nil {
+            break;
+        }
+        if copy_items {
+            // -[NSObject copy] returns an owned (+1 retain) copy. Insert it,
+            // then release our extra reference so the dictionary's retain is
+            // the only one we own.
+            let copy: id = msg![env; next copy];
+            dict.insert(env, copy, null, /* copy_key: */ false);
+            release(env, copy);
+        } else {
+            dict.insert(env, next, null, /* copy_key: */ false);
+        }
     }
     dict
 }
