@@ -8,14 +8,18 @@
 //! This is not even toll-free bridged to `NSRunLoop` in Apple's implementation,
 //! but here it is the same type.
 
+use crate::abi::CallFromHost;
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use crate::frameworks::core_foundation::time::CFTimeInterval;
-use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
+use crate::frameworks::core_foundation::{CFIndex, CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
-use crate::mem::{ConstPtr, GuestISize, MutVoidPtr, SafeRead};
-use crate::objc::{id, msg, msg_class, nil, HostObject};
+use crate::mem::{ConstPtr, GuestISize, MutPtr, MutVoidPtr, SafeRead};
+use crate::objc::{
+    id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
+};
 use crate::Environment;
 
 pub type CFRunLoopRef = CFTypeRef;
@@ -48,6 +52,40 @@ pub struct CFRunLoopTimerHostObject {
 }
 
 impl HostObject for CFRunLoopTimerHostObject {}
+
+/// `CFRunLoopSourceContext` (version 0). Mirrors the public C declaration in
+/// `<CoreFoundation/CFRunLoop.h>`.
+#[repr(C, packed)]
+pub struct CFRunLoopSourceContext {
+    pub version: CFIndex,
+    pub info: MutVoidPtr,
+    pub retain: GuestFunction,
+    pub release: GuestFunction,
+    pub copyDescription: GuestFunction,
+    pub equal: GuestFunction,
+    pub hash: GuestFunction,
+    pub schedule: GuestFunction,
+    pub cancel: GuestFunction,
+    pub perform: GuestFunction,
+}
+unsafe impl SafeRead for CFRunLoopSourceContext {}
+
+pub struct CFRunLoopSourceHostObject {
+    pub version: CFIndex,
+    pub info: MutVoidPtr,
+    pub retain: GuestFunction,
+    pub release: GuestFunction,
+    pub copy_description: GuestFunction,
+    pub equal: GuestFunction,
+    pub hash: GuestFunction,
+    pub schedule: GuestFunction,
+    pub cancel: GuestFunction,
+    pub perform: GuestFunction,
+    pub order: i32,
+    pub valid: bool,
+    pub signaled: bool,
+}
+impl HostObject for CFRunLoopSourceHostObject {}
 
 // CFRunLoopRunResult
 const kCFRunLoopRunFinished: i32 = 1;
@@ -200,31 +238,118 @@ fn CFRunLoopWakeUp(_env: &mut Environment, _rl: CFRunLoopRef) {
 // MARK: - Sources
 
 fn CFRunLoopAddSource(
-    _env: &mut Environment,
-    _rl: CFRunLoopRef,
-    _source: CFRunLoopSourceRef,
-    _mode: CFRunLoopMode,
+    env: &mut Environment,
+    rl: CFRunLoopRef,
+    source: CFRunLoopSourceRef,
+    mode: CFRunLoopMode,
 ) {
-    log!("CFRunLoopAddSource: stubbed");
+    if rl.is_null() || source.is_null() {
+        return;
+    }
+    if !is_known_mode(env, mode) {
+        log_dbg!("CFRunLoopAddSource: ignoring unknown mode");
+        return;
+    }
+    let already_contains = env
+        .objc
+        .borrow::<crate::frameworks::foundation::ns_run_loop::NSRunLoopHostObject>(rl)
+        .sources
+        .contains(&source);
+    if already_contains {
+        return;
+    }
+    CFRetain(env, source);
+    env.objc
+        .borrow_mut::<crate::frameworks::foundation::ns_run_loop::NSRunLoopHostObject>(rl)
+        .sources
+        .push(source);
+    let schedule = env
+        .objc
+        .borrow::<CFRunLoopSourceHostObject>(source)
+        .schedule;
+    let info = env.objc.borrow::<CFRunLoopSourceHostObject>(source).info;
+    if !schedule.to_ptr().is_null() {
+        let _: () = schedule.call_from_host(env, (info, rl, mode));
+    }
 }
 
 fn CFRunLoopRemoveSource(
-    _env: &mut Environment,
-    _rl: CFRunLoopRef,
-    _source: CFRunLoopSourceRef,
-    _mode: CFRunLoopMode,
+    env: &mut Environment,
+    rl: CFRunLoopRef,
+    source: CFRunLoopSourceRef,
+    mode: CFRunLoopMode,
 ) {
-    log!("CFRunLoopRemoveSource: stubbed");
+    if rl.is_null() || source.is_null() {
+        return;
+    }
+    let pos = env
+        .objc
+        .borrow::<crate::frameworks::foundation::ns_run_loop::NSRunLoopHostObject>(rl)
+        .sources
+        .iter()
+        .position(|&s| s == source);
+    let Some(pos) = pos else { return };
+    env.objc
+        .borrow_mut::<crate::frameworks::foundation::ns_run_loop::NSRunLoopHostObject>(rl)
+        .sources
+        .remove(pos);
+    let cancel = env.objc.borrow::<CFRunLoopSourceHostObject>(source).cancel;
+    let info = env.objc.borrow::<CFRunLoopSourceHostObject>(source).info;
+    if !cancel.to_ptr().is_null() {
+        let _: () = cancel.call_from_host(env, (info, rl, mode));
+    }
+    CFRelease(env, source);
 }
 
 fn CFRunLoopSourceCreate(
-    _env: &mut Environment,
-    _allocator: CFTypeRef,
-    _order: i32,
-    _context: MutVoidPtr, // CFRunLoopSourceContext*
+    env: &mut Environment,
+    allocator: CFAllocatorRef,
+    order: i32,
+    context_ptr: MutPtr<CFRunLoopSourceContext>,
 ) -> CFRunLoopSourceRef {
-    log!("CFRunLoopSourceCreate: stubbed, returning null");
-    nil
+    if !(allocator == kCFAllocatorDefault || env.mem.read(allocator).is_system_default()) {
+        log!("CFRunLoopSourceCreate: non-default allocator unsupported, returning null");
+        return nil;
+    }
+    if context_ptr.is_null() {
+        log!("CFRunLoopSourceCreate: NULL context, returning null");
+        return nil;
+    }
+    let context = env.mem.read(context_ptr);
+    let version = context.version;
+    if version != 0 {
+        log!(
+            "CFRunLoopSourceCreate: unsupported context version {}, returning null",
+            version
+        );
+        return nil;
+    }
+    let host = Box::new(CFRunLoopSourceHostObject {
+        version,
+        info: context.info,
+        retain: context.retain,
+        release: context.release,
+        copy_description: context.copyDescription,
+        equal: context.equal,
+        hash: context.hash,
+        schedule: context.schedule,
+        cancel: context.cancel,
+        perform: context.perform,
+        order,
+        valid: true,
+        signaled: false,
+    });
+    let class = env
+        .objc
+        .get_known_class("_touchHLE_CFRunLoopSource", &mut env.mem);
+    let source = env.objc.alloc_object(class, host, &mut env.mem);
+    // Retain `info` if the context provides a retain callback (Apple docs).
+    let retain_cb = env.objc.borrow::<CFRunLoopSourceHostObject>(source).retain;
+    let info = env.objc.borrow::<CFRunLoopSourceHostObject>(source).info;
+    if !retain_cb.to_ptr().is_null() {
+        let _: MutVoidPtr = retain_cb.call_from_host(env, (info,));
+    }
+    source
 }
 
 fn CFRunLoopSourceRetain(env: &mut Environment, source: CFRunLoopSourceRef) -> CFRunLoopSourceRef {
@@ -241,16 +366,60 @@ fn CFRunLoopSourceRelease(env: &mut Environment, source: CFRunLoopSourceRef) {
     }
 }
 
-fn CFRunLoopSourceSignal(_env: &mut Environment, _source: CFRunLoopSourceRef) {
-    log_dbg!("CFRunLoopSourceSignal: stubbed");
+fn CFRunLoopSourceInvalidate(env: &mut Environment, source: CFRunLoopSourceRef) {
+    if source.is_null() {
+        return;
+    }
+    env.objc
+        .borrow_mut::<CFRunLoopSourceHostObject>(source)
+        .valid = false;
 }
 
-fn CFRunLoopSourceIsValid(_env: &mut Environment, source: CFRunLoopSourceRef) -> bool {
-    !source.is_null()
+fn CFRunLoopSourceIsValid(env: &mut Environment, source: CFRunLoopSourceRef) -> bool {
+    if source.is_null() {
+        return false;
+    }
+    env.objc.borrow::<CFRunLoopSourceHostObject>(source).valid
 }
 
-fn CFRunLoopSourceInvalidate(_env: &mut Environment, _source: CFRunLoopSourceRef) {
-    log_dbg!("CFRunLoopSourceInvalidate: stubbed");
+fn CFRunLoopSourceSignal(env: &mut Environment, source: CFRunLoopSourceRef) {
+    if source.is_null() {
+        return;
+    }
+    env.objc
+        .borrow_mut::<CFRunLoopSourceHostObject>(source)
+        .signaled = true;
+}
+
+fn CFRunLoopSourceGetOrder(env: &mut Environment, source: CFRunLoopSourceRef) -> i32 {
+    if source.is_null() {
+        return 0;
+    }
+    env.objc.borrow::<CFRunLoopSourceHostObject>(source).order
+}
+
+fn CFRunLoopSourceGetContext(
+    env: &mut Environment,
+    source: CFRunLoopSourceRef,
+    ctx_out: MutPtr<CFRunLoopSourceContext>,
+) {
+    if source.is_null() || ctx_out.is_null() {
+        return;
+    }
+    let host = env.objc.borrow::<CFRunLoopSourceHostObject>(source);
+    let ctx = CFRunLoopSourceContext {
+        version: host.version,
+        info: host.info,
+        retain: host.retain,
+        release: host.release,
+        copyDescription: host.copy_description,
+        equal: host.equal,
+        hash: host.hash,
+        schedule: host.schedule,
+        cancel: host.cancel,
+        perform: host.perform,
+    };
+    env.mem.write(ctx_out, ctx);
 }
 
 // MARK: - Observers
@@ -468,6 +637,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFRunLoopSourceSignal(_)),
     export_c_func!(CFRunLoopSourceIsValid(_)),
     export_c_func!(CFRunLoopSourceInvalidate(_)),
+    export_c_func!(CFRunLoopSourceGetOrder(_)),
+    export_c_func!(CFRunLoopSourceGetContext(_, _)),
     // Observers
     export_c_func!(CFRunLoopAddObserver(_, _, _)),
     export_c_func!(CFRunLoopRemoveObserver(_, _, _)),
@@ -493,3 +664,29 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFRunLoopTimerDoesRepeat(_)),
     export_c_func!(CFRunLoopTimerGetOrder(_)),
 ];
+
+// At the bottom of the file, append (still inside the same Rust module) a
+// CLASSES const that declares `_touchHLE_CFRunLoopSource: NSObject` so the
+// runtime can dispatch retain/release through env.objc.
+pub const CLASSES: ClassExports = objc_classes! {
+
+(env, this, _cmd);
+
+@implementation _touchHLE_CFRunLoopSource: NSObject
+
+- (())dealloc {
+    // If a release callback was supplied, call it on `info` per Apple docs.
+    let release_cb = env
+        .objc
+        .borrow::<CFRunLoopSourceHostObject>(this)
+        .release;
+    let info = env.objc.borrow::<CFRunLoopSourceHostObject>(this).info;
+    if !release_cb.to_ptr().is_null() {
+        let _: () = release_cb.call_from_host(env, (info,));
+    }
+    env.objc.dealloc_object(this, &mut env.mem);
+}
+
+@end
+
+};

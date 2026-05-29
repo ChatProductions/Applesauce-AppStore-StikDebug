@@ -474,6 +474,277 @@ fn aes_decrypt_block(block: &[u8; 16], expanded_key: &[u8], nr: usize) -> [u8; 1
     state
 }
 
+// ============================================================================
+// MARK: - DES (FIPS 46-3)
+// ============================================================================
+//
+// Apple's CommonCrypto exposes single-DES via `kCCAlgorithmDES (1)`. Our app
+// inputs include game DRM blobs and analytics SDK payloads. Implement DES
+// per the published FIPS-46-3 specification so we produce identical bytes
+// to Apple's CCCrypt rather than copying data through unchanged.
+
+const DES_IP: [u8; 64] = [
+    58, 50, 42, 34, 26, 18, 10, 2, 60, 52, 44, 36, 28, 20, 12, 4,
+    62, 54, 46, 38, 30, 22, 14, 6, 64, 56, 48, 40, 32, 24, 16, 8,
+    57, 49, 41, 33, 25, 17, 9, 1, 59, 51, 43, 35, 27, 19, 11, 3,
+    61, 53, 45, 37, 29, 21, 13, 5, 63, 55, 47, 39, 31, 23, 15, 7,
+];
+const DES_FP: [u8; 64] = [
+    40, 8, 48, 16, 56, 24, 64, 32, 39, 7, 47, 15, 55, 23, 63, 31,
+    38, 6, 46, 14, 54, 22, 62, 30, 37, 5, 45, 13, 53, 21, 61, 29,
+    36, 4, 44, 12, 52, 20, 60, 28, 35, 3, 43, 11, 51, 19, 59, 27,
+    34, 2, 42, 10, 50, 18, 58, 26, 33, 1, 41, 9, 49, 17, 57, 25,
+];
+const DES_E: [u8; 48] = [
+    32, 1, 2, 3, 4, 5, 4, 5, 6, 7, 8, 9, 8, 9, 10, 11, 12, 13,
+    12, 13, 14, 15, 16, 17, 16, 17, 18, 19, 20, 21, 20, 21, 22, 23, 24, 25,
+    24, 25, 26, 27, 28, 29, 28, 29, 30, 31, 32, 1,
+];
+const DES_P: [u8; 32] = [
+    16, 7, 20, 21, 29, 12, 28, 17, 1, 15, 23, 26, 5, 18, 31, 10,
+    2, 8, 24, 14, 32, 27, 3, 9, 19, 13, 30, 6, 22, 11, 4, 25,
+];
+const DES_PC1: [u8; 56] = [
+    57, 49, 41, 33, 25, 17, 9, 1, 58, 50, 42, 34, 26, 18,
+    10, 2, 59, 51, 43, 35, 27, 19, 11, 3, 60, 52, 44, 36,
+    63, 55, 47, 39, 31, 23, 15, 7, 62, 54, 46, 38, 30, 22,
+    14, 6, 61, 53, 45, 37, 29, 21, 13, 5, 28, 20, 12, 4,
+];
+const DES_PC2: [u8; 48] = [
+    14, 17, 11, 24, 1, 5, 3, 28, 15, 6, 21, 10,
+    23, 19, 12, 4, 26, 8, 16, 7, 27, 20, 13, 2,
+    41, 52, 31, 37, 47, 55, 30, 40, 51, 45, 33, 48,
+    44, 49, 39, 56, 34, 53, 46, 42, 50, 36, 29, 32,
+];
+const DES_SHIFTS: [u8; 16] =
+    [1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1];
+
+const DES_SBOX: [[u8; 64]; 8] = [
+    [
+        14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7,
+        0, 15, 7, 4, 14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8,
+        4, 1, 14, 8, 13, 6, 2, 11, 15, 12, 9, 7, 3, 10, 5, 0,
+        15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14, 10, 0, 6, 13,
+    ],
+    [
+        15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10,
+        3, 13, 4, 7, 15, 2, 8, 14, 12, 0, 1, 10, 6, 9, 11, 5,
+        0, 14, 7, 11, 10, 4, 13, 1, 5, 8, 12, 6, 9, 3, 2, 15,
+        13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12, 0, 5, 14, 9,
+    ],
+    [
+        10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8,
+        13, 7, 0, 9, 3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1,
+        13, 6, 4, 9, 8, 15, 3, 0, 11, 1, 2, 12, 5, 10, 14, 7,
+        1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3, 11, 5, 2, 12,
+    ],
+    [
+        7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15,
+        13, 8, 11, 5, 6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9,
+        10, 6, 9, 0, 12, 11, 7, 13, 15, 1, 3, 14, 5, 2, 8, 4,
+        3, 15, 0, 6, 10, 1, 13, 8, 9, 4, 5, 11, 12, 7, 2, 14,
+    ],
+    [
+        2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9,
+        14, 11, 2, 12, 4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6,
+        4, 2, 1, 11, 10, 13, 7, 8, 15, 9, 12, 5, 6, 3, 0, 14,
+        11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9, 10, 4, 5, 3,
+    ],
+    [
+        12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11,
+        10, 15, 4, 2, 7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8,
+        9, 14, 15, 5, 2, 8, 12, 3, 7, 0, 4, 10, 1, 13, 11, 6,
+        4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7, 6, 0, 8, 13,
+    ],
+    [
+        4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1,
+        13, 0, 11, 7, 4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6,
+        1, 4, 11, 13, 12, 3, 7, 14, 10, 15, 6, 8, 0, 5, 9, 2,
+        6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15, 14, 2, 3, 12,
+    ],
+    [
+        13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7,
+        1, 15, 13, 8, 10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2,
+        7, 11, 4, 1, 9, 12, 14, 2, 0, 6, 10, 13, 15, 3, 5, 8,
+        2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0, 3, 5, 6, 11,
+    ],
+];
+
+fn des_bit(buf: u64, pos: usize, total: usize) -> u64 {
+    (buf >> (total - pos)) & 1
+}
+
+fn des_permute(input: u64, table: &[u8], in_bits: usize) -> u64 {
+    let mut out: u64 = 0;
+    for (i, &p) in table.iter().enumerate() {
+        out |= des_bit(input, p as usize, in_bits) << (table.len() - 1 - i);
+    }
+    out
+}
+
+fn des_key_schedule(key: u64) -> [u64; 16] {
+    let permuted = des_permute(key, &DES_PC1, 64);
+    let mut c = (permuted >> 28) & 0x0fff_ffff;
+    let mut d = permuted & 0x0fff_ffff;
+    let mut subkeys = [0u64; 16];
+    for round in 0..16 {
+        let shift = DES_SHIFTS[round] as u32;
+        c = ((c << shift) | (c >> (28 - shift))) & 0x0fff_ffff;
+        d = ((d << shift) | (d >> (28 - shift))) & 0x0fff_ffff;
+        let merged = (c << 28) | d;
+        subkeys[round] = des_permute(merged, &DES_PC2, 56);
+    }
+    subkeys
+}
+
+fn des_f(half: u32, subkey: u64) -> u32 {
+    let expanded = des_permute(half as u64, &DES_E, 32) ^ subkey;
+    let mut output: u32 = 0;
+    for i in 0..8 {
+        let chunk = ((expanded >> (42 - i * 6)) & 0x3f) as usize;
+        let row = ((chunk & 0x20) >> 4) | (chunk & 0x01);
+        let col = (chunk >> 1) & 0x0f;
+        let s_val = DES_SBOX[i][(row * 16 + col)] as u32;
+        output |= s_val << (28 - i * 4);
+    }
+    des_permute(output as u64, &DES_P, 32) as u32
+}
+
+fn des_encrypt_block(block: u64, subkeys: &[u64; 16]) -> u64 {
+    let permuted = des_permute(block, &DES_IP, 64);
+    let mut l = (permuted >> 32) as u32;
+    let mut r = permuted as u32;
+    for round in 0..16 {
+        let new_r = l ^ des_f(r, subkeys[round]);
+        l = r;
+        r = new_r;
+    }
+    let pre_output = ((r as u64) << 32) | (l as u64);
+    des_permute(pre_output, &DES_FP, 64)
+}
+
+fn des_decrypt_block(block: u64, subkeys: &[u64; 16]) -> u64 {
+    let permuted = des_permute(block, &DES_IP, 64);
+    let mut l = (permuted >> 32) as u32;
+    let mut r = permuted as u32;
+    for round in (0..16).rev() {
+        let new_r = l ^ des_f(r, subkeys[round]);
+        l = r;
+        r = new_r;
+    }
+    let pre_output = ((r as u64) << 32) | (l as u64);
+    des_permute(pre_output, &DES_FP, 64)
+}
+
+fn des_load_block(bytes: &[u8]) -> u64 {
+    u64::from_be_bytes(bytes.try_into().unwrap())
+}
+
+fn des_store_block(block: u64, out: &mut [u8]) {
+    out.copy_from_slice(&block.to_be_bytes());
+}
+
+fn des_process(
+    encrypt: bool,
+    input: &[u8],
+    key: &[u8],
+    iv: Option<&[u8]>,
+    pkcs7_pad: bool,
+    ecb_mode: bool,
+) -> Result<Vec<u8>, i32> {
+    if key.len() != 8 {
+        return Err(kCCParamError);
+    }
+    let subkeys = des_key_schedule(des_load_block(key));
+    let block_size = 8usize;
+
+    if encrypt {
+        let work_data: Vec<u8> = if pkcs7_pad {
+            let pad_len = block_size - (input.len() % block_size);
+            input
+                .iter()
+                .copied()
+                .chain(std::iter::repeat(pad_len as u8).take(pad_len))
+                .collect()
+        } else {
+            if input.len() % block_size != 0 {
+                return Err(kCCAlignmentError);
+            }
+            input.to_vec()
+        };
+
+        let mut output = vec![0u8; work_data.len()];
+        let mut prev = [0u8; 8];
+        if !ecb_mode {
+            if let Some(iv_bytes) = iv {
+                if iv_bytes.len() == block_size {
+                    prev.copy_from_slice(iv_bytes);
+                }
+            }
+        }
+
+        for i in (0..work_data.len()).step_by(block_size) {
+            let mut blk = [0u8; 8];
+            blk.copy_from_slice(&work_data[i..i + block_size]);
+            if !ecb_mode {
+                for j in 0..block_size {
+                    blk[j] ^= prev[j];
+                }
+            }
+            let encrypted = des_encrypt_block(des_load_block(&blk), &subkeys);
+            des_store_block(encrypted, &mut output[i..i + block_size]);
+            if !ecb_mode {
+                prev.copy_from_slice(&output[i..i + block_size]);
+            }
+        }
+        Ok(output)
+    } else {
+        if input.is_empty() {
+            return Ok(Vec::new());
+        }
+        if input.len() % block_size != 0 {
+            return Err(kCCAlignmentError);
+        }
+        let mut output = vec![0u8; input.len()];
+        let mut prev = [0u8; 8];
+        if !ecb_mode {
+            if let Some(iv_bytes) = iv {
+                if iv_bytes.len() == block_size {
+                    prev.copy_from_slice(iv_bytes);
+                }
+            }
+        }
+
+        for i in (0..input.len()).step_by(block_size) {
+            let mut blk = [0u8; 8];
+            blk.copy_from_slice(&input[i..i + block_size]);
+            let decrypted = des_decrypt_block(des_load_block(&blk), &subkeys);
+            let mut decrypted_bytes = [0u8; 8];
+            des_store_block(decrypted, &mut decrypted_bytes);
+            if ecb_mode {
+                output[i..i + block_size].copy_from_slice(&decrypted_bytes);
+            } else {
+                for j in 0..block_size {
+                    output[i + j] = decrypted_bytes[j] ^ prev[j];
+                }
+                prev.copy_from_slice(&input[i..i + block_size]);
+            }
+        }
+
+        let final_len = if pkcs7_pad {
+            let pad = output[output.len() - 1] as usize;
+            if pad == 0 || pad > block_size {
+                return Err(kCCDecodeError);
+            }
+            output.len() - pad
+        } else {
+            output.len()
+        };
+        output.truncate(final_len);
+        Ok(output)
+    }
+}
+
 // CCCrypt has 11 args. All are passed via the standard ARM calling convention
 // (R0-R3 + stack), handled by the CallFromGuest framework.
 #[allow(non_snake_case)]
@@ -681,6 +952,33 @@ fn CCCrypt(
     }
 
     // Unsupported block cipher algorithm: copy as-is
+    if alg == 1 {
+        let key_bytes = env.mem.bytes_at(key.cast(), key_length).to_vec();
+        if key_bytes.len() != 8 {
+            return kCCParamError;
+        }
+        let input = env.mem.bytes_at(data_in.cast(), data_in_length).to_vec();
+        let iv_bytes_opt = if !ecb_mode && !iv.is_null() {
+            Some(env.mem.bytes_at(iv.cast(), block_size as GuestUSize).to_vec())
+        } else {
+            None
+        };
+        let iv_slice = iv_bytes_opt.as_deref();
+        let is_encrypt = op == 0;
+        return match des_process(is_encrypt, &input, &key_bytes, iv_slice, pkcs7_pad, ecb_mode) {
+            Ok(output) => {
+                if data_out_available < output.len() as GuestUSize {
+                    return kCCBufferTooSmall;
+                }
+                env.mem
+                    .bytes_at_mut(data_out.cast(), output.len() as GuestUSize)
+                    .copy_from_slice(&output);
+                env.mem.write(data_out_moved, output.len() as GuestUSize);
+                kCCSuccess
+            }
+            Err(code) => code,
+        };
+    }
     if data_out_available < data_in_length {
         return kCCBufferTooSmall;
     }
@@ -1366,3 +1664,20 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     constant_exports: &[],
     function_exports: &[FUNCTIONS],
 };
+
+#[cfg(test)]
+mod des_tests {
+    use super::*;
+
+    #[test]
+    fn fips_46_3_known_answer() {
+        let key: u64 = 0x133457799BBCDFF1;
+        let plaintext: u64 = 0x0123456789ABCDEF;
+        let expected: u64 = 0x85E813540F0AB405;
+        let subkeys = des_key_schedule(key);
+        let ciphertext = des_encrypt_block(plaintext, &subkeys);
+        assert_eq!(ciphertext, expected, "DES encrypt KAT failed");
+        let roundtrip = des_decrypt_block(ciphertext, &subkeys);
+        assert_eq!(roundtrip, plaintext, "DES decrypt round-trip failed");
+    }
+}
