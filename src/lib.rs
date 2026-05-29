@@ -280,8 +280,15 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         };
         let major: u32 = major_str.parse().unwrap_or(0);
         let minor: u32 = minor_str.parse().unwrap_or(0);
-        if major > 4 || (major == 4 && minor > 0) {
-            echo!("Warning: app requires OS version {}. Only apps for iOS 4.0 and earlier are currently supported.", version);
+        // Apps targeting up to iOS 9.0 attempt to run silently. Only warn
+        // when the deployment target is beyond iOS 9, where breakage from
+        // missing post-iOS-9 APIs becomes the rule rather than the exception.
+        if major > 9 || (major == 9 && minor > 0) {
+            echo!(
+                "Warning: app requires OS version {}. touchHLE currently aims \
+                 for iOS 2.x–9.0; newer APIs may be missing.",
+                version
+            );
         }
     }
 

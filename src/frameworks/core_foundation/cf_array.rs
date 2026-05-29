@@ -8,7 +8,7 @@
 //! These are toll-free bridged to `NSArray` and `NSMutableArray` in Apple's
 //! implementation. Here they are the same types.
 
-use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
+use super::cf_allocator::CFAllocatorRef;
 use super::{CFIndex, CFRelease, CFRetain, CFTypeRef};
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};

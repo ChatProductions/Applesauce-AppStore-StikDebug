@@ -1,6 +1,5 @@
 use crate::objc::{autorelease, id, msg, nil, release, retain, HostObject};
 use crate::objc_classes;
-use crate::Environment;
 
 // =====================================================================
 // HOST OBJECTS

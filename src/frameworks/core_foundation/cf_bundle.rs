@@ -355,7 +355,7 @@ fn CFBundleCopyExecutableURL(env: &mut Environment, bundle: CFBundleRef) -> CFUR
 }
 
 fn CFBundleCopyAuxiliaryExecutableURL(
-    env: &mut Environment,
+    _env: &mut Environment,
     bundle: CFBundleRef,
     executable_name: CFStringRef,
 ) -> CFURLRef {

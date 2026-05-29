@@ -34,6 +34,13 @@ struct NSKeyedArchiverHostObject {
     current_key: Option<Uid>,
     /// map of id => Uid
     already_archived: HashMap<id, Uid>,
+    /// Scratch dictionary that receives writes attempted after `finishEncoding`
+    /// has been called. Apple's docs state that any `encode...` invocation
+    /// after `finishEncoding` raises `NSInvalidArgumentException`; rather than
+    /// risk crashing the guest by raising an exception from inside the
+    /// archiver, we log a warning and silently discard the write. This field
+    /// keeps the borrow signatures of the helpers stable.
+    discarded_scope: Dictionary,
 }
 impl HostObject for NSKeyedArchiverHostObject {}
 
@@ -58,7 +65,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         plist,
         encoded_data: nil,
         current_key: None,
-        already_archived
+        already_archived,
+        discarded_scope: Dictionary::new(),
     }), &mut env.mem)
 }
 
@@ -228,6 +236,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     scope.insert(key, Value::Data(data));
 }
 
+// MARK: - Non-keyed coding compatibility
+//
+// Apple's "Archives and Serializations Programming Guide" notes that
+// `NSKeyedArchiver` supports the older non-keyed NSCoder API by
+// auto-generating sequential keys (`$0`, `$1`, ...) within the current
+// encoding scope. Implementing these keeps NSCoding subclasses that
+// fall back to the non-keyed path working — for example NSNumber's
+// internal encoder, and a number of third-party SDKs (e.g. analytics
+// libraries that hand the archiver an opaque payload object).
+- (())encodeObject:(id)object { // NSCoding *
+    let key = next_positional_key(env, this);
+    encode_object_for_key(env, this, object, key);
+}
+
+// `encodeConditionalObject:` is meant to record a weak reference that
+// only gets serialized if the object is also archived elsewhere
+// unconditionally. Apple's docs explicitly call out that any subclass
+// "that does not support conditional encoding" must behave as
+// `encodeObject:`. NSKeyedArchiver provides true conditional encoding
+// only through the `forKey:` variant; the non-keyed flavour therefore
+// degrades to the same behaviour as `encodeObject:`.
+- (())encodeConditionalObject:(id)object { // NSCoding *
+    let key = next_positional_key(env, this);
+    encode_object_for_key(env, this, object, key);
+}
+
 - (())finishEncoding {
     let plist = &env.objc.borrow::<NSKeyedArchiverHostObject>(this).plist;
     let mut buffer = Vec::new();
@@ -292,12 +326,29 @@ fn normalize_key(env: &mut Environment, key: id) -> Option<String> {
 }
 
 fn get_value_to_encode_for_current_key(env: &mut Environment, archiver: id) -> &mut Dictionary {
-    assert_eq!(
-        env.objc
-            .borrow::<NSKeyedArchiverHostObject>(archiver)
-            .encoded_data,
-        nil
-    );
+    // Apple's docs (Archives and Serializations Programming Guide,
+    // "NSKeyedArchiver Class Reference") explicitly state that any
+    // `encodeObject:forKey:`-style call made after `-finishEncoding` raises
+    // an NSInvalidArgumentException. Mirror the intent without crashing the
+    // emulator: detect the post-finish state, warn loudly, and hand the
+    // caller a scratch dictionary whose contents are thrown away. This keeps
+    // misbehaving apps alive instead of panicking the assert that lived here
+    // previously.
+    if env
+        .objc
+        .borrow::<NSKeyedArchiverHostObject>(archiver)
+        .encoded_data
+        != nil
+    {
+        log!(
+            "Warning: NSKeyedArchiver: encode method called after \
+             -finishEncoding (Apple raises NSInvalidArgumentException). \
+             Discarding the value to keep the guest alive."
+        );
+        let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
+        host_object.discarded_scope.clear();
+        return &mut host_object.discarded_scope;
+    }
     let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
     match host_object.current_key {
         Some(uid) => host_object
@@ -377,6 +428,23 @@ fn encode_object(env: &mut Environment, archiver: id, object: id) -> Uid {
         }
 
         new_uid
+    }
+}
+
+/// Returns the next unused positional key (`"$0"`, `"$1"`, ...) inside
+/// the archiver's current encoding scope. Used by the non-keyed
+/// `encodeObject:` and `encodeValueOfObjCType:at:` paths so that
+/// fall-through NSCoder callers receive Apple-compatible auto-generated
+/// keys instead of clobbering each other.
+fn next_positional_key(env: &mut Environment, archiver: id) -> String {
+    let scope = get_value_to_encode_for_current_key(env, archiver);
+    let mut idx: u32 = 0;
+    loop {
+        let candidate = format!("${}", idx);
+        if !scope.contains_key(&candidate) {
+            return candidate;
+        }
+        idx += 1;
     }
 }
 

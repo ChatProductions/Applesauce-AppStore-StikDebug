@@ -37,7 +37,7 @@ use crate::objc::{
     autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain,
     Class, ClassExports, HostObject, NSZonePtr, ObjC, SEL,
 };
-use crate::{todo_objc_setter, Environment};
+use crate::Environment;
 
 /// State maintained for UIView's class-level animation block API
 /// (`+beginAnimations:context:` ... `+commitAnimations`). At most one block
@@ -166,7 +166,7 @@ impl Default for UIViewHostObject {
 }
 
 pub fn set_view_controller(env: &mut Environment, view: id, controller: id) {
-    let mut host_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let host_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     host_obj.view_controller = controller;
 }
 
@@ -706,11 +706,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)isAnimating { env.objc.borrow::<UIViewHostObject>(this).is_animating }
 - (())startAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if !host.is_animating { host.is_animating = true; }
 }
 - (())stopAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if host.is_animating { host.is_animating = false; }
 }
 
@@ -984,6 +984,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     if recognizer == nil { return; }
     retain(env, recognizer);
     env.objc.borrow_mut::<UIViewHostObject>(this).gesture_recognizers.push(recognizer);
+    // Apple docs: -addGestureRecognizer: sets the recognizer's `view` to
+    // the receiver. The recognizer holds this back-pointer weakly.
+    env.objc
+        .borrow_mut::<crate::frameworks::uikit::ui_gesture_recognizer::UIGestureRecognizerHostObject>(recognizer)
+        .view = this;
 }
 
 - (())removeGestureRecognizer:(id)recognizer {
@@ -991,6 +996,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if let Some(pos) = host.gesture_recognizers.iter().position(|&r| r == recognizer) {
         host.gesture_recognizers.remove(pos);
+        // Apple docs: recognizer's view back-pointer is cleared on detach.
+        env.objc
+            .borrow_mut::<crate::frameworks::uikit::ui_gesture_recognizer::UIGestureRecognizerHostObject>(recognizer)
+            .view = nil;
         release(env, recognizer);
     }
 }
@@ -1013,6 +1022,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     // existing list, release each, replace, retain new ones.
     let old: Vec<id> =
         env.objc.borrow::<UIViewHostObject>(this).gesture_recognizers.clone();
+    for r in &old {
+        // Clear the recognizer's view back-pointer before releasing.
+        env.objc
+            .borrow_mut::<crate::frameworks::uikit::ui_gesture_recognizer::UIGestureRecognizerHostObject>(*r)
+            .view = nil;
+    }
     for r in old { release(env, r); }
     let mut new_list: Vec<id> = Vec::new();
     if recognizers != nil {
@@ -1022,7 +1037,12 @@ pub const CLASSES: ClassExports = objc_classes! {
             if r != nil { retain(env, r); new_list.push(r); }
         }
     }
-    env.objc.borrow_mut::<UIViewHostObject>(this).gesture_recognizers = new_list;
+    env.objc.borrow_mut::<UIViewHostObject>(this).gesture_recognizers = new_list.clone();
+    for r in &new_list {
+        env.objc
+            .borrow_mut::<crate::frameworks::uikit::ui_gesture_recognizer::UIGestureRecognizerHostObject>(*r)
+            .view = this;
+    }
 }
 
 - (id)superview { env.objc.borrow::<UIViewHostObject>(this).superview }
@@ -1052,10 +1072,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         retain(env, view);
         () = msg![env; view removeFromSuperview];
-        let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+        let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
         subview_obj.superview = this;
         let subview_layer = subview_obj.layer;
-        let mut this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
+        let this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
         this_obj.subviews.push(view);
         let this_layer = this_obj.layer;
         () = msg![env; this_layer addSublayer:subview_layer];
@@ -1071,7 +1091,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
-    let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
@@ -1091,7 +1111,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
-    let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
@@ -1173,7 +1193,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if superview == nil { return; }
     let _: () = msg![env; this_layer removeFromSuperlayer];
 
-    let mut superview_obj = env.objc.borrow_mut::<UIViewHostObject>(superview);
+    let superview_obj = env.objc.borrow_mut::<UIViewHostObject>(superview);
     let subviews = &mut superview_obj.subviews;
 
     if let Some(idx) = subviews.iter().position(|&subview| subview == this) {
@@ -1234,7 +1254,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)context { nil }
 - (())setContext:(id)_context { }
 - (())resume {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     host.is_animating = true;
 }
 
@@ -1315,6 +1335,37 @@ pub const CLASSES: ClassExports = objc_classes! {
         let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
         msg![env; layer setNeedsDisplay]
     }
+}
+
+- (())setNeedsDisplayInRect:(CGRect)invalid_rect {
+    // Apple docs (UIView Reference, "Drawing and Updating the View"):
+    //   "Marks the specified rectangle of the receiver as needing to be
+    //    redrawn. invalidRect: The rectangular region of the receiver to
+    //    mark as invalid; it should be specified in the coordinate system
+    //    of the receiver."
+    //
+    // The view delegates the dirty rectangle to its backing CALayer; the
+    // next display cycle will only repaint the union of pending invalid
+    // rects (CALayer.setNeedsDisplayInRect: is documented to coalesce).
+    // We keep the same fast-out as -setNeedsDisplay: if neither -drawRect:
+    // nor -drawLayer:inContext: is overridden by this view's class, there
+    // is nothing to repaint and we can save the layer round-trip.
+    let this_class = ObjC::read_isa(this, &env.mem);
+    let ui_view_class = env.objc.get_known_class("UIView", &mut env.mem);
+
+    let draw_layer_sel = env.objc.lookup_selector("drawLayer:inContext:").unwrap();
+    let draw_rect_sel = env.objc.lookup_selector("drawRect:").unwrap();
+
+    if !(env.objc.class_overrides_method_of_superclass(this_class, draw_rect_sel, ui_view_class)
+        || env
+            .objc
+            .class_overrides_method_of_superclass(this_class, draw_layer_sel, ui_view_class))
+    {
+        return;
+    }
+
+    let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
+    () = msg![env; layer setNeedsDisplayInRect:invalid_rect]
 }
 
 - (())setNeedsLayout { }

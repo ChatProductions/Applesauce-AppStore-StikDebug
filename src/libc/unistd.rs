@@ -552,6 +552,16 @@ fn chmod(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
     0
 }
 
+/// `int fchmod(int fd, mode_t mode);`
+///
+/// Per Apple's `fchmod(2)` man page
+/// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fchmod.2.html>):
+///
+/// > Th
+fn fchmod(_env: &mut Environment, _fd: i32, _mode: u32) -> i32 {
+    0
+}
+
 // Darwin/XNU `<sys/syscall.h>` selector numbers used by the few syscalls
 // touchHLE knows how to implement directly. The full list is enormous; we
 // only enumerate the ones we resolve here.
@@ -603,6 +613,28 @@ fn syscall(env: &mut Environment, number: i32, _args: DotDotDot) -> i32 {
     }
 }
 
+/// `sync()` — Darwin man 2: "The `sync()` function causes all
+/// information in memory that updates file systems to be scheduled for
+/// writing out to all file systems." touchHLE delegates every file
+/// write to the host kernel through ordinary `write(2)`-family calls,
+/// so the guest never has buffered data on our side that still needs to
+/// hit disk. The correct emulator-side behaviour is therefore a no-op
+/// that returns synchronously, which matches what Darwin would do for
+/// an app that did not open any files. Prior to this entry point being
+/// present, the dynamic linker installed a return-0 stub — semantically
+/// identical here, but having the function declared properly avoids
+/// the "call to unimplemented function _sync" warning that confused
+/// users into thinking persistence was broken.
+fn sync(_env: &mut Environment) {}
+
+/// `fsync(int fd) -> int`. Same reasoning as [sync]: the host has
+/// already flushed by the time `write(2)` returns from our HLE
+/// implementations, so returning 0 (success) for any valid descriptor
+/// is correct. We don't validate `fd` because doing so would require
+/// tracking guest descriptor state that we already trust the kernel
+/// to police.
+fn fsync(_env: &mut Environment, _fd: i32) -> i32 { 0 }
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(syscall(_, _)),
     export_c_func!(sleep(_)),
@@ -628,4 +660,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fork()),
     export_c_func!(sbrk(_)),
     export_c_func!(chmod(_, _)),
+    export_c_func!(fchmod(_, _)),
+    export_c_func!(sync()),
+    export_c_func!(fsync(_)),
 ];

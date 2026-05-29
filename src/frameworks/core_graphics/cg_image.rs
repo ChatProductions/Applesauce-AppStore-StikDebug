@@ -14,7 +14,7 @@ use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant}
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
 use crate::image::Image;
-use crate::mem::{ConstPtr, GuestUSize, MutPtr};
+use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{autorelease, id, nil, objc_classes, ClassExports, HostObject, ObjC};
 use crate::Environment;
 
@@ -321,7 +321,7 @@ fn CGImageGetBitmapInfo(_env: &mut Environment, image: CGImageRef) -> CGBitmapIn
 }
 
 /// Decode array — we always use the default (nil / identity mapping).
-fn CGImageGetDecode(_env: &mut Environment, image: CGImageRef) -> ConstPtr<CGFloat> {
+fn CGImageGetDecode(_env: &mut Environment, _image: CGImageRef) -> ConstPtr<CGFloat> {
     ConstPtr::null()
 }
 
@@ -333,7 +333,7 @@ fn CGImageGetShouldInterpolate(_env: &mut Environment, image: CGImageRef) -> boo
 }
 
 /// CGColorRenderingIntent — 0 = kCGRenderingIntentDefault.
-fn CGImageGetRenderingIntent(_env: &mut Environment, image: CGImageRef) -> i32 {
+fn CGImageGetRenderingIntent(_env: &mut Environment, _image: CGImageRef) -> i32 {
     0
 }
 
@@ -851,6 +851,161 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_kCGImagePropertyPNGChromaticities",
         HostConstant::NSString("Chromaticities"),
+    ),
+    // Parent metadata dictionaries. Apple documents these as
+    // `extern const CFStringRef` keys whose string values match
+    // dictionary names embedded in image containers (EXIF, TIFF, etc.).
+    // <https://developer.apple.com/documentation/imageio/image_properties>
+    (
+        "_kCGImagePropertyExifDictionary",
+        HostConstant::NSString("{Exif}"),
+    ),
+    (
+        "_kCGImagePropertyTIFFDictionary",
+        HostConstant::NSString("{TIFF}"),
+    ),
+    (
+        "_kCGImagePropertyIPTCDictionary",
+        HostConstant::NSString("{IPTC}"),
+    ),
+    (
+        "_kCGImagePropertyGPSDictionary",
+        HostConstant::NSString("{GPS}"),
+    ),
+    (
+        "_kCGImagePropertyRawDictionary",
+        HostConstant::NSString("{RAW}"),
+    ),
+    (
+        "_kCGImagePropertyCIFFDictionary",
+        HostConstant::NSString("{CIFF}"),
+    ),
+    (
+        "_kCGImagePropertyExifAuxDictionary",
+        HostConstant::NSString("{ExifAux}"),
+    ),
+    (
+        "_kCGImagePropertyMakerCanonDictionary",
+        HostConstant::NSString("{MakerCanon}"),
+    ),
+    (
+        "_kCGImagePropertyMakerNikonDictionary",
+        HostConstant::NSString("{MakerNikon}"),
+    ),
+    (
+        "_kCGImagePropertyMakerMinoltaDictionary",
+        HostConstant::NSString("{MakerMinolta}"),
+    ),
+    (
+        "_kCGImagePropertyMakerFujiDictionary",
+        HostConstant::NSString("{MakerFuji}"),
+    ),
+    (
+        "_kCGImagePropertyMakerOlympusDictionary",
+        HostConstant::NSString("{MakerOlympus}"),
+    ),
+    (
+        "_kCGImagePropertyMakerPentaxDictionary",
+        HostConstant::NSString("{MakerPentax}"),
+    ),
+    (
+        "_kCGImageProperty8BIMDictionary",
+        HostConstant::NSString("{8BIM}"),
+    ),
+    (
+        "_kCGImagePropertyDNGDictionary",
+        HostConstant::NSString("{DNG}"),
+    ),
+    // Common EXIF subkeys. These are accessed via the {Exif}
+    // sub-dictionary; we expose them as literal CFString constants so
+    // guest comparisons work whether or not the dictionary is populated.
+    (
+        "_kCGImagePropertyExifExposureTime",
+        HostConstant::NSString("ExposureTime"),
+    ),
+    (
+        "_kCGImagePropertyExifApertureValue",
+        HostConstant::NSString("ApertureValue"),
+    ),
+    (
+        "_kCGImagePropertyExifShutterSpeedValue",
+        HostConstant::NSString("ShutterSpeedValue"),
+    ),
+    (
+        "_kCGImagePropertyExifFNumber",
+        HostConstant::NSString("FNumber"),
+    ),
+    (
+        "_kCGImagePropertyExifISOSpeedRatings",
+        HostConstant::NSString("ISOSpeedRatings"),
+    ),
+    (
+        "_kCGImagePropertyExifDateTimeOriginal",
+        HostConstant::NSString("DateTimeOriginal"),
+    ),
+    (
+        "_kCGImagePropertyExifDateTimeDigitized",
+        HostConstant::NSString("DateTimeDigitized"),
+    ),
+    (
+        "_kCGImagePropertyExifPixelXDimension",
+        HostConstant::NSString("PixelXDimension"),
+    ),
+    (
+        "_kCGImagePropertyExifPixelYDimension",
+        HostConstant::NSString("PixelYDimension"),
+    ),
+    (
+        "_kCGImagePropertyExifFocalLength",
+        HostConstant::NSString("FocalLength"),
+    ),
+    (
+        "_kCGImagePropertyExifFlash",
+        HostConstant::NSString("Flash"),
+    ),
+    (
+        "_kCGImagePropertyExifWhiteBalance",
+        HostConstant::NSString("WhiteBalance"),
+    ),
+    (
+        "_kCGImagePropertyExifColorSpace",
+        HostConstant::NSString("ColorSpace"),
+    ),
+    (
+        "_kCGImagePropertyExifSubjectArea",
+        HostConstant::NSString("SubjectArea"),
+    ),
+    (
+        "_kCGImagePropertyExifSubjectDistance",
+        HostConstant::NSString("SubjectDistance"),
+    ),
+    (
+        "_kCGImagePropertyExifFlashEnergy",
+        HostConstant::NSString("FlashEnergy"),
+    ),
+    (
+        "_kCGImagePropertyExifUserComment",
+        HostConstant::NSString("UserComment"),
+    ),
+    (
+        "_kCGImagePropertyExifBodySerialNumber",
+        HostConstant::NSString("BodySerialNumber"),
+    ),
+    (
+        "_kCGImagePropertyExifCameraOwnerName",
+        HostConstant::NSString("CameraOwnerName"),
+    ),
+    (
+        "_kCGImagePropertyExifLensModel",
+        HostConstant::NSString("LensModel"),
+    ),
+    (
+        "_kCGImagePropertyExifLensMake",
+        HostConstant::NSString("LensMake"),
+    ),
+    (
+        "_kCGImagePropertyExifLensSerialNumber",
+        HostConstant::NSString("LensSerialNumber"),
     ),
     // ImageDestination options.
     (

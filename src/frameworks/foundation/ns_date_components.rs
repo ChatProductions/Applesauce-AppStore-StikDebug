@@ -202,7 +202,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         host.weekday, host.weekday_ordinal, host.week_of_month, host.week_of_year,
         host.year_for_week_of_year, host.quarter,
     );
-    drop(host);
     let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, s);
     crate::objc::autorelease(env, ns)
 }

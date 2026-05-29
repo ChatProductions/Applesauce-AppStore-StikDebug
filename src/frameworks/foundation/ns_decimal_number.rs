@@ -446,10 +446,10 @@ type NSComparisonResult = NSInteger;
 
 fn decimal_from_f64(env: &mut crate::Environment, value: f64) -> crate::objc::id {
     let class = env.objc.get_known_class("NSDecimalNumber", &mut env.mem);
-    let obj = env.objc.alloc_object(
+    
+    env.objc.alloc_object(
         class,
         Box::new(NSDecimalNumberHostObject { value }),
         &mut env.mem,
-    );
-    obj
+    )
 }

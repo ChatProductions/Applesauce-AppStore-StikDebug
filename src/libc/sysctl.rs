@@ -14,7 +14,7 @@ use crate::libc::sysctl::SysInfoType::String;
 use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, MutVoidPtr, PAGE_SIZE};
 use crate::Environment;
 
-static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 28] = [
+static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 29] = [
     // Generic CPU, I/O
     ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
     ((6,2), "hw.model" , String(b"M68AP")),
@@ -53,6 +53,9 @@ static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 28] = [
     ((1,10), "kern.hostname" , String(b"touchHLE")),
     ((1,4), "kern.version" , String(b"Darwin Kernel Version 13.0.0: Wed Jun 13 16:55:00 PDT 2012; root:xnu-2107.7.55~11/RELEASE_ARM_S5L8920X")),
     ((1,21), "kern.boottime" , SysInfoType::Int64(1600000000)),
+    // kern.proc.pid is a node for process information. Some games probe
+    // it with sysctl([CTL_KERN, KERN_PROC, ...]) and only need success.
+    ((1,65), "kern.proc.pid", SysInfoType::Bytes(b"")),
 ];
 
 static STRING_MAP: LazyLock<HashMap<&str, SysInfoType>> = LazyLock::new(|| {
@@ -79,6 +82,7 @@ enum SysInfoType {
     String(&'static [u8]),
     Int32(i32),
     Int64(i64),
+    Bytes(&'static [u8]),
 }
 
 fn sysctl(
@@ -215,7 +219,8 @@ where
     if !newp.is_null() || newlen != 0 {
         log!(
             "Warning: sysctl: write attempt (newp={:?}, newlen={}) — returning EPERM (-1)",
-            newp, newlen
+            newp,
+            newlen
         );
         set_errno(env, 1); // EPERM
         return -1;
@@ -228,6 +233,7 @@ where
         String(str) => str.len() as GuestUSize + 1,
         SysInfoType::Int32(_) => guest_size_of::<i32>(),
         SysInfoType::Int64(_) => guest_size_of::<i64>(),
+        SysInfoType::Bytes(bytes) => bytes.len() as GuestUSize,
     };
     if oldp.is_null() {
         env.mem.write(oldlenp, len);
@@ -252,6 +258,19 @@ where
                 env.mem.write(oldlenp, guest_size_of::<i32>());
                 return 0;
             }
+            SysInfoType::Bytes(bytes) => {
+                let copy_len = oldlen.min(len);
+                if copy_len > 0 {
+                    let tmp = env.mem.alloc(copy_len);
+                    env.mem
+                        .bytes_at_mut(tmp.cast(), copy_len)
+                        .copy_from_slice(&bytes[..copy_len as usize]);
+                    env.mem.memmove(oldp, tmp.cast_const().cast(), copy_len);
+                    env.mem.free(tmp);
+                }
+                env.mem.write(oldlenp, copy_len);
+                return 0;
+            }
             _ => {
                 log!("sysctl(byname) for '{name_str}': the buffer of size {oldlen} is too low to fit the value of size {len}, returning -1");
                 return -1;
@@ -269,6 +288,14 @@ where
         }
         SysInfoType::Int64(num) => {
             env.mem.write(oldp.cast(), num);
+        }
+        SysInfoType::Bytes(bytes) => {
+            if len > 0 {
+                let tmp = env.mem.alloc(len);
+                env.mem.bytes_at_mut(tmp.cast(), len).copy_from_slice(bytes);
+                env.mem.memmove(oldp, tmp.cast_const().cast(), len);
+                env.mem.free(tmp);
+            }
         }
     }
     env.mem.write(oldlenp, len);

@@ -8,7 +8,22 @@
 
 use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+
+/// Apple's NSNumberFormatter behavior modes.
+/// <https://developer.apple.com/documentation/foundation/nsnumberformatterbehavior>
+///
+/// * `NSNumberFormatterBehaviorDefault = 0`
+/// * `NSNumberFormatterBehavior10_0    = 1000`
+/// * `NSNumberFormatterBehavior10_4    = 1040`
+const NS_NUMBER_FORMATTER_BEHAVIOR_10_4: NSUInteger = 1040;
+
+/// Process-wide default formatter behavior, used by
+/// `+defaultFormatterBehavior` / `+setDefaultFormatterBehavior:`. Apple
+/// documents the runtime default as `NSNumberFormatterBehavior10_4` on
+/// modern OS versions.
+static DEFAULT_FORMATTER_BEHAVIOR: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(NS_NUMBER_FORMATTER_BEHAVIOR_10_4);
 
 #[derive(Default)]
 struct NSNumberFormatterHostObject {
@@ -18,6 +33,9 @@ struct NSNumberFormatterHostObject {
     uses_grouping_separator: bool,
     minimum_fraction_digits: NSUInteger,
     maximum_fraction_digits: NSUInteger,
+    /// `NSNumberFormatterBehavior` value. Defaults to
+    /// `NSNumberFormatterBehavior10_4` (1040) to match modern iOS.
+    formatter_behavior: NSUInteger,
 }
 impl HostObject for NSNumberFormatterHostObject {}
 
@@ -39,8 +57,21 @@ pub const CLASSES: ClassExports = objc_classes! {
         uses_grouping_separator: false,
         minimum_fraction_digits: 0,
         maximum_fraction_digits: 0,
+        formatter_behavior: NS_NUMBER_FORMATTER_BEHAVIOR_10_4,
     };
     env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
+}
+
+// `+ (NSNumberFormatterBehavior)defaultFormatterBehavior`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1409014-defaultformatterbehavior>
++ (NSUInteger)defaultFormatterBehavior {
+    DEFAULT_FORMATTER_BEHAVIOR.load(std::sync::atomic::Ordering::Relaxed) as NSUInteger
+}
+
+// `+ (void)setDefaultFormatterBehavior:(NSNumberFormatterBehavior)behavior`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1407959-setdefaultformatterbehavior>
++ (())setDefaultFormatterBehavior:(NSUInteger)behavior {
+    DEFAULT_FORMATTER_BEHAVIOR.store(behavior as u32, std::sync::atomic::Ordering::Relaxed);
 }
 
 // =========================================================================
@@ -53,6 +84,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     env.objc.dealloc_object(this, &mut env.mem)
+}
+
+// `- (NSNumberFormatterBehavior)formatterBehavior`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1411915-formatterbehavior>
+- (NSUInteger)formatterBehavior {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).formatter_behavior
+}
+
+// `- (void)setFormatterBehavior:(NSNumberFormatterBehavior)behavior`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1416550-setformatterbehavior>
+//
+// Apple defines three valid values: `NSNumberFormatterBehaviorDefault`
+// (0), `NSNumberFormatterBehavior10_0` (1000) and
+// `NSNumberFormatterBehavior10_4` (1040). The "default" value is
+// documented to be mapped onto the current
+// `+defaultFormatterBehavior` (i.e. the 10.4 behaviour on modern
+// systems), so store the resolved value to keep `-formatterBehavior`
+// observable from the guest.
+- (())setFormatterBehavior:(NSUInteger)behavior {
+    let resolved = if behavior == 0 {
+        DEFAULT_FORMATTER_BEHAVIOR.load(std::sync::atomic::Ordering::Relaxed) as NSUInteger
+    } else {
+        behavior
+    };
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).formatter_behavior = resolved;
 }
 
 - (NSUInteger)numberStyle {
@@ -137,7 +193,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let rust_str = to_rust_string(env, string);
 
     // Clean string from currency and percentage signs
-    let clean_str = rust_str.replace('$', "").replace(',', "").replace('%', "");
+    let clean_str = rust_str.replace(['$', ',', '%'], "");
     let trimmed = clean_str.trim();
 
     if let Ok(val) = trimmed.parse::<f64>() {

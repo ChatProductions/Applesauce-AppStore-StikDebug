@@ -6,7 +6,6 @@
 //! Separate module just for the dylib list, so it gets its own git history.
 
 use crate::frameworks;
-use crate::frameworks::libsqlite3;
 use crate::libc;
 use crate::objc;
 

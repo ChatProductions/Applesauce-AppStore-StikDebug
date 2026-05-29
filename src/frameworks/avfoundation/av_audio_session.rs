@@ -384,7 +384,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, category);
     release(env, old);
 
-    let mut host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
+    let host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
     host.category = category;
     host.category_options = options;
     true
@@ -400,7 +400,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, category);
     retain(env, mode);
 
-    let mut host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
+    let host = env.objc.borrow_mut::<AVAudioSessionHostObject>(this);
     host.category = category;
     host.mode = mode;
     host.category_options = options;

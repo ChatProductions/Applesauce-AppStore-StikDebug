@@ -11,7 +11,7 @@ use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string;
-use crate::mem::{ConstPtr, SafeRead};
+use crate::mem::SafeRead;
 use crate::objc::{autorelease, nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -68,7 +68,7 @@ fn alloc_uuid(env: &mut Environment, bytes: CFUUIDBytes) -> CFUUIDRef {
 
 /// Generate a pseudo-random UUID using a simple LCG seeded from the system
 /// time. Not cryptographically secure, but sufficient for game use-cases.
-fn generate_uuid_bytes(env: &mut Environment) -> CFUUIDBytes {
+fn generate_uuid_bytes(_env: &mut Environment) -> CFUUIDBytes {
     use std::time::{SystemTime, UNIX_EPOCH};
     // Use a static counter combined with time to reduce collisions within
     // a single session.

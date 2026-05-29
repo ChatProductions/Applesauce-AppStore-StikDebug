@@ -42,7 +42,7 @@ pub const CLASSES: crate::objc::ClassExports = objc_classes! {
     }
 
     - (bool) canUndo {
-        env.framework_state.foundation.ns_undo_manager.stacks.get(&this).map_or(false, |s| !s.is_empty())
+        env.framework_state.foundation.ns_undo_manager.stacks.get(&this).is_some_and(|s| !s.is_empty())
     }
 
     - (()) undo {

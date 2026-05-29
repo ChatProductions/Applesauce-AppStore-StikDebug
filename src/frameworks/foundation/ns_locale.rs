@@ -381,7 +381,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)localeIdentifier {
     let host = env.objc.borrow::<NSLocaleHostObject>(this);
     let (language_code, country_code) = (host.language_code, host.country_code);
-    drop(host);
     let lang    = ns_string::to_rust_string(env, language_code).into_owned();
     let country = ns_string::to_rust_string(env, country_code).into_owned();
     let id_str  = locale_identifier(&lang, &country);
@@ -408,7 +407,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         NSLocaleIdentifier | kCFLocaleIdentifier => {
             let host = env.objc.borrow::<NSLocaleHostObject>(this);
             let (language_code, country_code) = (host.language_code, host.country_code);
-            drop(host);
             let lang    = ns_string::to_rust_string(env, language_code).into_owned();
             let country = ns_string::to_rust_string(env, country_code).into_owned();
             let id_str  = locale_identifier(&lang, &country);

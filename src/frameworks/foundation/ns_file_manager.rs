@@ -233,7 +233,14 @@ fn NSSearchPathForDirectoriesInDomains(
     expand_tilde: bool,
 ) -> id {
     // Only user domain supported for now
-    if domain_mask != NSUserDomainMask && domain_mask != NSAllDomainsMask {
+    // On iOS the "local domain" resolves to the same location as the user domain.
+    // Accept NSLocalDomainMask without a warning. Any other mask is legitimately
+    // unsupported — log a warning but continue with user-domain paths (best effort).
+    // Reference: <https://developer.apple.com/documentation/foundation/1417717-nssearchpathfordirectoriesindoma>
+    if domain_mask != NSUserDomainMask
+        && domain_mask != NSLocalDomainMask
+        && domain_mask != NSAllDomainsMask
+    {
         log!(
             "Warning: NSSearchPathForDirectoriesInDomains called with unsupported domain_mask: {}",
             domain_mask
@@ -347,6 +354,14 @@ pub struct State {
 struct NSDirectoryEnumeratorHostObject {
     iterator: std::vec::IntoIter<GuestPathBuf>,
     base_path: GuestPathBuf,
+    /// Number of directory components below `base_path` of the most recently
+    /// returned path. Apple documents `-[NSDirectoryEnumerator level]` as
+    /// "the number of levels deep the current object is in the directory
+    /// hierarchy being enumerated". A file located directly inside the
+    /// enumeration root therefore has level 1; the value is 0 before the
+    /// first `nextObject` call.
+    /// <https://developer.apple.com/documentation/foundation/nsdirectoryenumerator/1413939-level>
+    current_level: NSUInteger,
 }
 impl HostObject for NSDirectoryEnumeratorHostObject {}
 
@@ -467,6 +482,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(NSDirectoryEnumeratorHostObject {
         iterator: paths.into_iter(),
         base_path: GuestPathBuf::from(guest_path),
+        current_level: 0,
     });
 
     let class = env.objc.get_known_class("NSDirectoryEnumerator", &mut env.mem);
@@ -1115,6 +1131,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = Box::new(NSDirectoryEnumeratorHostObject {
         iterator: Vec::new().into_iter(),
         base_path: GuestPathBuf::from(GuestPath::new("")),
+        current_level: 0,
     });
     env.objc.alloc_object(this, host, &mut env.mem)
 }
@@ -1125,7 +1142,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Главный метод: игра вызывает его в цикле, пока он не вернет nil
 - (id)nextObject {
-    let mut host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
+    let host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
 
     if let Some(path) = host.iterator.next() {
         let path_str = path.as_str();
@@ -1144,11 +1161,32 @@ pub const CLASSES: ClassExports = objc_classes! {
             path_str
         };
 
+        // Apple docs (`-[NSDirectoryEnumerator level]`): the value reflects
+        // how many directories below the enumeration root the current path
+        // lives in. An item directly inside the base directory has level 1.
+        // Counting the path separators in the relative path and adding 1
+        // gives the right answer for both files and subdirectories. An empty
+        // relative string (which would represent the base path itself, not
+        // normally yielded by `enumerate_recursive`) keeps level 0.
+        host.current_level = if rel_path.is_empty() {
+            0
+        } else {
+            (rel_path.matches('/').count() as NSUInteger) + 1
+        };
+
         let ns_str = ns_string::from_rust_string(env, rel_path.to_string());
         autorelease(env, ns_str)
     } else {
         nil
     }
+}
+
+// `-[NSDirectoryEnumerator level]`
+// <https://developer.apple.com/documentation/foundation/nsdirectoryenumerator/1413939-level>
+// "Returns the number of levels deep the current object is in the
+// directory hierarchy being enumerated."
+- (NSUInteger)level {
+    env.objc.borrow::<NSDirectoryEnumeratorHostObject>(this).current_level
 }
 
 - (id)fileAttributes {

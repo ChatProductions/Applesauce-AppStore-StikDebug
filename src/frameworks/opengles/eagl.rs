@@ -1519,10 +1519,10 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
             let mut bl: [u8; 4] = [0; 4];
             let mut br: [u8; 4] = [0; 4];
             let mut cc: [u8; 4] = [0; 4];
-            let xmax = (width as i32).saturating_sub(1).max(0);
-            let ymax = (height as i32).saturating_sub(1).max(0);
-            let xmid = (width as i32) / 2;
-            let ymid = (height as i32) / 2;
+            let xmax = width.saturating_sub(1).max(0);
+            let ymax = height.saturating_sub(1).max(0);
+            let xmid = width / 2;
+            let ymid = height / 2;
             for (x, y, buf) in [
                 (0, 0, &mut bl),
                 (xmax, 0, &mut br),

@@ -59,7 +59,7 @@ fn getifaddrs(env: &mut Environment, ifap: MutPtr<MutPtr<ifaddrs>>) -> i32 {
 ///
 /// Since our `getifaddrs` never allocates anything, this is a no-op. If a
 /// future implementation does allocate, the deallocation logic belongs here.
-fn freeifaddrs(env: &mut Environment, ifa: MutPtr<ifaddrs>) {
+fn freeifaddrs(_env: &mut Environment, ifa: MutPtr<ifaddrs>) {
     if !ifa.is_null() {
         // Future: walk the linked list and free each node + name string.
         log!(
@@ -100,7 +100,7 @@ fn if_nametoindex(env: &mut Environment, ifname: ConstPtr<u8>) -> u32 {
 /// Writes the name of interface `ifindex` into `ifname` (at least
 /// `IF_NAMESIZE` bytes) and returns `ifname`, or NULL on error.
 /// Stub: always returns NULL / ENXIO.
-fn if_indextoname(env: &mut Environment, ifindex: u32, ifname: MutPtr<u8>) -> MutPtr<u8> {
+fn if_indextoname(env: &mut Environment, ifindex: u32, _ifname: MutPtr<u8>) -> MutPtr<u8> {
     log!(
         "TODO: if_indextoname({}) – returning NULL (not implemented)",
         ifindex
@@ -131,7 +131,7 @@ fn if_nameindex(env: &mut Environment) -> MutPtr<if_nameindex> {
 /// `void if_freenameindex(struct if_nameindex *ptr)`
 ///
 /// Frees the array returned by `if_nameindex`. No-op in the stub.
-fn if_freenameindex(env: &mut Environment, ptr: MutPtr<if_nameindex>) {
+fn if_freenameindex(_env: &mut Environment, ptr: MutPtr<if_nameindex>) {
     if !ptr.is_null() {
         log!(
             "TODO: if_freenameindex({:#x}) – not allocated by us, ignoring",

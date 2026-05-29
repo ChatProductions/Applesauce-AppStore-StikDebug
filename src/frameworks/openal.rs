@@ -15,7 +15,7 @@ use crate::audio::openal::al_types::*;
 use crate::audio::openal::alc_types::*;
 use crate::audio::openal::{
     OpenAL, OpenALContext, ALC_DEVICE_SPECIFIER, ALC_FREQUENCY, ALC_MONO_SOURCES, ALC_REFRESH,
-    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_NO_ERROR, AL_RENDERER, AL_VENDOR, AL_VERSION,
+    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_RENDERER, AL_VENDOR, AL_VERSION,
 };
 use crate::dyld::{export_c_func, FunctionExports, HostDylib};
 use crate::libc::string::strcmp;
@@ -802,8 +802,8 @@ fn alDeleteSources(env: &mut Environment, n: ALsizei, sources: ConstPtr<ALuint>)
     };
     let sources = env.mem.ptr_at(sources, n_usize);
     let Some(context) = State::try_make_current(env) else {
-        log!(
-            "Попытка вызова alDeleteSources({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
+        log_dbg!(
+            "alDeleteSources({}, {:?}) called with no active context {:?} — no-op per OpenAL spec",
             n,
             sources,
             State::get(env).current_ctx
@@ -1063,8 +1063,8 @@ fn alDeleteBuffers(env: &mut Environment, n: ALsizei, buffers: ConstPtr<ALuint>)
     };
     let buffers = env.mem.ptr_at(buffers, n_usize);
     let Some(context) = State::try_make_current(env) else {
-        log!(
-            "Попытка вызова alDeleteBuffers({}, {:?}) с неактивным контекстом {:?}, пропускаем!",
+        log_dbg!(
+            "alDeleteBuffers({}, {:?}) called with no active context {:?} — no-op per OpenAL spec",
             n,
             buffers,
             State::get(env).current_ctx

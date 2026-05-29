@@ -17,6 +17,7 @@ use crate::mem::{ConstVoidPtr, MutPtr};
 
 pub mod ui_accelerometer;
 pub mod ui_action_sheet;
+pub mod ui_activity;
 pub mod ui_activity_indicator_view;
 pub mod ui_application;
 pub mod ui_color;
@@ -31,6 +32,7 @@ pub mod ui_graphics;
 pub mod ui_image;
 pub mod ui_image_picker_controller;
 pub mod ui_keyboard;
+pub mod ui_layout_placeholders;
 pub mod ui_local_notification;
 pub mod ui_navigation_bar;
 pub mod ui_nib;
@@ -44,7 +46,6 @@ pub mod ui_screen_mode;
 pub mod ui_search_bar;
 pub mod ui_split_view_controller;
 pub mod ui_storyboard;
-pub mod ui_layout_placeholders;
 pub mod ui_tab_bar_controller;
 pub mod ui_tab_bar_item;
 pub mod ui_touch;
@@ -112,6 +113,16 @@ fn write_cgfloat(env: &mut Environment, value: f32) -> ConstVoidPtr {
 
 fn ui_font_weight_ultralight(env: &mut Environment) -> ConstVoidPtr {
     write_cgfloat(env, -0.8)
+}
+
+/// `UITableViewAutomaticDimension` — sentinel value used for automatic
+/// row/section heights in self-sizing table views (iOS 5+).
+///
+/// Value is -1.0 (a `CGFloat`), matching the constant defined in
+/// Apple `UITableView.h`:
+/// <https://developer.apple.com/documentation/uikit/uitableview/1614961-automaticDimension>
+fn ui_table_view_automatic_dimension(env: &mut Environment) -> ConstVoidPtr {
+    write_cgfloat(env, -1.0)
 }
 fn ui_font_weight_thin(env: &mut Environment) -> ConstVoidPtr {
     write_cgfloat(env, -0.6)
@@ -281,6 +292,22 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIPasteboardNameFind",
         HostConstant::NSString("UIPasteboardNameFind"),
+    ),
+    (
+        "_UIPasteboardChangedNotification",
+        HostConstant::NSString("UIPasteboardChangedNotification"),
+    ),
+    (
+        "_UIPasteboardRemovedNotification",
+        HostConstant::NSString("UIPasteboardRemovedNotification"),
+    ),
+    (
+        "_UIPasteboardChangedTypesAddedKey",
+        HostConstant::NSString("UIPasteboardChangedTypesAddedKey"),
+    ),
+    (
+        "_UIPasteboardChangedTypesRemovedKey",
+        HostConstant::NSString("UIPasteboardChangedTypesRemovedKey"),
     ),
     // UIPasteboard type list constants (NSArray of UTI strings).
     // On real iOS these are NSArray singletons; here we export them as
@@ -611,6 +638,27 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIActivityTypeAddToReadingList",
         HostConstant::NSString("com.apple.UIKit.activity.AddToReadingList"),
     ),
+    // iOS 7+
+    // <https://developer.apple.com/documentation/uikit/uiactivitytype/1620521-airdrop>
+    (
+        "_UIActivityTypeAirDrop",
+        HostConstant::NSString("com.apple.UIKit.activity.AirDropActivityType"),
+    ),
+    // <https://developer.apple.com/documentation/uikit/uiactivitytype/1620522-openinbooks>
+    (
+        "_UIActivityTypeOpenInIBooks",
+        HostConstant::NSString("com.apple.UIKit.activity.OpenInIBooks"),
+    ),
+    // iOS 7+
+    // <https://developer.apple.com/documentation/uikit/uiactivitytype>
+    (
+        "_UIActivityTypePostToFlickr",
+        HostConstant::NSString("com.apple.UIKit.activity.PostToFlickr"),
+    ),
+    (
+        "_UIActivityTypePostToVimeo",
+        HostConstant::NSString("com.apple.UIKit.activity.PostToVimeo"),
+    ),
     // -----------------------------------------------------------------
     // UICollectionView supplementary view kinds (NSString constants),
     // <https://developer.apple.com/documentation/uikit/uicollectionview>.
@@ -666,6 +714,13 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UITableViewSelectionDidChangeNotification",
         HostConstant::NSString("UITableViewSelectionDidChangeNotification"),
+    ),
+    // UITableViewAutomaticDimension (CGFloat = -1.0) — self-sizing rows/headers.
+    // Apple `UITableView.h`, iOS 5.0+.
+    // <https://developer.apple.com/documentation/uikit/uitableview/1614961-automaticDimension>
+    (
+        "_UITableViewAutomaticDimension",
+        HostConstant::Custom(ui_table_view_automatic_dimension),
     ),
     // -----------------------------------------------------------------
     // UIContentSizeCategory (iOS 7+ Dynamic Type). Apple `UIApplication.h`
@@ -872,6 +927,26 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIApplicationLaunchOptionsUserActivityTypeKey",
         HostConstant::NSString("UIApplicationLaunchOptionsUserActivityType"),
     ),
+    // -----------------------------------------------------------------
+    // CoreSpotlight constants (iOS 9+).
+    //
+    // CSSearchableItemActionType is the NSUserActivity activityType
+    // string for items opened via Spotlight search. Apps match this in
+    // `application(_:continue:restorationHandler:)` to detect Spotlight
+    // handoffs.
+    // <https://developer.apple.com/documentation/corespotlight/cssearchableitemactiontype>
+    (
+        "_CSSearchableItemActionType",
+        HostConstant::NSString("com.apple.corespotlight.search-action"),
+    ),
+    // CSSearchableItemActivityIdentifier is the key in the
+    // NSUserActivity userInfo dictionary whose value is the
+    // CSSearchableItem uniqueIdentifier string.
+    // <https://developer.apple.com/documentation/corespotlight/cssearchableitemactivityidentifier>
+    (
+        "_CSSearchableItemActivityIdentifier",
+        HostConstant::NSString("kCSSearchableItemActivityIdentifier"),
+    ),
     (
         "_UIApplicationLaunchOptionsCloudKitShareMetadataKey",
         HostConstant::NSString("UIApplicationLaunchOptionsCloudKitShareMetadataKey"),
@@ -897,6 +972,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_accelerometer::CLASSES,
         ui_action_sheet::CLASSES,
         ui_activity_indicator_view::CLASSES,
+        ui_activity::CLASSES,
         ui_application::CLASSES,
         ui_color::CLASSES,
         ui_custom_object::CLASSES,

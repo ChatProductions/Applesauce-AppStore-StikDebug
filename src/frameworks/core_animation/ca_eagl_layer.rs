@@ -8,7 +8,7 @@
 use super::ca_layer::CALayerHostObject;
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect};
 use crate::frameworks::foundation::ns_string;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, release, Class, ClassExports};
 use crate::Environment;
 
 // MARK: - EAGLDrawable property key constants

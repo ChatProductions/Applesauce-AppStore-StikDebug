@@ -430,7 +430,7 @@ pub fn CGContextStrokeRectWithWidth(
         .borrow::<CGContextHostObject>(context)
         .rgb_stroke_color;
     // Draw four filled thin rects forming the border.
-    let hw = width / 2.0;
+    let _hw = width / 2.0;
     let CGRect { origin, size } = rect;
 
     // Top, bottom, left, right bands.
@@ -625,7 +625,7 @@ fn CGContextAddArc(
     radius: CGFloat,
     start_angle: CGFloat,
     end_angle: CGFloat,
-    clockwise: i32,
+    _clockwise: i32,
 ) {
     // Store start/end points only.
     if context.is_null() {
@@ -721,7 +721,7 @@ fn CGContextClosePath(env: &mut Environment, context: CGContextRef) {
 fn CGContextDrawPath(env: &mut Environment, context: CGContextRef, mode: i32) {
     // mode: 0=fill, 1=eof-fill, 2=stroke, 3=fill+stroke, 4=eof-fill+stroke
     let do_fill = matches!(mode, 0 | 1 | 3 | 4);
-    let do_stroke = matches!(mode, 2 | 3 | 4);
+    let do_stroke = matches!(mode, 2..=4);
     if context.is_null() {
         return;
     }
@@ -968,7 +968,78 @@ pub fn CGContextDrawImage(
         return;
     } // ← closes if
     cg_bitmap_context::draw_image(env, context, rect, image);
-} // ← closes function ← THIS IS MISSING OR WRONG
+}
+
+/// `void CGContextDrawTiledImage(CGContextRef c, CGRect rect, CGImageRef image)`
+///
+/// Apple documentation: draws an image repeatedly, tiling it across the entire
+/// clipping region of the context. `rect` defines the origin (the tiling
+/// phase) and the size of a single tile. We reproduce this faithfully by
+/// computing the current clip bounding box and drawing the image into a grid
+/// of tile-sized rectangles aligned to `rect.origin` until the whole clip
+/// region is covered.
+pub fn CGContextDrawTiledImage(
+    env: &mut Environment,
+    context: CGContextRef,
+    rect: CGRect,
+    image: CGImageRef,
+) {
+    if context.is_null() || image.is_null() {
+        log!("Warning: CGContextDrawTiledImage called with null context/image, skipping");
+        return;
+    }
+
+    let tile_w = rect.size.width;
+    let tile_h = rect.size.height;
+    if !(tile_w > 0.0) || !(tile_h > 0.0) {
+        // A degenerate tile size would tile forever; nothing to draw.
+        return;
+    }
+
+    // The region we must fill.
+    let clip = CGContextGetClipBoundingBox(env, context);
+    let clip_min_x = clip.origin.x;
+    let clip_min_y = clip.origin.y;
+    let clip_max_x = clip.origin.x + clip.size.width;
+    let clip_max_y = clip.origin.y + clip.size.height;
+
+    // Align the tile grid to `rect.origin` (the tiling phase): find the first
+    // tile boundary at or before the clip's minimum corner on each axis.
+    let start_x = rect.origin.x + ((clip_min_x - rect.origin.x) / tile_w).floor() * tile_w;
+    let start_y = rect.origin.y + ((clip_min_y - rect.origin.y) / tile_h).floor() * tile_h;
+
+    // Guard against pathological cases (e.g. a huge clip with a tiny tile)
+    // producing an unbounded number of draw calls.
+    const MAX_TILES: u64 = 1_000_000;
+    let mut drawn: u64 = 0;
+
+    let mut y = start_y;
+    while y < clip_max_y {
+        let mut x = start_x;
+        while x < clip_max_x {
+            let tile_rect = CGRect {
+                origin: CGPoint { x, y },
+                size: super::CGSize {
+                    width: tile_w,
+                    height: tile_h,
+                },
+            };
+            cg_bitmap_context::draw_image(env, context, tile_rect, image);
+
+            drawn += 1;
+            if drawn >= MAX_TILES {
+                log!(
+                    "Warning: CGContextDrawTiledImage hit the {} tile cap; stopping early",
+                    MAX_TILES
+                );
+                return;
+            }
+
+            x += tile_w;
+        }
+        y += tile_h;
+    }
+}
 
 pub fn CGContextDrawLinearGradient(
     env: &mut Environment,
@@ -1323,6 +1394,36 @@ fn CGContextShowGlyphs(
     CGContextShowGlyphsAtPoint(env, context, 0.0, 0.0, glyphs, count);
 }
 
+
+/// `void CGContextSetAllowsFontSubpixelPositioning(CGContextRef c, bool allow)`
+///
+/// Controls whether subpixel font positioning is used.  On the emulated
+/// screen there is no physical sub-pixel grid to exploit, so this is a
+/// no-op.  Exporting the symbol eliminates the "unimplemented function"
+/// warning produced by apps that call it unconditionally.
+///
+/// Reference: <https://developer.apple.com/documentation/coregraphics/1454839-cgcontextsetallowsfontsubpixelpo>
+fn CGContextSetAllowsFontSubpixelPositioning(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _allows: bool,
+) {
+}
+
+/// `void CGContextSetShouldSubpixelQuantizeFonts(CGContextRef c, bool should)`
+///
+/// Controls whether font glyph metrics are quantised to sub-pixel
+/// boundaries.  No-op for the same reasons as
+/// `CGContextSetAllowsFontSubpixelPositioning`.
+///
+/// Reference: <https://developer.apple.com/documentation/coregraphics/1455671-cgcontextsetshouldsub pixelquanti>
+fn CGContextSetShouldSubpixelQuantizeFonts(
+    _env: &mut Environment,
+    _context: CGContextRef,
+    _should: bool,
+) {
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -1339,6 +1440,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextScaleCTM(_, _, _)),
     export_c_func!(CGContextTranslateCTM(_, _, _)),
     export_c_func!(CGContextDrawImage(_, _, _)),
+    export_c_func!(CGContextDrawTiledImage(_, _, _)),
     export_c_func!(CGContextSaveGState(_)),
     export_c_func!(CGContextRestoreGState(_)),
     export_c_func!(CGContextSetInterpolationQuality(_, _)),
@@ -1401,4 +1503,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetStrokeColorSpace(_, _)),
     export_c_func!(CGContextSetRenderingIntent(_, _)),
     export_c_func!(CGContextDrawLinearGradient(_, _, _, _, _)),
+    export_c_func!(CGContextSetAllowsFontSubpixelPositioning(_, _)),
+    export_c_func!(CGContextSetShouldSubpixelQuantizeFonts(_, _)),
 ];

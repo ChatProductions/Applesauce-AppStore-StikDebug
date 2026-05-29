@@ -21,7 +21,7 @@ use crate::Environment;
 use plist::Value;
 use std::io::Cursor;
 use std::ops::Add;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 pub type NSPropertyListMutabilityOptions = NSUInteger;
 pub const NSPropertyListImmutable: NSPropertyListMutabilityOptions = 0;
@@ -377,13 +377,35 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         Value::Data(buffer_slice.to_vec())
     } else if env.objc.class_is_subclass_of(class, date_class) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
+        let time = apple_epoch().add(
+            crate::frameworks::foundation::ns_time_interval_to_duration_or_zero(date.time_interval),
+        );
         Value::Date(time.into())
     } else {
+        warn_unsupported_serialize_class_once(env.objc.get_class_name(class));
+        // Per Apple's NSPropertyListSerialization docs, only NSData / NSDate /
+        // NSNumber / NSString / NSArray / NSDictionary are encodable. Anything
+        // else *should* raise NSInvalidArgumentException, but we want to keep
+        // the archive valid for debugging purposes. Fall back to whatever
+        // -[<plist> description] returns —
+        let description = msg![env; plist description];
+        Value::String(ns_string::to_rust_string(env, description).to_string())
+    }
+}
+
+fn warn_unsupported_serialize_class_once(class_name: &str) {
+    use std::collections::HashSet;
+    use std::sync::{Mutex, OnceLock};
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut guard = seen.lock().unwrap();
+    if guard.insert(class_name.to_string()) {
         log!(
-            "Warning: serialize_plist: unsupported class {} - serializing as null string.",
-            env.objc.get_class_name(class)
+            "Warning: serialize_plist: unsupported class {} — falling back to \
+             -[<obj> description] (per Apple docs only NSData / NSDate / \
+             NSNumber / NSString / NSArray / NSDictionary are plist-encodable; \
+             further occurrences of this class will be silenced)",
+            class_name
         );
-        Value::String(String::new())
     }
 }

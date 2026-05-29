@@ -9,27 +9,16 @@ use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant}
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::{ns_string, NSUInteger};
-use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject};
+use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
+use std::collections::HashSet;
+use std::sync::{Mutex, OnceLock};
 
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
 
 @implementation _touchHLE_CGColorSpace: NSObject
-
-- (id)systemUptime {
-    nil
-}
-
-- (id)tick_audio {
-    nil
-}
-
-- (id)load_sound_files {
-    nil
-}
-
 @end
 
 };
@@ -71,30 +60,65 @@ fn alloc_color_space(env: &mut Environment, name: &'static str) -> CGColorSpaceR
 // MARK: - Constructors
 
 pub fn CGColorSpaceCreateWithName(env: &mut Environment, name: CFStringRef) -> CGColorSpaceRef {
-    let generic_rgb = ns_string::get_static_str(env, kCGColorSpaceGenericRGB);
-    let generic_gray = ns_string::get_static_str(env, kCGColorSpaceGenericGray);
-    let srgb = ns_string::get_static_str(env, kCGColorSpaceSRGB);
-    let device_cmyk = ns_string::get_static_str(env, kCGColorSpaceGenericCMYK);
-    let linear_gray = ns_string::get_static_str(env, kCGColorSpaceLinearGray);
-    let linear_srgb = ns_string::get_static_str(env, kCGColorSpaceLinearSRGB);
-
-    if msg![env; name isEqualToString:generic_rgb]
-        || msg![env; name isEqualToString:srgb]
-        || msg![env; name isEqualToString:linear_srgb]
-    {
-        alloc_color_space(env, kCGColorSpaceGenericRGB)
-    } else if msg![env; name isEqualToString:generic_gray]
-        || msg![env; name isEqualToString:linear_gray]
-    {
-        alloc_color_space(env, kCGColorSpaceGenericGray)
-    } else if msg![env; name isEqualToString:device_cmyk] {
-        alloc_color_space(env, kCGColorSpaceGenericCMYK)
-    } else {
+    if name == nil {
         log!(
-            "Warning: CGColorSpaceCreateWithName: unknown color space, \
-             falling back to GenericRGB"
+            "Warning: CGColorSpaceCreateWithName(NULL): NULL name is invalid per \
+             Apple's CGColorSpace.h, returning NULL."
         );
-        alloc_color_space(env, kCGColorSpaceGenericRGB)
+        return nil;
+    }
+
+    // Compare by Rust string so we don't need a static CFString lookup per call
+    // and can also use the value as a dedup-key for the warning.
+    let name_str = ns_string::to_rust_string(env, name).into_owned();
+
+    let canonical: &'static str = match name_str.as_str() {
+        // RGB-family — all map to our GenericRGB pipeline. touchHLE does not
+        // model wide-gamut / linear / Adobe RGB / Rec. 709 / 2020 separately;
+        // the closest match in our renderer is the standard sRGB-ish path.
+        s if s == kCGColorSpaceGenericRGB
+            || s == kCGColorSpaceSRGB
+            || s == kCGColorSpaceLinearSRGB
+            || s == kCGColorSpaceGenericRGBLinear
+            || s == kCGColorSpaceDisplayP3
+            || s == kCGColorSpaceAdobeRGB1998
+            || s == kCGColorSpaceITUR_709
+            || s == kCGColorSpaceITUR_2020 =>
+        {
+            kCGColorSpaceGenericRGB
+        }
+        // Gray-family.
+        s if s == kCGColorSpaceGenericGray
+            || s == kCGColorSpaceLinearGray
+            || s == kCGColorSpaceGenericGrayGamma2_2 =>
+        {
+            kCGColorSpaceGenericGray
+        }
+        s if s == kCGColorSpaceGenericCMYK => kCGColorSpaceGenericCMYK,
+        _ => {
+            warn_unknown_color_space_once(&name_str);
+            kCGColorSpaceGenericRGB
+        }
+    };
+
+    alloc_color_space(env, canonical)
+}
+
+/// Warn at most once per unique color-space name. The same unknown name can be
+/// passed to CGColorSpaceCreateWithName thousands of times per frame by some
+/// apps; without dedup the log fills with hundreds of thousands of copies of
+/// the same line and drowns out everything else useful.
+fn warn_unknown_color_space_once(name: &str) {
+    static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut guard = seen.lock().unwrap();
+    if guard.insert(name.to_string()) {
+        log!(
+            "Warning: CGColorSpaceCreateWithName: unknown color space {:?}, \
+             falling back to GenericRGB (further occurrences of this name \
+             will be silenced)",
+            name
+        );
     }
 }
 
@@ -237,6 +261,19 @@ pub const kCGColorSpaceGenericCMYK: &str = "kCGColorSpaceGenericCMYK";
 pub const kCGColorSpaceSRGB: &str = "kCGColorSpaceSRGB";
 pub const kCGColorSpaceLinearSRGB: &str = "kCGColorSpaceLinearSRGB";
 pub const kCGColorSpaceLinearGray: &str = "kCGColorSpaceLinearGray";
+// Additional CGColorSpace name constants from <CoreGraphics/CGColorSpace.h>.
+// These are passed by real-world apps but were not handled previously,
+// triggering hundreds of thousands of "unknown color space" warnings per
+// frame. We canonicalize them to the closest of our three internal models in
+// CGColorSpaceCreateWithName above.
+pub const kCGColorSpaceGenericRGBLinear: &str = "kCGColorSpaceGenericRGBLinear";
+pub const kCGColorSpaceGenericGrayGamma2_2: &str = "kCGColorSpaceGenericGrayGamma2_2";
+pub const kCGColorSpaceDisplayP3: &str = "kCGColorSpaceDisplayP3";
+pub const kCGColorSpaceAdobeRGB1998: &str = "kCGColorSpaceAdobeRGB1998";
+#[allow(non_upper_case_globals)]
+pub const kCGColorSpaceITUR_709: &str = "kCGColorSpaceITUR_709";
+#[allow(non_upper_case_globals)]
+pub const kCGColorSpaceITUR_2020: &str = "kCGColorSpaceITUR_2020";
 
 pub const CONSTANTS: ConstantExports = &[
     (

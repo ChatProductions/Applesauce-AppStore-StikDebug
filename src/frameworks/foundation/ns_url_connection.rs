@@ -229,7 +229,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     retain(env, delegate);
     {
-        let mut host = env.objc.borrow_mut::<NSURLConnectionHostObject>(this);
+        let host = env.objc.borrow_mut::<NSURLConnectionHostObject>(this);
         host.delegate  = delegate;
         host.cancelled = false;
     }

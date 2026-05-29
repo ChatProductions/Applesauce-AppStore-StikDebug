@@ -7,7 +7,7 @@
 
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 // =========================================================================
@@ -128,7 +128,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // `-init` — designated initialiser; generates a random UUID.
 - (id)init {
     {
-        let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+        let host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
         host.bytes = UuidBytes::random();
     }
     log_dbg!("NSUUID init => {}", env.objc.borrow::<NSUUIDHostObject>(this).bytes.to_string());
@@ -146,7 +146,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     match UuidBytes::from_string(&s) {
         Some(bytes) => {
             {
-                let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+                let host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
                 host.bytes = bytes;
             }
             log_dbg!("NSUUID initWithUUIDString:{:?} => OK", s);
@@ -170,7 +170,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let src = env.mem.bytes_at(bytes_ptr, 16);
     bytes.copy_from_slice(src);
     {
-        let mut host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
+        let host = env.objc.borrow_mut::<NSUUIDHostObject>(this);
         host.bytes = UuidBytes(bytes);
     }
     this

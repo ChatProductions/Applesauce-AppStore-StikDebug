@@ -6,7 +6,6 @@
 //! `net/if.h`
 
 use crate::dyld::FunctionExports;
-use crate::export_c_func;
 use crate::mem::{ConstPtr, Ptr};
 use crate::Environment;
 

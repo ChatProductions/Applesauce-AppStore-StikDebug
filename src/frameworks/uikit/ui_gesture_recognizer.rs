@@ -26,7 +26,7 @@
 use crate::frameworks::core_graphics::{CGFloat, CGPoint};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, msg, msg_send, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg_send, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
     SEL,
 };
 use crate::Environment;

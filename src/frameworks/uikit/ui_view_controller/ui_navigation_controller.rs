@@ -318,7 +318,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setViewControllers:(id)controllers animated:(bool)animated {
-    let self_view = env.objc
+    let _self_view = env.objc
         .borrow::<UINavigationControllerHostObject>(this)
         .superclass
         .view;

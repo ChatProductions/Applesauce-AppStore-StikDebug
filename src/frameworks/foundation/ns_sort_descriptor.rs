@@ -126,7 +126,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ascending  = host.ascending;
     let selector   = host.selector;
     let comparator = host.comparator;
-    drop(host);
 
     // Extract values via valueForKeyPath: if key is set.
     let (val1, val2) = if key != nil {
@@ -161,7 +160,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key       = host.key;
     let ascending = host.ascending;
     let selector  = host.selector;
-    drop(host);
 
     let new: id = msg_class![env; NSSortDescriptor alloc];
     let new: id = msg![env; new initWithKey:key ascending:(!ascending) selector:selector];
@@ -203,7 +201,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())encodeWithCoder:(id)coder {
     let host = env.objc.borrow::<NSSortDescriptorHostObject>(this);
     let (key, ascending, selector) = (host.key, host.ascending, host.selector);
-    drop(host);
 
     let key_key = ns_string::get_static_str(env, "NSKey");
     let asc_key = ns_string::get_static_str(env, "NSAscending");
@@ -243,7 +240,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<NSSortDescriptorHostObject>(this);
     let key  = host.key;
     let asc  = host.ascending;
-    drop(host);
 
     let key_str = if key != nil {
         ns_string::to_rust_string(env, key).into_owned()

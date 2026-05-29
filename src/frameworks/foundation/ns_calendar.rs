@@ -252,7 +252,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ident = env.objc.borrow::<NSCalendarHostObject>(this).calendar_identifier;
     // assert!(ident != nil);
     let greg: id = get_static_str(env, NSGregorianCalendar);
-    let is_gregorian: bool = msg![env; ident isEqualToString:greg];
+    let _is_gregorian: bool = msg![env; ident isEqualToString:greg];
     // assert!(is_gregorian);
 
     let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceReferenceDate];
@@ -291,7 +291,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         if v == NSInteger::MAX || v < -100_000 {
             default_
         } else {
-            v as i32
+            v
         }
     }
 

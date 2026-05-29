@@ -5,7 +5,7 @@
  */
 //! POSIX `sys/stat.h`
 
-use super::{close, off_t, open_direct, FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use super::{off_t, FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestFile, GuestPath};
 use crate::libc::errno::{set_errno, EACCES, EBADF, EEXIST, ENOENT};
@@ -239,7 +239,7 @@ fn stat(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<stat>) -> i32 {
     if let Ok(size) = env.fs.size(guest_path) {
         st.st_size = size as off_t;
         st.st_blksize = 4096;
-        st.st_blocks = ((size as u64 + 511) / 512) as blkcnt_t;
+        st.st_blocks = size.div_ceil(512) as blkcnt_t;
     }
 
     if let Ok(mtime) = env.fs.modified(guest_path) {

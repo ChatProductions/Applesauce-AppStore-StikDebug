@@ -47,6 +47,7 @@ pub mod ns_file_manager;
 pub mod ns_host;
 pub mod ns_http_cookie_storage;
 pub mod ns_index_path;
+pub mod ns_json_serialization;
 pub mod ns_input_stream;
 pub mod ns_invocation;
 pub mod ns_keyed_archiver;
@@ -113,7 +114,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
         match c {
             'r' | 'n' | 'N' | 'o' | 'O' | 'R' | 'V' => {
-                ptr = ptr + 1;
+                ptr += 1;
             }
             _ => break,
         }
@@ -121,7 +122,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
     let c = env.mem.read(ptr) as char;
 
-    ptr = ptr + 1;
+    ptr += 1;
 
     match c {
         // Базовые типы
@@ -153,7 +154,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 if c.is_ascii_digit() {
                     len = len * 10 + c.to_digit(10).unwrap();
 
-                    ptr = ptr + 1;
+                    ptr += 1;
                 } else {
                     break;
                 }
@@ -161,7 +162,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             let (mut next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
 
             if env.mem.read(next_ptr) as char == ']' {
-                next_ptr = next_ptr + 1;
+                next_ptr += 1;
             }
             (next_ptr, len * elem_size, elem_align)
         }
@@ -171,7 +172,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             loop {
                 let c = env.mem.read(ptr) as char;
 
-                ptr = ptr + 1;
+                ptr += 1;
                 if c == '=' || c == '}' {
                     if c == '}' {
                         return (ptr, 0, 1);
@@ -186,7 +187,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 let c = env.mem.read(ptr) as char;
 
                 if c == '}' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     break;
                 }
@@ -196,11 +197,11 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
                 // Пропускаем имена полей (например: "x"f)
                 if c == '"' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     loop {
                         let nc = env.mem.read(ptr) as char;
-                        ptr = ptr + 1;
+                        ptr += 1;
                         if nc == '"' {
                             break;
                         }
@@ -238,7 +239,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             loop {
                 let c = env.mem.read(ptr) as char;
 
-                ptr = ptr + 1;
+                ptr += 1;
                 if c == '=' || c == ')' {
                     if c == ')' {
                         return (ptr, 0, 1);
@@ -253,7 +254,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 let c = env.mem.read(ptr) as char;
 
                 if c == ')' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     break;
                 }
@@ -262,10 +263,10 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 }
 
                 if c == '"' {
-                    ptr = ptr + 1;
+                    ptr += 1;
                     loop {
                         let nc = env.mem.read(ptr) as char;
-                        ptr = ptr + 1;
+                        ptr += 1;
                         if nc == '"' {
                             break;
                         }
@@ -295,12 +296,12 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 if c.is_ascii_digit() {
                     bits = bits * 10 + c.to_digit(10).unwrap();
 
-                    ptr = ptr + 1;
+                    ptr += 1;
                 } else {
                     break;
                 }
             }
-            let bytes = (bits + 7) / 8;
+            let bytes = bits.div_ceil(8);
 
             (ptr, bytes, 1)
         }
@@ -351,6 +352,56 @@ fn ns_url_session_transfer_size_unknown(env: &mut Environment) -> ConstVoidPtr {
     let ptr: MutPtr<u64> = env.mem.alloc(8).cast();
     env.mem.write(ptr, (-1i64) as u64);
     ptr.cast().cast_const()
+}
+
+/// `kCMTimeRangeZero` — `CMTimeRange` (48 bytes) of all-zero bytes.
+///
+/// From `<CoreMedia/CMTime.h>`: `CMTimeRange = { CMTime start; CMTime
+/// duration; }`. `CMTime` is `{ int64 value; int32 timescale; uint32 flags;
+/// int64 epoch }` (=24 bytes), so the
+fn kcm_timetime_range_zero(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u8> = env.mem.alloc(48).cast();
+    env.mem.bytes_at_mut(ptr, 48).fill(0);
+    ptr.cast().cast_const()
+}
+
+/// `matrix_identity_float4x4` — 4×4 identity matrix in column-major f32 order.
+///
+/// From `<simd/matrix.h>`: 16× f32 in column-major order per Apple's simd.h
+/// convention, with 1.0f at the four diagonal positions (offsets 0, 5, 10,
+/// 15 in the 16-element matrix, i.e. byte offsets 0, 20, 40, 60).
+fn matrix_identity_float4x4(env: &mut Environment) -> ConstVoidPtr {
+    let base: MutPtr<u8> = env.mem.alloc(64).cast();
+    env.mem.bytes_at_mut(base, 64).fill(0);
+    // Write 1.0f32 at column-major diagonal positions: byte offsets 0, 20, 40, 60.
+    for &offset in &[0u32, 20, 40, 60] {
+        let p: MutPtr<f32> = MutPtr::from_bits(base.to_bits() + offset);
+        env.mem.write(p, 1.0f32);
+    }
+    base.cast().cast_const()
+}
+
+/// `UILayoutFittingCompressedSize` — `CGSize{0,0}` (8 bytes of zero) per
+/// Apple's `<UIKit/UIGeometry.h>`. This is the value AutoLayout uses
+/// when asking a view for its minimum size.
+fn ui_layout_fitting_compressed_size(env: &mut Environment) -> ConstVoidPtr {
+    let ptr: MutPtr<u8> = env.mem.alloc(8).cast();
+    env.mem.bytes_at_mut(ptr, 8).fill(0);
+    ptr.cast().cast_const()
+}
+
+/// `UILayoutFittingExpandedSize` — CGSize with two `CGFLOAT_MAX` values.
+///
+/// From `<UIKit/UIGeometry.h>`: `UILayoutFittingExpandedSize` uses
+/// `CGFLOAT_MAX` (i.e. `f32::MAX`) for both width and height.
+fn ui_layout_fitting_expanded_size(env: &mut Environment) -> ConstVoidPtr {
+    let base: MutPtr<u8> = env.mem.alloc(8).cast();
+    env.mem.bytes_at_mut(base, 8).fill(0);
+    for &offset in &[0u32, 4] {
+        let p: MutPtr<f32> = MutPtr::from_bits(base.to_bits() + offset);
+        env.mem.write(p, f32::MAX);
+    }
+    base.cast().cast_const()
 }
 
 pub const STUB_CONSTANTS: ConstantExports = &[
@@ -569,6 +620,157 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_NSStreamSocketSecurityLevelNegotiatedSSL",
         HostConstant::NSString("kCFStreamSocketSecurityLevelNegotiatedSSL"),
+    ),
+    // -----------------------------------------------------------------
+    // NSStream SOCKS-proxy configuration keys (CFNetwork bridge).
+    // The values are the CFNetwork string names Apple's bridge layer
+    // uses internally (see <CFNetwork/CFSocketStream.h> and
+    // NSStream.h).
+    // -----------------------------------------------------------------
+    (
+        "_NSStreamSOCKSProxyConfigurationKey",
+        HostConstant::NSString("kCFStreamPropertySOCKSProxy"),
+    ),
+    (
+        "_NSStreamSOCKSProxyHostKey",
+        HostConstant::NSString("SOCKSProxy"),
+    ),
+    (
+        "_NSStreamSOCKSProxyPortKey",
+        HostConstant::NSString("SOCKSPort"),
+    ),
+    (
+        "_NSStreamSOCKSProxyVersionKey",
+        HostConstant::NSString("kCFStreamPropertySOCKSVersion"),
+    ),
+    (
+        "_NSStreamSOCKSProxyUserKey",
+        HostConstant::NSString("SOCKSUser"),
+    ),
+    (
+        "_NSStreamSOCKSProxyPasswordKey",
+        HostConstant::NSString("SOCKSPassword"),
+    ),
+    // SOCKS version sentinels.
+    (
+        "_NSStreamSOCKSProxyVersion4",
+        HostConstant::NSString("kCFStreamSocketSOCKSVersion4"),
+    ),
+    (
+        "_NSStreamSOCKSProxyVersion5",
+        HostConstant::NSString("kCFStreamSocketSOCKSVersion5"),
+    ),
+    // -----------------------------------------------------------------
+    // NSStream network service type keys (telephony hints).
+    // -----------------------------------------------------------------
+    (
+        "_NSStreamNetworkServiceType",
+        HostConstant::NSString("kCFStreamNetworkServiceType"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVoIP",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoIP"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVideo",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVideo"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeBackground",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeBackground"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeVoice",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeVoice"),
+    ),
+    (
+        "_NSStreamNetworkServiceTypeCallSignaling",
+        HostConstant::NSString("kCFStreamNetworkServiceTypeCallSignaling"),
+    ),
+    // -----------------------------------------------------------------
+    // NSAttributedString HTML/RTF import attribute keys
+    // (see UIKit's NSAttributedString.h "loading" category).
+    // -----------------------------------------------------------------
+    (
+        "_NSDocumentTypeDocumentAttribute",
+        HostConstant::NSString("DocumentType"),
+    ),
+    (
+        "_NSCharacterEncodingDocumentAttribute",
+        HostConstant::NSString("CharacterEncoding"),
+    ),
+    (
+        "_NSDefaultAttributesDocumentAttribute",
+        HostConstant::NSString("DefaultAttributes"),
+    ),
+    ("_NSHTMLTextDocumentType", HostConstant::NSString("NSHTML")),
+    (
+        "_NSPlainTextDocumentType",
+        HostConstant::NSString("NSPlainText"),
+    ),
+    ("_NSRTFTextDocumentType", HostConstant::NSString("NSRTF")),
+    (
+        "_NSRTFDTextDocumentType",
+        HostConstant::NSString("NSRTFD"),
+    ),
+    // -----------------------------------------------------------------
+    // NSProgress kind constants (NSProgress.h).
+    // -----------------------------------------------------------------
+    (
+        "_NSProgressKindFile",
+        HostConstant::NSString("NSProgressKindFile"),
+    ),
+    // -----------------------------------------------------------------
+    // CFError userInfo keys (CFError.h). They share storage with the
+    // toll-free-bridged NSError userInfo dictionary, so the documented
+    // literal values are exactly the NS*-prefixed names.
+    // -----------------------------------------------------------------
+    (
+        "_kCFErrorDescriptionKey",
+        HostConstant::NSString("NSDescription"),
+    ),
+    (
+        "_kCFErrorLocalizedDescriptionKey",
+        HostConstant::NSString("NSLocalizedDescription"),
+    ),
+    (
+        "_kCFErrorLocalizedFailureReasonKey",
+        HostConstant::NSString("NSLocalizedFailureReason"),
+    ),
+    (
+        "_kCFErrorLocalizedRecoverySuggestionKey",
+        HostConstant::NSString("NSLocalizedRecoverySuggestion"),
+    ),
+    (
+        "_kCFErrorUnderlyingErrorKey",
+        HostConstant::NSString("NSUnderlyingError"),
+    ),
+    (
+        "_kCFErrorURLKey",
+        HostConstant::NSString("NSURL"),
+    ),
+    (
+        "_kCFErrorFilePathKey",
+        HostConstant::NSString("NSFilePath"),
+    ),
+    // -----------------------------------------------------------------
+    // CFProxySupport.h: proxy dictionary key constants.
+    // -----------------------------------------------------------------
+    (
+        "_kCFProxyTypeAutoConfigurationJavaScript",
+        HostConstant::NSString("kCFProxyTypeAutoConfigurationJavaScript"),
+    ),
+    (
+        "_kCFProxyAutoConfigurationJavaScriptKey",
+        HostConstant::NSString("kCFProxyAutoConfigurationJavaScriptKey"),
+    ),
+    (
+        "_kCFProxyUsernameKey",
+        HostConstant::NSString("kCFProxyUsernameKey"),
+    ),
+    (
+        "_kCFProxyPasswordKey",
+        HostConstant::NSString("kCFProxyPasswordKey"),
     ),
     // -----------------------------------------------------------------
     // NSFileHandle notification names / userInfo keys.
@@ -990,6 +1192,95 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSXMLParserErrorDomain",
         HostConstant::NSString("NSXMLParserErrorDomain"),
     ),
+    // -----------------------------------------------------------------
+    // AVFoundation notification constants.
+    // From <AVFoundation/AVPlayerItem.h>: the value of these constants
+    // is exactly the constant name.
+    // -----------------------------------------------------------------
+    (
+        "AVPlayerItemTimeJumpedNotification",
+        HostConstant::NSString("AVPlayerItemTimeJumpedNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // Photos framework constants.
+    // -----------------------------------------------------------------
+    (
+        "PHImageErrorKey",
+        HostConstant::NSString("PHImageErrorKey"),
+    ),
+    // -----------------------------------------------------------------
+    // StoreKit framework constants.
+    // -----------------------------------------------------------------
+    (
+        "SKReceiptPropertyIsExpired",
+        HostConstant::NSString("SKReceiptPropertyIsExpired"),
+    ),
+    (
+        "SKReceiptPropertyIsRevoked",
+        HostConstant::NSString("SKReceiptPropertyIsRevoked"),
+    ),
+    (
+        "SKReceiptPropertyIsVolumePurchase",
+        HostConstant::NSString("SKReceiptPropertyIsVolumePurchase"),
+    ),
+    (
+        "SKStoreProductParameterProductIdentifier",
+        HostConstant::NSString("SKStoreProductParameterProductIdentifier"),
+    ),
+    // -----------------------------------------------------------------
+    // UIKit accessibility/input constants.
+    // -----------------------------------------------------------------
+    (
+        "UIAccessibilityScreenChangedNotification",
+        HostConstant::NSString("UIAccessibilityScreenChangedNotification"),
+    ),
+    (
+        "UITextInputCurrentInputModeDidChangeNotification",
+        HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
+    ),
+    // -----------------------------------------------------------------
+    // ImageIO constants.
+    // -----------------------------------------------------------------
+    (
+        "kCGImagePropertyExifDictionary",
+        HostConstant::NSString("{Exif}"),
+    ),
+    // -----------------------------------------------------------------
+    // Security constants.
+    // -----------------------------------------------------------------
+    (
+        "kSecAttrIsPermanent",
+        HostConstant::NSString("isper"),
+    ),
+    (
+        "kSecUseAuthenticationUI",
+        HostConstant::NSString("u_AuthUI"),
+    ),
+    (
+        "kSecUseAuthenticationUIFail",
+        HostConstant::NSString("u_AuthUIF"),
+    ),
+    // -----------------------------------------------------------------
+    // CMTime constants.
+    // -----------------------------------------------------------------
+    (
+        "kCMTimeRangeZero",
+        HostConstant::Custom(kcm_timetime_range_zero),
+    ),
+    // -----------------------------------------------------------------
+    // simd constants.
+    // -----------------------------------------------------------------
+    (
+        "matrix_identity_float4x4",
+        HostConstant::Custom(matrix_identity_float4x4),
+    ),
+    // -----------------------------------------------------------------
+    // sqlite3 constants.
+    // -----------------------------------------------------------------
+    (
+        "sqlite3_temp_directory",
+        HostConstant::NullPtr,
+    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -1021,6 +1312,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_manager::CLASSES,
         ns_host::CLASSES,
         ns_index_path::CLASSES,
+        ns_json_serialization::CLASSES,
         ns_input_stream::CLASSES,
         ns_invocation::CLASSES,
         ns_keyed_archiver::CLASSES,

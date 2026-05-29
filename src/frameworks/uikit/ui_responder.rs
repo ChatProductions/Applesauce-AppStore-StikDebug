@@ -6,7 +6,6 @@
 //! `UIResponder`.
 
 use crate::objc::{id, msg, nil, objc_classes, ClassExports};
-use crate::Environment;
 
 #[derive(Default)]
 pub struct State {

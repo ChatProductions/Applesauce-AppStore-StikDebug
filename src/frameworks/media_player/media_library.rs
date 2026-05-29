@@ -12,7 +12,7 @@
 //! library — no songs, playlists, or artists. This prevents apps from
 //! crashing when they call methods on the returned object.
 
-use crate::objc::{id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 /// Host object for MPMediaLibrary — just a marker (empty library).
 struct MPMediaLibraryHostObject;

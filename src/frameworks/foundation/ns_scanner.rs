@@ -59,9 +59,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithString:(id)string { // NSString *
-    assert!(string != nil);
-    let string: id = msg![env; string copy]; // Same behaviour as simulator
-    let len: NSUInteger = msg![env; string length];
+    // Per Apple's NSScanner, a scanner created over a nil string does not
+    // raise — it simply has nothing to scan (every scan operation fails and
+    // -isAtEnd is true). Real-world iOS apps rely on this lenient behaviour,
+    // so instead of asserting we handle nil as an empty (length 0) scanner.
+    let (string, len): (id, NSUInteger) = if string == nil {
+        (nil, 0)
+    } else {
+        let string: id = msg![env; string copy]; // Same behaviour as simulator
+        let len: NSUInteger = msg![env; string length];
+        (string, len)
+    };
     let default_set = msg_class![env; NSCharacterSet whitespaceAndNewlineCharacterSet];
     retain(env, default_set);
     *env.objc.borrow_mut(this) = NSScannerHostObject {
@@ -163,19 +171,64 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)scanHexInt:(MutPtr<u32>)result {
-    assert!(!result.is_null());
     skip_characters(env, this);
 
-    let NSScannerHostObject { to_be_skipped: _set, string, len, pos } = env.objc.borrow::<NSScannerHostObject>(this).clone();
-    if pos >= len { return false; }
+    let NSScannerHostObject { to_be_skipped, string, len, pos } =
+        std::mem::take(env.objc.borrow_mut::<NSScannerHostObject>(this));
+    if pos >= len {
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) =
+            NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
 
-    let susbstring: id = msg![env; string substringFromIndex:pos];
-    // Исправлено: добавлено '_', чтобы избежать ошибки unused variable
-    let _tmp = to_rust_string(env, susbstring);
+    let substring: id = msg![env; string substringFromIndex:pos];
+    let st = to_rust_string(env, substring);
+    let chars: Vec<char> = st.chars().collect();
 
-    // TODO: Implement actual hex scanning
-    env.mem.write(result, 0);
-    false
+    // Per Apple's documentation for -scanHexInt::
+    // "The hexadecimal integer representation may optionally be preceded by
+    //  0x or 0X." The prefix is only consumed when an actual hex digit
+    // follows it.
+    let mut i = 0usize;
+    if chars.len() >= 3
+        && chars[0] == '0'
+        && (chars[1] == 'x' || chars[1] == 'X')
+        && chars[2].is_ascii_hexdigit()
+    {
+        i = 2;
+    }
+
+    let digits_start = i;
+    let mut value: u64 = 0;
+    while i < chars.len() && chars[i].is_ascii_hexdigit() {
+        let digit = chars[i].to_digit(16).unwrap() as u64;
+        value = value.saturating_mul(16).saturating_add(digit);
+        // "If the receiver contains a hexadecimal representation greater than
+        //  UINT_MAX, then the value [...] is UINT_MAX."
+        if value > u32::MAX as u64 {
+            value = u32::MAX as u64;
+        }
+        i += 1;
+    }
+
+    if i == digits_start {
+        // No hexadecimal digits were found; scanner is unchanged.
+        *env.objc.borrow_mut::<NSScannerHostObject>(this) =
+            NSScannerHostObject { to_be_skipped, string, len, pos };
+        return false;
+    }
+
+    if !result.is_null() {
+        env.mem.write(result, value as u32);
+    }
+
+    // Only ASCII characters ("0x" + hex digits) were consumed, so the number
+    // of Rust chars equals the number of UTF-16 code units to advance by.
+    let consumed = i as NSUInteger;
+    *env.objc.borrow_mut::<NSScannerHostObject>(this) =
+        NSScannerHostObject { to_be_skipped, string, len, pos: pos + consumed };
+    log_dbg!("scanHexInt: from '{}' -> {:#x}", st, value);
+    true
 }
 
 - (bool)scanUpToString:(id)stop_string // NSString *

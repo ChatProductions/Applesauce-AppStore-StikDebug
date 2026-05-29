@@ -7,9 +7,9 @@
 
 use crate::abi::{CallFromHost, GuestFunction};
 use crate::frameworks::foundation::NSUInteger;
-use crate::mem::{ConstPtr, Ptr}; // Добавили ConstPtr
+use crate::mem::ConstPtr; // Добавили ConstPtr
 use crate::objc::{
-    id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject,
+    id, msg, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::Environment;

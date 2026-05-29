@@ -211,12 +211,15 @@ pub const CONSTANTS: ConstantExports = &[
 #[derive(Default)]
 struct CFReadStreamHostObject {
     status: CFStreamStatus,
+    offset: usize,
+    data: Vec<u8>,
 }
 impl HostObject for CFReadStreamHostObject {}
 
 #[derive(Default)]
 struct CFWriteStreamHostObject {
     status: CFStreamStatus,
+    data: Vec<u8>,
 }
 impl HostObject for CFWriteStreamHostObject {}
 
@@ -248,6 +251,8 @@ fn alloc_read_stream(env: &mut Environment) -> CFReadStreamRef {
         class,
         Box::new(CFReadStreamHostObject {
             status: kCFStreamStatusNotOpen,
+            offset: 0,
+            data: Vec::new(),
         }),
         &mut env.mem,
     )
@@ -261,6 +266,7 @@ fn alloc_write_stream(env: &mut Environment) -> CFWriteStreamRef {
         class,
         Box::new(CFWriteStreamHostObject {
             status: kCFStreamStatusNotOpen,
+            data: Vec::new(),
         }),
         &mut env.mem,
     )
@@ -309,7 +315,7 @@ fn CFReadStreamCreateWithBytesNoCopy(
 fn CFReadStreamCreateWithFile(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    file_url: CFTypeRef, // CFURLRef
+    _file_url: CFTypeRef, // CFURLRef
 ) -> CFReadStreamRef {
     log_dbg!("CFReadStreamCreateWithFile: stubbed");
     alloc_read_stream(env)
@@ -318,7 +324,7 @@ fn CFReadStreamCreateWithFile(
 fn CFWriteStreamCreateWithFile(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    file_url: CFTypeRef, // CFURLRef
+    _file_url: CFTypeRef, // CFURLRef
 ) -> CFWriteStreamRef {
     log_dbg!("CFWriteStreamCreateWithFile: stubbed");
     alloc_write_stream(env)
@@ -397,9 +403,10 @@ fn CFReadStreamOpen(env: &mut Environment, stream: CFReadStreamRef) -> bool {
     if stream.is_null() {
         return false;
     }
-    log!("CFReadStreamOpen: stubbed -> false");
-    env.objc.borrow_mut::<CFReadStreamHostObject>(stream).status = kCFStreamStatusError;
-    false
+    let host = env.objc.borrow_mut::<CFReadStreamHostObject>(stream);
+    host.status = kCFStreamStatusOpen;
+    host.offset = 0;
+    true
 }
 
 fn CFReadStreamClose(env: &mut Environment, stream: CFReadStreamRef) {
@@ -414,11 +421,10 @@ fn CFWriteStreamOpen(env: &mut Environment, stream: CFWriteStreamRef) -> bool {
     if stream.is_null() {
         return false;
     }
-    log!("CFWriteStreamOpen: stubbed -> false");
     env.objc
         .borrow_mut::<CFWriteStreamHostObject>(stream)
-        .status = kCFStreamStatusError;
-    false
+        .status = kCFStreamStatusOpen;
+    true
 }
 
 fn CFWriteStreamClose(env: &mut Environment, stream: CFWriteStreamRef) {
@@ -460,13 +466,30 @@ fn CFWriteStreamGetError(_env: &mut Environment, _stream: CFWriteStreamRef) -> u
 // MARK: - Read / Write
 
 fn CFReadStreamRead(
-    _env: &mut Environment,
-    _stream: CFReadStreamRef,
-    _buffer: MutPtr<u8>,
-    _buffer_length: i32,
+    env: &mut Environment,
+    stream: CFReadStreamRef,
+    buffer: MutPtr<u8>,
+    buffer_length: i32,
 ) -> i32 {
-    log!("CFReadStreamRead: stubbed -> -1 (error)");
-    -1
+    if stream.is_null() || buffer.is_null() || buffer_length < 0 {
+        return -1;
+    }
+    let host = env.objc.borrow_mut::<CFReadStreamHostObject>(stream);
+    if host.status != kCFStreamStatusOpen && host.status != kCFStreamStatusReading {
+        return -1;
+    }
+    let remaining = host.data.len().saturating_sub(host.offset);
+    let copy_len = remaining.min(buffer_length as usize);
+    if copy_len > 0 {
+        env.mem
+            .bytes_at_mut(buffer, copy_len as u32)
+            .copy_from_slice(&host.data[host.offset..host.offset + copy_len]);
+        host.offset += copy_len;
+    }
+    if host.offset >= host.data.len() {
+        host.status = kCFStreamStatusAtEnd;
+    }
+    copy_len as i32
 }
 
 fn CFReadStreamGetBuffer(
@@ -478,22 +501,38 @@ fn CFReadStreamGetBuffer(
     ConstPtr::null()
 }
 
-fn CFReadStreamHasBytesAvailable(_env: &mut Environment, _stream: CFReadStreamRef) -> bool {
-    false
+fn CFReadStreamHasBytesAvailable(env: &mut Environment, stream: CFReadStreamRef) -> bool {
+    if stream.is_null() {
+        return false;
+    }
+    let host = env.objc.borrow::<CFReadStreamHostObject>(stream);
+    host.offset < host.data.len()
 }
 
 fn CFWriteStreamWrite(
-    _env: &mut Environment,
-    _stream: CFWriteStreamRef,
-    _buffer: ConstPtr<u8>,
-    _buffer_length: i32,
+    env: &mut Environment,
+    stream: CFWriteStreamRef,
+    buffer: ConstPtr<u8>,
+    buffer_length: i32,
 ) -> i32 {
-    log!("CFWriteStreamWrite: stubbed -> -1 (error)");
-    -1
+    if stream.is_null() || buffer.is_null() || buffer_length < 0 {
+        return -1;
+    }
+    let host = env.objc.borrow_mut::<CFWriteStreamHostObject>(stream);
+    if host.status != kCFStreamStatusOpen && host.status != kCFStreamStatusWriting {
+        return -1;
+    }
+    let bytes = env.mem.bytes_at(buffer, buffer_length as u32);
+    host.data.extend_from_slice(bytes);
+    buffer_length
 }
 
-fn CFWriteStreamCanAcceptBytes(_env: &mut Environment, _stream: CFWriteStreamRef) -> bool {
-    false
+fn CFWriteStreamCanAcceptBytes(env: &mut Environment, stream: CFWriteStreamRef) -> bool {
+    if stream.is_null() {
+        return false;
+    }
+    let status = env.objc.borrow::<CFWriteStreamHostObject>(stream).status;
+    status == kCFStreamStatusOpen || status == kCFStreamStatusWriting
 }
 
 // MARK: - Properties
@@ -543,8 +582,7 @@ fn CFReadStreamSetClient(
     _client_cb: MutVoidPtr,
     _client_ctx: MutVoidPtr,
 ) -> bool {
-    log!("CFReadStreamSetClient: stubbed -> false");
-    false
+    true
 }
 
 fn CFWriteStreamSetClient(
@@ -554,8 +592,7 @@ fn CFWriteStreamSetClient(
     _client_cb: MutVoidPtr,
     _client_ctx: MutVoidPtr,
 ) -> bool {
-    log!("CFWriteStreamSetClient: stubbed -> false");
-    false
+    true
 }
 
 fn CFReadStreamScheduleWithRunLoop(

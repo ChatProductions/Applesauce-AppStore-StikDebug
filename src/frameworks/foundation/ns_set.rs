@@ -13,7 +13,8 @@ use crate::abi::DotDotDot;
 use crate::environment::Environment;
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 
 /// Belongs to _touchHLE_NSSet
@@ -213,6 +214,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithSet:(id)other { // NSSet*
+    // Apple docs (NSSet "Creating a Set"): "Returns a newly initialized set
+    // using the objects from another given set." The objects are NOT copied
+    // — they're retained, exactly like -initWithArray:.
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_set(env, other, false);
+    this
+}
+
+- (id)initWithSet:(id)other copyItems:(bool)copy_items { // NSSet*
+    // Apple docs: when `flag` is YES, each object is sent -copyWithZone:nil
+    // and the copy is added to the new set (objects must conform to
+    // NSCopying — non-conforming objects raise NSInvalidArgumentException).
+    env.objc.borrow_mut::<SetHostObject>(this).dict =
+        set_from_set(env, other, copy_items);
+    this
+}
+
 - (())dealloc {
     std::mem::take(&mut env.objc.borrow_mut::<SetHostObject>(this).dict).release(env);
     env.objc.dealloc_object(this, &mut env.mem)
@@ -311,6 +329,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+- (id)initWithSet:(id)other { // NSSet*
+    // Apple docs (NSSet "Creating a Set"): "Returns a newly initialized set
+    // using the objects from another given set." The objects are NOT copied
+    // — they're retained, exactly like -initWithArray:.
+    env.objc.borrow_mut::<SetHostObject>(this).dict = set_from_set(env, other, false);
+    this
+}
+
+- (id)initWithSet:(id)other copyItems:(bool)copy_items { // NSSet*
+    // Apple docs: when `flag` is YES, each object is sent -copyWithZone:nil
+    // and the copy is added to the new set (objects must conform to
+    // NSCopying — non-conforming objects raise NSInvalidArgumentException).
+    env.objc.borrow_mut::<SetHostObject>(this).dict =
+        set_from_set(env, other, copy_items);
+    this
+}
+
 - (())dealloc {
     std::mem::take(&mut env.objc.borrow_mut::<SetHostObject>(this).dict).release(env);
     env.objc.dealloc_object(this, &mut env.mem)
@@ -402,6 +437,70 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
+
+- (())minusSet:(id)other { // NSSet *
+    if other == nil {
+        return;
+    }
+    let enumerator: id = msg![env; other objectEnumerator];
+    loop {
+        let next: id = msg![env; enumerator nextObject];
+        if next == nil {
+            break;
+        }
+        () = msg![env; this removeObject:next];
+    }
+}
+
+- (())setSet:(id)other { // NSSet *
+    () = msg![env; this removeAllObjects];
+    () = msg![env; this unionSet:other];
+}
+
+- (())intersectSet:(id)other { // NSSet *
+    if other == nil {
+        () = msg![env; this removeAllObjects];
+        return;
+    }
+    let objects: id = msg![env; this allObjects];
+    let count: NSUInteger = msg![env; objects count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let object: id = msg![env; objects objectAtIndex:i];
+        let contains: bool = msg![env; other containsObject:object];
+        if !contains {
+            () = msg![env; this removeObject:object];
+        }
+        i += 1;
+    }
+}
+
+- (())encodeWithCoder:(id)coder {
+    let objects: id = msg![env; this allObjects];
+    () = msg![env; objects encodeWithCoder:coder];
+}
+
+// Apple: "Adds to the receiving set each object contained in a given array
+// that is not already a member." (NSMutableSet addObjectsFromArray:).
+// https://developer.apple.com/documentation/foundation/nsmutableset/1408015-addobjectsfromarray
+//
+// We tolerate `nil` (real Foundation crashes, but every other touchHLE
+// container path tolerates nil to keep flaky games alive), and use indexed
+// access rather than fast enumeration because some guest array
+// implementations don't implement -objectEnumerator yet.
+- (())addObjectsFromArray:(id)array { // NSArray *
+    if array == nil {
+        return;
+    }
+    let count: NSUInteger = msg![env; array count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let object: id = msg![env; array objectAtIndex:i];
+        () = msg![env; this addObject:object];
+        i += 1;
+    }
+}
+
 @end
 
 };
@@ -438,6 +537,40 @@ fn set_from_array(env: &mut Environment, array: id) -> DictionaryHostObject {
     for i in 0..count {
         let object: id = msg![env; array objectAtIndex:i];
         dict.insert(env, object, null, /* copy_key: */ false);
+    }
+    dict
+}
+
+/// Build a [DictionaryHostObject] populated with the contents of `other`,
+/// reached through the public NSSet API so subclasses work transparently.
+/// When `copy_items` is true, each object is sent `-copyWithZone:nil` and the
+/// returned copy is inserted instead of the original, matching the documented
+/// behavior of `-[NSSet initWithSet:copyItems:]`.
+fn set_from_set(env: &mut Environment, other: id, copy_items: bool) -> DictionaryHostObject {
+    let mut dict = <DictionaryHostObject as Default>::default();
+    if other == nil {
+        return dict;
+    }
+    let null: id = msg_class![env; NSNull null];
+    let enumerator: id = msg![env; other objectEnumerator];
+    if enumerator == nil {
+        return dict;
+    }
+    loop {
+        let next: id = msg![env; enumerator nextObject];
+        if next == nil {
+            break;
+        }
+        if copy_items {
+            // -[NSObject copy] returns an owned (+1 retain) copy. Insert it,
+            // then release our extra reference so the dictionary's retain is
+            // the only one we own.
+            let copy: id = msg![env; next copy];
+            dict.insert(env, copy, null, /* copy_key: */ false);
+            release(env, copy);
+        } else {
+            dict.insert(env, next, null, /* copy_key: */ false);
+        }
     }
     dict
 }

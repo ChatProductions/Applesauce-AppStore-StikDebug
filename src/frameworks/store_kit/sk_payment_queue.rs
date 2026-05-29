@@ -8,7 +8,7 @@
 
 use crate::frameworks::foundation::{ns_string, NSInteger};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::Environment;
@@ -83,13 +83,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())addTransactionObserver:(id)observer {
     // Убрали .unwrap()
-    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
+    let host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
     host_obj.observer = observer;
 }
 
 - (())removeTransactionObserver:(id)_observer {
     // Убрали .unwrap()
-    let mut host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
+    let host_obj = env.objc.borrow_mut::<SKPaymentQueueHostObject>(this);
     host_obj.observer = nil;
 }
 

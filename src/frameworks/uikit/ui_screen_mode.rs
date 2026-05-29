@@ -67,7 +67,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         "<UIScreenMode: size=({}, {}), pixelAspectRatio={}>",
         width, height, pixel_aspect_ratio
     );
-    drop(host);
     let ns = crate::frameworks::foundation::ns_string::from_rust_string(env, s);
     crate::objc::autorelease(env, ns)
 }
@@ -80,7 +79,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// For use by `UIScreen` when building its `availableModes` array.
 pub fn from_size(env: &mut crate::Environment, size: CGSize, pixel_aspect_ratio: CGFloat) -> id {
     let mode: id = crate::objc::msg_class![env; UIScreenMode alloc];
-    let mut host = env.objc.borrow_mut::<UIScreenModeHostObject>(mode);
+    let host = env.objc.borrow_mut::<UIScreenModeHostObject>(mode);
     host.size = size;
     host.pixel_aspect_ratio = pixel_aspect_ratio;
     crate::objc::autorelease(env, mode)

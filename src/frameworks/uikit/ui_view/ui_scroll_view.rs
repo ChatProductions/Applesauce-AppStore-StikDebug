@@ -9,8 +9,10 @@
 
 pub mod ui_text_view;
 
+use crate::abi::{GuestArg, GuestRet};
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
+use crate::mem::SafeRead;
 use crate::objc::{
     id, impl_HostObject_with_superclass, msg, nil, objc_classes, ClassExports, NSZonePtr, SEL,
 };
@@ -53,11 +55,31 @@ pub struct UIScrollViewHostObject {
 impl_HostObject_with_superclass!(UIScrollViewHostObject);
 
 #[derive(Copy, Clone, Debug, Default)]
+#[repr(C, packed)]
 struct UIEdgeInsets {
     top: CGFloat,
     left: CGFloat,
     bottom: CGFloat,
     right: CGFloat,
+}
+unsafe impl SafeRead for UIEdgeInsets {}
+impl GuestRet for UIEdgeInsets {}
+impl GuestArg for UIEdgeInsets {
+    const REG_COUNT: usize = 4;
+    fn from_regs(regs: &[u32]) -> Self {
+        UIEdgeInsets {
+            top: GuestArg::from_regs(&regs[0..1]),
+            left: GuestArg::from_regs(&regs[1..2]),
+            bottom: GuestArg::from_regs(&regs[2..3]),
+            right: GuestArg::from_regs(&regs[3..4]),
+        }
+    }
+    fn to_regs(self, regs: &mut [u32]) {
+        GuestArg::to_regs(self.top, &mut regs[0..1]);
+        GuestArg::to_regs(self.left, &mut regs[1..2]);
+        GuestArg::to_regs(self.bottom, &mut regs[2..3]);
+        GuestArg::to_regs(self.right, &mut regs[3..4]);
+    }
 }
 
 impl Default for UIScrollViewHostObject {
@@ -141,6 +163,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 // UIEdgeInsets passed as four floats (top, left, bottom, right) on the stack.
 // We store them individually to avoid needing a SafeRead impl here.
 
+- (UIEdgeInsets)contentInset {
+    env.objc.borrow::<UIScrollViewHostObject>(this).content_inset
+}
+- (())setContentInset:(UIEdgeInsets)inset {
+    env.objc.borrow_mut::<UIScrollViewHostObject>(this).content_inset = inset;
+}
 - (CGFloat)contentInsetTop {
     env.objc.borrow::<UIScrollViewHostObject>(this).content_inset.top
 }

@@ -200,6 +200,12 @@ pub const kCAValueFunctionTranslateX: &str = "translateX";
 pub const kCAValueFunctionTranslateY: &str = "translateY";
 pub const kCAValueFunctionTranslateZ: &str = "translateZ";
 
+// CALayer action key constants. From `CALayer.h`. Apps look up implicit
+// animations under these keys in a layer's `actions` dictionary (or via
+// `-[CALayer actionForKey:]`). The string values are exactly the key names.
+pub const kCAOnOrderIn: &str = "onOrderIn";
+pub const kCAOnOrderOut: &str = "onOrderOut";
+
 pub const CONSTANTS: ConstantExports = &[
     ("_kCAFilterLinear", HostConstant::NSString(kCAFilterLinear)),
     (
@@ -307,6 +313,8 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCATransitionFromBottom",
         HostConstant::NSString(kCATransitionFromBottom),
     ),
+    ("_kCAOnOrderIn", HostConstant::NSString(kCAOnOrderIn)),
+    ("_kCAOnOrderOut", HostConstant::NSString(kCAOnOrderOut)),
     (
         "_kCAValueFunctionRotateX",
         HostConstant::NSString(kCAValueFunctionRotateX),
@@ -473,7 +481,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())addSublayer:(id)layer {
     if layer == nil { return; }
     if env.objc.borrow::<CALayerHostObject>(layer).superlayer == this {
-        () = msg![env; this bringSublayerToFront:layer];
+        // The layer is already a sublayer of this layer. Per Core Animation,
+        // re-adding an existing sublayer moves it to the top of the z-order,
+        // i.e. the end of the sublayers array. Do this directly instead of
+        // dispatching a `bringSublayerToFront:` selector, which is not a real
+        // CALayer method and is never registered (sending it panics with
+        // "Unknown selector").
+        let CALayerHostObject { ref mut sublayers, .. } = env.objc.borrow_mut(this);
+        if let Some(pos) = sublayers.iter().position(|&l| l == layer) {
+            let moved = sublayers.remove(pos);
+            sublayers.push(moved);
+        }
     } else {
         retain(env, layer);
         () = msg![env; layer removeFromSuperlayer];
@@ -705,6 +723,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (bool)needsDisplay { env.objc.borrow::<CALayerHostObject>(this).needs_display }
 - (())setNeedsDisplay { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true; }
 
+- (())setNeedsDisplayInRect:(CGRect)_invalid_rect {
+    // Apple docs (CALayer Reference):
+    //   "Marks the region within the specified rectangle as needing to be
+    //    updated. ... You should call this method when the layer's contents
+    //    have changed and need to be redrawn."
+    //
+    // We currently track invalidation at whole-layer granularity rather
+    // than per-rect, so the documented conservative thing is to mark the
+    // entire layer as needing display. This still produces correct output
+    // (just at the cost of a full -displayLayer:/-drawLayer:inContext:
+    // round-trip instead of a partial one) and matches the iOS
+    // documentation's wording that "calling setNeedsDisplay(in:) with the
+    // bounds of the layer is equivalent to calling setNeedsDisplay()".
+    env.objc.borrow_mut::<CALayerHostObject>(this).needs_display = true;
+}
+
 - (bool)needsDisplayOnBoundsChange { env.objc.borrow::<CALayerHostObject>(this).needs_display_on_bounds_change }
 - (())setNeedsDisplayOnBoundsChange:(bool)value { env.objc.borrow_mut::<CALayerHostObject>(this).needs_display_on_bounds_change = value; }
 
@@ -880,13 +914,31 @@ pub const CLASSES: ClassExports = objc_classes! {
         () = msg![env; anim setDuration:duration];
     }
     if key == nil {
-        let inserted = env.objc.borrow_mut::<CALayerHostObject>(this).anonymous_animations.insert(anim);
-        assert!(inserted);
+        // Anonymous animation. If this exact animation object is already
+        // attached, adding it again is a no-op (and we must not retain it a
+        // second time, or it would leak).
+        let inserted = env
+            .objc
+            .borrow_mut::<CALayerHostObject>(this)
+            .anonymous_animations
+            .insert(anim);
+        if inserted {
+            retain(env, anim);
+        }
     } else {
-        let key_string = to_rust_string(env, key);
-        env.objc.borrow_mut::<CALayerHostObject>(this).animations.insert(key_string.to_string(), anim);
+        // Named animation. Adding an animation for a key that already exists
+        // replaces (and releases) the previous one, per Core Animation.
+        let key_string = to_rust_string(env, key).to_string();
+        let previous = env
+            .objc
+            .borrow_mut::<CALayerHostObject>(this)
+            .animations
+            .insert(key_string, anim);
+        if let Some(previous) = previous {
+            release(env, previous);
+        }
+        retain(env, anim);
     }
-    retain(env, anim);
 }
 
 - (())removeAnimationForKey:(id)key {
@@ -894,6 +946,44 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(anim) = env.objc.borrow_mut::<CALayerHostObject>(this).animations.remove(&*key_string) {
         release(env, anim);
     };
+}
+
+// Apple: -[CALayer animationKeys] - returns the array of NSString keys of
+// the currently attached named animations, or nil if there are none.
+// https://developer.apple.com/documentation/quartzcore/calayer/animationkeys()
+- (id)animationKeys {
+    // Collect first to avoid borrow conflicts when constructing NSStrings.
+    let keys: Vec<String> = env.objc
+        .borrow::<CALayerHostObject>(this)
+        .animations
+        .keys()
+        .cloned()
+        .collect();
+    if keys.is_empty() {
+        return nil;
+    }
+    let mut ids = Vec::with_capacity(keys.len());
+    for k in keys {
+        ids.push(ns_string::from_rust_string(env, k));
+    }
+    let array = crate::frameworks::foundation::ns_array::from_vec(env, ids);
+    crate::objc::autorelease(env, array)
+}
+
+// Apple: -[CALayer animationForKey:] - returns the CAAnimation for the
+// given key, or nil if there is no such animation.
+// https://developer.apple.com/documentation/quartzcore/calayer/animation(forkey:)
+- (id)animationForKey:(id)key {
+    if key == nil {
+        return nil;
+    }
+    let key_string = to_rust_string(env, key).into_owned();
+    env.objc
+        .borrow::<CALayerHostObject>(this)
+        .animations
+        .get(&key_string)
+        .copied()
+        .unwrap_or(nil)
 }
 
 // --- ДОБАВЛЕННЫЙ МЕТОД: removeAllAnimations ---
@@ -1043,8 +1133,14 @@ pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: i
         .borrow_mut::<CALayerHostObject>(layer)
         .anonymous_animations
         .remove(&animation);
-    assert!(removed);
-    release(env, animation);
+    // Removing an animation that is no longer attached (e.g. it was already
+    // cleared by -removeAllAnimations, or its completion handler ran twice)
+    // is a no-op, matching Core Animation semantics. Only release the retain
+    // taken in -addAnimation:forKey: when we actually removed it here, so the
+    // retain count stays balanced and we never double-free.
+    if removed {
+        release(env, animation);
+    }
 }
 
 fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAffineTransform {

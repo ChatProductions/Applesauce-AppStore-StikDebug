@@ -11,7 +11,7 @@ use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg, nil, objc_classes, release, retain, ClassExports, NSZonePtr,
 };
 
 // `ADBannerContentSizeIdentifier*` CFString constants. iAd-using apps export

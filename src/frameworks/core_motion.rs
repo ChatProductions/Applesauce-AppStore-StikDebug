@@ -26,7 +26,7 @@
 
 use crate::dyld::HostDylib;
 use crate::objc::{
-    autorelease, id, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
 };
 use crate::Environment;
 use std::time::Instant;

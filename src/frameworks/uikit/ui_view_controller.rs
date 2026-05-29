@@ -13,9 +13,7 @@ use crate::frameworks::core_graphics::{CGRect, CGSize};
 use crate::frameworks::foundation::ns_objc_runtime::NSStringFromClass;
 use crate::frameworks::foundation::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
-use crate::frameworks::uikit::ui_application::{
-    UIInterfaceOrientation, UIInterfaceOrientationPortrait,
-};
+use crate::frameworks::uikit::ui_application::UIInterfaceOrientation;
 use crate::frameworks::uikit::ui_view::set_view_controller;
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_super, nil, objc_classes, release, retain,
@@ -79,6 +77,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::<UIViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
++ (())attemptRotationToDeviceOrientation {
+    // Apple docs (UIViewController Class Reference):
+    //   "Attempts to rotate all windows to the orientation of the device.
+    //    Some view controllers may want to use app-specific conditions to
+    //    determine what interface orientations are supported. If your view
+    //    controller does this, when those conditions change your app should
+    //    call this class method. The system immediately attempts to rotate
+    //    to the new orientation."
+    //
+    // touchHLE does not currently perform live device-orientation
+    // rotations — the window is pinned to the orientation the app launched
+    // in. Re-querying supported orientations would therefore not result in
+    // any change, so the documented behavior reduces to a no-op for our
+    // host. We still log the call so app authors can see that their hook
+    // ran in case they wire up rotation handling later.
+    log_dbg!(
+        "+[UIViewController attemptRotationToDeviceOrientation]: no live \
+         rotation system; treating as a no-op."
+    );
 }
 
 - (id)navigationController {
@@ -815,8 +834,7 @@ fn resolve_nib_name_from_class(env: &mut Environment, bundle: id, class_name: id
 
     // 2. Пробуем имя без суффикса "Controller" (напр. MainView)
     let class_str = to_rust_string(env, class_name);
-    if class_str.ends_with("Controller") {
-        let short_name = &class_str[..class_str.len() - "Controller".len()];
+    if let Some(short_name) = class_str.strip_suffix("Controller") {
         let short_ns = from_rust_string(env, short_name.to_string());
         let res = check_and_resolve_nib(env, bundle, short_ns);
         release(env, short_ns);

@@ -918,7 +918,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let pairs: Vec<(id, id)> = host.map.values()
            .flat_map(|v| v.iter().copied())
            .collect();
-        drop(host);
 
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];
@@ -1079,7 +1078,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let pairs: Vec<(id, id)> = host.map.values()
            .flat_map(|v| v.iter().copied())
            .collect();
-        drop(host);
 
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];
@@ -1223,6 +1221,45 @@ pub const CLASSES: ClassExports = objc_classes! {
         if val != nil {
             () = msg![env; this setObject:val forKey:key];
         }
+        release(env, key);
+    }
+}
+
+- (())setValuesForKeysWithDictionary:(id)keyed_values { // NSDictionary *
+    // Apple's NSKeyValueCoding docs (NSObject(NSKeyValueCoding)):
+    // "For each key in keyedValues, the corresponding value is set in the
+    //  receiver by invoking -setValue:forKey:. The default implementation
+    //  invokes -setValue:forKey: for each key-value pair, substituting nil
+    //  for instances of NSNull."
+    //
+    // We must route through -setValue:forKey: rather than -setObject:forKey:
+    // so that KVC-only setters (and guest overrides) are honored. Collect the
+    // keys first so the source dictionary can be mutated by side-effects of
+    // the setters without invalidating our enumeration.
+    if keyed_values == nil {
+        return;
+    }
+    let key_enum: id = msg![env; keyed_values keyEnumerator];
+    if key_enum == nil {
+        return;
+    }
+    let mut keys: Vec<id> = Vec::new();
+    loop {
+        let next: id = msg![env; key_enum nextObject];
+        if next == nil {
+            break;
+        }
+        retain(env, next);
+        keys.push(next);
+    }
+    let ns_null: id = msg_class![env; NSNull null];
+    for key in keys {
+        let val: id = msg![env; keyed_values objectForKey:key];
+        // Per Apple docs, NSNull is treated as nil. -setValue:forKey:'s own
+        // contract is then "remove the value for the key" when the argument
+        // is nil — sending the nil through is therefore the correct thing.
+        let arg: id = if val == ns_null { nil } else { val };
+        () = msg![env; this setValue:arg forKey:key];
         release(env, key);
     }
 }

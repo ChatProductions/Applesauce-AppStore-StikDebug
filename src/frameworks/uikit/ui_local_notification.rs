@@ -6,20 +6,24 @@
 //! `UILocalNotification`.
 
 use crate::dyld::{ConstantExports, HostConstant};
+use crate::frameworks::foundation::NSUInteger;
 use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
-use crate::Environment;
 
 #[derive(Default)]
 pub(super) struct UILocalNotificationHostObject {
     fire_date: id,
     time_zone: id,
+    repeat_interval: NSUInteger,
+    repeat_calendar: id,
     alert_body: id,
     alert_action: id,
+    alert_launch_image: id,
     sound_name: id,
     application_icon_badge_number: i32,
     user_info: id,
+    has_action: bool,
 }
 impl HostObject for UILocalNotificationHostObject {}
 
@@ -33,11 +37,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(UILocalNotificationHostObject {
         fire_date: nil,
         time_zone: nil,
+        repeat_interval: 0,
+        repeat_calendar: nil,
         alert_body: nil,
         alert_action: nil,
+        alert_launch_image: nil,
         sound_name: nil,
         application_icon_badge_number: 0,
         user_info: nil,
+        has_action: true,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -48,18 +56,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host = env.objc.borrow::<UILocalNotificationHostObject>(this);
-    let (fd, tz, ab, aa, sn, ui) = (
+    let (fd, tz, rc, ab, aa, ali, sn, ui) = (
         host.fire_date,
         host.time_zone,
+        host.repeat_calendar,
         host.alert_body,
         host.alert_action,
+        host.alert_launch_image,
         host.sound_name,
         host.user_info,
     );
     release(env, fd);
     release(env, tz);
+    release(env, rc);
     release(env, ab);
     release(env, aa);
+    release(env, ali);
     release(env, sn);
     release(env, ui);
 
@@ -83,6 +95,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UILocalNotificationHostObject>(this).time_zone = val;
 }
 
+
+- (NSUInteger)repeatInterval { env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_interval }
+- (())setRepeatInterval:(NSUInteger)val {
+    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).repeat_interval = val;
+}
+
+- (id)repeatCalendar { env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_calendar }
+- (())setRepeatCalendar:(id)val {
+    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).repeat_calendar;
+    retain(env, val);
+    release(env, old);
+    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).repeat_calendar = val;
+}
+
 - (id)alertBody { env.objc.borrow::<UILocalNotificationHostObject>(this).alert_body }
 - (())setAlertBody:(id)val {
     let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_body;
@@ -97,6 +123,20 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, val);
     release(env, old);
     env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_action = val;
+}
+
+
+- (id)alertLaunchImage { env.objc.borrow::<UILocalNotificationHostObject>(this).alert_launch_image }
+- (())setAlertLaunchImage:(id)val {
+    let old = env.objc.borrow::<UILocalNotificationHostObject>(this).alert_launch_image;
+    retain(env, val);
+    release(env, old);
+    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).alert_launch_image = val;
+}
+
+- (bool)hasAction { env.objc.borrow::<UILocalNotificationHostObject>(this).has_action }
+- (())setHasAction:(bool)val {
+    env.objc.borrow_mut::<UILocalNotificationHostObject>(this).has_action = val;
 }
 
 - (id)soundName { env.objc.borrow::<UILocalNotificationHostObject>(this).sound_name }

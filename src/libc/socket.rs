@@ -142,6 +142,9 @@ struct SocketHostObject {
     tcp_stream: Option<TcpStream>,
     /// UDP socket
     udp_socket: Option<UdpSocket>,
+    /// Unix domain socket created by socketpair(2).
+    /// Stored here so send()/recv() fall through to the same path as TCP.
+    unix_stream: Option<std::os::unix::net::UnixStream>,
 }
 
 #[derive(Default)]
@@ -201,6 +204,7 @@ fn socket(env: &mut Environment, domain: i32, type_: i32, protocol: i32) -> File
         pending_tcp_stream: None,
         tcp_stream: None,
         udp_socket: None,
+        unix_stream: None,
     };
     State::get_mut(env).sockets.insert(fd, host_object);
 
@@ -1091,6 +1095,33 @@ fn recvfrom(
         SOCK_STREAM => {
             assert!(address.is_null());
             assert!(address_len.is_null());
+            let buf = env.mem.bytes_at_mut(buffer.cast(), length);
+            // Prefer unix_stream (socketpair) over tcp_stream.
+            if env.libc_state.socket.sockets.get(&socket).unwrap().unix_stream.is_some() {
+                use std::io::Read as _;
+                let unix_sock = env
+                    .libc_state.socket.sockets.get_mut(&socket).unwrap()
+                    .unix_stream.as_mut().unwrap();
+                let read = match unix_sock.read(buf) {
+                    Ok(n) => n,
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        set_errno(env, EAGAIN);
+                        return -1;
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe
+                        || e.kind() == io::ErrorKind::ConnectionReset =>
+                    {
+                        set_errno(env, ECONNRESET);
+                        return -1;
+                    }
+                    Err(e) => {
+                        log!("recvfrom: unix socket {} IO error: {}", socket, e);
+                        set_errno(env, EIO);
+                        return -1;
+                    }
+                };
+                return read.try_into().unwrap();
+            }
             let mut tcp_stream = env
                 .libc_state
                 .socket
@@ -1100,7 +1131,6 @@ fn recvfrom(
                 .tcp_stream
                 .as_ref()
                 .unwrap();
-            let buf = env.mem.bytes_at_mut(buffer.cast(), length);
             let read = match tcp_stream.read(buf) {
                 Ok(n) => n,
                 Err(ref e) if e.kind() == io::ErrorKind::ConnectionReset => {
@@ -1165,13 +1195,38 @@ fn send(
 
     match type_ {
         SOCK_STREAM => {
+            let buf = env.mem.bytes_at(buffer.cast(), length);
+            // Try unix_stream (socketpair) first, then fall back to TCP.
+            if let Some(ref mut unix_sock) = State::get_mut(env)
+                .sockets.get_mut(&socket).unwrap().unix_stream
+            {
+                use std::io::Write as _;
+                return match unix_sock.write(buf) {
+                    Ok(n) => {
+                        log_dbg!("send: wrote {} bytes to unix socket {}", n, socket);
+                        n.try_into().unwrap()
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        set_errno(env, EAGAIN);
+                        -1
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::BrokenPipe => {
+                        set_errno(env, ECONNRESET);
+                        -1
+                    }
+                    Err(e) => {
+                        log!("send: unix socket {} IO error: {}", socket, e);
+                        set_errno(env, EIO);
+                        -1
+                    }
+                };
+            }
             let Some(mut stream) = State::get(env)
                 .sockets.get(&socket).unwrap().tcp_stream.as_ref()
             else {
                 set_errno(env, ENOTCONN);
                 return -1;
             };
-            let buf = env.mem.bytes_at(buffer.cast(), length);
             match stream.write(buf) {
                 Ok(n) => {
                     log_dbg!("send: wrote {} bytes to TCP socket {}", n, socket);
@@ -1468,6 +1523,89 @@ fn getpeername(
     0
 }
 
+
+/// `int socketpair(int domain, int type, int protocol, int sv[2])`
+///
+/// Creates an unnamed pair of connected sockets and writes their file
+/// descriptors into `sv[0]` and `sv[1]`.
+///
+/// Only `AF_UNIX` / `SOCK_STREAM` pairs are supported (the most common usage
+/// in iOS apps).  The network_access option gate does **not** apply because
+/// socketpair is purely local IPC — it never touches the network.
+///
+/// Reference: <https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/socketpair.2.html>
+fn socketpair(
+    env: &mut Environment,
+    domain: i32,
+    type_: i32,
+    _protocol: i32,
+    sv: MutPtr<[i32; 2]>,
+) -> i32 {
+    set_errno(env, 0);
+
+    if domain != AF_INET && domain != 1 /* AF_UNIX = 1 on Darwin/Linux */ {
+        log!(
+            "Warning: socketpair({}, {}, _): unsupported domain; returning -1",
+            domain, type_
+        );
+        set_errno(env, EAFNOSUPPORT);
+        return -1;
+    }
+    if type_ != SOCK_STREAM {
+        log!(
+            "Warning: socketpair({}, {}, _): only SOCK_STREAM supported; returning -1",
+            domain, type_
+        );
+        set_errno(env, ESOCKTNOSUPPORT);
+        return -1;
+    }
+
+    // Create a host-side connected pair of Unix domain sockets.
+    let (a, b) = match std::os::unix::net::UnixStream::pair() {
+        Ok(pair) => pair,
+        Err(e) => {
+            log!("socketpair: UnixStream::pair() failed: {}", e);
+            set_errno(env, EINVAL);
+            return -1;
+        }
+    };
+    // Put into non-blocking mode so recv() is consistent with TCP behaviour.
+    let _ = a.set_nonblocking(true);
+    let _ = b.set_nonblocking(true);
+
+    let fd_a = find_or_create_socket(env);
+    State::get_mut(env).sockets.insert(
+        fd_a,
+        SocketHostObject {
+            type_: SOCK_STREAM,
+            options: Default::default(),
+            tcp_listener: None,
+            pending_tcp_stream: None,
+            tcp_stream: None,
+            udp_socket: None,
+            unix_stream: Some(a),
+        },
+    );
+
+    let fd_b = find_or_create_socket(env);
+    State::get_mut(env).sockets.insert(
+        fd_b,
+        SocketHostObject {
+            type_: SOCK_STREAM,
+            options: Default::default(),
+            tcp_listener: None,
+            pending_tcp_stream: None,
+            tcp_stream: None,
+            udp_socket: None,
+            unix_stream: Some(b),
+        },
+    );
+
+    log_dbg!("socketpair({}, {}, _) => [{}, {}]", domain, type_, fd_a, fd_b);
+    env.mem.write(sv, [fd_a, fd_b]);
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(socket(_, _, _)),
     export_c_func!(ioctl(_, _, _)),
@@ -1485,6 +1623,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(shutdown(_, _)),
     export_c_func!(getsockname(_, _, _)),
     export_c_func!(getpeername(_, _, _)),
+    export_c_func!(socketpair(_, _, _, _)),
 ];
 
 /// A helper to close a socket, not a part of API

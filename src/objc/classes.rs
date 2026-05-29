@@ -694,12 +694,54 @@ impl ObjC {
                 self.register_static_object(metaclass, metaclass_host_object);
                 name
             } else {
-                let class_host_object = Box::new(ClassHostObject::from_bin(
+                let mut class_host_object = Box::new(ClassHostObject::from_bin(
                     class, /* is_metaclass: */ false, mem, self,
                 ));
-                let metaclass_host_object = Box::new(ClassHostObject::from_bin(
+                let mut metaclass_host_object = Box::new(ClassHostObject::from_bin(
                     metaclass, /* is_metaclass: */ true, mem, self,
                 ));
+                // Apple's Objective-C runtime guarantees that a class and its
+                // metaclass share the same NUL-terminated UTF-8 name (see
+                // `class_getName` in <objc/runtime.h>). When the binary is
+                // corrupted (e.g. partially-decrypted FairPlay IPA) `from_bin`
+                // falls back to a synthetic placeholder derived from the
+                // object's own pointer — but the class and metaclass are at
+                // different addresses, so their placeholders diverge and the
+                // assertion below trips. Force them back into agreement by
+                // using the class's name (or, if only the metaclass name was
+                // readable, the metaclass's name) for both sides.
+                if class_host_object.name != metaclass_host_object.name {
+                    let class_synthetic = class_host_object
+                        .name
+                        .starts_with("_touchHLE_UnreadableClass_");
+                    let metaclass_synthetic = metaclass_host_object
+                        .name
+                        .starts_with("_touchHLE_UnreadableClass_");
+                    if class_synthetic || metaclass_synthetic {
+                        let canonical = if !class_synthetic {
+                            class_host_object.name.clone()
+                        } else if !metaclass_synthetic {
+                            metaclass_host_object.name.clone()
+                        } else {
+                            // Both are synthetic; prefer the class pointer
+                            // (the conventional Apple-runtime side) so the
+                            // pair gets a single stable identity.
+                            class_host_object.name.clone()
+                        };
+                        log!(
+                            "Note: harmonizing mismatched class/metaclass \
+                             names ({:?} vs {:?}) to {:?} for unreadable \
+                             class at {:?}/{:?}.",
+                            class_host_object.name,
+                            metaclass_host_object.name,
+                            canonical,
+                            class,
+                            metaclass,
+                        );
+                        class_host_object.name = canonical.clone();
+                        metaclass_host_object.name = canonical;
+                    }
+                }
                 assert!(class_host_object.name == metaclass_host_object.name);
                 let name = class_host_object.name.clone();
 
@@ -1298,6 +1340,46 @@ pub fn class_getInstanceMethod(
     ConstVoidPtr::null()
 }
 
+/// `BOOL class_respondsToSelector(Class cls, SEL sel)`
+///
+/// Apple: "Returns a Boolean value that indicates whether instances of a
+/// class respond to a particular selector." Walks the class chain and
+/// reports YES if any class in that chain implements `sel`.
+/// <https://developer.apple.com/documentation/objectivec/1418555-class_respondstoselector>
+///
+/// Per the documentation `class_respondsToSelector(Nil, …)` returns NO and
+/// `class_respondsToSelector(cls, NULL)` also returns NO. Mirroring the
+/// real runtime here avoids the previous return-0 stub silently breaking
+/// guests that use this entry point to gate optional behaviour
+/// (e.g. `class_respondsToSelector([NSString class], @selector(...))` for
+/// runtime-availability checks in older SDKs).
+pub fn class_respondsToSelector(
+    env: &mut crate::Environment,
+    cls: Class,
+    sel: SEL,
+) -> bool {
+    if cls.is_null() || sel.is_null() {
+        return false;
+    }
+
+    let mut curr = cls;
+    while !curr.is_null() {
+        if let Some(host_obj) = env.objc.get_host_object(curr) {
+            if let Some(class_obj) = host_obj.as_any().downcast_ref::<ClassHostObject>() {
+                if class_obj.methods.contains_key(&sel) {
+                    return true;
+                }
+            }
+        }
+        let next = env.objc.get_superclass(curr);
+        if next == curr {
+            break;
+        }
+        curr = next;
+    }
+    false
+}
+
 pub fn method_getImplementation(
     env: &mut crate::Environment,
     cls: Class,
@@ -1843,10 +1925,53 @@ pub fn objc_getProtocol(_env: &mut crate::Environment, _name: ConstPtr<u8>) -> i
 
 /// `const char *protocol_getName(Protocol *p)` — paired with
 /// `objc_getProtocol`. Returns NULL since we never hand out a real
-/// protocol pointer.
+/// Protocol pointer to the guest.
 pub fn protocol_getName(_env: &mut crate::Environment, _p: id) -> ConstPtr<u8> {
     use crate::mem::Ptr;
     Ptr::null()
+}
+
+/// `BOOL protocol_conformsToProtocol(Protocol *proto, Protocol *other)`
+/// per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418841-protocol_conformstoprotocol>):
+///
+/// > Returns a Boolean value that indicates whether one protocol
+/// > conforms to another.
+pub fn protocol_conformsToProtocol(_env: &mut crate::Environment, proto: id, other: id) -> bool {
+    if proto.is_null() || other.is_null() {
+        return false;
+    }
+    proto == other
+}
+
+/// `int objc_getClassList(Class *buffer, int bufferLen)` per Apple's
+/// Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418579-objc_getclasslist>):
+///
+/// > Returns the number of currently registered classes. If `buffer` is
+/// > NULL or `bufferLen` is 0, it must just return the total count.
+/// > Otherwise it must copy up to `bufferLen` Class pointers into
+/// > `buffer`, but still return the total number registered (callers
+/// > use that to detect that they need a bigger buffer).
+pub fn objc_getClassList(
+    env: &mut crate::Environment,
+    buffer: crate::mem::MutPtr<Class>,
+    buffer_len: i32,
+) -> i32 {
+    let total = env.objc.classes.values().count();
+    if buffer.is_null() || buffer_len <= 0 {
+        return i32::try_from(total).unwrap_or(i32::MAX);
+    }
+    let cap = u32::try_from(buffer_len).unwrap_or(0);
+    let mut offset: u32 = 0;
+    for class in env.objc.classes.values() {
+        if offset >= cap {
+            break;
+        }
+        env.mem.write(buffer + offset, *class);
+        offset += 1;
+    }
+    i32::try_from(total).unwrap_or(i32::MAX)
 }
 
 /// `const char **objc_copyClassNamesForImage(const char *image,

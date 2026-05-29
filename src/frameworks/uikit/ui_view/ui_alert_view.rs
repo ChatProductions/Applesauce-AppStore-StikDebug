@@ -68,7 +68,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     {
         // ИСПРАВЛЕНИЕ: Добавлен `mut`, так как изменение полей `RefMut` требует
         // мутабельности переменной
-        let mut host = env.objc.borrow_mut::<UIAlertViewHostObject>(this);
+        let host = env.objc.borrow_mut::<UIAlertViewHostObject>(this);
         host.title    = title;
         host.message  = message;
         host.delegate = delegate;

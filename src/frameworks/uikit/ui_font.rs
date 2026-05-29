@@ -229,7 +229,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let font_name = to_rust_string(env, fontName).to_string();
     let host_object = UIFontHostObject {
-        kind: get_equivalent_font(&font_name).unwrap_or_else(|| {
+        kind: get_equivalent_font(&font_name).unwrap_or({
             FontKind::SansRegular
         }),
         size: fontSize,

@@ -94,7 +94,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())lock {
     loop {
         {
-            let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionHostObject>(this);
             if !host.locked {
                 host.locked = true;
                 break;
@@ -108,7 +108,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())unlock {
-    let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+    let host = env.objc.borrow_mut::<NSConditionHostObject>(this);
     host.locked = false;
 
     // Будим первый поток в очереди
@@ -123,7 +123,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // 1. Атомарно освобождаем блокировку и добавляем себя в очередь ожидания
     // сигнала
     {
-        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        let host = env.objc.borrow_mut::<NSConditionHostObject>(this);
         host.locked = false;
         if let Some(thread) = host.lock_waiting_threads.pop_front() {
             env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
@@ -149,7 +149,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // 1. Освобождаем блокировку
     {
-        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        let host = env.objc.borrow_mut::<NSConditionHostObject>(this);
         host.locked = false;
         if let Some(thread) = host.lock_waiting_threads.pop_front() {
             env.threads[thread].blocked_by = crate::environment::ThreadBlock::NotBlocked;
@@ -160,13 +160,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // 2. Засыпаем с таймаутом
-    let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+    let until = std::time::Instant::now()
+        + super::ns_time_interval_to_duration_or_zero(ti);
     env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
     // 3. Проверяем, проснулись ли мы сами (таймаут) или нас разбудили
     let mut timed_out = false;
     {
-        let mut host = env.objc.borrow_mut::<NSConditionHostObject>(this);
+        let host = env.objc.borrow_mut::<NSConditionHostObject>(this);
         let current_thread = env.current_thread;
         if let Some(pos) = host.waiting_threads.iter().position(|&t| t == current_thread) {
             host.waiting_threads.remove(pos);
@@ -272,7 +273,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())lock {
     loop {
         {
-            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             if !host.locked {
                 host.locked = true;
                 break;
@@ -285,7 +286,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())unlock {
-    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     host.locked = false;
 
     // Ищем первый поток, который ждет освобождения или ждет текущего condition
@@ -308,7 +309,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())lockWhenCondition:(NSInteger)condition {
     loop {
         {
-            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             if !host.locked && host.condition == condition {
                 host.locked = true;
                 break;
@@ -324,7 +325,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                beforeDate:(id)limit_date { // NSDate*
     loop {
         {
-            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             if !host.locked && host.condition == condition {
                 host.locked = true;
                 return true;
@@ -337,18 +338,19 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
 
         {
-            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             let current_thread = env.current_thread;
             host.waiting_threads.push_back((current_thread, Some(condition)));
         }
 
-        let until = std::time::Instant::now() + std::time::Duration::from_secs_f64(ti);
+        let until = std::time::Instant::now()
+            + super::ns_time_interval_to_duration_or_zero(ti);
         env.yield_thread(crate::environment::ThreadBlock::Sleeping(until));
 
         // Удаляем себя из очереди, если мы проснулись по таймауту
         // (если разбудили — следующая итерация захватит блокировку)
         {
-            let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+            let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
             let current_thread = env.current_thread;
             if let Some(pos) = host.waiting_threads.iter().position(|&(t, _)| t == current_thread) {
                 host.waiting_threads.remove(pos);
@@ -358,7 +360,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)tryLock {
-    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     if !host.locked {
         host.locked = true;
         return true;
@@ -367,7 +369,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)tryLockWhenCondition:(NSInteger)condition {
-    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     if !host.locked && host.condition == condition {
         host.locked = true;
         return true;
@@ -376,7 +378,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())unlockWithCondition:(NSInteger)condition {
-    let mut host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
+    let host = env.objc.borrow_mut::<NSConditionLockHostObject>(this);
     host.locked = false;
     host.condition = condition;
 

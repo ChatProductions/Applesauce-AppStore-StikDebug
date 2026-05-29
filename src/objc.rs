@@ -38,7 +38,7 @@ pub use classes::{
     class_addMethod, class_copyIvarList, class_copyMethodList, class_copyPropertyList,
     class_copyProtocolList, class_getClassMethod, class_getInstanceMethod, class_getInstanceSize,
     class_getMethodImplementation, class_getMethodImplementation_stret, class_getName,
-    class_getProperty, class_getSuperclass, class_replaceMethod, class_setSuperclass,
+    class_getProperty, class_getSuperclass, class_replaceMethod, class_respondsToSelector, class_setSuperclass,
     method_exchangeImplementations,
     method_getImplementation, method_getTypeEncoding, method_setImplementation, objc_storeStrong,
     objc_allocateClassPair, objc_autoreleasePoolPop,
@@ -49,7 +49,7 @@ pub use classes::{
     objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
     objc_retainBlock, __objc_deallocOnMainThreadHelper,
     objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
-    protocol_getName, Class, ClassExports, ClassTemplate,
+    protocol_getName, objc_getClassList, protocol_conformsToProtocol, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
     autorelease, msg, msg_class, msg_send, msg_send_no_type_checking, msg_send_super2, msg_super,
@@ -62,7 +62,6 @@ pub use objects::{
 pub use properties::todo_objc_setter;
 pub use selectors::{selector, SEL};
 
-use crate::mem::ConstVoidPtr;
 use crate::objc::classes::___objc_personality_v0;
 use crate::Environment;
 use classes::{ClassHostObject, FakeClass, UnimplementedClass};
@@ -76,6 +75,7 @@ use properties::{ivar_list_t, objc_copyStruct, objc_getProperty, objc_setPropert
 use properties::{
     objc_setProperty_atomic_copy, objc_setProperty_nonatomic, objc_setProperty_nonatomic_copy,
 };
+use properties::objc_setProperty_atomic;
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -156,6 +156,20 @@ pub struct ObjC {
     /// - Apple `objc-runtime-new.mm` `weak_table_t` (open-source on
     ///   <https://opensource.apple.com/source/objc4/>).
     pub(crate) weak_refs: HashMap<id, Vec<crate::mem::MutPtr<id>>>,
+
+    /// Per-object table of values set via `objc_setAssociatedObject`.
+    ///
+    /// Key: `(object id, key pointer)`.
+    /// Value: `(associated id, is_retained)`.  `is_retained` is true for
+    /// RETAIN and COPY policies; the value will be released when the
+    /// association is overwritten, removed, or the object is deallocated.
+    /// ASSIGN policy (0) stores without retaining — the caller is
+    /// responsible for ensuring the value outlives the association.
+    ///
+    /// References:
+    /// - <https://developer.apple.com/documentation/objectivec/1418509-objc_setassociatedobject>
+    /// - Apple `objc-references.mm` (open-source `objc4`).
+    pub(crate) associated_objects: HashMap<(id, crate::mem::GuestUSize), (id, bool)>,
 }
 
 impl ObjC {
@@ -169,6 +183,7 @@ impl ObjC {
             message_type_info: None,
             initialized_classes: HashSet::new(),
             weak_refs: HashMap::new(),
+            associated_objects: HashMap::new(),
         }
     }
 
@@ -179,6 +194,116 @@ impl ObjC {
             .find(|(_k, v)| **v == sel)
             .map(|(k, _v)| k.as_str())
             .expect("get_selector_name: unknown selector")
+    }
+}
+
+
+// ──────────────────────────────────────────────────────────────────
+// Associated objects  (<objc/runtime.h>)
+// ──────────────────────────────────────────────────────────────────
+
+/// Policy constants for `objc_setAssociatedObject`.
+/// Source: Apple `<objc/runtime.h>`, `objc_AssociationPolicy` enum.
+type ObjcAssociationPolicy = crate::mem::GuestUSize;
+const OBJC_ASSOCIATION_ASSIGN: ObjcAssociationPolicy = 0;
+const OBJC_ASSOCIATION_RETAIN_NONATOMIC: ObjcAssociationPolicy = 1;
+const OBJC_ASSOCIATION_COPY_NONATOMIC: ObjcAssociationPolicy = 3;
+/// 0o1401 (octal) = 769 decimal
+const OBJC_ASSOCIATION_RETAIN: ObjcAssociationPolicy = 0o1401;
+/// 0o1403 (octal) = 771 decimal
+const OBJC_ASSOCIATION_COPY: ObjcAssociationPolicy = 0o1403;
+
+/// `void objc_setAssociatedObject(id object, const void *key, id value,
+///                                 objc_AssociationPolicy policy)`
+///
+/// Sets an associated value for a key on an object.
+/// <https://developer.apple.com/documentation/objectivec/1418509-objc_setassociatedobject>
+fn objc_setAssociatedObject(
+    env: &mut Environment,
+    object: id,
+    key: crate::mem::ConstVoidPtr,
+    value: id,
+    policy: ObjcAssociationPolicy,
+) {
+    if object.is_null() {
+        log_dbg!("objc_setAssociatedObject: object is nil, ignoring");
+        return;
+    }
+
+    let map_key = (object, key.to_bits());
+
+    // Release any old retained value for this slot.
+    if let Some((old_val, was_retained)) = env.objc.associated_objects.remove(&map_key) {
+        if was_retained && !old_val.is_null() {
+            release(env, old_val);
+        }
+    }
+
+    // A nil value means "remove the association" — we already removed it above.
+    if value.is_null() {
+        return;
+    }
+
+    let is_retained = match policy {
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC | OBJC_ASSOCIATION_RETAIN => {
+            retain(env, value);
+            true
+        }
+        OBJC_ASSOCIATION_COPY_NONATOMIC | OBJC_ASSOCIATION_COPY => {
+            // Send `-copy` to get an independent copy, then retain is implicit
+            // because the copy call already returns a +1 object.
+            let copied: id = msg![env; value copy];
+            env.objc.associated_objects.insert(map_key, (copied, true));
+            return;
+        }
+        // OBJC_ASSOCIATION_ASSIGN (0) and any unknown policy: weak storage.
+        _ => false,
+    };
+
+    env.objc.associated_objects.insert(map_key, (value, is_retained));
+}
+
+/// `id objc_getAssociatedObject(id object, const void *key)`
+///
+/// Returns the value associated with a given object for a given key.
+/// <https://developer.apple.com/documentation/objectivec/1418625-objc_getassociatedobject>
+fn objc_getAssociatedObject(
+    env: &mut Environment,
+    object: id,
+    key: crate::mem::ConstVoidPtr,
+) -> id {
+    if object.is_null() {
+        return nil;
+    }
+    env.objc
+        .associated_objects
+        .get(&(object, key.to_bits()))
+        .map(|(val, _)| *val)
+        .unwrap_or(nil)
+}
+
+/// `void objc_removeAssociatedObjects(id object)`
+///
+/// Removes all associations for a given object.
+/// <https://developer.apple.com/documentation/objectivec/1418718-objc_removeassociatedobjects>
+fn objc_removeAssociatedObjects(env: &mut Environment, object: id) {
+    if object.is_null() {
+        return;
+    }
+    // Collect keys and values to avoid borrowing issues.
+    let to_remove: Vec<((id, crate::mem::GuestUSize), (id, bool))> = env
+        .objc
+        .associated_objects
+        .iter()
+        .filter(|((obj, _), _)| *obj == object)
+        .map(|(k, v)| (*k, *v))
+        .collect();
+
+    for (k, (val, was_retained)) in to_remove {
+        env.objc.associated_objects.remove(&k);
+        if was_retained && !val.is_null() {
+            release(env, val);
+        }
     }
 }
 
@@ -232,6 +357,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_setProperty(_, _, _, _, _, _)),
     export_c_func!(objc_setProperty_nonatomic_copy(_, _, _, _)),
     export_c_func!(objc_setProperty_atomic_copy(_, _, _, _)),
+    export_c_func!(objc_setProperty_atomic(_, _, _, _)),
     export_c_func!(objc_copyStruct(_, _, _, _, _)),
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
@@ -257,6 +383,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_getInstanceSize(_, _)),
     export_c_func!(class_getInstanceMethod(_, _)),
     export_c_func!(class_getClassMethod(_, _)),
+    export_c_func!(class_respondsToSelector(_, _)),
     export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(class_getProperty(_, _)),
     export_c_func!(class_copyPropertyList(_, _)),
@@ -283,6 +410,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_setSuperclass(_, _)),
     export_c_func!(objc_getProtocol(_)),
     export_c_func!(protocol_getName(_)),
+    export_c_func!(objc_getClassList(_, _)),
+    export_c_func!(protocol_conformsToProtocol(_, _)),
     export_c_func!(objc_copyClassNamesForImage(_, _)),
     export_c_func!(object_getIndexedIvars(_)),
     // `_objc_deallocOnMainThreadHelper` (one leading underscore in the C
@@ -294,4 +423,9 @@ const FUNCTIONS: FunctionExports = &[
         "_objc_deallocOnMainThreadHelper",
         __objc_deallocOnMainThreadHelper(_)
     ),
+    // Associated objects — available since iOS 3.1 / Mac OS X 10.6.
+    // Reference: <https://developer.apple.com/documentation/objectivec/1418509-objc_setassociatedobject>
+    export_c_func!(objc_setAssociatedObject(_, _, _, _)),
+    export_c_func!(objc_getAssociatedObject(_, _)),
+    export_c_func!(objc_removeAssociatedObjects(_)),
 ];

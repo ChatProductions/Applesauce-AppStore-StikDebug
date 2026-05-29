@@ -919,7 +919,7 @@ fn CGFontCreateWithPlatformFont(
 /// Returns the Core Foundation type identifier for CGFont objects.
 fn CGFontGetTypeID(env: &mut Environment) -> u32 {
     let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
-    class.to_bits() as u32
+    class.to_bits()
 }
 
 
