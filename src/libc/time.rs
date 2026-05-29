@@ -949,15 +949,17 @@ const ASCTIME_MON: [&str; 12] = [
 fn format_asctime(tm: &tm) -> String {
     let wday = ASCTIME_WDAY[tm.tm_wday.rem_euclid(7) as usize];
     let mon = ASCTIME_MON[tm.tm_mon.rem_euclid(12) as usize];
+    // `format!` takes references to its arguments, but references to fields of
+    // a `#[repr(packed)]` struct are not allowed (they may be unaligned), so
+    // copy each field into a local first.
+    let mday = tm.tm_mday;
+    let hour = tm.tm_hour;
+    let min = tm.tm_min;
+    let sec = tm.tm_sec;
+    let year = tm.tm_year + 1900;
     format!(
         "{} {}{:3} {:02}:{:02}:{:02} {}\n",
-        wday,
-        mon,
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min,
-        tm.tm_sec,
-        tm.tm_year + 1900,
+        wday, mon, mday, hour, min, sec, year,
     )
 }
 
