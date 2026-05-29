@@ -19,7 +19,14 @@
 //! avoids `no_duplicate_functions` test failures.
 
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
+use crate::frameworks::core_foundation::cf_array::CFArrayRef;
+use crate::frameworks::core_foundation::cf_dictionary::CFDictionaryRef;
+use crate::frameworks::core_foundation::CFTypeRef;
+use crate::frameworks::foundation::ns_array;
+use crate::frameworks::foundation::ns_dictionary::dict_from_keys_and_objects;
+use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::mem::MutPtr;
+use crate::objc::{id, msg_class};
 use crate::Environment;
 
 const DUMMY_STREAM: u32 = 0xC0F0_0001;
@@ -97,11 +104,68 @@ fn CFReadStreamCopyError(_env: &mut Environment, _stream: u32) -> u32 {
     0
 }
 
+/// `CFDictionaryRef CFNetworkCopySystemProxySettings(void)`
+///
+/// Apple documentation: returns a dictionary describing the current system
+/// proxy configuration (see the `kCFNetworkProxies*` keys). touchHLE has no
+/// host-side proxy configuration, which is exactly the situation a real device
+/// is in when the user has not configured a proxy in Settings. We faithfully
+/// reproduce that state by returning a dictionary whose `*Enable` keys are all
+/// the number `0`, so callers that inspect the settings correctly conclude
+/// that no proxy should be used.
+///
+/// This is an ownership-transferring ("Copy") function: the caller is
+/// responsible for releasing the returned dictionary.
+fn CFNetworkCopySystemProxySettings(env: &mut Environment) -> CFDictionaryRef {
+    let zero: id = msg_class![env; NSNumber numberWithInt:(0i32)];
+
+    // Key strings here intentionally use the same literal values as the
+    // exported `kCFNetworkProxies*` constants, so a guest that looks the value
+    // up via `CFDictionaryGetValue(settings, kCFNetworkProxiesHTTPEnable)`
+    // matches by string equality.
+    let http_enable = get_static_str(env, "HTTPEnable");
+    let https_enable = get_static_str(env, "HTTPSEnable");
+    let pac_enable = get_static_str(env, "ProxyAutoConfigEnable");
+
+    dict_from_keys_and_objects(
+        env,
+        &[
+            (http_enable, zero),
+            (https_enable, zero),
+            (pac_enable, zero),
+        ],
+    )
+}
+
+/// `CFArrayRef CFNetworkCopyProxiesForURL(CFURLRef url, CFDictionaryRef proxySettings)`
+///
+/// Apple documentation: returns an array of dictionaries, each describing a
+/// proxy that should be tried (in order) for the supplied URL. When no proxy
+/// applies, the documented return value is an array containing a single
+/// dictionary whose `kCFProxyTypeKey` is `kCFProxyTypeNone`, meaning "connect
+/// directly". touchHLE never routes traffic through a proxy, so that is
+/// precisely what we return regardless of the URL or settings passed in.
+///
+/// This is an ownership-transferring ("Copy") function: the caller is
+/// responsible for releasing the returned array.
+fn CFNetworkCopyProxiesForURL(
+    env: &mut Environment,
+    _url: CFTypeRef,
+    _proxy_settings: CFDictionaryRef,
+) -> CFArrayRef {
+    let proxy_type_key = get_static_str(env, "kCFProxyTypeKey");
+    let proxy_type_none = get_static_str(env, "kCFProxyTypeNone");
+    let direct = dict_from_keys_and_objects(env, &[(proxy_type_key, proxy_type_none)]);
+    ns_array::from_vec(env, vec![direct])
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CFReadStreamCreateForHTTPRequest(_, _)),
     // Other CFReadStream* helpers are exported from
     // core_foundation::cf_stream; not duplicated here.
     export_c_func!(CFReadStreamCopyError(_)),
+    export_c_func!(CFNetworkCopySystemProxySettings()),
+    export_c_func!(CFNetworkCopyProxiesForURL(_, _)),
 ];
 
 // CFNetwork & related non-lazy NSString constants.

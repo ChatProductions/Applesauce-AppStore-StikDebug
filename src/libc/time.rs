@@ -19,6 +19,9 @@ pub struct State {
     /// Temporary static storage for the return value of `gmtime` or
     /// `localtime`. The standard allows calls to either to overwrite it.
     gmtime_tmp: Option<MutPtr<tm>>,
+    /// Temporary static storage for the string returned by `ctime` or
+    /// `asctime`. The standard allows calls to either to overwrite it.
+    asctime_buf: Option<MutPtr<u8>>,
     /// Seconds west of UTC, populated by tzset().
     pub timezone_offset_seconds: i32,
     /// DST flag (non-zero if DST is ever observed), populated by tzset().
@@ -931,6 +934,72 @@ fn strftime(
     res.len().try_into().unwrap_or(GuestUSize::MAX)
 }
 
+/// Size of the buffer returned by `asctime`/`ctime`. The C standard output is
+/// 26 bytes ("Www Mmm dd hh:mm:ss yyyy\n\0"); we allocate extra slack so that
+/// out-of-range years (which produce a longer year field) still fit.
+const ASCTIME_BUF_SIZE: GuestUSize = 64;
+
+const ASCTIME_WDAY: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ASCTIME_MON: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/// Format a `tm` exactly like the C standard `asctime`:
+/// `"%.3s %.3s%3d %.2d:%.2d:%.2d %d\n"`, e.g. `"Thu Nov 24 18:22:48 1986\n"`.
+fn format_asctime(tm: &tm) -> String {
+    let wday = ASCTIME_WDAY[tm.tm_wday.rem_euclid(7) as usize];
+    let mon = ASCTIME_MON[tm.tm_mon.rem_euclid(12) as usize];
+    format!(
+        "{} {}{:3} {:02}:{:02}:{:02} {}\n",
+        wday,
+        mon,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec,
+        tm.tm_year + 1900,
+    )
+}
+
+/// Lazily allocate (and return) the shared static buffer used by both
+/// `asctime` and `ctime`.
+fn asctime_buf(env: &mut Environment) -> MutPtr<u8> {
+    *env.libc_state.time.asctime_buf.get_or_insert_with(|| {
+        let ptr = env.mem.alloc(ASCTIME_BUF_SIZE).cast::<u8>();
+        env.mem.bytes_at_mut(ptr, ASCTIME_BUF_SIZE).fill(0);
+        ptr
+    })
+}
+
+/// `char *asctime(const struct tm *timeptr)`
+fn asctime(env: &mut Environment, timeptr: ConstPtr<tm>) -> MutPtr<u8> {
+    if timeptr.is_null() {
+        return Ptr::null();
+    }
+    let calendar_date = env.mem.read(timeptr);
+    let s = format_asctime(&calendar_date);
+    let buf = asctime_buf(env);
+    write_cstr_to_buffer(env, buf, &s, ASCTIME_BUF_SIZE);
+    buf
+}
+
+/// `char *ctime(const time_t *timep)`
+///
+/// Equivalent to `asctime(localtime(timep))`: converts the timestamp to local
+/// calendar time, then formats it into the shared static buffer.
+fn ctime(env: &mut Environment, timep: ConstPtr<time_t>) -> MutPtr<u8> {
+    if timep.is_null() {
+        return Ptr::null();
+    }
+    let timestamp = env.mem.read(timep);
+    let offset = env.libc_state.time.timezone_offset_seconds;
+    let calendar_date = timestamp_to_calendar_date(timestamp.saturating_sub(offset));
+    let s = format_asctime(&calendar_date);
+    let buf = asctime_buf(env);
+    write_cstr_to_buffer(env, buf, &s, ASCTIME_BUF_SIZE);
+    buf
+}
+
 fn difftime(_env: &mut Environment, time1: time_t, time0: time_t) -> f64 {
     // Возвращаем разницу в секундах.
     // Приведение к f64 гарантирует, что мы отдаем честный double, как того ждет
@@ -952,4 +1021,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strptime(_, _, _)),
     export_c_func!(strftime(_, _, _, _)),
     export_c_func!(difftime(_, _)),
+    export_c_func!(asctime(_)),
+    export_c_func!(ctime(_)),
 ];
