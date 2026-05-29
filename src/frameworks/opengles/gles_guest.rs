@@ -3830,6 +3830,366 @@ fn glVertexAttribI4ui(
     });
 }
 
+// -- 3D / compressed-3D textures (OpenGL ES 3.0 §3.8.6) --
+fn glCompressedTexImage3D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    internalformat: GLenum,
+    width: GLsizei,
+    height: GLsizei,
+    depth: GLsizei,
+    border: GLint,
+    image_size: GLsizei,
+    data: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let data = if data.is_null() {
+            std::ptr::null()
+        } else {
+            mem.ptr_at(data.cast::<u8>(), image_size.max(0) as GuestUSize)
+                .cast()
+        };
+        gles.CompressedTexImage3D(
+            target, level, internalformat, width, height, depth, border, image_size, data,
+        )
+    });
+}
+
+fn glCompressedTexSubImage3D(
+    env: &mut Environment,
+    target: GLenum,
+    level: GLint,
+    xoffset: GLint,
+    yoffset: GLint,
+    zoffset: GLint,
+    width: GLsizei,
+    height: GLsizei,
+    depth: GLsizei,
+    format: GLenum,
+    image_size: GLsizei,
+    data: ConstVoidPtr,
+) {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
+        let data = if data.is_null() {
+            std::ptr::null()
+        } else {
+            mem.ptr_at(data.cast::<u8>(), image_size.max(0) as GuestUSize)
+                .cast()
+        };
+        gles.CompressedTexSubImage3D(
+            target, level, xoffset, yoffset, zoffset, width, height, depth, format, image_size,
+            data,
+        )
+    });
+}
+
+// -- Sampler vector parameters (OpenGL ES 3.0 §3.8.10) --
+fn glSamplerParameteriv(
+    env: &mut Environment,
+    sampler: GLuint,
+    pname: GLenum,
+    params: ConstPtr<GLint>,
+) {
+    let params = env.mem.ptr_at(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.SamplerParameteriv(sampler, pname, params)
+    });
+}
+
+fn glSamplerParameterfv(
+    env: &mut Environment,
+    sampler: GLuint,
+    pname: GLenum,
+    params: ConstPtr<GLfloat>,
+) {
+    let params = env.mem.ptr_at(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.SamplerParameterfv(sampler, pname, params)
+    });
+}
+
+fn glGetSamplerParameteriv(
+    env: &mut Environment,
+    sampler: GLuint,
+    pname: GLenum,
+    params: MutPtr<GLint>,
+) {
+    let params = env.mem.ptr_at_mut(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetSamplerParameteriv(sampler, pname, params)
+    });
+}
+
+fn glGetSamplerParameterfv(
+    env: &mut Environment,
+    sampler: GLuint,
+    pname: GLenum,
+    params: MutPtr<GLfloat>,
+) {
+    let params = env.mem.ptr_at_mut(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetSamplerParameterfv(sampler, pname, params)
+    });
+}
+
+// -- Indexed / 64-bit state queries (OpenGL ES 3.0 §6.1.1) --
+fn glGetInteger64v(env: &mut Environment, pname: GLenum, data: MutPtr<i64>) {
+    let data = env.mem.ptr_at_mut(data, 16);
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.GetInteger64v(pname, data) });
+}
+
+fn glGetIntegeri_v(env: &mut Environment, target: GLenum, index: GLuint, data: MutPtr<GLint>) {
+    let data = env.mem.ptr_at_mut(data, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetIntegeri_v(target, index, data)
+    });
+}
+
+fn glGetInteger64i_v(env: &mut Environment, target: GLenum, index: GLuint, data: MutPtr<i64>) {
+    let data = env.mem.ptr_at_mut(data, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetInteger64i_v(target, index, data)
+    });
+}
+
+fn glGetBufferParameteri64v(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<i64>,
+) {
+    let params = env.mem.ptr_at_mut(params, 1);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetBufferParameteri64v(target, pname, params)
+    });
+}
+
+fn glGetInternalformativ(
+    env: &mut Environment,
+    target: GLenum,
+    internalformat: GLenum,
+    pname: GLenum,
+    buf_size: GLsizei,
+    params: MutPtr<GLint>,
+) {
+    if buf_size <= 0 {
+        return;
+    }
+    let params = env.mem.ptr_at_mut(params, buf_size as GuestUSize);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetInternalformativ(target, internalformat, pname, buf_size, params)
+    });
+}
+
+// -- Integer vertex attributes (OpenGL ES 3.0 §2.7 / §6.1.10) --
+fn glVertexAttribI4iv(env: &mut Environment, index: GLuint, v: ConstPtr<GLint>) {
+    let v = env.mem.ptr_at(v, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.VertexAttribI4iv(index, v) });
+}
+
+fn glVertexAttribI4uiv(env: &mut Environment, index: GLuint, v: ConstPtr<GLuint>) {
+    let v = env.mem.ptr_at(v, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.VertexAttribI4uiv(index, v) });
+}
+
+fn glGetVertexAttribIiv(
+    env: &mut Environment,
+    index: GLuint,
+    pname: GLenum,
+    params: MutPtr<GLint>,
+) {
+    let params = env.mem.ptr_at_mut(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetVertexAttribIiv(index, pname, params)
+    });
+}
+
+fn glGetVertexAttribIuiv(
+    env: &mut Environment,
+    index: GLuint,
+    pname: GLenum,
+    params: MutPtr<GLuint>,
+) {
+    let params = env.mem.ptr_at_mut(params, 4);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetVertexAttribIuiv(index, pname, params)
+    });
+}
+
+// -- Unsigned-integer uniform queries (OpenGL ES 3.0 §6.1.14 / §2.12.6) --
+fn glGetUniformuiv(
+    env: &mut Environment,
+    program: GLuint,
+    location: GLint,
+    params: MutPtr<GLuint>,
+) {
+    let params = env.mem.ptr_at_mut(params, 16);
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetUniformuiv(program, location, params)
+    });
+}
+
+/// `void glGetUniformIndices(GLuint program, GLsizei uniformCount,
+///   const GLchar *const *uniformNames, GLuint *uniformIndices)` — ES 3.0
+/// §2.12.6.
+fn glGetUniformIndices(
+    env: &mut Environment,
+    program: GLuint,
+    uniform_count: GLsizei,
+    uniform_names: ConstPtr<ConstPtr<GLubyte>>,
+    uniform_indices: MutPtr<GLuint>,
+) {
+    if uniform_count <= 0 {
+        return;
+    }
+    let n = uniform_count as usize;
+    let mut owned: Vec<std::ffi::CString> = Vec::with_capacity(n);
+    for i in 0..n {
+        let name_ptr: ConstPtr<GLubyte> = env.mem.read(uniform_names + (i as GuestUSize));
+        if name_ptr.is_null() {
+            owned.push(std::ffi::CString::default());
+        } else {
+            owned.push(
+                std::ffi::CString::new(env.mem.cstr_at(name_ptr).to_vec()).unwrap_or_default(),
+            );
+        }
+    }
+    let ptrs: Vec<*const std::os::raw::c_char> = owned.iter().map(|s| s.as_ptr()).collect();
+    let mut results: Vec<GLuint> = vec![0; n];
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetUniformIndices(program, uniform_count, ptrs.as_ptr(), results.as_mut_ptr());
+    });
+    for (i, v) in results.iter().enumerate() {
+        env.mem.write(uniform_indices + (i as GuestUSize), *v);
+    }
+}
+
+// -- Transform feedback varyings (OpenGL ES 3.0 §2.15.2 / §6.1.12) --
+fn glTransformFeedbackVaryings(
+    env: &mut Environment,
+    program: GLuint,
+    count: GLsizei,
+    varyings: ConstPtr<ConstPtr<GLubyte>>,
+    buffer_mode: GLenum,
+) {
+    if count <= 0 {
+        return;
+    }
+    let n = count as usize;
+    let mut owned: Vec<std::ffi::CString> = Vec::with_capacity(n);
+    for i in 0..n {
+        let name_ptr: ConstPtr<GLubyte> = env.mem.read(varyings + (i as GuestUSize));
+        if name_ptr.is_null() {
+            owned.push(std::ffi::CString::default());
+        } else {
+            owned.push(
+                std::ffi::CString::new(env.mem.cstr_at(name_ptr).to_vec()).unwrap_or_default(),
+            );
+        }
+    }
+    let ptrs: Vec<*const std::os::raw::c_char> = owned.iter().map(|s| s.as_ptr()).collect();
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.TransformFeedbackVaryings(program, count, ptrs.as_ptr(), buffer_mode);
+    });
+}
+
+fn glGetTransformFeedbackVarying(
+    env: &mut Environment,
+    program: GLuint,
+    index: GLuint,
+    buf_size: GLsizei,
+    length: MutPtr<GLsizei>,
+    size: MutPtr<GLint>,
+    type_: MutPtr<GLenum>,
+    name: MutPtr<GLubyte>,
+) {
+    let mut host_length: GLsizei = 0;
+    let mut host_size: GLint = 0;
+    let mut host_type: GLenum = 0;
+    let mut host_name: Vec<u8> = vec![0u8; buf_size.max(0) as usize];
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetTransformFeedbackVarying(
+            program,
+            index,
+            buf_size,
+            &mut host_length,
+            &mut host_size,
+            &mut host_type,
+            host_name.as_mut_ptr().cast(),
+        );
+    });
+    if !length.is_null() {
+        env.mem.write(length, host_length);
+    }
+    if !size.is_null() {
+        env.mem.write(size, host_size);
+    }
+    if !type_.is_null() {
+        env.mem.write(type_, host_type);
+    }
+    if !name.is_null() && buf_size > 0 {
+        let copy = (host_length as usize + 1).min(buf_size as usize);
+        let dst = env.mem.ptr_at_mut(name, copy as GuestUSize);
+        unsafe {
+            std::ptr::copy_nonoverlapping(host_name.as_ptr(), dst, copy);
+        }
+    }
+}
+
+// -- Sync object query (OpenGL ES 3.0 §6.1.8) --
+fn glGetSynciv(
+    env: &mut Environment,
+    sync: GLuint,
+    pname: GLenum,
+    buf_size: GLsizei,
+    length: MutPtr<GLsizei>,
+    values: MutPtr<GLint>,
+) {
+    let mut host_length: GLsizei = 0;
+    let count = buf_size.max(0) as usize;
+    let mut host_values: Vec<GLint> = vec![0; count];
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetSynciv(
+            sync as usize,
+            pname,
+            buf_size,
+            &mut host_length,
+            host_values.as_mut_ptr(),
+        );
+    });
+    if !length.is_null() {
+        env.mem.write(length, host_length);
+    }
+    let written = (host_length.max(0) as usize).min(count);
+    for i in 0..written {
+        env.mem.write(values + (i as GuestUSize), host_values[i]);
+    }
+}
+
+/// `void glGetBufferPointerv(GLenum target, GLenum pname, void **params)` —
+/// ES 3.0 §6.1.15. The only valid `pname` is `GL_BUFFER_MAP_POINTER`, which
+/// is NULL unless the buffer is currently mapped. touchHLE exposes buffer
+/// mappings to the guest via glMapBufferOES (which hands the app a *guest*
+/// pointer and keeps its own host<->guest mirror), so the raw host pointer
+/// the driver returns is not meaningful in the guest address space. We still
+/// forward the real query, and report the guest-visible result, which is NULL
+/// when no guest-visible mapping is active — the GL default and common case.
+fn glGetBufferPointerv(
+    env: &mut Environment,
+    target: GLenum,
+    pname: GLenum,
+    params: MutPtr<MutVoidPtr>,
+) {
+    let mut host_ptr: *mut GLvoid = std::ptr::null_mut();
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.GetBufferPointerv(target, pname, &mut host_ptr);
+    });
+    let _ = host_ptr;
+    env.mem.write(params, Ptr::null());
+}
+
+
 // -- Integer uniforms --
 fn glUniform1ui(env: &mut Environment, location: GLint, v0: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.Uniform1ui(location, v0) });
@@ -4509,6 +4869,30 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glGetStringi(_, _)),
     export_c_func!(glGetFragDataLocation(_, _)),
     export_c_func!(glProgramParameteri(_, _, _)),
+    // OpenGL ES 3.0 entry points whose backend implementations already exist
+    // but were missing from the guest export table (caused "unhandled
+    // external relocation" warnings for GL ES 3.0 apps such as Marmalade/Life).
+    export_c_func!(glCompressedTexImage3D(_, _, _, _, _, _, _, _, _)),
+    export_c_func!(glCompressedTexSubImage3D(_, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(glSamplerParameteriv(_, _, _)),
+    export_c_func!(glSamplerParameterfv(_, _, _)),
+    export_c_func!(glGetSamplerParameteriv(_, _, _)),
+    export_c_func!(glGetSamplerParameterfv(_, _, _)),
+    export_c_func!(glGetInteger64v(_, _)),
+    export_c_func!(glGetIntegeri_v(_, _, _)),
+    export_c_func!(glGetInteger64i_v(_, _, _)),
+    export_c_func!(glGetBufferParameteri64v(_, _, _)),
+    export_c_func!(glGetBufferPointerv(_, _, _)),
+    export_c_func!(glGetInternalformativ(_, _, _, _, _)),
+    export_c_func!(glVertexAttribI4iv(_, _)),
+    export_c_func!(glVertexAttribI4uiv(_, _)),
+    export_c_func!(glGetVertexAttribIiv(_, _, _)),
+    export_c_func!(glGetVertexAttribIuiv(_, _, _)),
+    export_c_func!(glGetUniformuiv(_, _, _)),
+    export_c_func!(glGetUniformIndices(_, _, _, _)),
+    export_c_func!(glTransformFeedbackVaryings(_, _, _, _)),
+    export_c_func!(glGetTransformFeedbackVarying(_, _, _, _, _, _, _)),
+    export_c_func!(glGetSynciv(_, _, _, _, _)),
     // GL_EXT_debug_label — debug-label extension, no-op implementations.
     // Reference: <https://registry.khronos.org/OpenGL/extensions/EXT/EXT_debug_label.txt>
     export_c_func!(glLabelObjectEXT(_, _, _, _)),
