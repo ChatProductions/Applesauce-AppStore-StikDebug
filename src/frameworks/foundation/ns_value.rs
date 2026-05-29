@@ -867,15 +867,37 @@ pub const CLASSES: ClassExports = objc_classes! {
     let other_num = env.objc.borrow::<NSNumberHostObject>(other);
     let ordering = match (num.is_float(), other_num.is_float()) {
         (false, false) => num.as_i128().cmp(&other_num.as_i128()),
-        // In case of having a float, we promote to double for comparison
+        // In case of having a float, we promote to double for comparison.
+        // This follows the same total ordering as Foundation's
+        // CFNumberCompare (CoreFoundation `CFNumber.c`): NaN compares equal
+        // to NaN; a lone NaN is greater than a negative value and less than a
+        // positive value; and signed zero is respected (-0.0 < +0.0).
         _ => {
-            // TODO: handle partial cmp fails
-            let res = num.as_double().partial_cmp(&other_num.as_double()).unwrap();
-            if res == Ordering::Equal {
-                // On ties, we compare as i128 as well
-                num.as_i128().cmp(&other_num.as_i128())
+            let d1 = num.as_double();
+            let d2 = other_num.as_double();
+            // `copysign(1.0, x)` yields ±1.0 from the sign bit even for NaN
+            // and signed zero, matching CFNumberCompare's `s1`/`s2`.
+            let s1 = 1.0_f64.copysign(d1);
+            let s2 = 1.0_f64.copysign(d2);
+            if d1.is_nan() && d2.is_nan() {
+                Ordering::Equal
+            } else if d1.is_nan() {
+                if s2 < 0.0 { Ordering::Greater } else { Ordering::Less }
+            } else if d2.is_nan() {
+                if s1 < 0.0 { Ordering::Less } else { Ordering::Greater }
+            } else if s1 < s2 {
+                Ordering::Less
+            } else if s2 < s1 {
+                Ordering::Greater
+            } else if d1 < d2 {
+                Ordering::Less
+            } else if d2 < d1 {
+                Ordering::Greater
             } else {
-                res
+                // Equal as doubles: break exact ties using the full-precision
+                // integer representation (covers large integers that lose
+                // precision when promoted to f64).
+                num.as_i128().cmp(&other_num.as_i128())
             }
         },
     };
