@@ -37,7 +37,7 @@ use crate::objc::{
     autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain,
     Class, ClassExports, HostObject, NSZonePtr, ObjC, SEL,
 };
-use crate::{todo_objc_setter, Environment};
+use crate::Environment;
 
 /// State maintained for UIView's class-level animation block API
 /// (`+beginAnimations:context:` ... `+commitAnimations`). At most one block
@@ -166,7 +166,7 @@ impl Default for UIViewHostObject {
 }
 
 pub fn set_view_controller(env: &mut Environment, view: id, controller: id) {
-    let mut host_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let host_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     host_obj.view_controller = controller;
 }
 
@@ -706,11 +706,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)isAnimating { env.objc.borrow::<UIViewHostObject>(this).is_animating }
 - (())startAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if !host.is_animating { host.is_animating = true; }
 }
 - (())stopAnimation {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     if host.is_animating { host.is_animating = false; }
 }
 
@@ -1072,10 +1072,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         retain(env, view);
         () = msg![env; view removeFromSuperview];
-        let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+        let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
         subview_obj.superview = this;
         let subview_layer = subview_obj.layer;
-        let mut this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
+        let this_obj = env.objc.borrow_mut::<UIViewHostObject>(this);
         this_obj.subviews.push(view);
         let this_layer = this_obj.layer;
         () = msg![env; this_layer addSublayer:subview_layer];
@@ -1091,7 +1091,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
-    let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
@@ -1111,7 +1111,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, view);
     () = msg![env; view removeFromSuperview];
 
-    let mut subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
+    let subview_obj = env.objc.borrow_mut::<UIViewHostObject>(view);
     subview_obj.superview = this;
     let subview_layer = subview_obj.layer;
 
@@ -1193,7 +1193,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if superview == nil { return; }
     let _: () = msg![env; this_layer removeFromSuperlayer];
 
-    let mut superview_obj = env.objc.borrow_mut::<UIViewHostObject>(superview);
+    let superview_obj = env.objc.borrow_mut::<UIViewHostObject>(superview);
     let subviews = &mut superview_obj.subviews;
 
     if let Some(idx) = subviews.iter().position(|&subview| subview == this) {
@@ -1254,7 +1254,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)context { nil }
 - (())setContext:(id)_context { }
 - (())resume {
-    let mut host = env.objc.borrow_mut::<UIViewHostObject>(this);
+    let host = env.objc.borrow_mut::<UIViewHostObject>(this);
     host.is_animating = true;
 }
 

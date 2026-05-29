@@ -251,14 +251,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     // ------------------------------------------------------------------
     // Tear down old lists.
     // ------------------------------------------------------------------
-    let old_views = std::mem::replace(
-        &mut env.objc.borrow_mut::<UIToolbarHostObject>(this).button_views,
-        Vec::new(),
-    );
-    let old_items = std::mem::replace(
-        &mut env.objc.borrow_mut::<UIToolbarHostObject>(this).items,
-        Vec::new(),
-    );
+    let old_views = std::mem::take(&mut env.objc.borrow_mut::<UIToolbarHostObject>(this).button_views);
+    let old_items = std::mem::take(&mut env.objc.borrow_mut::<UIToolbarHostObject>(this).items);
 
     for bv in old_views {
         () = msg![env; bv removeFromSuperview];
@@ -301,7 +295,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<UIToolbarHostObject>(this);
     let items = host.items.to_vec();
     let views = host.button_views.to_vec();
-    drop(host);
 
     if items.is_empty() {
         return;

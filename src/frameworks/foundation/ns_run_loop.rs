@@ -122,8 +122,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())addTimer:(id)timer // NSTimer*
        forMode:(NSRunLoopMode)mode {
-    let default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
-    let common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
+    let _default_mode = ns_string::get_static_str(env, NSDefaultRunLoopMode);
+    let _common_modes = ns_string::get_static_str(env, NSRunLoopCommonModes);
     // TODO: handle other modes
     // assert!(msg![env; mode isEqualToString:default_mode] || msg![env; mode
     // isEqualToString:common_modes]);

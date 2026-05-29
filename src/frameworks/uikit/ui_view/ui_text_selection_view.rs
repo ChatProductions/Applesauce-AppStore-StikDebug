@@ -11,7 +11,7 @@
 
 use crate::frameworks::core_graphics::CGRect;
 use crate::objc::{
-    id, impl_HostObject_with_superclass, msg, msg_super, nil, objc_classes, ClassExports, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, msg_super, objc_classes, ClassExports, NSZonePtr,
 };
 
 #[derive(Default)]

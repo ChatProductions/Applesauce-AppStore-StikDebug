@@ -9,9 +9,9 @@
 
 use crate::abi::GuestFunction;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
+use crate::frameworks::core_foundation::cf_allocator::CFAllocatorRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
-use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstPtr, MutPtr, MutVoidPtr};
 use crate::objc::{objc_classes, ClassExports, HostObject};
 use crate::Environment;
 
@@ -136,7 +136,7 @@ fn SCNetworkReachabilitySetCallback(
     callout: GuestFunction,
     context: MutVoidPtr,
 ) -> bool {
-    let mut host = env
+    let host = env
         .objc
         .borrow_mut::<SCNetworkReachabilityHostObject>(target);
     host.callout = Some(callout);

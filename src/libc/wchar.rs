@@ -427,7 +427,7 @@ fn wctomb(env: &mut Environment, s: MutPtr<u8>, wc: wchar_t) -> i32 {
     if s.is_null() {
         return 0;
     }
-    if wc < 0 || wc > 0x7F {
+    if !(0..=0x7F).contains(&wc) {
         return -1;
     }
     env.mem.write(s, wc as u8);
@@ -471,7 +471,7 @@ fn wcstombs(
         if i == n {
             break;
         }
-        if wc < 0 || wc > 0x7F {
+        if !(0..=0x7F).contains(&wc) {
             return GuestUSize::MAX;
             // encoding error
         }

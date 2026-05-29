@@ -1141,7 +1141,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // Главный метод: игра вызывает его в цикле, пока он не вернет nil
 - (id)nextObject {
-    let mut host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
+    let host = env.objc.borrow_mut::<NSDirectoryEnumeratorHostObject>(this);
 
     if let Some(path) = host.iterator.next() {
         let path_str = path.as_str();

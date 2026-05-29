@@ -475,14 +475,14 @@ fn try_parse_caf_aac(bytes: &[u8]) -> Option<AacPackets> {
         .unwrap_or_default();
     let packet_count = reader.get_packet_count()?;
     let mut packet_bytes = Vec::new();
-    let mut packet_offsets = Vec::with_capacity(packet_count as usize + 1);
+    let mut packet_offsets = Vec::with_capacity(packet_count + 1);
 
     reader.seek_to_packet(0).ok()?;
     for _ in 0..packet_count {
         let pkt_size = reader.next_packet_size()?;
         packet_offsets.push(packet_bytes.len());
         let start = packet_bytes.len();
-        packet_bytes.resize(start + pkt_size as usize, 0u8);
+        packet_bytes.resize(start + pkt_size, 0u8);
         reader.read_packet_into(&mut packet_bytes[start..]).ok()?;
     }
     packet_offsets.push(packet_bytes.len());
@@ -510,7 +510,7 @@ fn caf_read_format_id(bytes: &[u8]) -> Option<[u8; 4]> {
         pos += 12;
         if chunk_type == b"desc" && chunk_size >= 12 {
             let data = bytes.get(pos..pos + chunk_size as usize)?;
-            return Some(data[8..12].try_into().ok()?);
+            return data[8..12].try_into().ok();
         }
         pos = pos.checked_add(chunk_size.try_into().ok()?)?;
     }

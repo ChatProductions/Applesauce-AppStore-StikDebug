@@ -109,7 +109,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                         _ => unreachable!()
                     };
                     let mut depth = 1;
-                    while let Some(sc) = chars.next() {
+                    for sc in chars.by_ref() {
                         current_type.push(sc);
                         if sc == open { depth += 1; }
                         else if sc == close {
@@ -119,7 +119,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     }
                 } else if c == '"' {
                     // Обработка именованных полей в структурах
-                    while let Some(sc) = chars.next() {
+                    for sc in chars.by_ref() {
                         current_type.push(sc);
                         if sc == '"' { break; }
                     }
@@ -132,7 +132,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
 
         if !parsed_types.is_empty() {
-            let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(sig);
+            let host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(sig);
             host.return_type = parsed_types.remove(0);
             host.argument_type_ptrs = vec![None; parsed_types.len()];
             host.argument_types = parsed_types;
@@ -152,14 +152,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())_touchHLE_setNumberOfArguments:(NSUInteger)count {
-    let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
+    let host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     let count_usize = count as usize;
     host.argument_types.resize(count_usize, String::from("@"));
     host.argument_type_ptrs.resize(count_usize, None);
 }
 
 - (crate::mem::ConstPtr<std::ffi::c_char>)methodReturnType {
-    let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
+    let host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     if host.return_type_ptr.is_none() {
         let bytes = host.return_type.as_bytes();
         let ptr: crate::mem::MutPtr<u8> = env.mem.alloc(bytes.len() as u32 + 1).cast();
@@ -175,7 +175,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (crate::mem::ConstPtr<std::ffi::c_char>)getArgumentTypeAtIndex:(NSUInteger)_index {
-    let mut host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
+    let host = env.objc.borrow_mut::<NSMethodSignatureHostObject>(this);
     let idx = _index as usize;
 
     if idx < host.argument_types.len() {
@@ -233,10 +233,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         if let Some(ptr) = host.return_type_ptr {
             env.mem.free(ptr.cast());
         }
-        for opt_ptr in &host.argument_type_ptrs {
-            if let Some(ptr) = opt_ptr {
-                env.mem.free(ptr.cast());
-            }
+        for ptr in host.argument_type_ptrs.iter().flatten() {
+            env.mem.free(ptr.cast());
         }
     }
     env.objc.dealloc_object(this, &mut env.mem)

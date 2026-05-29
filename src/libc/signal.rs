@@ -22,7 +22,7 @@ const SIG_DFL: u32 = 0;
 // const SIG_IGN: u32 = 1;
 // const SIG_ERR: u32 = 0xFFFFFFFF; // -1
 
-fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: MutVoidPtr) -> i32 {
+fn sigaction(env: &mut Environment, _signum: i32, _act: ConstVoidPtr, _old_act: MutVoidPtr) -> i32 {
     set_errno(env, 0);
     // Пока возвращаем 0 (успех), убрав TODO, так как sigaction сложнее в
     // реализации
@@ -33,14 +33,14 @@ fn sigaction(env: &mut Environment, signum: i32, act: ConstVoidPtr, old_act: Mut
 fn signal(env: &mut Environment, signum: i32, handler: MutVoidPtr) -> MutVoidPtr {
     set_errno(env, 0);
     // Честная эмуляция: сохраняем новый обработчик и возвращаем старый.
-    let old_handler = env
+    
+    env
         .libc_state
         .signal
         .handlers
         .insert(signum, handler)
         // ИСПОЛЬЗУЕМ from_bits вместо new
-        .unwrap_or_else(|| MutVoidPtr::from_bits(SIG_DFL));
-    old_handler
+        .unwrap_or_else(|| MutVoidPtr::from_bits(SIG_DFL))
 }
 
 fn sigprocmask(env: &mut Environment, _how: i32, _set: ConstVoidPtr, _old_set: MutVoidPtr) -> i32 {

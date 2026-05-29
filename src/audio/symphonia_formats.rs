@@ -107,7 +107,7 @@ pub fn decode_symphonia_to_pcm(file: Cursor<Vec<u8>>) -> Result<SymphoniaDecoded
                 }
             };
 
-            let audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
+            let _audio_spec = audio_spec.get_or_insert_with(|| decoded_packet.spec().clone());
 
             let tmp_raw_s16_buf = tmp_raw_s16_buf
                 .get_or_insert_with(|| Vec::with_capacity(decoded_packet.capacity()));

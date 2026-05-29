@@ -19,7 +19,6 @@ use crate::mem::{
     ConstPtr, ConstVoidPtr, GuestISize, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead,
 };
 use crate::Environment;
-use libc::EMFILE;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 #[derive(Default)]
@@ -336,8 +335,8 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
     // Без этой проверки приложения, использующие O_EXCL как lock-файл,
     // получали паник вместо штатного EEXIST.
     use crate::libc::errno::EEXIST;
-    if (flags & O_EXCL) != 0 && (flags & O_CREAT) != 0 {
-        if env.fs.exists(GuestPath::new(&actual_path_string)) {
+    if (flags & O_EXCL) != 0 && (flags & O_CREAT) != 0
+        && env.fs.exists(GuestPath::new(&actual_path_string)) {
             set_errno(env, EEXIST);
             log_dbg!(
                 "open({:?} {:?}, {:#x}) => -1 (O_EXCL: file exists)",
@@ -347,7 +346,6 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
             );
             return -1;
         }
-    }
 
     let res = match env
         .fs
@@ -721,7 +719,7 @@ pub fn lseek(env: &mut Environment, fd: FileDescriptor, offset: off_t, whence: i
 }
 
 pub fn close(env: &mut Environment, fd: FileDescriptor) -> i32 {
-    let signed_fd = fd as i32;
+    let signed_fd = fd;
 
     if signed_fd < 0 {
         log_dbg!(

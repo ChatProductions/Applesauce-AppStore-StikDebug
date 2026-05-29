@@ -28,7 +28,7 @@ use super::ns_value::NSNumberHostObject;
 use super::NSUInteger;
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, ClassExports,
 };
 use crate::Environment;
 

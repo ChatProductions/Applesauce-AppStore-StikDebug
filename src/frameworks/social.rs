@@ -21,7 +21,6 @@
 
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::foundation::NSInteger;
-use crate::mem::MutPtr;
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -105,7 +104,7 @@ pub const CLASSES: ClassExports = objc_classes! {
           parameters:(id)parameters {
     let url = retain(env, url);
     let params = retain(env, parameters);
-    let mut host = env.objc.borrow_mut::<SLRequestHostObject>(this);
+    let host = env.objc.borrow_mut::<SLRequestHostObject>(this);
     host.request_method = method;
     host.url = url;
     host.parameters = params;
@@ -117,10 +116,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setAccount:(id)account {
     let new_value = retain(env, account);
-    let mut host = env.objc.borrow_mut::<SLRequestHostObject>(this);
+    let host = env.objc.borrow_mut::<SLRequestHostObject>(this);
     let old = host.account;
     host.account = new_value;
-    drop(host);
     release(env, old);
 }
 
@@ -146,7 +144,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let url = host.url;
     let params = host.parameters;
     let method = host.request_method;
-    drop(host);
 
     let req: id = msg_class![env; NSMutableURLRequest requestWithURL:url];
     let method_string = match method {

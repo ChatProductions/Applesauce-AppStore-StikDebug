@@ -375,7 +375,7 @@ fn setsockopt(
             );
             0
         }
-        (level, option_name) if level == IPPROTO_TCP as i32 => {
+        (level, option_name) if level == IPPROTO_TCP => {
             // TCP_NODELAY (1) — disable Nagle's algorithm.
             const TCP_NODELAY: i32 = 1;
             if option_name == TCP_NODELAY {
@@ -694,7 +694,7 @@ fn select(
 ) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
-    assert!(n_fds >= 0 && n_fds <= 1024);
+    assert!((0..=1024).contains(&n_fds));
 
     // В POSIX вызов select с n_fds = 0 используется для точного сна
     // (микросекунды)

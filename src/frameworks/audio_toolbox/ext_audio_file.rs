@@ -9,12 +9,12 @@
 use crate::audio;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::audio_toolbox::audio_file::{
-    kAudioFilePropertyDataFormat, kAudioFilePropertyPacketSizeUpperBound, AudioFileHostObject,
+    AudioFileHostObject,
     AudioFileID, State as AudioFileState,
 };
 use crate::frameworks::carbon_core::{eofErr, OSStatus};
 use crate::frameworks::core_audio_types::{
-    debug_fourcc, fourcc, kAudioFormatFlagIsBigEndian, kAudioFormatFlagIsFloat,
+    debug_fourcc, fourcc,
     kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
     AudioStreamBasicDescription,
 };
@@ -462,7 +462,7 @@ pub fn ExtAudioFileRead(
     }
 
     let starting_packet = (host.frame_position / frames_per_packet as u64) as i64;
-    let packets_to_read = (frames_requested + frames_per_packet - 1) / frames_per_packet;
+    let packets_to_read = frames_requested.div_ceil(frames_per_packet);
     let mut bytes_to_read = packets_to_read * packet_size;
 
     if bytes_to_read > max_bytes {

@@ -521,17 +521,16 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
 
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.Ferrari") && wait {
-        if sel == env.objc.lookup_selector("initTextInput:").unwrap() ||
-           sel == env.objc.lookup_selector("removeTextField:").unwrap() {
+    if env.bundle.bundle_identifier().starts_with("com.gameloft.Ferrari") && wait
+        && (sel == env.objc.lookup_selector("initTextInput:").unwrap() ||
+           sel == env.objc.lookup_selector("removeTextField:").unwrap()) {
             log!("Applying game-specific hack for Ferrari GT: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel_name, env.current_thread);
             () = msg_send(env, (this, sel, arg));
             return;
         }
-    }
 
-    if env.bundle.bundle_identifier().starts_with("com.gameloft.HOS2") && wait {
-        if sel == env.objc.lookup_selector("sendGameInfo").unwrap() || sel == env.objc.lookup_selector("setStatusBar:").unwrap() {
+    if env.bundle.bundle_identifier().starts_with("com.gameloft.HOS2") && wait
+        && (sel == env.objc.lookup_selector("sendGameInfo").unwrap() || sel == env.objc.lookup_selector("setStatusBar:").unwrap()) {
             log!("Applying game-specific hack for HOS2: performing performSelectorOnMainThread:SEL({}) waitUntilDone:true on thread {}", sel_name, env.current_thread);
             if sel_name.ends_with(':') {
                 () = msg_send(env, (this, sel, arg));
@@ -540,7 +539,6 @@ pub const CLASSES: ClassExports = objc_classes! {
             }
             return;
         }
-    }
 
     if wait {
         // `waitUntilDone:YES` from a background thread: schedule the selector to run on the main
@@ -602,14 +600,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     // performSelectorOnMainThread:waitUntilDone:YES would hang forever.)
     let sem_to_post = unsafe {
         let timer_bits = which.to_bits();
-        if let Some(pos) = SYNC_PERFORM_SEMAPHORES
+        SYNC_PERFORM_SEMAPHORES
             .iter()
-            .position(|x| x.0 == timer_bits)
-        {
-            Some(SYNC_PERFORM_SEMAPHORES.remove(pos).1)
-        } else {
-            None
-        }
+            .position(|x| x.0 == timer_bits).map(|pos| SYNC_PERFORM_SEMAPHORES.remove(pos).1)
     };
 
     let dict: id = msg![env; which userInfo];

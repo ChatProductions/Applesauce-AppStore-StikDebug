@@ -21,11 +21,10 @@
 //! sharing options — the view controller behaves like an empty modal that
 //! invokes its completion handler with `completed = NO` when presented.
 
-use crate::frameworks::foundation::ns_string;
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{
-    autorelease, id, impl_HostObject_with_superclass, msg, nil, objc_classes, release,
-    retain, ClassExports, HostObject, NSZonePtr, SEL,
+    id, impl_HostObject_with_superclass, msg, nil, objc_classes, release,
+    retain, ClassExports, HostObject, NSZonePtr,
 };
 
 pub type UIActivityCategory = NSInteger;
@@ -100,7 +99,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithPlaceholderItem:(id)placeholder {
     let placeholder = retain(env, placeholder);
-    let mut host = env.objc.borrow_mut::<UIActivityItemProviderHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityItemProviderHostObject>(this);
     host.placeholder_item = placeholder;
     this
 }
@@ -147,7 +146,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: id = msg![env; this init];
     let items = retain(env, activityItems);
     let apps = retain(env, applicationActivities);
-    let mut host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
     host.activity_items = items;
     host.application_activities = apps;
     this
@@ -158,10 +157,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setExcludedActivityTypes:(id)types {
     let new_value = retain(env, types);
-    let mut host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
     let old = host.excluded_activity_types;
     host.excluded_activity_types = new_value;
-    drop(host);
     release(env, old);
 }
 
@@ -170,10 +168,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setCompletionHandler:(id)handler {
     let new_value = retain(env, handler);
-    let mut host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
     let old = host.completion_handler;
     host.completion_handler = new_value;
-    drop(host);
     release(env, old);
 }
 
@@ -182,10 +179,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 - (())setCompletionWithItemsHandler:(id)handler {
     let new_value = retain(env, handler);
-    let mut host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
+    let host = env.objc.borrow_mut::<UIActivityViewControllerHostObject>(this);
     let old = host.completion_with_items_handler;
     host.completion_with_items_handler = new_value;
-    drop(host);
     release(env, old);
 }
 

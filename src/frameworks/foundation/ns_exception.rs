@@ -48,17 +48,11 @@ fn objc_str(env: &mut Environment, s: id, fallback: &str) -> String {
     super::ns_string::to_rust_string(env, s).into_owned()
 }
 
+#[derive(Default)]
 pub struct State {
     pub uncaught_exception_handler: MutVoidPtr,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        State {
-            uncaught_exception_handler: MutVoidPtr::null(),
-        }
-    }
-}
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -197,7 +191,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())dealloc {
     let host = env.objc.borrow::<NSExceptionHostObject>(this);
     let (name, reason, user_info) = (host.name, host.reason, host.user_info);
-    drop(host); // release borrow before mutation
     release(env, name);
     release(env, reason);
     release(env, user_info);

@@ -926,7 +926,7 @@ pub(super) fn handle_players(env: &mut Environment) {
 
         if let PendingNotification::PlaybackDidFinish { reason, .. } = notif {
             // userInfo[MPMoviePlayerPlaybackDidFinishReasonUserInfoKey] = reason
-            let reason_num: id = msg_class![env; NSNumber numberWithInt:(reason as i32)];
+            let reason_num: id = msg_class![env; NSNumber numberWithInt:(reason)];
             let reason_key = ns_string::get_static_str(
                 env,
                 MPMoviePlayerPlaybackDidFinishReasonUserInfoKey,

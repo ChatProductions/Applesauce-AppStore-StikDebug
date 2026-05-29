@@ -11,7 +11,7 @@ use super::NSUInteger;
 use crate::frameworks::foundation::NSInteger;
 use crate::mem::{ConstPtr, MutPtr};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 
@@ -145,7 +145,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)indexPathByAddingIndex:(NSUInteger)index {
     let mut new_indexes = env.objc.borrow::<NSIndexPathHostObject>(this).indexes.clone();
     new_indexes.push(index);
-    let len = new_indexes.len() as NSUInteger;
+    let _len = new_indexes.len() as NSUInteger;
 
     let new: id = msg_class![env; NSIndexPath alloc];
     env.objc.borrow_mut::<NSIndexPathHostObject>(new).indexes = new_indexes;
@@ -192,7 +192,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<NSIndexPathHostObject>(this);
     let mut h: u32 = 2166136261;
     for &idx in &host.indexes {
-        let bytes = (idx as u32).to_le_bytes();
+        let bytes = idx.to_le_bytes();
         for b in bytes {
             h ^= b as u32;
             h = h.wrapping_mul(16777619);
@@ -252,7 +252,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host = env.objc.borrow::<NSIndexPathHostObject>(this);
     let parts: Vec<String> = host.indexes.iter().map(|i| i.to_string()).collect();
     let s = format!("<NSIndexPath: [{}]>", parts.join(", "));
-    drop(host);
     let ns = from_rust_string(env, s);
     autorelease(env, ns)
 }

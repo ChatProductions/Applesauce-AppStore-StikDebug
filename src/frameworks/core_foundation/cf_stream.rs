@@ -313,7 +313,7 @@ fn CFReadStreamCreateWithBytesNoCopy(
 fn CFReadStreamCreateWithFile(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    file_url: CFTypeRef, // CFURLRef
+    _file_url: CFTypeRef, // CFURLRef
 ) -> CFReadStreamRef {
     log_dbg!("CFReadStreamCreateWithFile: stubbed");
     alloc_read_stream(env)
@@ -322,7 +322,7 @@ fn CFReadStreamCreateWithFile(
 fn CFWriteStreamCreateWithFile(
     env: &mut Environment,
     _allocator: CFAllocatorRef,
-    file_url: CFTypeRef, // CFURLRef
+    _file_url: CFTypeRef, // CFURLRef
 ) -> CFWriteStreamRef {
     log_dbg!("CFWriteStreamCreateWithFile: stubbed");
     alloc_write_stream(env)

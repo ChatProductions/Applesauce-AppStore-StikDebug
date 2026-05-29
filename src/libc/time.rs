@@ -442,13 +442,13 @@ fn localtime_r(env: &mut Environment, timestamp: ConstPtr<time_t>, res: MutPtr<t
             .time
             .tzname_dst_ptr
             .map(|p| p.cast_const())
-            .unwrap_or(Ptr::null())
+            .unwrap_or_default()
     } else {
         env.libc_state
             .time
             .tzname_std_ptr
             .map(|p| p.cast_const())
-            .unwrap_or(Ptr::null())
+            .unwrap_or_default()
     };
 
     env.mem.write(res, calendar_date);
@@ -506,13 +506,13 @@ fn mktime(env: &mut Environment, tm: MutPtr<tm>) -> time_t {
                     .time
                     .tzname_dst_ptr
                     .map(|p| p.cast_const())
-                    .unwrap_or(Ptr::null())
+                    .unwrap_or_default()
             } else {
                 env.libc_state
                     .time
                     .tzname_std_ptr
                     .map(|p| p.cast_const())
-                    .unwrap_or(Ptr::null())
+                    .unwrap_or_default()
             },
         };
         env.mem.write(tm, guest_tm);

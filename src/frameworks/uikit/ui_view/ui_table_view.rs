@@ -468,7 +468,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UITableViewHostObject>(this).separator_style = style as NSInteger;
 }
 - (i32)separatorStyle {
-    env.objc.borrow::<UITableViewHostObject>(this).separator_style as i32
+    env.objc.borrow::<UITableViewHostObject>(this).separator_style
 }
 - (())setSeparatorColor:(id)color {
     if color != nil { retain(env, color); }

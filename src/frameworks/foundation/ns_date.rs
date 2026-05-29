@@ -7,7 +7,7 @@
 //!
 //! `NSDate`.
 
-use super::ns_string::{from_rust_ordering, from_rust_string, to_rust_string};
+use super::ns_string::{from_rust_ordering, from_rust_string};
 use super::{NSComparisonResult, NSTimeInterval};
 use crate::frameworks::core_foundation::time::{
     apple_epoch, CFAbsoluteTimeGetGregorianDate, SECS_FROM_UNIX_TO_APPLE_EPOCHS,
@@ -18,7 +18,7 @@ use crate::objc::{
     NSZonePtr,
 };
 use std::ops::{Add, Sub};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 // Time interval constants
 const SECS_PER_DAY: NSTimeInterval = 86400.0;

@@ -109,7 +109,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return false;
     }
     let host: HashTableHostObject = std::mem::take(env.objc.borrow_mut(this));
-    let mut dict = host.dict;
+    let dict = host.dict;
     let res = dict.lookup(env, object) != nil;
     let options = host.options;
     *env.objc.borrow_mut(this) = HashTableHostObject { dict, options };
@@ -121,7 +121,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
     let host: HashTableHostObject = std::mem::take(env.objc.borrow_mut(this));
-    let mut dict = host.dict;
+    let dict = host.dict;
     let found = dict.lookup(env, object);
     let res = if found != nil { object } else { nil };
     let options = host.options;

@@ -10,7 +10,9 @@ use crate::objc::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 enum OperationState {
+    #[default]
     Ready,
     Executing,
     Finished,
@@ -38,11 +40,6 @@ struct NSOperationHostObject {
     arg: id,
 }
 
-impl Default for OperationState {
-    fn default() -> Self {
-        OperationState::Ready
-    }
-}
 
 impl HostObject for NSOperationHostObject {}
 

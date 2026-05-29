@@ -16,7 +16,7 @@ use crate::libc::pthread::thread::{
 };
 use crate::mem::{guest_size_of, Mem, MutPtr};
 use crate::objc::{
-    id, msg_send, msg_send_no_type_checking, nil, objc_classes, release, retain, todo_objc_setter,
+    id, msg_send, msg_send_no_type_checking, nil, objc_classes, release, retain,
     Class, ClassExports, HostObject, NSZonePtr, SEL,
 };
 use crate::Environment;

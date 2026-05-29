@@ -181,7 +181,7 @@ fn CFAbsoluteTimeGetDayOfWeek(env: &mut Environment, at: CFAbsoluteTime, tz: CFT
     // Compute day-of-week from the absolute time using Tomohiko Sakamoto's
     // algorithm — avoids needing private tm fields entirely.
     let gd = CFAbsoluteTimeGetGregorianDate(env, at, tz);
-    let y = gd.year as i32 - if gd.month as i32 <= 2 { 1 } else { 0 };
+    let y = gd.year - if gd.month as i32 <= 2 { 1 } else { 0 };
     let m = gd.month as i32;
     let d = gd.day as i32;
     static T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
@@ -200,7 +200,7 @@ fn CFAbsoluteTimeGetDayOfYear(env: &mut Environment, at: CFAbsoluteTime, tz: CFT
         log!("Warning: CFAbsoluteTimeGetDayOfYear: non-GMT timezone ignored");
     }
     let gd = CFAbsoluteTimeGetGregorianDate(env, at, tz);
-    let y = gd.year as i32;
+    let y = gd.year;
     let m = gd.month as i32;
     let d = gd.day as i32;
     // Days elapsed before each month (non-leap).
@@ -242,7 +242,7 @@ fn CFAbsoluteTimeAddGregorianUnits(
 
     // Carry: seconds → minutes
     let carry_m = gd.seconds as i32 / 60;
-    gd.seconds = gd.seconds % 60.0;
+    gd.seconds %= 60.0;
     gd.minutes += carry_m as i8;
     // Carry: minutes → hours
     let carry_h = gd.minutes as i32 / 60;

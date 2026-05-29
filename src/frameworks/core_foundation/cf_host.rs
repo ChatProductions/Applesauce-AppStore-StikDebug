@@ -155,7 +155,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let (client_release, client_info, scheduled) = {
         let h = env.objc.borrow_mut::<CFHostHostObject>(this);
         let release_cb = h.client_release.take();
-        let info = std::mem::replace(&mut h.client_info, MutVoidPtr::null());
+        let info = std::mem::take(&mut h.client_info);
         let scheduled = std::mem::take(&mut h.scheduled);
         h.callout = None;
         h.client_retain = None;
@@ -612,7 +612,7 @@ fn CFHostSetClient(
     let (prev_release, prev_info) = {
         let h = env.objc.borrow_mut::<CFHostHostObject>(host);
         let r = h.client_release.take();
-        let i = std::mem::replace(&mut h.client_info, MutVoidPtr::null());
+        let i = std::mem::take(&mut h.client_info);
         h.callout = None;
         h.client_retain = None;
         (r, i)

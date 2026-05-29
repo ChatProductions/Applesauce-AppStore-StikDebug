@@ -9,7 +9,7 @@
 
 use crate::abi::CallFromHost;
 use crate::abi::GuestFunction;
-use crate::dyld::{export_c_func, FunctionExports};
+use crate::dyld::FunctionExports;
 use crate::frameworks::core_foundation::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
 use crate::frameworks::core_foundation::cf_run_loop::{CFRunLoopMode, CFRunLoopRef};
 use crate::frameworks::core_foundation::time::{CFAbsoluteTime, CFTimeInterval};

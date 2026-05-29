@@ -46,7 +46,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // Сохраняем целевой объект и селектор (игры) внутри самого CADisplayLink
     {
-        let mut host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
+        let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
         host_object.target = target;
         host_object.selector = Some(sel);
     }
@@ -64,7 +64,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, ns_timer);
 
     {
-        let mut host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
+        let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
         host_object.ns_timer = ns_timer;
     }
 
@@ -160,7 +160,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Освобождаем зависимости и обнуляем их в HostObject,
     // чтобы разорвать Retain Cycle: (Target -> CADisplayLink -> Target).
     let (ns_timer, target) = {
-        let mut host = env.objc.borrow_mut::<CADisplayLinkHostObject>(this);
+        let host = env.objc.borrow_mut::<CADisplayLinkHostObject>(this);
         let t = host.ns_timer;
         let tgt = host.target;
         host.ns_timer = nil;

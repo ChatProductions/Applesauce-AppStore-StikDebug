@@ -14,7 +14,7 @@
 //! which is correct but not SIMD-optimized (sufficient for emulation).
 
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead};
+use crate::mem::{ConstPtr, GuestUSize, MutPtr, MutVoidPtr, SafeRead};
 use crate::Environment;
 
 

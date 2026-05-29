@@ -14,7 +14,7 @@ use crate::objc::{
     NSZonePtr, TrivialHostObject, SEL,
 };
 use crate::Environment;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Default)]
 pub struct State {

@@ -366,7 +366,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let bundle_identifier = host.bundle_identifier;
     let bundle_url        = host.bundle_url;
     let info_dictionary   = host.info_dictionary;
-    drop(host);
     if bundle_path != nil { release(env, bundle_path); }
     if bundle_identifier != nil { release(env, bundle_identifier); }
     if let Some(url)  = bundle_url       { release(env, url); }
@@ -816,7 +815,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     // We should allow table lookup on ANY bundle that has a path.
     let host = env.objc.borrow::<NSBundleHostObject>(this);
     let is_valid_bundle = host.bundle_path != nil;
-    drop(host);
     if !is_valid_bundle {
         return if value != nil && value != empty_str { value } else { key };
     }

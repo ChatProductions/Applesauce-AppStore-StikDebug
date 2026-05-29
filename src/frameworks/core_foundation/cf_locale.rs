@@ -13,7 +13,6 @@ use super::cf_string::CFStringRef;
 use super::{CFRelease, CFRetain, CFTypeRef};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::foundation::ns_string;
-use crate::frameworks::foundation::NSUInteger;
 use crate::objc::{autorelease, id, msg, msg_class, nil};
 use crate::Environment;
 
@@ -281,7 +280,7 @@ fn CFLocaleCreateLocaleIdentifierFromWindowsLocaleCode(
 }
 
 fn CFLocaleGetWindowsLocaleCodeFromLocaleIdentifier(
-    env: &mut Environment,
+    _env: &mut Environment,
     _locale_identifier: CFLocaleIdentifier,
 ) -> u32 {
     // 0x0409 = en-US LCID.

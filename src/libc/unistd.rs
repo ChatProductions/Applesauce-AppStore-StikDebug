@@ -9,7 +9,7 @@ use crate::abi::DotDotDot;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestPath};
 use crate::libc::errno::{
-    set_errno, EACCES, EEXIST, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, ENOTSUP, EPERM, EROFS, EBADF,
+    set_errno, EACCES, EEXIST, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, ENOTSUP, EPERM, EROFS,
 };
 use crate::libc::posix_io::{FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::mem::{ConstPtr, GuestISize, GuestUSize, MutPtr, PAGE_SIZE};

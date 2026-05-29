@@ -14,8 +14,8 @@ use crate::frameworks::uikit::ui_graphics::UIGraphicsGetCurrentContext;
 use crate::fs::GuestPath;
 use crate::image::Image;
 use crate::objc::{
-    autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
-    HostObject, NSZonePtr, SEL,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports,
+    HostObject, NSZonePtr,
 };
 use crate::Environment;
 use std::collections::HashMap;
