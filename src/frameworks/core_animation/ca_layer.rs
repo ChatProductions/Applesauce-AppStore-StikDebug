@@ -920,6 +920,44 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 }
 
+// Apple: -[CALayer animationKeys] - returns the array of NSString keys of
+// the currently attached named animations, or nil if there are none.
+// https://developer.apple.com/documentation/quartzcore/calayer/animationkeys()
+- (id)animationKeys {
+    // Collect first to avoid borrow conflicts when constructing NSStrings.
+    let keys: Vec<String> = env.objc
+        .borrow::<CALayerHostObject>(this)
+        .animations
+        .keys()
+        .cloned()
+        .collect();
+    if keys.is_empty() {
+        return nil;
+    }
+    let mut ids = Vec::with_capacity(keys.len());
+    for k in keys {
+        ids.push(ns_string::from_rust_string(env, k));
+    }
+    let array = crate::frameworks::foundation::ns_array::from_vec(env, ids);
+    crate::objc::autorelease(env, array)
+}
+
+// Apple: -[CALayer animationForKey:] - returns the CAAnimation for the
+// given key, or nil if there is no such animation.
+// https://developer.apple.com/documentation/quartzcore/calayer/animation(forkey:)
+- (id)animationForKey:(id)key {
+    if key == nil {
+        return nil;
+    }
+    let key_string = to_rust_string(env, key).into_owned();
+    env.objc
+        .borrow::<CALayerHostObject>(this)
+        .animations
+        .get(&key_string)
+        .copied()
+        .unwrap_or(nil)
+}
+
 // --- ДОБАВЛЕННЫЙ МЕТОД: removeAllAnimations ---
 - (())removeAllAnimations {
     let host = env.objc.borrow_mut::<CALayerHostObject>(this);

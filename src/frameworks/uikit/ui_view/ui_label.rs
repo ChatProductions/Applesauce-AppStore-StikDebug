@@ -32,6 +32,9 @@ pub struct UILabelHostObject {
     line_break_mode: UILineBreakMode,
     number_of_lines: NSInteger,
     enabled: bool,
+    adjusts_font_size_to_fit_width: bool,
+    minimum_font_size: CGFloat,
+    baseline_adjustment: UIBaselineAdjustment,
     shadow_color: id,
     shadow_offset: CGSize,
 }
@@ -49,13 +52,51 @@ impl Default for UILabelHostObject {
             line_break_mode: UILineBreakModeTailTruncation,
             number_of_lines: 1,
             enabled: true,
+            adjusts_font_size_to_fit_width: false,
+            minimum_font_size: 0.0,
+            baseline_adjustment: 0,
             // Apple's documented defaults for UILabel:
             // - shadowColor: nil (no shadow drawn)
             // - shadowOffset: { width: 0, height: -1 } (one point above the
             //   baseline, mirroring UIKit's behaviour on iOS 2.x–6.x).
             shadow_color: nil,
-            shadow_offset: CGSize { width: 0.0, height: -1.0 },
+            shadow_offset: CGSize {
+                width: 0.0,
+                height: -1.0,
+            },
         }
+    }
+}
+
+fn fitting_font_for_width(
+    env: &mut crate::Environment,
+    text: id,
+    font: id,
+    width: CGFloat,
+    adjusts: bool,
+    minimum_font_size: CGFloat,
+) -> id {
+    if !adjusts || width <= 0.0 {
+        return font;
+    }
+    let text_size: CGSize = msg![env; text sizeWithFont:font];
+    if text_size.width <= width || text_size.width <= 0.0 {
+        return font;
+    }
+    let point_size: CGFloat = msg![env; font pointSize];
+    if point_size <= 0.0 {
+        return font;
+    }
+    let min_size = if minimum_font_size > 0.0 {
+        minimum_font_size.min(point_size)
+    } else {
+        point_size
+    };
+    let scaled_size = (point_size * (width / text_size.width)).clamp(min_size, point_size);
+    if (scaled_size - point_size).abs() < 0.01 {
+        font
+    } else {
+        msg![env; font fontWithSize:scaled_size]
     }
 }
 
@@ -198,8 +239,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setNeedsDisplay];
 }
 
-- (bool)adjustsFontSizeToFitWidth { false }
-- (())setAdjustsFontSizeToFitWidth:(bool)_adjusts { }
+- (bool)adjustsFontSizeToFitWidth {
+    env.objc.borrow::<UILabelHostObject>(this).adjusts_font_size_to_fit_width
+}
+- (())setAdjustsFontSizeToFitWidth:(bool)adjusts {
+    env.objc.borrow_mut::<UILabelHostObject>(this).adjusts_font_size_to_fit_width = adjusts;
+    () = msg![env; this setNeedsDisplay];
+}
+
+- (CGFloat)minimumFontSize {
+    env.objc.borrow::<UILabelHostObject>(this).minimum_font_size
+}
+- (())setMinimumFontSize:(CGFloat)font_size {
+    env.objc.borrow_mut::<UILabelHostObject>(this).minimum_font_size = font_size.max(0.0);
+    () = msg![env; this setNeedsDisplay];
+}
 
 - (bool)isEnabled { env.objc.borrow::<UILabelHostObject>(this).enabled }
 - (())setEnabled:(bool)enabled {
@@ -252,8 +306,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; this setNeedsDisplay];
 }
 
+- (UIBaselineAdjustment)baselineAdjustment {
+    env.objc.borrow::<UILabelHostObject>(this).baseline_adjustment
+}
 - (())setBaselineAdjustment:(UIBaselineAdjustment)value {
-    log!("TODO: [(UILabel*) {:?} setBaselineAdjustment:{}]", this, value);
+    env.objc.borrow_mut::<UILabelHostObject>(this).baseline_adjustment = value;
+    () = msg![env; this setNeedsDisplay];
 }
 
 - (())sizeToFit {
@@ -267,8 +325,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (CGSize)sizeThatFits:(CGSize)size {
-    let &UILabelHostObject { text, font, line_break_mode, number_of_lines, .. } =
-        env.objc.borrow(this);
+    let &UILabelHostObject {
+        text, font, line_break_mode, number_of_lines,
+        adjusts_font_size_to_fit_width, minimum_font_size, ..
+    } = env.objc.borrow(this);
 
     if text == nil || font == nil {
         return CGSize { width: 0.0, height: 0.0 };
@@ -284,6 +344,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     let single_line = number_of_lines == 1;
 
     if single_line {
+        let font = fitting_font_for_width(
+            env,
+            text,
+            font,
+            size.width,
+            adjusts_font_size_to_fit_width,
+            minimum_font_size,
+        );
         let text_size: CGSize = msg![env; text sizeWithFont:font];
         text_size
     } else {
@@ -310,7 +378,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     let context = UIGraphicsGetCurrentContext(env);
 
     let &mut UILabelHostObject {
-        text, font, text_color, text_alignment, line_break_mode, number_of_lines, shadow_color, shadow_offset, ..
+        text, font, text_color, text_alignment, line_break_mode, number_of_lines,
+        adjusts_font_size_to_fit_width, minimum_font_size, baseline_adjustment,
+        shadow_color, shadow_offset, ..
     } = env.objc.borrow_mut(this);
 
     if text == nil || font == nil || text_color == nil { return; }
@@ -320,6 +390,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let single_line = number_of_lines == 1;
 
+    let font = if single_line {
+        fitting_font_for_width(
+            env,
+            text,
+            font,
+            bounds.size.width,
+            adjusts_font_size_to_fit_width,
+            minimum_font_size,
+        )
+    } else {
+        font
+    };
+
     let calculated_size: CGSize = if single_line {
         msg![env; text sizeWithFont:font]
     } else {
@@ -328,11 +411,14 @@ pub const CLASSES: ClassExports = objc_classes! {
                   lineBreakMode:line_break_mode]
     };
 
+    let y_offset = match baseline_adjustment {
+        0 => 0.0,
+        1 => (bounds.size.height - calculated_size.height) / 2.0,
+        2 => bounds.size.height - calculated_size.height,
+        _ => 0.0,
+    };
     let base_rect = CGRect {
-        origin: CGPoint {
-            x: bounds.origin.x,
-            y: bounds.origin.y + (bounds.size.height - calculated_size.height) / 2.0,
-        },
+        origin: CGPoint { x: bounds.origin.x, y: bounds.origin.y + y_offset },
         size: CGSize { width: bounds.size.width, height: calculated_size.height },
     };
 

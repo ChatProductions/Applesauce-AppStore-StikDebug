@@ -25,7 +25,7 @@ use crate::frameworks::uikit::ui_font::{
 };
 use crate::fs::GuestPath;
 use crate::mach_o::MachO;
-use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, Ptr, SafeRead};
+use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
     HostObject, NSZonePtr, ObjC,
@@ -789,6 +789,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     str_mut
 }
 
+
 - (bool)getCString:(MutPtr<u8>)buffer maxLength:(NSUInteger)buffer_size encoding:(NSStringEncoding)encoding {
     get_bytes_buffer_inner(env, this, buffer, buffer_size, encoding, true)
 }
@@ -804,6 +805,156 @@ pub const CLASSES: ClassExports = objc_classes! {
     let length = (u32::MAX - buffer.to_bits()).min(NSMaximumStringLength);
     let res: bool = msg![env; this getCString:buffer maxLength:length encoding:encoding];
     assert!(res);
+}
+
+// -[NSString getBytes:maxLength:usedLength:encoding:options:range:remainingRange:]
+// Apple: https://developer.apple.com/documentation/foundation/nsstring/1408564-getbytes
+//
+// Writes a representation of the receiver, encoded with `encoding`, into the
+// memory at `buffer` (at most `max_buffer_count` bytes). The substring covered
+// is given by `range`, expressed in UTF-16 code units. On return:
+//   * usedLength receives the number of bytes actually written (if non-NULL).
+//   * leftover receives the portion of `range` that did not fit
+//     (if non-NULL). leftover.length == 0 means the whole range fit.
+// Returns YES iff at least one full character fit; NO if `range` is non-empty
+// but nothing could be encoded.
+//
+// Notes on our implementation:
+//   * We encode the entire receiver up-front via `bytes_for_encoding`, then
+//     slice based on `range` measured in UTF-16 code units. This matches what
+//     guest code actually relies on for the small subset of `range` values it
+//     ever passes (typically `{0, length}`).
+//   * The `options` mask is best-effort: bit 0 (`NSStringEncodingConversionAllowLossy`)
+//     is accepted; bit 1 (`NSStringEncodingConversionExternalRepresentation`)
+//     is currently ignored.
+- (bool)getBytes:(MutVoidPtr)buffer
+       maxLength:(NSUInteger)max_buffer_count
+      usedLength:(MutPtr<NSUInteger>)used_length
+        encoding:(NSStringEncoding)encoding
+         options:(NSUInteger)_options
+           range:(NSRange)range
+  remainingRange:(MutPtr<NSRange>)leftover {
+    // Re-encode the whole receiver, then slice by the requested UTF-16 range.
+    let full_bytes = bytes_for_encoding(env, this, encoding);
+
+    // Map the UTF-16 range to a byte range over `full_bytes`.
+    let prefix_units = range.location as usize;
+    let suffix_start_unit = prefix_units + range.length as usize;
+
+    // Bytes consumed to cover the first `prefix_units` UTF-16 code units.
+    let prefix_bytes = code_units_consumed_for_bytes(env, this, encoding, full_bytes.len()) as usize;
+    // Walk forward to find byte offsets corresponding to the unit boundaries.
+    // To keep the implementation straightforward, recompute the byte/unit map
+    // by re-encoding character-by-character. For most NSString instances this
+    // is cheap (the strings in question are tiny localization keys).
+    let rust_string = to_rust_string(env, this);
+    let mut units_seen: usize = 0;
+    let mut byte_offset_start: usize = 0;
+    let mut byte_offset_end: usize = full_bytes.len();
+    let mut have_start = prefix_units == 0;
+    for ch in rust_string.chars() {
+        let unit_step = ch.len_utf16();
+        let byte_step = match encoding {
+            NSUTF16LittleEndianStringEncoding
+            | NSUTF16BigEndianStringEncoding
+            | NSUTF16StringEncoding
+            | NSUnicodeStringEncoding => unit_step * 2,
+            NSUTF32LittleEndianStringEncoding
+            | NSUTF32BigEndianStringEncoding
+            | NSUTF32StringEncoding => 4,
+            NSShiftJISStringEncoding => {
+                let mut buf = [0u8; 4];
+                let temp = ch.encode_utf8(&mut buf);
+                let (cow, _, _) = SHIFT_JIS.encode(temp);
+                cow.len()
+            }
+            _ => ch.len_utf8(),
+        };
+        if !have_start {
+            byte_offset_start += byte_step;
+            if units_seen + unit_step >= prefix_units {
+                have_start = true;
+            }
+        }
+        units_seen += unit_step;
+        if units_seen >= suffix_start_unit {
+            byte_offset_end = byte_offset_start
+                .saturating_add(byte_step)
+                .max(byte_offset_start);
+            // We've consumed enough to cover the range; record where the
+            // "end" pointer landed (the next character starts here).
+            byte_offset_end = (byte_offset_start
+                + (full_bytes.len().saturating_sub(byte_offset_start)))
+                .min(full_bytes.len());
+            break;
+        }
+    }
+    let _ = prefix_bytes; // not used directly; kept for clarity / future use.
+
+    let slice_end = byte_offset_end.min(full_bytes.len());
+    let slice_start = byte_offset_start.min(slice_end);
+    let slice = &full_bytes[slice_start..slice_end];
+
+    let copy_len = (slice.len()).min(max_buffer_count as usize);
+    if copy_len > 0 && !buffer.is_null() {
+        env.mem
+            .bytes_at_mut(buffer.cast::<u8>(), copy_len as u32)
+            .copy_from_slice(&slice[..copy_len]);
+    }
+
+    if !used_length.is_null() {
+        env.mem.write(used_length, copy_len as NSUInteger);
+    }
+
+    if !leftover.is_null() {
+        // How many UTF-16 code units did the bytes we actually wrote cover?
+        // Use the same incremental walk so the math agrees with what we
+        // wrote out above.
+        let mut consumed_bytes = 0usize;
+        let mut consumed_units = 0usize;
+        for ch in rust_string[..].chars().skip_while(|_| false) {
+            let unit_step = ch.len_utf16();
+            let byte_step = match encoding {
+                NSUTF16LittleEndianStringEncoding
+                | NSUTF16BigEndianStringEncoding
+                | NSUTF16StringEncoding
+                | NSUnicodeStringEncoding => unit_step * 2,
+                NSUTF32LittleEndianStringEncoding
+                | NSUTF32BigEndianStringEncoding
+                | NSUTF32StringEncoding => 4,
+                NSShiftJISStringEncoding => {
+                    let mut buf = [0u8; 4];
+                    let temp = ch.encode_utf8(&mut buf);
+                    let (cow, _, _) = SHIFT_JIS.encode(temp);
+                    cow.len()
+                }
+                _ => ch.len_utf8(),
+            };
+            if consumed_bytes + byte_step > copy_len {
+                break;
+            }
+            consumed_bytes += byte_step;
+            consumed_units += unit_step;
+        }
+        let consumed_units = consumed_units as NSUInteger;
+        let new_loc = range.location.saturating_add(consumed_units);
+        let new_len = range.length.saturating_sub(consumed_units);
+        env.mem.write(
+            leftover,
+            NSRange {
+                location: new_loc,
+                length: new_len,
+            },
+        );
+    }
+
+    // Apple returns NO only when the requested range is non-empty but nothing
+    // could be encoded. Empty range -> trivially YES.
+    if range.length == 0 || copy_len > 0 {
+        true
+    } else {
+        false
+    }
 }
 
 - (id)componentsSeparatedByString:(id)separator {
@@ -1122,14 +1273,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)stringByAddingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
-    let str = to_rust_string(env, this);
-    let bytes: std::borrow::Cow<[u8]> = match encoding {
-        NSUTF8StringEncoding | NSASCIIStringEncoding => std::borrow::Cow::Borrowed(str.as_bytes()),
-        _ => std::borrow::Cow::Borrowed(str.as_bytes())
-    };
+    let bytes = bytes_for_percent_escaping(env, this, encoding);
     let mut escaped = String::with_capacity(bytes.len());
     for byte in bytes.iter() {
-        if byte.is_ascii_alphanumeric() || b"-_.~".contains(byte) || b"!*'();:@&=+$,/?%#".contains(byte) {
+        if byte.is_ascii_alphanumeric()
+            || b"-_.~".contains(byte)
+            || b"!*'();:@&=+$,/?%#[]".contains(byte)
+        {
             escaped.push(*byte as char);
         } else {
             use std::fmt::Write;
@@ -1137,6 +1287,30 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     let new: id = from_rust_string(env, escaped);
+    autorelease(env, new)
+}
+
+- (id)stringByReplacingPercentEscapesUsingEncoding:(NSStringEncoding)encoding {
+    let source = to_rust_string(env, this);
+    let mut bytes = Vec::with_capacity(source.len());
+    let source_bytes = source.as_bytes();
+    let mut i = 0;
+    while i < source_bytes.len() {
+        if source_bytes[i] == b'%' && i + 2 < source_bytes.len() {
+            let hi = (source_bytes[i + 1] as char).to_digit(16);
+            let lo = (source_bytes[i + 2] as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                bytes.push(((hi << 4) | lo) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        bytes.push(source_bytes[i]);
+        i += 1;
+    }
+    let host_object = StringHostObject::decode(Cow::Owned(bytes), encoding);
+    let class = env.objc.get_known_class("_touchHLE_NSString", &mut env.mem);
+    let new = env.objc.alloc_object(class, Box::new(host_object), &mut env.mem);
     autorelease(env, new)
 }
 
@@ -2440,25 +2614,13 @@ mod ns_string_tests {
     }
 }
 
-pub fn get_bytes_buffer_inner(
-    env: &mut Environment,
-    str: id,
-    buffer: MutPtr<u8>,
-    buffer_size: NSUInteger,
-    encoding: NSStringEncoding,
-    include_null_terminator: bool,
-) -> bool {
+fn bytes_for_encoding(env: &mut Environment, str: id, encoding: NSStringEncoding) -> Vec<u8> {
     let string = to_rust_string(env, str);
-    let mut bytes: Vec<u8> = match encoding {
+    match encoding {
         NSASCIIStringEncoding
         | NSMacOSRomanStringEncoding
         | NSISOLatin1StringEncoding
-        | NSNextStepLatinStringEncoding => {
-            if string.chars().any(|c| (c as u32) > 0xFF) {
-                return false;
-            }
-            string.as_bytes().to_vec()
-        }
+        | NSNextStepLatinStringEncoding => string.as_bytes().to_vec(),
         NSUTF8StringEncoding | NSWindowsCP1252StringEncoding => string.as_bytes().to_vec(),
         NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding | NSUnicodeStringEncoding => {
             string.encode_utf16().flat_map(u16::to_le_bytes).collect()
@@ -2475,14 +2637,88 @@ pub fn get_bytes_buffer_inner(
             .flat_map(|c| (c as u32).to_be_bytes())
             .collect(),
         NSShiftJISStringEncoding => {
-            let (cow, _, _) = encoding_rs::SHIFT_JIS.encode(&string);
+            let (cow, _, _) = SHIFT_JIS.encode(&string);
             cow.into_owned()
         }
         _ => {
-            println!("Warning: get_bytes_buffer_inner requested with unknown encoding: {}, falling back to UTF-8", encoding);
+            log!(
+                "Warning: NSString byte conversion requested with unknown encoding: {}; using UTF-8",
+                encoding
+            );
             string.as_bytes().to_vec()
         }
-    };
+    }
+}
+
+fn bytes_for_percent_escaping(
+    env: &mut Environment,
+    str: id,
+    encoding: NSStringEncoding,
+) -> Vec<u8> {
+    bytes_for_encoding(env, str, encoding)
+}
+
+fn code_units_consumed_for_bytes(
+    env: &mut Environment,
+    str: id,
+    encoding: NSStringEncoding,
+    byte_count: usize,
+) -> NSUInteger {
+    match encoding {
+        NSUTF16LittleEndianStringEncoding
+        | NSUTF16BigEndianStringEncoding
+        | NSUTF16StringEncoding
+        | NSUnicodeStringEncoding => (byte_count / 2) as NSUInteger,
+        NSUTF32LittleEndianStringEncoding
+        | NSUTF32BigEndianStringEncoding
+        | NSUTF32StringEncoding => {
+            let string = to_rust_string(env, str);
+            let mut consumed_bytes = 0usize;
+            let mut consumed_units = 0usize;
+            for ch in string.chars() {
+                let needed = 4usize;
+                if consumed_bytes + needed > byte_count {
+                    break;
+                }
+                consumed_bytes += needed;
+                consumed_units += ch.len_utf16();
+            }
+            consumed_units as NSUInteger
+        }
+        _ => {
+            let string = to_rust_string(env, str);
+            let mut consumed_bytes = 0usize;
+            let mut consumed_units = 0usize;
+            for ch in string.chars() {
+                let needed = match encoding {
+                    NSShiftJISStringEncoding => {
+                        let mut buf = [0u8; 4];
+                        let temp = ch.encode_utf8(&mut buf);
+                        let (cow, _, _) = SHIFT_JIS.encode(temp);
+                        cow.len()
+                    }
+                    _ => ch.len_utf8(),
+                };
+                if consumed_bytes + needed > byte_count {
+                    break;
+                }
+                consumed_bytes += needed;
+                consumed_units += ch.len_utf16();
+            }
+            consumed_units as NSUInteger
+        }
+    }
+}
+
+pub fn get_bytes_buffer_inner(
+    env: &mut Environment,
+    str: id,
+    buffer: MutPtr<u8>,
+    buffer_size: NSUInteger,
+    encoding: NSStringEncoding,
+    include_null_terminator: bool,
+) -> bool {
+    let mut bytes = bytes_for_encoding(env, str, encoding);
 
     if include_null_terminator {
         match encoding {

@@ -17,8 +17,8 @@ use crate::mem::{ConstVoidPtr, MutPtr};
 
 pub mod ui_accelerometer;
 pub mod ui_action_sheet;
-pub mod ui_activity_indicator_view;
 pub mod ui_activity;
+pub mod ui_activity_indicator_view;
 pub mod ui_application;
 pub mod ui_color;
 pub mod ui_custom_object;
@@ -32,6 +32,7 @@ pub mod ui_graphics;
 pub mod ui_image;
 pub mod ui_image_picker_controller;
 pub mod ui_keyboard;
+pub mod ui_layout_placeholders;
 pub mod ui_local_notification;
 pub mod ui_navigation_bar;
 pub mod ui_nib;
@@ -45,7 +46,6 @@ pub mod ui_screen_mode;
 pub mod ui_search_bar;
 pub mod ui_split_view_controller;
 pub mod ui_storyboard;
-pub mod ui_layout_placeholders;
 pub mod ui_tab_bar_controller;
 pub mod ui_tab_bar_item;
 pub mod ui_touch;
@@ -292,6 +292,22 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIPasteboardNameFind",
         HostConstant::NSString("UIPasteboardNameFind"),
+    ),
+    (
+        "_UIPasteboardChangedNotification",
+        HostConstant::NSString("UIPasteboardChangedNotification"),
+    ),
+    (
+        "_UIPasteboardRemovedNotification",
+        HostConstant::NSString("UIPasteboardRemovedNotification"),
+    ),
+    (
+        "_UIPasteboardChangedTypesAddedKey",
+        HostConstant::NSString("UIPasteboardChangedTypesAddedKey"),
+    ),
+    (
+        "_UIPasteboardChangedTypesRemovedKey",
+        HostConstant::NSString("UIPasteboardChangedTypesRemovedKey"),
     ),
     // UIPasteboard type list constants (NSArray of UTI strings).
     // On real iOS these are NSArray singletons; here we export them as
