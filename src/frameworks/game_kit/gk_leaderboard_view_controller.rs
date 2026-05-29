@@ -8,8 +8,10 @@
 //! `GKLeaderboardViewController` and `GKAchievementViewController`.
 
 use crate::frameworks::foundation::NSInteger;
+use crate::frameworks::uikit::ui_view_controller::UIViewControllerHostObject;
 use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, nil, objc_classes, release, retain, ClassExports,
+    HostObject, NSZonePtr,
 };
 
 type GKLeaderboardTimeScope = NSInteger;
@@ -26,18 +28,22 @@ const GKLeaderboardPlayerScopeFriendsOnly: GKLeaderboardPlayerScope = 1;
 
 // MARK: - GKLeaderboardViewController
 
+#[derive(Default)]
 struct GKLeaderboardViewControllerHostObject {
+    superclass: UIViewControllerHostObject,
     /// GKLeaderboardViewControllerDelegate — weak reference
     leaderboard_delegate: id,
     /// NSString* — category filter
     category: id,
     time_scope: GKLeaderboardTimeScope,
 }
-impl HostObject for GKLeaderboardViewControllerHostObject {}
+impl_HostObject_with_superclass!(GKLeaderboardViewControllerHostObject);
 
 // MARK: - GKFriendRequestComposeViewController
 
+#[derive(Default)]
 struct GKFriendRequestComposeViewControllerHostObject {
+    superclass: UIViewControllerHostObject,
     /// GKFriendRequestComposeViewControllerDelegate — weak reference
     compose_view_delegate: id,
     /// NSString*
@@ -45,15 +51,17 @@ struct GKFriendRequestComposeViewControllerHostObject {
     /// NSInteger
     max_recipients: NSInteger,
 }
-impl HostObject for GKFriendRequestComposeViewControllerHostObject {}
+impl_HostObject_with_superclass!(GKFriendRequestComposeViewControllerHostObject);
 
 // MARK: - GKAchievementViewController
 
+#[derive(Default)]
 struct GKAchievementViewControllerHostObject {
+    superclass: UIViewControllerHostObject,
     /// GKAchievementViewControllerDelegate — weak reference
     achievement_delegate: id,
 }
-impl HostObject for GKAchievementViewControllerHostObject {}
+impl_HostObject_with_superclass!(GKAchievementViewControllerHostObject);
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -67,9 +75,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(GKLeaderboardViewControllerHostObject {
-        leaderboard_delegate: nil,
-        category: nil,
         time_scope: GKLeaderboardTimeScopeAllTime,
+        ..Default::default()
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -168,11 +175,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation GKFriendRequestComposeViewController: UIViewController
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(GKFriendRequestComposeViewControllerHostObject {
-        compose_view_delegate: nil,
-        message: nil,
-        max_recipients: 0,
-    });
+    let host_object = Box::<GKFriendRequestComposeViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
@@ -281,9 +284,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation GKAchievementViewController: UIViewController
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(GKAchievementViewControllerHostObject {
-        achievement_delegate: nil,
-    });
+    let host_object = Box::<GKAchievementViewControllerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 

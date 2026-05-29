@@ -719,8 +719,56 @@ impl MachO {
                     bind_size,
                     ..
                 } => {
+                    fn checked_dyld_info_slice<'a>(
+                        bytes: &'a [u8],
+                        off: u64,
+                        size: u64,
+                        kind: &str,
+                        name: &str,
+                    ) -> &'a [u8] {
+                        // Convert to host usize with bounds checking — a truncated
+                        // Mach-O (e.g. a corrupt IPA) can declare a dyld_info range
+                        // that runs past EOF, and the raw slice panics with
+                        // "range end index N out of range for slice of length M".
+                        // Apple's dyld bails out on the binary; we degrade
+                        // gracefully and load the rest.
+                        let Ok(off_usize) = usize::try_from(off) else {
+                            log!(
+                                "Warning: {} dyld_info range starts at {:#x} past host usize \
+                                 in {:?}; skipping.",
+                                kind, off, name
+                            );
+                            return &[];
+                        };
+                        let Ok(size_usize) = usize::try_from(size) else {
+                            log!(
+                                "Warning: {} dyld_info range size {:#x} past host usize \
+                                 in {:?}; skipping.",
+                                kind, size, name
+                            );
+                            return &[];
+                        };
+                        let Some(end) = off_usize.checked_add(size_usize) else {
+                            log!(
+                                "Warning: {} dyld_info range {:#x}..{:#x}+{:#x} overflows \
+                                 in {:?}; skipping.",
+                                kind, off_usize, off_usize, size_usize, name
+                            );
+                            return &[];
+                        };
+                        if end > bytes.len() {
+                            log!(
+                                "Warning: {} dyld_info range {:#x}..{:#x} past end of \
+                                 Mach-O file ({:#x}) in {:?}; skipping.",
+                                kind, off_usize, end, bytes.len(), name
+                            );
+                            return &[];
+                        }
+                        &bytes[off_usize..end]
+                    }
+
                     let rebase_opcodes = Rebase::parse(
-                        &bytes[rebase_off as usize..][..rebase_size as usize],
+                        checked_dyld_info_slice(bytes, rebase_off as u64, rebase_size as u64, "rebase", &name),
                         size_of::<GuestUSize>(),
                     );
 
@@ -750,7 +798,7 @@ impl MachO {
                     }
 
                     let bind_opcodes = Bind::parse(
-                        &bytes[bind_off as usize..][..bind_size as usize],
+                        checked_dyld_info_slice(bytes, bind_off as u64, bind_size as u64, "bind", &name),
                         size_of::<GuestUSize>(),
                     );
                     for symb in bind_opcodes {
