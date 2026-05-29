@@ -22,6 +22,7 @@ pub mod cf_binary_heap;
 pub mod cf_bundle;
 pub mod cf_data;
 pub mod cf_dictionary;
+pub mod cf_error;
 pub mod cf_host;
 pub mod cf_locale;
 pub mod cf_number;
@@ -51,6 +52,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         cf_allocator::CONSTANTS,
         cf_bundle::CONSTANTS,
         cf_dictionary::CONSTANTS,
+        cf_error::CONSTANTS,
         cf_locale::CONSTANTS,
         cf_number::CONSTANTS,
         cf_preferences::CONSTANTS,

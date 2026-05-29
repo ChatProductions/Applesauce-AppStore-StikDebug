@@ -1924,10 +1924,53 @@ pub fn objc_getProtocol(_env: &mut crate::Environment, _name: ConstPtr<u8>) -> i
 
 /// `const char *protocol_getName(Protocol *p)` — paired with
 /// `objc_getProtocol`. Returns NULL since we never hand out a real
-/// protocol pointer.
+/// Protocol pointer to the guest.
 pub fn protocol_getName(_env: &mut crate::Environment, _p: id) -> ConstPtr<u8> {
     use crate::mem::Ptr;
     Ptr::null()
+}
+
+/// `BOOL protocol_conformsToProtocol(Protocol *proto, Protocol *other)`
+/// per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418841-protocol_conformstoprotocol>):
+///
+/// > Returns a Boolean value that indicates whether one protocol
+/// > conforms to another.
+pub fn protocol_conformsToProtocol(_env: &mut crate::Environment, proto: id, other: id) -> bool {
+    if proto.is_null() || other.is_null() {
+        return false;
+    }
+    proto == other
+}
+
+/// `int objc_getClassList(Class *buffer, int bufferLen)` per Apple's
+/// Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/1418579-objc_getclasslist>):
+///
+/// > Returns the number of currently registered classes. If `buffer` is
+/// > NULL or `bufferLen` is 0, it must just return the total count.
+/// > Otherwise it must copy up to `bufferLen` Class pointers into
+/// > `buffer`, but still return the total number registered (callers
+/// > use that to detect that they need a bigger buffer).
+pub fn objc_getClassList(
+    env: &mut crate::Environment,
+    buffer: crate::mem::MutPtr<Class>,
+    buffer_len: i32,
+) -> i32 {
+    let total = env.objc.classes.values().count();
+    if buffer.is_null() || buffer_len <= 0 {
+        return i32::try_from(total).unwrap_or(i32::MAX);
+    }
+    let cap = u32::try_from(buffer_len).unwrap_or(0);
+    let mut offset: u32 = 0;
+    for class in env.objc.classes.values() {
+        if offset >= cap {
+            break;
+        }
+        env.mem.write(buffer + offset, *class);
+        offset += 1;
+    }
+    i32::try_from(total).unwrap_or(i32::MAX)
 }
 
 /// `const char **objc_copyClassNamesForImage(const char *image,

@@ -9,7 +9,7 @@ use crate::abi::DotDotDot;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::fs::{FsError, GuestPath};
 use crate::libc::errno::{
-    set_errno, EACCES, EEXIST, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, ENOTSUP, EPERM, EROFS,
+    set_errno, EACCES, EEXIST, EINVAL, ENOENT, ENOSYS, ENOTDIR, ENOTEMPTY, ENOTSUP, EPERM, EROFS, EBADF,
 };
 use crate::libc::posix_io::{FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::mem::{ConstPtr, GuestISize, GuestUSize, MutPtr, PAGE_SIZE};
@@ -552,6 +552,16 @@ fn chmod(env: &mut Environment, path: ConstPtr<u8>, _mode: u32) -> i32 {
     0
 }
 
+/// `int fchmod(int fd, mode_t mode);`
+///
+/// Per Apple's `fchmod(2)` man page
+/// (<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fchmod.2.html>):
+///
+/// > Th
+fn fchmod(_env: &mut Environment, _fd: i32, _mode: u32) -> i32 {
+    0
+}
+
 // Darwin/XNU `<sys/syscall.h>` selector numbers used by the few syscalls
 // touchHLE knows how to implement directly. The full list is enormous; we
 // only enumerate the ones we resolve here.
@@ -650,6 +660,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(fork()),
     export_c_func!(sbrk(_)),
     export_c_func!(chmod(_, _)),
+    export_c_func!(fchmod(_, _)),
     export_c_func!(sync()),
     export_c_func!(fsync(_)),
 ];
