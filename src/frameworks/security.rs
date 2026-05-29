@@ -289,7 +289,7 @@ fn SecRandomCopyBytes(
 // =========================================================================
 
 fn SecCertificateCreateWithData(
-    env: &mut Environment,
+    _env: &mut Environment,
     _allocator: CFTypeRef,
     _data: CFDataRef,
 ) -> SecCertificateRef {

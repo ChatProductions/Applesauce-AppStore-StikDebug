@@ -2813,7 +2813,7 @@ fn glUniform4f(
 }
 fn glUniform1iv(env: &mut Environment, location: GLint, count: GLsizei, value: ConstPtr<GLint>) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        let n = (count as usize).max(0);
+        let n = count as usize;
         let ptr = mem.ptr_at(value, n.try_into().unwrap_or(0));
         gles.Uniform1iv(location, count, ptr);
     });

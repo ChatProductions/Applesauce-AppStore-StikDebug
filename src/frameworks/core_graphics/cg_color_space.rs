@@ -9,7 +9,7 @@ use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant}
 use crate::frameworks::core_foundation::cf_string::CFStringRef;
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::{ns_string, NSUInteger};
-use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject};
+use crate::objc::{nil, objc_classes, ClassExports, HostObject};
 use crate::Environment;
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};

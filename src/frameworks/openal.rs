@@ -15,7 +15,7 @@ use crate::audio::openal::al_types::*;
 use crate::audio::openal::alc_types::*;
 use crate::audio::openal::{
     OpenAL, OpenALContext, ALC_DEVICE_SPECIFIER, ALC_FREQUENCY, ALC_MONO_SOURCES, ALC_REFRESH,
-    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_NO_ERROR, AL_RENDERER, AL_VENDOR, AL_VERSION,
+    ALC_STEREO_SOURCES, ALC_SYNC, AL_EXTENSIONS, AL_RENDERER, AL_VENDOR, AL_VERSION,
 };
 use crate::dyld::{export_c_func, FunctionExports, HostDylib};
 use crate::libc::string::strcmp;

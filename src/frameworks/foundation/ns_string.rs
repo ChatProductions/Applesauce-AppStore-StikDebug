@@ -950,11 +950,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // Apple returns NO only when the requested range is non-empty but nothing
     // could be encoded. Empty range -> trivially YES.
-    if range.length == 0 || copy_len > 0 {
-        true
-    } else {
-        false
-    }
+    range.length == 0 || copy_len > 0
 }
 
 - (id)componentsSeparatedByString:(id)separator {
@@ -1962,11 +1958,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
     if env.objc.class_is_subclass_of(class, keyed_arch_class) {
         let host = env.objc.borrow::<StringHostObject>(this);
-        let rust_str = match &*host {
+        let rust_str = match host {
             StringHostObject::Utf8(s) => s.to_string(),
             StringHostObject::Utf16(s) => String::from_utf16_lossy(s).to_string(),
         };
-        drop(host);
         let content = from_rust_string(env, rust_str);
         let key = from_rust_string(env, "NS.string".to_string());
         () = msg![env; coder encodeObject:content forKey:key];
@@ -2105,11 +2100,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let keyed_arch_class: Class = msg_class![env; NSKeyedArchiver class];
     if env.objc.class_is_subclass_of(class, keyed_arch_class) {
         let host = env.objc.borrow::<StringHostObject>(this);
-        let rust_str = match &*host {
+        let rust_str = match host {
             StringHostObject::Utf8(s) => s.to_string(),
             StringHostObject::Utf16(s) => String::from_utf16_lossy(s).to_string(),
         };
-        drop(host);
         let content = from_rust_string(env, rust_str);
         let key = from_rust_string(env, "NS.string".to_string());
         () = msg![env; coder encodeObject:content forKey:key];
@@ -2748,7 +2742,7 @@ pub fn get_bytes_buffer_inner(
         return false;
     }
 
-    let dest = env.mem.bytes_at_mut(buffer, buffer_size as u32);
+    let dest = env.mem.bytes_at_mut(buffer, buffer_size);
     dest[..bytes.len()].copy_from_slice(&bytes);
 
     true

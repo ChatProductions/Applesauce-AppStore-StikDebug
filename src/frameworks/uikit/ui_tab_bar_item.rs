@@ -5,7 +5,6 @@
  */
 //! `UITabBarItem`.
 
-use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::NSInteger;
 use crate::objc::{id, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr};
 
@@ -55,7 +54,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, title);
     retain(env, image);
     {
-        let mut host = env.objc.borrow_mut::<UITabBarItemHostObject>(this);
+        let host = env.objc.borrow_mut::<UITabBarItemHostObject>(this);
         host.title = title;
         host.image = image;
         host.tag = tag;
@@ -68,7 +67,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, image);
     retain(env, selected_image);
     {
-        let mut host = env.objc.borrow_mut::<UITabBarItemHostObject>(this);
+        let host = env.objc.borrow_mut::<UITabBarItemHostObject>(this);
         host.title = title;
         host.image = image;
         host.selected_image = selected_image;

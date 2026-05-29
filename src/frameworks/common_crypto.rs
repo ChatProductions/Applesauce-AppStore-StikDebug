@@ -604,7 +604,7 @@ fn des_f(half: u32, subkey: u64) -> u32 {
         let chunk = ((expanded >> (42 - i * 6)) & 0x3f) as usize;
         let row = ((chunk & 0x20) >> 4) | (chunk & 0x01);
         let col = (chunk >> 1) & 0x0f;
-        let s_val = DES_SBOX[i][(row * 16 + col)] as u32;
+        let s_val = DES_SBOX[i][row * 16 + col] as u32;
         output |= s_val << (28 - i * 4);
     }
     des_permute(output as u64, &DES_P, 32) as u32
@@ -664,10 +664,10 @@ fn des_process(
             input
                 .iter()
                 .copied()
-                .chain(std::iter::repeat(pad_len as u8).take(pad_len))
+                .chain(std::iter::repeat_n(pad_len as u8, pad_len))
                 .collect()
         } else {
-            if input.len() % block_size != 0 {
+            if !input.len().is_multiple_of(block_size) {
                 return Err(kCCAlignmentError);
             }
             input.to_vec()
@@ -702,7 +702,7 @@ fn des_process(
         if input.is_empty() {
             return Ok(Vec::new());
         }
-        if input.len() % block_size != 0 {
+        if !input.len().is_multiple_of(block_size) {
             return Err(kCCAlignmentError);
         }
         let mut output = vec![0u8; input.len()];
@@ -853,11 +853,11 @@ fn CCCrypt(
                 padded = input
                     .iter()
                     .copied()
-                    .chain(std::iter::repeat(pad_len as u8).take(pad_len))
+                    .chain(std::iter::repeat_n(pad_len as u8, pad_len))
                     .collect();
                 &padded
             } else {
-                if input_len % block_size != 0 {
+                if !input_len.is_multiple_of(block_size) {
                     return kCCAlignmentError;
                 }
                 &input
@@ -871,7 +871,7 @@ fn CCCrypt(
             output = vec![0u8; out_len];
             let mut prev_block = [0u8; 16];
             if !ecb_mode && !iv.is_null() {
-                prev_block.copy_from_slice(&env.mem.bytes_at(iv.cast(), 16).to_vec());
+                prev_block.copy_from_slice(env.mem.bytes_at(iv.cast(), 16));
             }
 
             for i in (0..out_len).step_by(block_size) {
@@ -902,14 +902,14 @@ fn CCCrypt(
                 env.mem.write(data_out_moved, 0);
                 return kCCSuccess;
             }
-            if input_len % block_size != 0 {
+            if !input_len.is_multiple_of(block_size) {
                 return kCCAlignmentError;
             }
 
             output = vec![0u8; input_len];
             let mut prev_block = [0u8; 16];
             if !ecb_mode && !iv.is_null() {
-                prev_block.copy_from_slice(&env.mem.bytes_at(iv.cast(), 16).to_vec());
+                prev_block.copy_from_slice(env.mem.bytes_at(iv.cast(), 16));
             }
 
             for i in (0..input_len).step_by(block_size) {

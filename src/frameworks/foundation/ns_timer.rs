@@ -5,9 +5,8 @@
  */
 //! `NSTimer`.
 
-use super::ns_run_loop::NSDefaultRunLoopMode;
 use super::NSTimeInterval;
-use super::{ns_run_loop, ns_string, ns_time_interval_to_duration_or_zero};
+use super::ns_time_interval_to_duration_or_zero;
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
     HostObject, NSZonePtr, SEL,
@@ -152,7 +151,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())invalidate {
     let run_loop_to_remove = {
-        let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
+        let host = env.objc.borrow_mut::<NSTimerHostObject>(this);
         host.due_by = None;
         let rl = host.run_loop;
         host.run_loop = crate::objc::nil;
@@ -188,7 +187,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // ВЫЧИСЛЯЕМ до borrow_mut
     let time_interval: NSTimeInterval = msg![env; date timeIntervalSinceNow];
 
-    let mut timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
+    let timer = env.objc.borrow_mut::<NSTimerHostObject>(this);
     if timer.due_by.is_some() {
         if !time_interval.is_finite() || time_interval <= 0.0 {
             timer.due_by = Some(Instant::now());
@@ -250,7 +249,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     // ТОЛЬКО ТЕПЕРЬ берём `borrow_mut` и записываем все данные
-    let mut host = env.objc.borrow_mut::<NSTimerHostObject>(this);
+    let host = env.objc.borrow_mut::<NSTimerHostObject>(this);
 
     host.ns_interval = safe_ti;
     host.rust_interval = rust_interval;

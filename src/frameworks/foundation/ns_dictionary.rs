@@ -908,7 +908,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let pairs: Vec<(id, id)> = host.map.values()
            .flat_map(|v| v.iter().copied())
            .collect();
-        drop(host);
 
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];
@@ -1069,7 +1068,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         let pairs: Vec<(id, id)> = host.map.values()
            .flat_map(|v| v.iter().copied())
            .collect();
-        drop(host);
 
         let keys_array: id = msg_class![env; NSMutableArray new];
         let objects_array: id = msg_class![env; NSMutableArray new];

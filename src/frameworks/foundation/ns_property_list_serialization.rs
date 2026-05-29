@@ -21,9 +21,7 @@ use crate::Environment;
 use plist::Value;
 use std::io::Cursor;
 use std::ops::Add;
-use std::time::{Duration, SystemTime};
-use std::collections::HashSet;
-use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 pub type NSPropertyListMutabilityOptions = NSUInteger;
 pub const NSPropertyListImmutable: NSPropertyListMutabilityOptions = 0;

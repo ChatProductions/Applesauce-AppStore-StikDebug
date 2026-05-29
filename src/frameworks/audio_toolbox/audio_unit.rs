@@ -8,7 +8,6 @@
 
 use std::time::Instant;
 
-use crate::audio::openal as al;
 use crate::audio::openal::al_types::{ALuint, ALvoid};
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
 
@@ -22,9 +21,7 @@ use crate::dyld::FunctionExports;
 use crate::environment::Environment;
 use crate::export_c_func;
 use crate::frameworks::audio_toolbox::audio_components;
-use crate::frameworks::audio_toolbox::audio_queue::{
-    is_supported_audio_format, log_if_broken_audio_format,
-};
+use crate::frameworks::audio_toolbox::audio_queue::log_if_broken_audio_format;
 use crate::frameworks::carbon_core::{paramErr, OSStatus};
 use crate::frameworks::core_audio_types::{fourcc, AudioStreamBasicDescription};
 use crate::frameworks::core_foundation::cf_run_loop::CFRunLoopGetMain;
@@ -34,7 +31,6 @@ use crate::objc::nil;
 
 use super::audio_components::{AURenderCallbackStruct, AudioComponentInstance};
 use super::audio_queue::decode_buffer;
-use super::audio_session;
 
 pub type AudioUnit = AudioComponentInstance;
 

@@ -7,9 +7,9 @@
 //! constants.
 
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::core_graphics::{CGRect, CGSize};
+use crate::frameworks::core_graphics::CGSize;
 use crate::frameworks::foundation::NSInteger;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, TrivialHostObject};
+use crate::objc::{id, msg_class, nil, objc_classes, ClassExports, TrivialHostObject};
 
 // MARK: - Notification names
 

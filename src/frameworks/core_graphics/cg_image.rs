@@ -14,7 +14,7 @@ use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant}
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::foundation::ns_string;
 use crate::image::Image;
-use crate::mem::{ConstPtr, GuestUSize, MutPtr};
+use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{autorelease, id, nil, objc_classes, ClassExports, HostObject, ObjC};
 use crate::Environment;
 
@@ -320,7 +320,7 @@ fn CGImageGetBitmapInfo(_env: &mut Environment, image: CGImageRef) -> CGBitmapIn
 }
 
 /// Decode array — we always use the default (nil / identity mapping).
-fn CGImageGetDecode(_env: &mut Environment, image: CGImageRef) -> ConstPtr<CGFloat> {
+fn CGImageGetDecode(_env: &mut Environment, _image: CGImageRef) -> ConstPtr<CGFloat> {
     ConstPtr::null()
 }
 
@@ -332,7 +332,7 @@ fn CGImageGetShouldInterpolate(_env: &mut Environment, image: CGImageRef) -> boo
 }
 
 /// CGColorRenderingIntent — 0 = kCGRenderingIntentDefault.
-fn CGImageGetRenderingIntent(_env: &mut Environment, image: CGImageRef) -> i32 {
+fn CGImageGetRenderingIntent(_env: &mut Environment, _image: CGImageRef) -> i32 {
     0
 }
 

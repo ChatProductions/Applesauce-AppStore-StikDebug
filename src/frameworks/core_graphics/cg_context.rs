@@ -422,7 +422,7 @@ pub fn CGContextStrokeRectWithWidth(
         .borrow::<CGContextHostObject>(context)
         .rgb_stroke_color;
     // Draw four filled thin rects forming the border.
-    let hw = width / 2.0;
+    let _hw = width / 2.0;
     let CGRect { origin, size } = rect;
 
     // Top, bottom, left, right bands.
@@ -617,7 +617,7 @@ fn CGContextAddArc(
     radius: CGFloat,
     start_angle: CGFloat,
     end_angle: CGFloat,
-    clockwise: i32,
+    _clockwise: i32,
 ) {
     // Store start/end points only.
     if context.is_null() {
@@ -713,7 +713,7 @@ fn CGContextClosePath(env: &mut Environment, context: CGContextRef) {
 fn CGContextDrawPath(env: &mut Environment, context: CGContextRef, mode: i32) {
     // mode: 0=fill, 1=eof-fill, 2=stroke, 3=fill+stroke, 4=eof-fill+stroke
     let do_fill = matches!(mode, 0 | 1 | 3 | 4);
-    let do_stroke = matches!(mode, 2 | 3 | 4);
+    let do_stroke = matches!(mode, 2..=4);
     if context.is_null() {
         return;
     }

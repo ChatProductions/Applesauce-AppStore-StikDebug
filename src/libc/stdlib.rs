@@ -20,6 +20,7 @@ use std::str::FromStr;
 
 pub mod qsort;
 
+#[derive(Default)]
 pub struct State {
     rand: u32,
     random: u32,
@@ -34,17 +35,6 @@ pub struct State {
     pub atexit_handlers: Vec<GuestFunction>,
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            rand: 0,
-            random: 0,
-            arc4random: 0,
-            drand48: Drand48State::default(),
-            atexit_handlers: Vec::new(),
-        }
-    }
-}
 
 /// State for the POSIX `drand48`/`lrand48`/`mrand48` family. Mirrors what real
 /// libc keeps internally — a 48-bit state plus the multiplier `a` and addend
@@ -134,7 +124,7 @@ fn malloc(env: &mut Environment, mut size: GuestUSize) -> MutVoidPtr {
         return MutVoidPtr::null();
     }
 
-    let ptr = env.mem.alloc(size as u32);
+    let ptr = env.mem.alloc(size);
     if ptr.is_null() {
         set_errno(env, crate::libc::errno::ENOMEM);
     }
@@ -254,7 +244,7 @@ fn posix_memalign(
 fn valloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
     // Same page size touchHLE reports via `_NSGetExecutablePath` etc.
     const PAGE_SIZE: GuestUSize = 4096;
-    let mut out: MutPtr<MutVoidPtr> = env.mem.alloc(4).cast();
+    let out: MutPtr<MutVoidPtr> = env.mem.alloc(4).cast();
     let rc = posix_memalign(env, out, PAGE_SIZE, size);
     let ptr = if rc == 0 { env.mem.read(out) } else { MutVoidPtr::null() };
     env.mem.free(out.cast());
@@ -309,7 +299,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
     // If the pointer looks obviously bogus, log caller context so we can trace
     // where the corruption originated, then bail out instead of confusing the
     // underlying allocator.
-    if addr >= 0xfff0_0000 || addr < 0x1000 {
+    if !(0x1000..0xfff0_0000).contains(&addr) {
         let pc = env.cpu.regs()[crate::cpu::Cpu::PC];
         let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
         log!(
@@ -1375,7 +1365,7 @@ fn setxattr(
     env: &mut Environment,
     path: ConstPtr<u8>,
     name: ConstPtr<u8>,
-    value: ConstVoidPtr,
+    _value: ConstVoidPtr,
     size: GuestUSize,
     position: u32,
     options: i32,
@@ -1400,7 +1390,7 @@ fn fsetxattr(
     env: &mut Environment,
     fd: crate::libc::posix_io::FileDescriptor,
     name: ConstPtr<u8>,
-    value: ConstVoidPtr,
+    _value: ConstVoidPtr,
     size: GuestUSize,
     position: u32,
     options: i32,
@@ -1421,7 +1411,7 @@ fn getxattr(
     env: &mut Environment,
     path: ConstPtr<u8>,
     name: ConstPtr<u8>,
-    value: MutVoidPtr,
+    _value: MutVoidPtr,
     size: GuestUSize,
     position: u32,
     options: i32,
@@ -1445,7 +1435,7 @@ fn fgetxattr(
     env: &mut Environment,
     fd: crate::libc::posix_io::FileDescriptor,
     name: ConstPtr<u8>,
-    value: MutVoidPtr,
+    _value: MutVoidPtr,
     size: GuestUSize,
     position: u32,
     options: i32,

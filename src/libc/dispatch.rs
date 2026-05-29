@@ -159,12 +159,12 @@ fn dispatch_once_f(
 
 // MARK: - Queue creation / retrieval
 
-fn dispatch_get_main_queue(env: &mut Environment) -> dispatch_queue_t {
+fn dispatch_get_main_queue(_env: &mut Environment) -> dispatch_queue_t {
     MutVoidPtr::from_bits(MAIN_QUEUE_PTR)
 }
 
 fn dispatch_get_global_queue(
-    env: &mut Environment,
+    _env: &mut Environment,
     identifier: i32,
     _flags: u32,
 ) -> dispatch_queue_t {
@@ -203,8 +203,8 @@ fn dispatch_queue_create(
 fn dispatch_queue_attr_make_with_qos_class(
     _env: &mut Environment,
     attr: dispatch_queue_t,
-    qos_class: u32,
-    relative_priority: i32,
+    _qos_class: u32,
+    _relative_priority: i32,
 ) -> dispatch_queue_t {
     // Apple docs (<dispatch/queue.h>):
     //   "Returns an attribute value which may be provided to
@@ -221,13 +221,13 @@ fn dispatch_queue_attr_make_with_qos_class(
     attr
 }
 
-fn dispatch_queue_get_label(env: &mut Environment, queue: dispatch_queue_t) -> ConstVoidPtr {
+fn dispatch_queue_get_label(env: &mut Environment, _queue: dispatch_queue_t) -> ConstVoidPtr {
     // Return an empty string — label lookup not implemented.
     let empty = env.mem.alloc_and_write_cstr(b"");
     empty.cast_void().cast_const()
 }
 
-fn dispatch_get_current_queue(env: &mut Environment) -> dispatch_queue_t {
+fn dispatch_get_current_queue(_env: &mut Environment) -> dispatch_queue_t {
     // We always run on the "main" queue.
     MutVoidPtr::from_bits(MAIN_QUEUE_PTR)
 }
@@ -240,11 +240,11 @@ fn dispatch_queue_release(_env: &mut Environment, _queue: dispatch_queue_t) {
     // no-op
 }
 
-fn dispatch_retain(_env: &mut Environment, obj: MutVoidPtr) {
+fn dispatch_retain(_env: &mut Environment, _obj: MutVoidPtr) {
     // no-op for all dispatch objects
 }
 
-fn dispatch_release(_env: &mut Environment, obj: MutVoidPtr) {
+fn dispatch_release(_env: &mut Environment, _obj: MutVoidPtr) {
     // no-op
 }
 
@@ -364,7 +364,7 @@ fn dispatch_walltime(_env: &mut Environment, _spec: ConstVoidPtr, delta: i64) ->
 
 // MARK: - dispatch_group
 
-fn dispatch_group_create(env: &mut Environment) -> dispatch_group_t {
+fn dispatch_group_create(_env: &mut Environment) -> dispatch_group_t {
     // Return a small non-null sentinel.
     MutVoidPtr::from_bits(0x0200_0001)
 }
@@ -462,7 +462,7 @@ fn dispatch_semaphore_signal(env: &mut Environment, sem: dispatch_semaphore_t) -
 // MARK: - dispatch_source (stub)
 
 fn dispatch_source_create(
-    env: &mut Environment,
+    _env: &mut Environment,
     _type_: ConstVoidPtr,
     _handle: usize,
     _mask: usize,
@@ -473,7 +473,7 @@ fn dispatch_source_create(
 }
 
 fn dispatch_source_set_event_handler(
-    env: &mut Environment,
+    _env: &mut Environment,
     _source: dispatch_source_t,
     _handler: dispatch_block_t,
 ) {

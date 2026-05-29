@@ -2948,8 +2948,7 @@ impl GLES for GLES1OnGL2<'_> {
         }
         if !precision.is_null() {
             *precision = match precisiontype {
-                0x8DF3 /* GL_LOW_INT */ | 0x8DF4 /* GL_MEDIUM_INT */
-                | 0x8DF5 /* GL_HIGH_INT */ => 0,
+                0x8DF3..=0x8DF5 /* GL_HIGH_INT */ => 0,
                 _ => 23, // mantissa bits
             };
         }

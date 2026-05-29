@@ -215,7 +215,7 @@ pub fn CVPixelBufferGetBaseAddress(env: &mut Environment, _pixel_buffer: MutVoid
 pub fn CVPixelBufferLockBaseAddress(
     _env: &mut Environment,
     _pixel_buffer: MutVoidPtr,
-    lock_flags: i32,
+    _lock_flags: i32,
 ) -> i32 {
     let mut buffers = PIXEL_BUFFERS.lock().unwrap();
     if let Some(ref mut info) = *buffers {
@@ -265,8 +265,8 @@ pub fn CVPixelBufferGetBytesPerRow(_env: &mut Environment, _pixel_buffer: MutVoi
 }
 
 pub fn CVPixelBufferGetBytesPerRowOfPlane(
-    env: &mut Environment,
-    pixel_buffer: MutVoidPtr,
+    _env: &mut Environment,
+    _pixel_buffer: MutVoidPtr,
     plane_index: u32,
 ) -> u32 {
     let buffers = PIXEL_BUFFERS.lock().unwrap();
@@ -422,10 +422,10 @@ pub fn CVPixelBufferGetDataSize(_env: &mut Environment, _pixel_buffer: MutVoidPt
 pub fn CVPixelBufferGetExtendedPixels(
     _env: &mut Environment,
     _pixel_buffer: MutVoidPtr,
-    extra_columns_on_left: MutPtr<u32>,
-    extra_columns_on_right: MutPtr<u32>,
-    extra_rows_on_top: MutPtr<u32>,
-    extra_rows_on_bottom: MutPtr<u32>,
+    _extra_columns_on_left: MutPtr<u32>,
+    _extra_columns_on_right: MutPtr<u32>,
+    _extra_rows_on_top: MutPtr<u32>,
+    _extra_rows_on_bottom: MutPtr<u32>,
 ) {
     // Для простоты возвращаем нули - нет дополнительных пикселей
     // В реальности эти значения могут быть ненулевыми для некоторых форматов

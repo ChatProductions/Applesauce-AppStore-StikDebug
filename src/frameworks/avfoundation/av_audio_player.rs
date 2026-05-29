@@ -27,7 +27,7 @@ use crate::frameworks::foundation::ns_error::NSOSStatusErrorDomain;
 use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval};
 use crate::mem::{guest_size_of, GuestUSize, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    id, msg, msg_class, nil, release, retain, todo_objc_setter, Class, ClassExports, HostObject,
+    id, msg, msg_class, nil, release, retain, Class, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::objc_classes;

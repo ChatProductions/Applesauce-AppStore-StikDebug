@@ -18,7 +18,7 @@ use crate::frameworks::carbon_core::OSStatus;
 use crate::frameworks::core_audio_types::{
     debug_fourcc, fourcc, kAudioFormatAppleIMA4, kAudioFormatFlagIsBigEndian,
     kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger,
-    kAudioFormatLinearPCM, kAudioFormatMPEGLayer3, AudioStreamBasicDescription, AudioTimeStamp,
+    kAudioFormatLinearPCM, kAudioFormatMPEGLayer3, AudioStreamBasicDescription,
 };
 use crate::frameworks::core_foundation::cf_run_loop::{
     kCFRunLoopCommonModes, CFRunLoopGetMain, CFRunLoopMode, CFRunLoopRef,
@@ -1461,7 +1461,7 @@ fn notify_aq_is_running(env: &mut Environment, in_aq: AudioQueueRef) {
 pub fn AudioQueueStart(
     env: &mut Environment,
     in_aq: AudioQueueRef,
-    in_device_start_time: ConstVoidPtr,
+    _in_device_start_time: ConstVoidPtr,
 ) -> OSStatus {
     return_if_null!(in_aq);
 
@@ -1655,7 +1655,7 @@ fn AudioQueueFreeBuffer(
 pub fn AudioQueueDispose(
     env: &mut Environment,
     in_aq: AudioQueueRef,
-    in_immediate: bool,
+    _in_immediate: bool,
 ) -> OSStatus {
     return_if_null!(in_aq);
 
@@ -1713,7 +1713,7 @@ pub fn AudioQueueNewInput(
     in_callback_proc: AudioQueueOutputCallback,
     in_user_data: MutVoidPtr,
     in_callback_run_loop: CFRunLoopRef,
-    in_callback_run_loop_mode: CFRunLoopMode,
+    _in_callback_run_loop_mode: CFRunLoopMode,
     in_flags: u32,
     out_aq: MutPtr<AudioQueueRef>,
 ) -> OSStatus {

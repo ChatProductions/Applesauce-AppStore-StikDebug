@@ -72,7 +72,7 @@ impl State {
         //    that behaviour: create a fresh host object with default state
         //    and let the surrounding code report errors via `errno` /
         //    `ferror()` if the underlying `fd` turns out to be invalid.
-        if !self.file_streams.contains_key(&file_ptr) {
+        self.file_streams.entry(file_ptr).or_insert_with(|| {
             let FILE { fd } = mem.read(file_ptr);
             if !matches!(fd, STDIN_FILENO | STDOUT_FILENO | STDERR_FILENO) {
                 log!(
@@ -84,14 +84,11 @@ impl State {
                     fd
                 );
             }
-            self.file_streams.insert(
-                file_ptr,
-                FILEHostObject {
+            FILEHostObject {
                     pushbacks: Vec::new(),
                     error: false,
-                },
-            );
-        }
+                }
+        });
         self.file_streams.get_mut(&file_ptr).unwrap()
     }
 }
@@ -800,7 +797,7 @@ fn tmpfile(env: &mut Environment) -> MutPtr<FILE> {
     file_ptr
 }
 
-fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, buf: ConstPtr<u8>) {
+fn setbuf(env: &mut Environment, stream: MutPtr<FILE>, _buf: ConstPtr<u8>) {
     // TODO: handle errno properly
     set_errno(env, 0);
 

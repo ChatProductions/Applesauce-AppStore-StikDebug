@@ -7,7 +7,7 @@
 
 use crate::frameworks::core_graphics::CGRect;
 use crate::objc::{
-    id, msg_super, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, msg_super, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
 
 #[derive(Default)]

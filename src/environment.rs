@@ -281,9 +281,7 @@ impl Environment {
         // launch logic uses portrait by default whenever it's listed, so
         // mirror that.
         let portrait_supported = bundle
-            .supported_interface_orientations()
-            .iter()
-            .any(|&o| o == "UIInterfaceOrientationPortrait");
+            .supported_interface_orientations().contains(&"UIInterfaceOrientationPortrait");
         if options.initial_orientation == window::DeviceOrientation::Portrait
             && !portrait_supported
         {
@@ -1735,7 +1733,7 @@ impl Environment {
                     dyld::Dyld::SVC_THREAD_EXIT => {
                         if self.current_thread == 0 {
                             log_no_panic!("Main thread exited normally (or crashed early). Returning to host.");
-                            return ThreadNextAction::ReturnToHost;
+                            ThreadNextAction::ReturnToHost
                         } else {
                             log_dbg!("Thread {} has completed execution.", self.current_thread);
                             self.threads[self.current_thread].active = false;
@@ -1751,7 +1749,7 @@ impl Environment {
                             // Возвращаемся в цикл (run_inner вызовет
                             // yield_thread,
                             // а потом run переключит поток)
-                            return ThreadNextAction::Continue;
+                            ThreadNextAction::Continue
                         }
                     }
                 }

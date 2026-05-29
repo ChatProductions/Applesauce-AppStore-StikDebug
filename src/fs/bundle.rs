@@ -230,7 +230,7 @@ impl IpaFileRef {
         // The solution here is to cache unzipped data in memory, which should
         // be OK as early iOS IPA files are relatively small in size.
         let mut archive_cache = (*self.archive_files_cache).borrow_mut();
-        if !archive_cache.contains_key(&self.index) {
+        archive_cache.entry(self.index).or_insert_with(|| {
             // Read the zip entry into an owned buffer inside its own block so
             // the `archive` RefMut is released before we touch the caches.
             let mut archive = (*self.archive).borrow_mut();
@@ -294,13 +294,13 @@ impl IpaFileRef {
                         .borrow_mut()
                         .entry(self.index)
                         .or_insert(meta);
-                    archive_cache.insert(self.index, Rc::from(buf));
+                    Rc::from(buf)
                 }
                 None => {
-                    archive_cache.insert(self.index, Rc::from(Vec::new()));
+                    Rc::from(Vec::new())
                 }
             }
-        }
+        });
         let cached_file = Rc::clone(archive_cache.get(&self.index).unwrap());
         IpaFile {
             file: Cursor::new(cached_file),

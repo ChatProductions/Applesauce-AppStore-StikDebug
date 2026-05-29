@@ -6,7 +6,7 @@
 //! `NSDateFormatter`.
 
 use crate::frameworks::core_foundation::time::CFAbsoluteTimeGetGregorianDate;
-use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
+use crate::frameworks::foundation::{ns_string, NSTimeInterval, NSUInteger};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -473,7 +473,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let ms = host.month_symbols;
     let sws = host.short_weekday_symbols;
     let ws = host.weekday_symbols;
-    drop(host);
     let am_copy: id = if am != nil { msg![env; am copy] } else { nil };
     let pm_copy: id = if pm != nil { msg![env; pm copy] } else { nil };
     retain(env, locale);
@@ -751,7 +750,7 @@ fn parse_date(fmt: &str, s: &str) -> Option<f64> {
                 s_chars.next(); // skip matching ' in string
             } else {
                 // consume until closing quote
-                while let Some(qc) = fmt_chars.next() {
+                for qc in fmt_chars.by_ref() {
                     if qc == '\'' {
                         break;
                     }

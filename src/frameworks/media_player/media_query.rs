@@ -15,7 +15,7 @@
 //! library to proceed without crashing.
 
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, objc_classes, ClassExports, HostObject, NSZonePtr,
 };
 
 struct MPMediaQueryHostObject;

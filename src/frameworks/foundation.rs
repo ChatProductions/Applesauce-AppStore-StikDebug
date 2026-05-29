@@ -114,7 +114,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
         match c {
             'r' | 'n' | 'N' | 'o' | 'O' | 'R' | 'V' => {
-                ptr = ptr + 1;
+                ptr += 1;
             }
             _ => break,
         }
@@ -122,7 +122,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
     let c = env.mem.read(ptr) as char;
 
-    ptr = ptr + 1;
+    ptr += 1;
 
     match c {
         // Базовые типы
@@ -154,7 +154,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 if c.is_ascii_digit() {
                     len = len * 10 + c.to_digit(10).unwrap();
 
-                    ptr = ptr + 1;
+                    ptr += 1;
                 } else {
                     break;
                 }
@@ -162,7 +162,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             let (mut next_ptr, elem_size, elem_align) = parse_objc_type(env, ptr);
 
             if env.mem.read(next_ptr) as char == ']' {
-                next_ptr = next_ptr + 1;
+                next_ptr += 1;
             }
             (next_ptr, len * elem_size, elem_align)
         }
@@ -172,7 +172,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             loop {
                 let c = env.mem.read(ptr) as char;
 
-                ptr = ptr + 1;
+                ptr += 1;
                 if c == '=' || c == '}' {
                     if c == '}' {
                         return (ptr, 0, 1);
@@ -187,7 +187,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 let c = env.mem.read(ptr) as char;
 
                 if c == '}' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     break;
                 }
@@ -197,11 +197,11 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
 
                 // Пропускаем имена полей (например: "x"f)
                 if c == '"' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     loop {
                         let nc = env.mem.read(ptr) as char;
-                        ptr = ptr + 1;
+                        ptr += 1;
                         if nc == '"' {
                             break;
                         }
@@ -239,7 +239,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
             loop {
                 let c = env.mem.read(ptr) as char;
 
-                ptr = ptr + 1;
+                ptr += 1;
                 if c == '=' || c == ')' {
                     if c == ')' {
                         return (ptr, 0, 1);
@@ -254,7 +254,7 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 let c = env.mem.read(ptr) as char;
 
                 if c == ')' {
-                    ptr = ptr + 1;
+                    ptr += 1;
 
                     break;
                 }
@@ -263,10 +263,10 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 }
 
                 if c == '"' {
-                    ptr = ptr + 1;
+                    ptr += 1;
                     loop {
                         let nc = env.mem.read(ptr) as char;
-                        ptr = ptr + 1;
+                        ptr += 1;
                         if nc == '"' {
                             break;
                         }
@@ -296,12 +296,12 @@ fn parse_objc_type(env: &mut Environment, mut ptr: ConstPtr<u8>) -> (ConstPtr<u8
                 if c.is_ascii_digit() {
                     bits = bits * 10 + c.to_digit(10).unwrap();
 
-                    ptr = ptr + 1;
+                    ptr += 1;
                 } else {
                     break;
                 }
             }
-            let bytes = (bits + 7) / 8;
+            let bytes = bits.div_ceil(8);
 
             (ptr, bytes, 1)
         }

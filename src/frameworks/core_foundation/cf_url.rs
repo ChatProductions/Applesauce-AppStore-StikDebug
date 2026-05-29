@@ -10,17 +10,17 @@
 //! This is toll-free bridged to `NSURL` in Apple's implementation. Here it is
 //! the same type.
 use super::cf_allocator::{kCFAllocatorDefault, CFAllocatorRef};
-use super::{CFIndex, CFRelease, CFRetain, CFTypeRef};
+use super::{CFIndex, CFRelease, CFRetain};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_foundation::cf_string::{
-    kCFStringEncodingASCII, kCFStringEncodingUTF8, CFStringConvertEncodingToNSStringEncoding,
+    kCFStringEncodingUTF8, CFStringConvertEncodingToNSStringEncoding,
     CFStringEncoding, CFStringRef,
 };
 use crate::frameworks::foundation::ns_string::{
-    from_rust_string, get_static_str, to_rust_string, NSASCIIStringEncoding, NSUTF8StringEncoding,
+    from_rust_string, get_static_str, to_rust_string, NSUTF8StringEncoding,
 };
 use crate::frameworks::foundation::NSUInteger;
-use crate::mem::{ConstPtr, MutPtr, Ptr};
+use crate::mem::{ConstPtr, MutPtr};
 use crate::objc::{id, msg, msg_class, nil, release, retain};
 use crate::Environment;
 
@@ -1018,12 +1018,12 @@ fn CFURLCreateStringByAddingPercentEscapes(
         // Check if this character should be forced to escape
         let force_escape = force_escaped
             .as_ref()
-            .map_or(false, |chars| chars.contains(c));
+            .is_some_and(|chars| chars.contains(c));
 
         // Check if this character should be left unescaped
         let leave_alone = leave_unescaped
             .as_ref()
-            .map_or(false, |chars| chars.contains(c));
+            .is_some_and(|chars| chars.contains(c));
 
         if force_escape && !leave_alone {
             // Force-escape this character
@@ -1046,8 +1046,8 @@ fn CFURLCreateStringByAddingPercentEscapes(
         }
     }
 
-    let ns_result = from_rust_string(env, result);
-    ns_result
+    
+    from_rust_string(env, result)
 }
 
 // MARK: - Type Info

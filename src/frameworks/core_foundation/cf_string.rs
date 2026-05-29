@@ -431,7 +431,7 @@ fn CFStringCreateWithPascalString(
     }
 
     let len: CFIndex = env.mem.read(p_str).into();
-    if len < 0 || len > 255 {
+    if !(0..=255).contains(&len) {
         return nil;
     }
 
@@ -621,7 +621,7 @@ fn CFStringGetCharacters(
 }
 
 fn CFStringGetCharacterFromInlineBuffer(
-    env: &mut Environment,
+    _env: &mut Environment,
     buf: MutVoidPtr,
     idx: CFIndex,
 ) -> unichar {
@@ -1416,7 +1416,7 @@ fn CFStringNormalize(
 fn CFStringTransform(
     env: &mut Environment,
     string: CFMutableStringRef,
-    range: MutPtr<CFRange>,
+    _range: MutPtr<CFRange>,
     transform: CFStringRef,
     reverse: bool,
 ) -> bool {
@@ -1817,7 +1817,7 @@ fn compose_pair(a: char, b: char) -> Option<char> {
         return char::from_u32(s);
     }
     // LVT composition (LV syllable + trailing jamo)
-    if (0xAC00..=0xD7A3).contains(&l) && (l - 0xAC00) % 28 == 0 && (0x11A8..=0x11C2).contains(&v) {
+    if (0xAC00..=0xD7A3).contains(&l) && (l - 0xAC00).is_multiple_of(28) && (0x11A8..=0x11C2).contains(&v) {
         let t_index = v - 0x11A7;
         return char::from_u32(l + t_index);
     }

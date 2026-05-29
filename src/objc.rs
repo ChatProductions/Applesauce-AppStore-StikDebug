@@ -62,7 +62,6 @@ pub use objects::{
 pub use properties::todo_objc_setter;
 pub use selectors::{selector, SEL};
 
-use crate::mem::ConstVoidPtr;
 use crate::objc::classes::___objc_personality_v0;
 use crate::Environment;
 use classes::{ClassHostObject, FakeClass, UnimplementedClass};

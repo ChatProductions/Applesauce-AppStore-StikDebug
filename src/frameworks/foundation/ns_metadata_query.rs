@@ -7,8 +7,8 @@
 
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::objc::{id, msg, msg_class, objc_classes, ClassExports, HostObject, NSZonePtr};
-use crate::Environment;
 
+#[derive(Default)]
 pub struct NSMetadataQueryHostObject {
     is_started: bool,
 }
@@ -16,11 +16,6 @@ pub struct NSMetadataQueryHostObject {
 // Заменяем неработающий макрос на прямую реализацию трейта HostObject
 impl HostObject for NSMetadataQueryHostObject {}
 
-impl Default for NSMetadataQueryHostObject {
-    fn default() -> Self {
-        Self { is_started: false }
-    }
-}
 
 pub const CLASSES: ClassExports = objc_classes! {
     (env, this, _cmd);

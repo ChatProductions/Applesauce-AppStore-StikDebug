@@ -148,7 +148,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     // Only release http_method if we own it (i.e. it was set by the caller,
     // not the default static "GET" string from get_static_str).
     let http_method         = if host.http_method_is_owned { host.http_method } else { nil };
-    drop(host); // release borrow before calling release()
     release(env, url);
     release(env, main_document_url);
     release(env, http_method);
@@ -178,7 +177,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let body        = host.http_body;
     let body_stream = host.http_body_stream;
     let src_headers = host.http_header_fields;
-    drop(host);
 
     // init sets url/cache_policy/timeout_interval; patch the rest manually.
     let new: id = msg![env; new initWithURL:url cachePolicy:cp timeoutInterval:ti];
@@ -238,7 +236,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let body         = host.http_body;
     let body_stream  = host.http_body_stream;
     let src_headers  = host.http_header_fields;
-    drop(host);
 
     let new: id = msg![env; new initWithURL:url cachePolicy:cp timeoutInterval:ti];
     if new == nil { return nil; }
@@ -412,7 +409,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     let old_owned = host.http_method_is_owned;
     let old       = std::mem::replace(&mut host.http_method, copy);
     host.http_method_is_owned = true;
-    drop(host);
     if old_owned {
         release(env, old);
     }

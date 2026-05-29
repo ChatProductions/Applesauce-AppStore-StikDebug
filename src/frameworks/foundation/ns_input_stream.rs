@@ -277,7 +277,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.mem.bytes_at_mut(buffer, to_read as u32).copy_from_slice(&src_slice);
 
         // Обновляем состояние
-        let mut host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
         if let InputStreamBacking::Data { offset, .. } = &mut host.backing {
             *offset += to_read;
             if *offset >= total as usize {
@@ -309,7 +309,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
         env.mem.bytes_at_mut(buffer, chunk.len() as u32).copy_from_slice(&chunk);
 
-        let mut host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
+        let host = env.objc.borrow_mut::<NSInputStreamHostObject>(this);
         if let InputStreamBacking::File { bytes, offset, .. } = &mut host.backing {
             *offset += chunk.len();
             if *offset >= bytes.len() {

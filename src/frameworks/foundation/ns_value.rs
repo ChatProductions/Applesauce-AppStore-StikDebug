@@ -632,7 +632,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             coder,
             class
         );
-        msg_class![env; NSNumber numberWithInt:(0 as i32)]
+        msg_class![env; NSNumber numberWithInt:(0_i32)]
     };
     release(env, this);
     new_num

@@ -9,10 +9,9 @@
 use crate::dyld::{ConstantExports, FunctionExports, HostConstant};
 use crate::export_c_func;
 use crate::libc::sys::socket::{sockaddr, AF_INET, SOCK_DGRAM, SOCK_STREAM};
-use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, MutPtr, MutVoidPtr, Ptr, SafeRead};
+use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, MutPtr, Ptr, SafeRead};
 use crate::Environment;
 use std::net::ToSocketAddrs;
-use std::ops::Add;
 
 const AI_PASSIVE: i32 = 0x1;
 const AI_CANONNAME: i32 = 0x2;
@@ -54,7 +53,7 @@ pub const H_ERRNO_TRY_AGAIN: i32 = TRY_AGAIN;
 pub const H_ERRNO_NO_RECOVERY: i32 = NO_RECOVERY;
 pub const H_ERRNO_NO_DATA: i32 = NO_DATA;
 // AF_INET in network byte order for in_addr.
-const AF_INET_NBO: u16 = ((AF_INET as u16) << 8) | ((AF_INET as u16) >> 8);
+const AF_INET_NBO: u16 = (AF_INET as u16).rotate_right(8);
 
 #[derive(Default)]
 pub struct State {
@@ -603,7 +602,7 @@ fn getaddrinfo(
         .mem
         .alloc_and_write(sockaddr::from_ipv4_parts(ip_octets, port));
     let result = addrinfo {
-        ai_flags: ai_flags,
+        ai_flags,
         ai_family: AF_INET,
         ai_socktype: if ai_socktype != 0 {
             ai_socktype

@@ -8,7 +8,7 @@
 
 use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
-use crate::objc::{id, msg, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
 
 /// Apple's NSNumberFormatter behavior modes.
 /// <https://developer.apple.com/documentation/foundation/nsnumberformatterbehavior>
@@ -23,7 +23,7 @@ const NS_NUMBER_FORMATTER_BEHAVIOR_10_4: NSUInteger = 1040;
 /// documents the runtime default as `NSNumberFormatterBehavior10_4` on
 /// modern OS versions.
 static DEFAULT_FORMATTER_BEHAVIOR: std::sync::atomic::AtomicU32 =
-    std::sync::atomic::AtomicU32::new(NS_NUMBER_FORMATTER_BEHAVIOR_10_4 as u32);
+    std::sync::atomic::AtomicU32::new(NS_NUMBER_FORMATTER_BEHAVIOR_10_4);
 
 struct NSNumberFormatterHostObject {
     number_style: NSUInteger,
@@ -192,7 +192,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let rust_str = to_rust_string(env, string);
 
     // Clean string from currency and percentage signs
-    let clean_str = rust_str.replace('$', "").replace(',', "").replace('%', "");
+    let clean_str = rust_str.replace(['$', ',', '%'], "");
     let trimmed = clean_str.trim();
 
     if let Ok(val) = trimmed.parse::<f64>() {

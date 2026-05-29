@@ -16,7 +16,6 @@ use crate::objc::{
     ClassExports, NSZonePtr,
 };
 use crate::Environment;
-use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};

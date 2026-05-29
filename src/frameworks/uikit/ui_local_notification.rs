@@ -8,9 +8,8 @@
 use crate::dyld::{ConstantExports, HostConstant};
 use crate::frameworks::foundation::NSUInteger;
 use crate::objc::{
-    id, msg, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    id, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
 };
-use crate::Environment;
 
 pub(super) struct UILocalNotificationHostObject {
     fire_date: id,
