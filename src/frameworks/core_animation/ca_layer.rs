@@ -481,7 +481,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())addSublayer:(id)layer {
     if layer == nil { return; }
     if env.objc.borrow::<CALayerHostObject>(layer).superlayer == this {
-        () = msg![env; this bringSublayerToFront:layer];
+        // The layer is already a sublayer of this layer. Per Core Animation,
+        // re-adding an existing sublayer moves it to the top of the z-order,
+        // i.e. the end of the sublayers array. Do this directly instead of
+        // dispatching a `bringSublayerToFront:` selector, which is not a real
+        // CALayer method and is never registered (sending it panics with
+        // "Unknown selector").
+        let CALayerHostObject { ref mut sublayers, .. } = env.objc.borrow_mut(this);
+        if let Some(pos) = sublayers.iter().position(|&l| l == layer) {
+            let moved = sublayers.remove(pos);
+            sublayers.push(moved);
+        }
     } else {
         retain(env, layer);
         () = msg![env; layer removeFromSuperlayer];
@@ -904,13 +914,31 @@ pub const CLASSES: ClassExports = objc_classes! {
         () = msg![env; anim setDuration:duration];
     }
     if key == nil {
-        let inserted = env.objc.borrow_mut::<CALayerHostObject>(this).anonymous_animations.insert(anim);
-        assert!(inserted);
+        // Anonymous animation. If this exact animation object is already
+        // attached, adding it again is a no-op (and we must not retain it a
+        // second time, or it would leak).
+        let inserted = env
+            .objc
+            .borrow_mut::<CALayerHostObject>(this)
+            .anonymous_animations
+            .insert(anim);
+        if inserted {
+            retain(env, anim);
+        }
     } else {
-        let key_string = to_rust_string(env, key);
-        env.objc.borrow_mut::<CALayerHostObject>(this).animations.insert(key_string.to_string(), anim);
+        // Named animation. Adding an animation for a key that already exists
+        // replaces (and releases) the previous one, per Core Animation.
+        let key_string = to_rust_string(env, key).to_string();
+        let previous = env
+            .objc
+            .borrow_mut::<CALayerHostObject>(this)
+            .animations
+            .insert(key_string, anim);
+        if let Some(previous) = previous {
+            release(env, previous);
+        }
+        retain(env, anim);
     }
-    retain(env, anim);
 }
 
 - (())removeAnimationForKey:(id)key {
@@ -1105,8 +1133,14 @@ pub fn remove_anonymous_animation(env: &mut Environment, layer: id, animation: i
         .borrow_mut::<CALayerHostObject>(layer)
         .anonymous_animations
         .remove(&animation);
-    assert!(removed);
-    release(env, animation);
+    // Removing an animation that is no longer attached (e.g. it was already
+    // cleared by -removeAllAnimations, or its completion handler ran twice)
+    // is a no-op, matching Core Animation semantics. Only release the retain
+    // taken in -addAnimation:forKey: when we actually removed it here, so the
+    // retain count stays balanced and we never double-free.
+    if removed {
+        release(env, animation);
+    }
 }
 
 fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAffineTransform {

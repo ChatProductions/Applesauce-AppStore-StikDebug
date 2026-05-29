@@ -8,7 +8,7 @@
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::mach::init::MACH_TASK_SELF;
 use crate::libc::mach::port::mach_port_t;
-use crate::libc::mach::thread_info::{kern_return_t, KERN_SUCCESS};
+use crate::libc::mach::thread_info::{kern_return_t, KERN_INVALID_ADDRESS, KERN_SUCCESS};
 use crate::mem::{MutPtr, Ptr, PAGE_SIZE, PAGE_SIZE_ALIGN_MASK};
 use crate::Environment;
 use std::collections::HashMap;
@@ -70,10 +70,37 @@ fn vm_deallocate(
     assert_eq!(target_task, MACH_TASK_SELF);
     log_dbg!("vm_deallocate() implemented atop standard allocator");
 
-    assert_eq!(
-        *env.libc_state.mach_vm.allocations.get(&address).unwrap(),
-        size
-    );
+    // The guest may ask us to free a region we never handed out via
+    // vm_allocate (a double free, a region obtained by other means, or a
+    // bogus pointer). A real Mach kernel returns KERN_INVALID_ADDRESS in
+    // that case rather than aborting the task, so mirror that instead of
+    // panicking on the missing map entry.
+    let Some(&tracked_size) = env.libc_state.mach_vm.allocations.get(&address) else {
+        log!(
+            "Warning: vm_deallocate({:#x}, {:#x}) for an address that was not allocated via vm_allocate; returning KERN_INVALID_ADDRESS.",
+            address,
+            size
+        );
+        return KERN_INVALID_ADDRESS;
+    };
+
+    // We record the original requested size in `vm_allocate`, but the guest
+    // is free to pass either the original size or the page-rounded size it
+    // was effectively given. Accept both.
+    let rounded_tracked_size = if !tracked_size.is_multiple_of(PAGE_SIZE) {
+        tracked_size + PAGE_SIZE - (tracked_size % PAGE_SIZE)
+    } else {
+        tracked_size
+    };
+    if size != tracked_size && size != rounded_tracked_size {
+        log!(
+            "Warning: vm_deallocate({:#x}, {:#x}) size mismatch (region was allocated with size {:#x}); freeing the whole region anyway.",
+            address,
+            size,
+            tracked_size
+        );
+    }
+
     env.mem.free(Ptr::from_bits(address));
     env.libc_state.mach_vm.allocations.remove(&address);
 
