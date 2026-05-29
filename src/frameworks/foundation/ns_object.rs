@@ -596,29 +596,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())_touchHLE_timerFireMethod:(id)which {
-    let dict: id = msg![env; which userInfo];
-    let sel_key: id = get_static_str(env, "SEL");
-    let sel_str_id: id = msg![env; dict objectForKey:sel_key];
-    let sel_str = to_rust_string(env, sel_str_id);
-    let sel = env.objc.lookup_selector(&sel_str).unwrap();
-
-    let arg_key: id = get_static_str(env, "arg");
-    let arg: id = msg![env; dict objectForKey:arg_key];
-    let target_bits = this.to_bits();
-    let mut cancelled = false;
-
-    unsafe {
-        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_ref())) {
-            crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
-            cancelled = true;
-        } else if let Some(_) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.is_none()) {
-            cancelled = true;
-        }
-    }
-
-    // Pull out any semaphore associated with this timer up-front so we can post it after the
-    // selector has finished, regardless of whether it was cancelled. (If we skipped posting on
-    // cancellation, the waiting thread would hang forever.)
+    // Pull out any semaphore associated with this timer up-front so we can
+    // always post it before returning, regardless of how this method exits.
+    // (If we returned early without posting, a thread blocked in
+    // performSelectorOnMainThread:waitUntilDone:YES would hang forever.)
     let sem_to_post = unsafe {
         let timer_bits = which.to_bits();
         if let Some(pos) = SYNC_PERFORM_SEMAPHORES
@@ -630,6 +611,49 @@ pub const CLASSES: ClassExports = objc_classes! {
             None
         }
     };
+
+    let dict: id = msg![env; which userInfo];
+    let sel_key: id = get_static_str(env, "SEL");
+    let sel_str_id: id = msg![env; dict objectForKey:sel_key];
+    let sel_str = to_rust_string(env, sel_str_id).into_owned();
+
+    // The stored selector name should always be present, but guard against a
+    // missing/empty entry (e.g. the timer's userInfo dictionary was released
+    // out from under us) rather than panicking. With no selector there is
+    // nothing to fire, so just release any waiter and bail.
+    if sel_str.is_empty() {
+        log!(
+            "Warning: _touchHLE_timerFireMethod: timer {:?} has no stored selector; skipping.",
+            which
+        );
+        if let Some(sem_bits) = sem_to_post {
+            let sem: crate::mem::MutPtr<crate::libc::semaphore::sem_t> =
+                crate::mem::MutPtr::from_bits(sem_bits);
+            sem_post(env, sem);
+        }
+        return;
+    }
+
+    // Turn the stored name into a selector. This mirrors sel_registerName():
+    // a non-empty method name always maps to a valid selector, registering a
+    // new one if it has not been seen before, so this never returns None.
+    let sel = env
+        .objc
+        .register_host_selector(sel_str.clone(), &mut env.mem);
+
+    let arg_key: id = get_static_str(env, "arg");
+    let arg: id = msg![env; dict objectForKey:arg_key];
+    let target_bits = this.to_bits();
+    let mut cancelled = false;
+
+    unsafe {
+        if let Some(pos) = crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().position(|x| x.0 == target_bits && x.1.as_deref() == Some(sel_str.as_str())) {
+            crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.remove(pos);
+            cancelled = true;
+        } else if crate::frameworks::foundation::ns_object::CANCELLED_PERFORMS.iter().any(|x| x.0 == target_bits && x.1.is_none()) {
+            cancelled = true;
+        }
+    }
 
     if !cancelled {
         if sel.as_str(&env.mem).ends_with(':') {
