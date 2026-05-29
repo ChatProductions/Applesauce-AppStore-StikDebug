@@ -239,9 +239,9 @@ destructiveButtonTitle:(id)destructive_title // NSString*
         return;
     }
 
-    let sel_clicked        = env.objc.lookup_selector("actionSheet:clickedButtonAtIndex:")       .unwrap();
-    let sel_will_dismiss   = env.objc.lookup_selector("actionSheet:willDismissWithButtonIndex:") .unwrap();
-    let sel_did_dismiss    = env.objc.lookup_selector("actionSheet:didDismissWithButtonIndex:")  .unwrap();
+    let sel_clicked        = env.objc.register_host_selector("actionSheet:clickedButtonAtIndex:".to_string(), &mut env.mem);
+    let sel_will_dismiss   = env.objc.register_host_selector("actionSheet:willDismissWithButtonIndex:".to_string(), &mut env.mem);
+    let sel_did_dismiss    = env.objc.register_host_selector("actionSheet:didDismissWithButtonIndex:".to_string(), &mut env.mem);
 
     let responds_clicked: bool      = msg![env; delegate respondsToSelector:sel_clicked];
     let responds_will:    bool      = msg![env; delegate respondsToSelector:sel_will_dismiss];
@@ -266,7 +266,7 @@ destructiveButtonTitle:(id)destructive_title // NSString*
         return;
     }
 
-    let sel_clicked = env.objc.lookup_selector("actionSheet:clickedButtonAtIndex:").unwrap();
+    let sel_clicked = env.objc.register_host_selector("actionSheet:clickedButtonAtIndex:".to_string(), &mut env.mem);
     let responds: bool = msg![env; delegate respondsToSelector:sel_clicked];
     if responds {
         let _: () = msg![env; delegate actionSheet:this clickedButtonAtIndex:index];
@@ -282,7 +282,7 @@ destructiveButtonTitle:(id)destructive_title // NSString*
 
     let delegate = env.objc.borrow::<UIActionSheetHostObject>(this).delegate;
     if delegate != nil {
-        let sel_cancel = env.objc.lookup_selector("actionSheetCancel:").unwrap();
+        let sel_cancel = env.objc.register_host_selector("actionSheetCancel:".to_string(), &mut env.mem);
         let responds: bool = msg![env; delegate respondsToSelector:sel_cancel];
         if responds {
             let _: () = msg![env; delegate actionSheetCancel:this];
