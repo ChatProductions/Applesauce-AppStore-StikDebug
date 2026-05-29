@@ -481,7 +481,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())addSublayer:(id)layer {
     if layer == nil { return; }
     if env.objc.borrow::<CALayerHostObject>(layer).superlayer == this {
-        () = msg![env; this bringSublayerToFront:layer];
+        // The layer is already a sublayer of this layer. Per Core Animation,
+        // re-adding an existing sublayer moves it to the top of the z-order,
+        // i.e. the end of the sublayers array. Do this directly instead of
+        // dispatching a `bringSublayerToFront:` selector, which is not a real
+        // CALayer method and is never registered (sending it panics with
+        // "Unknown selector").
+        let CALayerHostObject { ref mut sublayers, .. } = env.objc.borrow_mut(this);
+        if let Some(pos) = sublayers.iter().position(|&l| l == layer) {
+            let moved = sublayers.remove(pos);
+            sublayers.push(moved);
+        }
     } else {
         retain(env, layer);
         () = msg![env; layer removeFromSuperlayer];
