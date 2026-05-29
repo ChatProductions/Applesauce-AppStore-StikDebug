@@ -205,6 +205,38 @@ pub const CONSTANTS: ConstantExports = &[
         "_kCFFTPStatusCodeKey",
         HostConstant::NSString("kCFFTPStatusCodeKey"),
     ),
+    (
+        "_kCFFTPResourceModDate",
+        HostConstant::NSString("kCFFTPResourceModDate"),
+    ),
+    (
+        "_kCFFTPResourceName",
+        HostConstant::NSString("kCFFTPResourceName"),
+    ),
+    (
+        "_kCFFTPResourceType",
+        HostConstant::NSString("kCFFTPResourceType"),
+    ),
+    (
+        "_kCFFTPResourceSize",
+        HostConstant::NSString("kCFFTPResourceSize"),
+    ),
+    (
+        "_kCFFTPResourceMode",
+        HostConstant::NSString("kCFFTPResourceMode"),
+    ),
+    (
+        "_kCFFTPResourceOwner",
+        HostConstant::NSString("kCFFTPResourceOwner"),
+    ),
+    (
+        "_kCFFTPResourceGroup",
+        HostConstant::NSString("kCFFTPResourceGroup"),
+    ),
+    (
+        "_kCFFTPResourceLink",
+        HostConstant::NSString("kCFFTPResourceLink"),
+    ),
     // CFHTTPMessage / CFHTTPAuthentication property keys (kCFHTTP*).
     ("_kCFHTTPVersion1_0", HostConstant::NSString("HTTP/1.0")),
     ("_kCFHTTPVersion1_1", HostConstant::NSString("HTTP/1.1")),

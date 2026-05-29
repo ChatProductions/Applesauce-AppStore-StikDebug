@@ -13,7 +13,8 @@ use crate::abi::DotDotDot;
 use crate::environment::Environment;
 use crate::mem::MutPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    NSZonePtr,
 };
 
 /// Belongs to _touchHLE_NSSet
@@ -434,6 +435,49 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         () = msg![env; this addObject:next];
     }
+}
+
+
+- (())minusSet:(id)other { // NSSet *
+    if other == nil {
+        return;
+    }
+    let enumerator: id = msg![env; other objectEnumerator];
+    loop {
+        let next: id = msg![env; enumerator nextObject];
+        if next == nil {
+            break;
+        }
+        () = msg![env; this removeObject:next];
+    }
+}
+
+- (())setSet:(id)other { // NSSet *
+    () = msg![env; this removeAllObjects];
+    () = msg![env; this unionSet:other];
+}
+
+- (())intersectSet:(id)other { // NSSet *
+    if other == nil {
+        () = msg![env; this removeAllObjects];
+        return;
+    }
+    let objects: id = msg![env; this allObjects];
+    let count: NSUInteger = msg![env; objects count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let object: id = msg![env; objects objectAtIndex:i];
+        let contains: bool = msg![env; other containsObject:object];
+        if !contains {
+            () = msg![env; this removeObject:object];
+        }
+        i += 1;
+    }
+}
+
+- (())encodeWithCoder:(id)coder {
+    let objects: id = msg![env; this allObjects];
+    () = msg![env; objects encodeWithCoder:coder];
 }
 
 // Apple: "Adds to the receiving set each object contained in a given array

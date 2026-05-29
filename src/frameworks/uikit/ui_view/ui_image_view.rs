@@ -24,6 +24,9 @@ struct UIImageViewHostObject {
     animation_duration: NSTimeInterval,
     animation_repeat_count: NSInteger,
     is_animating: bool,
+    highlighted: bool,
+    highlighted_image: id,
+    highlighted_animation_images: id,
 }
 impl_HostObject_with_superclass!(UIImageViewHostObject);
 
@@ -51,10 +54,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         superclass: _,
         image,
         animation_images,
+        highlighted_image,
+        highlighted_animation_images,
         ..
     } = env.objc.borrow(this);
     release(env, image);
-    release(env, animation_images); // Обязательно освобождаем память из-под массива
+    release(env, animation_images);
+    release(env, highlighted_image);
+    release(env, highlighted_animation_images);
     msg_super![env; this dealloc]
 }
 
@@ -97,6 +104,57 @@ pub const CLASSES: ClassExports = objc_classes! {
     let layer: id = msg![env; this layer];
     let cg_image: CGImageRef = msg![env; new_image CGImage];
     () = msg![env; layer setContents:cg_image];
+}
+
+
+- (bool)isHighlighted {
+    env.objc.borrow::<UIImageViewHostObject>(this).highlighted
+}
+- (bool)highlighted {
+    env.objc.borrow::<UIImageViewHostObject>(this).highlighted
+}
+- (())setHighlighted:(bool)highlighted {
+    env.objc.borrow_mut::<UIImageViewHostObject>(this).highlighted = highlighted;
+    let display_image = {
+        let host = env.objc.borrow::<UIImageViewHostObject>(this);
+        if highlighted && host.highlighted_image != nil {
+            host.highlighted_image
+        } else {
+            host.image
+        }
+    };
+    if display_image != nil {
+        let layer: id = msg![env; this layer];
+        let cg_image: CGImageRef = msg![env; display_image CGImage];
+        () = msg![env; layer setContents:cg_image];
+    }
+}
+
+- (id)highlightedImage {
+    env.objc.borrow::<UIImageViewHostObject>(this).highlighted_image
+}
+- (())setHighlightedImage:(id)new_image {
+    let old_image = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIImageViewHostObject>(this).highlighted_image,
+        new_image,
+    );
+    retain(env, new_image);
+    release(env, old_image);
+    if env.objc.borrow::<UIImageViewHostObject>(this).highlighted {
+        () = msg![env; this setHighlighted:true];
+    }
+}
+
+- (id)highlightedAnimationImages {
+    env.objc.borrow::<UIImageViewHostObject>(this).highlighted_animation_images
+}
+- (())setHighlightedAnimationImages:(id)images {
+    let old_images = std::mem::replace(
+        &mut env.objc.borrow_mut::<UIImageViewHostObject>(this).highlighted_animation_images,
+        images,
+    );
+    retain(env, images);
+    release(env, old_images);
 }
 
 // MARK: - Animation Properties

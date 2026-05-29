@@ -93,6 +93,44 @@ impl_HostIMP!(P1, P2, P3, P4);
 impl_HostIMP!(P1, P2, P3, P4, P5);
 impl_HostIMP!(P1, P2, P3, P4, P5, P6);
 
+// --- Extended HostIMP/MsgSendSuperSignature for higher-arity selectors ---
+//
+// A handful of Apple selectors take 7+ message arguments, e.g.
+// -[NSString getBytes:maxLength:usedLength:encoding:options:range:remainingRange:].
+// The matching MsgSendSignature impls already live in messages.rs, so to
+// avoid trait-impl conflicts we only fill in the HostIMP and
+// MsgSendSuperSignature halves here.
+macro_rules! impl_HostIMP_high_arity {
+    ( $($P:ident),* ) => {
+        impl<R, $($P,)*> HostIMP
+            for fn(&mut Environment, id, SEL, $($P,)*) -> R
+        where
+            R: GuestRet + 'static,
+            $($P: GuestArg + 'static,)*
+        {
+            fn type_info(&self) -> (TypeId, &'static str) {
+                <(R, (id, SEL, $($P,)*)) as MsgSendSignature>::type_info()
+            }
+        }
+        impl<R, $($P,)*> HostIMP
+            for fn(&mut Environment, id, SEL, $($P,)* DotDotDot) -> R
+        where
+            R: GuestRet + 'static,
+            $($P: GuestArg + 'static,)*
+        {
+            fn type_info(&self) -> (TypeId, &'static str) {
+                (TypeId::of::<fn(DotDotDot) -> R>(), "host_varargs_unsupported")
+            }
+        }
+        // NOTE: MsgSendSignature and MsgSendSuperSignature impls for 7–9
+        // arities already live in src/objc/messages.rs.
+    }
+}
+
+impl_HostIMP_high_arity!(P1, P2, P3, P4, P5, P6, P7);
+impl_HostIMP_high_arity!(P1, P2, P3, P4, P5, P6, P7, P8);
+impl_HostIMP_high_arity!(P1, P2, P3, P4, P5, P6, P7, P8, P9);
+
 /// Type for a guest function implementing a method. See [GuestFunction].
 pub type GuestIMP = GuestFunction;
 

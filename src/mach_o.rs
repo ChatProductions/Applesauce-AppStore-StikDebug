@@ -268,10 +268,37 @@ impl MachO {
         let (header, commands) = match file {
             OFile::MachFile { header, commands } => (header, commands),
             OFile::FatFile { files, .. } => {
-                let mut best_subslice = None;
+                let mut best_subslice: Option<&[u8]> = None;
                 let mut best_type = None;
+                let mut had_truncated_slice = false;
                 for (arch, _) in files {
                     if arch.cputype != mach_object::CPU_TYPE_ARM {
+                        continue;
+                    }
+                    // Per Apple's Mach-O FAT documentation, each `fat_arch`
+                    // gives an absolute offset and size into the wrapping FAT
+                    // file. Some malformed / partially-downloaded IPAs (e.g.
+                    // Bike Race Free) have a header that describes a slice
+                    // larger than the bytes we actually have on disk, which
+                    // used to crash with `range end index N out of range for
+                    // slice of length M`. Bounds-check here and skip the slice
+                    // instead of panicking; we'll fall back to whatever other
+                    // slice is present, or surface a clean error.
+                    let off = arch.offset as usize;
+                    let size = arch.size as usize;
+                    let end = off.checked_add(size);
+                    let in_bounds = matches!(end, Some(e) if e <= bytes.len());
+                    if !in_bounds {
+                        log!(
+                            "Warning: FAT slice (cputype {:#x}, cpusubtype {:#x}) declares \
+                             range {:#x}..{:#x}, past end of file ({:#x}); skipping this slice.",
+                            arch.cputype,
+                            arch.cpusubtype,
+                            off,
+                            off.saturating_add(size),
+                            bytes.len(),
+                        );
+                        had_truncated_slice = true;
                         continue;
                     }
                     if arch.cpusubtype == mach_object::CPU_SUBTYPE_ARM_V7
@@ -279,14 +306,14 @@ impl MachO {
                             && best_type != Some(mach_object::CPU_SUBTYPE_ARM_V7))
                         || best_type.is_none()
                     {
-                        best_subslice = Some(
-                            &bytes[arch.offset as usize..arch.offset as usize + arch.size as usize],
-                        );
+                        best_subslice = Some(&bytes[off..off + size]);
                         best_type = Some(arch.cpusubtype);
                     }
                 }
                 return if let Some(subslice) = best_subslice {
                     MachO::load_from_bytes(subslice, into_mem, name, slide_to_address)
+                } else if had_truncated_slice {
+                    Err("FAT binary is truncated: declared ARM slice extends past end of file (the .ipa may be corrupt or incomplete)")
                 } else {
                     Err("No supported architecture in the fat binary")
                 };
@@ -433,11 +460,33 @@ impl MachO {
                         // the memory is already zeroed!
                         if filesize > 0 {
                             assert!(filesize <= vmsize);
-
-                            let src = &bytes[fileoff..][..filesize as usize];
-                            let dst =
-                                into_mem.bytes_at_mut(Ptr::from_bits(vmaddr + slide), filesize);
-                            dst.copy_from_slice(src);
+                            let fileoff: usize = fileoff
+                                .try_into()
+                                .map_err(|_| "Segment file offset does not fit host usize")?;
+                            let filesize_usize = filesize as usize;
+                            let file_end = fileoff
+                                .checked_add(filesize_usize)
+                                .ok_or("Segment file range overflows host usize")?;
+                            if file_end > bytes.len() {
+                                log!(
+                                    "Warning: segment {} declares file range \
+                                     {:#x}..{:#x}, past end of Mach-O file \
+                                     ({:#x}); loading available bytes and \
+                                     leaving the rest zero-filled",
+                                    segname,
+                                    fileoff,
+                                    file_end,
+                                    bytes.len(),
+                                );
+                            }
+                            if fileoff < bytes.len() {
+                                let available_end = file_end.min(bytes.len());
+                                let src = &bytes[fileoff..available_end];
+                                let copy_len = src.len() as GuestUSize;
+                                let dst =
+                                    into_mem.bytes_at_mut(Ptr::from_bits(vmaddr + slide), copy_len);
+                                dst.copy_from_slice(src);
+                            }
                         }
                     }
 
