@@ -1769,21 +1769,30 @@ pub fn objc_retainAutorelease(env: &mut crate::Environment, obj: id) -> id {
     obj
 }
 
-/// `id objc_retainBlock(id block)` — ARC's runtime helper for retaining
-/// a block. Per Apple's clang ARC spec
-/// (<https://clang.llvm.org/docs/AutomaticReferenceCounting.html#runtime-support>)
-/// and the libobjc source for `objc_retainBlock`, it is functionally
-/// equivalent to `_Block_copy`: when the block is a global block (the
-/// common case for blocks captured from a Mach-O literal) it returns the
-/// same pointer; when the block lives on the stack it copies it to the
-/// heap and returns the heap pointer. touchHLE only implements global
-/// blocks today, so deferring to `_Block_copy`'s no-op path matches
-/// Apple's semantics for the cases we encounter.
-pub fn objc_retainBlock(env: &mut crate::Environment, block: id) -> id {
-    if !block.is_null() {
-        crate::objc::retain(env, block);
+/// `id objc_alloc(Class cls)` — ARC/libobjc fast-path allocator. Apple's
+/// objc4 runtime (`NSObject.mm`, `objc_alloc`) implements this as
+/// `callAlloc(cls, /*checkNil=*/true, /*allocWithZone=*/false)`, which for a
+/// class that does not override `+allocWithZone:` is exactly equivalent to
+/// `[cls alloc]`. Forwarding the `alloc` selector reproduces that behaviour
+/// precisely, including honouring any class that provides its own `+alloc`.
+/// Compilers emit calls to this helper instead of an `objc_msgSend(cls,
+/// @selector(alloc))` to save a selector lookup, so it must really allocate
+/// — a return-0 stub leaves the guest with a nil object and crashes later.
+pub fn objc_alloc(env: &mut crate::Environment, cls: Class) -> id {
+    if cls.is_null() {
+        return nil;
     }
-    block
+    crate::objc::msg![env; cls alloc]
+}
+
+/// `id objc_autorelease(id obj)` — ARC/libobjc fast-path autorelease. objc4
+/// implements it as `obj ? obj->autorelease() : nil`: the object is added to
+/// the current autorelease pool and returned unchanged. touchHLE's
+/// `autorelease` helper does exactly this (with a nil fast path), so we
+/// forward to it. This is the real implementation, not a stub: returning 0
+/// here would hand the guest a nil where it expects its object back.
+pub fn objc_autorelease(env: &mut crate::Environment, obj: id) -> id {
+    crate::objc::autorelease(env, obj)
 }
 
 // === Additional ObjC runtime helpers used by iOS 5/6 Cocoa classes ===
