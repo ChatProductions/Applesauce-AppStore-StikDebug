@@ -520,6 +520,29 @@ impl ObjC {
             return class;
         };
 
+        // An empty or otherwise garbage class name never corresponds to a real
+        // class. The real Objective-C runtime returns nil for such lookups
+        // (e.g. `objc_getClass("") == nil`). These names show up in touchHLE
+        // when a guest reads a class name (or a `Class` pointer) from
+        // uninitialised/corrupt memory — e.g. a NULL-page read returning all
+        // zeroes decodes to the empty string. Registering a placeholder class
+        // under such a name is actively harmful: it (a) pollutes the class
+        // table so every subsequent lookup of that name returns a non-nil
+        // placeholder, breaking the documented "class not loaded -> nil"
+        // contract apps rely on for feature detection, and (b) leads the guest
+        // to send messages (e.g. `+new`) to a bogus class, which here was
+        // observed to spin in a tight loop printing
+        // `Class "" ... is unimplemented. Call to class method "new".`
+        // forever. Refuse to create/register such classes and return nil so
+        // the guest sees the same "no such class" result a real device would.
+        if name.is_empty() || name.chars().any(|c| c.is_control() || !c.is_ascii()) {
+            log_dbg!(
+                "Refusing to link class with empty/garbage name {:?}; returning nil.",
+                name
+            );
+            return nil;
+        }
+
         let class_host_object: Box<dyn AnyHostObject>;
         let metaclass_host_object: Box<dyn AnyHostObject>;
         if let Some(template) = Self::find_template(name) {
@@ -583,14 +606,9 @@ impl ObjC {
                 || name.starts_with("SBScene")
                 || name.starts_with("SBSystem"); // <-- ДОБАВЛЕНО ЗДЕСЬ
 
-            // Detect garbage class names that come from corrupted guest
-            // memory reads (e.g. a NULL-page read returning all zeroes
-            // becomes the empty string after CStr decoding). Treat them
-            // like any other "unknown class": install a placeholder so the
-            // guest can keep running, instead of crashing the emulator.
-            let is_garbage =
-                name.is_empty() || name.chars().any(|c| c.is_control() || !c.is_ascii());
-
+            // Note: empty/garbage class names are rejected earlier in this
+            // function (they return nil), so by this point `name` is a
+            // plausible, if unknown, class name.
             if !use_placeholder && !is_fake {
                 // Historically this branch panicked. In the real
                 // Objective-C runtime, looking up a class that doesn't
@@ -604,21 +622,12 @@ impl ObjC {
                 // perfectly valid apps, so instead we log a loud warning
                 // and install an UnimplementedClass placeholder, matching
                 // the behaviour of the `link_class` (dyld) path.
-                if is_garbage {
-                    log!(
-                        "Warning: get_known_class called with a garbage/empty class name \
-                         ({:?}) — this usually indicates corrupted guest memory. \
-                         Installing a placeholder so the guest can keep running.",
-                        name
-                    );
-                } else {
-                    log!(
-                        "Warning: get_known_class({:?}) — no host implementation; \
-                         installing a placeholder. Some features depending on this \
-                         class may not work.",
-                        name
-                    );
-                }
+                log!(
+                    "Warning: get_known_class({:?}) — no host implementation; \
+                     installing a placeholder. Some features depending on this \
+                     class may not work.",
+                    name
+                );
             }
 
             if is_fake {
