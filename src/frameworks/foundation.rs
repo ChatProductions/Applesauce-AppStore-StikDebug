@@ -1254,80 +1254,80 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // is exactly the constant name.
     // -----------------------------------------------------------------
     (
-        "AVPlayerItemTimeJumpedNotification",
+        "_AVPlayerItemTimeJumpedNotification",
         HostConstant::NSString("AVPlayerItemTimeJumpedNotification"),
     ),
     // -----------------------------------------------------------------
     // Photos framework constants.
     // -----------------------------------------------------------------
     (
-        "PHImageErrorKey",
+        "_PHImageErrorKey",
         HostConstant::NSString("PHImageErrorKey"),
     ),
     // -----------------------------------------------------------------
     // StoreKit framework constants.
     // -----------------------------------------------------------------
     (
-        "SKReceiptPropertyIsExpired",
+        "_SKReceiptPropertyIsExpired",
         HostConstant::NSString("SKReceiptPropertyIsExpired"),
     ),
     (
-        "SKReceiptPropertyIsRevoked",
+        "_SKReceiptPropertyIsRevoked",
         HostConstant::NSString("SKReceiptPropertyIsRevoked"),
     ),
     (
-        "SKReceiptPropertyIsVolumePurchase",
+        "_SKReceiptPropertyIsVolumePurchase",
         HostConstant::NSString("SKReceiptPropertyIsVolumePurchase"),
     ),
     (
-        "SKStoreProductParameterProductIdentifier",
+        "_SKStoreProductParameterProductIdentifier",
         HostConstant::NSString("SKStoreProductParameterProductIdentifier"),
     ),
     // -----------------------------------------------------------------
     // UIKit accessibility/input constants.
     // -----------------------------------------------------------------
     (
-        "UIAccessibilityScreenChangedNotification",
+        "_UIAccessibilityScreenChangedNotification",
         HostConstant::NSString("UIAccessibilityScreenChangedNotification"),
     ),
     (
-        "UITextInputCurrentInputModeDidChangeNotification",
+        "_UITextInputCurrentInputModeDidChangeNotification",
         HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
     ),
     // -----------------------------------------------------------------
     // ImageIO constants.
     // -----------------------------------------------------------------
     (
-        "kCGImagePropertyExifDictionary",
+        "_kCGImagePropertyExifDictionary",
         HostConstant::NSString("{Exif}"),
     ),
     // -----------------------------------------------------------------
     // Security constants.
     // -----------------------------------------------------------------
     (
-        "kSecAttrIsPermanent",
+        "_kSecAttrIsPermanent",
         HostConstant::NSString("isper"),
     ),
     (
-        "kSecUseAuthenticationUI",
+        "_kSecUseAuthenticationUI",
         HostConstant::NSString("u_AuthUI"),
     ),
     (
-        "kSecUseAuthenticationUIFail",
+        "_kSecUseAuthenticationUIFail",
         HostConstant::NSString("u_AuthUIF"),
     ),
     // -----------------------------------------------------------------
     // CMTime constants.
     // -----------------------------------------------------------------
     (
-        "kCMTimeRangeZero",
+        "_kCMTimeRangeZero",
         HostConstant::Custom(kcm_timetime_range_zero),
     ),
     // -----------------------------------------------------------------
     // simd constants.
     // -----------------------------------------------------------------
     (
-        "matrix_identity_float4x4",
+        "_matrix_identity_float4x4",
         HostConstant::Custom(matrix_identity_float4x4),
     ),
     // -----------------------------------------------------------------
@@ -1336,135 +1336,135 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // hardware-keyboard events, but the symbols must resolve to a stable
     // non-nil NSString so the app's +keyCommands setup does not crash.
     // -----------------------------------------------------------------
-    ("UIKeyInputUpArrow", HostConstant::NSString("UIKeyInputUpArrow")),
+    ("_UIKeyInputUpArrow", HostConstant::NSString("UIKeyInputUpArrow")),
     (
-        "UIKeyInputDownArrow",
+        "_UIKeyInputDownArrow",
         HostConstant::NSString("UIKeyInputDownArrow"),
     ),
     (
-        "UIKeyInputLeftArrow",
+        "_UIKeyInputLeftArrow",
         HostConstant::NSString("UIKeyInputLeftArrow"),
     ),
     (
-        "UIKeyInputRightArrow",
+        "_UIKeyInputRightArrow",
         HostConstant::NSString("UIKeyInputRightArrow"),
     ),
-    ("UIKeyInputEscape", HostConstant::NSString("UIKeyInputEscape")),
+    ("_UIKeyInputEscape", HostConstant::NSString("UIKeyInputEscape")),
     (
-        "UIUserNotificationActionResponseTypedTextKey",
+        "_UIUserNotificationActionResponseTypedTextKey",
         HostConstant::NSString("UIUserNotificationActionResponseTypedTextKey"),
     ),
     // -----------------------------------------------------------------
     // CoreAnimation CATextLayer alignment modes (<QuartzCore/CATextLayer.h>).
     // These are documented kCAAlignment* string values.
     // -----------------------------------------------------------------
-    ("kCAAlignmentLeft", HostConstant::NSString("left")),
-    ("kCAAlignmentRight", HostConstant::NSString("right")),
-    ("kCAAlignmentCenter", HostConstant::NSString("center")),
-    ("kCAAlignmentJustified", HostConstant::NSString("justified")),
-    ("kCAAlignmentNatural", HostConstant::NSString("natural")),
+    ("_kCAAlignmentLeft", HostConstant::NSString("left")),
+    ("_kCAAlignmentRight", HostConstant::NSString("right")),
+    ("_kCAAlignmentCenter", HostConstant::NSString("center")),
+    ("_kCAAlignmentJustified", HostConstant::NSString("justified")),
+    ("_kCAAlignmentNatural", HostConstant::NSString("natural")),
     // -----------------------------------------------------------------
     // AVFoundation time-pitch algorithm identifiers
     // (<AVFoundation/AVAudioProcessingSettings.h>). Documented values.
     // -----------------------------------------------------------------
     (
-        "AVAudioTimePitchAlgorithmTimeDomain",
+        "_AVAudioTimePitchAlgorithmTimeDomain",
         HostConstant::NSString("TimeDomain"),
     ),
     (
-        "AVAudioTimePitchAlgorithmVarispeed",
+        "_AVAudioTimePitchAlgorithmVarispeed",
         HostConstant::NSString("Varispeed"),
     ),
     (
-        "AVAudioTimePitchAlgorithmSpectral",
+        "_AVAudioTimePitchAlgorithmSpectral",
         HostConstant::NSString("Spectral"),
     ),
     (
-        "AVAudioTimePitchAlgorithmLowQualityZeroLatency",
+        "_AVAudioTimePitchAlgorithmLowQualityZeroLatency",
         HostConstant::NSString("LowQualityZeroLatency"),
     ),
     (
-        "AVCaptureDeviceTypeBuiltInWideAngleCamera",
+        "_AVCaptureDeviceTypeBuiltInWideAngleCamera",
         HostConstant::NSString("AVCaptureDeviceTypeBuiltInWideAngleCamera"),
     ),
     // -----------------------------------------------------------------
     // CoreMedia / CoreVideo / VideoToolbox format & pixel-buffer keys.
     // -----------------------------------------------------------------
     (
-        "kCMFormatDescriptionExtension_Depth",
+        "_kCMFormatDescriptionExtension_Depth",
         HostConstant::NSString("Depth"),
     ),
     (
-        "kCVPixelBufferPoolMinimumBufferCountKey",
+        "_kCVPixelBufferPoolMinimumBufferCountKey",
         HostConstant::NSString("MinimumBufferCount"),
     ),
     (
-        "kCVPixelBufferPoolMaximumBufferAgeKey",
+        "_kCVPixelBufferPoolMaximumBufferAgeKey",
         HostConstant::NSString("MaximumBufferAge"),
     ),
     (
-        "kCVPixelBufferPoolAllocationThresholdKey",
+        "_kCVPixelBufferPoolAllocationThresholdKey",
         HostConstant::NSString("AllocationThreshold"),
     ),
     (
-        "kVTDecompressionPropertyKey_PixelBufferPool",
+        "_kVTDecompressionPropertyKey_PixelBufferPool",
         HostConstant::NSString("PixelBufferPool"),
     ),
     (
-        "kVTDecompressionPropertyKey_PixelBufferPoolIsShared",
+        "_kVTDecompressionPropertyKey_PixelBufferPoolIsShared",
         HostConstant::NSString("PixelBufferPoolIsShared"),
     ),
     (
-        "kVTDecompressionPropertyKey_OutputPoolRequestedMinimumBufferCount",
+        "_kVTDecompressionPropertyKey_OutputPoolRequestedMinimumBufferCount",
         HostConstant::NSString("OutputPoolRequestedMinimumBufferCount"),
     ),
     // -----------------------------------------------------------------
     // CoreText font attribute key (<CoreText/CTFont.h>).
     // -----------------------------------------------------------------
     (
-        "kCTFontPostScriptNameKey",
+        "_kCTFontPostScriptNameKey",
         HostConstant::NSString("NSCTFontPostScriptNameAttribute"),
     ),
     // -----------------------------------------------------------------
     // CoreGraphics PDF context info keys (<CoreGraphics/CGPDFContext.h>).
     // -----------------------------------------------------------------
-    ("kCGPDFContextTitle", HostConstant::NSString("Title")),
-    ("kCGPDFContextCreator", HostConstant::NSString("Creator")),
+    ("_kCGPDFContextTitle", HostConstant::NSString("Title")),
+    ("_kCGPDFContextCreator", HostConstant::NSString("Creator")),
     // -----------------------------------------------------------------
     // GameKit error domain (<GameKit/GKSession.h>).
     // -----------------------------------------------------------------
     (
-        "GKSessionErrorDomain",
+        "_GKSessionErrorDomain",
         HostConstant::NSString("com.apple.gamekit.GKSessionErrorDomain"),
     ),
     // -----------------------------------------------------------------
     // PassKit payment network identifiers (<PassKit/PKPaymentRequest.h>).
     // Documented values.
     // -----------------------------------------------------------------
-    ("PKPaymentNetworkVisa", HostConstant::NSString("Visa")),
+    ("_PKPaymentNetworkVisa", HostConstant::NSString("Visa")),
     (
-        "PKPaymentNetworkMasterCard",
+        "_PKPaymentNetworkMasterCard",
         HostConstant::NSString("MasterCard"),
     ),
-    ("PKPaymentNetworkAmex", HostConstant::NSString("Amex")),
-    ("PKPaymentNetworkDiscover", HostConstant::NSString("Discover")),
+    ("_PKPaymentNetworkAmex", HostConstant::NSString("Amex")),
+    ("_PKPaymentNetworkDiscover", HostConstant::NSString("Discover")),
     // -----------------------------------------------------------------
     // MapKit launch-options keys (<MapKit/MKTypes.h>).
     // -----------------------------------------------------------------
     (
-        "MKLaunchOptionsDirectionsModeKey",
+        "_MKLaunchOptionsDirectionsModeKey",
         HostConstant::NSString("MKLaunchOptionsDirectionsModeKey"),
     ),
     (
-        "MKLaunchOptionsDirectionsModeDriving",
+        "_MKLaunchOptionsDirectionsModeDriving",
         HostConstant::NSString("Driving"),
     ),
-    ("MKMapRectNull", HostConstant::Custom(mk_map_rect_null)),
+    ("_MKMapRectNull", HostConstant::Custom(mk_map_rect_null)),
     // -----------------------------------------------------------------
     // UIKit activity type (<UIKit/UIActivity.h>). Documented value.
     // -----------------------------------------------------------------
     (
-        "UIActivityTypePostToTencentWeibo",
+        "_UIActivityTypePostToTencentWeibo",
         HostConstant::NSString("com.apple.UIKit.activity.PostToTencentWeibo"),
     ),
     // -----------------------------------------------------------------
@@ -1473,35 +1473,35 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // when the app subscribes via NSNotificationCenter.
     // -----------------------------------------------------------------
     (
-        "NSCurrentLocaleDidChangeNotification",
+        "_NSCurrentLocaleDidChangeNotification",
         HostConstant::NSString("NSCurrentLocaleDidChangeNotification"),
     ),
     (
-        "NSExtensionHostDidBecomeActiveNotification",
+        "_NSExtensionHostDidBecomeActiveNotification",
         HostConstant::NSString("NSExtensionHostDidBecomeActiveNotification"),
     ),
     (
-        "NSExtensionHostDidEnterBackgroundNotification",
+        "_NSExtensionHostDidEnterBackgroundNotification",
         HostConstant::NSString("NSExtensionHostDidEnterBackgroundNotification"),
     ),
     (
-        "NSExtensionHostWillEnterForegroundNotification",
+        "_NSExtensionHostWillEnterForegroundNotification",
         HostConstant::NSString("NSExtensionHostWillEnterForegroundNotification"),
     ),
     (
-        "NSExtensionHostWillResignActiveNotification",
+        "_NSExtensionHostWillResignActiveNotification",
         HostConstant::NSString("NSExtensionHostWillResignActiveNotification"),
     ),
     (
-        "UIScreenCapturedDidChangeNotification",
+        "_UIScreenCapturedDidChangeNotification",
         HostConstant::NSString("UIScreenCapturedDidChangeNotification"),
     ),
     (
-        "UISceneWillConnectNotification",
+        "_UISceneWillConnectNotification",
         HostConstant::NSString("UISceneWillConnectNotification"),
     ),
     (
-        "UISceneDidDisconnectNotification",
+        "_UISceneDidDisconnectNotification",
         HostConstant::NSString("UISceneDidDisconnectNotification"),
     ),
     // -----------------------------------------------------------------
@@ -1509,19 +1509,19 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // probe for iCloud document state.
     // -----------------------------------------------------------------
     (
-        "NSMetadataItemPathKey",
+        "_NSMetadataItemPathKey",
         HostConstant::NSString("kMDItemPath"),
     ),
     (
-        "NSMetadataUbiquitousItemDownloadingStatusKey",
+        "_NSMetadataUbiquitousItemDownloadingStatusKey",
         HostConstant::NSString("NSMetadataUbiquitousItemDownloadingStatusKey"),
     ),
     (
-        "NSURLUbiquitousItemDownloadingStatusKey",
+        "_NSURLUbiquitousItemDownloadingStatusKey",
         HostConstant::NSString("NSURLUbiquitousItemDownloadingStatusKey"),
     ),
     (
-        "NSURLUbiquitousItemDownloadingStatusCurrent",
+        "_NSURLUbiquitousItemDownloadingStatusCurrent",
         HostConstant::NSString("NSURLUbiquitousItemDownloadingStatusCurrent"),
     ),
     // -----------------------------------------------------------------
@@ -1530,36 +1530,36 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // relocations (e.g. for `@[]` / `@{}` literals); they must resolve to a
     // real, retained, empty NSArray/NSDictionary object.
     // -----------------------------------------------------------------
-    ("__NSArray0__", HostConstant::Custom(ns_array0)),
-    ("__NSDictionary0__", HostConstant::Custom(ns_dictionary0)),
+    ("___NSArray0__", HostConstant::Custom(ns_array0)),
+    ("___NSDictionary0__", HostConstant::Custom(ns_dictionary0)),
     // -----------------------------------------------------------------
     // MediaPlayer now-playing-info dictionary keys
     // (<MediaPlayer/MPNowPlayingInfoCenter.h>). Documented values.
     // -----------------------------------------------------------------
     (
-        "MPNowPlayingInfoPropertyElapsedPlaybackTime",
+        "_MPNowPlayingInfoPropertyElapsedPlaybackTime",
         HostConstant::NSString("MPNowPlayingInfoPropertyElapsedPlaybackTime"),
     ),
     (
-        "MPNowPlayingInfoPropertyPlaybackRate",
+        "_MPNowPlayingInfoPropertyPlaybackRate",
         HostConstant::NSString("MPNowPlayingInfoPropertyPlaybackRate"),
     ),
     // -----------------------------------------------------------------
     // AVFoundation metadata key spaces / common keys
     // (<AVFoundation/AVMetadataIdentifiers.h>). Documented values.
     // -----------------------------------------------------------------
-    ("AVMetadataKeySpaceCommon", HostConstant::NSString("comn")),
-    ("AVMetadataCommonKeyTitle", HostConstant::NSString("title")),
+    ("_AVMetadataKeySpaceCommon", HostConstant::NSString("comn")),
+    ("_AVMetadataCommonKeyTitle", HostConstant::NSString("title")),
     // -----------------------------------------------------------------
     // CoreGraphics extended-range color space names
     // (<CoreGraphics/CGColorSpace.h>).
     // -----------------------------------------------------------------
     (
-        "kCGColorSpaceExtendedSRGB",
+        "_kCGColorSpaceExtendedSRGB",
         HostConstant::NSString("kCGColorSpaceExtendedSRGB"),
     ),
     (
-        "kCGColorSpaceExtendedLinearSRGB",
+        "_kCGColorSpaceExtendedLinearSRGB",
         HostConstant::NSString("kCGColorSpaceExtendedLinearSRGB"),
     ),
     // -----------------------------------------------------------------
@@ -1567,18 +1567,53 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     // (<AVFoundation/AVCaptureDevice.h>).
     // -----------------------------------------------------------------
     (
-        "AVCaptureExposureDurationCurrent",
+        "_AVCaptureExposureDurationCurrent",
         HostConstant::Custom(av_capture_exposure_duration_current),
     ),
     (
-        "AVCaptureISOCurrent",
+        "_AVCaptureISOCurrent",
         HostConstant::Custom(av_capture_iso_current),
+    ),
+    // -----------------------------------------------------------------
+    // CoreAnimation CAEmitterLayer emitter shapes & render modes
+    // (<QuartzCore/CAEmitterLayer.h>). Documented string values.
+    // -----------------------------------------------------------------
+    ("_kCAEmitterLayerPoint", HostConstant::NSString("point")),
+    ("_kCAEmitterLayerLine", HostConstant::NSString("line")),
+    ("_kCAEmitterLayerRectangle", HostConstant::NSString("rectangle")),
+    ("_kCAEmitterLayerCuboid", HostConstant::NSString("cuboid")),
+    ("_kCAEmitterLayerCircle", HostConstant::NSString("circle")),
+    ("_kCAEmitterLayerSphere", HostConstant::NSString("sphere")),
+    ("_kCAEmitterLayerSurface", HostConstant::NSString("surface")),
+    ("_kCAEmitterLayerUnordered", HostConstant::NSString("unordered")),
+    (
+        "_kCAEmitterLayerOldestFirst",
+        HostConstant::NSString("oldestFirst"),
+    ),
+    ("_kCAEmitterLayerOldestLast", HostConstant::NSString("oldestLast")),
+    (
+        "_kCAEmitterLayerBackToFront",
+        HostConstant::NSString("backToFront"),
+    ),
+    ("_kCAEmitterLayerAdditive", HostConstant::NSString("additive")),
+    // -----------------------------------------------------------------
+    // UIKit table-view section-index search magic string
+    // (<UIKit/UITableView.h>). Documented value is "{search}".
+    // -----------------------------------------------------------------
+    ("_UITableViewIndexSearch", HostConstant::NSString("{search}")),
+    // -----------------------------------------------------------------
+    // AVFoundation audio-encoder setting key
+    // (<AVFoundation/AVAudioSettings.h>).
+    // -----------------------------------------------------------------
+    (
+        "_AVEncoderBitRatePerChannelKey",
+        HostConstant::NSString("AVEncoderBitRatePerChannelKey"),
     ),
     // -----------------------------------------------------------------
     // sqlite3 constants.
     // -----------------------------------------------------------------
     (
-        "sqlite3_temp_directory",
+        "_sqlite3_temp_directory",
         HostConstant::NullPtr,
     ),
 ];
