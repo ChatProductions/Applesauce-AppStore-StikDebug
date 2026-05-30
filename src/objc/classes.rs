@@ -1814,6 +1814,21 @@ pub fn objc_retainBlock(env: &mut crate::Environment, block: id) -> id {
     block
 }
 
+/// `id objc_unsafeClaimAutoreleasedReturnValue(id obj)` — ARC runtime
+/// optimisation counterpart to `objc_retainAutoreleasedReturnValue`. Apple's
+/// objc4 runtime uses it when a returned object is consumed by code that does
+/// *not* want an owning reference (e.g. the result is immediately passed on,
+/// or stored `__unsafe_unretained`): it accepts the autoreleased value and
+/// claims it without adding a retain, balancing the optimised return sequence.
+/// In touchHLE's serialised execution model there is no retain/autorelease
+/// elision to undo, so the correct behaviour is to return the object
+/// unchanged (and nil-safe). See `objc4` `NSObject.mm`,
+/// `objc_unsafeClaimAutoreleasedReturnValue`.
+pub fn objc_unsafeClaimAutoreleasedReturnValue(env: &mut crate::Environment, obj: id) -> id {
+    let _ = env;
+    obj
+}
+
 // === Additional ObjC runtime helpers used by iOS 5/6 Cocoa classes ===
 //
 // These are part of the public Objective-C runtime header

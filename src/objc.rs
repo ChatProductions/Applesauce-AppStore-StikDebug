@@ -48,7 +48,7 @@ pub use classes::{
     objc_readClassPair, objc_registerClassPair,
     objc_release, objc_retain, objc_retainAutorelease, objc_retainAutoreleaseReturnValue,
     objc_retainBlock, __objc_deallocOnMainThreadHelper,
-    objc_retainAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
+    objc_retainAutoreleasedReturnValue, objc_unsafeClaimAutoreleasedReturnValue, object_getClass, object_getClassName, object_getIndexedIvars,
     protocol_getName, objc_getClassList, protocol_conformsToProtocol, Class, ClassExports, ClassTemplate,
 };
 pub use messages::{
@@ -367,6 +367,7 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(object_getClassName(_)),
     export_c_func!(object_getClass(_)),
     export_c_func!(objc_retainAutoreleasedReturnValue(_)),
+    export_c_func!(objc_unsafeClaimAutoreleasedReturnValue(_)),
     export_c_func!(objc_autoreleaseReturnValue(_)),
     export_c_func!(objc_retainAutoreleaseReturnValue(_)),
     export_c_func!(objc_autoreleasePoolPush(_)),
