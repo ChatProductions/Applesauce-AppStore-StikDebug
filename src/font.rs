@@ -186,16 +186,21 @@ impl Font {
         }
     }
 
-    pub fn from_vec(bytes: Vec<u8>) -> Font {
+    pub fn from_vec(bytes: Vec<u8>) -> Option<Font> {
         let raw_copy = bytes.clone();
         let Some(font) = rusttype::Font::try_from_vec(bytes) else {
-            panic!("Couldn't parse font bytes.");
+            log!(
+                "Warning: Font::from_vec: couldn't parse {} bytes of font data; \
+                 returning None (the data is likely not a supported font format).",
+                raw_copy.len()
+            );
+            return None;
         };
 
-        Font {
+        Some(Font {
             font,
             raw_data: Some(raw_copy),
-        }
+        })
     }
 
     pub fn mono_regular() -> Font {

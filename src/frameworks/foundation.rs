@@ -47,6 +47,7 @@ pub mod ns_file_manager;
 pub mod ns_host;
 pub mod ns_http_cookie_storage;
 pub mod ns_index_path;
+pub mod ns_index_set;
 pub mod ns_json_serialization;
 pub mod ns_input_stream;
 pub mod ns_invocation;
@@ -1312,6 +1313,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_manager::CLASSES,
         ns_host::CLASSES,
         ns_index_path::CLASSES,
+        ns_index_set::CLASSES,
         ns_json_serialization::CLASSES,
         ns_input_stream::CLASSES,
         ns_invocation::CLASSES,
