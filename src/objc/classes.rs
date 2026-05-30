@@ -693,55 +693,43 @@ impl ObjC {
                 self.register_static_object(metaclass, metaclass_host_object);
                 name
             } else {
-                let mut class_host_object = Box::new(ClassHostObject::from_bin(
+                let class_host_object = Box::new(ClassHostObject::from_bin(
                     class, /* is_metaclass: */ false, mem, self,
                 ));
                 let mut metaclass_host_object = Box::new(ClassHostObject::from_bin(
                     metaclass, /* is_metaclass: */ true, mem, self,
                 ));
                 // Apple's Objective-C runtime guarantees that a class and its
-                // metaclass share the same NUL-terminated UTF-8 name (see
-                // `class_getName` in <objc/runtime.h>). When the binary is
-                // corrupted (e.g. partially-decrypted FairPlay IPA) `from_bin`
-                // falls back to a synthetic placeholder derived from the
-                // object's own pointer — but the class and metaclass are at
-                // different addresses, so their placeholders diverge and the
-                // assertion below trips. Force them back into agreement by
-                // using the class's name (or, if only the metaclass name was
-                // readable, the metaclass's name) for both sides.
+                // metaclass always share the same NUL-terminated UTF-8 name:
+                // `class_getName(cls)` and `class_getName(object_getClass(cls))`
+                // return the identical string (see <objc/runtime.h>). In a
+                // healthy Mach-O the `class_rw_t.name` pointer of the class and
+                // its metaclass point at the very same C string. Real-world
+                // binaries break this in two ways: (1) partially-decrypted
+                // FairPlay IPAs whose `__objc_classname` bytes are unreadable,
+                // so `from_bin` substitutes a per-pointer synthetic placeholder
+                // that necessarily diverges between class and metaclass; and
+                // (2) clobbered `__TEXT` segments where the metaclass name
+                // pointer reads a *different* but still valid-UTF-8 string.
+                // Apple's runtime never crashes on either; it simply uses the
+                // class's name. Mirror that: treat the class side as canonical
+                // and force the metaclass to match, unconditionally. This
+                // removes the previous `assert!` that aborted the whole VM
+                // (observed with GameStop_iOS, whose class/metaclass names were
+                // both readable yet mismatched).
                 if class_host_object.name != metaclass_host_object.name {
-                    let class_synthetic = class_host_object
-                        .name
-                        .starts_with("_touchHLE_UnreadableClass_");
-                    let metaclass_synthetic = metaclass_host_object
-                        .name
-                        .starts_with("_touchHLE_UnreadableClass_");
-                    if class_synthetic || metaclass_synthetic {
-                        let canonical = if !class_synthetic {
-                            class_host_object.name.clone()
-                        } else if !metaclass_synthetic {
-                            metaclass_host_object.name.clone()
-                        } else {
-                            // Both are synthetic; prefer the class pointer
-                            // (the conventional Apple-runtime side) so the
-                            // pair gets a single stable identity.
-                            class_host_object.name.clone()
-                        };
-                        log!(
-                            "Note: harmonizing mismatched class/metaclass \
-                             names ({:?} vs {:?}) to {:?} for unreadable \
-                             class at {:?}/{:?}.",
-                            class_host_object.name,
-                            metaclass_host_object.name,
-                            canonical,
-                            class,
-                            metaclass,
-                        );
-                        class_host_object.name = canonical.clone();
-                        metaclass_host_object.name = canonical;
-                    }
+                    log!(
+                        "Note: harmonizing mismatched class/metaclass names \
+                         ({:?} vs {:?}) to {:?} for class at {:?}/{:?} (Apple's \
+                         runtime guarantees they are identical).",
+                        class_host_object.name,
+                        metaclass_host_object.name,
+                        class_host_object.name,
+                        class,
+                        metaclass,
+                    );
+                    metaclass_host_object.name = class_host_object.name.clone();
                 }
-                assert!(class_host_object.name == metaclass_host_object.name);
                 let name = class_host_object.name.clone();
 
                 self.register_static_object(class, class_host_object);
