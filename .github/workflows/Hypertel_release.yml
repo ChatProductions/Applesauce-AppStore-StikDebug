@@ -137,9 +137,9 @@ jobs:
       run: 7z -ovendor x boost_1_81_0.7z && mv vendor/boost_1_81_0 vendor/boost  
 
     - name: Setup CMake
-        uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: "~3.29.0"
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: "~3.29.0"
 
     - name: Install AArch64 Android Rust toolchain  
       run: rustup target add aarch64-linux-android  
@@ -190,9 +190,9 @@ jobs:
       run: 7z -ovendor x boost_1_81_0.7z && ren vendor\boost_1_81_0 boost  
 
     - name: Setup CMake
-        uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: "~3.29.0"
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: "~3.29.0"
 
     - name: Build  
       run: cargo build --release  
