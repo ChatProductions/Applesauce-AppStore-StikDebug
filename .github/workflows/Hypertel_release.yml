@@ -50,6 +50,8 @@ jobs:
 
       - name: Setup CMake
         uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.29.0"
 
       - name: Install x86_64 toolchain  
         run: rustup target add x86_64-apple-darwin  
@@ -135,7 +137,9 @@ jobs:
       run: 7z -ovendor x boost_1_81_0.7z && mv vendor/boost_1_81_0 vendor/boost  
 
     - name: Setup CMake
-      uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.29.0"
 
     - name: Install AArch64 Android Rust toolchain  
       run: rustup target add aarch64-linux-android  
@@ -145,6 +149,8 @@ jobs:
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@main
+      with:
+        validate-wrappers: false
       
     - name: Build for Android  
       run: cd android && gradle assembleRelease && mv app/build/outputs/apk/release/app-release.apk ../touchHLE.apk  
@@ -184,7 +190,9 @@ jobs:
       run: 7z -ovendor x boost_1_81_0.7z && ren vendor\boost_1_81_0 boost  
 
     - name: Setup CMake
-      uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.29.0"
 
     - name: Build  
       run: cargo build --release  
