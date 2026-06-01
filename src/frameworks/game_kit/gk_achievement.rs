@@ -34,6 +34,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @implementation GKAchievement: NSObject
 
+// MARK: - Class methods (must come before instance methods in objc_classes! macro)
+
 + (id)allocWithZone:(NSZonePtr)_zone {
     let host_object = Box::new(GKAchievementHostObject {
         identifier: nil,
@@ -43,7 +45,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// MARK: - Initializers
+// + (void)loadAchievementsWithCompletionHandler:(void (^)(NSArray *, NSError *))handler
++ (())loadAchievementsWithCompletionHandler:(id)_handler {
+    log!("GKAchievement loadAchievementsWithCompletionHandler: stubbed (returning empty)");
+}
+
+// + (void)resetAchievementsWithCompletionHandler:(void (^)(NSError *))handler
++ (())resetAchievementsWithCompletionHandler:(id)_handler {
+    log!("GKAchievement resetAchievementsWithCompletionHandler: stubbed");
+}
+
+// + (void)reportAchievements:(NSArray *)achievements
+//       withCompletionHandler:(void (^)(NSError *))handler
++ (())reportAchievements:(id)_achievements withCompletionHandler:(id)_handler {
+    log!("GKAchievement reportAchievements:withCompletionHandler: stubbed");
+}
+
+// MARK: - Instance methods
 
 - (id)initWithIdentifier:(id)identifier {
     retain(env, identifier);
@@ -56,8 +74,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<GKAchievementHostObject>(this).identifier = identifier;
     this
 }
-
-// MARK: - Properties
 
 - (id)identifier {
     env.objc.borrow::<GKAchievementHostObject>(this).identifier
@@ -90,12 +106,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<GKAchievementHostObject>(this).percent_complete >= 100.0
 }
 
-// lastReportedDate — return nil (no backend)
 - (id)lastReportedDate {
     nil
 }
-
-// MARK: - Reporting
 
 // - (void)reportAchievementWithCompletionHandler:(void (^)(NSError *))completionHandler
 - (())reportAchievementWithCompletionHandler:(id)_handler {
@@ -113,40 +126,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             pct
         );
     }
-    // If completionHandler is non-nil, we should invoke it with nil error.
-    // Block invocation is complex in touchHLE — just skip for now.
 }
-
-// MARK: - Class methods
-
-// + (void)loadAchievementsWithCompletionHandler:(void (^)(NSArray *, NSError *))handler
-+ (())loadAchievementsWithCompletionHandler:(id)_handler {
-    log!("GKAchievement loadAchievementsWithCompletionHandler: stubbed (returning empty)");
-    // The handler block should be called with (emptyArray, nil) but block
-    // invocation is not trivial — games typically handle nil/no-op gracefully.
-}
-
-// + (void)resetAchievementsWithCompletionHandler:(void (^)(NSError *))handler
-+ (())resetAchievementsWithCompletionHandler:(id)_handler {
-    log!("GKAchievement resetAchievementsWithCompletionHandler: stubbed");
-    // Same as above — the handler should be called with nil error.
-}
-
-// + (void)reportAchievements:(NSArray *)achievements
-//       withCompletionHandler:(void (^)(NSError *))handler
-+ (())reportAchievements:(id)_achievements withCompletionHandler:(id)_handler {
-    log!("GKAchievement reportAchievements:withCompletionHandler: stubbed");
-}
-
-// MARK: - Dealloc
 
 - (())dealloc {
     let ident = env.objc.borrow::<GKAchievementHostObject>(this).identifier;
     release(env, ident);
     env.objc.dealloc_object(this, &mut env.mem);
 }
-
-// MARK: - Description
 
 - (id)description {
     let ident = env.objc.borrow::<GKAchievementHostObject>(this).identifier;
