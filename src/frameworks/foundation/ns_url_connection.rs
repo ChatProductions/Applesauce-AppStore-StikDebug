@@ -220,7 +220,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         return nil;
     }
 
-    log!(
+    log_dbg!(
         "NSURLConnection initWithRequest:... delegate:... \
          startImmediately:{} (stub — failure via delegate)",
         start_immediately,
@@ -234,28 +234,57 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     if start_immediately {
-        // Do NOT call the delegate failure callback synchronously.
-        // Calling it immediately during initWithRequest: triggers the game's
-        // error-handling code before the render loop is set up, which can
-        // leave the app in a broken state (white screen). Instead, silently
-        // drop the request — the app will eventually time out or proceed
-        // without the network data.
-        log!(
-            "NSURLConnection: request will silently fail \
+        // Per Apple's documentation, when startImmediately is YES the
+        // connection begins loading data immediately. Since touchHLE has
+        // no network stack, we schedule the delegate failure callback via
+        // performSelector:withObject:afterDelay: so that it fires on the
+        // next run-loop iteration rather than synchronously during init.
+        // This matches real iOS timing behavior — delegates are never
+        // called during the initializer itself.
+        //
+        // Reference: https://developer.apple.com/documentation/foundation/nsurlconnection/1418425-initwithrequest
+        log_dbg!(
+            "NSURLConnection: scheduling deferred failure notification \
              (networking not supported in touchHLE)"
         );
+        // Use performSelector to defer the callback to the next run loop
+        // iteration. We call a helper method on self that will invoke the
+        // delegate's connection:didFailWithError: method.
+        let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
+        () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
     }
 
     this
 }
 
+// Internal helper method: delivers the failure callback to the delegate.
+// Called via performSelector:withObject:afterDelay: from initWithRequest:
+// when startImmediately is true, ensuring the delegate is notified on
+// the next run-loop iteration (not synchronously during init).
+- (())_touchHLE_deliverFailure {
+    let host = env.objc.borrow::<NSURLConnectionHostObject>(this);
+    if host.cancelled {
+        return;
+    }
+    let delegate = host.delegate;
+    if delegate == nil {
+        return;
+    }
+    notify_delegate_failure(env, this, delegate);
+}
+
 // MARK: - Instance methods
 
 - (())start {
-    log!(
-        "NSURLConnection start: silently dropping \
+    // Per Apple's docs, -start begins the asynchronous load. Since
+    // touchHLE has no network, schedule the failure callback on the next
+    // run-loop iteration via performSelector:afterDelay:.
+    log_dbg!(
+        "NSURLConnection start: scheduling deferred failure \
          (networking not supported in touchHLE)"
     );
+    let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
+    () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
 }
 
 - (())cancel {
