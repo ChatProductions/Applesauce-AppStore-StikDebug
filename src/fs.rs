@@ -464,6 +464,39 @@ impl GuestFile {
         // https://stackoverflow.com/questions/65911066/what-does-lseek-mean-for-a-directory-file-descriptor
         !matches!(self, GuestFile::Socket)
     }
+
+    /// Duplicate this file descriptor, creating an independent handle that
+    /// shares the underlying kernel file description (for `GuestFile::File`)
+    /// or creates a new cursor at the same position (for IPA/resource files).
+    /// This is used to implement POSIX `dup(2)` / `fcntl(F_DUPFD)`.
+    pub fn try_clone(&self) -> std::io::Result<GuestFile> {
+        match self {
+            GuestFile::File(file) => {
+                let cloned = file.try_clone()?;
+                Ok(GuestFile::File(cloned))
+            }
+            GuestFile::IpaBundleFile(ipa_file) => {
+                // IpaFile uses Cursor<Rc<[u8]>> — clone shares the data and
+                // copies the seek position.
+                Ok(GuestFile::IpaBundleFile(ipa_file.clone()))
+            }
+            GuestFile::ResourceFile(_) => {
+                // ResourceFile wraps a host File. We cannot easily clone it
+                // without re-opening, so return an error. This is rare.
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Cannot duplicate a resource file descriptor",
+                ))
+            }
+            GuestFile::Directory => Ok(GuestFile::Directory),
+            GuestFile::Socket => {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Cannot duplicate a socket file descriptor",
+                ))
+            }
+        }
+    }
 }
 
 impl Read for GuestFile {
