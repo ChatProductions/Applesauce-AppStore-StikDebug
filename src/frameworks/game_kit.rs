@@ -14,6 +14,7 @@
 
 pub mod ad_banner_view;
 pub mod fb_session; // <--- ДОБАВЬ ЭТУ СТРОКУ СЮДА
+pub mod gk_achievement;
 pub mod gk_challenge_event_handler;
 pub mod gk_leaderboard_view_controller;
 pub mod gk_local_player;
@@ -44,6 +45,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     class_exports: &[
         ad_banner_view::CLASSES,
         fb_session::CLASSES, // <--- И ДОБАВЬ ЭТУ СТРОКУ СЮДА
+        gk_achievement::CLASSES,
         gk_challenge_event_handler::CLASSES,
         gk_leaderboard_view_controller::CLASSES,
         gk_local_player::CLASSES,
