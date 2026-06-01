@@ -126,13 +126,17 @@ pub const CLASSES: ClassExports = objc_classes! {
             return nil;
         };
         let target_text = &full_text[start_byte..end_byte];
-        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
-        let Some(re) = &host_obj.regex else {
-            return nil;
+        // Clone the regex so we can release the borrow on env before calling
+        // from_ranges (which needs &mut env).
+        let re_clone = {
+            let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+            match &host_obj.regex {
+                Some(re) => re.clone(),
+                None => return nil,
+            }
         };
 
-        // Use captures() to get all capture groups
-        let Some(caps) = re.captures(target_text) else {
+        let Some(caps) = re_clone.captures(target_text) else {
             return nil;
         };
 
@@ -158,17 +162,26 @@ pub const CLASSES: ClassExports = objc_classes! {
             return empty;
         };
         let target_text = &full_text[start_byte..end_byte];
-        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
-        let Some(re) = &host_obj.regex else {
-            let empty: id = msg_class![env; NSArray array];
-            return empty;
+        // Clone regex to release the borrow before calling env-mutating functions.
+        let re_clone = {
+            let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+            match &host_obj.regex {
+                Some(re) => re.clone(),
+                None => {
+                    let empty: id = msg_class![env; NSArray array];
+                    return empty;
+                }
+            }
         };
 
+        // Collect all capture results into byte-level data first
+        let all_ranges: Vec<Vec<NSRange>> = re_clone.captures_iter(target_text)
+            .map(|caps| build_capture_ranges(&full_text, &caps, start_byte, range.location))
+            .collect();
+
         let mut results: Vec<id> = Vec::new();
-        for caps in re.captures_iter(target_text) {
-            let ranges = build_capture_ranges(&full_text, &caps, start_byte, range.location);
+        for ranges in all_ranges {
             let result = ns_text_checking_result::from_ranges(env, ranges);
-            // retain so it survives being put in the array
             crate::objc::retain(env, result);
             results.push(result);
         }
@@ -179,14 +192,16 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // - (NSString *)pattern
     - (id)pattern {
-        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
-        if let Some(re) = &host_obj.regex {
-            let s = ns_string::from_rust_string(env, re.as_str().to_string());
-            autorelease(env, s)
-        } else {
-            let s = ns_string::from_rust_string(env, String::new());
-            autorelease(env, s)
-        }
+        let pat_string = {
+            let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+            if let Some(re) = &host_obj.regex {
+                re.as_str().to_string()
+            } else {
+                String::new()
+            }
+        };
+        let s = ns_string::from_rust_string(env, pat_string);
+        autorelease(env, s)
     }
 
     // - (NSUInteger)numberOfCaptureGroups
@@ -222,10 +237,16 @@ pub const CLASSES: ClassExports = objc_classes! {
             let ns = ns_string::from_rust_string(env, full_text);
             return autorelease(env, ns);
         };
-        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
-        let Some(re) = &host_obj.regex else {
-            let ns = ns_string::from_rust_string(env, full_text);
-            return autorelease(env, ns);
+        // Clone regex to release borrow before using env for string operations
+        let re_clone = {
+            let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+            match &host_obj.regex {
+                Some(re) => re.clone(),
+                None => {
+                    let ns = ns_string::from_rust_string(env, full_text);
+                    return autorelease(env, ns);
+                }
+            }
         };
 
         // Only replace within the specified range
@@ -233,7 +254,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         let target = &full_text[start_byte..end_byte];
         let suffix = &full_text[end_byte..];
 
-        let replaced = re.replace_all(target, template_str.as_str());
+        let replaced = re_clone.replace_all(target, template_str.as_str());
         let result = format!("{}{}{}", prefix, replaced, suffix);
         let ns = ns_string::from_rust_string(env, result);
         autorelease(env, ns)
