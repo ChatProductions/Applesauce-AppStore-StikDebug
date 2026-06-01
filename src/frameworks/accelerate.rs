@@ -735,7 +735,8 @@ fn vDSP_sve(
     let s = stride.max(1) as GuestUSize;
     let mut sum: f32 = 0.0;
     for i in 0..(n as GuestUSize) {
-        sum += env.mem.read::<f32>((input + i * s).cast());
+        let val: f32 = env.mem.read((input + i * s).cast());
+        sum += val;
     }
     env.mem.write(output, sum);
 }
@@ -762,7 +763,8 @@ fn vDSP_normalize(
     // Compute mean
     let mut sum: f32 = 0.0;
     for i in 0..(n as GuestUSize) {
-        sum += env.mem.read::<f32>((input + i * sa).cast());
+        let val: f32 = env.mem.read((input + i * sa).cast());
+        sum += val;
     }
     let mean = sum / nf;
 
