@@ -1459,6 +1459,28 @@ fn CFStringGetTypeID(_env: &mut Environment) -> u32 {
 
 // MARK: - Exports
 
+/// `Boolean CFStringGetFileSystemRepresentation(CFStringRef string,
+///                                              char *buffer,
+///                                              CFIndex maxBufLen)`
+///
+/// Per Apple docs: "Extracts the contents of a string object and stores
+/// them in a C-string buffer in a form suitable for use with POSIX file
+/// system calls. Returns true if the operation was successful."
+/// The file system representation on iOS is UTF-8.
+/// Reference: https://developer.apple.com/documentation/corefoundation/1542721-cfstringgetfilesystemrepresentat
+fn CFStringGetFileSystemRepresentation(
+    env: &mut Environment,
+    the_string: CFStringRef,
+    buffer: MutPtr<u8>,
+    max_buf_len: CFIndex,
+) -> bool {
+    if the_string.is_null() || buffer.is_null() || max_buf_len <= 0 {
+        return false;
+    }
+    // File system representation is always UTF-8 on iOS/macOS
+    CFStringGetCString(env, the_string, buffer, max_buf_len, kCFStringEncodingUTF8)
+}
+
 fn CFStringCreateExternalRepresentation(
     env: &mut Environment,
     _alloc: CFAllocatorRef,
@@ -2029,6 +2051,8 @@ pub const FUNCTIONS: FunctionExports = &[
     // Normalization and transformation
     export_c_func!(CFStringNormalize(_, _)),
     export_c_func!(CFStringTransform(_, _, _, _)),
+    // File system representation
+    export_c_func!(CFStringGetFileSystemRepresentation(_, _, _)),
     // Type info — CFStringGetTypeID is exported from cf_type; not duplicated.
     export_c_func!(CFStringCreateExternalRepresentation(_, _, _, _)),
 ];
