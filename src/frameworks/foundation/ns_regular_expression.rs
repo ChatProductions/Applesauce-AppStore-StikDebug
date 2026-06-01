@@ -8,9 +8,11 @@ use super::{ns_string, NSRange, NSUInteger};
 use crate::mem::MutPtr;
 use crate::msg;
 use crate::objc::{
-    autorelease, id, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg_class, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr,
 };
 use regex::Regex;
+
+use super::ns_text_checking_result;
 
 /// Хост-объект для хранения скомпилированного регулярного выражения.
 struct NSRegularExpressionHostObject {
@@ -108,6 +110,135 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
 
+    // - (NSTextCheckingResult *)firstMatchInString:(NSString *)string
+    //                                     options:(NSMatchingOptions)options
+    //                                       range:(NSRange)range
+    - (id)firstMatchInString:(id)string
+                     options:(u32)_options
+                       range:(NSRange)range {
+        if string == nil {
+            return nil;
+        }
+        let full_text = ns_string::to_rust_string(env, string);
+        let Some((start_byte, end_byte)) =
+            utf16_range_to_utf8_byte_range(&full_text, range)
+        else {
+            return nil;
+        };
+        let target_text = &full_text[start_byte..end_byte];
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+        let Some(re) = &host_obj.regex else {
+            return nil;
+        };
+
+        // Use captures() to get all capture groups
+        let Some(caps) = re.captures(target_text) else {
+            return nil;
+        };
+
+        let ranges = build_capture_ranges(&full_text, &caps, start_byte, range.location);
+        ns_text_checking_result::from_ranges(env, ranges)
+    }
+
+    // - (NSArray *)matchesInString:(NSString *)string
+    //                      options:(NSMatchingOptions)options
+    //                        range:(NSRange)range
+    - (id)matchesInString:(id)string
+                  options:(u32)_options
+                    range:(NSRange)range {
+        if string == nil {
+            let empty: id = msg_class![env; NSArray array];
+            return empty;
+        }
+        let full_text = ns_string::to_rust_string(env, string);
+        let Some((start_byte, end_byte)) =
+            utf16_range_to_utf8_byte_range(&full_text, range)
+        else {
+            let empty: id = msg_class![env; NSArray array];
+            return empty;
+        };
+        let target_text = &full_text[start_byte..end_byte];
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+        let Some(re) = &host_obj.regex else {
+            let empty: id = msg_class![env; NSArray array];
+            return empty;
+        };
+
+        let mut results: Vec<id> = Vec::new();
+        for caps in re.captures_iter(target_text) {
+            let ranges = build_capture_ranges(&full_text, &caps, start_byte, range.location);
+            let result = ns_text_checking_result::from_ranges(env, ranges);
+            // retain so it survives being put in the array
+            crate::objc::retain(env, result);
+            results.push(result);
+        }
+
+        let arr = crate::frameworks::foundation::ns_array::from_vec(env, results);
+        autorelease(env, arr)
+    }
+
+    // - (NSString *)pattern
+    - (id)pattern {
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+        if let Some(re) = &host_obj.regex {
+            let s = ns_string::from_rust_string(env, re.as_str().to_string());
+            autorelease(env, s)
+        } else {
+            let s = ns_string::from_rust_string(env, String::new());
+            autorelease(env, s)
+        }
+    }
+
+    // - (NSUInteger)numberOfCaptureGroups
+    - (NSUInteger)numberOfCaptureGroups {
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+        if let Some(re) = &host_obj.regex {
+            re.captures_len().saturating_sub(1) as NSUInteger
+        } else {
+            0
+        }
+    }
+
+    // - (NSString *)stringByReplacingMatchesInString:(NSString *)string
+    //                                       options:(NSMatchingOptions)options
+    //                                         range:(NSRange)range
+    //                                  withTemplate:(NSString *)templ
+    - (id)stringByReplacingMatchesInString:(id)string
+                                   options:(u32)_options
+                                     range:(NSRange)range
+                              withTemplate:(id)templ {
+        if string == nil {
+            return nil;
+        }
+        let full_text = ns_string::to_rust_string(env, string).into_owned();
+        let template_str = if templ != nil {
+            ns_string::to_rust_string(env, templ).into_owned()
+        } else {
+            String::new()
+        };
+        let Some((start_byte, end_byte)) =
+            utf16_range_to_utf8_byte_range(&full_text, range)
+        else {
+            let ns = ns_string::from_rust_string(env, full_text);
+            return autorelease(env, ns);
+        };
+        let host_obj = env.objc.borrow::<NSRegularExpressionHostObject>(this);
+        let Some(re) = &host_obj.regex else {
+            let ns = ns_string::from_rust_string(env, full_text);
+            return autorelease(env, ns);
+        };
+
+        // Only replace within the specified range
+        let prefix = &full_text[..start_byte];
+        let target = &full_text[start_byte..end_byte];
+        let suffix = &full_text[end_byte..];
+
+        let replaced = re.replace_all(target, template_str.as_str());
+        let result = format!("{}{}{}", prefix, replaced, suffix);
+        let ns = ns_string::from_rust_string(env, result);
+        autorelease(env, ns)
+    }
+
     @end
 };
 
@@ -142,6 +273,46 @@ fn utf16_range_to_utf8_byte_range(s: &str, range: NSRange) -> Option<(usize, usi
         return None;
     }
     Some((start_byte, end_byte))
+}
+
+/// Build an NSRange vector from regex captures. Converts byte offsets within
+/// `target_text` (which starts at `target_start_byte` within the full string)
+/// into UTF-16 code unit ranges relative to the start of the full string.
+/// `search_location_utf16` is the NSRange.location passed to the search method.
+fn build_capture_ranges(
+    full_text: &str,
+    caps: &regex::Captures<'_>,
+    target_start_byte: usize,
+    search_location_utf16: u32,
+) -> Vec<NSRange> {
+    let mut ranges = Vec::with_capacity(caps.len());
+    for i in 0..caps.len() {
+        if let Some(m) = caps.get(i) {
+            // m.start()/m.end() are byte offsets relative to target_text.
+            // Convert to byte offsets in full_text:
+            let abs_start_byte = target_start_byte + m.start();
+            let abs_end_byte = target_start_byte + m.end();
+            // Convert byte offsets to UTF-16 code unit offsets
+            let utf16_start = byte_offset_to_utf16(full_text, abs_start_byte);
+            let utf16_end = byte_offset_to_utf16(full_text, abs_end_byte);
+            ranges.push(NSRange {
+                location: utf16_start as u32,
+                length: (utf16_end - utf16_start) as u32,
+            });
+        } else {
+            // Capture group didn't participate — {NSNotFound, 0}
+            ranges.push(NSRange {
+                location: 0x7fffffff,
+                length: 0,
+            });
+        }
+    }
+    ranges
+}
+
+/// Convert a byte offset in a UTF-8 string to a UTF-16 code unit offset.
+fn byte_offset_to_utf16(s: &str, byte_offset: usize) -> usize {
+    s[..byte_offset].chars().map(|c| c.len_utf16()).sum()
 }
 
 #[cfg(test)]
