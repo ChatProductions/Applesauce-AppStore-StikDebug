@@ -56,8 +56,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // Returns the overall range of the match (capture group 0).
 - (NSRange)range {
     let host = env.objc.borrow::<NSTextCheckingResultHostObject>(this);
-    if let Some(&r) = host.ranges.first() {
-        r
+    if let Some(r) = host.ranges.first() {
+        NSRange { location: r.location, length: r.length }
     } else {
         NSRange { location: NS_NOT_FOUND as u32, length: 0 }
     }
@@ -68,8 +68,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 // If the capture group did not participate, returns {NSNotFound, 0}.
 - (NSRange)rangeAtIndex:(NSUInteger)idx {
     let host = env.objc.borrow::<NSTextCheckingResultHostObject>(this);
-    if let Some(&r) = host.ranges.get(idx as usize) {
-        r
+    if let Some(r) = host.ranges.get(idx as usize) {
+        NSRange { location: r.location, length: r.length }
     } else {
         NSRange { location: NS_NOT_FOUND as u32, length: 0 }
     }

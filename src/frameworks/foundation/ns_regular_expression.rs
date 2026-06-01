@@ -120,6 +120,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             return nil;
         }
         let full_text = ns_string::to_rust_string(env, string);
+        let range_location = range.location;
         let Some((start_byte, end_byte)) =
             utf16_range_to_utf8_byte_range(&full_text, range)
         else {
@@ -140,7 +141,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             return nil;
         };
 
-        let ranges = build_capture_ranges(&full_text, &caps, start_byte, range.location);
+        let ranges = build_capture_ranges(&full_text, &caps, start_byte, range_location);
         ns_text_checking_result::from_ranges(env, ranges)
     }
 
@@ -155,6 +156,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             return empty;
         }
         let full_text = ns_string::to_rust_string(env, string);
+        let range_location = range.location;
         let Some((start_byte, end_byte)) =
             utf16_range_to_utf8_byte_range(&full_text, range)
         else {
@@ -176,7 +178,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
         // Collect all capture results into byte-level data first
         let all_ranges: Vec<Vec<NSRange>> = re_clone.captures_iter(target_text)
-            .map(|caps| build_capture_ranges(&full_text, &caps, start_byte, range.location))
+            .map(|caps| build_capture_ranges(&full_text, &caps, start_byte, range_location))
             .collect();
 
         let mut results: Vec<id> = Vec::new();
