@@ -165,11 +165,12 @@ pub fn AudioFileCreateWithURL(
 
     let format: AudioStreamBasicDescription = env.mem.read(in_format);
 
+    let sr = format.sample_rate;
+    let ch = format.channels_per_frame;
+    let bpp = format.bytes_per_packet;
     log_dbg!(
         "AudioFileCreateWithURL: creating virtual writable file (rate={}, ch={}, bpp={})",
-        format.sample_rate,
-        format.channels_per_frame,
-        format.bytes_per_packet
+        sr, ch, bpp
     );
 
     let host_object = AudioFileHostObject::Writable {
@@ -217,11 +218,12 @@ pub fn AudioFileInitializeWithCallbacks(
 
     let format: AudioStreamBasicDescription = env.mem.read(in_format);
 
+    let sr = format.sample_rate;
+    let ch = format.channels_per_frame;
+    let bpp = format.bytes_per_packet;
     log_dbg!(
         "AudioFileInitializeWithCallbacks: creating virtual writable file (rate={}, ch={}, bpp={})",
-        format.sample_rate,
-        format.channels_per_frame,
-        format.bytes_per_packet
+        sr, ch, bpp
     );
 
     let host_object = AudioFileHostObject::Writable {

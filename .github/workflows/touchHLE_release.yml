@@ -16,15 +16,9 @@ jobs:
 
     steps:  
       - name: Checkout touchHLE  
-        shell: bash
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE"  
-          git clone https://github.com/j92580498-max/touchHLE "$GITHUB_WORKSPACE"  
-          cd "$GITHUB_WORKSPACE"  
-          git fetch origin "$GITHUB_REF"  
-          git checkout "$GITHUB_SHA"
-      - name: Get Submodules  
-        run: git submodule update --init  
+        uses: actions/checkout@v4
+        with:
+          submodules: true
       - name: Cache Rust build artifacts
         uses: actions/cache@v3
         with:
@@ -109,15 +103,9 @@ jobs:
 
     steps:  
     - name: Checkout touchHLE  
-      shell: bash
-      run: |
-        mkdir -p "$GITHUB_WORKSPACE"  
-        git clone https://github.com/j92580498-max/touchHLE "$GITHUB_WORKSPACE"  
-        cd "$GITHUB_WORKSPACE"  
-        git fetch origin "$GITHUB_REF"  
-        git checkout "$GITHUB_SHA"
-    - name: Get Submodules  
-      run: git submodule update --init  
+      uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: Cache Rust build artifacts
       uses: actions/cache@v3
       with:
@@ -199,15 +187,9 @@ jobs:
 
     steps:  
     - name: Checkout touchHLE  
-      shell: bash
-      run: |
-        mkdir -p "$GITHUB_WORKSPACE"  
-        git clone https://github.com/j92580498-max/touchHLE "$GITHUB_WORKSPACE"  
-        cd "$GITHUB_WORKSPACE"  
-        git fetch origin "$GITHUB_REF"  
-        git checkout "$GITHUB_SHA"
-    - name: Get Submodules  
-      run: git submodule update --init  
+      uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: Cache Rust build artifacts
       uses: actions/cache@v3
       with:
@@ -215,9 +197,9 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-android-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-android-
+          ${{ runner.os }}-cargo-
     - name: Try to get cached copy of Boost  
       id: cache-boost  
       uses: actions/cache@v3  
