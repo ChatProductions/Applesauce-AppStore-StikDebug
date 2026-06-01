@@ -329,6 +329,39 @@ pub fn resolve_path<'a>(path: &'a GuestPath, relative_to: Option<&'a GuestPath>)
         apply_path_component(&mut components, component);
     }
 
+    // --- Path deduplication heuristic ---
+    // Some guest apps (Triniti engine, OMH!, etc.) construct invalid paths by
+    // concatenating the Documents (or other sandbox) directory twice, e.g.:
+    //   /var/mobile/.../Documents/ + /var/mobile/.../Documents/.AudioCache...
+    // This results in a path like:
+    //   /var/mobile/.../Documents/var/mobile/.../Documents/.AudioCache...
+    // which has a repeated prefix. Detect and strip the duplication so the
+    // filesystem lookup succeeds. We look for the *home directory prefix*
+    // appearing a second time within the resolved components.
+    //
+    // Strategy: if we find the sequence ["var", "mobile", "Applications"] at
+    // any position > 0, that second occurrence marks the start of the "real"
+    // path — truncate everything before it.
+    if components.len() > 6 {
+        let marker = ["var", "mobile", "Applications"];
+        // Skip the first occurrence (position 0) and look for a second one.
+        if let Some(dup_start) = components.windows(marker.len()).position(|w| {
+            w == marker
+        }) {
+            // Check if there's a second occurrence of the same marker.
+            if let Some(second_pos) = components[dup_start + 1..].windows(marker.len()).position(|w| {
+                w == marker
+            }) {
+                let real_start = dup_start + 1 + second_pos;
+                log_dbg!(
+                    "Path deduplication: stripping duplicate prefix at component {}",
+                    real_start
+                );
+                components = components[real_start..].to_vec();
+            }
+        }
+    }
+
     log_dbg!("=> {:?}", components);
 
     components
