@@ -6,18 +6,19 @@
 //! `CGContext.h`
 
 use super::cg_affine_transform::{CGAffineTransform, CGAffineTransformIdentity};
+use super::cg_bitmap_context::{
+    CGBitmapContextDrawer, CGBitmapContextGetHeight, CGBitmapContextGetWidth,
+};
+use super::cg_color::CGColorRef;
+use super::cg_color_space::{
+    kCGColorSpaceModelMonochrome, kCGColorSpaceModelRGB, CGColorSpaceGetModel, CGColorSpaceRef,
+};
+use super::cg_font::{CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph};
+use super::cg_geometry::CGPointZero;
 use super::cg_image::CGImageRef;
 use super::{cg_bitmap_context, cg_color, CGFloat, CGPoint, CGRect};
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
-use crate::frameworks::core_graphics::cg_bitmap_context::{
-    CGBitmapContextDrawer, CGBitmapContextGetHeight, CGBitmapContextGetWidth,
-};
-use crate::frameworks::core_graphics::cg_color::CGColorRef;
-use crate::frameworks::core_graphics::cg_font::{
-    CGFontHostObject, CGFontRef, CGFontRelease, CGFontRetain, CGGlyph,
-};
-use crate::frameworks::core_graphics::cg_geometry::CGPointZero;
 use crate::frameworks::uikit;
 use crate::mem::{ConstPtr, GuestUSize};
 use crate::objc::{objc_classes, ClassExports, HostObject};
