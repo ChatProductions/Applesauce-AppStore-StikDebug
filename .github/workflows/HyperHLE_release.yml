@@ -1,16 +1,16 @@
-name: Build Hypertel
+name: Build HyperHLE
 
 on:
   workflow_dispatch:
     inputs:
-      publish_hypertel_release:
-        description: Publish a Hypertel release (after all builds succeed)
+      publish_hyperhle_release:
+        description: Publish a HyperHLE release (after all builds succeed)
         type: boolean
         default: false
   push:
-    branches: [ "t" ]
+    branches: [ "trunk" ]
   pull_request:
-    branches: [ "t" ]
+    branches: [ "trunk" ]
   create: # for tags
 
 env:
@@ -326,7 +326,7 @@ jobs:
         name: touchHLE_Windows_x86_64  
         path: touchHLE_windows_bundle/
 
-  check-hypertel-release:
+  check-hyperhle-release:
     runs-on: ubuntu-latest
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/t') ||
@@ -341,17 +341,17 @@ jobs:
         uses: actions/checkout@main
         with:
           fetch-depth: 0
-      - name: Check whether a Hypertel release is due
+      - name: Check whether a HyperHLE release is due
         id: check
         env:
-          FORCE_HYPERTEL_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_hypertel_release && 'true' || '' }}
-        run: ./dev-scripts/hypertel-should-release.sh
+          FORCE_HYPERHLE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_hyperhle_release && 'true' || '' }}
+        run: ./dev-scripts/hyperhle-should-release.sh
 
-  publish-hypertel-release:
-    needs: [check-hypertel-release, build-osx, build-linux, build-android, build-win]
+  publish-hyperhle-release:
+    needs: [check-hyperhle-release, build-osx, build-linux, build-android, build-win]
     if: >-
-      needs.check-hypertel-release.result == 'success' &&
-      needs.check-hypertel-release.outputs.should_release == 'true' &&
+      needs.check-hyperhle-release.result == 'success' &&
+      needs.check-hyperhle-release.outputs.should_release == 'true' &&
       needs.build-osx.result == 'success' &&
       needs.build-linux.result == 'success' &&
       needs.build-android.result == 'success' &&
@@ -387,20 +387,20 @@ jobs:
           path: artifacts/linux
       - name: Install packaging tools
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pandoc zip
-      - name: Package Hypertel release files
+      - name: Package HyperHLE release files
         env:
           GITHUB_SERVER_URL: ${{ github.server_url }}
-          FORCE_HYPERTEL_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_hypertel_release && 'true' || '' }}
-          VERSION: ${{ needs.check-hypertel-release.outputs.version }}
-          CHANGELOG_FROM: ${{ needs.check-hypertel-release.outputs.changelog_from }}
-          CHANGELOG_LIMIT: ${{ needs.check-hypertel-release.outputs.changelog_limit }}
-        run: ./dev-scripts/package-hypertel-release.sh "$VERSION" "$CHANGELOG_FROM"
-      - name: Publish Hypertel release
+          FORCE_HYPERHLE_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_hyperhle_release && 'true' || '' }}
+          VERSION: ${{ needs.check-hyperhle-release.outputs.version }}
+          CHANGELOG_FROM: ${{ needs.check-hyperhle-release.outputs.changelog_from }}
+          CHANGELOG_LIMIT: ${{ needs.check-hyperhle-release.outputs.changelog_limit }}
+        run: ./dev-scripts/package-hyperhle-release.sh "$VERSION" "$CHANGELOG_FROM"
+      - name: Publish HyperHLE release
         uses: softprops/action-gh-release@master
         with:
-          tag_name: ${{ needs.check-hypertel-release.outputs.version }}
-          name: Hypertel ${{ needs.check-hypertel-release.outputs.version }}
+          tag_name: ${{ needs.check-hyperhle-release.outputs.version }}
+          name: HyperHLE ${{ needs.check-hyperhle-release.outputs.version }}
           body_path: release/RELEASE_NOTES.md
           files: |
-            release/Hypertel_*.zip
+            release/HyperHLE_*.zip
           fail_on_unmatched_files: true
