@@ -100,6 +100,7 @@ pub const kAudioFileReadWritePermission: AudioFilePermissions = 3;
 
 type AudioFileTypeID = u32;
 const kAudioFileCAFType: AudioFileTypeID = fourcc(b"caff");
+const kAUdioFileAIFFType: AudioFileTypeID = fourcc(b"AIFF");
 
 type AudioFilePropertyID = u32;
 pub const kAudioFilePropertyDataFormat: AudioFilePropertyID = fourcc(b"dfmt");
@@ -261,11 +262,20 @@ pub fn AudioFileOpenURL(
         );
     }
 
-    if in_file_type_hint != 0 && in_file_type_hint != kAudioFileCAFType {
-        log!(
-            "Игнорируем неизвестный тип файла {} для AudioFileOpenURL()",
-            debug_fourcc(in_file_type_hint)
-        );
+    match in_file_type_hint {
+        0 => {}
+        kAudioFileCAFType => {
+            log!("Ignoring 'caff' file type hint for AudioFileOpenURL()");
+        }
+        kAUdioFileAIFFType => {
+            log!("Ignoring 'AIFF' file type hint for AudioFileOpenURL()");
+        }
+        _ => {
+            log!(
+                "Игнорируем неизвестный тип файла {} для AudioFileOpenURL()",
+                debug_fourcc(in_file_type_hint)
+            );
+        }
     }
 
     let path = to_rust_path(env, in_file_ref);
@@ -994,7 +1004,15 @@ pub fn AudioFileGetProperty(
                         .write(out_property_data.cast(), frames_per_packet as f64);
                 }
                 kAudioFilePropertyFileFormat => {
-                    env.mem.write(out_property_data.cast(), kAudioFileCAFType)
+                    let bundle_id = env.bundle.bundle_identifier();
+                    if bundle_id.starts_with("com.ea.mirrorsedge.bv")
+                        || bundle_id.starts_with("com.ea.mirrorsedge.inc")
+                    {
+                        log!("Applying game-specific hack for Mirror's Edge: returning WAVE for kAudioFilePropertyFileFormat in AudioFileGetProperty()");
+                        env.mem.write(out_property_data.cast(), fourcc(b"WAVE"));
+                    } else {
+                        env.mem.write(out_property_data.cast(), kAudioFileCAFType);
+                    }
                 }
                 _ => return kAudioFileUnsupportedPropertyError,
             }

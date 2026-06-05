@@ -18,6 +18,7 @@ use crate::objc::{
     NSZonePtr,
 };
 
+#[derive(Default)]
 struct GKAchievementHostObject {
     /// The achievement identifier string (retained NSString*).
     identifier: id,

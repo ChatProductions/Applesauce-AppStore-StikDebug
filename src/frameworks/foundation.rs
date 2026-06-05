@@ -778,39 +778,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("NSProgressKindFile"),
     ),
     // -----------------------------------------------------------------
-    // CFError userInfo keys (CFError.h). They share storage with the
-    // toll-free-bridged NSError userInfo dictionary, so the documented
-    // literal values are exactly the NS*-prefixed names.
-    // -----------------------------------------------------------------
-    (
-        "_kCFErrorDescriptionKey",
-        HostConstant::NSString("NSDescription"),
-    ),
-    (
-        "_kCFErrorLocalizedDescriptionKey",
-        HostConstant::NSString("NSLocalizedDescription"),
-    ),
-    (
-        "_kCFErrorLocalizedFailureReasonKey",
-        HostConstant::NSString("NSLocalizedFailureReason"),
-    ),
-    (
-        "_kCFErrorLocalizedRecoverySuggestionKey",
-        HostConstant::NSString("NSLocalizedRecoverySuggestion"),
-    ),
-    (
-        "_kCFErrorUnderlyingErrorKey",
-        HostConstant::NSString("NSUnderlyingError"),
-    ),
-    (
-        "_kCFErrorURLKey",
-        HostConstant::NSString("NSURL"),
-    ),
-    (
-        "_kCFErrorFilePathKey",
-        HostConstant::NSString("NSFilePath"),
-    ),
-    // -----------------------------------------------------------------
     // CFProxySupport.h: proxy dictionary key constants.
     // -----------------------------------------------------------------
     (
@@ -1128,117 +1095,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("NSHTTPCookieManagerAcceptPolicyChangedNotification"),
     ),
     // -----------------------------------------------------------------
-    // `NSURL` resource-value keys introduced in iOS 5+. Apple
-    // `NSURL.h` declares them as `NSString * const`. The literal value
-    // of each constant is its own symbol name. Apps fetch them via
-    // `getResourceValue:forKey:error:` / `setResourceValue:forKey:error:`.
-    // <https://developer.apple.com/documentation/foundation/nsurl/resource_keys>
-    // -----------------------------------------------------------------
-    (
-        "_NSURLPathKey",
-        HostConstant::NSString("NSURLPathKey"),
-    ),
-    (
-        "_NSURLNameKey",
-        HostConstant::NSString("NSURLNameKey"),
-    ),
-    (
-        "_NSURLLocalizedNameKey",
-        HostConstant::NSString("NSURLLocalizedNameKey"),
-    ),
-    (
-        "_NSURLIsRegularFileKey",
-        HostConstant::NSString("NSURLIsRegularFileKey"),
-    ),
-    (
-        "_NSURLIsDirectoryKey",
-        HostConstant::NSString("NSURLIsDirectoryKey"),
-    ),
-    (
-        "_NSURLIsSymbolicLinkKey",
-        HostConstant::NSString("NSURLIsSymbolicLinkKey"),
-    ),
-    (
-        "_NSURLIsVolumeKey",
-        HostConstant::NSString("NSURLIsVolumeKey"),
-    ),
-    (
-        "_NSURLIsHiddenKey",
-        HostConstant::NSString("NSURLIsHiddenKey"),
-    ),
-    (
-        "_NSURLIsAliasFileKey",
-        HostConstant::NSString("NSURLIsAliasFileKey"),
-    ),
-    (
-        "_NSURLFileSizeKey",
-        HostConstant::NSString("NSURLFileSizeKey"),
-    ),
-    (
-        "_NSURLFileAllocatedSizeKey",
-        HostConstant::NSString("NSURLFileAllocatedSizeKey"),
-    ),
-    (
-        "_NSURLCreationDateKey",
-        HostConstant::NSString("NSURLCreationDateKey"),
-    ),
-    (
-        "_NSURLContentAccessDateKey",
-        HostConstant::NSString("NSURLContentAccessDateKey"),
-    ),
-    (
-        "_NSURLContentModificationDateKey",
-        HostConstant::NSString("NSURLContentModificationDateKey"),
-    ),
-    (
-        "_NSURLAttributeModificationDateKey",
-        HostConstant::NSString("NSURLAttributeModificationDateKey"),
-    ),
-    (
-        "_NSURLLinkCountKey",
-        HostConstant::NSString("NSURLLinkCountKey"),
-    ),
-    (
-        "_NSURLTypeIdentifierKey",
-        HostConstant::NSString("NSURLTypeIdentifierKey"),
-    ),
-    (
-        "_NSURLLocalizedTypeDescriptionKey",
-        HostConstant::NSString("NSURLLocalizedTypeDescriptionKey"),
-    ),
-    (
-        "_NSURLLabelNumberKey",
-        HostConstant::NSString("NSURLLabelNumberKey"),
-    ),
-    (
-        "_NSURLLabelColorKey",
-        HostConstant::NSString("NSURLLabelColorKey"),
-    ),
-    (
-        "_NSURLLocalizedLabelKey",
-        HostConstant::NSString("NSURLLocalizedLabelKey"),
-    ),
-    (
-        "_NSURLEffectiveIconKey",
-        HostConstant::NSString("NSURLEffectiveIconKey"),
-    ),
-    (
-        "_NSURLCustomIconKey",
-        HostConstant::NSString("NSURLCustomIconKey"),
-    ),
-    (
-        "_NSURLParentDirectoryURLKey",
-        HostConstant::NSString("NSURLParentDirectoryURLKey"),
-    ),
-    (
-        "_NSURLVolumeURLKey",
-        HostConstant::NSString("NSURLVolumeURLKey"),
-    ),
-    (
-        "_NSURLFileResourceTypeKey",
-        HostConstant::NSString("NSURLFileResourceTypeKey"),
-    ),
-    // -----------------------------------------------------------------
     // `NSXMLParserErrorDomain` — the error domain used by NSError
     // userInfo from `<Foundation/NSXMLParser.h>`. Apple ships this as
     // `FOUNDATION_EXPORT NSString * const`; the literal value is the
@@ -1294,13 +1150,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_UITextInputCurrentInputModeDidChangeNotification",
         HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
-    ),
-    // -----------------------------------------------------------------
-    // ImageIO constants.
-    // -----------------------------------------------------------------
-    (
-        "_kCGImagePropertyExifDictionary",
-        HostConstant::NSString("{Exif}"),
     ),
     // -----------------------------------------------------------------
     // Security constants.
@@ -1438,6 +1287,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_GKSessionErrorDomain",
         HostConstant::NSString("com.apple.gamekit.GKSessionErrorDomain"),
     ),
+    (
+        "_AVPlayerItemTimeJumpedNotification",
+        HostConstant::NSString("AVPlayerItemTimeJumpedNotification"),
+    ),
     // -----------------------------------------------------------------
     // PassKit payment network identifiers (<PassKit/PKPaymentRequest.h>).
     // Documented values.
@@ -1446,6 +1299,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_PKPaymentNetworkMasterCard",
         HostConstant::NSString("MasterCard"),
+    ),
+    (
+        "_PHImageErrorKey",
+        HostConstant::NSString("PHImageErrorKey"),
     ),
     ("_PKPaymentNetworkAmex", HostConstant::NSString("Amex")),
     ("_PKPaymentNetworkDiscover", HostConstant::NSString("Discover")),
@@ -1460,6 +1317,14 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_MKLaunchOptionsDirectionsModeDriving",
         HostConstant::NSString("Driving"),
     ),
+    (
+        "_SKReceiptPropertyIsExpired",
+        HostConstant::NSString("SKReceiptPropertyIsExpired"),
+    ),
+    (
+        "_SKReceiptPropertyIsRevoked",
+        HostConstant::NSString("SKReceiptPropertyIsRevoked"),
+    ),
     ("_MKMapRectNull", HostConstant::Custom(mk_map_rect_null)),
     // -----------------------------------------------------------------
     // UIKit activity type (<UIKit/UIActivity.h>). Documented value.
@@ -1467,6 +1332,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_UIActivityTypePostToTencentWeibo",
         HostConstant::NSString("com.apple.UIKit.activity.PostToTencentWeibo"),
+    ),
+    (
+        "_SKReceiptPropertyIsVolumePurchase",
+        HostConstant::NSString("SKReceiptPropertyIsVolumePurchase"),
     ),
     // -----------------------------------------------------------------
     // Notification names referenced by apps but never posted by touchHLE.
@@ -1505,6 +1374,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_UISceneDidDisconnectNotification",
         HostConstant::NSString("UISceneDidDisconnectNotification"),
     ),
+    (
+        "_SKStoreProductParameterProductIdentifier",
+        HostConstant::NSString("SKStoreProductParameterProductIdentifier"),
+    ),
     // -----------------------------------------------------------------
     // NSMetadata / iCloud ubiquitous-item keys referenced by apps that
     // probe for iCloud document state.
@@ -1520,6 +1393,14 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_NSURLUbiquitousItemDownloadingStatusKey",
         HostConstant::NSString("NSURLUbiquitousItemDownloadingStatusKey"),
+    ),
+    (
+        "_UIAccessibilityScreenChangedNotification",
+        HostConstant::NSString("UIAccessibilityScreenChangedNotification"),
+    ),
+    (
+        "_UITextInputCurrentInputModeDidChangeNotification",
+        HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
     ),
     (
         "_NSURLUbiquitousItemDownloadingStatusCurrent",
@@ -1545,6 +1426,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_MPNowPlayingInfoPropertyPlaybackRate",
         HostConstant::NSString("MPNowPlayingInfoPropertyPlaybackRate"),
     ),
+    (
+        "_kCGImagePropertyExifDictionary",
+        HostConstant::NSString("{Exif}"),
+    ),
     // -----------------------------------------------------------------
     // AVFoundation metadata key spaces / common keys
     // (<AVFoundation/AVMetadataIdentifiers.h>). Documented values.
@@ -1563,6 +1448,14 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_kCGColorSpaceExtendedLinearSRGB",
         HostConstant::NSString("kCGColorSpaceExtendedLinearSRGB"),
     ),
+    (
+        "_kSecAttrIsPermanent",
+        HostConstant::NSString("isper"),
+    ),
+    (
+        "_kSecUseAuthenticationUI",
+        HostConstant::NSString("u_AuthUI"),
+    ),
     // -----------------------------------------------------------------
     // AVCaptureDevice "current value" sentinels
     // (<AVFoundation/AVCaptureDevice.h>).
@@ -1574,6 +1467,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_AVCaptureISOCurrent",
         HostConstant::Custom(av_capture_iso_current),
+    ),
+    (
+        "_kSecUseAuthenticationUIFail",
+        HostConstant::NSString("u_AuthUIF"),
     ),
     // -----------------------------------------------------------------
     // CoreAnimation CAEmitterLayer emitter shapes & render modes
@@ -1596,6 +1493,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_kCAEmitterLayerBackToFront",
         HostConstant::NSString("backToFront"),
     ),
+    (
+        "_kCMTimeRangeZero",
+        HostConstant::Custom(kcm_timetime_range_zero),
+    ),
     ("_kCAEmitterLayerAdditive", HostConstant::NSString("additive")),
     // -----------------------------------------------------------------
     // UIKit table-view section-index search magic string
@@ -1609,6 +1510,10 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_AVEncoderBitRatePerChannelKey",
         HostConstant::NSString("AVEncoderBitRatePerChannelKey"),
+    ),
+    (
+        "_matrix_identity_float4x4",
+        HostConstant::Custom(matrix_identity_float4x4),
     ),
     // -----------------------------------------------------------------
     // sqlite3 constants.
@@ -1647,6 +1552,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
         ns_host::CLASSES,
+        ns_http_cookie_storage::CLASSES,
         ns_index_path::CLASSES,
         ns_index_set::CLASSES,
         ns_json_serialization::CLASSES,
@@ -1676,11 +1582,10 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_string::CLASSES,
         ns_text_checking_result::CLASSES,
         ns_thread::CLASSES,
-        ns_timer::CLASSES,
         ns_time_zone::CLASSES,
+        ns_timer::CLASSES,
         ns_ubiquitous_key_value_store::CLASSES,
         ns_undo_manager::CLASSES,
-        ns_http_cookie_storage::CLASSES,
         ns_url::CLASSES,
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,

@@ -15,6 +15,7 @@ use regex::Regex;
 use super::ns_text_checking_result;
 
 /// Хост-объект для хранения скомпилированного регулярного выражения.
+#[derive(Default)]
 struct NSRegularExpressionHostObject {
     regex: Option<Regex>,
 }

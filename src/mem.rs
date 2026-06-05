@@ -357,7 +357,8 @@ pub struct Mem {
 impl Drop for Mem {
     fn drop(&mut self) {
         unsafe {
-            crate::mem::host::free_memory(self.bytes.cast(), std::mem::size_of::<Bytes>()).unwrap();
+            crate::mem::host::free_guest_memory(self.bytes.cast(), std::mem::size_of::<Bytes>())
+                .unwrap();
             // Free the read stub page
             if !self.null_stub_page.is_null() {
                 crate::mem::host::free_memory(self.null_stub_page.cast(), PAGE_SIZE as usize)
@@ -389,7 +390,7 @@ impl Mem {
     /// Create a fresh instance of guest memory.
     pub fn new() -> Mem {
         let size = std::mem::size_of::<Bytes>();
-        let ptr = unsafe { crate::mem::host::allocate_memory(size).unwrap() };
+        let ptr = unsafe { crate::mem::host::allocate_guest_memory(size).unwrap() };
 
         assert_eq!(
             ptr as usize & PAGE_SIZE_ALIGN_MASK as usize,
@@ -737,6 +738,15 @@ impl Mem {
         Ptr::from_bits(u32::try_from(guest_addr).unwrap())
     }
 
+    /// Returns whether a host pointer addresses a location inside the guest's
+    /// memory region. Used to sanity-check pointers that touchHLE hands to host
+    /// APIs (e.g. client-side OpenGL vertex arrays): a pointer outside this
+    /// range is wild and dereferencing it on the host would crash the emulator.
+    pub fn is_host_ptr_in_guest_mem(&self, host_ptr: *const std::ffi::c_void) -> bool {
+        let host_ptr = host_ptr.cast::<u8>();
+        self.bytes().as_ptr_range().contains(&host_ptr)
+    }
+
     /// Read a value for memory.
     /// This is the preferred way to read memory in
     /// most cases.
@@ -1026,5 +1036,31 @@ impl Mem {
             return;
         }
         self.allocator.reserve(allocator::Chunk::new(base, size));
+    }
+}
+
+#[cfg(test)]
+mod mem_tests {
+    use super::{Mem, MutPtr, Ptr};
+
+    #[test]
+    fn lazy_commit_far_addresses() {
+        let mut mem = Mem::new();
+
+        mem.set_null_segment_size(super::PAGE_SIZE);
+
+        let probes: [u32; 6] = [
+            0x0000_1000,
+            0x1000_0000,
+            0x4000_0000,
+            0x8000_0000,
+            0xC000_0000,
+            0xFFFE_F000,
+        ];
+        for &addr in &probes {
+            let p: MutPtr<u8> = Ptr::from_bits(addr);
+            mem.write(p, 0xAB);
+            assert_eq!(mem.read(p.cast_const()), 0xAB);
+        }
     }
 }

@@ -324,6 +324,16 @@ pub fn init_with_objects_and_keys(
 
 /// Helper function to share `initWithDictionary:` implementations
 fn init_with_dictionary_common(env: &mut Environment, this: id, other_dict: id) -> id {
+    // Apple's `-[NSDictionary initWithDictionary:nil]` returns an empty
+    // dictionary instead of crashing. Guard against guest code calling us
+    // with `nil` (or a non-dictionary object that has no host record)
+    // before we try to swap host objects, so we don't have to rely on the
+    // objc phantom-fallback path producing a valid empty `HashMap`.
+    if other_dict == nil {
+        *env.objc.borrow_mut(this) = <DictionaryHostObject as Default>::default();
+        return this;
+    }
+
     let other_host_object: DictionaryHostObject = std::mem::take(env.objc.borrow_mut(other_dict));
     let mut host_object = <DictionaryHostObject as Default>::default();
 
@@ -691,6 +701,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.mem.free(stop_ptr.cast());
 }
 
+- (bool)isEqual:(id)other {
+    if this == other {
+        return true;
+    }
+    let class: Class = msg_class![env; NSDictionary class];
+    if !msg![env; other isKindOfClass:class] {
+        return false;
+    }
+    msg![env; this isEqualToDictionary:other]
+}
+- (bool)isEqualToDictionary:(id)other { // NSDictionary *
+    if other == nil {
+        return false;
+    }
+    let count: NSUInteger = msg![env; this count];
+    let other_count: NSUInteger = msg![env; other count];
+    if count != other_count {
+        return false;
+    }
+    let keys_arr = msg![env; this allKeys];
+    let keys_count: NSUInteger = msg![env; keys_arr count];
+    for i in 0..keys_count {
+        let key: id = msg![env; keys_arr objectAtIndex:i];
+        let value: id = msg![env; this objectForKey:key];
+        let other_value: id = msg![env; other objectForKey:key];
+        let equal: bool = msg![env; value isEqual:other_value];
+        if !equal {
+            return false;
+        }
+    }
+    true
+}
 // Some apps (e.g. Rigonauts) incorrectly call mutation methods on
 // immutable NSDictionary instances. Rather than failing with "does not
 // respond to selector", we handle these gracefully. The underlying

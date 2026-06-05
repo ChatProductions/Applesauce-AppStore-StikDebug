@@ -22,6 +22,7 @@ use crate::objc::{
 const NS_NOT_FOUND: i32 = 0x7fffffff;
 
 /// Host object storing match results.
+#[derive(Default)]
 pub(super) struct NSTextCheckingResultHostObject {
     /// The overall match range (index 0) plus any capture group ranges.
     /// ranges[0] is the full match, ranges[1..] are capture groups.

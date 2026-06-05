@@ -18,6 +18,7 @@ use crate::objc::{
 };
 
 /// Host object for NSURLResponse
+#[derive(Default)]
 struct NSURLResponseHostObject {
     /// The URL of the response (NSURL*, retained)
     url: id,
@@ -31,6 +32,7 @@ struct NSURLResponseHostObject {
 impl HostObject for NSURLResponseHostObject {}
 
 /// Host object for NSHTTPURLResponse (extends NSURLResponse)
+#[derive(Default)]
 struct NSHTTPURLResponseHostObject {
     /// Base response fields
     url: id,
