@@ -659,6 +659,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     {
         let view_class: Class = msg![env; this class];
         let class_name = env.objc.get_class_name(view_class).to_owned();
+
+        if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS").is_some()
+            && (class_name == "UIWindow" || class_name.contains("EAGLView"))
+        {
+            let forced_bounds = CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize {
+                    width: 480.0,
+                    height: 320.0,
+                },
+            };
+            let forced_center = CGPoint { x: 240.0, y: 160.0 };
+
+            log!(
+                "TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS=1: forcing {} {:?} frame/bounds to 480x320",
+                class_name,
+                this
+            );
+
+            () = msg![env; this setBounds:forced_bounds];
+            () = msg![env; this setFrame:forced_bounds];
+            () = msg![env; this setCenter:forced_center];
+        }
+
         let final_frame: CGRect = msg![env; this frame];
         let user_int: bool = msg![env; this isUserInteractionEnabled];
         let hidden: bool = msg![env; this isHidden];
@@ -1373,6 +1397,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer bounds]
 }
 - (())setBounds:(CGRect)bounds {
+    let mut bounds = bounds;
+
+    if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS").is_some() {
+        let view_class: Class = msg![env; this class];
+        let class_name = env.objc.get_class_name(view_class).to_owned();
+        if class_name == "UIWindow" || class_name.contains("EAGLView") {
+            let w = bounds.size.width.round() as i32;
+            let h = bounds.size.height.round() as i32;
+            if (w == 320 && (h == 460 || h == 480)) || (w == 0 && h == 0) {
+                log!(
+                    "TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS=1: coercing setBounds for {} {:?} from {:?} to 480x320",
+                    class_name,
+                    this,
+                    bounds
+                );
+                bounds = CGRect {
+                    origin: CGPoint { x: 0.0, y: 0.0 },
+                    size: CGSize {
+                        width: 480.0,
+                        height: 320.0,
+                    },
+                };
+            }
+        }
+    }
+
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer setBounds:bounds]
 }
@@ -1389,6 +1439,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer frame]
 }
 - (())setFrame:(CGRect)frame {
+    let mut frame = frame;
+
+    if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS").is_some() {
+        let view_class: Class = msg![env; this class];
+        let class_name = env.objc.get_class_name(view_class).to_owned();
+        if class_name == "UIWindow" || class_name.contains("EAGLView") {
+            let w = frame.size.width.round() as i32;
+            let h = frame.size.height.round() as i32;
+            if (w == 320 && (h == 460 || h == 480)) || (w == 0 && h == 0) {
+                log!(
+                    "TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS=1: coercing setFrame for {} {:?} from {:?} to 480x320",
+                    class_name,
+                    this,
+                    frame
+                );
+                frame = CGRect {
+                    origin: CGPoint { x: 0.0, y: 0.0 },
+                    size: CGSize {
+                        width: 480.0,
+                        height: 320.0,
+                    },
+                };
+            }
+        }
+    }
+
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer setFrame:frame]
 }

@@ -67,12 +67,32 @@ pub unsafe fn present_frame(
     gles.ClearColor(0.0, 0.0, 0.0, 1.0);
     gles.Clear(gles11::COLOR_BUFFER_BIT | gles11::DEPTH_BUFFER_BIT | gles11::STENCIL_BUFFER_BIT);
     gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
+    // Stretch the full rendered frame to fill the active host viewport.
+    //
+    // This does NOT crop or shift the texture. The whole renderbuffer is
+    // sampled from normal 0..1 texture coordinates and mapped to a full-screen
+    // quad. This is the correct "fill the current window" behavior for
+    // PotatoGold-style landscape tests.
+    if std::env::var_os("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT").is_some() {
+        log_once!(
+            "TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT=1: stretching full rendered frame to the active viewport [this log will only be shown once]"
+        );
+    }
+
     let vertices: [f32; 12] = [
         -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0,
     ];
     gles.EnableClientState(gles11::VERTEX_ARRAY);
     gles.VertexPointer(2, gles11::FLOAT, 0, vertices.as_ptr() as *const GLvoid);
-    let tex_coords: [f32; 12] = [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+
+    let tex_coords: [f32; 12] = [
+        0.0, 0.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        1.0, 0.0,
+        0.0, 1.0,
+        1.0, 1.0,
+    ];
     gles.EnableClientState(gles11::TEXTURE_COORD_ARRAY);
     gles.TexCoordPointer(2, gles11::FLOAT, 0, tex_coords.as_ptr() as *const GLvoid);
     // Apply the device-rotation matrix to the TEXTURE matrix, but rotate

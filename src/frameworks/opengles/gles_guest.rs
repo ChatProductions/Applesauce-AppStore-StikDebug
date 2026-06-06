@@ -41,6 +41,11 @@ const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
     gles11::PALETTE8_RGBA4_OES,
     gles11::PALETTE8_RGBA8_OES,
 ];
+
+fn trace_potatogold_render() -> bool {
+    std::env::var_os("TOUCHHLE_TRACE_POTATOGOLD_RENDER").is_some()
+}
+
 #[track_caller]
 fn with_ctx_and_mem<T, U: Default>(env: &mut Environment, f: T) -> U
 where
@@ -514,6 +519,35 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     })
 }
 fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+    let (mut x, mut y, mut width, mut height) = (x, y, width, height);
+
+    if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT").is_some() {
+        // PotatoGold/adrastea-style landscape apps can end up with a 20px
+        // status-bar-shortened portrait-derived viewport, e.g. 460x320,
+        // even after UIScreen/EAGL have been made landscape. That leaves the
+        // final frame cropped/scuffed. In this compatibility mode, promote
+        // the common iPhone landscape viewport cases to the full 480x320
+        // logical viewport.
+        let should_force =
+            (x == 0 && y == 0 && width == 460 && height == 320)
+            || (x == 0 && y == 0 && width == 320 && height == 460)
+            || (x == 0 && y == 0 && width == 320 && height == 480);
+
+        if should_force {
+            log!(
+                "TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT=1: overriding glViewport({}, {}, {}, {}) to glViewport(0, 0, 480, 320)",
+                x,
+                y,
+                width,
+                height
+            );
+            x = 0;
+            y = 0;
+            width = 480;
+            height = 320;
+        }
+    }
+
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
@@ -975,6 +1009,20 @@ fn glDrawTexfOES(
     width: GLfloat,
     height: GLfloat,
 ) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexfOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexfOES(x, y, z, width, height)
     })
@@ -987,6 +1035,20 @@ fn glDrawTexiOES(
     width: GLint,
     height: GLint,
 ) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexiOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexiOES(x, y, z, width, height)
     })
@@ -999,6 +1061,20 @@ fn glDrawTexxOES(
     width: GLfixed,
     height: GLfixed,
 ) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexxOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexxOES(x, y, z, width, height)
     })
@@ -1224,13 +1300,27 @@ unsafe fn guard_client_vertex_arrays(gles: &mut dyn GLES, mem: &Mem) -> Vec<GLui
 
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
                 "First glDrawArrays(mode=0x{:x}, first={}, count={}) (app submitting first draw) [this log will only be shown once]",
                 mode, first, count
             );
+        }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 120 {
+                log!(
+                    "[POTATO RENDER TRACE] glDrawArrays #{} mode=0x{:x} first={} count={}",
+                    n + 1,
+                    mode,
+                    first,
+                    count
+                );
+            }
         }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
@@ -1251,13 +1341,28 @@ fn glDrawElements(
     indices: ConstVoidPtr,
 ) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
                 "First glDrawElements(mode=0x{:x}, count={}, type=0x{:x}) (app submitting first indexed draw) [this log will only be shown once]",
                 mode, count, type_
             );
+        }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 160 {
+                log!(
+                    "[POTATO RENDER TRACE] glDrawElements #{} mode=0x{:x} count={} type=0x{:x} indices=0x{:x}",
+                    n + 1,
+                    mode,
+                    count,
+                    type_,
+                    indices.to_bits()
+                );
+            }
         }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
@@ -1336,6 +1441,15 @@ fn glClearStencil(env: &mut Environment, s: GLint) {
 }
 
 fn glMatrixMode(env: &mut Environment, mode: GLenum) {
+    if trace_potatogold_render() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            log!("[POTATO RENDER TRACE] glMatrixMode(0x{:x})", mode);
+        }
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.MatrixMode(mode) });
 }
 fn glLoadIdentity(env: &mut Environment) {
@@ -1380,6 +1494,18 @@ fn glOrthof(
     near: GLfloat,
     far: GLfloat,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glOrthof(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Orthof(left, right, bottom, top, near, far)
     });
@@ -1393,6 +1519,18 @@ fn glOrthox(
     near: GLfixed,
     far: GLfixed,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glOrthox(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Orthox(left, right, bottom, top, near, far)
     });
@@ -1406,6 +1544,18 @@ fn glFrustumf(
     near: GLfloat,
     far: GLfloat,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glFrustumf(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Frustumf(left, right, bottom, top, near, far)
     });
@@ -1419,6 +1569,18 @@ fn glFrustumx(
     near: GLfixed,
     far: GLfixed,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glFrustumx(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Frustumx(left, right, bottom, top, near, far)
     });
@@ -1497,6 +1659,19 @@ fn glIsTexture(env: &mut Environment, texture: GLuint) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsTexture(texture) })
 }
 fn glBindTexture(env: &mut Environment, target: GLenum, texture: GLuint) {
+    if trace_potatogold_render() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            log!(
+                "[POTATO RENDER TRACE] glBindTexture(target=0x{:x}, texture={})",
+                target,
+                texture
+            );
+        }
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.BindTexture(target, texture)
     })
@@ -1586,6 +1761,28 @@ fn glTexParameterx(env: &mut Environment, target: GLenum, pname: GLenum, param: 
 }
 fn glTexParameteriv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLint>) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameteriv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameteriv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1610,6 +1807,28 @@ fn glTexParameterfv(
     params: ConstPtr<GLfloat>,
 ) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameterfv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameterfv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1634,6 +1853,28 @@ fn glTexParameterxv(
     params: ConstPtr<GLfixed>,
 ) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameterxv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameterxv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1699,13 +1940,32 @@ fn glTexImage2D(
     pixels: ConstVoidPtr,
 ) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
                 "First glTexImage2D({}x{}, internalformat=0x{:x}, format=0x{:x}, type=0x{:x}) (app uploading texture data) [this log will only be shown once]",
                 width, height, internalformat as u32, format, type_
             );
+        }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 80 {
+                log!(
+                    "[POTATO RENDER TRACE] glTexImage2D #{} target=0x{:x} level={} size={}x{} internal=0x{:x} format=0x{:x} type=0x{:x} pixels_null={}",
+                    n + 1,
+                    target,
+                    level,
+                    width,
+                    height,
+                    internalformat as u32,
+                    format,
+                    type_,
+                    pixels.is_null()
+                );
+            }
         }
     }
     let fix_filter = env.options.fix_texture_min_filter && level == 0;

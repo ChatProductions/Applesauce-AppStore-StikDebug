@@ -11,7 +11,7 @@ use crate::libc::errno::{EDEADLK, EINVAL, ESRCH};
 use crate::mem::{
     self, ConstPtr, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr, SafeRead, PAGE_SIZE,
 };
-use crate::{Environment, ThreadId};
+use crate::{cpu::Cpu, Environment, ThreadId};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -424,16 +424,31 @@ pub fn pthread_self(env: &mut Environment) -> pthread_t {
     ptr
 }
 
-pub fn pthread_exit(_env: &mut Environment, retval: MutVoidPtr) {
-    log_dbg!("pthread_exit({:?})", retval);
+pub fn pthread_exit(env: &mut Environment, retval: MutVoidPtr) {
+    let current_thread = env.current_thread;
+    log!(
+        "pthread_exit({:?}) on emulated thread {}; redirecting to touchHLE thread-exit routine",
+        retval,
+        current_thread
+    );
 
-    // Поскольку в touchHLE пока нет встроенного механизма мягкого завершения
-    // гостевого потока из хост-вызова, мы просто "паркуем" (усыпляем)
-    // текущий поток операционной системы навсегда.
-    // Это безопасно "замораживает" гостевой поток и спасает эмулятор от краша.
-    loop {
-        std::thread::park();
-    }
+    // pthread_exit is noreturn from the guest's point of view.
+    //
+    // The old implementation parked the *host* thread forever, which makes the
+    // desktop think touchHLE is frozen. Instead, branch to the same guest-side
+    // thread-exit SVC that touchHLE already uses when a pthread start routine
+    // returns normally.
+    //
+    // Note: environment::Thread::return_value is private to environment.rs.
+    // This patch intentionally does not set it here. If a game later joins a
+    // thread that exited via pthread_exit, we should add a small Environment
+    // setter instead of touching that private field from this module.
+    let thread_exit = env.dyld.thread_exit_routine();
+
+    let regs = env.cpu.regs_mut();
+    regs[0] = retval.to_bits();
+    regs[Cpu::LR] = thread_exit.addr_with_thumb_bit();
+    env.cpu.branch(thread_exit);
 }
 
 fn pthread_join(env: &mut Environment, thread: pthread_t, retval: MutPtr<MutVoidPtr>) -> i32 {

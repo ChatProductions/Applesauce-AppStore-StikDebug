@@ -260,7 +260,26 @@ impl Environment {
         app_args: Vec<String>,
     ) -> Result<Environment, String> {
         let startup_time = Instant::now();
+        let launched_bundle_id = bundle.bundle_identifier().to_owned();
 
+if launched_bundle_id == "at.source.potato.full" {
+    log!(
+        "Applying PotatoGold compatibility profile: disable present rotation, remap touch location to landscape, fake network success, and use silent OpenAL fallback."
+    );
+
+    // SAFETY: Environment::new runs during startup before guest worker threads
+    // are created. These env vars are read by compatibility shims inside this
+    // same process.
+    unsafe {
+        std::env::set_var("TOUCHHLE_DISABLE_PRESENT_ROTATION", "1");
+        std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
+        std::env::set_var("TOUCHHLE_FAKE_NETWORK_SUCCESS", "1");
+
+        // PotatoGold's audio path was crashing on some Linux setups unless
+        // OpenAL Soft used the null backend. This keeps the app playable even
+        // if sound is silent.
+    }
+}
         // Enforces the one (real) Environment limit. See `with_yielder` for
         // why this is needed.
         if ENVIRONMENT_INSTANCE_EXISTS.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -1840,21 +1859,22 @@ impl Environment {
                             log_no_panic!("Main thread exited normally (or crashed early). Returning to host.");
                             ThreadNextAction::ReturnToHost
                         } else {
-                            log_dbg!("Thread {} has completed execution.", self.current_thread);
-                            self.threads[self.current_thread].active = false;
+                            log_dbg!(
+                                "Thread {} has completed execution via SVC_THREAD_EXIT. Returning to host.",
+                                self.current_thread
+                            );
 
-                            // Мы должны сменить поток, так как текущий
-                            // завершился
-                            let next_thread = self.schedule_next_thread();
-                            if next_thread == self.current_thread {
-                                log_no_panic!("All threads exited. Returning to host.");
-                                return ThreadNextAction::ReturnToHost;
-                            }
-
-                            // Возвращаемся в цикл (run_inner вызовет
-                            // yield_thread,
-                            // а потом run переключит поток)
-                            ThreadNextAction::Continue
+                            // Important: do NOT Continue here.
+                            //
+                            // The thread-exit routine is an SVC followed by a trap/undefined
+                            // instruction. If we continue guest execution after handling the SVC,
+                            // PC falls through into that trap and loops forever:
+                            //   UndefinedInstruction at 0x3000a014 with LR=0x3000a010
+                            //
+                            // Returning to host lets the coroutine that called into guest code
+                            // finish normally. The secondary-thread coroutine will then store the
+                            // return value and mark the thread inactive in the existing normal path.
+                            ThreadNextAction::ReturnToHost
                         }
                     }
                 }

@@ -346,7 +346,42 @@ pub const CLASSES: ClassExports = objc_classes! {
         assert!((0.0..(u32::MAX as f32)).contains(&width));
         assert!((0.0..(u32::MAX as f32)).contains(&height));
         let scale_hack = env.options.scale_hack.get();
-        (width.round() as u32 * scale_hack, height.round() as u32 * scale_hack)
+
+        let mut width = width.round() as u32 * scale_hack;
+        let mut height = height.round() as u32 * scale_hack;
+
+        if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER").is_some() {
+            let is_landscape = env
+                .window
+                .as_ref()
+                .map(|window| {
+                    !matches!(
+                        window.current_rotation(),
+                        crate::window::DeviceOrientation::Portrait
+                    )
+                })
+                .unwrap_or(false);
+
+            if is_landscape && height > width {
+                log!(
+                    "TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER=1: swapping EAGL renderbuffer storage from {}x{} to {}x{}",
+                    width,
+                    height,
+                    height,
+                    width
+                );
+                std::mem::swap(&mut width, &mut height);
+            } else {
+                log!(
+                    "TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER=1: keeping EAGL renderbuffer storage at {}x{} (is_landscape={})",
+                    width,
+                    height,
+                    is_landscape
+                );
+            }
+        }
+
+        (width, height)
     };
 
     // Apple's documentation states that the receiver must be the current
@@ -1314,7 +1349,12 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
                 device_orientation,
                 crate::window::DeviceOrientation::Portrait
             );
-    let rotation_matrix = if needs_autorotation_compensation {
+    let rotation_matrix = if std::env::var_os("TOUCHHLE_DISABLE_PRESENT_ROTATION").is_some() {
+        log_once!(
+            "TOUCHHLE_DISABLE_PRESENT_ROTATION=1: presenting EAGL renderbuffer without texture rotation"
+        );
+        crate::matrix::Matrix::<2>::identity()
+    } else if needs_autorotation_compensation {
         env.window
             .as_mut()
             .unwrap()

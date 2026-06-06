@@ -80,24 +80,78 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UITouchHostObject { location, window, .. } = env.objc.borrow(this);
     let location_in_window: CGPoint = msg![env; window
         convertPoint:location fromWindow:nil];
-    if that_view == nil {
+    let mut result: CGPoint = if that_view == nil {
         location_in_window
     } else {
         msg![env;
         that_view convertPoint:location_in_window fromView:window]
+    };
+
+    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
+        // Important: this happens AFTER UIKit hit-testing. The touch can still
+        // hit the 320x480 EAGLView, but the game receives a landscape-style
+        // 480x320 point from locationInView:, which is what PotatoGold's
+        // custom OpenGL menu widgets appear to expect.
+        let old_x = result.x;
+        let old_y = result.y;
+        let mut new_x = old_x * (480.0 / 320.0);
+        let mut new_y = old_y * (320.0 / 480.0);
+
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_x += offset;
+            }
+        }
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_y += offset;
+            }
+        }
+
+        result = CGPoint {
+            x: new_x.clamp(0.0, 479.0),
+            y: new_y.clamp(0.0, 319.0),
+        };
     }
+
+    result
 }
 
 - (CGPoint)previousLocationInView:(id)that_view {
     let &UITouchHostObject { previous_location, window, .. } = env.objc.borrow(this);
     let location_in_window: CGPoint = msg![env; window
         convertPoint:previous_location fromWindow:nil];
-    if that_view == nil {
+    let mut result: CGPoint = if that_view == nil {
         location_in_window
     } else {
         msg![env;
         that_view convertPoint:location_in_window fromView:window]
+    };
+
+    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
+        let old_x = result.x;
+        let old_y = result.y;
+        let mut new_x = old_x * (480.0 / 320.0);
+        let mut new_y = old_y * (320.0 / 480.0);
+
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_x += offset;
+            }
+        }
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_y += offset;
+            }
+        }
+
+        result = CGPoint {
+            x: new_x.clamp(0.0, 479.0),
+            y: new_y.clamp(0.0, 319.0),
+        };
     }
+
+    result
 }
 
 - (id)view {
