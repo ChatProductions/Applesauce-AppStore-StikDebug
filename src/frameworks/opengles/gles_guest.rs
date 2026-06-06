@@ -3035,6 +3035,85 @@ fn glGetActiveAttrib(
         }
     });
 }
+
+fn strip_captain_tomato_shader_precision(source: &str) -> String {
+    fn replace_precision_tokens(line: &str) -> String {
+        let mut out = String::with_capacity(line.len());
+        let mut token = String::new();
+
+        let flush = |token: &mut String, out: &mut String| {
+            if token == "lowp" || token == "mediump" || token == "highp" {
+                out.push_str("highp");
+            } else {
+                out.push_str(token);
+            }
+            token.clear();
+        };
+
+        for ch in line.chars() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                token.push(ch);
+            } else {
+                if !token.is_empty() {
+                    flush(&mut token, &mut out);
+                }
+                out.push(ch);
+            }
+        }
+
+        if !token.is_empty() {
+            flush(&mut token, &mut out);
+        }
+
+        out
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut has_float_precision = false;
+    let mut has_int_precision = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("precision ") && trimmed.ends_with(" float;") {
+            has_float_precision = true;
+            lines.push("precision highp float;".to_string());
+            continue;
+        }
+
+        if trimmed.starts_with("precision ") && trimmed.ends_with(" int;") {
+            has_int_precision = true;
+            lines.push("precision highp int;".to_string());
+            continue;
+        }
+
+        lines.push(replace_precision_tokens(line));
+    }
+
+    // If a shader had only inline precision qualifiers and we normalized them,
+    // make sure GLSL ES still has default precision declarations.
+    let mut insert_at = 0usize;
+    while insert_at < lines.len() {
+        let t = lines[insert_at].trim();
+        if t.is_empty() || t.starts_with("#version") || t.starts_with("#extension") {
+            insert_at += 1;
+        } else {
+            break;
+        }
+    }
+
+    if !has_int_precision {
+        lines.insert(insert_at, "precision highp int;".to_string());
+    }
+    if !has_float_precision {
+        lines.insert(insert_at, "precision highp float;".to_string());
+    }
+
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
 fn glShaderSource(
     env: &mut Environment,
     shader: GLuint,
@@ -3075,6 +3154,20 @@ fn glShaderSource(
         } else {
             env.mem.cstr_at(str_ptr).to_vec()
         };
+        let bytes_vec = if env.bundle.bundle_identifier() == "at.source.veggie1" {
+            let src = String::from_utf8_lossy(&bytes_vec);
+            strip_captain_tomato_shader_precision(&src).into_bytes()
+        } else {
+            bytes_vec
+        };
+
+        let bytes_vec = if env.bundle.bundle_identifier() == "at.source.veggie1" {
+            let src = String::from_utf8_lossy(&bytes_vec);
+            strip_captain_tomato_shader_precision(&src).into_bytes()
+        } else {
+            bytes_vec
+        };
+
         let cs = std::ffi::CString::new(bytes_vec).unwrap_or_default();
         owned.push(cs);
     }
