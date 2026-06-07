@@ -72,11 +72,18 @@ impl Bundle {
     }
 
     pub fn bundle_identifier(&self) -> &str {
-        self.plist["CFBundleIdentifier"].as_string().unwrap()
+        self.plist
+            .get("CFBundleIdentifier")
+            .and_then(|v| v.as_string())
+            .unwrap_or("org.touchhle.app-picker")
     }
 
     pub fn bundle_version(&self) -> &str {
-        self.plist["CFBundleVersion"].as_string().unwrap()
+        self.plist
+            .get("CFBundleVersion")
+            .or_else(|| self.plist.get("CFBundleShortVersionString"))
+            .and_then(|v| v.as_string())
+            .unwrap_or("0")
     }
 
     pub fn bundle_localizations(&self) -> &[Value] {
