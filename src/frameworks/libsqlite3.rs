@@ -100,16 +100,7 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32
         let app_ns = std::env::var("TOUCHHLE_SQLITE_NAMESPACE")
             .ok()
             .filter(|s| !s.is_empty())
-            .or_else(|| {
-                std::env::args().nth(1).map(|arg| {
-                    std::path::Path::new(&arg)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("unknown_app")
-                        .to_string()
-                })
-            })
-            .unwrap_or_else(|| "app_picker".to_string())
+            .unwrap_or_else(|| env.bundle.bundle_identifier().to_string())
             .replace('/', "_")
             .replace('\\', "_")
             .replace(':', "_")

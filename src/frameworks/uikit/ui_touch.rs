@@ -65,7 +65,17 @@ fn touchhle_should_use_landscape_touch_remap(env: &Environment) -> bool {
 
 
 fn should_remap_touch_location_for_view(env: &mut Environment, view: id) -> bool {
-    if touchhle_should_use_landscape_touch_remap(env) {
+    match env.bundle.bundle_identifier() {
+        // Confirmed/wip landscape Source/Cocos games.
+        "at.source.veggie1" | "at.source.potato3D" | "at.source.potpan" => return true,
+
+        // TomatoZombie is native portrait.
+        "at.source.tomzom" => return false,
+
+        _ => {}
+    }
+
+    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
         return true;
     }
 
