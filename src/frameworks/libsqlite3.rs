@@ -106,8 +106,8 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32
             .replace(':', "_")
             .replace(' ', "_");
 
-        let dir = std::path::Path::new("touchHLE_sqlite");
-        if let Err(e) = std::fs::create_dir_all(dir) {
+        let dir = crate::paths::user_data_base_path().join("touchHLE_sqlite");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
             log!("libsqlite3: failed to create sqlite dir {:?}: {}", dir, e);
         }
 
