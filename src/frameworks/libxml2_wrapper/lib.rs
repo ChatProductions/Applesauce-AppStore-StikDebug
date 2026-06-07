@@ -424,6 +424,13 @@ extern "C" {
     pub fn xmlNodeAddContent(cur: *mut xmlNode, content: *const xmlChar);
     pub fn xmlNodeAddContentLen(cur: *mut xmlNode, content: *const xmlChar, len: c_int);
     pub fn xmlNodeGetContent(cur: *mut xmlNode) -> *mut xmlChar;
+    pub fn xmlNodeDump(
+        buf: *mut xmlBuffer,
+        doc: *mut xmlDoc,
+        cur: *mut xmlNode,
+        level: c_int,
+        format: c_int,
+    ) -> c_int;
     pub fn xmlNodeListGetString(
         doc: *mut xmlDoc,
         list: *mut xmlNode,

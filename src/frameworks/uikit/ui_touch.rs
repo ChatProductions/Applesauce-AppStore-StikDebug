@@ -50,6 +50,38 @@ pub(super) struct UITouchHostObject {
 }
 impl HostObject for UITouchHostObject {}
 
+fn touchhle_should_use_landscape_touch_remap(env: &Environment) -> bool {
+    match env.bundle.bundle_identifier() {
+        // Confirmed landscape Source/Cocos games.
+        "at.source.veggie1" | "at.source.potato3D" | "at.source.potpan" => true,
+
+        // TomatoZombie is native portrait.
+        "at.source.tomzom" => false,
+
+        // Manual override for testing.
+        _ => std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some(),
+    }
+}
+
+
+fn should_remap_touch_location_for_view(env: &mut Environment, view: id) -> bool {
+    if touchhle_should_use_landscape_touch_remap(env) {
+        return true;
+    }
+
+    if view == nil {
+        return false;
+    }
+
+    let view_class: crate::objc::Class = msg![env; view class];
+    let class_name = env.objc.get_class_name(view_class);
+
+    matches!(
+        class_name,
+        "CCGLView" | "EAGLView" | "CCEAGLView" | "GLKView"
+    )
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -87,15 +119,53 @@ pub const CLASSES: ClassExports = objc_classes! {
         that_view convertPoint:location_in_window fromView:window]
     };
 
-    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
+    if touchhle_should_use_landscape_touch_remap(env) {
         // Important: this happens AFTER UIKit hit-testing. The touch can still
         // hit the 320x480 EAGLView, but the game receives a landscape-style
         // 480x320 point from locationInView:, which is what PotatoGold's
         // custom OpenGL menu widgets appear to expect.
         let old_x = result.x;
         let old_y = result.y;
-        let mut new_x = old_x * (480.0 / 320.0);
-        let mut new_y = old_y * (320.0 / 480.0);
+
+        // CaptainTomato / Cocos2D landscape fix.
+        // UIKit hit-testing sees a 320x480 portrait CCGLView, but the game's
+        // Cocos/OpenGL menu expects 480x320 landscape coordinates.
+        //
+        // Default to LandscapeRight. Set TOUCHHLE_TOUCH_LANDSCAPE_LEFT=1 if
+        // taps are mirrored to the wrong side.
+        // CaptainTomato fix:
+        // Do NOT rotate. UIKit gives 320x480-ish touch coords, while the game
+        // wants 480x320-ish coords. The image is already visually rotated by
+        // the emulator/window path, so a 90-degree touch rotation makes the
+        // speaker/pause button hit the play button.
+        let mode = std::env::var("TOUCHHLE_TOUCH_MODE").unwrap_or_else(|_| {
+            match env.bundle.bundle_identifier() {
+                // CaptainTomato's confirmed working mode.
+                "at.source.veggie1" => "scale".to_string(),
+
+                // Potato Story / Potato Panic use the same scale-only touch
+                // behavior class as CaptainTomato. Do not rotate; rotation
+                // makes buttons miss entirely.
+                "at.source.potato3D" | "at.source.potpan" => "scale".to_string(),
+
+                // Other remapped apps default to the old safe behavior.
+                _ => "scale".to_string(),
+            }
+        });
+
+        let (mut new_x, mut new_y) = match mode.as_str() {
+            // LandscapeRight: portrait window -> 480x320 landscape coords.
+            "right" => (old_y, 320.0 - old_x),
+
+            // LandscapeLeft, kept for quick testing if right is mirrored.
+            "left" => (480.0 - old_y, old_x),
+
+            // Confirmed CaptainTomato behavior.
+            "scale" | _ => (
+                old_x * (480.0 / 320.0),
+                old_y * (320.0 / 480.0),
+            ),
+        };
 
         if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET") {
             if let Ok(offset) = offset.parse::<f32>() {
@@ -107,6 +177,14 @@ pub const CLASSES: ClassExports = objc_classes! {
                 new_y += offset;
             }
         }
+
+        log!(
+            "UITouch landscape remap: ({:.1}, {:.1}) -> ({:.1}, {:.1})",
+            old_x,
+            old_y,
+            new_x,
+            new_y
+        );
 
         result = CGPoint {
             x: new_x.clamp(0.0, 479.0),
@@ -128,9 +206,21 @@ pub const CLASSES: ClassExports = objc_classes! {
         that_view convertPoint:location_in_window fromView:window]
     };
 
-    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
+    if touchhle_should_use_landscape_touch_remap(env) {
         let old_x = result.x;
         let old_y = result.y;
+
+        // CaptainTomato / Cocos2D landscape fix.
+        // UIKit hit-testing sees a 320x480 portrait CCGLView, but the game's
+        // Cocos/OpenGL menu expects 480x320 landscape coordinates.
+        //
+        // Default to LandscapeRight. Set TOUCHHLE_TOUCH_LANDSCAPE_LEFT=1 if
+        // taps are mirrored to the wrong side.
+        // CaptainTomato fix:
+        // Do NOT rotate. UIKit gives 320x480-ish touch coords, while the game
+        // wants 480x320-ish coords. The image is already visually rotated by
+        // the emulator/window path, so a 90-degree touch rotation makes the
+        // speaker/pause button hit the play button.
         let mut new_x = old_x * (480.0 / 320.0);
         let mut new_y = old_y * (320.0 / 480.0);
 
@@ -144,6 +234,14 @@ pub const CLASSES: ClassExports = objc_classes! {
                 new_y += offset;
             }
         }
+
+        log!(
+            "UITouch landscape remap: ({:.1}, {:.1}) -> ({:.1}, {:.1})",
+            old_x,
+            old_y,
+            new_x,
+            new_y
+        );
 
         result = CGPoint {
             x: new_x.clamp(0.0, 479.0),
@@ -328,6 +426,16 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             continue;
         };
         let mut view: id = msg![env; window hitTest:location_in_window withEvent:event];
+
+        if view != nil {
+            let view_class: crate::objc::Class = msg![env; view class];
+            let class_name = env.objc.get_class_name(view_class).to_owned();
+
+            if class_name == "MBProgressHUD" {
+                log!("Touch hit MBProgressHUD; keeping HUD as touch target");
+            }
+        }
+
         if view == nil {
             log_dbg!("SUPER HACK: hitTest failed, forcing touch directly into the window");
             view = window;

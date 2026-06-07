@@ -88,15 +88,44 @@ fn set_error(db_handle: u32, msg: String) {
 // ---------- sqlite3_open ----------
 pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32 {
     let filename = read_cstring(env, filename_ptr);
-    let safe_name = filename.replace('/', "_");
+
     let path = if filename == ":memory:" {
         ":memory:".to_string()
     } else {
-        format!(
-            "/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}",
-            safe_name
-        )
+        let safe_name = filename
+            .replace('/', "_")
+            .replace('\\', "_")
+            .replace(':', "_");
+
+        let app_ns = std::env::var("TOUCHHLE_SQLITE_NAMESPACE")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                std::env::args().nth(1).map(|arg| {
+                    std::path::Path::new(&arg)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown_app")
+                        .to_string()
+                })
+            })
+            .unwrap_or_else(|| "app_picker".to_string())
+            .replace('/', "_")
+            .replace('\\', "_")
+            .replace(':', "_")
+            .replace(' ', "_");
+
+        let dir = std::path::Path::new("touchHLE_sqlite");
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            log!("libsqlite3: failed to create sqlite dir {:?}: {}", dir, e);
+        }
+
+        dir.join(format!("{}_{}", app_ns, safe_name))
+            .to_string_lossy()
+            .into_owned()
     };
+
+    log!("libsqlite3: sqlite3_open requested {:?} => {:?}", filename, path);
 
     match Connection::open(&path) {
         Ok(conn) => {
@@ -107,7 +136,7 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32
             SQLITE_OK
         }
         Err(e) => {
-            log!("libsqlite3: sqlite3_open failed: {}", e);
+            log!("libsqlite3: sqlite3_open failed for {:?}: {}", path, e);
             let p: MutPtr<u32> = MutPtr::from_bits(pp_db);
             env.mem.write(p, 0u32);
             SQLITE_ERROR

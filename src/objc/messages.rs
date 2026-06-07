@@ -19,7 +19,7 @@
 
 use super::{id, nil, Class, ObjC, IMP, SEL};
 use crate::abi::{CallFromHost, GuestRet};
-use crate::mem::{ConstPtr, MutVoidPtr, SafeRead};
+use crate::mem::{ConstPtr, MutVoidPtr, Ptr, SafeRead};
 use crate::Environment;
 use std::any::TypeId;
 
@@ -228,6 +228,14 @@ fn objc_msgSend_inner(
         return;
     }
 
+    if super2.is_none() && try_nsarray_indexed_subscript_interpose(env, receiver, selector, orig_class) {
+        return;
+    }
+
+    if super2.is_none() && try_gdataxml_interpose(env, receiver, selector, orig_class) {
+        return;
+    }
+
     // Lazily dispatch `+initialize` to the receiver's class (and its
     // superclasses) before this message reaches its IMP. Skipped for super
     // calls — the calling class is already initialized by the time we reach
@@ -427,6 +435,603 @@ Type mismatch when sending message {} to {:?}!
     }
 }
 
+
+
+// ============================================================================
+
+fn try_nsarray_indexed_subscript_interpose(
+    env: &mut Environment,
+    receiver: id,
+    selector: SEL,
+    orig_class: Class,
+) -> bool {
+    let sel_name = selector.as_str(&env.mem).to_string();
+    if sel_name != "objectAtIndexedSubscript:" {
+        return false;
+    }
+
+    let class_name = env.objc.get_class_name(orig_class).to_owned();
+    if !class_name.contains("NSArray") && !class_name.contains("NSMutableArray") {
+        return false;
+    }
+
+    let index = env.cpu.regs()[2];
+
+    let sel_object_at_index = env
+        .objc
+        .register_host_selector("objectAtIndex:".to_string(), &mut env.mem);
+
+    let obj: id = msg_send_no_type_checking(env, (receiver, sel_object_at_index, index));
+
+    log!(
+        "NSArray compat: [{} objectAtIndexedSubscript:{}] => {:?}",
+        class_name,
+        index,
+        obj
+    );
+
+    env.cpu.regs_mut()[0] = obj.to_bits();
+    env.cpu.regs_mut()[1] = 0;
+    true
+}
+
+// GDataXML compatibility layer
+// ============================================================================
+//
+// Some games bundle Google's GDataXML classes. Those classes directly
+// dereference libxml2's xmlNode/xmlAttr structs, but touchHLE's libxml2 shim
+// intentionally gives the guest opaque handle IDs instead of guest-visible
+// structs. Trying to fake libxml2 structs in libxml2.rs can make the guest walk
+// bad/cyclic XML graphs. Intercepting the tiny GDataXML surface the game uses
+// is safer: parse XML into a small Rust DOM and return real Objective-C objects
+// for GDataXMLDocument/GDataXMLElement/GDataXMLNode/GDataXMLAttribute methods.
+
+#[derive(Clone)]
+struct GDataCompatNode {
+    name: String,
+    text: String,
+    attrs: Vec<(String, String)>,
+    children: Vec<usize>,
+    parent: Option<usize>,
+}
+
+#[derive(Clone)]
+enum GDataCompatObject {
+    Document { root: usize },
+    Element { node: usize },
+    Attribute { name: String, value: String },
+}
+
+#[derive(Default)]
+struct GDataCompatState {
+    nodes: Vec<GDataCompatNode>,
+    objects: std::collections::HashMap<u32, GDataCompatObject>,
+}
+
+static GDATA_COMPAT_STATE: std::sync::Mutex<Option<GDataCompatState>> = std::sync::Mutex::new(None);
+
+fn gdata_state<R>(f: impl FnOnce(&mut GDataCompatState) -> R) -> R {
+    let mut guard = GDATA_COMPAT_STATE.lock().unwrap();
+    let state = guard.get_or_insert_with(GDataCompatState::default);
+    f(state)
+}
+
+fn gdata_class_name(env: &Environment, class: Class) -> Option<String> {
+    let host_object = env.objc.get_host_object(class)?;
+    if let Some(co) = host_object.as_any().downcast_ref::<super::ClassHostObject>() {
+        return Some(co.name.clone());
+    }
+    if let Some(co) = host_object.as_any().downcast_ref::<super::UnimplementedClass>() {
+        return Some(co.name.clone());
+    }
+    if let Some(co) = host_object.as_any().downcast_ref::<super::FakeClass>() {
+        return Some(co.name.clone());
+    }
+    None
+}
+
+fn gdata_is_class(name: &str) -> bool {
+    matches!(name, "GDataXMLDocument" | "GDataXMLElement" | "GDataXMLNode")
+}
+
+fn gdata_set_ret_id(env: &mut Environment, value: id) {
+    env.cpu.regs_mut()[0] = value.to_bits();
+    env.cpu.regs_mut()[1] = 0;
+}
+
+fn gdata_set_ret_u32(env: &mut Environment, value: u32) {
+    env.cpu.regs_mut()[0] = value;
+    env.cpu.regs_mut()[1] = 0;
+}
+
+fn gdata_make_string(env: &mut Environment, s: String) -> id {
+    crate::frameworks::foundation::ns_string::from_rust_string(env, s)
+}
+
+fn gdata_to_string(env: &mut Environment, s: id) -> String {
+    crate::frameworks::foundation::ns_string::to_rust_string(env, s).to_string()
+}
+
+fn gdata_make_array(env: &mut Environment, objects: Vec<id>) -> id {
+    crate::frameworks::foundation::ns_array::from_vec(env, objects)
+}
+
+fn gdata_alloc_object(env: &mut Environment, class_name: &str, object: GDataCompatObject) -> id {
+    let class = env.objc.get_known_class(class_name, &mut env.mem);
+    let obj = env.objc.alloc_object(class, Box::new(super::TrivialHostObject), &mut env.mem);
+    gdata_state(|s| {
+        s.objects.insert(obj.to_bits(), object);
+    });
+    obj
+}
+
+fn gdata_store_object(obj: id, object: GDataCompatObject) {
+    gdata_state(|s| {
+        s.objects.insert(obj.to_bits(), object);
+    });
+}
+
+fn gdata_lookup_object(obj: id) -> Option<GDataCompatObject> {
+    gdata_state(|s| s.objects.get(&obj.to_bits()).cloned())
+}
+
+fn gdata_node_name(node: usize) -> String {
+    gdata_state(|s| s.nodes.get(node).map(|n| n.name.clone()).unwrap_or_default())
+}
+
+fn gdata_node_string_value(node: usize) -> String {
+    fn collect(nodes: &[GDataCompatNode], idx: usize, out: &mut String) {
+        let Some(n) = nodes.get(idx) else { return; };
+        if !n.text.is_empty() {
+            out.push_str(&n.text);
+        }
+        for &child in &n.children {
+            collect(nodes, child, out);
+        }
+    }
+    gdata_state(|s| {
+        let mut out = String::new();
+        collect(&s.nodes, node, &mut out);
+        out
+    })
+}
+
+fn gdata_parse_xml(xml: &str) -> Option<usize> {
+    use quick_xml::events::Event;
+
+    let mut reader = quick_xml::Reader::from_reader(xml.as_bytes());
+    reader.config_mut().check_end_names = false;
+    reader.config_mut().trim_markup_names_in_closing_tags = true;
+
+    gdata_state(|state| {
+        let mut stack: Vec<usize> = Vec::new();
+        let mut root: Option<usize> = None;
+        let mut errors = 0usize;
+
+        loop {
+            match reader.read_event() {
+                Ok(Event::Start(e)) => {
+                    let local = e.local_name();
+                    let name = String::from_utf8_lossy(local.as_ref()).into_owned();
+                    let mut attrs = Vec::new();
+                    for attr in e.attributes().flatten() {
+                        let key_local = attr.key.local_name();
+                        let key = String::from_utf8_lossy(key_local.as_ref()).into_owned();
+                        let val = match attr.unescape_value() {
+                            Ok(v) => v.to_string(),
+                            Err(_) => String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        };
+                        attrs.push((key, val));
+                    }
+
+                    let idx = state.nodes.len();
+                    state.nodes.push(GDataCompatNode {
+                        name,
+                        text: String::new(),
+                        attrs,
+                        children: Vec::new(),
+                        parent: stack.last().copied(),
+                    });
+                    if let Some(&parent) = stack.last() {
+                        if let Some(p) = state.nodes.get_mut(parent) {
+                            p.children.push(idx);
+                        }
+                    } else if root.is_none() {
+                        root = Some(idx);
+                    }
+                    stack.push(idx);
+                }
+                Ok(Event::Empty(e)) => {
+                    let local = e.local_name();
+                    let name = String::from_utf8_lossy(local.as_ref()).into_owned();
+                    let mut attrs = Vec::new();
+                    for attr in e.attributes().flatten() {
+                        let key_local = attr.key.local_name();
+                        let key = String::from_utf8_lossy(key_local.as_ref()).into_owned();
+                        let val = match attr.unescape_value() {
+                            Ok(v) => v.to_string(),
+                            Err(_) => String::from_utf8_lossy(attr.value.as_ref()).into_owned(),
+                        };
+                        attrs.push((key, val));
+                    }
+
+                    let idx = state.nodes.len();
+                    state.nodes.push(GDataCompatNode {
+                        name,
+                        text: String::new(),
+                        attrs,
+                        children: Vec::new(),
+                        parent: stack.last().copied(),
+                    });
+                    if let Some(&parent) = stack.last() {
+                        if let Some(p) = state.nodes.get_mut(parent) {
+                            p.children.push(idx);
+                        }
+                    } else if root.is_none() {
+                        root = Some(idx);
+                    }
+                }
+                Ok(Event::Text(e)) => {
+                    if let Ok(text) = e.decode() {
+                        let text = text.to_string();
+                        if !text.trim().is_empty() {
+                            if let Some(&idx) = stack.last() {
+                                if let Some(n) = state.nodes.get_mut(idx) {
+                                    n.text.push_str(&text);
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Event::CData(e)) => {
+                    if let Ok(text) = e.decode() {
+                        if let Some(&idx) = stack.last() {
+                            if let Some(n) = state.nodes.get_mut(idx) {
+                                n.text.push_str(&text);
+                            }
+                        }
+                    }
+                }
+                Ok(Event::End(_)) => {
+                    if !stack.is_empty() {
+                        stack.pop();
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(err) => {
+                    errors += 1;
+                    if errors <= 4 {
+                        log!("GDataXML compat: XML parse error: {}", err);
+                    }
+                    if errors > 64 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        root
+    })
+}
+
+fn gdata_data_to_string(env: &mut Environment, data: id) -> String {
+    let Some(sel_bytes) = env.objc.lookup_selector("bytes") else { return String::new(); };
+    let Some(sel_length) = env.objc.lookup_selector("length") else { return String::new(); };
+    let bytes: ConstPtr<u8> = msg_send_no_type_checking(env, (data, sel_bytes));
+    let length: u32 = msg_send_no_type_checking(env, (data, sel_length));
+    if bytes.is_null() || length == 0 {
+        return String::new();
+    }
+    String::from_utf8_lossy(env.mem.bytes_at(bytes, length)).into_owned()
+}
+
+fn gdata_children_array(env: &mut Environment, node: usize, name_filter: Option<String>, deep: bool) -> id {
+    fn visit(env: &mut Environment, node_idx: usize, filter: Option<&str>, deep: bool, out: &mut Vec<id>) {
+        let children = gdata_state(|s| s.nodes.get(node_idx).map(|n| n.children.clone()).unwrap_or_default());
+        for child in children {
+            let name = gdata_node_name(child);
+            if filter.map(|f| f == name).unwrap_or(true) {
+                out.push(gdata_alloc_object(env, "GDataXMLElement", GDataCompatObject::Element { node: child }));
+            }
+            if deep {
+                visit(env, child, filter, deep, out);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    visit(env, node, name_filter.as_deref(), deep, &mut out);
+    gdata_make_array(env, out)
+}
+
+fn gdata_attrs_array(env: &mut Environment, node: usize) -> id {
+    let attrs = gdata_state(|s| s.nodes.get(node).map(|n| n.attrs.clone()).unwrap_or_default());
+    let mut out = Vec::new();
+    for (name, value) in attrs {
+        out.push(gdata_alloc_object(env, "GDataXMLNode", GDataCompatObject::Attribute { name, value }));
+    }
+    gdata_make_array(env, out)
+}
+
+fn gdata_attribute_for_name(env: &mut Environment, node: usize, wanted: String) -> id {
+    let found = gdata_state(|s| {
+        s.nodes.get(node).and_then(|n| {
+            n.attrs.iter().find(|(k, _)| k == &wanted).cloned()
+        })
+    });
+    if let Some((name, value)) = found {
+        gdata_alloc_object(env, "GDataXMLNode", GDataCompatObject::Attribute { name, value })
+    } else {
+        nil
+    }
+}
+
+fn gdata_parse_libxml_node_handle(env: &mut Environment, node_handle: u32) -> Option<usize> {
+    let xml = crate::frameworks::libxml2::compat_node_handle_to_xml_string(env, node_handle)?;
+    let root = gdata_parse_xml(&xml);
+    if root.is_none() {
+        log!("GDataXML compat: failed to parse XML dumped from libxml node handle {:#x}", node_handle);
+    } else {
+        log!("GDataXML compat: parsed XML dumped from libxml node handle {:#x}", node_handle);
+    }
+    root
+}
+
+fn try_gdataxml_interpose(env: &mut Environment, receiver: id, selector: SEL, orig_class: Class) -> bool {
+    let sel = selector.as_str(&env.mem).to_string();
+    let Some(class_name) = gdata_class_name(env, orig_class) else {
+        return false;
+    };
+
+    if !gdata_is_class(&class_name) {
+        return false;
+    }
+
+    // Pull raw objc_msgSend argument registers before any nested host call can
+    // clobber them.
+    let arg2 = env.cpu.regs()[2];
+    let arg3 = env.cpu.regs()[3];
+
+    match (class_name.as_str(), sel.as_str()) {
+        ("GDataXMLDocument", "initWithXMLString:error:")
+        | ("GDataXMLDocument", "initWithXMLString:options:error:") => {
+            let xml_obj: id = Ptr::from_bits(arg2);
+            let xml = gdata_to_string(env, xml_obj);
+            if let Some(root) = gdata_parse_xml(&xml) {
+                gdata_store_object(receiver, GDataCompatObject::Document { root });
+                log!("GDataXML compat: parsed XML string for document {:?}", receiver);
+                gdata_set_ret_id(env, receiver);
+            } else {
+                log!("GDataXML compat: failed to parse XML string");
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        ("GDataXMLDocument", "initWithData:")
+        | ("GDataXMLDocument", "initWithData:options:error:") => {
+            let data_obj: id = Ptr::from_bits(arg2);
+            let xml = gdata_data_to_string(env, data_obj);
+            if let Some(root) = gdata_parse_xml(&xml) {
+                gdata_store_object(receiver, GDataCompatObject::Document { root });
+                log!("GDataXML compat: parsed XML data for document {:?}", receiver);
+                gdata_set_ret_id(env, receiver);
+            } else {
+                log!("GDataXML compat: failed to parse XML data");
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        ("GDataXMLDocument", "initWithRootElement:") => {
+            let elem_obj: id = Ptr::from_bits(arg2);
+            if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(elem_obj) {
+                gdata_store_object(receiver, GDataCompatObject::Document { root: node });
+                gdata_set_ret_id(env, receiver);
+            } else {
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        ("GDataXMLDocument", "rootElement") => {
+            if let Some(GDataCompatObject::Document { root }) = gdata_lookup_object(receiver) {
+                let obj = gdata_alloc_object(env, "GDataXMLElement", GDataCompatObject::Element { node: root });
+                gdata_set_ret_id(env, obj);
+            } else {
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        (_, "nodeConsumingXMLNode:") | (_, "nodeBorrowingXMLNode:") => {
+            let node_handle = arg2;
+            if let Some(root) = gdata_parse_libxml_node_handle(env, node_handle) {
+                let obj = gdata_alloc_object(env, "GDataXMLElement", GDataCompatObject::Element { node: root });
+                gdata_set_ret_id(env, obj);
+            } else {
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        (_, "initConsumingXMLNode:") | (_, "initBorrowingXMLNode:") => {
+            let node_handle = arg2;
+            if let Some(root) = gdata_parse_libxml_node_handle(env, node_handle) {
+                gdata_store_object(receiver, GDataCompatObject::Element { node: root });
+                gdata_set_ret_id(env, receiver);
+            } else {
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        ("GDataXMLElement", "elementWithName:stringValue:") => {
+            let name: id = Ptr::from_bits(arg2);
+            let value: id = Ptr::from_bits(arg3);
+            let node = gdata_state(|s| {
+                let idx = s.nodes.len();
+                s.nodes.push(GDataCompatNode {
+                    name: gdata_to_string(env, name),
+                    text: gdata_to_string(env, value),
+                    attrs: Vec::new(),
+                    children: Vec::new(),
+                    parent: None,
+                });
+                idx
+            });
+            let obj = gdata_alloc_object(env, "GDataXMLElement", GDataCompatObject::Element { node });
+            gdata_set_ret_id(env, obj);
+            return true;
+        }
+
+        ("GDataXMLNode", "attributeWithName:stringValue:")
+        | ("GDataXMLElement", "attributeWithName:stringValue:") => {
+            let name: id = Ptr::from_bits(arg2);
+            let value: id = Ptr::from_bits(arg3);
+            let attr_name = gdata_to_string(env, name);
+            let attr_value = gdata_to_string(env, value);
+            let obj = gdata_alloc_object(
+                env,
+                "GDataXMLNode",
+                GDataCompatObject::Attribute {
+                    name: attr_name,
+                    value: attr_value,
+                },
+            );
+            gdata_set_ret_id(env, obj);
+            return true;
+        }
+
+        (_, "name") => {
+            let out = match gdata_lookup_object(receiver) {
+                Some(GDataCompatObject::Element { node }) => gdata_node_name(node),
+                Some(GDataCompatObject::Attribute { name, .. }) => name,
+                _ => String::new(),
+            };
+            let ret = gdata_make_string(env, out);
+            gdata_set_ret_id(env, ret);
+            return true;
+        }
+
+        (_, "stringValue") => {
+            let out = match gdata_lookup_object(receiver) {
+                Some(GDataCompatObject::Element { node }) => gdata_node_string_value(node),
+                Some(GDataCompatObject::Attribute { value, .. }) => value,
+                _ => String::new(),
+            };
+            let ret = gdata_make_string(env, out);
+            gdata_set_ret_id(env, ret);
+            return true;
+        }
+
+        ("GDataXMLElement", "children") | ("GDataXMLNode", "children") => {
+            if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(receiver) {
+                let arr = gdata_children_array(env, node, None, false);
+                gdata_set_ret_id(env, arr);
+            } else {
+                let ret = gdata_make_array(env, Vec::new());
+                gdata_set_ret_id(env, ret);
+            }
+            return true;
+        }
+
+        ("GDataXMLElement", "attributes") | ("GDataXMLNode", "attributes") => {
+            if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(receiver) {
+                let arr = gdata_attrs_array(env, node);
+                gdata_set_ret_id(env, arr);
+            } else {
+                let ret = gdata_make_array(env, Vec::new());
+                gdata_set_ret_id(env, ret);
+            }
+            return true;
+        }
+
+        ("GDataXMLElement", "elementsForName:") | ("GDataXMLNode", "elementsForName:") => {
+            let name_obj: id = Ptr::from_bits(arg2);
+            let wanted = gdata_to_string(env, name_obj);
+            if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(receiver) {
+                let arr = gdata_children_array(env, node, Some(wanted), false);
+                gdata_set_ret_id(env, arr);
+            } else {
+                let ret = gdata_make_array(env, Vec::new());
+                gdata_set_ret_id(env, ret);
+            }
+            return true;
+        }
+
+        ("GDataXMLElement", "attributeForName:") | ("GDataXMLNode", "attributeForName:") => {
+            let name_obj: id = Ptr::from_bits(arg2);
+            let wanted = gdata_to_string(env, name_obj);
+            if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(receiver) {
+                let obj = gdata_attribute_for_name(env, node, wanted);
+                gdata_set_ret_id(env, obj);
+            } else {
+                gdata_set_ret_id(env, nil);
+            }
+            return true;
+        }
+
+        (_, "nodesForXPath:error:") | (_, "nodesForXPath:namespaces:error:") => {
+            let xpath_obj: id = Ptr::from_bits(arg2);
+            let xpath = gdata_to_string(env, xpath_obj);
+            let result = if let Some(GDataCompatObject::Element { node }) = gdata_lookup_object(receiver) {
+                if let Some(name) = xpath.strip_prefix("//") {
+                    gdata_children_array(env, node, Some(name.to_string()), true)
+                } else if let Some(name) = xpath.strip_prefix("./") {
+                    gdata_children_array(env, node, Some(name.to_string()), false)
+                } else {
+                    gdata_make_array(env, Vec::new())
+                }
+            } else if let Some(GDataCompatObject::Document { root }) = gdata_lookup_object(receiver) {
+                if let Some(name) = xpath.strip_prefix("//") {
+                    gdata_children_array(env, root, Some(name.to_string()), true)
+                } else {
+                    gdata_make_array(env, Vec::new())
+                }
+            } else {
+                gdata_make_array(env, Vec::new())
+            };
+            gdata_set_ret_id(env, result);
+            return true;
+        }
+
+
+        (_, "dealloc") => {
+            gdata_state(|s| {
+                s.objects.remove(&receiver.to_bits());
+            });
+            env.cpu.regs_mut()[0..2].fill(0);
+            return true;
+        }
+
+        (_, "shouldFreeXMLNode") => {
+            gdata_set_ret_u32(env, 0);
+            return true;
+        }
+
+        (_, "setShouldFreeXMLNode:") => {
+            env.cpu.regs_mut()[0..2].fill(0);
+            return true;
+        }
+
+        (_, "XMLNode") | (_, "XMLNodeCopy") => {
+            gdata_set_ret_u32(env, 0);
+            return true;
+        }
+
+        (_, "isEqual:") => {
+            let other: id = Ptr::from_bits(arg2);
+            gdata_set_ret_u32(env, if other == receiver { 1 } else { 0 });
+            return true;
+        }
+
+        _ => {}
+    }
+
+    false
+}
 /// Standard variant of `objc_msgSend`. See [objc_msgSend_inner].
 #[allow(non_snake_case)]
 pub(super) fn objc_msgSend(env: &mut Environment, receiver: id, selector: SEL) {

@@ -194,7 +194,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this
                                    didStartElement:name_id
                                       namespaceURI:nil
-                                     qualifiedName:nil
+                                     qualifiedName:name_id
                                         attributes:dict];
                 }
 
@@ -206,7 +206,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this
                                      didEndElement:name_id
                                       namespaceURI:nil
-                                     qualifiedName:nil];
+                                     qualifiedName:name_id];
                 }
             }
             Event::Text(e) => {
@@ -238,7 +238,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this
                                    didStartElement:name_id
                                       namespaceURI:nil
-                                     qualifiedName:nil
+                                     qualifiedName:name_id
                                         attributes:dict];
                 }
             }
@@ -255,7 +255,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                     () = msg![env; delegate parser:this
                                      didEndElement:name_id
                                       namespaceURI:nil
-                                     qualifiedName:nil];
+                                     qualifiedName:name_id];
                 }
             }
             Event::CData(e) => {

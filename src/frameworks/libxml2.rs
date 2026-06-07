@@ -758,6 +758,48 @@ fn xmlNodeGetContent(env: &mut Environment, node: u32) -> u32 {
     take_xml_chars(env, p)
 }
 
+/// Compatibility helper for bundled GDataXML implementations.
+///
+/// Some apps call GDataXML's `nodeConsumingXMLNode:` / `initBorrowingXMLNode:`
+/// with one of our opaque libxml2 node handles. GDataXML then dereferences it
+/// as a real `_xmlNode *`, which fails. This helper serializes that host
+/// libxml node back into XML so the ObjC message hook can build its own small
+/// DOM without exposing host pointers or fake guest libxml structs.
+pub(crate) fn compat_node_handle_to_xml_string(_env: &mut Environment, node: u32) -> Option<String> {
+    let n = h2node(node);
+    if n.is_null() {
+        return None;
+    }
+
+    let doc = unsafe { xml::hxml_node_doc(n) };
+    if doc.is_null() {
+        return None;
+    }
+
+    let buf = unsafe { xml::xmlBufferCreate() };
+    if buf.is_null() {
+        return None;
+    }
+
+    let rc = unsafe { xml::xmlNodeDump(buf, doc, n, 0, 0) };
+    if rc < 0 {
+        unsafe { xml::xmlBufferFree(buf) };
+        return None;
+    }
+
+    let content = unsafe { xml::hxml_buffer_content(buf) };
+    let len = unsafe { xml::hxml_buffer_length(buf) };
+    let out = if !content.is_null() && len > 0 {
+        let bytes = unsafe { std::slice::from_raw_parts(content as *const u8, len as usize) };
+        Some(String::from_utf8_lossy(bytes).into_owned())
+    } else {
+        None
+    };
+
+    unsafe { xml::xmlBufferFree(buf) };
+    out
+}
+
 #[allow(non_snake_case)]
 fn xmlNodeListGetString(env: &mut Environment, doc: u32, list: u32, in_line: i32) -> u32 {
     let p = unsafe { xml::xmlNodeListGetString(h2doc(doc), h2node(list), in_line) };

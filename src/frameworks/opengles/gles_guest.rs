@@ -3090,16 +3090,12 @@ fn strip_captain_tomato_shader_precision(source: &str) -> String {
         lines.push(replace_precision_tokens(line));
     }
 
-    // If a shader had only inline precision qualifiers and we normalized them,
-    // make sure GLSL ES still has default precision declarations.
     let mut insert_at = 0usize;
-    while insert_at < lines.len() {
-        let t = lines[insert_at].trim();
-        if t.is_empty() || t.starts_with("#version") || t.starts_with("#extension") {
-            insert_at += 1;
-        } else {
-            break;
-        }
+    while insert_at < lines.len()
+        && (lines[insert_at].trim_start().starts_with("#version")
+            || lines[insert_at].trim_start().starts_with("#extension"))
+    {
+        insert_at += 1;
     }
 
     if !has_int_precision {
@@ -3109,9 +3105,7 @@ fn strip_captain_tomato_shader_precision(source: &str) -> String {
         lines.insert(insert_at, "precision highp float;".to_string());
     }
 
-    let mut out = lines.join("\n");
-    out.push('\n');
-    out
+    lines.join("\n")
 }
 
 fn glShaderSource(
@@ -3154,19 +3148,11 @@ fn glShaderSource(
         } else {
             env.mem.cstr_at(str_ptr).to_vec()
         };
-        let bytes_vec = if env.bundle.bundle_identifier() == "at.source.veggie1" {
-            let src = String::from_utf8_lossy(&bytes_vec);
-            strip_captain_tomato_shader_precision(&src).into_bytes()
-        } else {
-            bytes_vec
-        };
-
-        let bytes_vec = if env.bundle.bundle_identifier() == "at.source.veggie1" {
-            let src = String::from_utf8_lossy(&bytes_vec);
-            strip_captain_tomato_shader_precision(&src).into_bytes()
-        } else {
-            bytes_vec
-        };
+        // Normalize GLES precision qualifiers for all Cocos2D shaders.
+        // Fixes Mesa link failures like:
+        // uniform `CC_PMatrix` declared as type `f16mat4` and type `mat4`.
+        let src = String::from_utf8_lossy(&bytes_vec);
+        let bytes_vec = strip_captain_tomato_shader_precision(&src).into_bytes();
 
         let cs = std::ffi::CString::new(bytes_vec).unwrap_or_default();
         owned.push(cs);
