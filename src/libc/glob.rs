@@ -1,101 +1,162 @@
 /*
- * Реализация POSIX glob для TouchHLE
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//! glob? glob. glob-glob
 
-use crate::dyld::FunctionExports;
-use crate::environment::Environment;
-use crate::export_c_func;
-use crate::mem::{ConstPtr, MutPtr, SafeRead};
+use super::dirent::{closedir, dirent, opendir, readdir, DIR};
+use super::fnmatch::fnmatch;
+use super::string::strlen;
+use crate::abi::GuestFunction;
+use crate::dyld::{export_c_func, FunctionExports};
+use crate::mem::{guest_size_of, ConstPtr, GuestUSize, MutPtr, SafeRead};
+use crate::Environment;
 
-// Точная структура glob_t для 32-битного ARM (iOS/macOS)
-#[repr(C)]
-pub struct GuestGlobT {
-    pub gl_pathc: u32,
-    pub gl_matchc: i32,
-    pub gl_offs: u32,
-    pub gl_flags: i32,
-    pub gl_pathv: MutPtr<MutPtr<u8>>,
-    pub gl_errfunc: MutPtr<()>,
-    pub gl_closedir: MutPtr<()>,
-    pub gl_readdir: MutPtr<()>,
-    pub gl_opendir: MutPtr<()>,
-    pub gl_lstat: MutPtr<()>,
-    pub gl_stat: MutPtr<()>,
+// Our internal type.
+type GlobFlagType = i32;
+const GLOB_DOOFFS: GlobFlagType = 0x2;
+const GLOB_NOSORT: GlobFlagType = 0x20;
+const GLOB_MAGCHAR: GlobFlagType = 0x100;
+const GLOB_NOESCAPE: GlobFlagType = 0x2000;
+
+const GLOB_NOMATCH: i32 = -3;
+
+#[repr(C, packed)]
+struct glob_t {
+    gl_pathc: GuestUSize,
+    gl_matchc: i32,
+    gl_offs: GuestUSize,
+    gl_flags: i32,
+    gl_pathv: MutPtr<MutPtr<u8>>,
+    gl_errfunc: GuestFunction,  // TODO
+    gl_closedir: GuestFunction, // TODO
+    gl_readdir: GuestFunction,  // TODO
+    gl_opendir: GuestFunction,  // TODO
+    gl_lstat: GuestFunction,    // TODO
+    gl_stat: GuestFunction,     // TODO
 }
-
-unsafe impl SafeRead for GuestGlobT {}
-
-const GLOB_SUCCESS: i32 = 0;
-const GLOB_NOMATCH: i32 = -3; // Специфичное для Apple значение
+unsafe impl SafeRead for glob_t {}
 
 fn glob(
     env: &mut Environment,
-    pattern_ptr: ConstPtr<u8>,
-    flags: i32,
-    _errfunc: MutPtr<()>,
-    pglob_ptr: MutPtr<GuestGlobT>,
+    pattern: ConstPtr<u8>,
+    flags: GlobFlagType,
+    err_func: GuestFunction,
+    pglob: MutPtr<glob_t>,
 ) -> i32 {
-    let pattern = env.mem.cstr_at_utf8(pattern_ptr).unwrap_or("");
-    log_dbg!("glob(pattern: {:?}, flags: {:#x})", pattern, flags);
+    let pattern_str = env.mem.cstr_at_utf8(pattern);
+    log_dbg!(
+        "glob({:?}, {}, {:?}, {:?})",
+        pattern_str,
+        flags,
+        err_func,
+        pglob
+    );
+    assert!(err_func.to_ptr().is_null()); // TODO
 
-    let mut matched_paths: Vec<String> = Vec::new();
+    // TODO: assert against passed flags
+    assert!(flags & GLOB_NOSORT != 0);
+    assert!(flags & GLOB_NOESCAPE != 0);
+    let do_offs = flags & GLOB_DOOFFS != 0;
 
-    // Базовая логика: если путь не содержит масок, мы просто возвращаем его.
-    // Полноценный поиск по VFS (Virtual File System) с учетом масок (*) можно
-    // будет прикрутить позже, если игре не хватит прямых путей.
-    if !pattern.contains('*') && !pattern.contains('?') {
-        matched_paths.push(pattern.to_string());
+    // TODO: support other flags
+    assert!(flags & !(GLOB_DOOFFS | GLOB_NOSORT | GLOB_NOESCAPE) == 0);
+
+    let pattern_str = pattern_str.unwrap().to_owned();
+    assert!(!pattern_str.contains('\\')); // TODO
+
+    // TODO: account for non-global patterns
+    assert!(pattern_str.starts_with("/"));
+    let (directory, subpattern) = pattern_str.rsplit_once('/').unwrap();
+    assert!(!directory.contains('*') && !directory.contains('?') && !directory.contains('[')); // TODO
+    assert!(!subpattern.contains('?') && !subpattern.contains('[')); // TODO
+    let has_star_wildcard = subpattern.contains('*');
+
+    let directory_c_str = env.mem.alloc_and_write_cstr(directory.as_bytes());
+    let dirp: MutPtr<DIR> = opendir(env, directory_c_str.cast_const());
+    env.mem.free(directory_c_str.cast());
+    assert!(!dirp.is_null());
+
+    let subpattern_c_str: ConstPtr<u8> = env
+        .mem
+        .alloc_and_write_cstr(subpattern.as_bytes())
+        .cast_const();
+
+    let dirent_name_offset = std::mem::offset_of!(dirent, d_name) as GuestUSize;
+
+    let mut next_dir_entry = readdir(env, dirp);
+    let mut tmp_vec: Vec<MutPtr<u8>> = vec![];
+    while !next_dir_entry.is_null() {
+        let name_c_str: ConstPtr<u8> = next_dir_entry.cast().cast_const() + dirent_name_offset;
+
+        // TODO: should we match on the whole path or just the filename?
+        if fnmatch(env, subpattern_c_str, name_c_str, 0) == 0 {
+            // TODO: use `lstat` and/or `stat` to get information on names found
+            let name_len: GuestUSize = strlen(env, name_c_str);
+            let dir_len = directory.len() as GuestUSize;
+            let size = dir_len + 1 + name_len + 1;
+
+            let buf = env.mem.calloc(size).cast::<u8>();
+            env.mem
+                .bytes_at_mut(buf, dir_len)
+                .copy_from_slice(directory.as_bytes());
+            env.mem.bytes_at_mut(buf + dir_len, 1).copy_from_slice(b"/");
+            let name_bytes = env.mem.bytes_at(name_c_str, name_len).to_vec();
+            env.mem
+                .bytes_at_mut(buf + dir_len + 1, name_len)
+                .copy_from_slice(&name_bytes);
+
+            tmp_vec.push(buf);
+        }
+
+        next_dir_entry = readdir(env, dirp);
+    }
+
+    env.mem.free(subpattern_c_str.cast_mut().cast());
+    closedir(env, dirp);
+
+    let mut tmp_glob = env.mem.read(pglob);
+    let offs = if do_offs { tmp_glob.gl_offs } else { 0 };
+    let out_count = tmp_vec.len() as GuestUSize;
+    let total_count = out_count + offs;
+    tmp_glob.gl_pathc = out_count;
+    tmp_glob.gl_matchc = out_count as i32;
+    tmp_glob.gl_flags = if has_star_wildcard {
+        flags | GLOB_MAGCHAR
     } else {
-        log!(
-            "glob: Wildcards not fully supported yet, returning GLOB_NOMATCH for {}",
-            pattern
-        );
+        flags & !GLOB_MAGCHAR
+    };
+    let list_out: MutPtr<MutPtr<u8>> = env
+        .mem
+        .calloc((total_count + 1) * guest_size_of::<MutPtr<u8>>())
+        .cast();
+    let start = list_out + offs;
+    for (idx, out_str) in tmp_vec.iter().enumerate() {
+        env.mem.write(start + idx as GuestUSize, *out_str);
     }
+    tmp_glob.gl_pathv = list_out;
+    env.mem.write(pglob, tmp_glob);
 
-    if matched_paths.is_empty() {
-        return GLOB_NOMATCH;
+    if out_count > 0 {
+        0 // success and match
+    } else {
+        GLOB_NOMATCH
     }
-
-    let mut pglob = env.mem.read(pglob_ptr);
-    pglob.gl_pathc = matched_paths.len() as u32;
-    pglob.gl_matchc = matched_paths.len() as i32;
-
-    // Выделение памяти под массив указателей (gl_pathv) + 1 для завершающего
-    // NULL
-    let pathv_size = (matched_paths.len() as u32 + 1) * 4;
-    let pathv_ptr: MutPtr<MutPtr<u8>> = env.mem.alloc(pathv_size).cast();
-
-    for (i, path) in matched_paths.iter().enumerate() {
-        let guest_str_ptr = env.mem.alloc_and_write_cstr(path.as_bytes());
-        env.mem.write(pathv_ptr + (i as u32), guest_str_ptr);
-    }
-
-    // Записываем NULL-терминатор в конец массива
-    env.mem
-        .write(pathv_ptr + (matched_paths.len() as u32), MutPtr::null());
-
-    pglob.gl_pathv = pathv_ptr;
-    env.mem.write(pglob_ptr, pglob);
-
-    GLOB_SUCCESS
 }
 
-fn globfree(env: &mut Environment, pglob_ptr: MutPtr<GuestGlobT>) {
-    if pglob_ptr.is_null() {
-        return;
+fn globfree(env: &mut Environment, pglob: MutPtr<glob_t>) {
+    let tmp_glob = env.mem.read(pglob);
+    let offs = if tmp_glob.gl_flags & GLOB_DOOFFS != 0 {
+        tmp_glob.gl_offs
+    } else {
+        0
+    };
+    for i in 0..tmp_glob.gl_pathc as GuestUSize {
+        let match_ = env.mem.read(tmp_glob.gl_pathv + offs + i);
+        env.mem.free(match_.cast());
     }
-    let pglob = env.mem.read(pglob_ptr);
-
-    // Честно освобождаем всю выделенную гостевую память
-    if !pglob.gl_pathv.is_null() {
-        for i in 0..pglob.gl_pathc {
-            let str_ptr = env.mem.read(pglob.gl_pathv + i);
-            if !str_ptr.is_null() {
-                env.mem.free(str_ptr.cast());
-            }
-        }
-        env.mem.free(pglob.gl_pathv.cast());
-    }
+    env.mem.free(tmp_glob.gl_pathv.cast());
 }
 
 pub const FUNCTIONS: FunctionExports = &[
