@@ -43,11 +43,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// =========================================================================
-// MARK: - Class convenience constructors
-// =========================================================================
-
-+ (id)data {
+// ==================================================================+ (id)data {
     let new: id = msg![env; this alloc];
     let new: id = msg![env; new init];
     autorelease(env, new)
