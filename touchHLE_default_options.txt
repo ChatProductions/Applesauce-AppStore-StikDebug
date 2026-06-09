@@ -293,3 +293,11 @@ com.palmheroes.PalmHeroes: --landscape-right
 # Mutant Fridge Mayhem (issue #220)
 # App requests LandscapeRight; use landscape-right so the orientation matches.
 com.turner.mfm: --landscape-right
+
+# Known app-specific launch profiles (UltraHLE)
+com.apprisetec9.minionjump: --device-family=ipad --landscape-right --force-composition
+com.risinghighapps.kingdomprincepro: --device-family=ipad --landscape-right --force-composition
+at.source.veggie1: --device-family=iphone --landscape-right --force-composition
+at.source.tomzom: --device-family=iphone --landscape-right --force-composition
+at.source.potpan: --device-family=iphone --landscape-right --force-composition
+at.source.potato3D: --device-family=iphone --landscape-right --force-composition
