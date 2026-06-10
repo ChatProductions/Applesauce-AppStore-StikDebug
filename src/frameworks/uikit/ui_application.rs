@@ -532,6 +532,26 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 @end
 
+// UIUserNotificationSettings — holds notification permission settings.
+// https://developer.apple.com/documentation/uikit/uiusernotificationsettings
+// On iOS 8+, apps call [UIApplication registerUserNotificationSettings:settings]
+// with an instance of this class. Since touchHLE does not deliver notifications,
+// we expose a minimal stub that satisfies alloc/init and settingsForTypes:categories:.
+@implementation UIUserNotificationSettings: NSObject
+
++ (id)settingsForTypes:(NSUInteger)_types categories:(id)_categories {
+    // Return a shared dummy instance. Apps only inspect -types on the object
+    // returned by -[UIApplication currentUserNotificationSettings], which
+    // returns nil, so this object does not need to store anything.
+    msg_class![env; UIUserNotificationSettings new]
+}
+
+- (NSUInteger)types {
+    0 // UIUserNotificationTypeNone
+}
+
+@end
+
 };
 
 /// Best-effort discovery of the application delegate class.
