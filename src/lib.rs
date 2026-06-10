@@ -225,6 +225,35 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     };
 
     let app_id = bundle.bundle_identifier();
+
+    // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
+    // Potato Panic / Potato Story: leave rendering alone; remap touch coordinates as landscape-right.
+    unsafe {
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT");
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER");
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE");
+        std::env::remove_var("TOUCHHLE_TOUCH_MODE");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
+    }
+
+    if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
+        unsafe {
+            std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
+            std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
+        }
+    }
+    // ULTRAHLE_POTATO_LANDSCAPE_END
+
+
+
+
+
+
+
+
+
     let minimum_os_version = bundle.minimum_os_version();
     let required_device_capabilities = bundle.required_device_capabilities();
     let device_family = bundle.device_family_array();

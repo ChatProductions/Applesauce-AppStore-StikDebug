@@ -167,6 +167,9 @@ pub const CLASSES: ClassExports = objc_classes! {
             // LandscapeRight: portrait window -> 480x320 landscape coords.
             "right" => (old_y, 320.0 - old_x),
 
+            // Same rotation as right, but mirrored horizontally.
+            "right-flip-x" => (480.0 - old_y, 320.0 - old_x),
+
             // LandscapeLeft, kept for quick testing if right is mirrored.
             "left" => (480.0 - old_y, old_x),
 
