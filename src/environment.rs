@@ -262,24 +262,24 @@ impl Environment {
         let startup_time = Instant::now();
         let launched_bundle_id = bundle.bundle_identifier().to_owned();
 
-if launched_bundle_id == "at.source.potato.full" {
-    log!(
+        if launched_bundle_id == "at.source.potato.full" {
+            log!(
         "Applying PotatoGold compatibility profile: disable present rotation, remap touch location to landscape, fake network success, and use silent OpenAL fallback."
     );
 
-    // SAFETY: Environment::new runs during startup before guest worker threads
-    // are created. These env vars are read by compatibility shims inside this
-    // same process.
-    unsafe {
-        std::env::set_var("TOUCHHLE_DISABLE_PRESENT_ROTATION", "1");
-        std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
-        std::env::set_var("TOUCHHLE_FAKE_NETWORK_SUCCESS", "1");
+            // SAFETY: Environment::new runs during startup before guest worker threads
+            // are created. These env vars are read by compatibility shims inside this
+            // same process.
+            unsafe {
+                std::env::set_var("TOUCHHLE_DISABLE_PRESENT_ROTATION", "1");
+                std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
+                std::env::set_var("TOUCHHLE_FAKE_NETWORK_SUCCESS", "1");
 
-        // PotatoGold's audio path was crashing on some Linux setups unless
-        // OpenAL Soft used the null backend. This keeps the app playable even
-        // if sound is silent.
-    }
-}
+                // PotatoGold's audio path was crashing on some Linux setups unless
+                // OpenAL Soft used the null backend. This keeps the app playable even
+                // if sound is silent.
+            }
+        }
         // Enforces the one (real) Environment limit. See `with_yielder` for
         // why this is needed.
         if ENVIRONMENT_INSTANCE_EXISTS.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -300,9 +300,9 @@ if launched_bundle_id == "at.source.potato.full" {
         // launch logic uses portrait by default whenever it's listed, so
         // mirror that.
         let portrait_supported = bundle
-            .supported_interface_orientations().contains(&"UIInterfaceOrientationPortrait");
-        if options.initial_orientation == window::DeviceOrientation::Portrait
-            && !portrait_supported
+            .supported_interface_orientations()
+            .contains(&"UIInterfaceOrientationPortrait");
+        if options.initial_orientation == window::DeviceOrientation::Portrait && !portrait_supported
         {
             if let Some(&non_portrait_orientation) = bundle
                 .supported_interface_orientations()
@@ -1723,9 +1723,13 @@ if launched_bundle_id == "at.source.potato.full" {
                     log_no_panic!(
                         "Warning: Ignored UndefinedInstruction at {:#x}. \
                          Faking function return to LR ({:#x}) to bypass crash! \
+                         cpsr={:#x} thumb={} instruction_len={} \
                          (occurrence {} of at most {})",
                         pc,
                         lr,
+                        self.cpu.cpsr(),
+                        (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0,
+                        instruction_len,
                         count,
                         BYPASS_LIMIT
                     );
