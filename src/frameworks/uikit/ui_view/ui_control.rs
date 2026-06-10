@@ -349,6 +349,23 @@ forControlEvents:(UIControlEvents)events {
     };
 }
 
+- (())removeTarget:(id)target
+            action:(SEL)action
+  forControlEvents:(UIControlEvents)events {
+    let action_targets = &mut env.objc.borrow_mut::<UIControlHostObject>(this).action_targets;
+    action_targets.retain(|(t, a, e)| {
+        // If target is nil, match any target; otherwise only the specified one.
+        let target_match = target == crate::objc::nil || *t == target;
+        // If action selector is null/zero, match any action; otherwise only
+        // the specified one.
+        let action_match = action.is_null() || *a == action;
+        // Only remove entries where events overlap.
+        let events_match = (*e & events) != 0;
+        // Retain entries that do NOT match all three conditions.
+        !(target_match && action_match && events_match)
+    });
+}
+
 // TODO: more triggers/targets/actions stuff
 
 @end

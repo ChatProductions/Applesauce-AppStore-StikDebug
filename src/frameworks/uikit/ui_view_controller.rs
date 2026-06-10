@@ -476,6 +476,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).presented_view_controller = nil;
     release(env, presented);
 }
+// Presents an MPMoviePlayerViewController modally.
+// https://developer.apple.com/documentation/mediaplayer/uiviewcontroller/1619166-presentmovieplayerviewcontroller
+- (())presentMoviePlayerViewControllerAnimated:(id)moviePlayerViewController {
+    () = msg![env; this presentModalViewController:moviePlayerViewController animated:false];
+}
+
 - (())dismissMoviePlayerViewControllerAnimated {
     log!("TODO: [(UIViewController*){:?} dismissMoviePlayerViewControllerAnimated]", this);
     // TODO

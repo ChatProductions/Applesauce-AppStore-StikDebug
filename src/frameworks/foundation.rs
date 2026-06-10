@@ -867,6 +867,31 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_NSMetadataUbiquitousItemIsDownloadedKey",
         HostConstant::NSString("NSMetadataUbiquitousItemIsDownloadedKey"),
     ),
+    // iCloud item state keys — https://developer.apple.com/documentation/foundation/nsmetadataitem
+    (
+        "_NSMetadataUbiquitousItemIsDownloadingKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsDownloadingKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemIsUploadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsUploadedKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemIsUploadingKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsUploadingKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemHasUnresolvedConflictsKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemHasUnresolvedConflictsKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemPercentDownloadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemPercentDownloadedKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemPercentUploadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemPercentUploadedKey"),
+    ),
     // -----------------------------------------------------------------
     // NSURL ubiquity / iCloud item attribute keys, per
     // <https://developer.apple.com/documentation/foundation/nsurl>

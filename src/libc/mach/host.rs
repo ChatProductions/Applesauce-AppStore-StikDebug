@@ -90,11 +90,34 @@ fn host_statistics(
     host_info_out: host_info_t,
     host_info_out_count: MutPtr<mach_msg_type_number_t>,
 ) -> kern_return_t {
-    assert_eq!(host, MACH_HOST_SELF);
-    assert_eq!(flavor, HOST_VM_INFO);
+    if host != MACH_HOST_SELF {
+        log!(
+            "host_statistics: unexpected host port {:#010x} (expected MACH_HOST_SELF {:#010x}); \
+             returning KERN_INVALID_ARGUMENT",
+            host,
+            MACH_HOST_SELF
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
+    if flavor != HOST_VM_INFO {
+        log!(
+            "host_statistics: unsupported flavor {}; returning KERN_INVALID_ARGUMENT",
+            flavor
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
     let out_size_available = env.mem.read(host_info_out_count);
-    let out_size_expected = guest_size_of::<vm_statistics>() / guest_size_of::<natural_t>();
-    assert_eq!(out_size_expected, out_size_available);
+    let out_size_expected =
+        guest_size_of::<vm_statistics>() / guest_size_of::<natural_t>();
+    if (out_size_available as u32) < (out_size_expected as u32) {
+        log!(
+            "host_statistics: caller buffer too small: available={}, expected={}; \
+             returning KERN_INVALID_ARGUMENT",
+            out_size_available,
+            out_size_expected
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
     env.mem.write(
         host_info_out.cast(),
         vm_statistics {
@@ -115,6 +138,11 @@ fn host_statistics(
             speculative_count: 0,
         },
     );
+    // Per Apple XNU host_statistics semantics, update *count to the number of
+    // natural_t-sized fields actually written, so callers that passed a
+    // larger-than-needed buffer (e.g. Unreal Engine passing byte-size) still
+    // receive a valid, stable count back.
+    env.mem.write(host_info_out_count, out_size_expected as mach_msg_type_number_t);
     KERN_SUCCESS
 }
 
