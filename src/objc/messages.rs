@@ -264,6 +264,171 @@ fn objc_msgSend_inner(
         }
     }
 
+    
+    // ULTRAHLE_MINIONJUMP_TAP_BRIDGE_BEGIN
+    // Minion Jump / SheepEscape: map Cocos2D GrowButton/GrowStarButton objects
+    // to their real target+selector callbacks. This is app-gated so Potato and
+    // other games never see it.
+    static ULTRAHLE_MINIONJUMP_BUTTON_CALLBACKS: std::sync::OnceLock<
+        std::sync::Mutex<Vec<(u32, u32, u32, u32)>>,
+    > = std::sync::OnceLock::new();
+    static ULTRAHLE_MINIONJUMP_BUTTON_CALLBACK_REENTRY: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    static ULTRAHLE_MINIONJUMP_CURRENT_STAGE: std::sync::atomic::AtomicU32 =
+        std::sync::atomic::AtomicU32::new(0);
+
+    let ultrahle_minionjump_active = matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    );
+
+    let ultrahle_minionjump_sel_name = if ultrahle_minionjump_active {
+        selector.as_str(&env.mem).to_string()
+    } else {
+        String::new()
+    };
+
+    let ultrahle_minionjump_class_name = if ultrahle_minionjump_active {
+        env.objc.get_class_name(orig_class).to_owned()
+    } else {
+        String::new()
+    };
+
+    let ultrahle_minionjump_release_arg0 = env.cpu.regs()[2];
+
+    let mut ultrahle_minionjump_factory_should_map = false;
+    let mut ultrahle_minionjump_factory_target: u32 = 0;
+    let mut ultrahle_minionjump_factory_sel: u32 = 0;
+    let mut ultrahle_minionjump_factory_stage: u32 = 0;
+    let mut ultrahle_minionjump_factory_note = String::new();
+    let mut ultrahle_minionjump_factory_clears_scene_map = false;
+
+    if ultrahle_minionjump_active
+        && ultrahle_minionjump_class_name == "GrowButton"
+        && ultrahle_minionjump_sel_name == "buttonWithSprite:selectImage:target:selector:"
+    {
+        let sp = env.cpu.regs()[13];
+        let sp_ptr = crate::mem::ConstPtr::<u8>::from_bits(sp);
+
+        // r0=self/class, r1=_cmd, r2=sprite, r3=selectImage.
+        // stack[0]=target, stack[1]=selector.
+        ultrahle_minionjump_factory_target =
+            u32::from_le_bytes(env.mem.bytes_at(sp_ptr, 4).try_into().unwrap());
+        ultrahle_minionjump_factory_sel =
+            u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 4, 4).try_into().unwrap());
+
+        if ultrahle_minionjump_factory_target != 0 && ultrahle_minionjump_factory_sel != 0 {
+            let callback_sel_ptr =
+                crate::mem::ConstPtr::<u8>::from_bits(ultrahle_minionjump_factory_sel);
+            let callback_sel: crate::objc::SEL = unsafe { std::mem::transmute(callback_sel_ptr) };
+            let callback_name = callback_sel.as_str(&env.mem).to_string();
+
+            ultrahle_minionjump_factory_should_map = true;
+            ultrahle_minionjump_factory_note = callback_name.clone();
+
+            if callback_name == "playAction"
+                || callback_name == "backAction"
+                || callback_name == "selPause"
+            {
+                ultrahle_minionjump_factory_clears_scene_map = true;
+            }
+
+            log!(
+                "UltraHLE MinionJump factory GrowButton target=0x{:08x} selector={}",
+                ultrahle_minionjump_factory_target,
+                callback_name
+            );
+        }
+    }
+
+    if ultrahle_minionjump_active
+        && ultrahle_minionjump_class_name == "GrowStarButton"
+        && ultrahle_minionjump_sel_name
+            == "buttonWithSpriteFrame:selectframeName:stageNumber:starCount:locked:tag:target:selector:"
+    {
+        let sp = env.cpu.regs()[13];
+        let sp_ptr = crate::mem::ConstPtr::<u8>::from_bits(sp);
+
+        // r0=self/class, r1=_cmd, r2=spriteFrame, r3=selectframeName.
+        // stack[0]=stageNumber, stack[1]=starCount, stack[2]=locked,
+        // stack[3]=tag, stack[4]=target, stack[5]=selector.
+        let stage_number = u32::from_le_bytes(env.mem.bytes_at(sp_ptr, 4).try_into().unwrap());
+        let _star_count = u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 4, 4).try_into().unwrap());
+        let mut locked = u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 8, 4).try_into().unwrap());
+        let _tag = u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 12, 4).try_into().unwrap());
+
+        if stage_number <= 25 && locked != 0 {
+            let locked_arg_ptr = crate::mem::MutPtr::<u8>::from_bits(sp + 8);
+            env.mem
+                .bytes_at_mut(locked_arg_ptr, 4)
+                .copy_from_slice(&0u32.to_le_bytes());
+            locked = 0;
+            log!(
+                "UltraHLE MinionJump: forced stage {} unlocked in GrowStarButton factory",
+                stage_number
+            );
+        }
+
+        ultrahle_minionjump_factory_target =
+            u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 16, 4).try_into().unwrap());
+        ultrahle_minionjump_factory_sel =
+            u32::from_le_bytes(env.mem.bytes_at(sp_ptr + 20, 4).try_into().unwrap());
+
+        if ultrahle_minionjump_factory_target != 0 && ultrahle_minionjump_factory_sel != 0 {
+            let callback_sel_ptr =
+                crate::mem::ConstPtr::<u8>::from_bits(ultrahle_minionjump_factory_sel);
+            let callback_sel: crate::objc::SEL = unsafe { std::mem::transmute(callback_sel_ptr) };
+            let callback_name = callback_sel.as_str(&env.mem).to_string();
+
+            log!(
+                "UltraHLE MinionJump factory GrowStarButton stage={} locked={} target=0x{:08x} selector={}",
+                stage_number,
+                locked,
+                ultrahle_minionjump_factory_target,
+                callback_name
+            );
+
+            // ULTRAHLE_MINIONJUMP_CLEAR_ON_STAGE1_BEGIN
+            if stage_number == 1 && callback_name == "selectLVAction:" {
+                let map = ULTRAHLE_MINIONJUMP_BUTTON_CALLBACKS
+                    .get_or_init(|| std::sync::Mutex::new(Vec::new()));
+                map.lock().unwrap().clear();
+                log!("UltraHLE MinionJump: cleared stale level-select callback map at stage 1 factory");
+            }
+            // ULTRAHLE_MINIONJUMP_CLEAR_ON_STAGE1_END
+
+            if locked == 0 && callback_name == "selectLVAction:" {
+                ultrahle_minionjump_factory_should_map = true;
+                ultrahle_minionjump_factory_stage = stage_number;
+                ultrahle_minionjump_factory_note =
+                    format!("stage{}:{}", stage_number, callback_name);
+            }
+        }
+    }
+
+    if ultrahle_minionjump_active
+        && (ultrahle_minionjump_sel_name == "getCurrentStage"
+            || ultrahle_minionjump_sel_name == "currentstage"
+            || ultrahle_minionjump_sel_name == "currentStage")
+    {
+        let selected_stage_index: u32 =
+            std::env::var("ULTRAHLE_MINIONJUMP_SELECTED_STAGE_INDEX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+
+        log!(
+            "UltraHLE MinionJump: overriding {} -> {}",
+            ultrahle_minionjump_sel_name,
+            selected_stage_index
+        );
+
+        env.cpu.regs_mut()[0] = selected_stage_index;
+        env.cpu.regs_mut()[1] = 0;
+        return;
+    }
+    // ULTRAHLE_MINIONJUMP_TAP_BRIDGE_END
+
     // Traverse the chain of superclasses to find the method implementation.
     let mut class = orig_class;
     loop {
@@ -393,6 +558,168 @@ Type mismatch when sending message {} to {:?}!
                     // interfere with pass-through of stack arguments.
                     IMP::Guest(guest_imp) => guest_imp.call_without_pushing_stack_frame(env),
                 }
+
+                // ULTRAHLE_MINIONJUMP_TAP_POSTCALL_BEGIN
+                if ultrahle_minionjump_active && ultrahle_minionjump_factory_should_map {
+                    let returned_button = env.cpu.regs()[0];
+                    if returned_button != 0 {
+                        let map = ULTRAHLE_MINIONJUMP_BUTTON_CALLBACKS
+                            .get_or_init(|| std::sync::Mutex::new(Vec::new()));
+                        let mut map = map.lock().unwrap();
+
+                        if ultrahle_minionjump_factory_clears_scene_map {
+                            map.clear();
+                            log!(
+                                "UltraHLE MinionJump: cleared button callback map for selector={}",
+                                ultrahle_minionjump_factory_note
+                            );
+                        }
+
+                        map.retain(|(button, _, _, _)| *button != returned_button);
+                        map.push((
+                            returned_button,
+                            ultrahle_minionjump_factory_target,
+                            ultrahle_minionjump_factory_sel,
+                            ultrahle_minionjump_factory_stage,
+                        ));
+
+                        log!(
+                            "UltraHLE MinionJump: mapped button=0x{:08x} -> target=0x{:08x} selector={} stage={}",
+                            returned_button,
+                            ultrahle_minionjump_factory_target,
+                            ultrahle_minionjump_factory_note,
+                            ultrahle_minionjump_factory_stage
+                        );
+                    }
+                }
+
+                if ultrahle_minionjump_active
+                    && (ultrahle_minionjump_class_name == "GrowButton"
+                        || ultrahle_minionjump_class_name == "GrowStarButton")
+                    && ultrahle_minionjump_sel_name == "animateFocusLoseMenuItem:"
+                {
+                    let receiver_bits = receiver.to_bits();
+                    let arg_button_bits = ultrahle_minionjump_release_arg0;
+                    let mapped = {
+                        let map = ULTRAHLE_MINIONJUMP_BUTTON_CALLBACKS
+                            .get_or_init(|| std::sync::Mutex::new(Vec::new()));
+                        let map = map.lock().unwrap();
+                        map.iter()
+                            .find(|(button, _, _, _)| {
+                                *button == receiver_bits || *button == arg_button_bits
+                            })
+                            .copied()
+                    };
+
+                    if let Some((mapped_button, target_raw, sel_raw, mapped_stage)) = mapped {
+                        if target_raw != 0
+                            && sel_raw != 0
+                            && !ULTRAHLE_MINIONJUMP_BUTTON_CALLBACK_REENTRY
+                                .swap(true, std::sync::atomic::Ordering::Relaxed)
+                        {
+                            let callback_sel_ptr =
+                                crate::mem::ConstPtr::<u8>::from_bits(sel_raw);
+                            let callback_sel: crate::objc::SEL =
+                                unsafe { std::mem::transmute(callback_sel_ptr) };
+                            let callback_name = callback_sel.as_str(&env.mem).to_string();
+
+                            let sender_bits = if mapped_stage != 0
+                                && callback_name == "selectLVAction:"
+                            {
+                                mapped_button
+                            } else {
+                                ultrahle_minionjump_release_arg0
+                            };
+
+                            if mapped_stage != 0 && callback_name == "selectLVAction:" {
+                                let stage_index = mapped_stage.saturating_sub(1);
+                                ULTRAHLE_MINIONJUMP_CURRENT_STAGE
+                                    .store(mapped_stage, std::sync::atomic::Ordering::Relaxed);
+
+                                std::env::set_var(
+                                    "ULTRAHLE_MINIONJUMP_SELECTED_STAGE_INDEX",
+                                    format!("{}", stage_index),
+                                );
+
+                                // ULTRAHLE_MINIONJUMP_DUAL_TAG_BEGIN
+                                let set_tag_sel = env
+                                    .objc
+                                    .register_host_selector("setTag:".to_string(), &mut env.mem);
+                                let level_tag = stage_index as i32;
+
+                                // Force the tag onto both the original release sender and the
+                                // mapped GrowStarButton. On rebuilt level-select scenes, one can
+                                // have the stale tag while the other is the object selectLVAction
+                                // actually reads.
+                                let release_sender = id::from_bits(ultrahle_minionjump_release_arg0);
+                                let mapped_sender = id::from_bits(mapped_button);
+
+                                let _: () = msg_send_no_type_checking(
+                                    env,
+                                    (release_sender, set_tag_sel, level_tag),
+                                );
+                                if mapped_sender != release_sender {
+                                    let _: () = msg_send_no_type_checking(
+                                        env,
+                                        (mapped_sender, set_tag_sel, level_tag),
+                                    );
+                                }
+
+                                log!(
+                                    "UltraHLE MinionJump: selected stage {} index {} mapped_sender=0x{:08x} release_sender=0x{:08x} tag={}",
+                                    mapped_stage,
+                                    stage_index,
+                                    mapped_button,
+                                    ultrahle_minionjump_release_arg0,
+                                    level_tag
+                                );
+                                // ULTRAHLE_MINIONJUMP_DUAL_TAG_END
+                            }
+
+                            log!(
+                                "UltraHLE MinionJump: queued mapped button=0x{:08x} target=0x{:08x} selector={} sender=0x{:08x} stage={}",
+                                mapped_button,
+                                target_raw,
+                                callback_name,
+                                sender_bits,
+                                mapped_stage
+                            );
+
+                            std::env::set_var(
+                                "ULTRAHLE_MINIONJUMP_PENDING_TARGET",
+                                format!("{}", target_raw),
+                            );
+                            std::env::set_var(
+                                "ULTRAHLE_MINIONJUMP_PENDING_SEL",
+                                format!("{}", sel_raw),
+                            );
+                            std::env::set_var(
+                                "ULTRAHLE_MINIONJUMP_PENDING_SENDER",
+                                format!("{}", sender_bits),
+                            );
+                            std::env::set_var(
+                                "ULTRAHLE_MINIONJUMP_PENDING_CALLBACK",
+                                callback_name,
+                            );
+                            std::env::set_var(
+                                "ULTRAHLE_MINIONJUMP_PENDING_STAGE",
+                                format!("{}", mapped_stage),
+                            );
+
+                            ULTRAHLE_MINIONJUMP_BUTTON_CALLBACK_REENTRY
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    } else {
+                        log!(
+                            "UltraHLE MinionJump: no mapped callback for released {} receiver=0x{:08x} arg0=0x{:08x}",
+                            ultrahle_minionjump_class_name,
+                            receiver_bits,
+                            arg_button_bits
+                        );
+                    }
+                }
+                // ULTRAHLE_MINIONJUMP_TAP_POSTCALL_END
+
                 return;
             } else {
                 class = superclass;
