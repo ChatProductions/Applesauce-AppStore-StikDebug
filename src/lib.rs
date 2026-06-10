@@ -246,14 +246,15 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
 
     // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
     // Potato Panic / Potato Story:
-    // Android was still giving these apps a portrait 320x480 GL viewport even
-    // with --landscape-right. Force the app-facing view/renderbuffer/viewport
-    // to the PC-style 480x320 path, keep touch remap, and use CP1252 fallback
-    // for German strings like "für".
+    // Do NOT force the renderbuffer/viewport here. The normal landscape-right
+    // + force-composition path is what matches PC. Only keep touch remapping
+    // and CP1252 fallback for German text such as "für".
     unsafe {
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT");
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER");
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS");
+        std::env::remove_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT");
+        std::env::remove_var("TOUCHHLE_DISABLE_PRESENT_ROTATION");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE");
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
@@ -263,9 +264,6 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
 
     if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
         unsafe {
-            std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT", "1");
-            std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER", "1");
-            std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS", "1");
             std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
             std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
             std::env::set_var("TOUCHHLE_UTF8_FALLBACK_WINDOWS_1252", "1");
