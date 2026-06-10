@@ -117,7 +117,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)instantiateWithOwner:(id)owner options:(id)options {
-    assert!(owner != nil);
+    if owner == nil {
+            log!("touchHLE Warning: UINib instantiateWithOwner:nil; continuing with nil File's Owner");
+        }
 
     // Apple's UINib loading documentation: the only documented `options`
     // key is `UINibExternalObjects`; many older binaries also use the

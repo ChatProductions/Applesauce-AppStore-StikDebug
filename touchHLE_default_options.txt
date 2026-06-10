@@ -301,3 +301,4 @@ at.source.veggie1: --device-family=iphone --landscape-right --force-composition
 at.source.tomzom: --device-family=iphone --force-composition
 at.source.potpan: --device-family=iphone --landscape-right --force-composition
 at.source.potato3D: --device-family=iphone --landscape-right --force-composition
+com.tayasui.mrpoofree: --device-family=iphone --landscape-right --fullscreen --force-composition
