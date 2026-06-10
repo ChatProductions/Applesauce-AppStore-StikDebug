@@ -17,7 +17,7 @@ use crate::frameworks::core_graphics::{CGPoint, CGRect};
 use crate::frameworks::foundation::{NSInteger, NSTimeInterval, NSUInteger};
 use crate::mem::MutVoidPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::window::{Coords, Event, FingerId};
@@ -592,6 +592,76 @@ fn handle_touches_move(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     release(env, pool);
 }
 
+
+fn ultrahle_minionjump_drain_pending_callback(env: &mut Environment, select_only: bool) {
+    if !matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
+        return;
+    }
+
+    let Some(target_raw) = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_TARGET")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    else {
+        return;
+    };
+
+    let Some(sel_raw) = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_SEL")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    else {
+        return;
+    };
+
+    let sender_raw = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_SENDER")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let callback_name = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_CALLBACK")
+        .unwrap_or_else(|_| "<unknown>".to_string());
+
+    let stage =
+        std::env::var("ULTRAHLE_MINIONJUMP_PENDING_STAGE").unwrap_or_else(|_| "0".to_string());
+
+    let is_level_select = callback_name == "selectLVAction:";
+    if select_only != is_level_select {
+        return;
+    }
+
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_TARGET");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_SEL");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_SENDER");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_CALLBACK");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_STAGE");
+
+    if target_raw == 0 || sel_raw == 0 {
+        return;
+    }
+
+    let target_id = id::from_bits(target_raw);
+    let sender = id::from_bits(sender_raw);
+    let callback_sel_ptr = crate::mem::ConstPtr::<u8>::from_bits(sel_raw);
+    let callback_sel: crate::objc::SEL = unsafe { std::mem::transmute(callback_sel_ptr) };
+
+    log!(
+        "UltraHLE MinionJump: draining pending callback selector={} target={:?} sender={:?} stage={} select_only={}",
+        callback_name,
+        target_id,
+        sender,
+        stage,
+        select_only
+    );
+
+    if callback_name.ends_with(':') {
+        let _: () = msg_send_no_type_checking(env, (target_id, callback_sel, sender));
+    } else {
+        let _: () = msg_send_no_type_checking(env, (target_id, callback_sel));
+    }
+}
+
 fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     let pool: id = msg_class![env;
         NSAutoreleasePool new];
@@ -677,6 +747,14 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     for (view, start, end) in swipe_candidates {
         recognize_swipes(env, view, start, end);
     }
+
+    // ULTRAHLE_MINIONJUMP_DRAIN_SELECT_BEGIN
+    ultrahle_minionjump_drain_pending_callback(env, true);
+    // ULTRAHLE_MINIONJUMP_DRAIN_SELECT_END
+    // ULTRAHLE_MINIONJUMP_DRAIN_POST_BEGIN
+    ultrahle_minionjump_drain_pending_callback(env, false);
+    // ULTRAHLE_MINIONJUMP_DRAIN_POST_END
+
     release(env, pool);
 }
 
