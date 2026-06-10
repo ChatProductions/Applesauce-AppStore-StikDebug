@@ -1706,6 +1706,83 @@ impl Environment {
                 let pc = self.cpu.regs()[cpu::Cpu::PC];
                 let lr = self.cpu.regs()[cpu::Cpu::LR];
 
+                // Android/Dynarmic workaround:
+                //
+                // Potato Story hits UndefinedInstruction on valid Thumb-2
+                // MOVW/MOVT constant-load instructions on Android, while the
+                // same code runs on desktop. Do what the desktop path does:
+                // materialize the immediate into the destination register and
+                // advance past the 32-bit Thumb-2 instruction instead of
+                // fake-returning to LR and looping forever.
+                //
+                // The PC we log here has already been rewound by the generic
+                // Thumb path above, which assumes 2-byte Thumb instructions.
+                // Thumb-2 instructions are 4 bytes, so try both PC and PC-2.
+                if cfg!(target_os = "android")
+                    && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0
+                {
+                    for start in [pc, pc.wrapping_sub(2)] {
+                        if start & 1 != 0 {
+                            continue;
+                        }
+
+                        let hw1: u16 = self
+                            .mem
+                            .read(mem::ConstPtr::<u16>::from_bits(start));
+                        let hw2: u16 = self
+                            .mem
+                            .read(mem::ConstPtr::<u16>::from_bits(start.wrapping_add(2)));
+
+                        // Thumb-2 MOVW/MOVT immediate encodings. The mask
+                        // keeps the opcode bits and ignores immediate bits.
+                        // Examples from Potato Story:
+                        //   bytes 4a f2 36 10 => hw1=f24a, hw2=1036, MOVW
+                        //   bytes c0 f2 30 00 => hw1=f2c0, hw2=0030, MOVT
+                        //   bytes 4a f6 ea 01 => hw1=f64a, hw2=01ea, MOVW
+                        let is_movw = (hw1 & 0xfbf0) == 0xf240 && (hw2 & 0x8000) == 0;
+                        let is_movt = (hw1 & 0xfbf0) == 0xf2c0 && (hw2 & 0x8000) == 0;
+
+                        if is_movw || is_movt {
+                            let imm4 = (hw1 & 0x000f) as u32;
+                            let i = ((hw1 >> 10) & 1) as u32;
+                            let imm3 = ((hw2 >> 12) & 0x7) as u32;
+                            let rd = ((hw2 >> 8) & 0xf) as usize;
+                            let imm8 = (hw2 & 0x00ff) as u32;
+                            let imm16 = (imm4 << 12) | (i << 11) | (imm3 << 8) | imm8;
+
+                            // MOVW/MOVT to PC is not a normal case here; if it
+                            // ever appears, let the existing error path handle
+                            // it instead of inventing branch semantics.
+                            if rd == cpu::Cpu::PC {
+                                continue;
+                            }
+
+                            let old = self.cpu.regs()[rd];
+                            let new_value = if is_movt {
+                                (old & 0x0000_ffff) | (imm16 << 16)
+                            } else {
+                                imm16
+                            };
+
+                            log_no_panic!(
+                                "Android Thumb-2 compat: emulated {} at {:#x}: r{} {:#x} -> {:#x}; advancing to {:#x}",
+                                if is_movt { "MOVT" } else { "MOVW" },
+                                start,
+                                rd,
+                                old,
+                                new_value,
+                                start.wrapping_add(4)
+                            );
+
+                            self.cpu.regs_mut()[rd] = new_value;
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = start.wrapping_add(4);
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
+                    }
+                }
+
                 // Track repeated occurrences of the same bypass site.
                 const BYPASS_LIMIT: u32 = 256;
                 const LOG_RATE: u32 = 32;
