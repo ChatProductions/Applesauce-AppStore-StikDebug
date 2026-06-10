@@ -519,6 +519,29 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     })
 }
 fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+    // ULTRAHLE_MINIONJUMP_VIEWPORT_BEGIN
+    let (x, y, width, height) = if matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) && x == 0
+        && y == 0
+        && width == 768
+        && height == 1024
+    {
+        log!("UltraHLE MinionJump: viewport swap 768x1024 -> 1024x768");
+        (0, 0, 1024, 768)
+    } else if std::env::var_os("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN").is_some()
+        && x == 0
+        && y == 0
+        && width == 768
+        && height == 1024
+    {
+        log!("UltraHLE MinionJump: env iPad landscape viewport swap 768x1024 -> 1024x768");
+        (0, 0, 1024, 768)
+    } else {
+        (x, y, width, height)
+    };
+    // ULTRAHLE_MINIONJUMP_VIEWPORT_END
     let (mut x, mut y, mut width, mut height) = (x, y, width, height);
 
     if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT").is_some() {

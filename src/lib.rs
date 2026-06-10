@@ -226,6 +226,22 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
 
     let app_id = bundle.bundle_identifier();
 
+    // ULTRAHLE_MINIONJUMP_SCREEN_BEGIN
+    // Minion Jump / SheepEscape needs the iPad landscape identity/profile.
+    unsafe {
+        std::env::remove_var("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY");
+        std::env::remove_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN");
+    }
+
+    if matches!(app_id, "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro") {
+        unsafe {
+            std::env::set_var("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY", "1");
+            std::env::set_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN", "1");
+        }
+    }
+    // ULTRAHLE_MINIONJUMP_SCREEN_END
+
+
     // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
     // Potato Panic / Potato Story: leave rendering alone; remap touch coordinates as landscape-right.
     unsafe {

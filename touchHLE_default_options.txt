@@ -301,3 +301,7 @@ at.source.veggie1: --device-family=iphone --landscape-right --force-composition
 at.source.tomzom: --device-family=iphone --landscape-right --force-composition
 at.source.potpan: --device-family=iphone --landscape-right --force-composition
 at.source.potato3D: --device-family=iphone --landscape-right --force-composition
+
+# Minion Jump / Kingdom Prince
+com.apprisetec9.minionjump: --device-family=ipad --landscape-right --force-composition
+com.risinghighapps.kingdomprincepro: --device-family=ipad --landscape-right --force-composition

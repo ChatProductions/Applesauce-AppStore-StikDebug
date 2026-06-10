@@ -185,6 +185,30 @@ fn init_common(env: &mut Environment, this: id) -> id {
     this
 }
 
+
+fn ultrahle_minionjump_force_landscape_ccglview(env: &mut Environment, this: id) -> bool {
+    if !matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
+        return false;
+    }
+
+    let cls: crate::objc::Class = msg![env; this class];
+    let class_name = env.objc.get_class_name(cls);
+    class_name == "CCGLView"
+}
+
+fn ultrahle_minionjump_landscape_rect() -> CGRect {
+    CGRect {
+        origin: CGPoint { x: 0.0, y: 0.0 },
+        size: CGSize {
+            width: 1024.0,
+            height: 768.0,
+        },
+    }
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -1435,10 +1459,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; layer setPosition:center]
 }
 - (CGRect)frame {
+    // ULTRAHLE_MINIONJUMP_FRAME_BEGIN
+    if ultrahle_minionjump_force_landscape_ccglview(env, this) {
+        return ultrahle_minionjump_landscape_rect();
+    }
+    // ULTRAHLE_MINIONJUMP_FRAME_END
+
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer frame]
 }
 - (())setFrame:(CGRect)frame {
+    // ULTRAHLE_MINIONJUMP_SETFRAME_BEGIN
+    let frame = if ultrahle_minionjump_force_landscape_ccglview(env, this) {
+        ultrahle_minionjump_landscape_rect()
+    } else {
+        frame
+    };
+    // ULTRAHLE_MINIONJUMP_SETFRAME_END
+
     let mut frame = frame;
 
     if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS").is_some() {
