@@ -1706,6 +1706,79 @@ impl Environment {
                 let pc = self.cpu.regs()[cpu::Cpu::PC];
                 let lr = self.cpu.regs()[cpu::Cpu::LR];
 
+                // Potato Story Android hard fallback:
+                //
+                // The generic decoder did not match on-device, but Android
+                // repeatedly reports UDF at these exact Thumb-2 sites while
+                // desktop runs through them. Force the known constant-load
+                // results and advance PC like the desktop path effectively does.
+                if cfg!(target_os = "android")
+                    && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0
+                {
+                    match pc {
+                        // 0x9ec2: MOVW r0, #0xa136
+                        // 0x9ec6: MOVT r0, #0x0030
+                        0x9ec6 => {
+                            let old = self.cpu.regs()[0];
+                            let new_value = (old & 0x0000_ffff) | 0x0030_0000;
+                            log_no_panic!(
+                                "Potato Story Android hard fallback: MOVT r0 at 0x9ec6: {:#x} -> {:#x}; PC=0x9eca",
+                                old,
+                                new_value
+                            );
+                            self.cpu.regs_mut()[0] = new_value;
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = 0x9eca;
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
+
+                        // 0xabce: MOVW r1, #0xa0ea
+                        0xabce => {
+                            log_no_panic!(
+                                "Potato Story Android hard fallback: MOVW r1 at 0xabce -> 0xa0ea; PC=0xabd2"
+                            );
+                            self.cpu.regs_mut()[1] = 0x0000_a0ea;
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = 0xabd2;
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
+
+                        // 0xacd4: MOVT r12, #0x0030
+                        // Dynarmic reports/logs the second halfword at 0xacd6.
+                        0xacd6 => {
+                            let old = self.cpu.regs()[12];
+                            let new_value = (old & 0x0000_ffff) | 0x0030_0000;
+                            log_no_panic!(
+                                "Potato Story Android hard fallback: MOVT r12 at 0xacd4/0xacd6: {:#x} -> {:#x}; PC=0xacd8",
+                                old,
+                                new_value
+                            );
+                            self.cpu.regs_mut()[12] = new_value;
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = 0xacd8;
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
+
+                        // 0xadae is another one-off Android trap in the same
+                        // startup cluster. Advance past the 32-bit Thumb-2
+                        // instruction instead of fake-returning to LR.
+                        0xadae => {
+                            log_no_panic!(
+                                "Potato Story Android hard fallback: skipping trapped Thumb-2 instruction at 0xadae; PC=0xadb2"
+                            );
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = 0xadb2;
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
+
+                        _ => {}
+                    }
+                }
+
                 // Android/Dynarmic workaround:
                 //
                 // Potato Story hits UndefinedInstruction on valid Thumb-2
