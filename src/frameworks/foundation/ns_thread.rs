@@ -241,6 +241,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())start {
     log_once!("First [NSThread start] (app spawned a worker thread)");
 
+    // Cocoa keeps the thread object alive for the duration of the started
+    // thread. Without this retain, guest code can release the NSThread right
+    // after calling `start`, leaving the worker with a dangling `this` and
+    // causing the class check in the entry helper to see a freed object.
+    retain(env, this);
+
     let symb = "__touchHLE_NSThreadInvocationHelper";
     let hf: HostFunction = &(_touchHLE_NSThreadInvocationHelper as fn(&mut Environment, _) -> _);
     let gf = env.dyld.create_guest_function(&mut env.mem, symb, hf);
@@ -434,7 +440,15 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         );
     }
 
+    // Balance the retain done in `-start` so the NSThread object survives
+    // until the worker finishes, even if guest code releases its last
+    // reference immediately after calling `start`.
+    release(env, ns_thread_obj);
+
     if owned {
+        // Detached-thread APIs create the NSThread object internally, so we
+        // also need to release the original alloc/init ownership when the
+        // thread finishes.
         release(env, ns_thread_obj);
     }
 }
