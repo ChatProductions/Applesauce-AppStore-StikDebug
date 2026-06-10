@@ -1722,6 +1722,22 @@ fn maybe_demipmap_min_filter(env: &Environment, pname: GLenum, param: GLint) -> 
 }
 
 fn glTexParameteri(env: &mut Environment, target: GLenum, pname: GLenum, param: GLint) {
+    let param = if std::env::var_os("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES").is_some()
+        && pname == 0x2801 // GL_TEXTURE_MIN_FILTER
+        && matches!(param as u32, 0x2700 | 0x2701 | 0x2702 | 0x2703)
+    // mipmap filters
+    {
+        static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            log!(
+                "TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES=1: forcing mipmap GL_TEXTURE_MIN_FILTER to GL_LINEAR for Potato Android textures [this log will only be shown once]"
+            );
+        }
+        0x2601 // GL_LINEAR
+    } else {
+        param
+    };
+
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
@@ -1979,10 +1995,6 @@ fn glTexImage2D(
             let size = image_size_estimate(pixel_count, format, type_);
             mem.ptr_at(pixels.cast::<u8>(), size).cast::<GLvoid>()
         };
-        if std::env::var_os("TOUCHHLE_FORCE_UNPACK_ALIGNMENT_1").is_some() {
-            gles.PixelStorei(0x0cf5, 1); // GL_UNPACK_ALIGNMENT
-        }
-
         gles.TexImage2D(
             target,
             level,
@@ -2028,10 +2040,6 @@ fn glTexSubImage2D(
         let pixel_count: GuestUSize = width.checked_mul(height).unwrap().try_into().unwrap();
         let size = image_size_estimate(pixel_count, format, type_);
         let pixels = mem.ptr_at(pixels.cast::<u8>(), size).cast::<GLvoid>();
-        if std::env::var_os("TOUCHHLE_FORCE_UNPACK_ALIGNMENT_1").is_some() {
-            gles.PixelStorei(0x0cf5, 1); // GL_UNPACK_ALIGNMENT
-        }
-
         gles.TexSubImage2D(
             target, level, xoffset, yoffset, width, height, format, type_, pixels,
         )

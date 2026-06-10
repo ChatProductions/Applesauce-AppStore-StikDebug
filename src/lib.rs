@@ -245,28 +245,26 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     // ULTRAHLE_MINIONJUMP_SCREEN_END
 
     // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
-    // Potato Panic / Potato Story:
-    // Do NOT force the renderbuffer/viewport here. The normal landscape-right
-    // + force-composition path is what matches PC. Only keep touch remapping
-    // and CP1252 fallback for German text such as "für".
+    // Potato Panic / Potato Story: use normal PC-style present rotation/composition; remap touch coordinates as landscape-right.
     unsafe {
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT");
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER");
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS");
-        std::env::remove_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT");
-        std::env::remove_var("TOUCHHLE_DISABLE_PRESENT_ROTATION");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE");
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
-        std::env::remove_var("TOUCHHLE_UTF8_FALLBACK_WINDOWS_1252");
+        std::env::remove_var("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES");
     }
 
     if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
         unsafe {
             std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
             std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
-            std::env::set_var("TOUCHHLE_UTF8_FALLBACK_WINDOWS_1252", "1");
+
+            if cfg!(target_os = "android") {
+                std::env::set_var("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES", "1");
+            }
         }
     }
     // ULTRAHLE_POTATO_LANDSCAPE_END
