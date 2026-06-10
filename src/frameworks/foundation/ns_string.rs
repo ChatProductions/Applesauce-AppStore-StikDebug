@@ -25,13 +25,15 @@ use crate::frameworks::uikit::ui_font::{
 };
 use crate::fs::GuestPath;
 use crate::mach_o::MachO;
-use crate::mem::{guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead};
+use crate::mem::{
+    guest_size_of, ConstPtr, ConstVoidPtr, GuestUSize, Mem, MutPtr, MutVoidPtr, Ptr, SafeRead,
+};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, Class, ClassExports,
     HostObject, NSZonePtr, ObjC,
 };
 use crate::{fs, Environment};
-use encoding_rs::SHIFT_JIS;
+use encoding_rs::{SHIFT_JIS, WINDOWS_1252};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::Write;
@@ -318,7 +320,14 @@ impl StringHostObject {
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSUTF8StringEncoding => {
-                let string = String::from_utf8_lossy(&bytes).into_owned();
+                let string = match std::str::from_utf8(&bytes) {
+                    Ok(valid) => valid.to_owned(),
+                    Err(_) if std::env::var_os("TOUCHHLE_UTF8_FALLBACK_WINDOWS_1252").is_some() => {
+                        let (cow, _encoding_used, _had_errors) = WINDOWS_1252.decode(&bytes);
+                        cow.into_owned()
+                    }
+                    Err(_) => String::from_utf8_lossy(&bytes).into_owned(),
+                };
                 StringHostObject::Utf8(Cow::Owned(string))
             }
             NSMacOSRomanStringEncoding => {
