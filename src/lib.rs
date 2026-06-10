@@ -233,7 +233,10 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         std::env::remove_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN");
     }
 
-    if matches!(app_id, "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro") {
+    if matches!(
+        app_id,
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
         unsafe {
             std::env::set_var("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY", "1");
             std::env::set_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN", "1");
@@ -241,9 +244,8 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     }
     // ULTRAHLE_MINIONJUMP_SCREEN_END
 
-
     // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
-    // Potato Panic / Potato Story: leave rendering alone; remap touch coordinates as landscape-right.
+    // Potato Panic / Potato Story: use normal PC-style present rotation/composition; remap touch coordinates as landscape-right.
     unsafe {
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT");
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER");
@@ -252,23 +254,17 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
+        std::env::remove_var("TOUCHHLE_FORCE_UNPACK_ALIGNMENT_1");
     }
 
     if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
         unsafe {
             std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
             std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
+            std::env::set_var("TOUCHHLE_FORCE_UNPACK_ALIGNMENT_1", "1");
         }
     }
     // ULTRAHLE_POTATO_LANDSCAPE_END
-
-
-
-
-
-
-
-
 
     let minimum_os_version = bundle.minimum_os_version();
     let required_device_capabilities = bundle.required_device_capabilities();
@@ -323,9 +319,7 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         // itself tolerates malformed plists.
         let (major_str, minor_str) = match version.split_once('.') {
             Some((maj, rest)) => {
-                let minor_str = rest
-                    .split_once('.')
-                    .map_or(rest, |(minor, _patch)| minor);
+                let minor_str = rest.split_once('.').map_or(rest, |(minor, _patch)| minor);
                 (maj, minor_str)
             }
             None => (version, "0"),
