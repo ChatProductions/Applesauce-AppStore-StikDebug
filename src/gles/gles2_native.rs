@@ -162,6 +162,26 @@ unsafe fn detect_texture_lod_ext_support() -> bool {
         .any(|ext| ext == "GL_EXT_shader_texture_lod")
 }
 
+/// Returns `true` if the shader source contains a top-level default float
+/// precision declaration (`precision lowp|mediump|highp float;`).
+fn shader_has_default_float_precision(source: &str) -> bool {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("precision") {
+            let rest = rest.trim_start();
+            let mut parts = rest.split_whitespace();
+            let qualifier = parts.next();
+            let ty = parts.next();
+            if matches!(qualifier, Some("lowp" | "mediump" | "highp"))
+                && matches!(ty, Some(t) if t.starts_with("float"))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Patch a GLSL ES shader source for compatibility with native ES 2.0 drivers
 /// that may not support all extensions the guest app expects.
 ///
@@ -174,15 +194,25 @@ unsafe fn detect_texture_lod_ext_support() -> bool {
 ///    with `texture2D(s, c)` (dropping the LOD parameter). This loses mipmap
 ///    control but lets the shader compile and produce visually acceptable
 ///    results.
-/// 3. Fixing variable redeclaration errors by deduplicating identical
+/// 3. Injecting a default `precision mediump float;` declaration when the
+///    shader source does not define one and the caller requests it (fragment
+///    shaders only — GLSL ES gives fragment shaders no default float
+///    precision, so drivers reject such shaders outright; vertex shaders
+///    default to `highp` and must not be downgraded).
+/// 4. Fixing variable redeclaration errors by deduplicating identical
 ///    variable declarations in function scope.
-fn patch_shader_for_native_es2(source: &str, texture_lod_ext_supported: bool) -> String {
+fn patch_shader_for_native_es2(
+    source: &str,
+    texture_lod_ext_supported: bool,
+    inject_default_float_precision: bool,
+) -> String {
     let lines: Vec<&str> = source.lines().collect();
 
     // Separate lines into categories for hoisting.
     let mut version_line: Option<String> = None;
     let mut extension_lines: Vec<String> = Vec::new();
     let mut body_lines: Vec<String> = Vec::new();
+    let mut has_default_float_precision = false;
 
     for line in &lines {
         let trimmed = line.trim();
@@ -190,9 +220,7 @@ fn patch_shader_for_native_es2(source: &str, texture_lod_ext_supported: bool) ->
             version_line = Some(line.to_string());
         } else if trimmed.starts_with("#extension") {
             // If the driver doesn't support texture_lod, strip that extension
-            if !texture_lod_ext_supported
-                && trimmed.contains("GL_EXT_shader_texture_lod")
-            {
+            if !texture_lod_ext_supported && trimmed.contains("GL_EXT_shader_texture_lod") {
                 // Drop this line entirely
                 continue;
             }
@@ -200,9 +228,21 @@ fn patch_shader_for_native_es2(source: &str, texture_lod_ext_supported: bool) ->
         } else {
             body_lines.push(line.to_string());
         }
+
+        if trimmed.starts_with("precision") {
+            let rest = trimmed["precision".len()..].trim_start();
+            let mut parts = rest.split_whitespace();
+            let qualifier = parts.next();
+            let ty = parts.next();
+            if matches!(qualifier, Some("lowp" | "mediump" | "highp"))
+                && matches!(ty, Some(t) if t.starts_with("float"))
+            {
+                has_default_float_precision = true;
+            }
+        }
     }
 
-    // Reassemble: version, then extensions, then body
+    // Reassemble: version, then extensions, then body.
     let mut out = String::with_capacity(source.len() + 64);
     if let Some(v) = &version_line {
         out.push_str(v);
@@ -211,6 +251,9 @@ fn patch_shader_for_native_es2(source: &str, texture_lod_ext_supported: bool) ->
     for ext in &extension_lines {
         out.push_str(ext);
         out.push('\n');
+    }
+    if inject_default_float_precision && !has_default_float_precision {
+        out.push_str("precision mediump float;\n");
     }
     for line in &body_lines {
         out.push_str(line);
@@ -321,6 +364,37 @@ fn replace_texture_lod_ext_calls(source: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{patch_shader_for_native_es2, shader_has_default_float_precision};
+
+    #[test]
+    fn injects_default_float_precision_when_missing() {
+        let src = "#version 100\nvoid main() { gl_FragColor = vec4(1.0); }\n";
+        assert!(!shader_has_default_float_precision(src));
+        let out = patch_shader_for_native_es2(src, true, true);
+        assert!(out.contains("precision mediump float;"));
+        assert!(out.contains("void main()"));
+    }
+
+    #[test]
+    fn keeps_existing_float_precision() {
+        let src =
+            "#version 100\nprecision highp float;\nvoid main() { gl_FragColor = vec4(1.0); }\n";
+        assert!(shader_has_default_float_precision(src));
+        let out = patch_shader_for_native_es2(src, true, true);
+        assert!(out.contains("precision highp float;"));
+        assert_eq!(out.matches("precision").count(), 1);
+    }
+
+    #[test]
+    fn does_not_inject_when_not_requested() {
+        let src = "#version 100\nvoid main() { gl_Position = vec4(1.0); }\n";
+        let out = patch_shader_for_native_es2(src, true, false);
+        assert!(!out.contains("precision"));
+    }
 }
 
 pub struct GLES2Native<'gl_ctx> {
@@ -1075,13 +1149,29 @@ impl GLES for GLES2Native<'_> {
                 || joined.contains("texture2DProjLodEXT")
                 || joined.contains("textureCubeLodEXT"));
 
-        if !needs_ext_hoist && !needs_lod_patch {
+        // GLSL ES fragment shaders have no default precision for `float`, so
+        // strict drivers (e.g. AMD's native GLES) reject any fragment shader
+        // that declares a float without a `precision ... float;` line. Real
+        // iPhoneOS-era drivers (PowerVR SGX) were lenient about this, so some
+        // apps (e.g. The Binding of Isaac) ship such shaders. Inject a
+        // default `precision mediump float;` for them. Vertex shaders default
+        // to highp and must not be touched.
+        let mut shader_type: GLint = 0;
+        gles2::GetShaderiv(shader, gles2::SHADER_TYPE, &mut shader_type);
+        let needs_precision_inject = shader_type as GLenum == gles2::FRAGMENT_SHADER
+            && !shader_has_default_float_precision(&joined);
+
+        if !needs_ext_hoist && !needs_lod_patch && !needs_precision_inject {
             // No patching needed — pass through directly.
             gles2::ShaderSource(shader, count, string, length);
             return;
         }
 
-        let patched = patch_shader_for_native_es2(&joined, self.texture_lod_ext_supported);
+        let patched = patch_shader_for_native_es2(
+            &joined,
+            self.texture_lod_ext_supported,
+            needs_precision_inject,
+        );
         let c = match CString::new(patched) {
             Ok(c) => c,
             Err(_) => {
