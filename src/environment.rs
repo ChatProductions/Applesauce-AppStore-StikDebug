@@ -1712,9 +1712,7 @@ impl Environment {
                 // repeatedly reports UDF at these exact Thumb-2 sites while
                 // desktop runs through them. Force the known constant-load
                 // results and advance PC like the desktop path effectively does.
-                if cfg!(target_os = "android")
-                    && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0
-                {
+                if cfg!(target_os = "android") && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
                     match pc {
                         // 0x9ec2: MOVW r0, #0xa136
                         // 0x9ec6: MOVT r0, #0x0030
@@ -1791,20 +1789,48 @@ impl Environment {
                 // The PC we log here has already been rewound by the generic
                 // Thumb path above, which assumes 2-byte Thumb instructions.
                 // Thumb-2 instructions are 4 bytes, so try both PC and PC-2.
-                if cfg!(target_os = "android")
-                    && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0
-                {
-                    for start in [pc, pc.wrapping_sub(2)] {
+                if cfg!(target_os = "android") && (self.cpu.cpsr() & cpu::Cpu::CPSR_THUMB) != 0 {
+                    // Android/Dynarmic sometimes reports the fault PC a few
+                    // bytes before/after the real 32-bit Thumb-2 instruction.
+                    // Scan nearby even halfword starts instead of only pc/pc-2.
+                    for delta in [-8i32, -6, -4, -2, 0, 2, 4, 6, 8] {
+                        let start = if delta < 0 {
+                            pc.wrapping_sub((-delta) as u32)
+                        } else {
+                            pc.wrapping_add(delta as u32)
+                        };
+
                         if start & 1 != 0 {
                             continue;
                         }
 
-                        let hw1: u16 = self
-                            .mem
-                            .read(mem::ConstPtr::<u16>::from_bits(start));
+                        let hw1: u16 = self.mem.read(mem::ConstPtr::<u16>::from_bits(start));
                         let hw2: u16 = self
                             .mem
                             .read(mem::ConstPtr::<u16>::from_bits(start.wrapping_add(2)));
+
+                        // Potato Story on Android also trips on Thumb-2
+                        // VFP/coprocessor-looking instructions immediately
+                        // after the constant-load clusters. Do not fake-return
+                        // from the whole function; advance past the trapped
+                        // 32-bit instruction and let scene setup continue.
+                        if std::env::var_os("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT").is_some()
+                            && matches!(hw1 & 0xfe00, 0xec00 | 0xee00)
+                        {
+                            log_no_panic!(
+                                "Potato Story Android Thumb-2 compat: skipping coprocessor/VFP-looking instruction at {:#x} (reported PC {:#x}, hw1={:#06x}, hw2={:#06x}); advancing to {:#x}",
+                                start,
+                                pc,
+                                hw1,
+                                hw2,
+                                start.wrapping_add(4)
+                            );
+
+                            self.cpu.regs_mut()[cpu::Cpu::PC] = start.wrapping_add(4);
+                            self.udf_bypass_last = None;
+                            self.udf_bypass_count = 0;
+                            return;
+                        }
 
                         // Thumb-2 MOVW/MOVT immediate encodings. The mask
                         // keeps the opcode bits and ignores immediate bits.

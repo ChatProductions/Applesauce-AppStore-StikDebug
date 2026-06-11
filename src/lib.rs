@@ -254,7 +254,7 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
-        std::env::remove_var("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES");
+        std::env::remove_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT");
     }
 
     if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
@@ -263,7 +263,7 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
             std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
 
             if cfg!(target_os = "android") {
-                std::env::set_var("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES", "1");
+                std::env::set_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT", "1");
             }
         }
     }
