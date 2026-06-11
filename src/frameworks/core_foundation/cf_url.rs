@@ -169,6 +169,22 @@ fn CFURLCreateFromFileSystemRepresentationRelativeToBase(
     res
 }
 
+// MARK: - Home directory
+
+/// `CFCopyHomeDirectoryURL` — "Returns the URL of the current user's home
+/// directory" (Apple Core Foundation docs). On iPhone OS the home
+/// directory is the app's sandbox container, which is what
+/// `Fs::home_directory` models. The result follows the Create Rule (the
+/// caller owns one reference), hence the explicit retain.
+fn CFCopyHomeDirectoryURL(env: &mut Environment) -> CFURLRef {
+    let home = env.fs.home_directory().as_str().to_owned();
+    let path = from_rust_string(env, home);
+    let url: id = msg_class![env; NSURL alloc];
+    let url: id = msg![env; url initFileURLWithPath:path isDirectory:true];
+    release(env, path);
+    url
+}
+
 // MARK: - Creation Functions
 
 fn CFURLCreateWithBytes(
@@ -1073,6 +1089,8 @@ pub const FUNCTIONS: FunctionExports = &[
         _,
         _
     )),
+    // Home directory
+    export_c_func!(CFCopyHomeDirectoryURL()),
     // Creation
     export_c_func!(CFURLCreateWithBytes(_, _, _, _, _)),
     export_c_func!(CFURLCreateWithString(_, _, _)),
