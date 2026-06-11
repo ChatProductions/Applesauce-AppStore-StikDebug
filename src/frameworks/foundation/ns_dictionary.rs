@@ -12,7 +12,7 @@ use super::ns_property_list_serialization::{
 use super::ns_string::{from_rust_string, get_static_str, to_rust_string};
 use super::{
     _nib_archive_decoder, ns_array, ns_keyed_archiver, ns_keyed_unarchiver, ns_string, ns_url,
-    NSUInteger,
+    NSComparisonResult, NSUInteger,
 };
 use crate::abi::{CallFromHost, GuestFunction, VaList};
 use crate::frameworks::core_foundation::{CFHashCode, CFIndex};
@@ -23,10 +23,11 @@ use crate::frameworks::foundation::ns_file_manager::{
     NSFileModificationDate, NSFileSize, NSFileType,
 };
 use crate::fs::GuestPath;
+use crate::libc::stdlib::qsort::qsort_generic;
 use crate::mem::{ConstPtr, MutPtr, Ptr, SafeRead};
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, todo_objc_setter, Class,
-    ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, todo_objc_setter, Class,
+    ClassExports, HostObject, NSZonePtr, SEL,
 };
 use crate::{impl_HostObject_with_superclass, Environment};
 use std::collections::hash_map::Entry;
@@ -702,6 +703,58 @@ pub const CLASSES: ClassExports = objc_classes! {
         i += 1;
     }
     env.mem.free(stop_ptr.cast());
+}
+
+// `- (NSArray<KeyType> *)keysSortedByValueUsingSelector:(SEL)comparator`
+// Per Apple's NSDictionary reference: returns the dictionary's keys, sorted
+// by their corresponding values. Each pair of values is compared by sending
+// `comparator` (e.g. `compare:`) to one value with the other as its argument;
+// the selector must return an `NSComparisonResult`. The keys are reordered to
+// match the ascending order of their values.
+// <https://developer.apple.com/documentation/foundation/nsdictionary/1410025-keyssortedbyvalueusingselector>
+- (id)keysSortedByValueUsingSelector:(SEL)comparator {
+    // Snapshot keys and their values up-front (Apple sorts a copy).
+    let keys_array: id = msg![env; this allKeys];
+    let count: NSUInteger = msg![env; keys_array count];
+
+    let mut keys: Vec<id> = Vec::with_capacity(count as usize);
+    let mut values: Vec<id> = Vec::with_capacity(count as usize);
+    for i in 0..count {
+        let key: id = msg![env; keys_array objectAtIndex:i];
+        let value: id = msg![env; this objectForKey:key];
+        keys.push(key);
+        values.push(value);
+    }
+
+    let len = keys.len().try_into().unwrap();
+    // Sort key/value indices together: compare values via `comparator`, and
+    // apply the same swaps to the parallel `keys` vector so the returned keys
+    // line up with their values' ascending order.
+    let mut user_data = (env, &mut keys, &mut values);
+    qsort_generic(
+        &mut user_data,
+        len,
+        &mut |(env, _keys, values), l, r| {
+            let (l, r): (usize, usize) = (l.try_into().unwrap(), r.try_into().unwrap());
+            let res: NSComparisonResult = msg_send(env, (values[l], comparator, values[r]));
+            res
+        },
+        &mut |(_, keys, values), l, r| {
+            let (l, r): (usize, usize) = (l.try_into().unwrap(), r.try_into().unwrap());
+            keys.swap(l, r);
+            values.swap(l, r);
+        },
+    );
+    let (env, _, _) = user_data;
+
+    // Keys are owned by the dictionary; the returned array needs its own
+    // strong references. Retain each key for the new array, then autorelease
+    // the array per Apple's ownership convention (it is not `new`/`copy`).
+    for &key in &keys {
+        retain(env, key);
+    }
+    let res = ns_array::from_vec(env, keys);
+    autorelease(env, res)
 }
 
 - (bool)isEqual:(id)other {

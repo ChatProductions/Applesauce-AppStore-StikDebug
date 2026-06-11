@@ -1653,13 +1653,32 @@ impl<'gl_ctx> GLES1Native<'gl_ctx> {
     /// Helper used by every `OpenGL ES 2.0` shader-pipeline override above
     /// to flag a synthetic `GL_INVALID_OPERATION` and emit a one-shot
     /// warning describing the offending call.
-    fn record_es2_unsupported(&self, fn_name: &str) {
-        log!(
-            "{} (OpenGL ES 2.0) called on a native ES 1.1 context; \
-             reporting GL_INVALID_OPERATION via glGetError as required by spec.",
-            fn_name
-        );
+    fn record_es2_unsupported(&self, fn_name: &'static str) {
+        // The synthetic error must be queued on *every* call, because the
+        // ES 2.0 spec requires `GL_INVALID_OPERATION` to be reported each
+        // time one of these entry points is hit on an ES 1.1 context.
         self.pending_synthetic_error
             .set(gles11::INVALID_OPERATION);
+
+        // The accompanying human-readable warning, however, must only be
+        // emitted once per distinct entry point. Apps such as Cut the Rope
+        // and Angry Birds poll `glGetVertexAttribiv` every frame, which
+        // previously flooded the log with thousands of identical lines and
+        // added measurable per-frame overhead. Deduplicate via a
+        // process-global set keyed by the (`'static`) function name.
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+        use std::sync::OnceLock;
+        static LOGGED: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();
+        let logged = LOGGED.get_or_init(|| Mutex::new(HashSet::new()));
+        let is_new = logged.lock().unwrap().insert(fn_name);
+        if is_new {
+            log!(
+                "{} (OpenGL ES 2.0) called on a native ES 1.1 context; \
+                 reporting GL_INVALID_OPERATION via glGetError as required \
+                 by spec. [this log will only be shown once per entry point]",
+                fn_name
+            );
+        }
     }
 }

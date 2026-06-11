@@ -228,6 +228,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array_imm)
 }
 
+// `- (NSArray *)sortedArrayUsingSelector:` — defined here on the abstract
+// NSArray class (not just on a private concrete subclass) so that every
+// member of the class cluster, including NSMutableArray, responds to it.
+- (id)sortedArrayUsingSelector:(SEL)comparator {
+    let array = msg![env; this mutableCopy];
+    () = msg![env; array sortUsingSelector:comparator];
+    let array_imm = msg![env; array copy];
+    release(env, array);
+    autorelease(env, array_imm)
+}
+
+// `- (NSArray *)sortedArrayUsingComparator:(NSComparator)cmptr` —
+// per Apple's NSArray documentation: "Returns an array that lists the
+// receiving array's elements in ascending order, as determined by the
+// comparator block." Defined on the abstract NSArray class so that
+// NSMutableArray (a different branch of the class cluster) inherits it
+// too — previously it lived only on _touchHLE_NSArray, so calling it on
+// a mutable array hit the unrecognized-selector path (GeometryDash logs).
+- (id)sortedArrayUsingComparator:(id)comparator {
+    let array = msg![env; this mutableCopy];
+    () = msg![env; array sortUsingComparator:comparator];
+    let array_imm = msg![env; array copy];
+    release(env, array);
+    autorelease(env, array_imm)
+}
+
 // Add to NSArray @implementation:
 
 - (id)objectsAtIndexes:(id)index_set { // NSIndexSet*
@@ -870,25 +896,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let res = from_vec(env, tmp);
     autorelease(env, res)
-}
-
-- (id)sortedArrayUsingSelector:(SEL)comparator {
-    let new = msg![env; this mutableCopy];
-    () = msg![env; new sortUsingSelector:comparator];
-    autorelease(env, new)
-}
-
-// `- (NSArray *)sortedArrayUsingComparator:(NSComparator)cmptr` —
-// per Apple's [NSArray Reference](https://developer.apple.com/documentation/foundation/nsarray/1411124-sortedarrayusingcomparator):
-// returns a new sorted array using the given NSComparator block. We
-// implement it by copying the receiver into a mutable array and
-// delegating to `-sortUsingComparator:` on the mutable copy, then
-// returning an autoreleased copy. This matches `-sortedArrayUsingSelector:`
-// above.
-- (id)sortedArrayUsingComparator:(id)comparator {
-    let new = msg![env; this mutableCopy];
-    () = msg![env; new sortUsingComparator:comparator];
-    autorelease(env, new)
 }
 
 @end

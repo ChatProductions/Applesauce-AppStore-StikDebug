@@ -64,6 +64,7 @@ pub mod ns_number_formatter;
 pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
+pub mod ns_ordered_set;
 pub mod ns_persistent_store_coordinator;
 pub mod ns_predicate;
 pub mod ns_process_info;
@@ -85,6 +86,7 @@ pub mod ns_url;
 pub mod ns_url_connection;
 pub mod ns_url_request;
 pub mod ns_url_response;
+pub mod ns_url_session;
 pub mod ns_user_defaults;
 pub mod ns_uuid;
 pub mod ns_value;
@@ -1542,6 +1544,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_number_formatter::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,
+        ns_ordered_set::CLASSES,
         ns_persistent_store_coordinator::CLASSES,
         ns_predicate::CLASSES,
         ns_process_info::CLASSES,
@@ -1563,6 +1566,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,
         ns_url_response::CLASSES,
+        ns_url_session::CLASSES,
         ns_user_defaults::CLASSES,
         ns_uuid::CLASSES,
         ns_value::CLASSES,
@@ -1607,6 +1611,7 @@ pub struct State {
     pub ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
     pub ns_undo_manager: ns_undo_manager::State,
     ns_user_defaults: ns_user_defaults::State,
+    ns_url_session: ns_url_session::State,
     /// Singleton for [NSURLCache sharedURLCache].
     pub url_cache_singleton: crate::objc::id,
 }

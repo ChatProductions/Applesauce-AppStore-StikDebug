@@ -1506,6 +1506,14 @@ impl GLES for GLES2Native<'_> {
     unsafe fn BlendEquation(&mut self, mode: GLenum) {
         gles2::BlendEquation(mode)
     }
+    // GL_OES_blend_equation: this OpenGL ES 1.1 extension entry point is
+    // semantically identical to the core BlendEquation function in ES2/ES3.
+    // Some apps built against newer SDKs (e.g. games using the GLKit/Cocos2d
+    // blend helpers) still resolve the OES-suffixed symbol, so route it to
+    // the standard entry point instead of panicking.
+    unsafe fn BlendEquationOES(&mut self, mode: GLenum) {
+        gles2::BlendEquation(mode)
+    }
     unsafe fn BlendEquationSeparate(&mut self, modeRGB: GLenum, modeAlpha: GLenum) {
         gles2::BlendEquationSeparate(modeRGB, modeAlpha)
     }
