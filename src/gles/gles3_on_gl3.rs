@@ -1291,6 +1291,10 @@ impl GLES for GLES3OnGL3<'_> {
     unsafe fn BlendEquation(&mut self, mode: GLenum) {
         gl33::BlendEquation(mode)
     }
+    // GL_OES_blend_equation: semantically identical to core BlendEquation.
+    unsafe fn BlendEquationOES(&mut self, mode: GLenum) {
+        gl33::BlendEquation(mode)
+    }
     unsafe fn BlendEquationSeparate(&mut self, modeRGB: GLenum, modeAlpha: GLenum) {
         gl33::BlendEquationSeparate(modeRGB, modeAlpha)
     }
