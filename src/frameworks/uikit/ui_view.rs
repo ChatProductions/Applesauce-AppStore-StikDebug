@@ -79,7 +79,7 @@ pub struct State {
     pub(super) animation_block: AnimationBlockState,
 }
 
-pub(super) struct UIViewHostObject {
+pub(crate) struct UIViewHostObject {
     layer: id,
     subviews: Vec<id>,
     superview: id,

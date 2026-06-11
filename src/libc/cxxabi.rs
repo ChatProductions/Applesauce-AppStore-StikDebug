@@ -267,6 +267,17 @@ fn __cxa_pure_virtual(env: &mut Environment) {
     }
 }
 
+/// `__cxa_uncaught_exception` (Itanium C++ ABI; also re-exported by
+/// libc++abi). Returns whether an exception is currently in flight
+/// ("thrown but not yet caught"). touchHLE's exception bypass never
+/// leaves an exception in flight after `__cxa_throw` returns control to
+/// an app frame, so the truthful answer is `false`. libstdc++/libc++
+/// use this in `std::uncaught_exception()` and in stream/destructor
+/// guards.
+fn __cxa_uncaught_exception(_env: &mut Environment) -> bool {
+    false
+}
+
 fn __cxa_call_unexpected(env: &mut Environment, _exc: MutVoidPtr) {
     log!("__cxa_call_unexpected — bypassing");
     if !unwind_to_app_frame(env) {
@@ -374,6 +385,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_end_catch()),
     export_c_func!(__cxa_pure_virtual()),
     export_c_func!(__cxa_call_unexpected(_)),
+    export_c_func!(__cxa_uncaught_exception()),
     export_c_func!(__dynamic_cast(_, _, _, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
