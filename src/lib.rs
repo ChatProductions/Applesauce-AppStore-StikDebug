@@ -254,8 +254,8 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
+        std::env::remove_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT");
         std::env::remove_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT");
-        std::env::remove_var("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE");
     }
 
     if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
@@ -264,8 +264,13 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
             std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
 
             if cfg!(target_os = "android") {
+                // Potato Story/Panic must use the same logical GL shape as desktop:
+                // 480x320 landscape, not Android's current 320x480 Cocos viewport.
                 std::env::set_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT", "1");
-                std::env::set_var("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS", "1");
+                std::env::set_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT", "1");
             }
         }
     }
