@@ -164,22 +164,15 @@ pub fn create_gles2_ctx(env: &mut Environment) -> Box<dyn GLESContext> {
         assert!(window.on_main_stack());
         log!("Creating an OpenGL ES 2.0 context:");
 
-        if std::env::var_os("TOUCHHLE_SKIP_NATIVE_GLES2").is_some() {
-            log!(
-                "Skipping {} because TOUCHHLE_SKIP_NATIVE_GLES2=1",
-                GLES2NativeContext::description()
-            );
-        } else {
-            log!("Trying: {}", GLES2NativeContext::description());
-            match GLES2NativeContext::new(window) {
-                Ok(ctx) => {
-                    log!("=> Success!");
-                    let boxed: Box<dyn GLESContext> = Box::new(ctx);
-                    return boxed;
-                }
-                Err(err) => {
-                    log!("=> Failed: {}.", err);
-                }
+        log!("Trying: {}", GLES2NativeContext::description());
+        match GLES2NativeContext::new(window) {
+            Ok(ctx) => {
+                log!("=> Success!");
+                let boxed: Box<dyn GLESContext> = Box::new(ctx);
+                return boxed;
+            }
+            Err(err) => {
+                log!("=> Failed: {}.", err);
             }
         }
 

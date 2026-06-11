@@ -1328,6 +1328,21 @@ fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsize
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let disabled_arrays = guard_client_vertex_arrays(gles, mem);
         let fog_state_backup = clamp_fog_state_values(gles);
+        if std::env::var_os("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE").is_some() {
+            static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!(
+                    "TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE=1: disabling strict native GLES2 scissor/depth/cull state before Potato draws [this log will only be shown once]"
+                );
+            }
+
+            // PC desktop GL path is more forgiving about stale/clipping state.
+            // Adreno native GLES2 can happily draw only a tiny clipped piece.
+            gles.Disable(0x0c11); // GL_SCISSOR_TEST
+            gles.Disable(0x0b71); // GL_DEPTH_TEST
+            gles.Disable(0x0b44); // GL_CULL_FACE
+        }
+
         gles.DrawArrays(mode, first, count);
         restore_fog_state_values(gles, fog_state_backup);
         for index in disabled_arrays {
@@ -1370,6 +1385,21 @@ fn glDrawElements(
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let disabled_arrays = guard_client_vertex_arrays(gles, mem);
         let fog_state_backup = clamp_fog_state_values(gles);
+        if std::env::var_os("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE").is_some() {
+            static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!(
+                    "TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE=1: disabling strict native GLES2 scissor/depth/cull state before Potato draws [this log will only be shown once]"
+                );
+            }
+
+            // PC desktop GL path is more forgiving about stale/clipping state.
+            // Adreno native GLES2 can happily draw only a tiny clipped piece.
+            gles.Disable(0x0c11); // GL_SCISSOR_TEST
+            gles.Disable(0x0b71); // GL_DEPTH_TEST
+            gles.Disable(0x0b44); // GL_CULL_FACE
+        }
+
         let indices = translate_pointer_or_offset_to_host(
             gles,
             mem,
@@ -1722,22 +1752,6 @@ fn maybe_demipmap_min_filter(env: &Environment, pname: GLenum, param: GLint) -> 
 }
 
 fn glTexParameteri(env: &mut Environment, target: GLenum, pname: GLenum, param: GLint) {
-    let param = if std::env::var_os("TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES").is_some()
-        && pname == 0x2801 // GL_TEXTURE_MIN_FILTER
-        && matches!(param as u32, 0x2700 | 0x2701 | 0x2702 | 0x2703)
-    // mipmap filters
-    {
-        static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            log!(
-                "TOUCHHLE_POTATO_FORCE_LINEAR_TEXTURES=1: forcing mipmap GL_TEXTURE_MIN_FILTER to GL_LINEAR for Potato Android textures [this log will only be shown once]"
-            );
-        }
-        0x2601 // GL_LINEAR
-    } else {
-        param
-    };
-
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
