@@ -127,11 +127,15 @@ fn main() {
     // rerun-if-changed seems to not work if pointed to a directory :(
     //rerun_if_changed(&workspace_root.join("vendor/dynarmic"));
 
-    cc::Build::new()
+    let mut wrapper_build = cc::Build::new();
+    wrapper_build
         .file(package_root.join("lib.cpp"))
         .cpp(true)
         .std("c++17")
-        .include(dynarmic_out.join("include"))
-        .compile("dynarmic_wrapper");
+        .include(dynarmic_out.join("include"));
+    if !cfg!(debug_assertions) {
+        wrapper_build.define("NDEBUG", "1");
+    }
+    wrapper_build.compile("dynarmic_wrapper");
     rerun_if_changed(&package_root.join("lib.cpp"));
 }
