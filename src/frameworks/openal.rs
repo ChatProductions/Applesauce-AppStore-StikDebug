@@ -1534,42 +1534,6 @@ fn alGetProcAddress(env: &mut Environment, funcName: ConstPtr<u8>) -> MutVoidPtr
 fn alIsEnabled(_env: &mut Environment, _capability: ALenum) -> ALboolean {
     0
 }
-fn alSourcePlayv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourcePlay(env, src);
-    }
-}
-fn alSourcePausev(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourcePause(env, src);
-    }
-}
-fn alSourceStopv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourceStop(env, src);
-    }
-}
-fn alSourceRewindv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourceRewind(env, src);
-    }
-}
 
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(alcOpenDevice(_)),

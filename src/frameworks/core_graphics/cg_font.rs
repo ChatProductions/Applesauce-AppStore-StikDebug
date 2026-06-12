@@ -761,7 +761,186 @@ fn CGFontGetGlyphBBoxes(
 }
 
 
-// ==================================================================pub const FUNCTIONS: FunctionExports = &[
+// =========================================================================
+// MARK: - Table access (real implementation)
+// =========================================================================
+
+/// `CFArrayRef CGFontCopyTableTags(CGFontRef font)`
+///
+/// Returns an array of all table tags present in the font file. Each tag is
+/// a 4-byte value stored as a CFNumber (UInt32). We return it as a CFArray.
+fn CGFontCopyTableTags(env: &mut Environment, font: CGFontRef) -> CFTypeRef {
+    if font.is_null() {
+        return nil;
+    }
+    if !is_data_provider_font(env, font) {
+        return nil;
+    }
+
+    let tags = env
+        .objc
+        .borrow::<CGFontHostObject>(font)
+        .font
+        .table_tags();
+
+    if tags.is_empty() {
+        return nil;
+    }
+
+    // Create an NSMutableArray and populate it with NSNumber objects
+    let array: id = msg_class![env; NSMutableArray arrayWithCapacity:(tags.len() as u32)];
+    for tag in &tags {
+        let num: id = msg_class![env; NSNumber numberWithUnsignedInt:(*tag)];
+        () = msg![env; array addObject:num];
+    }
+    // Return retained (the caller owns this reference)
+    retain(env, array);
+    array
+}
+
+/// `CFDataRef CGFontCopyTableForTag(CGFontRef font, uint32_t tag)`
+///
+/// Returns the raw bytes of a font table as CFData. This provides direct
+/// access to any TrueType/OpenType table in the font.
+fn CGFontCopyTableForTag(env: &mut Environment, font: CGFontRef, tag: u32) -> CFTypeRef {
+    if font.is_null() {
+        return nil;
+    }
+    if !is_data_provider_font(env, font) {
+        return nil;
+    }
+
+    let table_bytes = env
+        .objc
+        .borrow::<CGFontHostObject>(font)
+        .font
+        .table_data(tag);
+
+    match table_bytes {
+        Some(bytes) => {
+            use crate::frameworks::core_foundation::cf_allocator::kCFAllocatorDefault;
+            use crate::frameworks::core_foundation::cf_data::CFDataCreate;
+
+            let len: u32 = bytes.len() as u32;
+            let buf = env.mem.alloc(len);
+            env.mem.bytes_at_mut(buf.cast(), len).copy_from_slice(&bytes);
+            CFDataCreate(env, kCFAllocatorDefault, buf.cast_const().cast(), len as i32)
+        }
+        None => nil,
+    }
+}
+
+
+// =========================================================================
+// MARK: - PostScript subset / encoding
+// =========================================================================
+
+/// `bool CGFontCanCreatePostScriptSubset(CGFontRef font,
+///     CGFontPostScriptFormat format)`
+fn CGFontCanCreatePostScriptSubset(
+    env: &mut Environment,
+    font: CGFontRef,
+    format: CGFontPostScriptFormat,
+) -> bool {
+    if font.is_null() {
+        return false;
+    }
+    // We can theoretically create Type42 subsets (which are just TrueType
+    // wrapped in PostScript). Type1 and Type3 conversions are not supported.
+    format == kCGFontPostScriptFormatType42 && is_data_provider_font(env, font)
+}
+
+fn CGFontCreatePostScriptSubset(
+    _env: &mut Environment,
+    font: CGFontRef,
+    _subset_name: CFStringRef,
+    _format: CGFontPostScriptFormat,
+    _glyphs: ConstPtr<CGGlyph>,
+    _count: u32,
+    _encoding: ConstPtr<CGGlyph>,
+) -> CFTypeRef {
+    log!(
+        "TODO: CGFontCreatePostScriptSubset({:?}) — not yet implemented",
+        font
+    );
+    nil
+}
+
+fn CGFontCreatePostScriptEncoding(
+    _env: &mut Environment,
+    font: CGFontRef,
+    _encoding: ConstPtr<CGGlyph>,
+) -> CFTypeRef {
+    log!(
+        "TODO: CGFontCreatePostScriptEncoding({:?}) — not yet implemented",
+        font
+    );
+    nil
+}
+
+// =========================================================================
+// MARK: - Variations
+// =========================================================================
+
+/// `CFArrayRef CGFontCopyVariationAxes(CGFontRef font)`
+///
+/// Returns variation axes if the font is a variable font. We check for the
+/// 'fvar' table; if not present, returns nil.
+fn CGFontCopyVariationAxes(env: &mut Environment, font: CGFontRef) -> CFTypeRef {
+    if font.is_null() {
+        return nil;
+    }
+    if !is_data_provider_font(env, font) {
+        return nil;
+    }
+    // Check if fvar table exists
+    let fvar = env
+        .objc
+        .borrow::<CGFontHostObject>(font)
+        .font
+        .table_data(0x66766172 /* 'fvar' */);
+    if fvar.is_none() {
+        return nil;
+    }
+    // Font variations are not supported in this emulation layer.
+    // Returning nil (empty) for now — the font will use its default instance.
+    nil
+}
+
+/// `CFDictionaryRef CGFontCopyVariations(CGFontRef font)`
+fn CGFontCopyVariations(_env: &mut Environment, font: CGFontRef) -> CFTypeRef {
+    log_dbg!("CGFontCopyVariations({:?}) — returning nil", font);
+    nil
+}
+
+// =========================================================================
+// MARK: - Encoding / misc
+// =========================================================================
+
+/// `CGFontRef CGFontCreateWithPlatformFont(void *platformFontReference)`
+/// This is a deprecated API but some old apps still call it.
+fn CGFontCreateWithPlatformFont(
+    _env: &mut Environment,
+    _platform_font_ref: MutVoidPtr,
+) -> CGFontRef {
+    log!("CGFontCreateWithPlatformFont: deprecated API, returning null");
+    Ptr::null()
+}
+
+/// `CFTypeID CGFontGetTypeID(void)`
+///
+/// Returns the Core Foundation type identifier for CGFont objects.
+fn CGFontGetTypeID(env: &mut Environment) -> u32 {
+    let class = env.objc.get_known_class("_touchHLE_CGFont", &mut env.mem);
+    class.to_bits()
+}
+
+
+// =========================================================================
+// MARK: - Function exports
+// =========================================================================
+
+pub const FUNCTIONS: FunctionExports = &[
     // Creation
     export_c_func!(CGFontCreateWithFontName(_)),
     export_c_func!(CGFontCreateCopyWithVariations(_, _)),

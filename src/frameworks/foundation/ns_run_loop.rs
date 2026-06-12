@@ -453,7 +453,7 @@ fn run_loop_for_thread(env: &mut Environment, this: Class, thread_id: ThreadId) 
             .objc
             .alloc_static_object(this, host_object, &mut env.mem);
         env.threads[thread_id]
-            .framework_state
+            .thread_local_framework_state
             .foundation
             .ns_run_loop
             .run_loop = new;
