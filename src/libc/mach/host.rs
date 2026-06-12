@@ -78,7 +78,19 @@ fn host_page_size(
     host: host_t,
     out_page_size: MutPtr<vm_size_t>,
 ) -> kern_return_t {
-    assert_eq!(host, MACH_HOST_SELF);
+    // Apple's host_page_size accepts MACH_HOST_SELF only; other ports fail
+    // with KERN_INVALID_ARGUMENT per XNU host.c. Real apps (e.g. Unreal Engine)
+    // pass different host-port values discovered at runtime, so use a soft
+    // error path instead of assert! which takes down the host.
+    if host != MACH_HOST_SELF {
+        log!(
+            "host_page_size: unexpected host port {:#010x} (expected MACH_HOST_SELF {:#010x}); \
+             returning KERN_INVALID_ARGUMENT",
+            host,
+            MACH_HOST_SELF
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
     env.mem.write(out_page_size, PAGE_SIZE);
     KERN_SUCCESS
 }
@@ -163,7 +175,18 @@ fn host_get_clock_service(
     clock_id: clock_id_t,
     clock_serv: MutPtr<clock_serv_t>,
 ) -> kern_return_t {
-    assert_eq!(host, MACH_HOST_SELF);
+    // Soft-fail on unexpected host ports (see host_page_size /
+    // host_statistics): per XNU host.c the kernel returns
+    // KERN_INVALID_ARGUMENT rather than aborting.
+    if host != MACH_HOST_SELF {
+        log!(
+            "host_get_clock_service: unexpected host port {:#010x} (expected MACH_HOST_SELF \
+             {:#010x}); returning KERN_INVALID_ARGUMENT",
+            host,
+            MACH_HOST_SELF
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
     let port = match clock_id {
         SYSTEM_CLOCK => CLOCK_PORT_MONOTONIC,
         CALENDAR_CLOCK => CLOCK_PORT_CALENDAR,
