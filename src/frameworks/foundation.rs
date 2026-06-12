@@ -1607,7 +1607,6 @@ pub struct State {
     ns_notification_center: ns_notification_center::State,
     ns_null: ns_null::State,
     ns_process_info: ns_process_info::State,
-    ns_run_loop: ns_run_loop::State,
     ns_string: ns_string::State,
     ns_thread: ns_thread::State,
     pub ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
@@ -1616,6 +1615,11 @@ pub struct State {
     ns_url_session: ns_url_session::State,
     /// Singleton for [NSURLCache sharedURLCache].
     pub url_cache_singleton: crate::objc::id,
+}
+
+#[derive(Default)]
+pub struct ThreadLocalState {
+    ns_run_loop: ns_run_loop::ThreadLocalState,
 }
 
 pub type NSInteger = i32;
