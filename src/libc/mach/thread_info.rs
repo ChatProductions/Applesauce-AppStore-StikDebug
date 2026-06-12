@@ -271,7 +271,54 @@ fn thread_policy_set(
     KERN_SUCCESS
 }
 
+/// `kern_return_t thread_resume(thread_act_t target_act)` — resumes a
+/// suspended thread, decrementing its suspend count, per Apple's Mach
+/// kernel API (osfmk/kern/thread_act.c in XNU). Counterpart of
+/// `thread_suspend`, and the standard way to start a thread created
+/// suspended via `pthread_create_suspended_np`.
+///
+/// `target_act` is the value returned by `pthread_mach_thread_np()`,
+/// i.e. `thread_id + 1` in touchHLE's port-numbering convention.
+fn thread_resume(env: &mut Environment, target_act: thread_inspect_t) -> kern_return_t {
+    if target_act == MACH_PORT_NULL || target_act == MACH_PORT_DEAD {
+        return KERN_INVALID_ARGUMENT;
+    }
+    let thread_id = (target_act - 1) as usize;
+    if thread_id >= env.threads.len() {
+        log!(
+            "Warning: thread_resume({:?}): unknown thread; returning KERN_INVALID_ARGUMENT.",
+            target_act
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
+    log_dbg!("thread_resume({:?}) => thread {}", target_act, thread_id);
+    env.resume_thread(thread_id);
+    KERN_SUCCESS
+}
+
+/// `kern_return_t thread_suspend(thread_act_t target_act)` — suspends a
+/// thread, incrementing its suspend count, per Apple's Mach kernel API.
+/// Counterpart of `thread_resume`.
+fn thread_suspend(env: &mut Environment, target_act: thread_inspect_t) -> kern_return_t {
+    if target_act == MACH_PORT_NULL || target_act == MACH_PORT_DEAD {
+        return KERN_INVALID_ARGUMENT;
+    }
+    let thread_id = (target_act - 1) as usize;
+    if thread_id >= env.threads.len() {
+        log!(
+            "Warning: thread_suspend({:?}): unknown thread; returning KERN_INVALID_ARGUMENT.",
+            target_act
+        );
+        return KERN_INVALID_ARGUMENT;
+    }
+    log_dbg!("thread_suspend({:?}) => thread {}", target_act, thread_id);
+    env.suspend_thread(thread_id);
+    KERN_SUCCESS
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(thread_info(_, _, _, _)),
     export_c_func!(thread_policy_set(_, _, _, _)),
+    export_c_func!(thread_resume(_)),
+    export_c_func!(thread_suspend(_)),
 ];

@@ -1009,6 +1009,27 @@ fn difftime(_env: &mut Environment, time1: time_t, time0: time_t) -> f64 {
     (time1 as f64) - (time0 as f64)
 }
 
+/// `size_t strftime_l(char *restrict s, size_t maxsize,
+/// const char *restrict format, const struct tm *restrict timeptr,
+/// locale_t loc)`
+///
+/// Per Apple's `strftime_l(3)` man page (iPhoneOS man pages), this behaves
+/// exactly like `strftime()` except it formats using the supplied extended
+/// locale instead of the global locale. touchHLE only models the "C"
+/// locale, so the locale argument is ignored and we forward to `strftime`.
+/// This symbol is imported by libstdc++/libc++ iostreams (`std::time_put`),
+/// which guest C++ code hits when formatting dates.
+fn strftime_l(
+    env: &mut Environment,
+    s: MutPtr<u8>,
+    max_size: GuestUSize,
+    format: ConstPtr<u8>,
+    time_ptr: ConstPtr<tm>,
+    _locale: crate::libc::clocale::locale_t,
+) -> GuestUSize {
+    strftime(env, s, max_size, format, time_ptr)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(clock()),
     export_c_func!(time(_)),
@@ -1022,6 +1043,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(nanosleep(_, _)),
     export_c_func!(strptime(_, _, _)),
     export_c_func!(strftime(_, _, _, _)),
+    export_c_func!(strftime_l(_, _, _, _, _)),
     export_c_func!(difftime(_, _)),
     export_c_func!(asctime(_)),
     export_c_func!(ctime(_)),
