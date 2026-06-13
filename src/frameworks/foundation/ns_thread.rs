@@ -275,10 +275,17 @@ pub const CLASSES: ClassExports = objc_classes! {
         tolerate_type_mismatch,
         ..
     } = env.objc.borrow(this);
+    let sel = match selector {
+        Some(s) => s,
+        None => {
+            log!("Warning: [(NSThread*){:?} main] called without a selector; nothing to execute.", this);
+            return;
+        }
+    };
     if tolerate_type_mismatch {
-        let _: () = msg_send_no_type_checking(env, (target, selector.unwrap(), object));
+        let _: () = msg_send_no_type_checking(env, (target, sel, object));
     } else {
-        let _: () = msg_send(env, (target, selector.unwrap(), object));
+        let _: () = msg_send(env, (target, sel, object));
     }
 }
 

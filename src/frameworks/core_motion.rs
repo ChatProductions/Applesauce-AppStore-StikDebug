@@ -24,6 +24,7 @@
 //! window's accelerometer reading) to provide real accelerometer data when
 //! available, and falls back to simulated gravity (0, 0, -1) otherwise.
 
+use crate::abi::{impl_GuestRet_for_large_struct, GuestArg};
 use crate::dyld::HostDylib;
 use crate::objc::{
     autorelease, id, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
@@ -50,19 +51,57 @@ pub const DYLIB: HostDylib = HostDylib {
 ///   y: longitudinal (positive = up toward top of device)
 ///   z: perpendicular to screen (positive = toward user)
 /// When device is flat on table face-up: x=0, y=0, z=-1 (gravity pulling down)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C, packed)]
 struct CMAcceleration {
     x: f64,
     y: f64,
     z: f64,
 }
+unsafe impl crate::mem::SafeRead for CMAcceleration {}
+impl_GuestRet_for_large_struct!(CMAcceleration);
+impl GuestArg for CMAcceleration {
+    const REG_COUNT: usize = 6;
+    fn from_regs(regs: &[u32]) -> Self {
+        CMAcceleration {
+            x: f64::from_regs(&regs[0..2]),
+            y: f64::from_regs(&regs[2..4]),
+            z: f64::from_regs(&regs[4..6]),
+        }
+    }
+    fn to_regs(self, regs: &mut [u32]) {
+        let (x, y, z) = (self.x, self.y, self.z);
+        x.to_regs(&mut regs[0..2]);
+        y.to_regs(&mut regs[2..4]);
+        z.to_regs(&mut regs[4..6]);
+    }
+}
 
 /// Per Apple docs: CMRotationRate in radians per second around each axis.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C, packed)]
 struct CMRotationRate {
     x: f64,
     y: f64,
     z: f64,
+}
+unsafe impl crate::mem::SafeRead for CMRotationRate {}
+impl_GuestRet_for_large_struct!(CMRotationRate);
+impl GuestArg for CMRotationRate {
+    const REG_COUNT: usize = 6;
+    fn from_regs(regs: &[u32]) -> Self {
+        CMRotationRate {
+            x: f64::from_regs(&regs[0..2]),
+            y: f64::from_regs(&regs[2..4]),
+            z: f64::from_regs(&regs[4..6]),
+        }
+    }
+    fn to_regs(self, regs: &mut [u32]) {
+        let (x, y, z) = (self.x, self.y, self.z);
+        x.to_regs(&mut regs[0..2]);
+        y.to_regs(&mut regs[2..4]);
+        z.to_regs(&mut regs[4..6]);
+    }
 }
 
 #[derive(Default)]
@@ -137,9 +176,6 @@ const CLASSES: ClassExports = objc_classes! {
 // =============================================================================
 // CMAccelerometerData
 // Per Apple: Encapsulates a single accelerometer sample.
-// Properties:
-//   - acceleration (CMAcceleration): the measured acceleration
-//   - timestamp (NSTimeInterval): time since boot when sample was taken
 // =============================================================================
 
 @implementation CMAccelerometerData: NSObject
@@ -152,16 +188,14 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
-// Per Apple docs: CMAccelerometerData.acceleration returns CMAcceleration struct
-// Since we can't return structs easily through the ObjC bridge, games typically
-// access the x/y/z components individually or through KVC.
+- (CMAcceleration)acceleration {
+    env.objc.borrow::<CMAccelerometerDataHostObject>(this).acceleration
+}
 
 - (f64)timestamp {
     env.objc.borrow::<CMAccelerometerDataHostObject>(this).timestamp
 }
 
-// Games access acceleration.x, acceleration.y, acceleration.z via KVC or
-// direct struct access. We provide accessor methods for the nested struct:
 - (f64)_accelerationX {
     env.objc.borrow::<CMAccelerometerDataHostObject>(this).acceleration.x
 }
@@ -186,10 +220,6 @@ const CLASSES: ClassExports = objc_classes! {
 
 // =============================================================================
 // CMGyroData
-// Per Apple: Encapsulates a single gyroscope sample.
-// Properties:
-//   - rotationRate (CMRotationRate): measured rotation rate in rad/s
-//   - timestamp (NSTimeInterval)
 // =============================================================================
 
 @implementation CMGyroData: NSObject
@@ -200,6 +230,10 @@ const CLASSES: ClassExports = objc_classes! {
         timestamp: 0.0,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (CMRotationRate)rotationRate {
+    env.objc.borrow::<CMGyroDataHostObject>(this).rotation_rate
 }
 
 - (f64)timestamp {
@@ -220,13 +254,6 @@ const CLASSES: ClassExports = objc_classes! {
 
 // =============================================================================
 // CMDeviceMotion
-// Per Apple: Encapsulates processed device-motion data.
-// Properties:
-//   - attitude (CMAttitude)
-//   - rotationRate (CMRotationRate)
-//   - gravity (CMAcceleration): gravity vector in device reference frame
-//   - userAcceleration (CMAcceleration): total acceleration minus gravity
-//   - timestamp (NSTimeInterval)
 // =============================================================================
 
 @implementation CMDeviceMotion: NSObject
@@ -241,11 +268,22 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
+- (CMAcceleration)gravity {
+    env.objc.borrow::<CMDeviceMotionHostObject>(this).gravity
+}
+
+- (CMAcceleration)userAcceleration {
+    env.objc.borrow::<CMDeviceMotionHostObject>(this).user_acceleration
+}
+
+- (CMRotationRate)rotationRate {
+    env.objc.borrow::<CMDeviceMotionHostObject>(this).rotation_rate
+}
+
 - (f64)timestamp {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).timestamp
 }
 
-// Gravity accessors
 - (f64)_gravityX {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).gravity.x
 }
@@ -256,7 +294,6 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).gravity.z
 }
 
-// User acceleration accessors
 - (f64)_userAccelerationX {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).user_acceleration.x
 }
@@ -267,7 +304,6 @@ const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).user_acceleration.z
 }
 
-// Rotation rate accessors
 - (f64)_rotationRateX {
     env.objc.borrow::<CMDeviceMotionHostObject>(this).rotation_rate.x
 }
