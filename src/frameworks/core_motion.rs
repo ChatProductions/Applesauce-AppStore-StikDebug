@@ -208,9 +208,11 @@ const CLASSES: ClassExports = objc_classes! {
 
 - (id)description {
     let host = env.objc.borrow::<CMAccelerometerDataHostObject>(this);
+    let acceleration = host.acceleration;
+    let (x, y, z) = (acceleration.x, acceleration.y, acceleration.z);
     let s = format!(
         "<CMAccelerometerData: timestamp={:.4} x={:.4} y={:.4} z={:.4}>",
-        host.timestamp, host.acceleration.x, host.acceleration.y, host.acceleration.z
+        host.timestamp, x, y, z
     );
     let cstr = env.mem.alloc_and_write_cstr(s.as_bytes());
     msg_class![env; NSString stringWithUTF8String:cstr]
