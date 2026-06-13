@@ -410,7 +410,14 @@ fn substitute_classes(
         || name.starts_with("UA")
         || name.starts_with("GAD")
         || name.starts_with("RevMob")
-        || name.starts_with("iSimulate"))
+        || name.starts_with("iSimulate")
+        || name.starts_with("ALSdk") // AppLovin SDK
+        || name.starts_with("ALAd")  // AppLovin ads
+        || name.starts_with("ALEvent") // AppLovin events
+        || name.starts_with("ALIncentivized") // AppLovin incentivized ads
+        || name.starts_with("ALTargeting") // AppLovin targeting
+        || name.starts_with("ALPrivacy") // AppLovin privacy settings
+    )
     // <-- ДОБАВЛЕНО ЗДЕСЬ
     {
         // TODO : try to remove when sqlite3 is supported.
