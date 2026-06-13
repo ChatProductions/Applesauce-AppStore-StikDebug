@@ -19,6 +19,7 @@ pub mod ui_accelerometer;
 pub mod ui_action_sheet;
 pub mod ui_activity;
 pub mod ui_activity_indicator_view;
+pub mod ui_alert_controller;
 pub mod ui_application;
 pub mod ui_color;
 pub mod ui_custom_object;
@@ -895,6 +896,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_action_sheet::CLASSES,
         ui_activity_indicator_view::CLASSES,
         ui_activity::CLASSES,
+        ui_alert_controller::CLASSES,
         ui_application::CLASSES,
         ui_color::CLASSES,
         ui_custom_object::CLASSES,
