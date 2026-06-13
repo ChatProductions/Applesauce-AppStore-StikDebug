@@ -89,15 +89,12 @@ impl State {
             .push(transaction);
     }
 
-    fn pop_explicit_transaction(env: &mut Environment) -> Transaction {
+    fn pop_explicit_transaction(env: &mut Environment) -> Option<Transaction> {
         let current_thread = env.current_thread;
         State::get_mut(env)
             .transactions
             .get_mut(&current_thread)
-            .unwrap()
-            .explicit_transactions
-            .pop()
-            .unwrap()
+            .and_then(|thread_state| thread_state.explicit_transactions.pop())
     }
 }
 
@@ -296,7 +293,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (())commit {
     log_dbg!("[CATransaction commit]");
-    State::pop_explicit_transaction(env).commit(env);
+    if let Some(transaction) = State::pop_explicit_transaction(env) {
+        transaction.commit(env);
+    } else {
+        log!("Warning: [CATransaction commit] called without a matching begin; ignoring.");
+    }
 }
 
 + (bool)disableActions {
