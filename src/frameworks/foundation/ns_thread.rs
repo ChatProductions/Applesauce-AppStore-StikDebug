@@ -127,16 +127,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)currentThread {
     let pthread = pthread_self(env);
-    #[allow(clippy::map_entry)]
-    if !State::get(env).ns_threads.contains_key(&pthread) {
-        let ns_thread: id = msg_class![env; NSThread alloc];
-        let ns_thread: id = msg![env; ns_thread init];
-        if env.current_thread == 0 {
-            env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
-        }
-        State::get(env).ns_threads.insert(pthread, ns_thread);
+    let thread_id = State::get(env).ns_threads.get(&pthread).copied();
+    if let Some(thread_id) = thread_id {
+        return thread_id;
     }
-    *State::get(env).ns_threads.get(&pthread).unwrap()
+
+    let ns_thread: id = msg_class![env; NSThread alloc];
+    let ns_thread: id = msg![env; ns_thread init];
+    if env.current_thread == 0 {
+        env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
+    }
+    State::get(env).ns_threads.insert(pthread, ns_thread);
+    ns_thread
 }
 
 + (id)callStackReturnAddresses {
@@ -275,12 +277,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         tolerate_type_mismatch,
         ..
     } = env.objc.borrow(this);
-    let sel = match selector {
-        Some(s) => s,
-        None => {
-            log!("Warning: [(NSThread*){:?} main] called without a selector; nothing to execute.", this);
-            return;
-        }
+    let Some(sel) = selector else {
+        log!("Warning: [(NSThread*){:?} main] called without a selector; nothing to execute.", this);
+        return;
     };
     if tolerate_type_mismatch {
         let _: () = msg_send_no_type_checking(env, (target, sel, object));
