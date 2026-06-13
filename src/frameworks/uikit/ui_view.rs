@@ -1444,7 +1444,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)endEditing:(bool)force {
-    assert!(force);
+    if !force { return false; }
     let responder: id = env.framework_state.uikit.ui_responder.first_responder;
     let class = msg![env; responder class];
     let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);
