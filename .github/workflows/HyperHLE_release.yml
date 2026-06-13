@@ -283,7 +283,7 @@ jobs:
         path: touchHLE.apk
 
   build-win:
-    runs-on: windows-latest  
+    runs-on: windows-2022  
 
     steps:  
     - name: Checkout touchHLE
