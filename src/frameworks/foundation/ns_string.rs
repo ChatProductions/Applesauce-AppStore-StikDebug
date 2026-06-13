@@ -1337,20 +1337,37 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)stringByStandardizingPath {
     let expanded: id = msg![env; this stringByExpandingTildeInPath];
     let path = to_rust_string(env, expanded);
-    assert!(!path.starts_with("/private"));
-    assert!(!path.starts_with("/var/automount"));
-    assert!(!path.contains("//"));
-    assert!(!path.contains("/./"));
-    let path = path_algorithms::trim_trailing_slashes(&path);
-    let new_path_str = if path.starts_with('/') {
-        assert!(!path.starts_with("/.."));
-        let resolved = fs::resolve_path(GuestPath::new(path), None);
-        let new_path = format!("/{}", resolved.join("/"));
-        assert!(!new_path.contains(".."));
-        new_path
-    } else {
-        String::from(path)
-    };
+
+    fn standardize_path(path: &str) -> String {
+        let mut path = path;
+        if let Some(stripped) = path.strip_prefix("/private") {
+            path = if stripped.is_empty() { "/" } else { stripped };
+        }
+
+        let is_absolute = path.starts_with('/');
+        let mut components = Vec::new();
+        for component in path.split('/') {
+            match component {
+                "" | "." => {}
+                ".." => {
+                    components.pop();
+                }
+                _ => components.push(component),
+            }
+        }
+
+        if is_absolute {
+            if components.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{}", components.join("/"))
+            }
+        } else {
+            components.join("/")
+        }
+    }
+
+    let new_path_str = standardize_path(&path_algorithms::trim_trailing_slashes(&path));
     let new_string = from_rust_string(env, new_path_str);
     autorelease(env, new_string)
 }

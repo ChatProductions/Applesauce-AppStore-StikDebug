@@ -7,7 +7,7 @@
 
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::libc::dirent::MAXPATHLEN;
-use crate::libc::errno::{set_errno, EBADF};
+use crate::libc::errno::{set_errno, EBADF, ENOENT};
 use crate::libc::posix_io::stat::uid_t;
 use crate::libc::posix_io::{FileDescriptor, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::mem::{ConstPtr, MutPtr, SafeRead};
@@ -75,17 +75,29 @@ fn fake_statfs() -> statfs {
 }
 
 pub fn statfs_inner(env: &mut Environment, path: ConstPtr<u8>) -> (i32, statfs) {
-    // FIXME does directory matter?
-    assert!(env
-        .mem
-        .cstr_at_utf8(path)
-        .is_ok_and(|path| path.starts_with(env.fs.home_directory().join("Documents").as_str())));
+    let Ok(path_str) = env.mem.cstr_at_utf8(path) else {
+        set_errno(env, ENOENT);
+        return (-1, fake_statfs());
+    };
+
+    if path_str.is_empty() {
+        set_errno(env, ENOENT);
+        return (-1, fake_statfs());
+    }
+
+    // Apple documents `statfs(2)` as returning information about the mounted
+    // filesystem containing the supplied path. touchHLE exposes a single
+    // filesystem, so any valid guest path should report the same mount.
+    // Returning the fake filesystem for every valid path is therefore the
+    // closest match and avoids crashing on apps that probe arbitrary paths.
     (0, fake_statfs())
 }
 
 fn statfs(env: &mut Environment, path: ConstPtr<u8>, buf: MutPtr<statfs>) -> i32 {
     let (ret, statfs) = statfs_inner(env, path);
-    env.mem.write(buf, statfs);
+    if ret == 0 {
+        env.mem.write(buf, statfs);
+    }
     ret
 }
 
@@ -103,7 +115,7 @@ fn fstatfs(env: &mut Environment, fd: FileDescriptor, buf: MutPtr<statfs>) -> i3
         0
     };
 
-    log!("TODO: fstatfs({fd}, {buf:?}) -> {result}");
+    log_dbg!("fstatfs({fd}, {buf:?}) -> {result}");
     result
 }
 
