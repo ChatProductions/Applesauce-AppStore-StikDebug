@@ -146,18 +146,34 @@ pub enum DeviceOrientation {
     LandscapeLeft,
     LandscapeRight,
 }
-fn size_for_orientation(
-    family: DeviceFamily,
+fn normalize_portrait_size(size: (u32, u32)) -> (u32, u32) {
+    if size.0 <= size.1 {
+        size
+    } else {
+        (size.1, size.0)
+    }
+}
+
+fn size_for_orientation_from_size(
+    size: (u32, u32),
     orientation: DeviceOrientation,
     scale_hack: NonZeroU32,
 ) -> (u32, u32) {
-    let (width, height) = family.portrait_size();
+    let (width, height) = size;
     let scale_hack = scale_hack.get();
     match orientation {
         DeviceOrientation::Portrait => (width * scale_hack, height * scale_hack),
         DeviceOrientation::LandscapeLeft => (height * scale_hack, width * scale_hack),
         DeviceOrientation::LandscapeRight => (height * scale_hack, width * scale_hack),
     }
+}
+
+fn size_for_orientation(
+    family: DeviceFamily,
+    orientation: DeviceOrientation,
+    scale_hack: NonZeroU32,
+) -> (u32, u32) {
+    size_for_orientation_from_size(family.portrait_size(), orientation, scale_hack)
 }
 fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32)) -> (u32, u32) {
     let (short_side, long_side) = if screen_size.0 < screen_size.1 {
@@ -319,6 +335,7 @@ pub struct Window {
     /// [Self::rotatable_fullscreen] returns [true].
     fullscreen: bool,
     scale_hack: NonZeroU32,
+    host_screen_size: Option<(u32, u32)>,
     internal_gl_ins: Option<Box<dyn GLESContext>>,
     splash_image: Option<Image>,
     device_family: DeviceFamily,
@@ -382,11 +399,13 @@ impl Window {
         video_ctx.enable_screen_saver();
 
         let scale_hack = options.scale_hack;
+        let host_screen_size = options.host_screen_size.map(normalize_portrait_size);
         // TODO: some apps specify their orientation in Info.plist, we could use
         // that here.
         let device_family = options.device_family.unwrap_or(DeviceFamily::iPhone);
         let device_orientation = options.initial_orientation;
         let fullscreen = options.fullscreen;
+        let portrait_screen_size = host_screen_size.unwrap_or_else(|| device_family.portrait_size());
 
         let mut window = if Self::rotatable_fullscreen() {
             // Without this, SDL will force fullscreen mode to be portrait.
@@ -411,7 +430,7 @@ impl Window {
             window
         } else {
             let (width, height) =
-                size_for_orientation(device_family, device_orientation, scale_hack);
+                size_for_orientation_from_size(portrait_screen_size, device_orientation, scale_hack);
             let window = video_ctx
                 .window(title, width, height)
                 .position_centered()
@@ -468,6 +487,7 @@ impl Window {
             viewport_y_offset: 0,
             fullscreen,
             scale_hack,
+            host_screen_size,
             internal_gl_ins: None,
             splash_image: launch_image,
             device_family,
@@ -1511,6 +1531,19 @@ impl Window {
         self.device_family
     }
 
+    pub fn screen_size(&self) -> (u32, u32) {
+        self.host_screen_size
+            .unwrap_or_else(|| self.device_family.portrait_size())
+    }
+
+    pub fn screen_scale(&self) -> f32 {
+        if self.host_screen_size.is_some() {
+            1.0
+        } else {
+            self.device_family.scale_factor()
+        }
+    }
+
     /// Returns the current device orientation
     pub fn current_rotation(&self) -> DeviceOrientation {
         self.device_orientation
@@ -1521,8 +1554,8 @@ impl Window {
     /// The aspect ratio, scale and orientation reflect the guest app's view of
     /// the world.
     pub fn size_unrotated_unscaled(&self) -> (u32, u32) {
-        size_for_orientation(
-            self.device_family,
+        size_for_orientation_from_size(
+            self.screen_size(),
             DeviceOrientation::Portrait,
             NonZeroU32::new(1).unwrap(),
         )
@@ -1535,7 +1568,7 @@ impl Window {
     /// the world, but the scale and orientation might not.
     pub fn viewport(&self) -> (u32, u32, u32, u32) {
         let (app_width, app_height) =
-            size_for_orientation(self.device_family, self.device_orientation, self.scale_hack);
+            size_for_orientation_from_size(self.screen_size(), self.device_orientation, self.scale_hack);
         if !self.fullscreen && !Self::rotatable_fullscreen() {
             return (0, 0, app_width, app_height);
         }

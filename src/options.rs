@@ -37,6 +37,11 @@ pub struct Options {
     pub fullscreen: bool,
     pub device_family: Option<DeviceFamily>,
     pub auto_device_family: bool,
+    /// When set, the guest sees a screen of exactly this size (in points) and
+    /// scale 1.0, instead of one of the fixed device profiles. Populated by
+    /// `--device-family=auto` (from the host display) or via the explicit
+    /// `--screen-size=WxH` override below.
+    pub host_screen_size: Option<(u32, u32)>,
     pub initial_orientation: DeviceOrientation,
     pub scale_hack: NonZeroU32,
     pub deadzone: f32,
@@ -94,16 +99,13 @@ pub struct Options {
     /// Qualcomm Adreno's native ES 1.1 driver instead sample
     /// incomplete textures as opaque black, which produces a black
     /// screen for games that never bother to set
-    /// `GL_TEXTURE_MIN_FILTER` themselves. The host driver's behaviour
-    /// is otherwise spec-compliant on either side.
-    ///
-    /// The fix-up only fires for `level == 0` uploads that find the
-    /// default mipmap filter still active; once the guest sets any
-    /// non-default filter (mipmap or not) we leave it alone, and any
-    /// subsequent `glTexParameteri(GL_TEXTURE_MIN_FILTER, …)` from the
-    /// guest will override our `GL_LINEAR` write. Multi-level uploads
-    /// (`level > 0`) do not trigger the fix-up so games that actually
-    /// use mipmaps are unaffected.
+    /// `GL_TEXTURE_MIN_FILTER` themselves. The fix-up only fires for
+    /// `level == 0` uploads that find the default mipmap filter still
+    /// active; once the guest sets any non-default filter (mipmap or not)
+    /// we leave it alone, and any subsequent `glTexParameteri(GL_TEXTURE_MIN_FILTER, …)`
+    /// from the guest will override our `GL_LINEAR` write. Multi-level uploads
+    /// (`level > 0`) do not trigger the fix-up so games that actually use
+    /// mipmaps are unaffected.
     pub fix_texture_min_filter: bool,
     pub zero_stack_after_guest_to_host_call: Option<u32>,
 }
@@ -114,6 +116,7 @@ impl Default for Options {
             fullscreen: false,
             device_family: None,
             auto_device_family: false,
+            host_screen_size: None,
             initial_orientation: DeviceOrientation::Portrait,
             scale_hack: NonZeroU32::new(1).unwrap(),
             analog_stick_tilt_controls: true,
@@ -178,6 +181,22 @@ impl Options {
                 self.auto_device_family = false;
                 self.device_family = Some(parsed);
             }
+        } else if let Some(value) = arg.strip_prefix("--screen-size=") {
+            let (w, h) = value
+                .split_once(|c| c == 'x' || c == 'X' || c == ',')
+                .ok_or_else(|| "--screen-size= requires WIDTHxHEIGHT".to_string())?;
+            let w: u32 = w
+                .trim()
+                .parse()
+                .map_err(|_| "Invalid width for --screen-size=".to_string())?;
+            let h: u32 = h
+                .trim()
+                .parse()
+                .map_err(|_| "Invalid height for --screen-size=".to_string())?;
+            if w == 0 || h == 0 {
+                return Err("--screen-size= dimensions must be non-zero".to_string());
+            }
+            self.host_screen_size = Some((w, h));
         } else if let Some(value) = arg.strip_prefix("--scale-hack=") {
             self.scale_hack = value
                 .parse()
