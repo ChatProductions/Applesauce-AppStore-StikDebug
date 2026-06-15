@@ -67,6 +67,56 @@ impl DeviceFamily {
             DeviceFamily::iPad => "iPad1,1",
         }
     }
+
+    /// Heuristically pick the emulated device family whose screen most closely
+    /// matches an arbitrary host screen of `(width, height)` physical pixels.
+    ///
+    /// This powers `--device-family=auto`: the goal isn't pixel-perfect
+    /// faithfulness (we only ever emulate three fixed point grids), but to pick
+    /// the device whose *aspect ratio* is nearest the host's, so the app's
+    /// layout and letterboxing look as natural as possible. We compare in the
+    /// orientation-independent sense by always reducing to (short, long).
+    ///
+    /// Reasoning:
+    /// - iPad      → 3:4   (768×1024), the "boxy" 4:3-ish profile.
+    /// - iPhone    → 2:3   (320×480), the classic pre-iPhone-5 profile.
+    /// - iPhone5   → ~9:16 (320×568 pts, 640×1136 px @2×), the "tall" profile,
+    ///   and the only retina (2×) option, so it best matches dense displays.
+    ///
+    /// A modern phone (e.g. 1080×1920 ≈ 9:16, or 1260×2800 ≈ 9:20) is tall and
+    /// dense, so it lands on iPhone5. A 1920×1080 desktop monitor reduces to
+    /// 9:16 short/long as well and also maps to iPhone5 (the closest tall, the
+    /// retina profile usually looks best when up-scaled). A 4:3 / 3:4 display
+    /// (older tablets, some monitors) maps to iPad.
+    pub fn pick_for_screen(width: u32, height: u32) -> DeviceFamily {
+        if width == 0 || height == 0 {
+            return DeviceFamily::iPhone;
+        }
+        // Orientation-independent: compare short:long ratios.
+        let (short, long) = if width <= height {
+            (width as f32, height as f32)
+        } else {
+            (height as f32, width as f32)
+        };
+        let host_ratio = short / long; // in (0, 1]
+
+        // Candidate short:long ratios, derived from each family's portrait size.
+        const CANDIDATES: [DeviceFamily; 3] =
+            [DeviceFamily::iPad, DeviceFamily::iPhone, DeviceFamily::iPhone5];
+
+        let mut best = DeviceFamily::iPhone;
+        let mut best_dist = f32::INFINITY;
+        for family in CANDIDATES {
+            let (w, h) = family.portrait_size();
+            let ratio = w as f32 / h as f32;
+            let dist = (ratio - host_ratio).abs();
+            if dist < best_dist {
+                best_dist = dist;
+                best = family;
+            }
+        }
+        best
+    }
 }
 impl TryFrom<u64> for DeviceFamily {
     type Error = ();
@@ -96,18 +146,34 @@ pub enum DeviceOrientation {
     LandscapeLeft,
     LandscapeRight,
 }
-fn size_for_orientation(
-    family: DeviceFamily,
+fn normalize_portrait_size(size: (u32, u32)) -> (u32, u32) {
+    if size.0 <= size.1 {
+        size
+    } else {
+        (size.1, size.0)
+    }
+}
+
+fn size_for_orientation_from_size(
+    size: (u32, u32),
     orientation: DeviceOrientation,
     scale_hack: NonZeroU32,
 ) -> (u32, u32) {
-    let (width, height) = family.portrait_size();
+    let (width, height) = size;
     let scale_hack = scale_hack.get();
     match orientation {
         DeviceOrientation::Portrait => (width * scale_hack, height * scale_hack),
         DeviceOrientation::LandscapeLeft => (height * scale_hack, width * scale_hack),
         DeviceOrientation::LandscapeRight => (height * scale_hack, width * scale_hack),
     }
+}
+
+fn size_for_orientation(
+    family: DeviceFamily,
+    orientation: DeviceOrientation,
+    scale_hack: NonZeroU32,
+) -> (u32, u32) {
+    size_for_orientation_from_size(family.portrait_size(), orientation, scale_hack)
 }
 fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32)) -> (u32, u32) {
     let (short_side, long_side) = if screen_size.0 < screen_size.1 {
@@ -232,6 +298,24 @@ fn surface_from_image(image: &Image) -> Surface<'_> {
     surface
 }
 
+/// Query the host's primary display size in physical pixels, if possible.
+///
+/// Used by `--device-family=auto` to pick the closest emulated device before
+/// the real [Window] is created. Spins up a throwaway SDL video subsystem; on
+/// any failure (e.g. headless host, no display) returns [None] so the caller
+/// can fall back to a sensible default.
+pub fn host_screen_size() -> Option<(u32, u32)> {
+    let sdl_ctx = sdl2::init().ok()?;
+    let video_ctx = sdl_ctx.video().ok()?;
+    let bounds = video_ctx.display_bounds(0).ok()?;
+    let (w, h) = bounds.size();
+    if w == 0 || h == 0 {
+        None
+    } else {
+        Some((w, h))
+    }
+}
+
 pub struct Window {
     _sdl_ctx: sdl2::Sdl,
     video_ctx: sdl2::VideoSubsystem,
@@ -251,6 +335,7 @@ pub struct Window {
     /// [Self::rotatable_fullscreen] returns [true].
     fullscreen: bool,
     scale_hack: NonZeroU32,
+    host_screen_size: Option<(u32, u32)>,
     internal_gl_ins: Option<Box<dyn GLESContext>>,
     splash_image: Option<Image>,
     device_family: DeviceFamily,
@@ -314,11 +399,13 @@ impl Window {
         video_ctx.enable_screen_saver();
 
         let scale_hack = options.scale_hack;
+        let host_screen_size = options.host_screen_size.map(normalize_portrait_size);
         // TODO: some apps specify their orientation in Info.plist, we could use
         // that here.
         let device_family = options.device_family.unwrap_or(DeviceFamily::iPhone);
         let device_orientation = options.initial_orientation;
         let fullscreen = options.fullscreen;
+        let portrait_screen_size = host_screen_size.unwrap_or_else(|| device_family.portrait_size());
 
         let mut window = if Self::rotatable_fullscreen() {
             // Without this, SDL will force fullscreen mode to be portrait.
@@ -343,7 +430,7 @@ impl Window {
             window
         } else {
             let (width, height) =
-                size_for_orientation(device_family, device_orientation, scale_hack);
+                size_for_orientation_from_size(portrait_screen_size, device_orientation, scale_hack);
             let window = video_ctx
                 .window(title, width, height)
                 .position_centered()
@@ -400,6 +487,7 @@ impl Window {
             viewport_y_offset: 0,
             fullscreen,
             scale_hack,
+            host_screen_size,
             internal_gl_ins: None,
             splash_image: launch_image,
             device_family,
@@ -1443,6 +1531,19 @@ impl Window {
         self.device_family
     }
 
+    pub fn screen_size(&self) -> (u32, u32) {
+        self.host_screen_size
+            .unwrap_or_else(|| self.device_family.portrait_size())
+    }
+
+    pub fn screen_scale(&self) -> f32 {
+        if self.host_screen_size.is_some() {
+            1.0
+        } else {
+            self.device_family.scale_factor()
+        }
+    }
+
     /// Returns the current device orientation
     pub fn current_rotation(&self) -> DeviceOrientation {
         self.device_orientation
@@ -1453,8 +1554,8 @@ impl Window {
     /// The aspect ratio, scale and orientation reflect the guest app's view of
     /// the world.
     pub fn size_unrotated_unscaled(&self) -> (u32, u32) {
-        size_for_orientation(
-            self.device_family,
+        size_for_orientation_from_size(
+            self.screen_size(),
             DeviceOrientation::Portrait,
             NonZeroU32::new(1).unwrap(),
         )
@@ -1467,7 +1568,7 @@ impl Window {
     /// the world, but the scale and orientation might not.
     pub fn viewport(&self) -> (u32, u32, u32, u32) {
         let (app_width, app_height) =
-            size_for_orientation(self.device_family, self.device_orientation, self.scale_hack);
+            size_for_orientation_from_size(self.screen_size(), self.device_orientation, self.scale_hack);
         if !self.fullscreen && !Self::rotatable_fullscreen() {
             return (0, 0, app_width, app_height);
         }

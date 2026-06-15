@@ -50,7 +50,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Geometry
 
 - (CGRect)bounds {
-    let (width, height) = env.window().device_family().portrait_size();
+    let (width, height) = env.window().screen_size();
     CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: CGSize {
@@ -78,7 +78,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Scale
 
 - (CGFloat)scale {
-    env.window().device_family().scale_factor() as CGFloat
+    env.window().screen_scale() as CGFloat
 }
 
 - (CGFloat)nativeScale {
@@ -107,7 +107,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Display mode / overscan
 
 - (id)currentMode {
-    let (width, height) = env.window().device_family().portrait_size();
+    let (width, height) = env.window().screen_size();
     let size = CGSize {
         width:  width  as CGFloat,
         height: height as CGFloat,
@@ -122,7 +122,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)availableModes {
-    msg_class![env; NSArray new]
+    let current_mode: id = msg![env; this currentMode];
+    msg_class![env; NSArray arrayWithObject:current_mode]
 }
 
 // Apple's

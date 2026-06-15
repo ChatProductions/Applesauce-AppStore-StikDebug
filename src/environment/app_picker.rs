@@ -151,6 +151,7 @@ struct AppPickerDelegateHostObject {
     device_family_iphone: bool,
     device_family_ipad: bool,
     device_family_iphone5: bool,
+    device_family_auto: bool,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -244,6 +245,9 @@ const CLASSES: ClassExports = objc_classes! {
 }
 - (())deviceFamilyIphone5 {
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_iphone5 = true;
+}
+- (())deviceFamilyAuto {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_auto = true;
 }
 
 - (())openFileManager {
@@ -579,6 +583,7 @@ fn app_picker_inner(
                     "iphone" => 0,
                     "ipad" => 1,
                     "iphone5" => 2,
+                    "auto" => 3,
                     _ => 0,
                 })
                 .min(buttons.len() - 1),
@@ -746,6 +751,13 @@ fn app_picker_inner(
             );
         } else if std::mem::take(&mut host_obj.device_family_iphone5) {
             quick_options_device_family = Some("iphone5");
+            update_device_family_buttons(
+                env,
+                &quick_options_stuff.device_family_buttons,
+                quick_options_device_family,
+            );
+        } else if std::mem::take(&mut host_obj.device_family_auto) {
+            quick_options_device_family = Some("auto");
             update_device_family_buttons(
                 env,
                 &quick_options_stuff.device_family_buttons,
@@ -1308,7 +1320,7 @@ struct QuickOptionsStuff {
     main_view: id,
     scale_hack_buttons: [id; 5],
     orientation_buttons: [id; 3],
-    device_family_buttons: [id; 3],
+    device_family_buttons: [id; 4],
 }
 
 fn setup_quick_options(
@@ -1408,6 +1420,7 @@ fn setup_quick_options(
             ("iPhone", "deviceFamilyIphone"),
             ("iPad", "deviceFamilyIpad"),
             ("iPhone 5", "deviceFamilyIphone5"),
+            ("Auto", "deviceFamilyAuto"),
         ]),
         RowKind::Label("Network access"),
         RowKind::Switch("network:", false),
