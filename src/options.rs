@@ -36,6 +36,7 @@ pub enum Button {
 pub struct Options {
     pub fullscreen: bool,
     pub device_family: Option<DeviceFamily>,
+    pub auto_device_family: bool,
     pub initial_orientation: DeviceOrientation,
     pub scale_hack: NonZeroU32,
     pub deadzone: f32,
@@ -112,6 +113,7 @@ impl Default for Options {
         Options {
             fullscreen: false,
             device_family: None,
+            auto_device_family: false,
             initial_orientation: DeviceOrientation::Portrait,
             scale_hack: NonZeroU32::new(1).unwrap(),
             analog_stick_tilt_controls: true,
@@ -167,9 +169,15 @@ impl Options {
         } else if arg == "--landscape-right" {
             self.initial_orientation = DeviceOrientation::LandscapeRight;
         } else if let Some(value) = arg.strip_prefix("--device-family=") {
-            let parsed =
-                DeviceFamily::try_from(value).map_err(|_| "Invalid device family".to_string())?;
-            self.device_family = Some(parsed);
+            if value == "auto" {
+                self.auto_device_family = true;
+                self.device_family = None;
+            } else {
+                let parsed =
+                    DeviceFamily::try_from(value).map_err(|_| "Invalid device family".to_string())?;
+                self.auto_device_family = false;
+                self.device_family = Some(parsed);
+            }
         } else if let Some(value) = arg.strip_prefix("--scale-hack=") {
             self.scale_hack = value
                 .parse()

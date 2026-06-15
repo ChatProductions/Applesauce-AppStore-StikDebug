@@ -39,7 +39,13 @@ Device options:
         If omitted, suitable device family would be deduced from application
         bundle itself, falling back to iPhone if needed.
 
-        Accepted values are "iphone", "iphone5" and "ipad" respectively.
+        Accepted values are "iphone", "iphone5", "ipad" and "auto".
+
+        Use "auto" to let touchHLE inspect your host display's resolution and
+        pick the device family whose screen aspect ratio is the closest match
+        (tall/dense displays map to iPhone5, 4:3-ish displays to iPad). The
+        chosen family is still validated against what the app bundle supports,
+        so an unsupported guess is ignored just like a manual override.
 
 Game controller options:
     --deadzone=...

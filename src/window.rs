@@ -67,6 +67,56 @@ impl DeviceFamily {
             DeviceFamily::iPad => "iPad1,1",
         }
     }
+
+    /// Heuristically pick the emulated device family whose screen most closely
+    /// matches an arbitrary host screen of `(width, height)` physical pixels.
+    ///
+    /// This powers `--device-family=auto`: the goal isn't pixel-perfect
+    /// faithfulness (we only ever emulate three fixed point grids), but to pick
+    /// the device whose *aspect ratio* is nearest the host's, so the app's
+    /// layout and letterboxing look as natural as possible. We compare in the
+    /// orientation-independent sense by always reducing to (short, long).
+    ///
+    /// Reasoning:
+    /// - iPad      → 3:4   (768×1024), the "boxy" 4:3-ish profile.
+    /// - iPhone    → 2:3   (320×480), the classic pre-iPhone-5 profile.
+    /// - iPhone5   → ~9:16 (320×568 pts, 640×1136 px @2×), the "tall" profile,
+    ///   and the only retina (2×) option, so it best matches dense displays.
+    ///
+    /// A modern phone (e.g. 1080×1920 ≈ 9:16, or 1260×2800 ≈ 9:20) is tall and
+    /// dense, so it lands on iPhone5. A 1920×1080 desktop monitor reduces to
+    /// 9:16 short/long as well and also maps to iPhone5 (the closest tall, the
+    /// retina profile usually looks best when up-scaled). A 4:3 / 3:4 display
+    /// (older tablets, some monitors) maps to iPad.
+    pub fn pick_for_screen(width: u32, height: u32) -> DeviceFamily {
+        if width == 0 || height == 0 {
+            return DeviceFamily::iPhone;
+        }
+        // Orientation-independent: compare short:long ratios.
+        let (short, long) = if width <= height {
+            (width as f32, height as f32)
+        } else {
+            (height as f32, width as f32)
+        };
+        let host_ratio = short / long; // in (0, 1]
+
+        // Candidate short:long ratios, derived from each family's portrait size.
+        const CANDIDATES: [DeviceFamily; 3] =
+            [DeviceFamily::iPad, DeviceFamily::iPhone, DeviceFamily::iPhone5];
+
+        let mut best = DeviceFamily::iPhone;
+        let mut best_dist = f32::INFINITY;
+        for family in CANDIDATES {
+            let (w, h) = family.portrait_size();
+            let ratio = w as f32 / h as f32;
+            let dist = (ratio - host_ratio).abs();
+            if dist < best_dist {
+                best_dist = dist;
+                best = family;
+            }
+        }
+        best
+    }
 }
 impl TryFrom<u64> for DeviceFamily {
     type Error = ();
@@ -230,6 +280,24 @@ fn surface_from_image(image: &Image) -> Surface<'_> {
         }
     });
     surface
+}
+
+/// Query the host's primary display size in physical pixels, if possible.
+///
+/// Used by `--device-family=auto` to pick the closest emulated device before
+/// the real [Window] is created. Spins up a throwaway SDL video subsystem; on
+/// any failure (e.g. headless host, no display) returns [None] so the caller
+/// can fall back to a sensible default.
+pub fn host_screen_size() -> Option<(u32, u32)> {
+    let sdl_ctx = sdl2::init().ok()?;
+    let video_ctx = sdl_ctx.video().ok()?;
+    let bounds = video_ctx.display_bounds(0).ok()?;
+    let (w, h) = bounds.size();
+    if w == 0 || h == 0 {
+        None
+    } else {
+        Some((w, h))
+    }
 }
 
 pub struct Window {
