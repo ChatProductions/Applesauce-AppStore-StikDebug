@@ -21,24 +21,24 @@ STRINGS: dict[str, dict[str, str]] = {
             "Your request will be filed against the *latest HyperHLE build "
             "from Actions* and forwarded to a maintainer.\n\n"
             "Send /cancel any time to stop.\n\n"
-            "First — what's the *app / game name*?"
+            "First: what's the *app / game name*?"
         ),
         "ask_version": (
             "Got it. What's the *app version*? (e.g. `1.0`)\n"
             "Send /skip if you don't know."
         ),
         "ask_ipa": (
-            "🔗 Now send the *IPA link(s)* — a direct download URL to the "
-            "`.ipa` (or zipped `.app`) — or *attach the IPA file directly*. "
+            "🔗 Now send the *IPA link(s)*: a direct download URL to the "
+            "`.ipa` (or zipped `.app`). Or *attach the IPA file directly*. "
             "You can paste several links (one per line) or send several "
-            "files; send /done when you've attached your file(s)."
+            "files, then send /done when you've attached your file(s)."
         ),
         "no_link": (
             "I couldn't find a valid `http(s)://…` link there. Please paste a "
             "direct download URL to the IPA, or attach the `.ipa` file itself."
         ),
         "ipa_not_ipa": (
-            "That file doesn't look like an IPA — please send a `.ipa` (or a "
+            "That file doesn't look like an IPA. Please send a `.ipa` (or a "
             "zipped `.app`), or paste a direct download link."
         ),
         "ipa_file_saved": (
@@ -105,9 +105,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "cancelled_inline": "Cancelled. Send /start to begin again.",
         "submitting": "⏳ Submitting your request…",
         "submitted": "✅ *Request submitted!* Thanks for the details.",
-        "build_ok": "\n🧪 Build from your log: {v} — ✅ up to date with the latest commit.",
+        "build_ok": "\n🧪 Build from your log: {v}. ✅ Up to date with the latest commit.",
         "build_outdated": (
-            "\n⚠️ Build {v} from your log is *OUTDATED* — the latest commit is "
+            "\n⚠️ Build {v} from your log is *OUTDATED*. The latest commit is "
             "{latest}. Please download the newest build from {actions} and "
             "re-test; the bug may already be fixed. (The request was still "
             "submitted.)"
@@ -118,7 +118,7 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "issue_line_ok": "\n📌 GitHub issue: {url}",
         "issue_line_no_token": (
-            "\n📌 No GitHub token configured — prefilled issue link:\n{url}"
+            "\n📌 No GitHub token configured. Prefilled issue link:\n{url}"
         ),
         "issue_line_failed": (
             "\n⚠️ Couldn't open the GitHub issue automatically (it was still forwarded)."
@@ -132,10 +132,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "language_set": "✅ Language set to English.",
         "help": (
             "I file *app fix requests* for HyperHLE.\n\n"
-            "/start — start a new request (IPA link, log file, bug description)\n"
-            "/language — change the language (English / Русский / العربية)\n"
-            "/cancel — abort the current request\n"
-            "/help — this message\n\n"
+            "/start: start a new request (IPA link, log file, bug description)\n"
+            "/language: change the language (English / Русский / العربية)\n"
+            "/cancel: abort the current request\n"
+            "/help: this message\n\n"
             "Requests are pinned to the latest build from {actions} and "
             "forwarded to {user}."
         ),
@@ -151,15 +151,15 @@ STRINGS: dict[str, dict[str, str]] = {
             "Запрос будет привязан к *последней сборке HyperHLE из Actions* "
             "и переслан мейнтейнеру.\n\n"
             "Отправьте /cancel в любой момент, чтобы прервать.\n\n"
-            "Для начала — как называется *приложение / игра*?"
+            "Для начала: как называется *приложение / игра*?"
         ),
         "ask_version": (
             "Принято. Какая *версия приложения*? (например, `1.0`)\n"
             "Отправьте /skip, если не знаете."
         ),
         "ask_ipa": (
-            "🔗 Теперь отправьте *ссылку (ссылки) на IPA* — прямой URL для "
-            "скачивания `.ipa` (или `.app` в zip-архиве) — или *прикрепите "
+            "🔗 Теперь отправьте *ссылку (ссылки) на IPA*: прямой URL для "
+            "скачивания `.ipa` (или `.app` в zip-архиве). Или *прикрепите "
             "сам файл IPA*. Можно несколько ссылок (по одной на строку) или "
             "несколько файлов; после файлов отправьте /done."
         ),
@@ -168,7 +168,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "ссылку на скачивание IPA или прикрепите сам файл `.ipa`."
         ),
         "ipa_not_ipa": (
-            "Этот файл не похож на IPA — пришлите `.ipa` (или `.app` в "
+            "Этот файл не похож на IPA. Пришлите `.ipa` (или `.app` в "
             "zip-архиве) либо вставьте прямую ссылку на скачивание."
         ),
         "ipa_file_saved": (
@@ -193,7 +193,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "добавите хотя бы один."
         ),
         "file_too_big": (
-            "Файл больше 20 МБ — это максимум, который я могу скачать. "
+            "Файл больше 20 МБ. Это максимум, который я могу скачать. "
             "Обрежьте лог или вставьте нужную часть текстом."
         ),
         "download_failed": "Не удалось скачать файл. Попробуйте ещё раз или вставьте текст.",
@@ -207,7 +207,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "✅ Текст лога добавлен. Пришлите ещё один лог или /done, чтобы продолжить."
         ),
         "log_required": (
-            "Лог обязателен — без него вылет не получится исследовать. "
+            "Лог обязателен. Без него вылет не получится исследовать. "
             "Прикрепите или вставьте хотя бы один лог перед /done."
         ),
         "ask_env": (
@@ -238,9 +238,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "cancelled_inline": "Отменено. Отправьте /start, чтобы начать заново.",
         "submitting": "⏳ Отправляю ваш запрос…",
         "submitted": "✅ *Запрос отправлен!* Спасибо за подробности.",
-        "build_ok": "\n🧪 Сборка из вашего лога: {v} — ✅ совпадает с последним коммитом.",
+        "build_ok": "\n🧪 Сборка из вашего лога: {v}. ✅ Совпадает с последним коммитом.",
         "build_outdated": (
-            "\n⚠️ Сборка {v} из вашего лога *УСТАРЕЛА* — последний коммит: "
+            "\n⚠️ Сборка {v} из вашего лога *УСТАРЕЛА*. Последний коммит: "
             "{latest}. Скачайте свежую сборку из {actions} и проверьте ещё "
             "раз; баг, возможно, уже исправлен. (Запрос всё равно отправлен.)"
         ),
@@ -250,7 +250,7 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "issue_line_ok": "\n📌 Issue на GitHub: {url}",
         "issue_line_no_token": (
-            "\n📌 GitHub-токен не настроен — ссылка с предзаполненным issue:\n{url}"
+            "\n📌 GitHub-токен не настроен. Ссылка с предзаполненным issue:\n{url}"
         ),
         "issue_line_failed": (
             "\n⚠️ Не удалось автоматически создать issue на GitHub "
@@ -265,10 +265,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "language_set": "✅ Язык переключён на русский.",
         "help": (
             "Я создаю *запросы на исправление приложений* для HyperHLE.\n\n"
-            "/start — новый запрос (ссылка на IPA, файл лога, описание бага)\n"
-            "/language — сменить язык (English / Русский / العربية)\n"
-            "/cancel — прервать текущий запрос\n"
-            "/help — это сообщение\n\n"
+            "/start: новый запрос (ссылка на IPA, файл лога, описание бага)\n"
+            "/language: сменить язык (English / Русский / العربية)\n"
+            "/cancel: прервать текущий запрос\n"
+            "/help: это сообщение\n\n"
             "Запросы привязываются к последней сборке из {actions} и "
             "пересылаются {user}."
         ),
@@ -284,15 +284,15 @@ STRINGS: dict[str, dict[str, str]] = {
             "سيُربط طلبك بأحدث نسخة من HyperHLE من Actions ويُحوَّل إلى "
             "المشرف.\n\n"
             "أرسل /cancel في أي وقت للإلغاء.\n\n"
-            "أولاً — ما اسم *التطبيق / اللعبة*؟"
+            "أولاً: ما اسم *التطبيق / اللعبة*؟"
         ),
         "ask_version": (
             "حسناً. ما *إصدار التطبيق*؟ (مثل `1.0`)\n"
             "أرسل /skip إذا كنت لا تعرف."
         ),
         "ask_ipa": (
-            "🔗 الآن أرسل *رابط (روابط) IPA* — رابط تنزيل مباشر لملف `.ipa` "
-            "(أو `.app` مضغوط) — أو *أرفق ملف IPA مباشرة*. يمكنك لصق عدة "
+            "🔗 الآن أرسل *رابط (روابط) IPA*: رابط تنزيل مباشر لملف `.ipa` "
+            "(أو `.app` مضغوط). أو *أرفق ملف IPA مباشرة*. يمكنك لصق عدة "
             "روابط (كل رابط في سطر) أو إرسال عدة ملفات؛ أرسل /done بعد "
             "إرفاق ملفاتك."
         ),
@@ -301,7 +301,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "تنزيل مباشر لملف IPA، أو إرفاق ملف `.ipa` نفسه."
         ),
         "ipa_not_ipa": (
-            "هذا الملف لا يبدو ملف IPA — أرسل ملف `.ipa` (أو `.app` مضغوطاً) "
+            "هذا الملف لا يبدو ملف IPA. أرسل ملف `.ipa` (أو `.app` مضغوطاً) "
             "أو الصق رابط تنزيل مباشراً."
         ),
         "ipa_file_saved": (
@@ -368,9 +368,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "cancelled_inline": "تم الإلغاء. أرسل /start للبدء من جديد.",
         "submitting": "⏳ جارٍ إرسال طلبك…",
         "submitted": "✅ *تم إرسال الطلب!* شكراً على التفاصيل.",
-        "build_ok": "\n🧪 النسخة في سجلك: {v} — ✅ مطابقة لأحدث كوميت.",
+        "build_ok": "\n🧪 النسخة في سجلك: {v}. ✅ مطابقة لأحدث كوميت.",
         "build_outdated": (
-            "\n⚠️ النسخة {v} في سجلك *قديمة* — أحدث كوميت هو {latest}. "
+            "\n⚠️ النسخة {v} في سجلك *قديمة*. أحدث كوميت هو {latest}. "
             "الرجاء تنزيل أحدث نسخة من {actions} وإعادة الاختبار؛ فقد يكون "
             "الخطأ مُصلحاً بالفعل. (تم إرسال الطلب على أي حال.)"
         ),
@@ -380,7 +380,7 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "issue_line_ok": "\n📌 مشكلة (Issue) على GitHub: {url}",
         "issue_line_no_token": (
-            "\n📌 لم يتم إعداد رمز GitHub — رابط مشكلة مُعبأ مسبقاً:\n{url}"
+            "\n📌 لم يتم إعداد رمز GitHub. رابط مشكلة مُعبأ مسبقاً:\n{url}"
         ),
         "issue_line_failed": (
             "\n⚠️ تعذر فتح المشكلة على GitHub تلقائياً (تم تحويل الطلب رغم ذلك)."
@@ -394,10 +394,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "language_set": "✅ تم تغيير اللغة إلى العربية.",
         "help": (
             "أنا أُنشئ *طلبات إصلاح التطبيقات* لـ HyperHLE.\n\n"
-            "/start — طلب جديد (رابط IPA، ملف السجل، وصف الخطأ)\n"
-            "/language — تغيير اللغة (English / Русский / العربية)\n"
-            "/cancel — إلغاء الطلب الحالي\n"
-            "/help — هذه الرسالة\n\n"
+            "/start: طلب جديد (رابط IPA، ملف السجل، وصف الخطأ)\n"
+            "/language: تغيير اللغة (English / Русский / العربية)\n"
+            "/cancel: إلغاء الطلب الحالي\n"
+            "/help: هذه الرسالة\n\n"
             "تُربط الطلبات بأحدث نسخة من {actions} وتُحوَّل إلى {user}."
         ),
     },
