@@ -151,6 +151,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (UIInterfaceOrientation)statusBarOrientation {
     match env.window().current_rotation() {
         DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
+        DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown,
         DeviceOrientation::LandscapeLeft => UIDeviceOrientationLandscapeLeft,
         DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight
     }
@@ -168,6 +169,9 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
         UIDeviceOrientationPortrait => {
             env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::Portrait));
+        }
+        UIDeviceOrientationPortraitUpsideDown => {
+            env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::PortraitUpsideDown));
         }
         UIDeviceOrientationLandscapeLeft => {
             env.on_parent_stack_in_coroutine(|window, _| window.rotate_device(DeviceOrientation::LandscapeLeft));

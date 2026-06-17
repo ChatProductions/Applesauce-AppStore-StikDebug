@@ -145,6 +145,7 @@ struct AppPickerDelegateHostObject {
     orientation_default: bool,
     orientation_landscape_left: bool,
     orientation_landscape_right: bool,
+    orientation_portrait_upside_down: bool,
     analog_stick_tilt_controls: Option<bool>,
     network: Option<bool>,
     fullscreen: Option<bool>,
@@ -224,6 +225,9 @@ const CLASSES: ClassExports = objc_classes! {
 }
 - (())orientationLandscapeRight {
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).orientation_landscape_right = true;
+}
+- (())orientationPortraitUpsideDown {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).orientation_portrait_upside_down = true;
 }
 - (())analogStickTiltControls:(id)switch { // UISwitch*
     let switch_state: bool = msg![env; switch isOn];
@@ -570,6 +574,7 @@ fn app_picker_inner(
             value.map_or(0, |v| match v {
                 DeviceOrientation::LandscapeLeft => 1,
                 DeviceOrientation::LandscapeRight => 2,
+                DeviceOrientation::PortraitUpsideDown => 3,
                 _ => panic!(),
             }),
         );
@@ -735,6 +740,13 @@ fn app_picker_inner(
                 &quick_options_stuff.orientation_buttons,
                 quick_options_orientation,
             );
+        } else if std::mem::take(&mut host_obj.orientation_portrait_upside_down) {
+            quick_options_orientation = Some(DeviceOrientation::PortraitUpsideDown);
+            update_orientation_buttons(
+                env,
+                &quick_options_stuff.orientation_buttons,
+                quick_options_orientation,
+            );
         } else if std::mem::take(&mut host_obj.device_family_iphone) {
             quick_options_device_family = Some("iphone");
             update_device_family_buttons(
@@ -784,6 +796,7 @@ fn app_picker_inner(
             match orientation {
                 DeviceOrientation::LandscapeLeft => "--landscape-left",
                 DeviceOrientation::LandscapeRight => "--landscape-right",
+                DeviceOrientation::PortraitUpsideDown => "--upside-down",
                 _ => todo!(),
             }
             .to_string(),
@@ -1319,7 +1332,7 @@ fn change_copyright_page(
 struct QuickOptionsStuff {
     main_view: id,
     scale_hack_buttons: [id; 5],
-    orientation_buttons: [id; 3],
+    orientation_buttons: [id; 4],
     device_family_buttons: [id; 4],
 }
 
@@ -1414,6 +1427,7 @@ fn setup_quick_options(
             ("Default", "orientationDefault"),
             ("←", "orientationLandscapeLeft"),
             ("→", "orientationLandscapeRight"),
+            ("↓", "orientationPortraitUpsideDown"),
         ]),
         RowKind::Label("Device Mode"),
         RowKind::Buttons(&[

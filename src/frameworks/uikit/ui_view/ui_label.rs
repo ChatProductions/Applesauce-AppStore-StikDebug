@@ -412,10 +412,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     let y_offset = match baseline_adjustment {
-        0 => 0.0,
-        1 => (bounds.size.height - calculated_size.height) / 2.0,
+        0 => (bounds.size.height - calculated_size.height) / 2.0,
+        1 => 0.0,
         2 => bounds.size.height - calculated_size.height,
-        _ => 0.0,
+        _ => (bounds.size.height - calculated_size.height) / 2.0,
     };
     let base_rect = CGRect {
         origin: CGPoint { x: bounds.origin.x, y: bounds.origin.y + y_offset },

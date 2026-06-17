@@ -240,43 +240,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
     let button: id = msg![env; button initWithFrame:frame];
 
-    // Честно обрабатываем все типы кнопок, чтобы UI работал корректно
-    match button_type {
-        UIButtonTypeCustom | UIButtonTypeRoundedRect => {
-            // Обычные кнопки. Игра сама настроит их размер, текст и внешний
-            // вид.
-        }
-        UIButtonTypeDetailDisclosure | UIButtonTypeInfoLight | UIButtonTypeInfoDark => {
-            // Системные Info-кнопки (типы 2, 3 и 4).
-            // Без заглушек: задаём хардкодный размер из оригинальной iOS
-            // (18x19),
-            // чтобы кнопка физически существовала на экране и ловила тапы.
-            let bounds = CGRect {
-                origin: CGPoint { x: 0.0, y: 0.0 },
-                size: CGSize { width: 18.0, height: 19.0 },
-            };
-            () = msg![env; button setBounds:bounds];
-
-            // У нас нет проприетарной графики Apple (UISystemInfoLight.png),
-            // поэтому ставим букву "i", чтобы кнопку было видно визуально
-            let title = get_static_str(env, "i");
-            () = msg![env; button setTitle:title forState:UIControlStateNormal];
-        }
-        UIButtonTypeContactAdd => {
-            // Системная кнопка "Плюс" (тип 5). Размер в iOS обычно 29x29
-            let bounds = CGRect {
-                origin: CGPoint { x: 0.0, y: 0.0 },
-                size: CGSize { width: 29.0, height: 29.0 },
-            };
-            () = msg![env; button setBounds:bounds];
-
-            let title = get_static_str(env, "+");
-            () = msg![env; button setTitle:title forState:UIControlStateNormal];
-        }
-        _ => {
-            log!("touchHLE::frameworks::uikit::ui_view::ui_control::ui_button: Warning: Unhandled UIButtonType {}", button_type);
-        }
-    }
+    set_type(env, button, button_type);
 
     autorelease(env, button)
 }
