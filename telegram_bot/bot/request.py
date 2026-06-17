@@ -110,13 +110,13 @@ class FixRequest:
         else:
             base = f"`{self.hyperhle_version}`"
         if self.up_to_date is True:
-            return base + " — ✅ matches the latest commit"
+            return base + " (✅ matches the latest commit)"
         if self.up_to_date is False:
             return (
                 base
-                + f" — ⚠️ **outdated**, latest is `{self.latest_commit_sha[:7]}`"
+                + f" (⚠️ **outdated**, latest is `{self.latest_commit_sha[:7]}`)"
             )
-        return base + " — could not verify against the latest commit"
+        return base + " (could not verify against the latest commit)"
 
     def _logs_block(self) -> str:
         parts = []
@@ -138,7 +138,7 @@ class FixRequest:
     def _ipa_block(self) -> str:
         lines = [f"- {link}" for link in self.ipa_links]
         lines += [
-            f"- `{name}` — IPA file attached via Telegram and forwarded to "
+            f"- `{name}`: IPA file attached via Telegram and forwarded to "
             "the maintainer (no public link)"
             for name in self.ipa_files
         ]
@@ -182,13 +182,13 @@ class FixRequest:
         """Plain-text summary for the maintainer DM."""
         ipa = "\n".join(
             [f"  • {link}" for link in self.ipa_links]
-            + [f"  • {name} (file — forwarded below)" for name in self.ipa_files]
+            + [f"  • {name} (file, forwarded below)" for name in self.ipa_files]
         )
         log_names = ", ".join(log.name for log in self.logs) or "none"
         if self.up_to_date is True:
             build_status = " (up to date)"
         elif self.up_to_date is False:
-            build_status = f" (OUTDATED — latest is {self.latest_commit_sha[:7]})"
+            build_status = f" (OUTDATED, latest is {self.latest_commit_sha[:7]})"
         else:
             build_status = " (unverified)"
         out = [
