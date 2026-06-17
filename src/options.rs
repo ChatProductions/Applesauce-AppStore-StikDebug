@@ -171,6 +171,8 @@ impl Options {
             self.initial_orientation = DeviceOrientation::LandscapeLeft;
         } else if arg == "--landscape-right" {
             self.initial_orientation = DeviceOrientation::LandscapeRight;
+        } else if arg == "--upside-down" {
+            self.initial_orientation = DeviceOrientation::PortraitUpsideDown;
         } else if let Some(value) = arg.strip_prefix("--device-family=") {
             if value == "auto" {
                 self.auto_device_family = true;

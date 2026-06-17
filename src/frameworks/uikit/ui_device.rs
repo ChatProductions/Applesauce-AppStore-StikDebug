@@ -131,6 +131,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (UIDeviceOrientation)orientation {
     match env.window().current_rotation() {
         DeviceOrientation::Portrait      => UIDeviceOrientationPortrait,
+        DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown,
         DeviceOrientation::LandscapeLeft  => UIDeviceOrientationLandscapeLeft,
         DeviceOrientation::LandscapeRight => UIDeviceOrientationLandscapeRight,
     }
@@ -139,6 +140,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setOrientation:(UIDeviceOrientation)orientation {
     env.window_mut().rotate_device(match orientation {
         UIDeviceOrientationPortrait      => DeviceOrientation::Portrait,
+        UIDeviceOrientationPortraitUpsideDown => DeviceOrientation::PortraitUpsideDown,
         UIDeviceOrientationLandscapeLeft  => DeviceOrientation::LandscapeLeft,
         UIDeviceOrientationLandscapeRight => DeviceOrientation::LandscapeRight,
         _ => {
