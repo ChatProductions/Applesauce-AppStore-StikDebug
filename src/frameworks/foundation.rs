@@ -64,8 +64,10 @@ pub mod ns_number_formatter;
 pub mod ns_objc_runtime;
 pub mod ns_object;
 pub mod ns_operation;
+pub mod ns_ordered_set;
 pub mod ns_persistent_store_coordinator;
 pub mod ns_predicate;
+pub mod ns_port;
 pub mod ns_process_info;
 pub mod ns_property_list_serialization;
 pub mod ns_regular_expression;
@@ -85,6 +87,7 @@ pub mod ns_url;
 pub mod ns_url_connection;
 pub mod ns_url_request;
 pub mod ns_url_response;
+pub mod ns_url_session;
 pub mod ns_user_defaults;
 pub mod ns_uuid;
 pub mod ns_value;
@@ -778,39 +781,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("NSProgressKindFile"),
     ),
     // -----------------------------------------------------------------
-    // CFError userInfo keys (CFError.h). They share storage with the
-    // toll-free-bridged NSError userInfo dictionary, so the documented
-    // literal values are exactly the NS*-prefixed names.
-    // -----------------------------------------------------------------
-    (
-        "_kCFErrorDescriptionKey",
-        HostConstant::NSString("NSDescription"),
-    ),
-    (
-        "_kCFErrorLocalizedDescriptionKey",
-        HostConstant::NSString("NSLocalizedDescription"),
-    ),
-    (
-        "_kCFErrorLocalizedFailureReasonKey",
-        HostConstant::NSString("NSLocalizedFailureReason"),
-    ),
-    (
-        "_kCFErrorLocalizedRecoverySuggestionKey",
-        HostConstant::NSString("NSLocalizedRecoverySuggestion"),
-    ),
-    (
-        "_kCFErrorUnderlyingErrorKey",
-        HostConstant::NSString("NSUnderlyingError"),
-    ),
-    (
-        "_kCFErrorURLKey",
-        HostConstant::NSString("NSURL"),
-    ),
-    (
-        "_kCFErrorFilePathKey",
-        HostConstant::NSString("NSFilePath"),
-    ),
-    // -----------------------------------------------------------------
     // CFProxySupport.h: proxy dictionary key constants.
     // -----------------------------------------------------------------
     (
@@ -899,6 +869,31 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_NSMetadataUbiquitousItemIsDownloadedKey",
         HostConstant::NSString("NSMetadataUbiquitousItemIsDownloadedKey"),
+    ),
+    // iCloud item state keys — https://developer.apple.com/documentation/foundation/nsmetadataitem
+    (
+        "_NSMetadataUbiquitousItemIsDownloadingKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsDownloadingKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemIsUploadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsUploadedKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemIsUploadingKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemIsUploadingKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemHasUnresolvedConflictsKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemHasUnresolvedConflictsKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemPercentDownloadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemPercentDownloadedKey"),
+    ),
+    (
+        "_NSMetadataUbiquitousItemPercentUploadedKey",
+        HostConstant::NSString("NSMetadataUbiquitousItemPercentUploadedKey"),
     ),
     // -----------------------------------------------------------------
     // NSURL ubiquity / iCloud item attribute keys, per
@@ -1128,117 +1123,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         HostConstant::NSString("NSHTTPCookieManagerAcceptPolicyChangedNotification"),
     ),
     // -----------------------------------------------------------------
-    // `NSURL` resource-value keys introduced in iOS 5+. Apple
-    // `NSURL.h` declares them as `NSString * const`. The literal value
-    // of each constant is its own symbol name. Apps fetch them via
-    // `getResourceValue:forKey:error:` / `setResourceValue:forKey:error:`.
-    // <https://developer.apple.com/documentation/foundation/nsurl/resource_keys>
-    // -----------------------------------------------------------------
-    (
-        "_NSURLPathKey",
-        HostConstant::NSString("NSURLPathKey"),
-    ),
-    (
-        "_NSURLNameKey",
-        HostConstant::NSString("NSURLNameKey"),
-    ),
-    (
-        "_NSURLLocalizedNameKey",
-        HostConstant::NSString("NSURLLocalizedNameKey"),
-    ),
-    (
-        "_NSURLIsRegularFileKey",
-        HostConstant::NSString("NSURLIsRegularFileKey"),
-    ),
-    (
-        "_NSURLIsDirectoryKey",
-        HostConstant::NSString("NSURLIsDirectoryKey"),
-    ),
-    (
-        "_NSURLIsSymbolicLinkKey",
-        HostConstant::NSString("NSURLIsSymbolicLinkKey"),
-    ),
-    (
-        "_NSURLIsVolumeKey",
-        HostConstant::NSString("NSURLIsVolumeKey"),
-    ),
-    (
-        "_NSURLIsHiddenKey",
-        HostConstant::NSString("NSURLIsHiddenKey"),
-    ),
-    (
-        "_NSURLIsAliasFileKey",
-        HostConstant::NSString("NSURLIsAliasFileKey"),
-    ),
-    (
-        "_NSURLFileSizeKey",
-        HostConstant::NSString("NSURLFileSizeKey"),
-    ),
-    (
-        "_NSURLFileAllocatedSizeKey",
-        HostConstant::NSString("NSURLFileAllocatedSizeKey"),
-    ),
-    (
-        "_NSURLCreationDateKey",
-        HostConstant::NSString("NSURLCreationDateKey"),
-    ),
-    (
-        "_NSURLContentAccessDateKey",
-        HostConstant::NSString("NSURLContentAccessDateKey"),
-    ),
-    (
-        "_NSURLContentModificationDateKey",
-        HostConstant::NSString("NSURLContentModificationDateKey"),
-    ),
-    (
-        "_NSURLAttributeModificationDateKey",
-        HostConstant::NSString("NSURLAttributeModificationDateKey"),
-    ),
-    (
-        "_NSURLLinkCountKey",
-        HostConstant::NSString("NSURLLinkCountKey"),
-    ),
-    (
-        "_NSURLTypeIdentifierKey",
-        HostConstant::NSString("NSURLTypeIdentifierKey"),
-    ),
-    (
-        "_NSURLLocalizedTypeDescriptionKey",
-        HostConstant::NSString("NSURLLocalizedTypeDescriptionKey"),
-    ),
-    (
-        "_NSURLLabelNumberKey",
-        HostConstant::NSString("NSURLLabelNumberKey"),
-    ),
-    (
-        "_NSURLLabelColorKey",
-        HostConstant::NSString("NSURLLabelColorKey"),
-    ),
-    (
-        "_NSURLLocalizedLabelKey",
-        HostConstant::NSString("NSURLLocalizedLabelKey"),
-    ),
-    (
-        "_NSURLEffectiveIconKey",
-        HostConstant::NSString("NSURLEffectiveIconKey"),
-    ),
-    (
-        "_NSURLCustomIconKey",
-        HostConstant::NSString("NSURLCustomIconKey"),
-    ),
-    (
-        "_NSURLParentDirectoryURLKey",
-        HostConstant::NSString("NSURLParentDirectoryURLKey"),
-    ),
-    (
-        "_NSURLVolumeURLKey",
-        HostConstant::NSString("NSURLVolumeURLKey"),
-    ),
-    (
-        "_NSURLFileResourceTypeKey",
-        HostConstant::NSString("NSURLFileResourceTypeKey"),
-    ),
-    // -----------------------------------------------------------------
     // `NSXMLParserErrorDomain` — the error domain used by NSError
     // userInfo from `<Foundation/NSXMLParser.h>`. Apple ships this as
     // `FOUNDATION_EXPORT NSString * const`; the literal value is the
@@ -1294,13 +1178,6 @@ pub const STUB_CONSTANTS: ConstantExports = &[
     (
         "_UITextInputCurrentInputModeDidChangeNotification",
         HostConstant::NSString("UITextInputCurrentInputModeDidChangeNotification"),
-    ),
-    // -----------------------------------------------------------------
-    // ImageIO constants.
-    // -----------------------------------------------------------------
-    (
-        "_kCGImagePropertyExifDictionary",
-        HostConstant::NSString("{Exif}"),
     ),
     // -----------------------------------------------------------------
     // Security constants.
@@ -1438,6 +1315,8 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_GKSessionErrorDomain",
         HostConstant::NSString("com.apple.gamekit.GKSessionErrorDomain"),
     ),
+    // (`_AVPlayerItemTimeJumpedNotification` is defined once in the
+    // AVFoundation notification section above.)
     // -----------------------------------------------------------------
     // PassKit payment network identifiers (<PassKit/PKPaymentRequest.h>).
     // Documented values.
@@ -1545,6 +1424,8 @@ pub const STUB_CONSTANTS: ConstantExports = &[
         "_MPNowPlayingInfoPropertyPlaybackRate",
         HostConstant::NSString("MPNowPlayingInfoPropertyPlaybackRate"),
     ),
+    // (`_kCGImagePropertyExifDictionary` is defined in
+    // core_graphics::cg_image's constant list.)
     // -----------------------------------------------------------------
     // AVFoundation metadata key spaces / common keys
     // (<AVFoundation/AVMetadataIdentifiers.h>). Documented values.
@@ -1647,6 +1528,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
         ns_host::CLASSES,
+        ns_http_cookie_storage::CLASSES,
         ns_index_path::CLASSES,
         ns_index_set::CLASSES,
         ns_json_serialization::CLASSES,
@@ -1663,8 +1545,10 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_number_formatter::CLASSES,
         ns_object::CLASSES,
         ns_operation::CLASSES,
+        ns_ordered_set::CLASSES,
         ns_persistent_store_coordinator::CLASSES,
         ns_predicate::CLASSES,
+        ns_port::CLASSES,
         ns_process_info::CLASSES,
         ns_property_list_serialization::CLASSES,
         ns_regular_expression::CLASSES,
@@ -1676,15 +1560,15 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_string::CLASSES,
         ns_text_checking_result::CLASSES,
         ns_thread::CLASSES,
-        ns_timer::CLASSES,
         ns_time_zone::CLASSES,
+        ns_timer::CLASSES,
         ns_ubiquitous_key_value_store::CLASSES,
         ns_undo_manager::CLASSES,
-        ns_http_cookie_storage::CLASSES,
         ns_url::CLASSES,
         ns_url_connection::CLASSES,
         ns_url_request::CLASSES,
         ns_url_response::CLASSES,
+        ns_url_session::CLASSES,
         ns_user_defaults::CLASSES,
         ns_uuid::CLASSES,
         ns_value::CLASSES,
@@ -1723,14 +1607,19 @@ pub struct State {
     ns_notification_center: ns_notification_center::State,
     ns_null: ns_null::State,
     ns_process_info: ns_process_info::State,
-    ns_run_loop: ns_run_loop::State,
     ns_string: ns_string::State,
     ns_thread: ns_thread::State,
     pub ns_ubiquitous_key_value_store: ns_ubiquitous_key_value_store::State,
     pub ns_undo_manager: ns_undo_manager::State,
     ns_user_defaults: ns_user_defaults::State,
+    ns_url_session: ns_url_session::State,
     /// Singleton for [NSURLCache sharedURLCache].
     pub url_cache_singleton: crate::objc::id,
+}
+
+#[derive(Default)]
+pub struct ThreadLocalState {
+    ns_run_loop: ns_run_loop::ThreadLocalState,
 }
 
 pub type NSInteger = i32;

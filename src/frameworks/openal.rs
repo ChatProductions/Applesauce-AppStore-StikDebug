@@ -617,7 +617,7 @@ fn alIsBuffer(env: &mut Environment, buffer: ALuint) -> ALboolean {
 }
 
 fn alGetBufferi(env: &mut Environment, buffer: ALuint, param: ALenum, value: MutPtr<ALint>) {
-    let value = env.mem.ptr_at(value, 1);
+    let value = env.mem.ptr_at_mut(value, 1);
     try_get_context!(env, context);
     unsafe { context.GetBufferi(buffer, param, value) }
 }
@@ -960,6 +960,31 @@ fn alSourceStop(env: &mut Environment, source: ALuint) {
 fn alSourceRewind(env: &mut Environment, source: ALuint) {
     try_get_context!(env, context);
     unsafe { context.SourceRewind(source) };
+}
+
+fn alSourcePlayv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    let nsources_usize: GuestUSize = nsources.try_into().unwrap();
+    let sources = env.mem.ptr_at(sources, nsources_usize);
+    try_get_context!(env, context);
+    unsafe { context.SourcePlayv(nsources, sources) };
+}
+fn alSourcePausev(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    let nsources_usize: GuestUSize = nsources.try_into().unwrap();
+    let sources = env.mem.ptr_at(sources, nsources_usize);
+    try_get_context!(env, context);
+    unsafe { context.SourcePausev(nsources, sources) };
+}
+fn alSourceStopv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    let nsources_usize: GuestUSize = nsources.try_into().unwrap();
+    let sources = env.mem.ptr_at(sources, nsources_usize);
+    try_get_context!(env, context);
+    unsafe { context.SourceStopv(nsources, sources) };
+}
+fn alSourceRewindv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
+    let nsources_usize: GuestUSize = nsources.try_into().unwrap();
+    let sources = env.mem.ptr_at(sources, nsources_usize);
+    try_get_context!(env, context);
+    unsafe { context.SourceRewindv(nsources, sources) };
 }
 
 fn alSourceQueueBuffers(
@@ -1508,42 +1533,6 @@ fn alGetProcAddress(env: &mut Environment, funcName: ConstPtr<u8>) -> MutVoidPtr
 }
 fn alIsEnabled(_env: &mut Environment, _capability: ALenum) -> ALboolean {
     0
-}
-fn alSourcePlayv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourcePlay(env, src);
-    }
-}
-fn alSourcePausev(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourcePause(env, src);
-    }
-}
-fn alSourceStopv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourceStop(env, src);
-    }
-}
-fn alSourceRewindv(env: &mut Environment, nsources: ALsizei, sources: ConstPtr<ALuint>) {
-    if sources.is_null() || nsources <= 0 {
-        return;
-    }
-    for i in 0..nsources {
-        let src: ALuint = env.mem.read(sources + i as u32);
-        alSourceRewind(env, src);
-    }
 }
 
 pub const FUNCTIONS: FunctionExports = &[

@@ -218,6 +218,7 @@ fn days_in_month(year: i32, month: i32) -> i32 {
     }
 }
 
+#[derive(Default)]
 struct NSCalendarHostObject {
     calendar_identifier: id,
     first_weekday: NSInteger,
@@ -250,6 +251,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         State::get(env).current_calendar = Some(new_calendar);
         new_calendar
     }
+}
+
+// Apple's `autoupdatingCurrentCalendar` returns a calendar that tracks later
+// changes to the user's locale/calendar settings. touchHLE has no live system
+// settings to track, so behaving like `currentCalendar` is equivalent and
+// avoids returning nil (which apps querying it at launch don't expect).
++ (id)autoupdatingCurrentCalendar {
+    msg![env; this currentCalendar]
 }
 
 - (id)initWithCalendarIdentifier:(id)identifier { // NSString *

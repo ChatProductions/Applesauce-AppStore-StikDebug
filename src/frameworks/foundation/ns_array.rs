@@ -10,11 +10,10 @@ use super::ns_property_list_serialization::{
     deserialize_plist_from_file, NSPropertyListBinaryFormat_v1_0,
 };
 use super::{
-    _nib_archive_decoder, ns_keyed_unarchiver, ns_string, ns_url, NSComparisonResult, NSNotFound,
-    NSRange, NSUInteger,
+    _nib_archive_decoder, ns_keyed_archiver, ns_keyed_unarchiver, ns_string, ns_url,
+    NSComparisonResult, NSNotFound, NSRange, NSUInteger,
 };
 use crate::abi::{CallFromHost, GuestFunction};
-use crate::frameworks::foundation::ns_string::from_rust_string;
 use crate::fs::GuestPath;
 use crate::libc::stdlib::qsort::qsort_generic;
 use crate::mem::{ConstPtr, MutPtr, MutVoidPtr, Ptr};
@@ -24,6 +23,7 @@ use crate::objc::{
 };
 use crate::Environment;
 
+#[derive(Default)]
 struct ObjectEnumeratorHostObject {
     /// the enumerated collection, NSArray *
     array: id,
@@ -94,18 +94,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     let array = from_vec(env, objects);
     autorelease(env, array)
 }
-+ (id)arrayWithObjects:(id)firstObj, ...args {
-    retain(env, firstObj);
-    let mut objects = vec![firstObj];
-    let mut varargs = args.start();
-    loop {
-        let next_arg: id = varargs.next(env);
-        if next_arg.is_null() {
-            break;
++ (id)arrayWithObjects:(id)first_obj, ...args {
+    let objects = if first_obj == nil {
+        vec![]
+    } else {
+        retain(env, first_obj);
+        let mut objects = vec![first_obj];
+        let mut varargs = args.start();
+        loop {
+            let next_arg: id = varargs.next(env);
+            if next_arg.is_null() {
+                break;
+            }
+            retain(env, next_arg);
+            objects.push(next_arg);
         }
-        retain(env, next_arg);
-        objects.push(next_arg);
-    }
+        objects
+    };
     let array = from_vec(env, objects);
     autorelease(env, array)
 }
@@ -223,6 +228,32 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, array_imm)
 }
 
+// `- (NSArray *)sortedArrayUsingSelector:` — defined here on the abstract
+// NSArray class (not just on a private concrete subclass) so that every
+// member of the class cluster, including NSMutableArray, responds to it.
+- (id)sortedArrayUsingSelector:(SEL)comparator {
+    let array = msg![env; this mutableCopy];
+    () = msg![env; array sortUsingSelector:comparator];
+    let array_imm = msg![env; array copy];
+    release(env, array);
+    autorelease(env, array_imm)
+}
+
+// `- (NSArray *)sortedArrayUsingComparator:(NSComparator)cmptr` —
+// per Apple's NSArray documentation: "Returns an array that lists the
+// receiving array's elements in ascending order, as determined by the
+// comparator block." Defined on the abstract NSArray class so that
+// NSMutableArray (a different branch of the class cluster) inherits it
+// too — previously it lived only on _touchHLE_NSArray, so calling it on
+// a mutable array hit the unrecognized-selector path (GeometryDash logs).
+- (id)sortedArrayUsingComparator:(id)comparator {
+    let array = msg![env; this mutableCopy];
+    () = msg![env; array sortUsingComparator:comparator];
+    let array_imm = msg![env; array copy];
+    release(env, array);
+    autorelease(env, array_imm)
+}
+
 // Add to NSArray @implementation:
 
 - (id)objectsAtIndexes:(id)index_set { // NSIndexSet*
@@ -251,6 +282,22 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     nil
+}
+
+- (bool)isEqual:(id)other {
+    if this == other {
+        return true;
+    }
+    // Per Apple's docs, `-[NSArray isEqual:]` returns YES when `other` is an
+    // NSArray with equal contents. Without this override the NSObject default
+    // (pointer identity) is used, so two distinct-but-equal arrays — e.g. an
+    // array and its unarchived copy — compare unequal, which breaks
+    // `NSDictionary`/`NSArray` equality after a round-trip.
+    let class: Class = msg_class![env; NSArray class];
+    if !msg![env; other isKindOfClass:class] {
+        return false;
+    }
+    msg![env; this isEqualToArray:other]
 }
 
 - (bool)isEqualToArray:(id)other { // NSArray*
@@ -374,18 +421,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     if env.objc.class_is_subclass_of(class, keyed_arch_class) {
         let array = env.objc.borrow::<ArrayHostObject>(this).array.clone();
-        // NSKeyedArchiver stores arrays as NS.objects.0, NS.objects.1 ...
-        for (i, obj) in array.iter().copied().enumerate() {
-            let key = from_rust_string(env, format!("NS.objects.{}", i));
-            () = msg![env; coder encodeObject:obj forKey:key];
-            release(env, key);
-        }
-
-        // Encode total count so decoder knows how many to read
-        let count_key = from_rust_string(env, "NS.count".to_string());
-        let count = array.len() as NSUInteger;
-        () = msg![env; coder encodeInt:count forKey:count_key];
-        release(env, count_key);
+        // NSKeyedArchiver stores an array's contents as an inline array of UID
+        // references under "NS.objects" (Apple's format, which is what our
+        // decoder reads back). See `encode_objects_as_uid_array`.
+        ns_keyed_archiver::encode_objects_as_uid_array(env, coder, "NS.objects", &array);
     } else {
         log!(
             "Warning: NSArray encodeWithCoder: unsupported coder class, skipping"
@@ -523,18 +562,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
-+ (id)arrayWithObjects:(id)firstObj, ...args {
-    retain(env, firstObj);
-    let mut objects = vec![firstObj];
-    let mut varargs = args.start();
-    loop {
-        let next_arg: id = varargs.next(env);
-        if next_arg.is_null() {
-            break;
++ (id)arrayWithObjects:(id)first_obj, ...args {
+    let objects = if first_obj == nil {
+        vec![]
+    } else {
+        retain(env, first_obj);
+        let mut objects = vec![first_obj];
+        let mut varargs = args.start();
+        loop {
+            let next_arg: id = varargs.next(env);
+            if next_arg.is_null() {
+                break;
+            }
+            retain(env, next_arg);
+            objects.push(next_arg);
         }
-        retain(env, next_arg);
-        objects.push(next_arg);
-    }
+        objects
+    };
     let array = mutable_from_vec(env, objects);
     autorelease(env, array)
 }
@@ -852,25 +896,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     let res = from_vec(env, tmp);
     autorelease(env, res)
-}
-
-- (id)sortedArrayUsingSelector:(SEL)comparator {
-    let new = msg![env; this mutableCopy];
-    () = msg![env; new sortUsingSelector:comparator];
-    autorelease(env, new)
-}
-
-// `- (NSArray *)sortedArrayUsingComparator:(NSComparator)cmptr` —
-// per Apple's [NSArray Reference](https://developer.apple.com/documentation/foundation/nsarray/1411124-sortedarrayusingcomparator):
-// returns a new sorted array using the given NSComparator block. We
-// implement it by copying the receiver into a mutable array and
-// delegating to `-sortUsingComparator:` on the mutable copy, then
-// returning an autoreleased copy. This matches `-sortedArrayUsingSelector:`
-// above.
-- (id)sortedArrayUsingComparator:(id)comparator {
-    let new = msg![env; this mutableCopy];
-    () = msg![env; new sortUsingComparator:comparator];
-    autorelease(env, new)
 }
 
 @end

@@ -325,6 +325,36 @@ impl Environment {
         }
 
         let device_family_override = options.device_family;
+        // `--device-family=auto`: when the user hasn't pinned a specific family,
+        // probe the host display and pick the closest-matching emulated device.
+        // This is treated exactly like an explicit override below, so it still
+        // respects what the app bundle actually supports.
+        let device_family_override = if device_family_override.is_none()
+            && options.auto_device_family
+            && !options.headless
+        {
+            match window::host_screen_size() {
+                Some((w, h)) => {
+                    let picked = DeviceFamily::pick_for_screen(w, h);
+                    if options.host_screen_size.is_none() {
+                        options.host_screen_size = Some((w, h));
+                    }
+                    log!(
+                        "Auto device family: host screen is {}x{} px, exposing the same resolution to the app and picking closest match {:?}.",
+                        w,
+                        h,
+                        picked
+                    );
+                    Some(picked)
+                }
+                None => {
+                    log!("Auto device family: couldn't determine host screen size; leaving choice to the app bundle.");
+                    None
+                }
+            }
+        } else {
+            device_family_override
+        };
         let device_family_array = bundle.device_family_array();
         let device_family = match device_family_array.len() {
             // iPhone only or iPad only
@@ -415,10 +445,21 @@ impl Environment {
         let mut mem = mem::Mem::new();
 
         let is_spore = bundle.bundle_identifier().starts_with("com.ea.spore");
+        let is_critter_crunch = bundle
+            .bundle_identifier()
+            .starts_with("com.capybaragames.CritterCrunch")
+            || bundle
+                .bundle_identifier()
+                .starts_with("com.go.starwave.CritterCrunch");
         // We always reset this flag depending on which game is launched.
-        mem.zero_memory_on_free = !is_spore;
+        mem.zero_memory_on_free = !is_spore && !is_critter_crunch;
         if is_spore {
             log!("Applying game-specific hack for Spore Origins: zeroing memory on alloc instead of free.");
+        }
+        if is_critter_crunch {
+            // Without this hack, every time a critter 'explodes',
+            // the game crashes with a null page access error.
+            log!("Applying game-specific hack for Critter Crunch: zeroing memory on alloc instead of free.");
         }
         let executable = mach_o::MachO::load_from_file(
             bundle.executable_path(),
@@ -454,6 +495,12 @@ impl Environment {
                         // We build `libz` from sources with our OSS toolchain,
                         // the base address is already set and sliding is not
                         // needed.
+                        0
+                    }
+                    "libsqlite3.dylib" | "libsqlite3.0.dylib" => {
+                        // We build `libsqlite3` from sources with our OSS
+                        // toolchain, the base address is already set and
+                        // sliding is not needed.
                         0
                     }
                     _ => {
@@ -493,6 +540,8 @@ impl Environment {
                     .to_string()
             })
             .unwrap();
+
+        let entry_point_is_lc_main = executable.entry_point_is_lc_main;
 
         let entry_point_addr = abi::GuestFunction::from_addr_with_thumb_bit(entry_point_addr);
 
@@ -582,7 +631,14 @@ impl Environment {
 
                         let envp = envp_ref_list.as_slice();
                         let apple = &[bin_path_apple_key.as_str()];
-                        stack::prep_stack_for_start(&mut env.mem, &mut env.cpu, &argv, envp, apple);
+                        stack::prep_stack_for_start(
+                            &mut env.mem,
+                            &mut env.cpu,
+                            &argv,
+                            envp,
+                            apple,
+                            entry_point_is_lc_main,
+                        );
                     }
 
                     // Manually call here, since running call_from_host pushes
@@ -794,7 +850,7 @@ impl Environment {
             let argv = &[];
             let envp = &[];
             let apple = &[];
-            stack::prep_stack_for_start(&mut env.mem, &mut env.cpu, argv, envp, apple);
+            stack::prep_stack_for_start(&mut env.mem, &mut env.cpu, argv, envp, apple, false);
         }
 
         env.cpu.set_cpsr(cpu::Cpu::CPSR_USER_MODE);
@@ -945,7 +1001,7 @@ impl Environment {
         }
     }
 
-    fn stack_trace_current(&self) {
+    pub(crate) fn stack_trace_current(&self) {
         if self.current_thread == 0 {
             echo_no_panic!("Attempting to produce stack trace for main thread:");
         } else {
@@ -1089,6 +1145,7 @@ impl Environment {
         new_thread_id
     }
 
+    #[allow(unused)]
     pub fn get_tl_framework_state(&mut self) -> &mut frameworks::ThreadLocalState {
         &mut self.threads[self.current_thread].thread_local_framework_state
     }

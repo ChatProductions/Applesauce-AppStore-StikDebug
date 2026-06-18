@@ -18,9 +18,11 @@ use crate::frameworks::core_graphics::{CGPoint, CGRect};
 use crate::frameworks::foundation::ns_string;
 use crate::frameworks::uikit::ui_application::{
     UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight,
+    UIInterfaceOrientationPortraitUpsideDown,
 };
 use crate::frameworks::uikit::ui_device::{
     UIDeviceOrientationLandscapeLeft, UIDeviceOrientationLandscapeRight,
+    UIDeviceOrientationPortraitUpsideDown,
 };
 use crate::objc::{id, msg, msg_class, msg_super, nil, objc_classes, release, retain, ClassExports};
 use std::collections::HashMap;
@@ -379,6 +381,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     if let Some(orientation) = match env.window.as_ref().unwrap().current_rotation() {
         crate::window::DeviceOrientation::LandscapeLeft => Some(UIDeviceOrientationLandscapeLeft),
         crate::window::DeviceOrientation::LandscapeRight => Some(UIDeviceOrientationLandscapeRight),
+        crate::window::DeviceOrientation::PortraitUpsideDown => Some(UIDeviceOrientationPortraitUpsideDown),
         // Portrait is the default so we don't do anything here.
         crate::window::DeviceOrientation::Portrait => None,
     } {
@@ -391,6 +394,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             let transform = match orientation {
                 UIInterfaceOrientationLandscapeLeft => CGAffineTransform::make_rotation(-std::f32::consts::FRAC_PI_2),
                 UIInterfaceOrientationLandscapeRight => CGAffineTransform::make_rotation(std::f32::consts::FRAC_PI_2),
+                UIInterfaceOrientationPortraitUpsideDown => CGAffineTransform::make_rotation(std::f32::consts::PI),
                 other => {
                     // UIInterfaceOrientation has Portrait/PortraitUpsideDown/
                     // LandscapeLeft/LandscapeRight; the first two are filtered

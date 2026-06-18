@@ -14,7 +14,7 @@
 
 use super::{NSRange, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg_class, nil, objc_classes, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, objc_classes, ClassExports, HostObject, NSZonePtr,
 };
 
 /// The NSNotFound sentinel value used in NSRange when a capture group didn't
@@ -22,6 +22,7 @@ use crate::objc::{
 const NS_NOT_FOUND: i32 = 0x7fffffff;
 
 /// Host object storing match results.
+#[derive(Default)]
 pub(super) struct NSTextCheckingResultHostObject {
     /// The overall match range (index 0) plus any capture group ranges.
     /// ranges[0] is the full match, ranges[1..] are capture groups.

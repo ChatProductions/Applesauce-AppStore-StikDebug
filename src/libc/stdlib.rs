@@ -773,16 +773,20 @@ fn exit(env: &mut Environment, exit_code: i32) {
         let _: () = func.call_from_host(env, ());
     }
 
-    // ИСПРАВЛЕНИЕ: Мы выводим в консоль, что приложение пытается закрыться,
-    // но саму команду закрытия эмулятора (std::process::exit) мы игнорируем!
-    // echo!("App called exit({}), ignoring to bypass DRM!", exit_code);
+    // Log the exit so it's clear in CI/run logs why the process stopped;
+    // previously this exited silently, which made the logs end abruptly with no
+    // explanation.
+    echo!("App called exit({}); touchHLE will now quit.", exit_code);
     std::process::exit(exit_code);
 }
 
-fn abort(_env: &mut Environment) {
-    // ИСПРАВЛЕНИЕ ДЛЯ BOX2D: Отключаем краш эмулятора при вызове abort()
-    // echo!("App called abort()! The guest application encountered a fatal
-    // error. Ignoring to bypass Box2D crash!");
+fn abort(env: &mut Environment) {
+    // abort() means the guest hit a fatal error (e.g. a failed assertion or an
+    // uncaught C++ exception calling std::terminate). Log it with a guest stack
+    // trace before quitting so the cause is visible, instead of exiting
+    // silently.
+    echo!("App called abort(); the guest encountered a fatal error.");
+    env.stack_trace_current();
     std::process::exit(1);
 }
 
@@ -863,6 +867,35 @@ pub fn strtoul(
             0
         }
     }
+}
+fn wcstoul(
+    env: &mut Environment,
+    nptr: ConstPtr<wchar_t>,
+    endptr: MutPtr<MutPtr<wchar_t>>,
+    base: i32,
+) -> u32 {
+    // TODO: support other locales
+    let ctype_locale = setlocale(env, LC_CTYPE, Ptr::null());
+    assert_eq!(env.mem.read(ctype_locale), b'C');
+
+    let w_string = env.mem.wcstr_at(nptr);
+    assert!(w_string.is_ascii()); // TODO
+
+    assert!(endptr.is_null()); // TODO
+
+    let c_string = env.mem.alloc_and_write_cstr(w_string.as_bytes());
+    // TODO: use str_to_int_inner_generic() instead
+    let res = strtoul(env, c_string.cast_const(), Ptr::null(), base);
+    env.mem.free(c_string.cast());
+    log_dbg!(
+        "wcstoul({:?} ({:?}), {:?}, {}) => {}",
+        nptr,
+        w_string,
+        endptr,
+        base,
+        res
+    );
+    res
 }
 
 fn strtoull(
@@ -1263,7 +1296,7 @@ fn mbtowc_l(
         return 1;
     }
 
-    let mut codepoint = 0u32;
+    let mut codepoint: u32;
     let bytes_to_read: u32;
 
     if (first_byte & 0xE0) == 0xC0 {
@@ -1603,6 +1636,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(bsearch(_, _, _, _, _)),
     export_c_func!(strtof(_, _)),
     export_c_func!(strtoul(_, _, _)),
+    export_c_func!(wcstoul(_, _, _)),
     export_c_func!(strtoull(_, _, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),

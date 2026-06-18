@@ -7,7 +7,7 @@
 //!
 //! `NSDate`.
 
-use super::ns_string::{from_rust_ordering, from_rust_string};
+use super::ns_string::{from_rust_ordering, from_rust_string, get_static_str};
 use super::{NSComparisonResult, NSTimeInterval};
 use crate::frameworks::core_foundation::time::{
     apple_epoch, CFAbsoluteTimeGetGregorianDate, SECS_FROM_UNIX_TO_APPLE_EPOCHS,
@@ -167,6 +167,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, this);
     // Note: Assuming NSKeyedUnarchiver as coder here
     decode_current_date(env, coder)
+}
+
+// Per Apple's NSDate, encoding stores the time as a double under the key
+// "NS.time" (the value of `timeIntervalSinceReferenceDate`). This mirrors the
+// decode path in `decode_current_date` (which reads "NS.time"), keeping
+// archive/unarchive round-trips consistent.
+- (())encodeWithCoder:(id)coder {
+    let time_interval = env.objc.borrow::<NSDateHostObject>(this).time_interval;
+    let key = get_static_str(env, "NS.time");
+    () = msg![env; coder encodeDouble:time_interval forKey:key];
 }
 
 // MARK: - Getting Time Intervals

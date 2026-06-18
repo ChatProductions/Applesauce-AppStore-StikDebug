@@ -15,6 +15,7 @@ use regex::Regex;
 use super::ns_text_checking_result;
 
 /// Хост-объект для хранения скомпилированного регулярного выражения.
+#[derive(Default)]
 struct NSRegularExpressionHostObject {
     regex: Option<Regex>,
 }
@@ -306,7 +307,7 @@ fn build_capture_ranges(
     full_text: &str,
     caps: &regex::Captures<'_>,
     target_start_byte: usize,
-    search_location_utf16: u32,
+    _search_location_utf16: u32,
 ) -> Vec<NSRange> {
     let mut ranges = Vec::with_capacity(caps.len());
     for i in 0..caps.len() {

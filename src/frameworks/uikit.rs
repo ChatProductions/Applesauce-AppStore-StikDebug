@@ -19,6 +19,7 @@ pub mod ui_accelerometer;
 pub mod ui_action_sheet;
 pub mod ui_activity;
 pub mod ui_activity_indicator_view;
+pub mod ui_alert_controller;
 pub mod ui_application;
 pub mod ui_color;
 pub mod ui_custom_object;
@@ -251,38 +252,6 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         HostConstant::NSString("UIScreenDidConnectNotification"),
     ),
     // -----------------------------------------------------------------
-    // UIApplication launch-options dictionary keys (passed in
-    // `application:didFinishLaunchingWithOptions:`).
-    // -----------------------------------------------------------------
-    (
-        "_UIApplicationLaunchOptionsURLKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsURLKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsSourceApplicationKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsSourceApplicationKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsAnnotationKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsAnnotationKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsRemoteNotificationKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsRemoteNotificationKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsLocalNotificationKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsLocalNotificationKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsLocationKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsLocationKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsNewsstandDownloadsKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsNewsstandDownloadsKey"),
-    ),
-    // -----------------------------------------------------------------
     // UIPasteboard well-known pasteboard names.
     // -----------------------------------------------------------------
     (
@@ -357,32 +326,6 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIWindowLevelAlert",
         HostConstant::Custom(ui_window_level_alert),
     ),
-    // Status-bar orientation change notifications
-    (
-        "_UIApplicationWillChangeStatusBarOrientationNotification",
-        HostConstant::NSString("UIApplicationWillChangeStatusBarOrientationNotification"),
-    ),
-    (
-        "_UIApplicationDidChangeStatusBarOrientationNotification",
-        HostConstant::NSString("UIApplicationDidChangeStatusBarOrientationNotification"),
-    ),
-    // Status-bar frame change notifications + userInfo key.
-    (
-        "_UIApplicationWillChangeStatusBarFrameNotification",
-        HostConstant::NSString("UIApplicationWillChangeStatusBarFrameNotification"),
-    ),
-    (
-        "_UIApplicationDidChangeStatusBarFrameNotification",
-        HostConstant::NSString("UIApplicationDidChangeStatusBarFrameNotification"),
-    ),
-    (
-        "_UIApplicationStatusBarFrameUserInfoKey",
-        HostConstant::NSString("UIApplicationStatusBarFrameUserInfoKey"),
-    ),
-    (
-        "_UIApplicationStatusBarOrientationUserInfoKey",
-        HostConstant::NSString("UIApplicationStatusBarOrientationUserInfoKey"),
-    ),
     // UIViewController transition coordinator context keys (iOS 5+).
     (
         "_UITransitionContextFromViewControllerKey",
@@ -444,14 +387,6 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
     (
         "_UIScreenModeDidChangeNotification",
         HostConstant::NSString("UIScreenModeDidChangeNotification"),
-    ),
-    // -----------------------------------------------------------------
-    // UIApplication time-change notification, per
-    // <https://developer.apple.com/documentation/uikit/uiapplication/1622987-significanttimechangenotification>.
-    // -----------------------------------------------------------------
-    (
-        "_UIApplicationSignificantTimeChangeNotification",
-        HostConstant::NSString("UIApplicationSignificantTimeChangeNotification"),
     ),
     (
         "_UIApplicationBackgroundRefreshStatusDidChangeNotification",
@@ -951,18 +886,6 @@ pub const CONSTANTS: &[(&str, HostConstant)] = &[
         "_UIApplicationLaunchOptionsCloudKitShareMetadataKey",
         HostConstant::NSString("UIApplicationLaunchOptionsCloudKitShareMetadataKey"),
     ),
-    (
-        "_UIApplicationLaunchOptionsBluetoothCentralsKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsBluetoothCentralsKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsBluetoothPeripheralsKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsBluetoothPeripheralsKey"),
-    ),
-    (
-        "_UIApplicationLaunchOptionsShortcutItemKey",
-        HostConstant::NSString("UIApplicationLaunchOptionsShortcutItemKey"),
-    ),
 ];
 
 pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
@@ -973,6 +896,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ui_action_sheet::CLASSES,
         ui_activity_indicator_view::CLASSES,
         ui_activity::CLASSES,
+        ui_alert_controller::CLASSES,
         ui_application::CLASSES,
         ui_color::CLASSES,
         ui_custom_object::CLASSES,
@@ -1069,8 +993,15 @@ pub fn handle_events(env: &mut Environment) -> Option<Instant> {
     use crate::window::Event;
     use crate::window::TextInputEvent;
 
+    // In headless mode there is no window to pull events from. This used to be
+    // assumed unreachable without a window, but an app that fully finishes
+    // launching enters the main run loop, which calls this unconditionally —
+    // so guard explicitly instead of unwrapping the absent window and panicking.
+    if env.window.is_none() {
+        return None;
+    }
+
     loop {
-        // NSRunLoop will never call this function in headless mode.
         let Some(event) = env.window_mut().pop_event() else {
             break;
         };

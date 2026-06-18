@@ -89,15 +89,12 @@ impl State {
             .push(transaction);
     }
 
-    fn pop_explicit_transaction(env: &mut Environment) -> Transaction {
+    fn pop_explicit_transaction(env: &mut Environment) -> Option<Transaction> {
         let current_thread = env.current_thread;
         State::get_mut(env)
             .transactions
             .get_mut(&current_thread)
-            .unwrap()
-            .explicit_transactions
-            .pop()
-            .unwrap()
+            .and_then(|thread_state| thread_state.explicit_transactions.pop())
     }
 }
 
@@ -204,17 +201,28 @@ pub const CLASSES: ClassExports = objc_classes! {
     match &*key_string  {
         kCATransactionAnimationDuration => {
             let value: CFTimeInterval = msg![env; value doubleValue];
-            State::get_current_transaction_mut(env).unwrap().animation_duration = value;
+            if let Some(transaction) = State::get_current_transaction_mut(env) {
+                transaction.animation_duration = value;
+            } else {
+                log!("Warning: [CATransaction setValue:forKey:kCATransactionAnimationDuration] called outside a transaction; ignoring.");
+            }
         },
         kCATransactionDisableActions => {
             let value: bool = msg![env; value boolValue];
-            State::get_current_transaction_mut(env).unwrap().disable_actions = value;
+            if let Some(transaction) = State::get_current_transaction_mut(env) {
+                transaction.disable_actions = value;
+            } else {
+                log!("Warning: [CATransaction setValue:forKey:kCATransactionDisableActions] called outside a transaction; ignoring.");
+            }
         },
         kCATransactionAnimationTimingFunction => {
-            let transaction = State::get_current_transaction_mut(env).unwrap();
-            let old_value = std::mem::replace(&mut transaction.animation_timing_function, value);
-            retain(env, value);
-            release(env, old_value);
+            if let Some(transaction) = State::get_current_transaction_mut(env) {
+                let old_value = std::mem::replace(&mut transaction.animation_timing_function, value);
+                retain(env, value);
+                release(env, old_value);
+            } else {
+                log!("Warning: [CATransaction setValue:forKey:kCATransactionAnimationTimingFunction] called outside a transaction; ignoring.");
+            }
         },
         kCATransactionCompletionBlock => {
             // We do not implement ObjC blocks (^{ ... }) yet so we cannot
@@ -245,15 +253,24 @@ pub const CLASSES: ClassExports = objc_classes! {
     let key_string = to_rust_string(env, key);
     let value = match &*key_string {
         kCATransactionAnimationDuration => {
-            let animation_duration = State::get_current_transaction(env).unwrap().animation_duration;
+            let animation_duration = State::get_current_transaction(env)
+                .map(|t| t.animation_duration)
+                .unwrap_or(0.25);
             msg_class![env; NSNumber numberWithDouble:animation_duration]
         },
         kCATransactionDisableActions => {
-            let disable_actions = State::get_current_transaction(env).unwrap().disable_actions;
+            let disable_actions = State::get_current_transaction(env)
+                .map(|t| t.disable_actions)
+                .unwrap_or(false);
             msg_class![env; NSNumber numberWithBool:disable_actions]
         },
         kCATransactionAnimationTimingFunction => {
-            State::get_current_transaction(env).unwrap().animation_timing_function
+            State::get_current_transaction(env)
+                .map(|t| t.animation_timing_function)
+                .unwrap_or_else(|| {
+                    let animation_timing_function_name = get_static_str(env, kCAMediaTimingFunctionDefault);
+                    msg_class![env; CAMediaTimingFunction functionWithName:animation_timing_function_name]
+                })
         },
         kCATransactionCompletionBlock => {
             log!("Warning: [CATransaction valueForKey:kCATransactionCompletionBlock] not supported; returning nil.");
@@ -276,7 +293,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (())commit {
     log_dbg!("[CATransaction commit]");
-    State::pop_explicit_transaction(env).commit(env);
+    if let Some(transaction) = State::pop_explicit_transaction(env) {
+        transaction.commit(env);
+    } else {
+        log!("Warning: [CATransaction commit] called without a matching begin; ignoring.");
+    }
 }
 
 + (bool)disableActions {

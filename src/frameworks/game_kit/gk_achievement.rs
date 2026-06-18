@@ -14,10 +14,11 @@
 
 use crate::frameworks::foundation::ns_string;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 
+#[derive(Default)]
 struct GKAchievementHostObject {
     /// The achievement identifier string (retained NSString*).
     identifier: id,

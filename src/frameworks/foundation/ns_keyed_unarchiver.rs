@@ -34,6 +34,7 @@ pub const CONSTANTS: ConstantExports = &[(
     HostConstant::NSString(NSKeyedArchiveRootObjectKey),
 )];
 
+#[derive(Default)]
 struct NSKeyedUnarchiverHostObject {
     plist: Dictionary,
     current_key: Option<Uid>,
@@ -422,6 +423,9 @@ fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
                     // while holding a reference to the class name, since it
                     // is ultimately owned by ObjC via the host object
                     let class_name = class_name.to_string();
+                    if class_name.is_empty() {
+                        log!("Warning: unarchive_key: empty $classname for class uid {}.", class_key.get());
+                    }
                     env.objc.get_known_class(&class_name, &mut env.mem)
                 };
                 let host_obj = borrow_host_obj(env, unarchiver); // reborrow
@@ -446,8 +450,7 @@ fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
             from_rust_string(env, s)
         }
         Value::Integer(int) => {
-            #[allow(clippy::clone_on_copy)]
-            let int = int.clone();
+            let int = *int;
             // Similar logic to deserialize_plist()
             let number: id = msg_class![env; NSNumber alloc];
             // TODO: is this the correct order of preference? does it matter?
@@ -492,7 +495,8 @@ fn unarchive_key(env: &mut Environment, unarchiver: id, key: Uid) -> id {
             env.mem.free(bytes_ptr);
             result
         }
-        Value::Date(_) | Value::Array(_) | Value::Uid(_) | Value::Dictionary(_) => {
+        // (Value::Dictionary is handled above)
+        Value::Date(_) | Value::Array(_) | Value::Uid(_) => {
             log!(
                 "Warning: unarchive_key: unhandled plist variant for uid {}; returning nil.",
                 key.get()

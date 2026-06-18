@@ -24,6 +24,7 @@ pub const MP_MEDIA_TYPE_VIDEO_ITunes: MPMediaType = 1 << 12;
 pub const MP_MEDIA_TYPE_ANY_VIDEO: MPMediaType = 0xff00;
 pub const MP_MEDIA_TYPE_ANY: MPMediaType = !0;
 
+#[derive(Default)]
 struct MPMediaPickerControllerHostObject {
     /// `MPMediaType` bitmask
     allowed_media_types: MPMediaType,
@@ -141,7 +142,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("MPMediaPickerController: viewDidLoad — no media library available");
 }
 
-- (())viewWillAppear:(bool)animated {
+- (())viewWillAppear:(bool)_animated {
     // No super call needed — UIViewController's default is a no-op.
 
     let delegate = env.objc.borrow::<MPMediaPickerControllerHostObject>(this).delegate;

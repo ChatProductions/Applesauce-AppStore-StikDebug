@@ -476,6 +476,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIViewControllerHostObject>(this).presented_view_controller = nil;
     release(env, presented);
 }
+// Presents an MPMoviePlayerViewController modally.
+// https://developer.apple.com/documentation/mediaplayer/uiviewcontroller/1619166-presentmovieplayerviewcontroller
+- (())presentMoviePlayerViewControllerAnimated:(id)moviePlayerViewController {
+    () = msg![env; this presentModalViewController:moviePlayerViewController animated:false];
+}
+
 - (())dismissMoviePlayerViewControllerAnimated {
     log!("TODO: [(UIViewController*){:?} dismissMoviePlayerViewControllerAnimated]", this);
     // TODO
@@ -545,10 +551,6 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())viewDidLayoutSubviews {
     log_dbg!("[(UIViewController*){:?} viewDidLayoutSubviews]", this);
-}
-
-- (bool)isEditing {
-    false
 }
 
 - (())setEditing:(bool)editing animated:(bool)_animated {
@@ -652,10 +654,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this dismissModalViewControllerAnimated:animated]
 }
 
-- (bool)wantsFullScreenLayout {
-    false
-}
-
 // Apple docs: The style used to transition the receiver's modal view controller
 // (its modalViewController property) to the screen.
 - (UIModalTransitionStyle)modalTransitionStyle {
@@ -717,8 +715,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (id)interfaceOrientation {
-    nil
+- (UIInterfaceOrientation)interfaceOrientation {
+    // UIKit reports the view controller's current interface orientation,
+    // which tracks the app-wide interface orientation. Returning 0
+    // (UIInterfaceOrientationUnknown) made landscape apps that query this
+    // during layout fall back to portrait, so mirror the shared
+    // application's status bar orientation instead.
+    let app: id = msg_class![env; UIApplication sharedApplication];
+    msg![env; app statusBarOrientation]
 }
 
 - (id)navigationItem {

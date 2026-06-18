@@ -34,6 +34,7 @@ impl State {
     }
 }
 
+#[derive(Default)]
 struct NSThreadHostObject {
     target: id,
     selector: Option<SEL>,
@@ -126,16 +127,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)currentThread {
     let pthread = pthread_self(env);
-    #[allow(clippy::map_entry)]
-    if !State::get(env).ns_threads.contains_key(&pthread) {
-        let ns_thread: id = msg_class![env; NSThread alloc];
-        let ns_thread: id = msg![env; ns_thread init];
-        if env.current_thread == 0 {
-            env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
-        }
-        State::get(env).ns_threads.insert(pthread, ns_thread);
+    let thread_id = State::get(env).ns_threads.get(&pthread).copied();
+    if let Some(thread_id) = thread_id {
+        return thread_id;
     }
-    *State::get(env).ns_threads.get(&pthread).unwrap()
+
+    let ns_thread: id = msg_class![env; NSThread alloc];
+    let ns_thread: id = msg![env; ns_thread init];
+    if env.current_thread == 0 {
+        env.objc.borrow_mut::<NSThreadHostObject>(ns_thread).is_main_thread = true;
+    }
+    State::get(env).ns_threads.insert(pthread, ns_thread);
+    ns_thread
 }
 
 + (id)callStackReturnAddresses {
@@ -240,6 +243,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())start {
     log_once!("First [NSThread start] (app spawned a worker thread)");
 
+    // Cocoa keeps the thread object alive for the duration of the started
+    // thread. Without this retain, guest code can release the NSThread right
+    // after calling `start`, leaving the worker with a dangling `this` and
+    // causing the class check in the entry helper to see a freed object.
+    retain(env, this);
+
     let symb = "__touchHLE_NSThreadInvocationHelper";
     let hf: HostFunction = &(_touchHLE_NSThreadInvocationHelper as fn(&mut Environment, _) -> _);
     let gf = env.dyld.create_guest_function(&mut env.mem, symb, hf);
@@ -268,10 +277,14 @@ pub const CLASSES: ClassExports = objc_classes! {
         tolerate_type_mismatch,
         ..
     } = env.objc.borrow(this);
+    let Some(sel) = selector else {
+        log!("Warning: [(NSThread*){:?} main] called without a selector; nothing to execute.", this);
+        return;
+    };
     if tolerate_type_mismatch {
-        let _: () = msg_send_no_type_checking(env, (target, selector.unwrap(), object));
+        let _: () = msg_send_no_type_checking(env, (target, sel, object));
     } else {
-        let _: () = msg_send(env, (target, selector.unwrap(), object));
+        let _: () = msg_send(env, (target, sel, object));
     }
 }
 
@@ -433,7 +446,15 @@ pub fn _touchHLE_NSThreadInvocationHelper(env: &mut Environment, ns_thread_obj: 
         );
     }
 
+    // Balance the retain done in `-start` so the NSThread object survives
+    // until the worker finishes, even if guest code releases its last
+    // reference immediately after calling `start`.
+    release(env, ns_thread_obj);
+
     if owned {
+        // Detached-thread APIs create the NSThread object internally, so we
+        // also need to release the original alloc/init ownership when the
+        // thread finishes.
         release(env, ns_thread_obj);
     }
 }

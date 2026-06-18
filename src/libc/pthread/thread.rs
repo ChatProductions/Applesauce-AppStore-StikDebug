@@ -347,6 +347,36 @@ pub fn pthread_create(
     0
 }
 
+/// `int pthread_create_suspended_np(pthread_t *thread, const pthread_attr_t *attr,
+///                                  void *(*start_routine)(void *), void *arg)` —
+/// Darwin extension (declared in Apple's `pthread.h`): identical to
+/// [pthread_create] except the new thread is created in a suspended state
+/// and does not run until the caller resumes it with `thread_resume()` on
+/// the Mach port obtained via `pthread_mach_thread_np()`. Used by e.g.
+/// Unreal Engine 3 and Gameloft launchers to set thread affinity/priority
+/// before the thread runs.
+pub fn pthread_create_suspended_np(
+    env: &mut Environment,
+    thread: MutPtr<pthread_t>,
+    attr: ConstPtr<pthread_attr_t>,
+    start_routine: GuestFunction,
+    user_data: MutVoidPtr,
+) -> i32 {
+    let ret = pthread_create(env, thread, attr, start_routine, user_data);
+    if ret != 0 {
+        return ret;
+    }
+    // Suspend the freshly created thread before it gets a chance to run.
+    let opaque = env.mem.read(thread);
+    let thread_id = State::get(env).threads.get(&opaque).unwrap().thread_id;
+    env.suspend_thread(thread_id);
+    log_dbg!(
+        "pthread_create_suspended_np: thread {} created suspended",
+        thread_id
+    );
+    0
+}
+
 fn pthread_equal(env: &mut Environment, thread1: pthread_t, thread2: pthread_t) -> i32 {
     // POSIX: pthread_equal() shall return a non-zero value if t1 and t2 are
     // equal; otherwise, zero shall be returned. On Darwin pthread_t is an
@@ -552,25 +582,34 @@ fn pthread_testcancel(env: &mut Environment) {
 #[allow(non_camel_case_types)]
 type mach_port_t = u32;
 fn pthread_mach_thread_np(env: &mut Environment, thread: pthread_t) -> mach_port_t {
-    let host_object = State::get(env).threads.get(&thread).unwrap();
-    (host_object.thread_id + 1).try_into().unwrap()
+    if let Some(host_object) = State::get(env).threads.get(&thread) {
+        (host_object.thread_id + 1).try_into().unwrap()
+    } else {
+        0
+    }
 }
 
 fn pthread_get_stackaddr_np(env: &mut Environment, thread: pthread_t) -> MutVoidPtr {
-    let thread_id = State::get(env).threads.get(&thread).unwrap().thread_id;
-    Ptr::from_bits(*env.threads[thread_id].stack.as_ref().unwrap().end())
+    if let Some(thread_id) = State::get(env).threads.get(&thread).map(|t| t.thread_id) {
+        Ptr::from_bits(*env.threads[thread_id].stack.as_ref().unwrap().end())
+    } else {
+        Ptr::from_bits(0)
+    }
 }
 
 fn pthread_get_stacksize_np(env: &mut Environment, thread: pthread_t) -> GuestUSize {
-    let thread_id = State::get(env).threads.get(&thread).unwrap().thread_id;
-    let start_unadjusted = env.threads[thread_id].stack.as_ref().unwrap().start();
-    let start = if thread_id == 0 {
-        *start_unadjusted + PAGE_SIZE
+    if let Some(thread_id) = State::get(env).threads.get(&thread).map(|t| t.thread_id) {
+        let start_unadjusted = env.threads[thread_id].stack.as_ref().unwrap().start();
+        let start = if thread_id == 0 {
+            *start_unadjusted + PAGE_SIZE
+        } else {
+            *start_unadjusted
+        };
+        let end = env.threads[thread_id].stack.as_ref().unwrap().end();
+        end.wrapping_add(1).wrapping_sub(start)
     } else {
-        *start_unadjusted
-    };
-    let end = env.threads[thread_id].stack.as_ref().unwrap().end();
-    end.wrapping_add(1).wrapping_sub(start)
+        0
+    }
 }
 
 fn pthread_getschedparam(
@@ -726,6 +765,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(pthread_attr_destroy(_)),
     // Lifecycle
     export_c_func!(pthread_create(_, _, _, _)),
+    export_c_func!(pthread_create_suspended_np(_, _, _, _)),
     export_c_func!(pthread_equal(_, _)),
     export_c_func!(pthread_self()),
     export_c_func!(pthread_exit(_)),

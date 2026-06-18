@@ -7,9 +7,7 @@
 
 use super::{ns_array, ns_string};
 use crate::dyld::{ConstantExports, HostConstant};
-use crate::frameworks::core_foundation::cf_locale::{
-    kCFLocaleCountryCode, kCFLocaleIdentifier, kCFLocaleLanguageCode,
-};
+use crate::frameworks::core_foundation::cf_locale::{kCFLocaleCountryCode, kCFLocaleLanguageCode};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
@@ -177,6 +175,7 @@ fn locale_identifier(language: &str, country: &str) -> String {
 
 // MARK: - Host object
 
+#[derive(Default)]
 struct NSLocaleHostObject {
     country_code: id,  // NSString* — retained
     language_code: id, // NSString* — retained
@@ -403,7 +402,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         NSLocaleLanguageCode | kCFLocaleLanguageCode => {
             env.objc.borrow::<NSLocaleHostObject>(this).language_code
         }
-        NSLocaleIdentifier | kCFLocaleIdentifier => {
+        // (kCFLocaleIdentifier has the same string value as NSLocaleIdentifier)
+        NSLocaleIdentifier => {
             let host = env.objc.borrow::<NSLocaleHostObject>(this);
             let (language_code, country_code) = (host.language_code, host.country_code);
             let lang    = ns_string::to_rust_string(env, language_code).into_owned();
@@ -456,7 +456,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // MARK: - displayNameForKey:value:
 
-- (id)displayNameForKey:(id)key value:(id)value {
+- (id)displayNameForKey:(id)_key value:(id)value {
     log_dbg!("NSLocale displayNameForKey:value: - returning value as-is");
     value
 }

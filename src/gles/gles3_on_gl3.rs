@@ -1185,6 +1185,14 @@ impl GLES for GLES3OnGL3<'_> {
     unsafe fn GetVertexAttribfv(&mut self, index: GLuint, pname: GLenum, params: *mut GLfloat) {
         gl33::GetVertexAttribfv(index, pname, params)
     }
+    unsafe fn GetVertexAttribPointerv(
+        &mut self,
+        index: GLuint,
+        pname: GLenum,
+        pointer: *mut *mut GLvoid,
+    ) {
+        gl33::GetVertexAttribPointerv(index, pname, pointer)
+    }
 
     // Uniforms
     unsafe fn Uniform1f(&mut self, location: GLint, v0: GLfloat) {
@@ -1281,6 +1289,10 @@ impl GLES for GLES3OnGL3<'_> {
         gl33::BlendColor(red, green, blue, alpha)
     }
     unsafe fn BlendEquation(&mut self, mode: GLenum) {
+        gl33::BlendEquation(mode)
+    }
+    // GL_OES_blend_equation: semantically identical to core BlendEquation.
+    unsafe fn BlendEquationOES(&mut self, mode: GLenum) {
         gl33::BlendEquation(mode)
     }
     unsafe fn BlendEquationSeparate(&mut self, modeRGB: GLenum, modeAlpha: GLenum) {

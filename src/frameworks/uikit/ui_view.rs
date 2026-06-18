@@ -79,7 +79,7 @@ pub struct State {
     pub(super) animation_block: AnimationBlockState,
 }
 
-pub(super) struct UIViewHostObject {
+pub(crate) struct UIViewHostObject {
     layer: id,
     subviews: Vec<id>,
     superview: id,
@@ -1366,8 +1366,6 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg![env; layer setNeedsDisplayInRect:invalid_rect]
 }
 
-- (())setNeedsLayout { }
-
 - (CGRect)bounds {
     let layer = env.objc.borrow::<UIViewHostObject>(this).layer;
     msg![env; layer bounds]
@@ -1446,7 +1444,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)endEditing:(bool)force {
-    assert!(force);
+    if !force { return false; }
     let responder: id = env.framework_state.uikit.ui_responder.first_responder;
     let class = msg![env; responder class];
     let ui_text_field_class = env.objc.get_known_class("UITextField", &mut env.mem);

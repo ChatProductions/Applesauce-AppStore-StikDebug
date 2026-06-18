@@ -688,6 +688,25 @@ fn mbsrtowcs(
     i
 }
 
+/// `size_t mbsrtowcs_l(wchar_t *restrict dst, const char **restrict src,
+/// size_t len, mbstate_t *restrict ps, locale_t loc)`
+///
+/// Per Apple's `mbsrtowcs_l(3)` man page (iPhoneOS man pages), identical to
+/// `mbsrtowcs()` except the conversion uses the supplied extended locale.
+/// touchHLE only models the "C" locale, so the locale argument is ignored.
+/// This symbol is imported by libstdc++/libc++ (`std::codecvt`), which guest
+/// C++ code hits when widening narrow strings.
+fn mbsrtowcs_l(
+    env: &mut Environment,
+    dest: MutPtr<wchar_t>,
+    src: MutPtr<ConstPtr<u8>>,
+    len: GuestUSize,
+    ps: crate::mem::MutVoidPtr,
+    _locale: crate::libc::clocale::locale_t,
+) -> GuestUSize {
+    mbsrtowcs(env, dest, src, len, ps)
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(btowc(_)),
     export_c_func!(wctob(_)),
@@ -751,4 +770,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(getwc(_)),
     export_c_func!(ungetwc(_, _)),
     export_c_func!(mbsrtowcs(_, _, _, _)),
+    export_c_func!(mbsrtowcs_l(_, _, _, _, _)),
 ];
