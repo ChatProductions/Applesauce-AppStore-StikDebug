@@ -255,7 +255,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             windows.last().map(|&window| {
                 let lx = location.x;
                 let ly = location.y;
-                log!(
+                log_dbg!(
                     "SUPER HACK: Forcing rejected touch at ({}, {}) into window",
                     lx,
                     ly
@@ -275,7 +275,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         };
         let mut view: id = msg![env; window hitTest:location_in_window withEvent:event];
         if view == nil {
-            log!("SUPER HACK: hitTest failed, forcing touch directly into the window");
+            log_dbg!("SUPER HACK: hitTest failed, forcing touch directly into the window");
             view = window;
         } else {
             let f: CGRect = msg![env;
@@ -284,7 +284,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             let class_name = env.objc.get_class_name(view_class).to_owned();
             let lx = location_in_window.x;
             let ly = location_in_window.y;
-            log!(
+            log_dbg!(
                 "Touch at ({}, {}) hit {} {:?} with frame {:?}",
                 lx,
                 ly,
