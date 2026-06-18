@@ -715,8 +715,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     nil
 }
 
-- (id)interfaceOrientation {
-    nil
+- (UIInterfaceOrientation)interfaceOrientation {
+    // UIKit reports the view controller's current interface orientation,
+    // which tracks the app-wide interface orientation. Returning 0
+    // (UIInterfaceOrientationUnknown) made landscape apps that query this
+    // during layout fall back to portrait, so mirror the shared
+    // application's status bar orientation instead.
+    let app: id = msg_class![env; UIApplication sharedApplication];
+    msg![env; app statusBarOrientation]
 }
 
 - (id)navigationItem {
