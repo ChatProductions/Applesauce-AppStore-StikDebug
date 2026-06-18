@@ -269,20 +269,54 @@ fn objc_msgSend_inner(
 
             // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: заменили panic! на log! (мягкий фейл
             // форка) ---
-            log!(
-                "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.",
-                if is_metaclass { "Class" } else { "Object" },
-                receiver,
-                if is_metaclass { "meta" } else { "" },
-                name,
-                orig_class,
-                if super2.is_some() {
-                    "'s superclass"
-                } else {
-                    ""
-                },
-                selector.as_str(&env.mem),
-            );
+            //
+            // Rate-limit per unique (class, selector) pair. Some apps poll an
+            // unimplemented selector (e.g. `-[CMDeviceMotion attitude]`) every
+            // single frame; logging unconditionally formatted a string and
+            // wrote it to the log file 60+ times per second, which by itself
+            // tanked emulation performance and bloated the log to megabytes.
+            // We log the first few occurrences of each distinct pair so the
+            // warning is still discoverable, then go quiet for that pair.
+            {
+                use std::collections::HashMap;
+                use std::sync::Mutex;
+                use std::sync::OnceLock;
+
+                const PER_PAIR_LOG_LIMIT: usize = 3;
+                static SEEN: OnceLock<Mutex<HashMap<(String, String), usize>>> = OnceLock::new();
+
+                let sel_str = selector.as_str(&env.mem).to_owned();
+                let key = (name.clone(), sel_str.clone());
+                let seen = SEEN.get_or_init(|| Mutex::new(HashMap::new()));
+                let count = {
+                    let mut map = seen.lock().unwrap();
+                    let entry = map.entry(key).or_insert(0);
+                    *entry += 1;
+                    *entry
+                };
+
+                if count <= PER_PAIR_LOG_LIMIT {
+                    log!(
+                        "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"! Returning 0.{}",
+                        if is_metaclass { "Class" } else { "Object" },
+                        receiver,
+                        if is_metaclass { "meta" } else { "" },
+                        name,
+                        orig_class,
+                        if super2.is_some() {
+                            "'s superclass"
+                        } else {
+                            ""
+                        },
+                        sel_str,
+                        if count == PER_PAIR_LOG_LIMIT {
+                            " (suppressing further warnings for this selector)"
+                        } else {
+                            ""
+                        },
+                    );
+                }
+            }
 
             // Имитируем возврат nil/0, чтобы приложение продолжило работу
             env.cpu.regs_mut()[0..2].fill(0);

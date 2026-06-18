@@ -149,6 +149,19 @@ struct CMDeviceMotionHostObject {
 }
 impl HostObject for CMDeviceMotionHostObject {}
 
+#[derive(Clone, Copy, Debug, Default)]
+struct CMAttitude {
+    roll: f64,
+    pitch: f64,
+    yaw: f64,
+}
+
+#[derive(Default)]
+struct CMAttitudeHostObject {
+    attitude: CMAttitude,
+}
+impl HostObject for CMAttitudeHostObject {}
+
 // =============================================================================
 // Helper: read real accelerometer data from SDL sensor via window
 // =============================================================================
@@ -255,6 +268,37 @@ const CLASSES: ClassExports = objc_classes! {
 @end
 
 // =============================================================================
+// CMAttitude
+// Per Apple: describes the orientation of the device as roll/pitch/yaw
+// (radians), plus a rotation matrix and quaternion. With no real gyroscope on
+// desktop/Android hosts, we derive roll/pitch from the gravity vector and
+// leave yaw at zero. This is enough for games that only read the property to
+// avoid the generic "does not respond to selector" path (which floods the log
+// and slows the whole emulator down).
+// =============================================================================
+
+@implementation CMAttitude: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    let host_object = Box::new(CMAttitudeHostObject::default());
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (f64)roll {
+    env.objc.borrow::<CMAttitudeHostObject>(this).attitude.roll
+}
+
+- (f64)pitch {
+    env.objc.borrow::<CMAttitudeHostObject>(this).attitude.pitch
+}
+
+- (f64)yaw {
+    env.objc.borrow::<CMAttitudeHostObject>(this).attitude.yaw
+}
+
+@end
+
+// =============================================================================
 // CMDeviceMotion
 // =============================================================================
 
@@ -268,6 +312,23 @@ const CLASSES: ClassExports = objc_classes! {
         timestamp: 0.0,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+- (id)attitude {
+    let gravity = env.objc.borrow::<CMDeviceMotionHostObject>(this).gravity;
+    let (gx, gy, gz) = (gravity.x, gravity.y, gravity.z);
+    let pitch = gx.atan2((gy * gy + gz * gz).sqrt());
+    let roll = gy.atan2((gx * gx + gz * gz).sqrt());
+    let attitude: id = msg_class![env; CMAttitude new];
+    {
+        let attitude_host = env.objc.borrow_mut::<CMAttitudeHostObject>(attitude);
+        attitude_host.attitude = CMAttitude {
+            roll,
+            pitch,
+            yaw: 0.0,
+        };
+    }
+    autorelease(env, attitude)
 }
 
 - (CMAcceleration)gravity {
