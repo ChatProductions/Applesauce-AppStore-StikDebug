@@ -556,7 +556,23 @@ fn recognize_swipes(env: &mut Environment, view: id, start: CGPoint, end: CGPoin
         }
     };
 
-    // Walk the view's attached recognizers looking for matching swipe ones.
+    // In real UIKit a gesture recognizer attached to *any* view in the hit
+    // view's ancestor chain can recognize the gesture, not just the leaf view
+    // the touch landed on. Games very commonly attach a
+    // `UISwipeGestureRecognizer` to a container/superview (or the window's
+    // root view) rather than the innermost `EAGLView` that actually gets hit.
+    // Only checking the leaf view meant those swipes silently never fired.
+    // Walk up the superview chain and fire matching recognizers on each view.
+    let mut current = view;
+    while current != nil {
+        fire_matching_swipes(env, current, detected_direction);
+        current = msg![env; current superview];
+    }
+}
+
+/// Fire any enabled `UISwipeGestureRecognizer` attached to `view` whose
+/// `direction` mask matches `detected_direction`.
+fn fire_matching_swipes(env: &mut Environment, view: id, detected_direction: NSInteger) {
     // `gestureRecognizers` returns an autoreleased NSArray of recognizer ids.
     let recognizers: id = msg![env; view gestureRecognizers];
     if recognizers == nil {
