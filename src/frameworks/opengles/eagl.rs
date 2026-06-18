@@ -845,8 +845,8 @@ unsafe fn present_renderbuffer_es2(
         *slot = v as u8;
     }
 
-    // Resolve renderbuffer → texture via a temporary FBO + glCopyTexImage2D,
-    // exactly like the fixed-function path but using the ES 2.0 entry points.
+    // Resolve renderbuffer → texture with a cached FBO + `glCopyTexImage2D`,
+    // using the ES 2.0 entry points.
     let mut renderbuffer: GLint = 0;
     gles.GetIntegerv(gles2::RENDERBUFFER_BINDING, &mut renderbuffer);
     let (width, height) = {
@@ -857,9 +857,8 @@ unsafe fn present_renderbuffer_es2(
         (w, h)
     };
 
-    let mut src_fb: GLuint = 0;
-    gles.GenFramebuffers(1, &mut src_fb);
-    gles.BindFramebuffer(gles2::FRAMEBUFFER, src_fb);
+    let present_objects = ensure_present_objects(gles);
+    gles.BindFramebuffer(gles2::FRAMEBUFFER, present_objects.framebuffer);
     gles.FramebufferRenderbuffer(
         gles2::FRAMEBUFFER,
         gles2::COLOR_ATTACHMENT0,
@@ -867,34 +866,11 @@ unsafe fn present_renderbuffer_es2(
         renderbuffer as GLuint,
     );
 
-    let mut tex: GLuint = 0;
-    gles.GenTextures(1, &mut tex);
     gles.ActiveTexture(gles2::TEXTURE0);
-    gles.BindTexture(gles2::TEXTURE_2D, tex);
+    gles.BindTexture(gles2::TEXTURE_2D, present_objects.texture);
     gles.CopyTexImage2D(gles2::TEXTURE_2D, 0, gles2::RGB, 0, 0, width, height, 0);
-    gles.TexParameteri(
-        gles2::TEXTURE_2D,
-        gles2::TEXTURE_MIN_FILTER,
-        gles2::LINEAR as _,
-    );
-    gles.TexParameteri(
-        gles2::TEXTURE_2D,
-        gles2::TEXTURE_MAG_FILTER,
-        gles2::LINEAR as _,
-    );
-    gles.TexParameteri(
-        gles2::TEXTURE_2D,
-        gles2::TEXTURE_WRAP_S,
-        gles2::CLAMP_TO_EDGE as _,
-    );
-    gles.TexParameteri(
-        gles2::TEXTURE_2D,
-        gles2::TEXTURE_WRAP_T,
-        gles2::CLAMP_TO_EDGE as _,
-    );
 
     gles.BindFramebuffer(gles2::FRAMEBUFFER, 0);
-    gles.DeleteFramebuffers(1, &src_fb);
 
     // Configure the destination viewport (the window) and clear.
     gles.Viewport(
@@ -916,7 +892,6 @@ unsafe fn present_renderbuffer_es2(
     // remains on screen and the app continues to run.
     let Some(program) = ensure_present_program(gles) else {
         log!("Warning: present_renderbuffer_es2: present shader unavailable, skipping frame.");
-        gles.DeleteTextures(1, &tex);
         // Restore vertex attribute enabled state so the app's next draw works.
         for (i, &was) in attrib_was_enabled.iter().enumerate() {
             if was != 0 {
@@ -938,8 +913,8 @@ unsafe fn present_renderbuffer_es2(
         gles.Viewport(
             old_viewport[0],
             old_viewport[1],
-            old_viewport[2] as _,
-            old_viewport[3] as _,
+            old_viewport[2],
+            old_viewport[3],
         );
         gles.ClearColor(
             old_clear_color[0],
@@ -1025,8 +1000,6 @@ unsafe fn present_renderbuffer_es2(
         let _ = pressed;
     }
 
-    gles.DeleteTextures(1, &tex);
-
     // Restore vertex attribute enabled state so the app's next draw works.
     for (i, &was) in attrib_was_enabled.iter().enumerate() {
         if was != 0 {
@@ -1082,8 +1055,25 @@ struct PresentProgram {
     u_tex_mat: GLint,
 }
 
+/// Reusable GL objects for the ES 2.0 present path. Allocating and freeing a
+/// framebuffer object and a texture on *every* presented frame is very
+/// expensive on tile-based mobile GPUs (e.g. ARM Mali, Qualcomm Adreno):
+/// object creation/teardown forces driver-side synchronisation and breaks
+/// the driver's ability to pipeline frames, which shows up as severe stutter
+/// in 60 FPS games (notably Unity titles, which present through this path).
+/// Caching the objects and reusing them across frames removes that per-frame
+/// churn entirely. The texture's storage is redefined each frame by
+/// `glCopyTexImage2D`, so a resolution change needs no special handling.
+#[derive(Copy, Clone)]
+struct PresentObjects {
+    framebuffer: GLuint,
+    texture: GLuint,
+}
+
 thread_local! {
     static PRESENT_PROGRAM: std::cell::Cell<Option<PresentProgram>> =
+        const { std::cell::Cell::new(None) };
+    static PRESENT_OBJECTS: std::cell::Cell<Option<PresentObjects>> =
         const { std::cell::Cell::new(None) };
 }
 
@@ -1191,6 +1181,58 @@ unsafe fn ensure_present_program(gles: &mut dyn GLES) -> Option<PresentProgram> 
     };
     PRESENT_PROGRAM.with(|c| c.set(Some(result)));
     Some(result)
+}
+
+/// Returns the reusable framebuffer + texture used by [present_renderbuffer_es2]
+/// to resolve the guest renderbuffer into a presentable texture.
+///
+/// These objects used to be created with `glGenFramebuffers` / `glGenTextures`
+/// and destroyed with `glDeleteFramebuffers` / `glDeleteTextures` on *every*
+/// presented frame. On tile-based mobile GPUs (ARM Mali, Qualcomm Adreno,
+/// PowerVR) allocating and freeing driver objects every frame is surprisingly
+/// expensive — it forces driver-side bookkeeping and synchronization that can
+/// dominate frame time, which is why a powerful Helio G99 (Mali-G57) could run
+/// a Unity game far more slowly than a real iPhone 4S, where iOS forces 60Hz
+/// v-sync and never does this churn. Caching the objects per thread and reusing
+/// them every frame removes that churn entirely.
+unsafe fn ensure_present_objects(gles: &mut dyn GLES) -> PresentObjects {
+    if let Some(o) = PRESENT_OBJECTS.with(|c| c.get()) {
+        return o;
+    }
+
+    let mut framebuffer: GLuint = 0;
+    gles.GenFramebuffers(1, &mut framebuffer);
+    let mut texture: GLuint = 0;
+    gles.GenTextures(1, &mut texture);
+    gles.ActiveTexture(crate::gles::gles2_raw::TEXTURE0);
+    gles.BindTexture(crate::gles::gles2_raw::TEXTURE_2D, texture);
+    gles.TexParameteri(
+        crate::gles::gles2_raw::TEXTURE_2D,
+        crate::gles::gles2_raw::TEXTURE_MIN_FILTER,
+        crate::gles::gles2_raw::LINEAR as _,
+    );
+    gles.TexParameteri(
+        crate::gles::gles2_raw::TEXTURE_2D,
+        crate::gles::gles2_raw::TEXTURE_MAG_FILTER,
+        crate::gles::gles2_raw::LINEAR as _,
+    );
+    gles.TexParameteri(
+        crate::gles::gles2_raw::TEXTURE_2D,
+        crate::gles::gles2_raw::TEXTURE_WRAP_S,
+        crate::gles::gles2_raw::CLAMP_TO_EDGE as _,
+    );
+    gles.TexParameteri(
+        crate::gles::gles2_raw::TEXTURE_2D,
+        crate::gles::gles2_raw::TEXTURE_WRAP_T,
+        crate::gles::gles2_raw::CLAMP_TO_EDGE as _,
+    );
+
+    let result = PresentObjects {
+        framebuffer,
+        texture,
+    };
+    PRESENT_OBJECTS.with(|c| c.set(Some(result)));
+    result
 }
 
 /// Copies the pixels in a renderbuffer bound to `GL_RENDERBUFFER_BINDING_OES`
