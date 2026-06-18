@@ -7,6 +7,12 @@
 //! `UITouch`.
 
 use super::ui_event;
+use super::ui_gesture_recognizer::{
+    fire_targets, UIGestureRecognizerHostObject, UIGestureRecognizerStatePossible,
+    UIGestureRecognizerStateRecognized, UISwipeGestureRecognizerDirectionDown,
+    UISwipeGestureRecognizerDirectionLeft, UISwipeGestureRecognizerDirectionRight,
+    UISwipeGestureRecognizerDirectionUp,
+};
 use crate::frameworks::core_graphics::{CGPoint, CGRect};
 use crate::frameworks::foundation::{NSInteger, NSTimeInterval, NSUInteger};
 use crate::mem::MutVoidPtr;
@@ -35,6 +41,9 @@ pub(super) struct UITouchHostObject {
     pub(super) window: id,
     location: CGPoint,
     previous_location: CGPoint,
+    /// Where this touch first landed (in window/screen coordinates). Used to
+    /// compute the total displacement for swipe gesture recognition.
+    start_location: CGPoint,
     timestamp: NSTimeInterval,
     phase: UITouchPhase,
 }
@@ -52,6 +61,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         window: nil,
         location: CGPoint { x: 0.0, y: 0.0 },
         previous_location: CGPoint { x: 0.0, y: 0.0 },
+        start_location: CGPoint { x: 0.0, y: 0.0 },
         timestamp: 0.0,
         phase: UITouchPhaseBegan,
     });
@@ -179,6 +189,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             window: nil,
             location,
             previous_location: location,
+            start_location: location,
             timestamp,
             phase: UITouchPhaseBegan,
         };
@@ -432,6 +443,8 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     }
 
     let mut view_touches: HashMap<id, id> = HashMap::new();
+    // (view, start_location, end_location) for swipe gesture detection.
+    let mut swipe_candidates: Vec<(id, CGPoint, CGPoint)> = Vec::new();
     for (finger_id, coords) in map {
         let Some(&touch) = env
             .framework_state
@@ -447,12 +460,17 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             y: coords.1,
         };
         let view = env.objc.borrow::<UITouchHostObject>(touch).view;
+        let start_location = env.objc.borrow::<UITouchHostObject>(touch).start_location;
         {
             let host = env.objc.borrow_mut::<UITouchHostObject>(touch);
             host.previous_location = host.location;
             host.location = location;
             host.timestamp = timestamp;
             host.phase = UITouchPhaseEnded;
+        }
+
+        if view != nil {
+            swipe_candidates.push((view, start_location, location));
         }
 
         let _: () = msg![env;
@@ -480,5 +498,105 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         let _: () = msg![env;
             view touchesEnded:v_set withEvent:event];
     }
+    for (view, start, end) in swipe_candidates {
+        recognize_swipes(env, view, start, end);
+    }
     release(env, pool);
+}
+
+/// Minimal `UISwipeGestureRecognizer` support.
+///
+/// HyperHLE delivers raw touches directly to views and does not run the full
+/// iOS gesture-recognition state machine. Many apps, however, attach a
+/// `UISwipeGestureRecognizer` to a view and rely on it firing — without this
+/// the swipe simply never happens (raw `touchesMoved:` still works, which is
+/// why plain taps/drags were fine but swipes were dead).
+///
+/// When a touch ends we compute its straight-line delta from where it began.
+/// If it moved far enough, fast/clean enough to count as a swipe, we look at
+/// the view's attached recognizers and fire any `UISwipeGestureRecognizer`
+/// whose `direction` mask matches the dominant axis of the movement.
+fn recognize_swipes(env: &mut Environment, view: id, start: CGPoint, end: CGPoint) {
+    // Apple's UIKit uses a swipe threshold in the tens of points; a touch that
+    // moved less than this is a tap, not a swipe.
+    const MIN_SWIPE_DISTANCE: f32 = 24.0;
+    // The motion must be reasonably axis-aligned to be a swipe (otherwise it's
+    // a free-form drag / pan). Require the dominant axis to dominate by 2x.
+    const AXIS_DOMINANCE: f32 = 2.0;
+
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let adx = dx.abs();
+    let ady = dy.abs();
+
+    if adx < MIN_SWIPE_DISTANCE && ady < MIN_SWIPE_DISTANCE {
+        return;
+    }
+
+    // Determine the swipe direction from the dominant axis.
+    let detected_direction: NSInteger = if adx >= ady {
+        if adx < ady * AXIS_DOMINANCE && ady >= MIN_SWIPE_DISTANCE {
+            // Too diagonal to be a clean swipe.
+            return;
+        }
+        if dx > 0.0 {
+            UISwipeGestureRecognizerDirectionRight
+        } else {
+            UISwipeGestureRecognizerDirectionLeft
+        }
+    } else {
+        if ady < adx * AXIS_DOMINANCE && adx >= MIN_SWIPE_DISTANCE {
+            return;
+        }
+        if dy > 0.0 {
+            UISwipeGestureRecognizerDirectionDown
+        } else {
+            UISwipeGestureRecognizerDirectionUp
+        }
+    };
+
+    // Walk the view's attached recognizers looking for matching swipe ones.
+    // `gestureRecognizers` returns an autoreleased NSArray of recognizer ids.
+    let recognizers: id = msg![env; view gestureRecognizers];
+    if recognizers == nil {
+        return;
+    }
+    let count: NSUInteger = msg![env; recognizers count];
+    let swipe_class = env
+        .objc
+        .get_known_class("UISwipeGestureRecognizer", &mut env.mem);
+    for i in 0..count {
+        let recognizer: id = msg![env; recognizers objectAtIndex:i];
+        if recognizer == nil {
+            continue;
+        }
+        let cls: crate::objc::Class = msg![env; recognizer class];
+        if !env.objc.class_is_subclass_of(cls, swipe_class) {
+            continue;
+        }
+        let enabled: bool = msg![env; recognizer isEnabled];
+        if !enabled {
+            continue;
+        }
+        let mask: NSInteger = msg![env; recognizer direction];
+        // `direction` is a bitmask; the recognizer fires if our detected
+        // direction is one of the directions it is configured for.
+        if mask & detected_direction == 0 {
+            continue;
+        }
+        // Transition the recognizer to the recognized state and fire its
+        // target-action pairs, mirroring real UIKit behaviour.
+        {
+            let host = env
+                .objc
+                .borrow_mut::<UIGestureRecognizerHostObject>(recognizer);
+            host.state = UIGestureRecognizerStateRecognized;
+        }
+        fire_targets(env, recognizer);
+        // Reset back to possible for the next gesture.
+        let host = env
+            .objc
+            .borrow_mut::<UIGestureRecognizerHostObject>(recognizer);
+        host.state = UIGestureRecognizerStatePossible;
+    }
 }
