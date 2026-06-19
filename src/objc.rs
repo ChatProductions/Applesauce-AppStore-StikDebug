@@ -77,6 +77,7 @@ use properties::{
     objc_setProperty_atomic_copy, objc_setProperty_nonatomic, objc_setProperty_nonatomic_copy,
 };
 use properties::objc_setProperty_atomic;
+use properties::{property_getAttributes, property_getName};
 use selectors::sel_registerName;
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
@@ -374,6 +375,8 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(class_respondsToSelector(_, _)),
     export_c_func!(class_addMethod(_, _, _, _)),
     export_c_func!(class_getProperty(_, _)),
+    export_c_func!(property_getName(_)),
+    export_c_func!(property_getAttributes(_)),
     export_c_func!(class_copyPropertyList(_, _)),
     export_c_func!(class_copyMethodList(_, _)),
     export_c_func!(class_copyIvarList(_, _)),

@@ -861,6 +861,39 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this setValue:value forKey:key_path]
 }
 
+// Per Apple's NSKeyValueCoding informal protocol
+// (https://developer.apple.com/documentation/objectivec/nsobject/1408301-dictionarywithvaluesforkeys):
+// "Returns a dictionary containing the property values identified by each
+//  of the keys in a given array. [...] The default implementation invokes
+//  -valueForKey: for each key in keys and substitutes NSNull values in the
+//  returned dictionary for any returned nil values."
+- (id)dictionaryWithValuesForKeys:(id)keys { // NSArray<NSString*> *
+    let result: id = msg_class![env; NSMutableDictionary dictionary];
+    if keys == nil {
+        return result;
+    }
+    let ns_null: id = msg_class![env; NSNull null];
+    // Snapshot the keys first so any KVC side effects can't invalidate the
+    // enumeration mid-iteration.
+    let key_enum: id = msg![env; keys objectEnumerator];
+    let mut key_list: Vec<id> = Vec::new();
+    loop {
+        let next: id = msg![env; key_enum nextObject];
+        if next == nil {
+            break;
+        }
+        retain(env, next);
+        key_list.push(next);
+    }
+    for key in key_list {
+        let value: id = msg![env; this valueForKey:key];
+        let stored: id = if value == nil { ns_null } else { value };
+        () = msg![env; result setObject:stored forKey:key];
+        release(env, key);
+    }
+    result
+}
+
 // MARK: - Key-Value Observing (KVO)
 
 - (NSUInteger)version {
