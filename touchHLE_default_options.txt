@@ -289,3 +289,7 @@ www.fishlabs.net.GalaxyOnFire: --landscape-right --button-to-touch=A,427,274 --b
 
 # Palm Heroes
 com.palmheroes.PalmHeroes: --landscape-right
+
+# Mutant Fridge Mayhem (issue #220)
+# App requests LandscapeRight; use landscape-right so the orientation matches.
+com.turner.mfm: --landscape-right

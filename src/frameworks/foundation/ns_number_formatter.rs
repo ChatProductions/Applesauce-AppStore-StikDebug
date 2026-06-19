@@ -36,6 +36,24 @@ struct NSNumberFormatterHostObject {
     /// `NSNumberFormatterBehavior` value. Defaults to
     /// `NSNumberFormatterBehavior10_4` (1040) to match modern iOS.
     formatter_behavior: NSUInteger,
+    /// Positive/negative format strings (10.0-style behavior).
+    /// These are format strings like `"#,##0.##"` that the 10.0-era
+    /// `setPositiveFormat:`/`setNegativeFormat:` API accepts. In the 10.4 API
+    /// they are superseded by richer properties, but many older apps (including
+    /// those using CSComScore / PlayHaven SDKs that still call
+    /// `setPositiveFormat:`) set them. We store the ObjC NSString pointer so
+    /// that callers that later read back the value get something sensible.
+    positive_format: id,
+    negative_format: id,
+    /// Prefix/suffix accessors — part of the 10.4-style format API.
+    positive_prefix: id,
+    positive_suffix: id,
+    negative_prefix: id,
+    negative_suffix: id,
+    /// Whether `numberFromString:` / `stringFromNumber:` should produce
+    /// `NSDecimalNumber` rather than plain `NSNumber`.  Most apps leave this
+    /// `false`.
+    generates_decimal_numbers: bool,
 }
 impl HostObject for NSNumberFormatterHostObject {}
 
@@ -58,6 +76,13 @@ pub const CLASSES: ClassExports = objc_classes! {
         minimum_fraction_digits: 0,
         maximum_fraction_digits: 0,
         formatter_behavior: NS_NUMBER_FORMATTER_BEHAVIOR_10_4,
+        positive_format: nil,
+        negative_format: nil,
+        positive_prefix: nil,
+        positive_suffix: nil,
+        negative_prefix: nil,
+        negative_suffix: nil,
+        generates_decimal_numbers: false,
     };
     env.objc.alloc_object(this, Box::new(host_object), &mut env.mem)
 }
@@ -203,6 +228,87 @@ pub const CLASSES: ClassExports = objc_classes! {
         log!("Warning: NSNumberFormatter failed to parse string '{}'", rust_str);
         nil
     }
+}
+
+// =========================================================================
+// MARK: - Format string accessors (10.0-style API)
+// =========================================================================
+
+// `- (NSString *)positiveFormat`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1408157-positiveformat>
+- (id)positiveFormat {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).positive_format
+}
+
+// `- (void)setPositiveFormat:(NSString *)format`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1408157-positiveformat>
+- (())setPositiveFormat:(id)format {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).positive_format = format;
+}
+
+// `- (NSString *)negativeFormat`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1408953-negativeformat>
+- (id)negativeFormat {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).negative_format
+}
+
+// `- (void)setNegativeFormat:(NSString *)format`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1408953-negativeformat>
+- (())setNegativeFormat:(id)format {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).negative_format = format;
+}
+
+// =========================================================================
+// MARK: - Prefix/Suffix accessors
+// =========================================================================
+
+// `- (NSString *)positivePrefix`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1414464-positiveprefix>
+- (id)positivePrefix {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).positive_prefix
+}
+- (())setPositivePrefix:(id)prefix {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).positive_prefix = prefix;
+}
+
+// `- (NSString *)positiveSuffix`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1413740-positivesuffix>
+- (id)positiveSuffix {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).positive_suffix
+}
+- (())setPositiveSuffix:(id)suffix {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).positive_suffix = suffix;
+}
+
+// `- (NSString *)negativePrefix`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1410408-negativeprefix>
+- (id)negativePrefix {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).negative_prefix
+}
+- (())setNegativePrefix:(id)prefix {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).negative_prefix = prefix;
+}
+
+// `- (NSString *)negativeSuffix`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1413203-negativesuffix>
+- (id)negativeSuffix {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).negative_suffix
+}
+- (())setNegativeSuffix:(id)suffix {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).negative_suffix = suffix;
+}
+
+// =========================================================================
+// MARK: - Decimal number generation
+// =========================================================================
+
+// `- (BOOL)generatesDecimalNumbers`
+// <https://developer.apple.com/documentation/foundation/nsnumberformatter/1412019-generatesdecimalnumbers>
+- (bool)generatesDecimalNumbers {
+    env.objc.borrow::<NSNumberFormatterHostObject>(this).generates_decimal_numbers
+}
+- (())setGeneratesDecimalNumbers:(bool)flag {
+    env.objc.borrow_mut::<NSNumberFormatterHostObject>(this).generates_decimal_numbers = flag;
 }
 
 @end

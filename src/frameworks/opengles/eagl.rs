@@ -351,16 +351,38 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
 
+    // Apple's documentation states that the receiver must be the current
+    // context when calling `renderbufferStorage:fromDrawable:`.  If no
+    // context is current for this thread but `this` has a valid backing GLES
+    // context, temporarily make `this` the current context so the GL call
+    // succeeds, then restore the previous state.  This matches the behaviour
+    // observed on real iOS where calling the method on a non-current context
+    // still works as long as the receiver has been initialised.
+    let prior_ctx = *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    let needs_temp_current = prior_ctx.is_none() && {
+        env.objc.borrow::<EAGLContextHostObject>(this).gles_ctx.is_some()
+    };
+    if needs_temp_current {
+        log_dbg!(
+            "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
+             no current context for thread {}; temporarily making this context current.",
+            target, drawable, env.current_thread
+        );
+        retain(env, this);
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = Some(this);
+    }
+
     let renderbuffer = {
-        // Unclear from documentation if this method requires an appropriate
-        // context to already be active, but that seems to be the case
-        // in practice?
         let Some(mut gles) = super::sync_context(
             &mut env.framework_state.opengles,
             &mut env.objc,
             window,
             env.current_thread,
         ) else {
+            if needs_temp_current {
+                *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = None;
+                release(env, this);
+            }
             log!(
                 "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
                  called with no current GL context for thread {}; failing \
@@ -402,6 +424,13 @@ pub const CLASSES: ClassExports = objc_classes! {
             renderbuffer as _
         }
     };
+
+    // Restore the previous thread-local context (if we temporarily set `this`
+    // as the current context earlier in this call).
+    if needs_temp_current {
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = None;
+        release(env, this);
+    }
 
     retain(env, drawable);
     let host_obj = env.objc.borrow_mut::<EAGLContextHostObject>(this);
