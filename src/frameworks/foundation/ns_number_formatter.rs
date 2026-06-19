@@ -8,7 +8,7 @@
 
 use crate::frameworks::foundation::ns_string::{from_rust_string, to_rust_string};
 use crate::frameworks::foundation::NSUInteger;
-use crate::objc::{id, msg, nil, objc_classes, ClassExports, HostObject, NSZonePtr};
+use crate::objc::{id, msg, nil, objc_classes, release, ClassExports, HostObject, NSZonePtr};
 
 /// Apple's NSNumberFormatter behavior modes.
 /// <https://developer.apple.com/documentation/foundation/nsnumberformatterbehavior>
@@ -108,6 +108,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
+    let host = env.objc.borrow::<NSNumberFormatterHostObject>(this);
+    let ids_to_release = [
+        host.locale,
+        host.positive_format,
+        host.negative_format,
+        host.positive_prefix,
+        host.positive_suffix,
+        host.negative_prefix,
+        host.negative_suffix,
+    ];
+    drop(host);
+    for id in ids_to_release {
+        release(env, id);
+    }
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
