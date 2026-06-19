@@ -33,6 +33,17 @@ impl State {
     }
 }
 
+/// Register an already-parsed [AudioFileHostObject] and return a fresh guest
+/// [AudioFileID] handle for it. Shared by the various AudioFile open/create
+/// entry points and by AVAudioPlayer's `initWithData:error:`.
+pub fn register_audio_file(env: &mut Environment, host_object: AudioFileHostObject) -> AudioFileID {
+    let guest_audio_file = env.mem.alloc_and_write(OpaqueAudioFileID { _filler: 0 });
+    State::get(&mut env.framework_state)
+        .audio_files
+        .insert(guest_audio_file, host_object);
+    guest_audio_file
+}
+
 pub enum AudioFileHostObject {
     Real(audio::AudioFile),
     // 2-секундная заглушка, спасающая эмулятор от OOM (Out Of Memory)

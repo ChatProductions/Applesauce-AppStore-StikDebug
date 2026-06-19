@@ -24,10 +24,10 @@ use crate::frameworks::carbon_core::eofErr;
 use crate::frameworks::core_audio_types::AudioStreamBasicDescription;
 use crate::frameworks::core_foundation::cf_run_loop::kCFRunLoopCommonModes;
 use crate::frameworks::foundation::ns_error::NSOSStatusErrorDomain;
-use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval};
-use crate::mem::{guest_size_of, GuestUSize, MutPtr, MutVoidPtr, Ptr};
+use crate::frameworks::foundation::{ns_string, NSInteger, NSTimeInterval, NSUInteger};
+use crate::mem::{guest_size_of, ConstVoidPtr, GuestUSize, MutPtr, MutVoidPtr, Ptr};
 use crate::objc::{
-    id, msg, msg_class, nil, release, retain, Class, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, nil, release, retain, Class, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::objc_classes;
@@ -124,8 +124,36 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithData:(id)data error:(MutPtr<id>)outError {
-    log_dbg!("[(AVAudioPlayer*){:?} initWithData:{:?} outError:{:?}] (STUB)", this, data, outError);
-    nil
+    log_dbg!("[(AVAudioPlayer*){:?} initWithData:{:?} outError:{:?}]", this, data, outError);
+
+    assert_eq!(env.objc.borrow::<AVAudioPlayerHostObject>(this).audio_file_url, nil);
+
+    let bytes: ConstVoidPtr = msg![env; data bytes];
+    let length: NSUInteger = msg![env; data length];
+    let data_vec = env.mem.bytes_at(bytes.cast(), length as GuestUSize).to_vec();
+
+    match crate::audio::AudioFile::read_from_vec(data_vec) {
+        Ok(file) => {
+            assert!(env.objc.borrow::<AVAudioPlayerHostObject>(this).audio_file_id.is_none());
+            let host_object = AudioFileHostObject::Real(file);
+            let guest_audio_file = audio_file::register_audio_file(env, host_object);
+            env.objc.borrow_mut::<AVAudioPlayerHostObject>(this).audio_file_id =
+                Some(guest_audio_file);
+            this
+        }
+        Err(_) => {
+            if !outError.is_null() {
+                let domain = ns_string::get_static_str(env, NSOSStatusErrorDomain);
+                let error = msg_class![env; NSError alloc];
+                let code: NSInteger = -1; // TODO: set a proper code
+                let error = msg![env; error initWithDomain:domain code:code userInfo:nil];
+                autorelease(env, error);
+                env.mem.write(outError, error);
+            }
+            release(env, this);
+            nil
+        }
+    }
 }
 
 - (())setDelegate:(id)delegate {
