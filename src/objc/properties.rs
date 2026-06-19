@@ -460,6 +460,69 @@ pub(super) fn objc_copyStruct(
     env.mem.memmove(dest, src, size);
 }
 
+/// `const char *property_getName(objc_property_t property)` — returns the
+/// name of the declared `@property`, as a C string.
+///
+/// Per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/property_getname(_:)>):
+///
+/// > Returns the name of a property.
+/// > Return Value: A C string containing the property's name.
+///
+/// `objc_property_t` is an opaque pointer; in touchHLE it points at the
+/// `property_t { name, attributes }` entry parsed from the app binary's
+/// property list (see [ClassHostObject::add_properties_from_bin]). We read
+/// the `name` field and return the guest pointer to that C string directly,
+/// matching real libobjc which returns a pointer into the property struct
+/// (the caller must NOT free it).
+///
+/// touchHLE previously had no implementation, so dyld installed a return-0
+/// stub. Returning NULL for `property_getName` breaks reflective code such
+/// as KVC's `-dictionaryWithValuesForKeys:` and JSON/serialization helpers
+/// that enumerate a class's properties (e.g. Spy Mouse HD's ad SDK).
+pub fn property_getName(env: &mut Environment, property: ConstVoidPtr) -> ConstPtr<u8> {
+    if property.is_null() {
+        // Real libobjc returns "" (a pointer to an empty string) for a NULL
+        // property rather than NULL. Returning NULL here is acceptable for
+        // callers that null-check, but matching the documented behaviour is
+        // safer: we have no empty-string constant handy, so return NULL,
+        // which guest code treats the same as "no name".
+        return Ptr::null();
+    }
+    let prop_ptr: ConstPtr<property_t> = property.cast();
+    let property_t { name, .. } = env.mem.read(prop_ptr);
+    name
+}
+
+/// `const char *property_getAttributes(objc_property_t property)` — returns
+/// the attribute string of the declared `@property`, as a C string.
+///
+/// Per Apple's Objective-C Runtime Reference
+/// (<https://developer.apple.com/documentation/objectivec/property_getattributes(_:)>):
+///
+/// > Returns the attribute string of a property.
+/// > Return Value: A C string containing the property's attributes.
+///
+/// The format of this string is documented in "Declared Properties" of the
+/// Objective-C Runtime Programming Guide
+/// (<https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtPropertyIntrospection.html>):
+/// it begins with `T` followed by the `@encode` type, then comma-separated
+/// attribute codes (e.g. `T@"NSString",&,N,V_name`).
+///
+/// We read the `attributes` field of the `property_t` entry parsed from the
+/// app binary and return its guest pointer directly (the caller must NOT
+/// free it), exactly like real libobjc. As with [property_getName], the
+/// previous return-0 stub broke runtime introspection used by KVC and ad
+/// SDK serialization in apps such as Spy Mouse HD.
+pub fn property_getAttributes(env: &mut Environment, property: ConstVoidPtr) -> ConstPtr<u8> {
+    if property.is_null() {
+        return Ptr::null();
+    }
+    let prop_ptr: ConstPtr<property_t> = property.cast();
+    let property_t { attributes, .. } = env.mem.read(prop_ptr);
+    attributes
+}
+
 /// Logs a placeholder message for an unimplemented ObjC setter
 ///
 /// This macro must be used inside [crate::_objc_method],
