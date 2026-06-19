@@ -418,6 +418,13 @@ fn rand(env: &mut Environment) -> i32 {
     (env.libc_state.stdlib.rand as i32) & RAND_MAX
 }
 
+fn rand_r(env: &mut Environment, seed_ptr: MutPtr<u32>) -> i32 {
+    let mut seed = env.mem.read(seed_ptr);
+    seed = prng(seed);
+    env.mem.write(seed_ptr, seed);
+    (seed as i32) & RAND_MAX
+}
+
 fn srandom(env: &mut Environment, seed: u32) {
     set_errno(env, 0);
     env.libc_state.stdlib.random = seed;
@@ -1607,6 +1614,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(srand(_)),
     export_c_func!(sranddev()),
     export_c_func!(rand()),
+    export_c_func!(rand_r(_)),
     export_c_func!(srandom(_)),
     export_c_func!(random()),
     export_c_func!(arc4random()),
