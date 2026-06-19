@@ -9,7 +9,9 @@
 use std::time::Instant;
 
 use crate::audio::openal::al_types::{ALuint, ALvoid};
-use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
+use crate::audio::openal::{
+    AL_BUFFERS_PROCESSED, AL_BUFFERS_QUEUED, AL_PLAYING, AL_SOURCE_STATE,
+};
 
 const AL_POSITION: i32 = 0x1004;
 const AL_REFERENCE_DISTANCE: i32 = 0x1020;
@@ -953,6 +955,57 @@ fn render_audio_unit_buses(env: &mut Environment, audio_unit: AudioUnit) {
 
     let now = Instant::now();
     for (bus_id, callback, al_source, last_render_time, fmt) in plan {
+        // Ограничиваем глубину очереди OpenAL, чтобы буферы не накапливались
+        // быстрее, чем воспроизводятся. Если этого не делать, при длительной
+        // игре источник набирает всё больше необработанных буферов, звук
+        // отстаёт по времени и начинает «скрипеть». Поведение зеркалит
+        // `handle_audio_queue` в audio_queue.rs.
+        let mut queued = 0;
+        let mut processed = 0;
+        {
+            let context = env
+                .framework_state
+                .audio_toolbox
+                .al_context
+                .make_al_context_current(&mut env.openal_manager);
+            unsafe {
+                context.GetSourcei(al_source, AL_BUFFERS_QUEUED, &mut queued);
+                context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
+            }
+        }
+        if queued.saturating_sub(processed) > 1 {
+            // Источник ещё не успел проиграть то, что уже в очереди.
+            // Сливаем отыгранные буферы и пропускаем рендер на этот тик.
+            let mut drained: Vec<ALuint> = Vec::new();
+            {
+                let context = env
+                    .framework_state
+                    .audio_toolbox
+                    .al_context
+                    .make_al_context_current(&mut env.openal_manager);
+                unsafe {
+                    while processed > 0 {
+                        let mut b = 0;
+                        context.SourceUnqueueBuffers(al_source, 1, &mut b);
+                        drained.push(b);
+                        processed -= 1;
+                    }
+                    if !drained.is_empty() {
+                        context.DeleteBuffers(drained.len() as i32, drained.as_ptr());
+                    }
+                }
+            }
+            if let Some(obj) = audio_components::State::get(&mut env.framework_state)
+                .audio_component_instances
+                .get_mut(&audio_unit)
+            {
+                if let Some(bus) = obj.mixer_buses.get_mut(&bus_id) {
+                    bus.last_render_time = Some(now);
+                }
+            }
+            continue;
+        }
+
         let elapsed = now.duration_since(last_render_time);
         let frames = ((elapsed.as_secs_f64() * fmt.sample_rate) as u32).clamp(64, 4096);
         let buffer_size = frames * fmt.channels_per_frame * (fmt.bits_per_channel / 8);
@@ -1175,6 +1228,55 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
     };
     log_once!("render_audio_unit: entering callback for the first time");
 
+    let now = Instant::now();
+    let mut queued_buffers = 0;
+    let mut processed_buffers = 0;
+    {
+        let context = env
+            .framework_state
+            .audio_toolbox
+            .al_context
+            .make_al_context_current(&mut env.openal_manager);
+        unsafe {
+            context.GetSourcei(al_source, AL_BUFFERS_QUEUED, &mut queued_buffers);
+            context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed_buffers);
+        }
+    }
+
+    let remaining_buffers = queued_buffers.saturating_sub(processed_buffers);
+    if remaining_buffers > 1 {
+        let mut drained_buffers = Vec::new();
+        {
+            let context = env
+                .framework_state
+                .audio_toolbox
+                .al_context
+                .make_al_context_current(&mut env.openal_manager);
+            unsafe {
+                while processed_buffers > 0 {
+                    let mut b = 0;
+                    context.SourceUnqueueBuffers(al_source, 1, &mut b);
+                    drained_buffers.push(b);
+                    processed_buffers -= 1;
+                }
+                if !drained_buffers.is_empty() {
+                    context.DeleteBuffers(drained_buffers.len() as i32, drained_buffers.as_ptr());
+                }
+            }
+        }
+
+        if let Some(obj) = env
+            .framework_state
+            .audio_toolbox
+            .audio_components
+            .audio_component_instances
+            .get_mut(&audio_unit)
+        {
+            obj.last_render_time = Some(now);
+        }
+        return;
+    }
+
     let mut al_buffers = Vec::new();
     {
         let context = env
@@ -1183,20 +1285,25 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             .al_context
             .make_al_context_current(&mut env.openal_manager);
         unsafe {
-            let mut processed = 0;
-            context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
-            while processed > 0 {
+            while processed_buffers > 0 {
                 let mut b = 0;
                 context.SourceUnqueueBuffers(al_source, 1, &mut b);
                 al_buffers.push(b);
-                context.GetSourcei(al_source, AL_BUFFERS_PROCESSED, &mut processed);
+                processed_buffers -= 1;
             }
         }
     }
 
-    let now = Instant::now();
-    let elapsed = now.duration_since(last_render_time);
-    let frames = ((elapsed.as_secs_f64() * sample_rate) as u32).min(2048);
+    let target_frames = (sample_rate
+        * env
+            .framework_state
+            .audio_toolbox
+            .audio_session
+            .current_hardware_io_buffer_duration as f64)
+        .round() as u32;
+    let elapsed_frames =
+        (now.duration_since(last_render_time).as_secs_f64() * sample_rate) as u32;
+    let frames = elapsed_frames.clamp(64, target_frames.clamp(64, 2048));
     let buffer_size =
         frames * stream_format.channels_per_frame * (stream_format.bits_per_channel / 8);
 
