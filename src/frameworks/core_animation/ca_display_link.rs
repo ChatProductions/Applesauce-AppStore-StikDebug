@@ -93,23 +93,23 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<CADisplayLinkHostObject>(this).paused = paused;
 }
 
-/// The time value associated with the last displayed frame.
-/// Per Apple docs, this is a CFTimeInterval (f64) measuring seconds since
-/// the system started. We return CACurrentMediaTime() as a best-effort
-/// approximation so that apps computing dt = (timestamp - lastTimestamp)
-/// get a plausible positive value rather than 0 or NaN.
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648478-timestamp>
+// The time value associated with the last displayed frame.
+// Per Apple docs, this is a CFTimeInterval (f64) measuring seconds since
+// the system started. We return CACurrentMediaTime() as a best-effort
+// approximation so that apps computing dt = (timestamp - lastTimestamp)
+// get a plausible positive value rather than 0 or NaN.
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648478-timestamp>
 - (f64)timestamp {
     msg_class![env; NSDate timeIntervalSinceReferenceDate]
 }
 
-/// The time interval between screen refresh updates.
-/// Per Apple docs: "The time interval between screen refresh updates. The
-/// value of this property is undefined until the timer has fired at least
-/// once."
-/// We derive it from the underlying NSTimer interval so that changes to
-/// frameInterval are reflected here.
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648422-duration>
+// The time interval between screen refresh updates.
+// Per Apple docs: "The time interval between screen refresh updates. The
+// value of this property is undefined until the timer has fired at least
+// once."
+// We derive it from the underlying NSTimer interval so that changes to
+// frameInterval are reflected here.
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648422-duration>
 - (f64)duration {
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
     if ns_timer == nil {
@@ -118,10 +118,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; ns_timer timeInterval]
 }
 
-/// frameInterval: the number of display refreshes between notifications.
-/// Default value is 1 (fire every frame).  Values less than 1 are clamped
-/// to 1 per Apple docs.
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648526-frameinterval>
+// frameInterval: the number of display refreshes between notifications.
+// Default value is 1 (fire every frame).  Values less than 1 are clamped
+// to 1 per Apple docs.
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/1648526-frameinterval>
 - (NSInteger)frameInterval {
     env.objc.borrow::<CADisplayLinkHostObject>(this).frame_interval
 }
@@ -140,12 +140,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// Registers the display link with a run loop.
-/// Per Apple docs: "You can add a display link to multiple input modes.
-/// When the input mode changes, the run loop stops calling the selector
-/// until the input mode changes back to one associated with the display
-/// link."
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/add(to:formode:)>
+// Registers the display link with a run loop.
+// Per Apple docs: "You can add a display link to multiple input modes.
+// When the input mode changes, the run loop stops calling the selector
+// until the input mode changes back to one associated with the display
+// link."
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/add(to:formode:)>
 - (())addToRunLoop:(id)run_loop forMode:(NSRunLoopMode)mode {
     log_dbg!("[(CADisplayLink*){:?} addToRunLoop:{:?} forMode:{:?}]", this, run_loop, mode);
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
@@ -154,10 +154,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// Removes the display link from a run loop in a specific mode.
-/// Per Apple docs: this removes the display link from the specified mode
-/// of a run loop. To stop all firing, call `invalidate`.
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/remove(from:formode:)>
+// Removes the display link from a run loop in a specific mode.
+// Per Apple docs: this removes the display link from the specified mode
+// of a run loop. To stop all firing, call `invalidate`.
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/remove(from:formode:)>
 - (())removeFromRunLoop:(id)run_loop forMode:(NSRunLoopMode)_mode {
     log_dbg!("[(CADisplayLink*){:?} removeFromRunLoop:{:?} forMode:{:?}]", this, run_loop, _mode);
     // NSTimer does not expose a per-mode remove API; invalidating stops all
@@ -172,9 +172,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 }
 
-/// Removes the display link from all run loops, releasing the target.
-/// After calling this method, the display link will not fire again.
-/// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/invalidate()>
+// Removes the display link from all run loops, releasing the target.
+// After calling this method, the display link will not fire again.
+// <https://developer.apple.com/documentation/quartzcore/cadisplaylink/invalidate()>
 - (())invalidate {
     log_dbg!("[(CADisplayLink*){:?} invalidate]", this);
     let ns_timer = env.objc.borrow::<CADisplayLinkHostObject>(this).ns_timer;
@@ -187,10 +187,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.dealloc_object(this, &mut env.mem);
 }
 
-/// Internal trampoline: called by the underlying NSTimer. Redirects the
-/// call to the game's target/selector, passing `this` (the CADisplayLink)
-/// as the argument — matching the iOS contract where the selector receives
-/// the CADisplayLink as its sole argument.
+// Internal trampoline: called by the underlying NSTimer. Redirects the
+// call to the game's target/selector, passing `this` (the CADisplayLink)
+// as the argument — matching the iOS contract where the selector receives
+// the CADisplayLink as its sole argument.
 - (())_touchHLE_displayLinkTimerDidFire:(id)timer { // NSTimer *
     let &CADisplayLinkHostObject {
         target,
