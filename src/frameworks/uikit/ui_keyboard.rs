@@ -147,6 +147,20 @@ pub const CONSTANTS: ConstantExports = &[
     ),
 ];
 
+/// State for the private keyboard classes. These expose `+sharedInstance`,
+/// which (like all Cocoa singletons) must return the *same* object on every
+/// call. The previous implementation allocated a brand-new object each time,
+/// so old apps that call `[UIKeyboard sharedInstance]` (or
+/// `[UIKeyboardImpl sharedInstance]`) repeatedly — sometimes recursively, via
+/// `+initialize`/`retain` chains — kept manufacturing fresh objects. That
+/// churn is what tripped the `objc_msgSend` recursion guard (bailing out with
+/// a nil return) and left the app messaging a half-built/freed object.
+#[derive(Default)]
+pub struct State {
+    ui_keyboard_shared_instance: Option<id>,
+    ui_keyboard_impl_shared_instance: Option<id>,
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -156,7 +170,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIKeyboard: UIView
 
 + (id)sharedInstance {
-    env.objc.alloc_static_object(this, Box::new(TrivialHostObject), &mut env.mem)
+    if let Some(existing) = env.framework_state.uikit.ui_keyboard.ui_keyboard_shared_instance {
+        return existing;
+    }
+    let instance = env.objc.alloc_static_object(this, Box::new(TrivialHostObject), &mut env.mem);
+    env.framework_state.uikit.ui_keyboard.ui_keyboard_shared_instance = Some(instance);
+    instance
 }
 
 + (bool)isInHardwareKeyboardMode {
@@ -203,7 +222,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIKeyboardImpl: NSObject
 
 + (id)sharedInstance {
-    env.objc.alloc_static_object(this, Box::new(TrivialHostObject), &mut env.mem)
+    if let Some(existing) = env.framework_state.uikit.ui_keyboard.ui_keyboard_impl_shared_instance {
+        return existing;
+    }
+    let instance = env.objc.alloc_static_object(this, Box::new(TrivialHostObject), &mut env.mem);
+    env.framework_state.uikit.ui_keyboard.ui_keyboard_impl_shared_instance = Some(instance);
+    instance
 }
 
 + (id)activeInstance {
