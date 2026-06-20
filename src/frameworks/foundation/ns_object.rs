@@ -894,6 +894,47 @@ pub const CLASSES: ClassExports = objc_classes! {
     result
 }
 
+// Per Apple's NSKeyValueCoding informal protocol
+// (https://developer.apple.com/documentation/objectivec/nsobject/setvaluesforkeys(_:)):
+// "For each key in keyedValues, the corresponding value is set in the
+//  receiver by invoking -setValue:forKey:. The default implementation
+//  substitutes nil for instances of NSNull."
+//
+// This is declared on NSObject (the informal protocol), so *any* object —
+// not just NSDictionary — must respond to it. Real apps rely on this:
+// e.g. Core Data / Unity code sends -setValuesForKeysWithDictionary: to
+// plain model objects (NSManagedObjectModel and friends). We must route
+// through -setValue:forKey: rather than -setObject:forKey: so KVC-only
+// setters and guest overrides are honored. Keys are snapshotted first so
+// side effects of the setters can't invalidate enumeration mid-iteration.
+- (())setValuesForKeysWithDictionary:(id)keyed_values { // NSDictionary *
+    if keyed_values == nil {
+        return;
+    }
+    let key_enum: id = msg![env; keyed_values keyEnumerator];
+    if key_enum == nil {
+        return;
+    }
+    let mut keys: Vec<id> = Vec::new();
+    loop {
+        let next: id = msg![env; key_enum nextObject];
+        if next == nil {
+            break;
+        }
+        retain(env, next);
+        keys.push(next);
+    }
+    let ns_null: id = msg_class![env; NSNull null];
+    for key in keys {
+        let val: id = msg![env; keyed_values objectForKey:key];
+        // Per Apple docs, NSNull is treated as nil. -setValue:forKey:'s own
+        // contract then handles the nil case (setNilValueForKey: / removal).
+        let arg: id = if val == ns_null { nil } else { val };
+        () = msg![env; this setValue:arg forKey:key];
+        release(env, key);
+    }
+}
+
 // MARK: - Key-Value Observing (KVO)
 
 - (NSUInteger)version {
