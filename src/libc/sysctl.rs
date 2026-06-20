@@ -16,8 +16,8 @@ use crate::Environment;
 
 static SYSCTL_VALUES: [((i32, i32), &str, SysInfoType); 29] = [
     // Generic CPU, I/O
-    ((6,1), "hw.machine" , String(b"iPhone1,1")), // overridden dynamically below
-    ((6,2), "hw.model" , String(b"M68AP")),
+    ((6,1), "hw.machine" , String(b"iPhone2,1")), // overridden dynamically below
+    ((6,2), "hw.model" , String(b"N88AP")),
     ((6,3), "hw.ncpu" , SysInfoType::Int32(1)),
     ((6,25), "hw.activecpu" , SysInfoType::Int32(1)), // Активные ядра
     // Physical / logical CPU counters introduced in 10.5 / iOS 4 and

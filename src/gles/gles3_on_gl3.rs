@@ -1670,6 +1670,39 @@ impl GLES for GLES3OnGL3<'_> {
     ) {
         gl33::RenderbufferStorageMultisample(target, samples, internalformat, width, height)
     }
+    unsafe fn ResolveMultisampleFramebufferAPPLE(&mut self) {
+        let mut color_rb: GLint = 0;
+        gl33::GetFramebufferAttachmentParameteriv(
+            gl33::READ_FRAMEBUFFER,
+            gl33::COLOR_ATTACHMENT0,
+            gl33::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME,
+            &mut color_rb,
+        );
+
+        let mut old_rb: GLint = 0;
+        gl33::GetIntegerv(gl33::RENDERBUFFER_BINDING, &mut old_rb);
+        gl33::BindRenderbuffer(gl33::RENDERBUFFER, color_rb as GLuint);
+
+        let mut width: GLint = 0;
+        let mut height: GLint = 0;
+        gl33::GetRenderbufferParameteriv(gl33::RENDERBUFFER, gl33::RENDERBUFFER_WIDTH, &mut width);
+        gl33::GetRenderbufferParameteriv(gl33::RENDERBUFFER, gl33::RENDERBUFFER_HEIGHT, &mut height);
+
+        gl33::BindRenderbuffer(gl33::RENDERBUFFER, old_rb as GLuint);
+
+        gl33::BlitFramebuffer(
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            gl33::COLOR_BUFFER_BIT,
+            gl33::NEAREST,
+        );
+    }
     unsafe fn FramebufferTextureLayer(
         &mut self,
         target: GLenum,

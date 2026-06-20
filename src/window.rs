@@ -62,7 +62,14 @@ impl DeviceFamily {
     /// hw.machine string returned by sysctl / uname.
     pub fn machine_name(&self) -> &'static str {
         match self {
-            DeviceFamily::iPhone => "iPhone1,1",
+            // iPhone1,1 is the original 2007 iPhone, which only supports
+            // OpenGL ES 1.1. Reporting it makes apps that require OpenGL ES 2.0
+            // (e.g. Infinity Blade, whose bundle lists the "opengles-2"
+            // required capability) treat the device as unsupported and refuse
+            // to render. iPhone2,1 (iPhone 3GS) is a real 320×480 non-retina
+            // device that supports OpenGL ES 2.0, so it matches this point grid
+            // while still satisfying GLES2-only apps.
+            DeviceFamily::iPhone => "iPhone2,1",
             DeviceFamily::iPhone5 => "iPhone5,1",
             DeviceFamily::iPad => "iPad1,1",
         }
