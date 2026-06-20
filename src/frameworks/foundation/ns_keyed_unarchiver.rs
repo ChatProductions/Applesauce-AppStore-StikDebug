@@ -319,6 +319,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     CGRectFromString(env, string)
 }
 
+// `- (void)finishDecoding`
+// <https://developer.apple.com/documentation/foundation/nskeyedunarchiver/1418233-finishdecoding>
+//
+// Instructs the archiver to construct the final object graph.  Older apps
+// (iOS < 9) call this directly; it is also called implicitly by
+// `+unarchiveObjectWithData:` in Apple's implementation.  Our decode is
+// already eager (objects are materialised as they are requested), so there
+// is nothing to flush here — we simply notify the delegate if one has been
+// set and return.
+- (())finishDecoding {
+    let delegate = env.objc.borrow::<NSKeyedUnarchiverHostObject>(this).delegate;
+    if delegate != nil {
+        // Call the delegate's `unarchiverDidFinish:` method if it responds.
+        let sel = env.objc.lookup_selector("unarchiverDidFinish:");
+        if let Some(sel) = sel {
+            if env.objc.class_has_method(
+                crate::objc::ObjC::read_isa(delegate, &env.mem),
+                sel,
+            ) {
+                let _: () = crate::objc::msg_send_no_type_checking(env, (delegate, sel, this));
+            }
+        }
+    }
+}
+
+// `- (void)setRequiresSecureCoding:(BOOL)flag`
+// <https://developer.apple.com/documentation/foundation/nskeyedunarchiver/1413855-requiressecurecoding>
+//
+// Secure coding is a feature that prevents substitution attacks when
+// deserialising objects.  touchHLE does not implement Class-level
+// conformance checks, so we just store the flag and accept both values
+// without enforcing anything.
+- (())setRequiresSecureCoding:(bool)_flag {
+    // No-op: we do not enforce secure coding checks.
+}
+
+- (bool)requiresSecureCoding {
+    false
+}
+
 @end
 
 };

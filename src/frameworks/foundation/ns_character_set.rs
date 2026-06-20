@@ -637,6 +637,37 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
+// `- (void)formUnionWithCharacterSet:(NSCharacterSet *)otherSet`
+// <https://developer.apple.com/documentation/foundation/nsmutablecharacterset/1416903-formunionwithcharacterset>
+//
+// Modifies the receiver so it contains all characters that exist in either
+// the receiver or another given character set.  This is equivalent to
+// `unionWithCharacterSet:` but uses the iOS 7+ naming convention that
+// appears in apps built against later SDKs.
+- (())formUnionWithCharacterSet:(id)other { // NSCharacterSet*
+    let other_chars: Vec<unichar> = {
+        let h = env.objc.borrow::<CharacterSetHostObject>(other);
+        h.set.iter().copied().collect()
+    };
+    let host = env.objc.borrow_mut::<CharacterSetHostObject>(this);
+    for c in other_chars { host.set.insert(c); }
+}
+
+// `- (void)formIntersectionWithCharacterSet:(NSCharacterSet *)otherSet`
+// <https://developer.apple.com/documentation/foundation/nsmutablecharacterset/1409073-formintersectionwithcharacterset>
+//
+// Modifies the receiver so it contains only characters that exist in both
+// the receiver and another given character set.  This is equivalent to
+// `intersectWithCharacterSet:`.
+- (())formIntersectionWithCharacterSet:(id)other { // NSCharacterSet*
+    let other_set: HashSet<unichar> = {
+        let h = env.objc.borrow::<CharacterSetHostObject>(other);
+        h.set.clone()
+    };
+    let host = env.objc.borrow_mut::<CharacterSetHostObject>(this);
+    host.set.retain(|c| other_set.contains(c));
+}
+
 - (bool)characterIsMemberOfSet:(unichar)code_unit {
     let host_object = env.objc.borrow::<CharacterSetHostObject>(this);
     host_object.set.contains(&code_unit) ^ host_object.inverted

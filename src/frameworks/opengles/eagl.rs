@@ -349,59 +349,104 @@ pub const CLASSES: ClassExports = objc_classes! {
         (width.round() as u32 * scale_hack, height.round() as u32 * scale_hack)
     };
 
-    let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
+    // Apple's documentation states that the receiver must be the current
+    // context when calling `renderbufferStorage:fromDrawable:`.  If no
+    // context is current for this thread but `this` has a valid backing GLES
+    // context, temporarily make `this` the current context so the GL call
+    // succeeds, then restore the previous state.  This matches the behaviour
+    // observed on real iOS where calling the method on a non-current context
+    // still works as long as the receiver has been initialised.
+    //
+    // Note: `window` must be borrowed from `env` AFTER any calls to
+    // `retain`/`release` because those also borrow `env` mutably.
+    let prior_ctx = *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    let needs_temp_current = prior_ctx.is_none() && {
+        env.objc.borrow::<EAGLContextHostObject>(this).gles_ctx.is_some()
+    };
+    if needs_temp_current {
+        log_dbg!(
+            "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
+             no current context for thread {}; temporarily making this context current.",
+            target, drawable, env.current_thread
+        );
+        retain(env, this);
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = Some(this);
+    }
 
-    let renderbuffer = {
-        // Unclear from documentation if this method requires an appropriate
-        // context to already be active, but that seems to be the case
-        // in practice?
-        let Some(mut gles) = super::sync_context(
+    // Run the actual GL storage allocation inside a nested scope so that
+    // `window` (which mutably borrows `env.window`) is dropped before we need
+    // to call `retain`/`release` with a full `&mut env` borrow below.
+    let renderbuffer_result: Option<u32> = {
+        let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
+        match super::sync_context(
             &mut env.framework_state.opengles,
             &mut env.objc,
             window,
             env.current_thread,
-        ) else {
-            log!(
-                "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
-                 called with no current GL context for thread {}; failing \
-                 the call instead of crashing.",
-                target,
-                drawable,
-                env.current_thread
-            );
-            return false;
-        };
-        unsafe {
-            // Clear any pre-existing error so we can detect failure of the
-            // storage allocation reliably.
-            while gles.GetError() != gles11::NO_ERROR {}
-            gles.RenderbufferStorageOES(target, internalformat, width.try_into().unwrap(), height.try_into().unwrap());
-            if gles.GetError() != gles11::NO_ERROR {
-                // RGBA8 is optional in OpenGL ES 1.1 Common Profile (requires
-                // OES_rgb8_rgba8). Fall back to RGBA4 (0x8056) which is
-                // required by OES_framebuffer_object.
-                const GL_RGBA4: gles11::types::GLenum = 0x8056;
-                gles.RenderbufferStorageOES(
+        ) {
+            None => {
+                log!(
+                    "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
+                     called with no current GL context for thread {}; failing \
+                     the call instead of crashing.",
                     target,
-                    GL_RGBA4,
-                    width.try_into().unwrap(),
-                    height.try_into().unwrap(),
+                    drawable,
+                    env.current_thread
                 );
-                if gles.GetError() != gles11::NO_ERROR {
+                None
+            }
+            Some(mut gles) => {
+                // Clear any pre-existing error so we can detect failure of the
+                // storage allocation reliably.
+                unsafe { while gles.GetError() != gles11::NO_ERROR {} }
+                unsafe { gles.RenderbufferStorageOES(target, internalformat, width.try_into().unwrap(), height.try_into().unwrap()); }
+                let needs_fallback = unsafe { gles.GetError() != gles11::NO_ERROR };
+                let alloc_ok = if needs_fallback {
+                    // RGBA8 is optional in OpenGL ES 1.1 Common Profile (requires
+                    // OES_rgb8_rgba8). Fall back to RGBA4 (0x8056) which is
+                    // required by OES_framebuffer_object.
+                    const GL_RGBA4: gles11::types::GLenum = 0x8056;
+                    unsafe { gles.RenderbufferStorageOES(target, GL_RGBA4, width.try_into().unwrap(), height.try_into().unwrap()); }
+                    unsafe { gles.GetError() == gles11::NO_ERROR }
+                } else {
+                    true
+                };
+                if !alloc_ok {
                     log!(
                         "[EAGLContext renderbufferStorage:{:#x} fromDrawable:{:?}] \
                          failed to allocate renderbuffer storage (tried RGBA8 and RGBA4)",
                         target,
                         drawable
                     );
-                    return false;
+                    None
+                } else {
+                    let mut renderbuffer: gles11::types::GLint = 0;
+                    unsafe { gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut renderbuffer); }
+                    Some(renderbuffer as u32)
                 }
             }
-            let mut renderbuffer = 0;
-            gles.GetIntegerv(gles11::RENDERBUFFER_BINDING_OES, &mut renderbuffer);
-            renderbuffer as _
         }
     };
+
+    // `window` borrow dropped here — safe to use `retain`/`release` again.
+    // `None` means either no GL context was available, or storage allocation failed.
+    let renderbuffer = match renderbuffer_result {
+        None => {
+            if needs_temp_current {
+                *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = None;
+                release(env, this);
+            }
+            return false;
+        }
+        Some(rb) => rb,
+    };
+
+    // Restore the previous thread-local context (if we temporarily set `this`
+    // as the current context earlier in this call).
+    if needs_temp_current {
+        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread) = None;
+        release(env, this);
+    }
 
     retain(env, drawable);
     let host_obj = env.objc.borrow_mut::<EAGLContextHostObject>(this);

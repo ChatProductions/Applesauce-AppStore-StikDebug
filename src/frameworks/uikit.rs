@@ -979,6 +979,7 @@ pub struct State {
     ui_geometry: ui_geometry::State,
     ui_graphics: ui_graphics::State,
     ui_image: ui_image::State,
+    ui_keyboard: ui_keyboard::State,
     ui_screen: ui_screen::State,
     ui_touch: ui_touch::State,
     pub ui_view: ui_view::State,
