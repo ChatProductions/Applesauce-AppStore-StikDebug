@@ -1536,6 +1536,47 @@ impl GLES for GLES3Native<'_> {
     ) {
         gles30::RenderbufferStorageMultisample(target, samples, internalformat, width, height)
     }
+    unsafe fn ResolveMultisampleFramebufferAPPLE(&mut self) {
+        let mut color_rb: GLint = 0;
+        gles30::GetFramebufferAttachmentParameteriv(
+            gles30::READ_FRAMEBUFFER,
+            gles30::COLOR_ATTACHMENT0,
+            gles30::FRAMEBUFFER_ATTACHMENT_OBJECT_NAME,
+            &mut color_rb,
+        );
+
+        let mut old_rb: GLint = 0;
+        gles30::GetIntegerv(gles30::RENDERBUFFER_BINDING, &mut old_rb);
+        gles30::BindRenderbuffer(gles30::RENDERBUFFER, color_rb as GLuint);
+
+        let mut width: GLint = 0;
+        let mut height: GLint = 0;
+        gles30::GetRenderbufferParameteriv(
+            gles30::RENDERBUFFER,
+            gles30::RENDERBUFFER_WIDTH,
+            &mut width,
+        );
+        gles30::GetRenderbufferParameteriv(
+            gles30::RENDERBUFFER,
+            gles30::RENDERBUFFER_HEIGHT,
+            &mut height,
+        );
+
+        gles30::BindRenderbuffer(gles30::RENDERBUFFER, old_rb as GLuint);
+
+        gles30::BlitFramebuffer(
+            0,
+            0,
+            width,
+            height,
+            0,
+            0,
+            width,
+            height,
+            gles30::COLOR_BUFFER_BIT,
+            gles30::NEAREST,
+        );
+    }
     unsafe fn FramebufferTextureLayer(
         &mut self,
         target: GLenum,
