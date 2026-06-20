@@ -208,6 +208,58 @@ fn encode_a32_trap() -> u32 {
     0xe7ffdefe
 }
 
+fn alloc_a32_ret_stub(mem: &mut Mem) -> MutPtr<u32> {
+    let fn_ptr: MutPtr<u32> = mem.alloc(8).cast();
+    mem.write(fn_ptr + 0, encode_a32_ret());
+    mem.write(fn_ptr + 1, encode_a32_trap());
+    fn_ptr
+}
+
+fn link_cxxabi_vtable(
+    name: &str,
+    cxxabi_vtable_addrs: &mut HashMap<String, u32>,
+    mem: &mut Mem,
+) -> ConstVoidPtr {
+    let addr = *cxxabi_vtable_addrs.entry(name.to_string()).or_insert_with(|| {
+        let stub = alloc_a32_ret_stub(mem);
+        let stub_addr = stub.to_bits();
+        let v: MutPtr<u32> = mem.alloc(40).cast();
+        mem.write(v + 0, 0);
+        mem.write(v + 1, 0);
+        for i in 2..10 {
+            mem.write(v + i, stub_addr);
+        }
+        v.to_bits()
+    });
+    Ptr::from_bits(addr).cast_const()
+}
+
+fn link_cxxabi_typeinfo(
+    name: &str,
+    cxxabi_vtable_addrs: &mut HashMap<String, u32>,
+    mem: &mut Mem,
+) -> ConstVoidPtr {
+    let name_bytes = name.strip_prefix('_').unwrap_or(name);
+    let name_cstr = mem.alloc_and_write_cstr(name_bytes.as_bytes());
+    let ti: MutPtr<u32> = mem.alloc(8).cast();
+    let vtable_addr = *cxxabi_vtable_addrs
+        .entry("__ZTVN10__cxxabiv117__class_type_infoE".to_string())
+        .or_insert_with(|| {
+            let stub = alloc_a32_ret_stub(mem);
+            let stub_addr = stub.to_bits();
+            let v: MutPtr<u32> = mem.alloc(40).cast();
+            mem.write(v + 0, 0);
+            mem.write(v + 1, 0);
+            for i in 2..10 {
+                mem.write(v + i, stub_addr);
+            }
+            v.to_bits()
+        });
+    mem.write(ti + 0, vtable_addr + 8);
+    mem.write(ti + 1, name_cstr.to_bits());
+    ti.cast().cast_const()
+}
+
 /// Make `std::string((const char*)NULL)` construct an empty string instead of
 /// looping forever / corrupting memory.
 ///
@@ -823,24 +875,12 @@ impl Dyld {
                 //   +28  __do_upcast()                -> returns 0 (no match)
                 //   +32  reserved
                 //   +36  reserved
-                let addr = *cxxabi_vtable_addrs.entry(name.clone()).or_insert_with(|| {
-                    // Shared method stub: minimal ARM32 function (BX LR)
-                    // returning 0/false for every virtual call.
-                    let stub: MutPtr<u32> = mem.alloc(8).cast();
-                    mem.write(stub + 0, encode_a32_ret());
-                    mem.write(stub + 1, encode_a32_trap());
-                    let stub_addr = stub.to_bits();
-
-                    let v: MutPtr<u32> = mem.alloc(40).cast();
-                    mem.write(v + 0, 0); // offset_to_top
-                    mem.write(v + 1, 0); // typeinfo
-                    for i in 2..10 {
-                        mem.write(v + i, stub_addr);
-                    }
-                    v.to_bits()
-                });
-                log_dbg!("Stubbed C++ vtable {} -> {:#x}", name, addr);
-                Ptr::from_bits(addr)
+                //
+                // The relocation addend (usually +8) is applied below, so we
+                // return the vtable base here.
+                let target = link_cxxabi_vtable(name, &mut cxxabi_vtable_addrs, mem);
+                log_dbg!("Stubbed C++ vtable {} -> {:#x}", name, target.to_bits());
+                target
             } else if name == "___gxx_personality_sj0" {
                 // C++ SjLj exception personality routine. Called by the
                 // unwinder for every frame; returning 0 (_URC_NO_REASON)
@@ -926,31 +966,9 @@ impl Dyld {
                 // The name string is never actually used for comparison (RTTI
                 // compares by pointer identity on most embedded platforms), but
                 // providing a non-NULL value prevents crashes in debuggers.
-                let name_bytes = name.strip_prefix('_').unwrap_or(name);
-                let name_cstr = mem.alloc_and_write_cstr(name_bytes.as_bytes());
-                let ti: MutPtr<u32> = mem.alloc(8).cast();
-                // vptr: point to a dummy vtable (BX LR stub) — same pattern
-                // as __ZTVN10__cxxabiv117__class_type_infoE
-                let vtable_addr = *cxxabi_vtable_addrs
-                    .entry("__ZTVN10__cxxabiv117__class_type_infoE".to_string())
-                    .or_insert_with(|| {
-                        let stub: MutPtr<u32> = mem.alloc(8).cast();
-                        mem.write(stub + 0, encode_a32_ret());
-                        mem.write(stub + 1, encode_a32_trap());
-                        let stub_addr = stub.to_bits();
-                        let v: MutPtr<u32> = mem.alloc(40).cast();
-                        mem.write(v + 0, 0);
-                        mem.write(v + 1, 0);
-                        for i in 2..10 {
-                            mem.write(v + i, stub_addr);
-                        }
-                        v.to_bits()
-                    });
-                // vptr points to vtable + 8 (past offset_to_top and typeinfo)
-                mem.write(ti + 0, vtable_addr + 8);
-                mem.write(ti + 1, name_cstr.to_bits());
-                log_dbg!("Stubbed C++ typeinfo {} at {:?}", name, ti);
-                ti.cast().cast_const()
+                let ti = link_cxxabi_typeinfo(name, &mut cxxabi_vtable_addrs, mem);
+                log_dbg!("Stubbed C++ typeinfo {} at {:#x}", name, ti.to_bits());
+                ti
             } else if name == "___objc_personality_v0" {
                 // Objective-C exception personality routine. Mirrors the
                 // non-lazy stub above: a guest-code BX LR returning 0
@@ -1294,6 +1312,59 @@ impl Dyld {
                     mem.write(p + i, 0);
                 }
                 mem.write(ptr_ptr, p.cast().cast_const());
+                continue;
+            }
+
+            // C++ Itanium ABI type_info vtables. Same handling as the
+            // external-relocation loop above: without these, every
+            // `__cxxabivN...__*_type_infoE` reference referenced through the
+            // `__nl_symbol_ptr` table is left NULL, so any virtual call on a
+            // type_info object (dynamic_cast, exception type matching) lands
+            // on address 0 and crashes.
+            if symbol == "__ZTVN10__cxxabiv117__class_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv120__si_class_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv121__vmi_class_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv119__pointer_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv120__function_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv116__enum_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv117__pbase_type_infoE"
+                || symbol == "__ZTVN10__cxxabiv129__pointer_to_member_type_infoE"
+            {
+                let target = link_cxxabi_vtable(symbol, &mut cxxabi_vtable_addrs, mem);
+                // A non-lazy symbol pointer holds the plain address of the
+                // named symbol (no addend), so it resolves to the vtable base.
+                mem.write(ptr_ptr, target);
+                log_dbg!("Stubbed C++ vtable {} -> {:#x}", symbol, target.to_bits());
+                continue;
+            }
+
+            // C++ RTTI type_info objects for fundamental types (double,
+            // float, int, long, unsigned int, short, char, void, bool,
+            // const char*, char*, void*, const void*). Without these the
+            // referenced type_info object has a NULL vptr; the first call
+            // through it (dynamic_cast / exception type matching / the
+            // `typeid(...)` comparison libstdc++ does for `const char*`)
+            // branches to 0x0 and crashes. This mirrors the external-
+            // relocation loop: the bundled libstdc++ in iOS 8 apps emits
+            // `__ZTIPKc` (typeinfo for `char const*`) into __nl_symbol_ptr,
+            // which previously fell through to the unhandled warning.
+            if symbol == "__ZTId"
+                || symbol == "__ZTIf"
+                || symbol == "__ZTIi"
+                || symbol == "__ZTIl"
+                || symbol == "__ZTIj"
+                || symbol == "__ZTIs"
+                || symbol == "__ZTIc"
+                || symbol == "__ZTIv"
+                || symbol == "__ZTIb"
+                || symbol == "__ZTIPKc"
+                || symbol == "__ZTIPc"
+                || symbol == "__ZTIPv"
+                || symbol == "__ZTIPKv"
+            {
+                let ti = link_cxxabi_typeinfo(symbol, &mut cxxabi_vtable_addrs, mem);
+                mem.write(ptr_ptr, ti);
+                log_dbg!("Stubbed C++ typeinfo {} at {:#x}", symbol, ti.to_bits());
                 continue;
             }
 
