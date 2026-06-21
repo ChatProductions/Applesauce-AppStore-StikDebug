@@ -8,6 +8,8 @@
 use super::ns_string::{from_rust_ordering, from_rust_string};
 use super::{_nib_archive_decoder, NSComparisonResult, NSOrderedSame, NSRange, NSUInteger};
 use crate::frameworks::core_foundation::cf_number::{
+    kCFNumberCFIndexType,
+    kCFNumberCGFloatType,
     kCFNumberCharType,
     kCFNumberDoubleType, // <-- ИСПРАВЛЕНИЕ: Добавлены наши новые типы
     kCFNumberFloat32Type,
@@ -15,6 +17,8 @@ use crate::frameworks::core_foundation::cf_number::{
     kCFNumberFloatType,
     kCFNumberIntType,
     kCFNumberLongLongType,
+    kCFNumberLongType,
+    kCFNumberNSIntegerType,
     kCFNumberSInt16Type,
     kCFNumberSInt32Type,
     kCFNumberSInt64Type,
@@ -956,7 +960,18 @@ pub fn is_conversion_lossless(env: &mut Environment, this: id, type_: CFNumberTy
             let val: i32 = num.as_int();
             msg_class![env; NSNumber numberWithInt:val]
         }
+        // On the 32-bit iOS ABI, NSInteger / CFIndex / long are all 32-bit
+        // signed integers, so they round-trip through `as_int` losslessly.
+        kCFNumberLongType | kCFNumberCFIndexType | kCFNumberNSIntegerType => {
+            let val: i32 = num.as_int();
+            msg_class![env; NSNumber numberWithInt:val]
+        }
         kCFNumberFloat32Type | kCFNumberFloatType => {
+            let val: f32 = num.as_float();
+            msg_class![env; NSNumber numberWithFloat:val]
+        }
+        // On the 32-bit iOS ABI, CGFloat is a 32-bit float.
+        kCFNumberCGFloatType => {
             let val: f32 = num.as_float();
             msg_class![env; NSNumber numberWithFloat:val]
         }

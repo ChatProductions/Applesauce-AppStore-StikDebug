@@ -29,6 +29,13 @@ pub const kCFNumberIntType: CFNumberType = 9;
 pub const kCFNumberLongLongType: CFNumberType = 11;
 pub const kCFNumberFloatType: CFNumberType = 12;
 pub const kCFNumberDoubleType: CFNumberType = 13;
+// Apple CFNumber.h: these are platform-width types. On the 32-bit iOS ABI
+// that touchHLE emulates, NSInteger / CFIndex / long are 32-bit signed
+// integers and CGFloat is a 32-bit float.
+pub const kCFNumberLongType: CFNumberType = 10;
+pub const kCFNumberCFIndexType: CFNumberType = 14;
+pub const kCFNumberNSIntegerType: CFNumberType = 15;
+pub const kCFNumberCGFloatType: CFNumberType = 16;
 
 type CFNumberRef = CFTypeRef;
 // Note: on iOS SDK side this type is defined as a pointer to an opaque struct
@@ -55,6 +62,11 @@ fn CFNumberCreate(
             let val: i32 = env.mem.read(value_ptr.cast());
             msg![env; num initWithInt:val]
         }
+        // 32-bit-ABI integer types (NSInteger / CFIndex / long): all read as i32.
+        kCFNumberLongType | kCFNumberCFIndexType | kCFNumberNSIntegerType => {
+            let val: i32 = env.mem.read(value_ptr.cast());
+            msg![env; num initWithInt:val]
+        }
         kCFNumberSInt8Type | kCFNumberCharType => {
             let val: i8 = env.mem.read(value_ptr.cast());
             msg![env; num initWithChar:val]
@@ -64,6 +76,11 @@ fn CFNumberCreate(
             msg![env; num initWithShort:val]
         }
         kCFNumberFloat32Type | kCFNumberFloatType => {
+            let val: f32 = env.mem.read(value_ptr.cast());
+            msg![env; num initWithFloat:val]
+        }
+        // CGFloat is a 32-bit float on the emulated 32-bit ABI.
+        kCFNumberCGFloatType => {
             let val: f32 = env.mem.read(value_ptr.cast());
             msg![env; num initWithFloat:val]
         }
@@ -97,6 +114,12 @@ fn CFNumberGetValue(
             env.mem.write(value_ptr.cast(), val);
             is_conversion_lossless(env, num, type_)
         }
+        // 32-bit-ABI integer types (NSInteger / CFIndex / long): all i32-wide.
+        kCFNumberLongType | kCFNumberCFIndexType | kCFNumberNSIntegerType => {
+            let val: i32 = msg![env; num intValue];
+            env.mem.write(value_ptr.cast(), val);
+            is_conversion_lossless(env, num, type_)
+        }
         kCFNumberSInt8Type | kCFNumberCharType => {
             let val: i8 = msg![env; num charValue];
             env.mem.write(value_ptr.cast(), val);
@@ -108,6 +131,12 @@ fn CFNumberGetValue(
             is_conversion_lossless(env, num, type_)
         }
         kCFNumberFloat32Type | kCFNumberFloatType => {
+            let val: f32 = msg![env; num floatValue];
+            env.mem.write(value_ptr.cast(), val);
+            is_conversion_lossless(env, num, type_)
+        }
+        // CGFloat is a 32-bit float on the emulated 32-bit ABI.
+        kCFNumberCGFloatType => {
             let val: f32 = msg![env; num floatValue];
             env.mem.write(value_ptr.cast(), val);
             is_conversion_lossless(env, num, type_)
