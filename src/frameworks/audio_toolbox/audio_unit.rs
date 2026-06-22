@@ -1273,6 +1273,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             .get_mut(&audio_unit)
         {
             obj.last_render_time = Some(now);
+            obj.is_running_handler = false;
         }
         return;
     }
