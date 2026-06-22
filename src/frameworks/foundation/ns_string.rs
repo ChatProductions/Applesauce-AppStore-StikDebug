@@ -37,15 +37,23 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::iter::Peekable;
 use std::string::FromUtf16Error;
-use yore::code_pages::CP1252;
 
 pub type NSStringEncoding = NSUInteger;
 pub const NSASCIIStringEncoding: NSUInteger = 1;
+pub const NSNEXTSTEPStringEncoding: NSUInteger = 2;
+pub const NSJapaneseEUCStringEncoding: NSUInteger = 3;
 pub const NSUTF8StringEncoding: NSUInteger = 4;
 pub const NSISOLatin1StringEncoding: NSUInteger = 5;
+pub const NSNonLossyASCIIStringEncoding: NSUInteger = 7;
 pub const NSShiftJISStringEncoding: NSUInteger = 8;
+pub const NSISOLatin2StringEncoding: NSUInteger = 9;
 pub const NSUnicodeStringEncoding: NSUInteger = 10;
+pub const NSWindowsCP1251StringEncoding: NSUInteger = 11;
 pub const NSWindowsCP1252StringEncoding: NSUInteger = 12;
+pub const NSWindowsCP1253StringEncoding: NSUInteger = 13;
+pub const NSWindowsCP1254StringEncoding: NSUInteger = 14;
+pub const NSWindowsCP1250StringEncoding: NSUInteger = 15;
+pub const NSISO2022JPStringEncoding: NSUInteger = 21;
 pub const NSMacOSRomanStringEncoding: NSUInteger = 30;
 pub const NSUTF16StringEncoding: NSUInteger = NSUnicodeStringEncoding;
 pub const NSNextStepLatinStringEncoding: NSUInteger = 0x422;
@@ -62,18 +70,195 @@ pub const NSBackwardsSearch: NSUInteger = 4;
 pub const NSNumericSearch: NSUInteger = 64;
 
 /// Encodings that C strings (null-terminated byte strings) can use.
+///
+/// These are all encodings whose representation of ASCII content never
+/// produces a NUL byte mid-string, so a null-terminated C buffer can be
+/// interpreted in them unambiguously. UTF-16/UTF-32 are deliberately
+/// excluded because their code units routinely contain NUL bytes.
 const C_STRING_FRIENDLY_ENCODINGS: &[NSStringEncoding] = &[
     NSASCIIStringEncoding,
     NSUTF8StringEncoding,
+    NSWindowsCP1250StringEncoding,
+    NSWindowsCP1251StringEncoding,
     NSWindowsCP1252StringEncoding,
+    NSWindowsCP1253StringEncoding,
+    NSWindowsCP1254StringEncoding,
     NSMacOSRomanStringEncoding,
     NSISOLatin1StringEncoding,
+    NSISOLatin2StringEncoding,
     NSShiftJISStringEncoding,
-    NSUTF32LittleEndianStringEncoding,
+    NSJapaneseEUCStringEncoding,
+    NSNEXTSTEPStringEncoding,
     NSNextStepLatinStringEncoding,
-    NSUTF32StringEncoding,
-    NSUTF32BigEndianStringEncoding,
 ];
+
+/// Unicode mappings for bytes 0x80..=0xFF in the NeXTSTEP / NSNEXTSTEP
+/// encoding (`NSNEXTSTEPStringEncoding` / `NSNextStepLatinStringEncoding`).
+///
+/// Bytes 0x00..=0x7F map identically to ASCII. The table below is derived
+/// from the Unicode Consortium's official mapping file
+/// (`MAPPINGS/VENDORS/NEXT/NEXTSTEP.TXT`). Two trailing slots are unused in
+/// the source mapping and are represented here by U+FFFD (replacement).
+const NEXTSTEP_UPPER_TO_UNICODE: [u16; 128] = [
+    0x00A0, 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C7, 0x00C8, 0x00C9, 0x00CA, 0x00CB,
+    0x00CC, 0x00CD, 0x00CE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x00D9,
+    0x00DA, 0x00DB, 0x00DC, 0x00DD, 0x00DE, 0x00B5, 0x00D7, 0x00F7, 0x00A9, 0x00A1, 0x00A2, 0x00A3,
+    0x2044, 0x00A5, 0x0192, 0x00A7, 0x00A4, 0x2019, 0x201C, 0x00AB, 0x2039, 0x203A, 0xFB01, 0xFB02,
+    0x00AE, 0x2013, 0x2020, 0x2021, 0x00B7, 0x00A6, 0x00B6, 0x2022, 0x201A, 0x201E, 0x201D, 0x00BB,
+    0x2026, 0x2030, 0x00AC, 0x00BF, 0x00B9, 0x02CB, 0x00B4, 0x02C6, 0x02DC, 0x00AF, 0x02D8, 0x02D9,
+    0x00A8, 0x00B2, 0x02DA, 0x00B8, 0x00B3, 0x02DD, 0x02DB, 0x02C7, 0x2014, 0x00B1, 0x00BC, 0x00BD,
+    0x00BE, 0x00E0, 0x00E1, 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x00EB,
+    0x00EC, 0x00C6, 0x00ED, 0x00AA, 0x00EE, 0x00EF, 0x00F0, 0x00F1, 0x0141, 0x00D8, 0x0152, 0x00BA,
+    0x00F2, 0x00F3, 0x00F4, 0x00F5, 0x00F6, 0x00E6, 0x00F9, 0x00FA, 0x00FB, 0x0131, 0x00FC, 0x00FD,
+    0x0142, 0x00F8, 0x0153, 0x00DF, 0x00FE, 0x00FF, 0xFFFD, 0xFFFD,
+];
+
+/// Map an [NSStringEncoding] to the corresponding [`encoding_rs::Encoding`],
+/// for the single-/multi-byte legacy encodings that `encoding_rs` implements
+/// directly. Returns `None` for encodings handled by bespoke code paths
+/// (ASCII, the Unicode transformation formats, NeXTSTEP, ISO Latin-1, ...).
+fn encoding_rs_for(encoding: NSStringEncoding) -> Option<&'static encoding_rs::Encoding> {
+    Some(match encoding {
+        NSShiftJISStringEncoding => encoding_rs::SHIFT_JIS,
+        NSJapaneseEUCStringEncoding => encoding_rs::EUC_JP,
+        NSISO2022JPStringEncoding => encoding_rs::ISO_2022_JP,
+        NSISOLatin2StringEncoding => encoding_rs::ISO_8859_2,
+        NSWindowsCP1250StringEncoding => encoding_rs::WINDOWS_1250,
+        NSWindowsCP1251StringEncoding => encoding_rs::WINDOWS_1251,
+        NSWindowsCP1252StringEncoding => encoding_rs::WINDOWS_1252,
+        NSWindowsCP1253StringEncoding => encoding_rs::WINDOWS_1253,
+        NSWindowsCP1254StringEncoding => encoding_rs::WINDOWS_1254,
+        _ => return None,
+    })
+}
+
+/// Decode bytes in the NeXTSTEP encoding to a Rust `String`. Bytes in the
+/// ASCII range pass through unchanged; high bytes are looked up in
+/// [NEXTSTEP_UPPER_TO_UNICODE].
+fn decode_nextstep(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|&b| {
+            if b < 0x80 {
+                b as char
+            } else {
+                char::from_u32(NEXTSTEP_UPPER_TO_UNICODE[(b - 0x80) as usize] as u32)
+                    .unwrap_or('\u{FFFD}')
+            }
+        })
+        .collect()
+}
+
+/// Encode a Rust string to the NeXTSTEP encoding. Characters that have no
+/// NeXTSTEP representation are replaced with `?` (matching Apple's lossy
+/// fallback for byte encodings).
+fn encode_nextstep(string: &str) -> Vec<u8> {
+    string
+        .chars()
+        .map(|c| {
+            if (c as u32) < 0x80 {
+                c as u8
+            } else {
+                NEXTSTEP_UPPER_TO_UNICODE
+                    .iter()
+                    .position(|&u| u as u32 == c as u32)
+                    .map(|i| (i as u8) + 0x80)
+                    .unwrap_or(b'?')
+            }
+        })
+        .collect()
+}
+
+/// Encode a Rust string into the byte representation for `encoding`.
+///
+/// Returns `None` when the string contains characters that cannot be
+/// represented in a (single-byte or legacy) `encoding` and `lossy` is
+/// false — this mirrors Apple's contract where `dataUsingEncoding:` /
+/// `cStringUsingEncoding:` yield nil/NULL on an inconvertible string.
+/// When `lossy` is true, unrepresentable characters are replaced with
+/// `?` (or the codec's own substitution) instead.
+fn encode_string(string: &str, encoding: NSStringEncoding, lossy: bool) -> Option<Vec<u8>> {
+    match encoding {
+        NSASCIIStringEncoding => {
+            let mut out = Vec::with_capacity(string.len());
+            for c in string.chars() {
+                if (c as u32) <= 0x7F {
+                    out.push(c as u8);
+                } else if lossy {
+                    out.push(b'?');
+                } else {
+                    return None;
+                }
+            }
+            Some(out)
+        }
+        NSISOLatin1StringEncoding => {
+            let mut out = Vec::with_capacity(string.len());
+            for c in string.chars() {
+                if (c as u32) <= 0xFF {
+                    out.push(c as u8);
+                } else if lossy {
+                    out.push(b'?');
+                } else {
+                    return None;
+                }
+            }
+            Some(out)
+        }
+        NSUTF8StringEncoding => Some(string.as_bytes().to_vec()),
+        NSMacOSRomanStringEncoding => {
+            let (cow, _, had_errors) = encoding_rs::MACINTOSH.encode(string);
+            if had_errors && !lossy {
+                None
+            } else {
+                Some(cow.into_owned())
+            }
+        }
+        NSNEXTSTEPStringEncoding | NSNextStepLatinStringEncoding => {
+            if !lossy {
+                // Detect any character that has no NeXTSTEP representation.
+                for c in string.chars() {
+                    let representable = (c as u32) < 0x80
+                        || NEXTSTEP_UPPER_TO_UNICODE
+                            .iter()
+                            .any(|&u| u as u32 == c as u32);
+                    if !representable {
+                        return None;
+                    }
+                }
+            }
+            Some(encode_nextstep(string))
+        }
+        NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding => {
+            Some(string.encode_utf16().flat_map(u16::to_le_bytes).collect())
+        }
+        NSUTF16BigEndianStringEncoding => {
+            Some(string.encode_utf16().flat_map(u16::to_be_bytes).collect())
+        }
+        NSUTF32LittleEndianStringEncoding => {
+            Some(string.chars().flat_map(|c| (c as u32).to_le_bytes()).collect())
+        }
+        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => {
+            Some(string.chars().flat_map(|c| (c as u32).to_be_bytes()).collect())
+        }
+        _ => {
+            if let Some(enc) = encoding_rs_for(encoding) {
+                let (cow, _, had_errors) = enc.encode(string);
+                if had_errors && !lossy {
+                    None
+                } else {
+                    Some(cow.into_owned())
+                }
+            } else {
+                log!(
+                    "Warning: NSString encode with unimplemented encoding {:#x}; using UTF-8 fallback.",
+                    encoding
+                );
+                Some(string.as_bytes().to_vec())
+            }
+        }
+    }
+}
 
 pub const NSMaximumStringLength: NSUInteger = (i32::MAX - 1) as _;
 
@@ -118,17 +303,17 @@ impl StringHostObject {
 
         match encoding {
             NSASCIIStringEncoding => {
+                // 7-bit ASCII: bytes >= 0x80 are not representable. Apple
+                // substitutes them, so use the Unicode replacement marker.
                 let string: String = bytes
                     .iter()
-                    .map(|&b| if b.is_ascii() { b as char } else { '?' })
+                    .map(|&b| if b.is_ascii() { b as char } else { '\u{FFFD}' })
                     .collect();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSMacOSRomanStringEncoding => {
-                let string = CP1252.decode(&bytes).to_string();
-                StringHostObject::Utf8(Cow::Owned(string))
-            }
             NSISOLatin1StringEncoding => {
+                // ISO-8859-1 maps each byte directly onto the matching
+                // Unicode code point U+0000..=U+00FF.
                 let string: String = bytes.iter().map(|&b| b as char).collect();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
@@ -136,48 +321,93 @@ impl StringHostObject {
                 let string = String::from_utf8_lossy(&bytes).into_owned();
                 StringHostObject::Utf8(Cow::Owned(string))
             }
-            NSUTF32LittleEndianStringEncoding
-            | NSUTF32StringEncoding
-            | NSUTF32BigEndianStringEncoding
-            | NSNextStepLatinStringEncoding
-            | NSWindowsCP1252StringEncoding => {
-                let string = CP1252.decode(&bytes).to_string();
-                StringHostObject::Utf8(Cow::Owned(string))
+            NSMacOSRomanStringEncoding => {
+                // Mac OS Roman (a.k.a. "macintosh"), not CP1252.
+                let (cow, _, _) = encoding_rs::MACINTOSH.decode(&bytes);
+                StringHostObject::Utf8(Cow::Owned(cow.into_owned()))
             }
-            NSShiftJISStringEncoding => {
-                let (cow, _encoding_used, _had_errors) = SHIFT_JIS.decode(&bytes);
-                println!("ShiftJIS decoded {:?}", cow);
-                StringHostObject::Utf8(Cow::Owned(cow.to_string()))
+            NSNEXTSTEPStringEncoding | NSNextStepLatinStringEncoding => {
+                StringHostObject::Utf8(Cow::Owned(decode_nextstep(&bytes)))
             }
             NSUTF16StringEncoding
             | NSUTF16BigEndianStringEncoding
             | NSUTF16LittleEndianStringEncoding => {
-                assert!(bytes.len().is_multiple_of(2));
+                // Keep the long-standing touchHLE default: BOMless
+                // NSUnicodeStringEncoding decodes as little-endian.
                 let is_big_endian = match encoding {
                     NSUTF16BigEndianStringEncoding => true,
                     NSUTF16LittleEndianStringEncoding => false,
-                    NSUTF16StringEncoding => match &bytes[0..2] {
-                        [0xFE, 0xFF] => true,
-                        [0xFF, 0xFE] => false,
+                    _ => match bytes.get(0..2) {
+                        Some([0xFE, 0xFF]) => true,
+                        Some([0xFF, 0xFE]) => false,
                         _ => false,
                     },
-                    _ => unreachable!(),
                 };
-                StringHostObject::Utf16(if is_big_endian {
-                    bytes
-                        .chunks(2)
-                        .map(|chunk| u16::from_be_bytes(chunk.try_into().unwrap()))
-                        .collect()
-                } else {
-                    bytes
-                        .chunks(2)
-                        .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
-                        .collect()
-                })
+                // Strip a leading BOM when present in the BOM-bearing form.
+                let payload: &[u8] = match (encoding, bytes.get(0..2)) {
+                    (NSUTF16StringEncoding, Some([0xFF, 0xFE]))
+                    | (NSUTF16StringEncoding, Some([0xFE, 0xFF])) => &bytes[2..],
+                    _ => &bytes,
+                };
+                // A trailing odd byte cannot form a code unit; ignore it
+                // rather than panicking (Apple tolerates truncated input).
+                let units: Utf16String = payload
+                    .chunks_exact(2)
+                    .map(|chunk| {
+                        let pair = [chunk[0], chunk[1]];
+                        if is_big_endian {
+                            u16::from_be_bytes(pair)
+                        } else {
+                            u16::from_le_bytes(pair)
+                        }
+                    })
+                    .collect();
+                StringHostObject::Utf16(units)
+            }
+            NSUTF32StringEncoding
+            | NSUTF32BigEndianStringEncoding
+            | NSUTF32LittleEndianStringEncoding => {
+                let is_big_endian = match encoding {
+                    NSUTF32BigEndianStringEncoding => true,
+                    NSUTF32LittleEndianStringEncoding => false,
+                    _ => match bytes.get(0..4) {
+                        Some([0x00, 0x00, 0xFE, 0xFF]) => true,
+                        Some([0xFF, 0xFE, 0x00, 0x00]) => false,
+                        _ => false,
+                    },
+                };
+                let payload: &[u8] = match (encoding, bytes.get(0..4)) {
+                    (NSUTF32StringEncoding, Some([0xFF, 0xFE, 0x00, 0x00]))
+                    | (NSUTF32StringEncoding, Some([0x00, 0x00, 0xFE, 0xFF])) => &bytes[4..],
+                    _ => &bytes,
+                };
+                let string: String = payload
+                    .chunks_exact(4)
+                    .map(|chunk| {
+                        let quad = [chunk[0], chunk[1], chunk[2], chunk[3]];
+                        let scalar = if is_big_endian {
+                            u32::from_be_bytes(quad)
+                        } else {
+                            u32::from_le_bytes(quad)
+                        };
+                        char::from_u32(scalar).unwrap_or('\u{FFFD}')
+                    })
+                    .collect();
+                StringHostObject::Utf8(Cow::Owned(string))
             }
             _ => {
-                println!("Warning: Unimplemented encoding {:#x}. Using lossy UTF-8 fallback to prevent crash.", encoding);
-                StringHostObject::Utf8(Cow::Owned(String::from_utf8_lossy(&bytes).into_owned()))
+                if let Some(enc) = encoding_rs_for(encoding) {
+                    let (cow, _, _) = enc.decode(&bytes);
+                    StringHostObject::Utf8(Cow::Owned(cow.into_owned()))
+                } else {
+                    log!(
+                        "Warning: NSString decode with unimplemented encoding {:#x}; using lossy UTF-8 fallback.",
+                        encoding
+                    );
+                    StringHostObject::Utf8(Cow::Owned(
+                        String::from_utf8_lossy(&bytes).into_owned(),
+                    ))
+                }
             }
         }
     }
@@ -434,7 +664,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (id)initWithCString:(ConstPtr<u8>)c_string encoding:(NSStringEncoding)encoding {
-    assert!(C_STRING_FRIENDLY_ENCODINGS.contains(&encoding), "encoding {encoding}");
+    if c_string.is_null() {
+        release(env, this);
+        return nil;
+    }
+    // Apple's contract: this initialiser returns nil (rather than aborting)
+    // when the bytes cannot be interpreted in the requested encoding. C-string
+    // initialisers are only meaningful for encodings whose ASCII bytes never
+    // contain an embedded NUL, but we still decode best-effort for any other
+    // value rather than crashing the whole emulator.
+    if !C_STRING_FRIENDLY_ENCODINGS.contains(&encoding) {
+        log!(
+            "Warning: [NSString initWithCString:encoding:] called with non-C-string encoding {:#x}; decoding best-effort.",
+            encoding
+        );
+    }
     let len: NSUInteger = env.mem.cstr_at(c_string).len().try_into().unwrap();
     msg![env; this initWithBytes:c_string length:len encoding:encoding]
 }
@@ -511,33 +755,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (NSUInteger)lengthOfBytesUsingEncoding:(NSStringEncoding)encoding {
-    let string = to_rust_string(env, this);
-    if C_STRING_FRIENDLY_ENCODINGS.contains(&encoding) {
-        // For byte-compatible encodings, the byte length equals the
-        // string's UTF-8 byte length (for ASCII content) or the
-        // character count (for single-byte charsets). Use the UTF-8
-        // byte length as a safe upper bound — this matches what
-        // Apple's implementation returns for UTF-8.
-        string.len().try_into().unwrap()
-    } else if encoding == NSUnicodeStringEncoding || encoding == NSUTF16StringEncoding {
-        // UTF-16: each code unit is 2 bytes. Rust's encode_utf16()
-        // gives exact code unit count.
-        (string.encode_utf16().count() * 2) as NSUInteger
-    } else if encoding == NSUTF16BigEndianStringEncoding {
-        (string.encode_utf16().count() * 2) as NSUInteger
-    } else if encoding == NSUTF32StringEncoding || encoding == NSUTF32LittleEndianStringEncoding {
-        // UTF-32: each character is 4 bytes.
-        (string.chars().count() * 4) as NSUInteger
-    } else {
-        // Fallback: return UTF-8 byte length rather than crashing.
-        // This is a safe approximation and prevents the emulator from
-        // aborting on an uncommon encoding.
-        log!(
-            "Warning: lengthOfBytesUsingEncoding: unknown encoding {}; returning UTF-8 byte count as fallback.",
-            encoding
-        );
-        string.len().try_into().unwrap()
-    }
+    // The number of bytes required to store the receiver in `encoding` is, by
+    // definition, the length of its encoded byte representation. Reusing
+    // `bytes_for_encoding` keeps this in exact agreement with what
+    // `dataUsingEncoding:`/`getBytes:...` actually produce, including for
+    // single-byte legacy charsets where a UTF-8 byte count would be wrong.
+    let bytes = bytes_for_encoding(env, this, encoding);
+    bytes.len().try_into().unwrap()
 }
 
 - (NSRange)rangeOfString:(id)search_string {
@@ -997,23 +1221,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (ConstPtr<u8>)cStringUsingEncoding:(NSStringEncoding)encoding {
     let string = to_rust_string(env, this);
-    let bytes: Vec<u8> = match encoding {
-        NSASCIIStringEncoding | NSMacOSRomanStringEncoding | NSISOLatin1StringEncoding | NSNextStepLatinStringEncoding => {
-            string.as_bytes().to_vec()
-        },
-        NSUTF8StringEncoding | NSUTF32LittleEndianStringEncoding | NSUTF32StringEncoding | NSUTF32BigEndianStringEncoding => {
-            string.as_bytes().to_vec()
-        },
-        NSUTF16LittleEndianStringEncoding | NSUnicodeStringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
-        NSUTF16BigEndianStringEncoding => string.encode_utf16().flat_map(u16::to_be_bytes).collect(),
-        NSShiftJISStringEncoding => {
-            let (cow, _, _) = SHIFT_JIS.encode(&string);
-            cow.into_owned()
-        },
-        _ => {
-            println!("Warning: cStringUsingEncoding requested with unknown encoding: {}, falling back to UTF-8", encoding);
-            string.as_bytes().to_vec()
-        }
+    // Apple returns NULL if the receiver can't be losslessly converted.
+    let Some(bytes) = encode_string(&string, encoding, false) else {
+        return Ptr::null();
     };
     let null_size: GuestUSize = match encoding {
         NSUTF16LittleEndianStringEncoding | NSUnicodeStringEncoding | NSUTF16BigEndianStringEncoding => 2,
@@ -2452,48 +2662,15 @@ fn data_using_encoding_lossy_inner(
     encoding: NSStringEncoding,
     lossy: bool,
 ) -> id {
-    if lossy {
-        println!(
-            "Warning: lossy conversion requested for '{}'",
-            to_rust_string(env, this)
-        );
-    }
     let string = to_rust_string(env, this);
+    if lossy {
+        log!("Warning: lossy conversion requested for '{}'", string);
+    }
 
-    let bytes: Vec<u8> = match encoding {
-        NSUTF16LittleEndianStringEncoding => {
-            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
-        }
-        NSUTF16BigEndianStringEncoding => {
-            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
-        }
-        NSUTF16StringEncoding => string.encode_utf16().flat_map(u16::to_le_bytes).collect(),
-        NSUTF32LittleEndianStringEncoding => string
-            .chars()
-            .flat_map(|c| (c as u32).to_le_bytes())
-            .collect(),
-        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => string
-            .chars()
-            .flat_map(|c| (c as u32).to_be_bytes())
-            .collect(),
-        NSShiftJISStringEncoding => {
-            let (cow, _, _) = encoding_rs::SHIFT_JIS.encode(&string);
-            cow.into_owned()
-        }
-        NSASCIIStringEncoding | NSISOLatin1StringEncoding | NSMacOSRomanStringEncoding => {
-            if lossy {
-                string
-                    .chars()
-                    .map(|c| if (c as u32) <= 0xFF { c as u8 } else { b'?' })
-                    .collect()
-            } else {
-                if string.chars().any(|c| (c as u32) > 0xFF) {
-                    return nil;
-                }
-                string.chars().map(|c| c as u8).collect()
-            }
-        }
-        NSUTF8StringEncoding | _ => string.as_bytes().to_vec(),
+    // Apple returns nil when the receiver cannot be represented in `encoding`
+    // and lossy conversion was not permitted.
+    let Some(bytes) = encode_string(&string, encoding, lossy) else {
+        return nil;
     };
 
     let length: NSUInteger = bytes.len().try_into().unwrap();
@@ -2815,40 +2992,9 @@ mod ns_string_tests {
 
 fn bytes_for_encoding(env: &mut Environment, str: id, encoding: NSStringEncoding) -> Vec<u8> {
     let string = to_rust_string(env, str);
-    match encoding {
-        NSASCIIStringEncoding
-        | NSMacOSRomanStringEncoding
-        | NSISOLatin1StringEncoding
-        | NSNextStepLatinStringEncoding => string.as_bytes().to_vec(),
-        NSUTF8StringEncoding | NSWindowsCP1252StringEncoding => string.as_bytes().to_vec(),
-        // Note: NSUnicodeStringEncoding is the same value as
-        // NSUTF16StringEncoding, so it is covered here too.
-        NSUTF16LittleEndianStringEncoding | NSUTF16StringEncoding => {
-            string.encode_utf16().flat_map(u16::to_le_bytes).collect()
-        }
-        NSUTF16BigEndianStringEncoding => {
-            string.encode_utf16().flat_map(u16::to_be_bytes).collect()
-        }
-        NSUTF32LittleEndianStringEncoding => string
-            .chars()
-            .flat_map(|c| (c as u32).to_le_bytes())
-            .collect(),
-        NSUTF32BigEndianStringEncoding | NSUTF32StringEncoding => string
-            .chars()
-            .flat_map(|c| (c as u32).to_be_bytes())
-            .collect(),
-        NSShiftJISStringEncoding => {
-            let (cow, _, _) = SHIFT_JIS.encode(&string);
-            cow.into_owned()
-        }
-        _ => {
-            log!(
-                "Warning: NSString byte conversion requested with unknown encoding: {}; using UTF-8",
-                encoding
-            );
-            string.as_bytes().to_vec()
-        }
-    }
+    // Best-effort byte representation: callers (getBytes:, percent-escaping)
+    // expect bytes back rather than a failure, so request lossy encoding.
+    encode_string(&string, encoding, true).unwrap_or_else(|| string.as_bytes().to_vec())
 }
 
 fn bytes_for_percent_escaping(
