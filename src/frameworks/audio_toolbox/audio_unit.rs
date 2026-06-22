@@ -1198,7 +1198,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
         }
         return;
     };
-    let Some(last_render_time) = last_render_time else {
+    let Some(_last_render_time) = last_render_time else {
         log_once!("render_audio_unit: skipped (last_render_time = None)");
         if let Some(obj) = env
             .framework_state
@@ -1302,9 +1302,7 @@ pub fn render_audio_unit(env: &mut Environment, audio_unit: AudioUnit) {
             .audio_session
             .current_hardware_io_buffer_duration as f64)
         .round() as u32;
-    let elapsed_frames =
-        (now.duration_since(last_render_time).as_secs_f64() * sample_rate) as u32;
-    let frames = elapsed_frames.clamp(64, target_frames.clamp(64, 2048));
+    let frames = target_frames.clamp(64, 2048);
     let buffer_size =
         frames * stream_format.channels_per_frame * (stream_format.bits_per_channel / 8);
 
