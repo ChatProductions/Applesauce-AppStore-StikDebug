@@ -332,16 +332,15 @@ impl StringHostObject {
             NSUTF16StringEncoding
             | NSUTF16BigEndianStringEncoding
             | NSUTF16LittleEndianStringEncoding => {
-                // Determine endianness. For the BOM-bearing form, honour a
-                // leading BOM; otherwise default to big-endian (Apple's
-                // external NSUnicodeStringEncoding default).
+                // Keep the long-standing touchHLE default: BOMless
+                // NSUnicodeStringEncoding decodes as little-endian.
                 let is_big_endian = match encoding {
                     NSUTF16BigEndianStringEncoding => true,
                     NSUTF16LittleEndianStringEncoding => false,
                     _ => match bytes.get(0..2) {
-                        Some([0xFF, 0xFE]) => false,
                         Some([0xFE, 0xFF]) => true,
-                        _ => true,
+                        Some([0xFF, 0xFE]) => false,
+                        _ => false,
                     },
                 };
                 // Strip a leading BOM when present in the BOM-bearing form.
@@ -372,9 +371,9 @@ impl StringHostObject {
                     NSUTF32BigEndianStringEncoding => true,
                     NSUTF32LittleEndianStringEncoding => false,
                     _ => match bytes.get(0..4) {
-                        Some([0xFF, 0xFE, 0x00, 0x00]) => false,
                         Some([0x00, 0x00, 0xFE, 0xFF]) => true,
-                        _ => true,
+                        Some([0xFF, 0xFE, 0x00, 0x00]) => false,
+                        _ => false,
                     },
                 };
                 let payload: &[u8] = match (encoding, bytes.get(0..4)) {
