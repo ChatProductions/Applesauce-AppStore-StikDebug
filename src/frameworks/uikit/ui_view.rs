@@ -176,6 +176,7 @@ fn init_common(env: &mut Environment, this: id) -> id {
     let layer: id = msg![env; layer_class layer];
     () = msg![env; layer setDelegate:this];
     () = msg![env; layer setOpaque:true];
+    crate::frameworks::core_animation::ca_layer::set_use_implicit_animations(env, layer, false);
 
     // A view's backing layer is not retained by the view.
     env.objc.borrow_mut::<UIViewHostObject>(this).layer = layer;
