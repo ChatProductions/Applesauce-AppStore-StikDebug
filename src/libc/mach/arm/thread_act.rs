@@ -108,17 +108,6 @@ fn task_set_exception_ports(
     KERN_SUCCESS
 }
 
-fn thread_suspend(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
-    let thread_id = (thread - 1) as usize;
-    env.suspend_thread(thread_id);
-    KERN_SUCCESS
-}
-
-fn thread_resume(env: &mut Environment, thread: thread_act_t) -> kern_return_t {
-    let thread_id = (thread - 1) as usize;
-    env.resume_thread(thread_id);
-    KERN_SUCCESS
-}
 
 fn thread_get_state(
     env: &mut Environment,
@@ -173,7 +162,8 @@ fn thread_get_state(
 pub const FUNCTIONS: FunctionExports = &[
     // task_threads and task_set_exception_ports are exported from
     // mach::arm::task; not duplicated here.
-    export_c_func!(thread_suspend(_)),
-    export_c_func!(thread_resume(_)),
+    // thread_suspend and thread_resume are exported from mach::thread_info
+    // (which has a more robust implementation that bounds-checks the port
+    // number); not duplicated here to avoid a duplicate-symbol export.
     export_c_func!(thread_get_state(_, _, _, _)),
 ];
