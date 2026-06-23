@@ -40,6 +40,9 @@ Compatibility:
     - If an app overrides the `shouldAutorotateToInterfaceOrientation:` method in a `UIViewController`, and the virtual device is in a landscape orientation, touchHLE will now apply a rotation transform to the root view when it is added to a window. (@hikari-no-yume)
     - Fixed a very old assumption that the backing store of a `CAEAGLLayer` should always be 320×480 pixels. (@hikari-no-yume)
   - Support for iPad device family. Device family is deduced from the app bundle, but user can also override it with `--device-family=` option. (@ciciplusplus)
+  - Implicit Core Animation animations: changing an animatable `CALayer` property (`bounds`, `position`, `anchorPoint`, `opacity`, `hidden`, `backgroundColor`, `cornerRadius`) outside an explicit transaction now creates a default `CABasicAnimation` via the current `CATransaction`, while `UIView` backing layers keep implicit animations disabled so existing `UIView` animation handling is unaffected. (ported from touchHLE)
+  - Objective-C `+load` methods are now sent during class initialization, before any `+initialize`, matching the runtime's ordering guarantee. (ported from touchHLE)
+  - `NSGarbageCollector` (with `+defaultCollector` returning `nil`, as on iOS), `NSBundle` localized `.strings` loading in the standard (non-property-list) format, and `+[NSObject willChangeValueForKey:]`/`didChangeValueForKey:` integration. (ported from touchHLE)
 - Improved support for iOS 3.1+:
   - The bundled dynamic libraries, libgcc and libstdc++, have been updated to their iOS 4.0.1 versions. (@ciciplusplus)
   - Support for NIBArchive NIB file format decoding. (@ciciplusplus)
