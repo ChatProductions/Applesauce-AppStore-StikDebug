@@ -44,8 +44,8 @@ impl State {
             .and_then(|t| t.get_current_transaction_mut())
     }
 
-    // Unused until support for implicit animations is implemented.
-    #[allow(unused)]
+    // Used by CALayer implicit animations (see ca_layer.rs
+    // add_default_implied_basic_animation).
     pub fn add_animation(env: &mut Environment, layer: id, animation: id) {
         let layer_class = msg![env; layer class];
         let ca_layer = env.objc.get_known_class("CALayer", &mut env.mem);

@@ -470,6 +470,11 @@ fn substitute_classes(
 }
 
 impl ObjC {
+    /// Iterator over all known classes and their names.
+    pub fn all_classes(&self) -> impl Iterator<Item = (&String, &Class)> {
+        self.classes.iter()
+    }
+
     fn get_class(&self, name: &str, is_metaclass: bool, mem: &Mem) -> Option<Class> {
         let class = self.classes.get(name).copied()?;
         Some(if is_metaclass {
@@ -1107,6 +1112,33 @@ impl ObjC {
                 class = next;
             }
         }
+    }
+
+    /// Check whether `class` is a placeholder for a class touchHLE/HyperHLE
+    /// does not implement (an `UnimplementedClass` host object).
+    pub fn is_unimplemented_class(&self, class: Class) -> bool {
+        if class == nil {
+            return false;
+        }
+        let Some(host_object) = self.get_host_object(class) else {
+            return false;
+        };
+        matches!(
+            host_object.as_any().downcast_ref(),
+            Some(UnimplementedClass { .. })
+        )
+    }
+
+    /// Check whether `class` is a "fake" class (a `FakeClass` host object),
+    /// i.e. one we tolerate the existence of without truly implementing.
+    pub fn is_fake_class(&self, class: Class) -> bool {
+        if class == nil {
+            return false;
+        }
+        let Some(host_object) = self.get_host_object(class) else {
+            return false;
+        };
+        matches!(host_object.as_any().downcast_ref(), Some(FakeClass { .. }))
     }
 
     pub fn get_class_name(&self, class: Class) -> &str {

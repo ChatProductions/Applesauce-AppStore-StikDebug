@@ -8,6 +8,7 @@
 //! `CALayer`.
 
 use crate::dyld::{ConstantExports, HostConstant};
+use crate::frameworks::core_animation::ca_transaction;
 use crate::frameworks::core_animation::ca_transform3d::{CATransform3D, CATransform3DIdentity};
 use crate::frameworks::core_foundation::time::CFTimeInterval;
 use crate::frameworks::core_graphics::cg_affine_transform::{
@@ -26,7 +27,7 @@ use crate::frameworks::core_graphics::cg_image::{
     kCGImageAlphaPremultipliedLast, kCGImageByteOrder32Big,
 };
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
-use crate::frameworks::foundation::ns_string::{self, to_rust_string};
+use crate::frameworks::foundation::ns_string::{self, get_static_str, to_rust_string};
 use crate::mem::{GuestUSize, Ptr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
@@ -101,6 +102,10 @@ pub(super) struct CALayerHostObject {
     /// `minificationFilterBias` — accepted for round-tripping. Defaults
     /// to 0.0 per Apple's docs.
     pub(super) minification_filter_bias: f32,
+    /// Whether implicit animations are enabled for property changes on this
+    /// layer. UIView-backing layers disable this; standalone CALayers enable
+    /// it. TODO: Remove once CAActions are implemented.
+    pub(super) use_implicit_animations: bool,
 }
 impl HostObject for CALayerHostObject {}
 
@@ -379,6 +384,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         minification_filter: kCAFilterLinear.to_owned(),
         magnification_filter: kCAFilterLinear.to_owned(),
         minification_filter_bias: 0.0,
+        use_implicit_animations: true,
     });
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
@@ -536,14 +542,27 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (CGRect)bounds { env.objc.borrow::<CALayerHostObject>(this).bounds }
 - (())setBounds:(CGRect)bounds {
     let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
-    host_object.bounds = bounds;
-    if host_object.needs_display_on_bounds_change {
+    let old_bounds = std::mem::replace(&mut host_object.bounds, bounds);
+    if host_object.use_implicit_animations && old_bounds != bounds {
+        let old_bounds: id = msg_class![env; NSValue valueWithCGRect:old_bounds];
+        let bounds: id = msg_class![env; NSValue valueWithCGRect:bounds];
+        add_default_implied_basic_animation(env, this, "bounds", old_bounds, bounds);
+    }
+    if env.objc.borrow::<CALayerHostObject>(this).needs_display_on_bounds_change {
         () = msg![env; this setNeedsDisplay];
     }
 }
 
 - (CGPoint)position { env.objc.borrow::<CALayerHostObject>(this).position }
-- (())setPosition:(CGPoint)position { env.objc.borrow_mut::<CALayerHostObject>(this).position = position; }
+- (())setPosition:(CGPoint)position {
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let old_position = std::mem::replace(&mut host_object.position, position);
+    if host_object.use_implicit_animations && old_position != position {
+        let old_position: id = msg_class![env; NSValue valueWithCGPoint:old_position];
+        let position: id = msg_class![env; NSValue valueWithCGPoint:position];
+        add_default_implied_basic_animation(env, this, "position", old_position, position);
+    }
+}
 
 // --- ДОБАВЛЕНЫ МЕТОДЫ ДЛЯ Z-POSITION ---
 - (CGFloat)zPosition { env.objc.borrow::<CALayerHostObject>(this).z_position }
@@ -551,7 +570,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 // ---------------------------------------
 
 - (CGPoint)anchorPoint { env.objc.borrow::<CALayerHostObject>(this).anchor_point }
-- (())setAnchorPoint:(CGPoint)anchor_point { env.objc.borrow_mut::<CALayerHostObject>(this).anchor_point = anchor_point; }
+- (())setAnchorPoint:(CGPoint)anchor_point {
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let old_anchor_point = std::mem::replace(&mut host_object.anchor_point, anchor_point);
+    if host_object.use_implicit_animations && old_anchor_point != anchor_point {
+        let old_anchor_point: id = msg_class![env; NSValue valueWithCGPoint:old_anchor_point];
+        let anchor_point: id = msg_class![env; NSValue valueWithCGPoint:anchor_point];
+        add_default_implied_basic_animation(env, this, "anchorPoint", old_anchor_point, anchor_point);
+    }
+}
 
 - (CGAffineTransform)affineTransform { env.objc.borrow::<CALayerHostObject>(this).affine_transform }
 - (())setAffineTransform:(CGAffineTransform)affine_transform {
@@ -650,13 +677,29 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)isHidden { env.objc.borrow::<CALayerHostObject>(this).hidden }
-- (())setHidden:(bool)hidden { env.objc.borrow_mut::<CALayerHostObject>(this).hidden = hidden; }
+- (())setHidden:(bool)hidden {
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let old_hidden = std::mem::replace(&mut host_object.hidden, hidden);
+    if host_object.use_implicit_animations && old_hidden != hidden {
+        let old_hidden: id = msg_class![env; NSNumber numberWithBool:old_hidden];
+        let hidden: id = msg_class![env; NSNumber numberWithBool:hidden];
+        add_default_implied_basic_animation(env, this, "hidden", old_hidden, hidden);
+    }
+}
 
 - (bool)isOpaque { env.objc.borrow::<CALayerHostObject>(this).opaque }
 - (())setOpaque:(bool)opaque { env.objc.borrow_mut::<CALayerHostObject>(this).opaque = opaque; }
 
 - (f32)opacity { env.objc.borrow::<CALayerHostObject>(this).opacity }
-- (())setOpacity:(f32)opacity { env.objc.borrow_mut::<CALayerHostObject>(this).opacity = opacity; }
+- (())setOpacity:(f32)opacity {
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let old_opacity = std::mem::replace(&mut host_object.opacity, opacity);
+    if host_object.use_implicit_animations && old_opacity != opacity {
+        let old_opacity: id = msg_class![env; NSNumber numberWithFloat:old_opacity];
+        let opacity: id = msg_class![env; NSNumber numberWithFloat:opacity];
+        add_default_implied_basic_animation(env, this, "opacity", old_opacity, opacity);
+    }
+}
 
 - (CGColorRef)backgroundColor {
     if let Some(bg_color) = env.objc.borrow::<CALayerHostObject>(this).background_color {
@@ -665,13 +708,27 @@ pub const CLASSES: ClassExports = objc_classes! {
         autorelease(env, obj)
     } else { nil }
 }
-- (())setBackgroundColor:(CGColorRef)new_color {
-    let new_color = if new_color == nil { None } else { Some(*env.objc.borrow::<CGColorHostObject>(new_color)) };
-    env.objc.borrow_mut::<CALayerHostObject>(this).background_color = new_color;
+- (())setBackgroundColor:(CGColorRef)new_color_ref {
+    let old_color_ref: CGColorRef = msg![env; this backgroundColor];
+    let new_color = if new_color_ref == nil { None } else { Some(*env.objc.borrow::<CGColorHostObject>(new_color_ref)) };
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let use_implicit = host_object.use_implicit_animations;
+    host_object.background_color = new_color;
+    if use_implicit && old_color_ref != nil && new_color_ref != nil {
+        add_default_implied_basic_animation(env, this, "backgroundColor", old_color_ref, new_color_ref);
+    }
 }
 
 - (CGFloat)cornerRadius { env.objc.borrow::<CALayerHostObject>(this).corner_radius }
-- (())setCornerRadius:(CGFloat)corner_radius { env.objc.borrow_mut::<CALayerHostObject>(this).corner_radius = corner_radius; }
+- (())setCornerRadius:(CGFloat)corner_radius {
+    let host_object = env.objc.borrow_mut::<CALayerHostObject>(this);
+    let old_corner_radius = std::mem::replace(&mut host_object.corner_radius, corner_radius);
+    if host_object.use_implicit_animations && old_corner_radius != corner_radius {
+        let old_corner_radius: id = msg_class![env; NSNumber numberWithFloat:old_corner_radius];
+        let corner_radius: id = msg_class![env; NSNumber numberWithFloat:corner_radius];
+        add_default_implied_basic_animation(env, this, "cornerRadius", old_corner_radius, corner_radius);
+    }
+}
 
 - (CGFloat)borderWidth { env.objc.borrow::<CALayerHostObject>(this).border_width }
 - (())setBorderWidth:(CGFloat)border_width { env.objc.borrow_mut::<CALayerHostObject>(this).border_width = border_width; }
@@ -1175,4 +1232,33 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
 
     let _ = common_ancestor;
     other_transform.concat(this_transform.invert())
+}
+
+/// Add a default implicit `CABasicAnimation` for a property change on a layer.
+///
+/// When a CALayer's animatable property is changed outside of an explicit
+/// animation block, Core Animation implicitly animates the transition using
+/// the layer's default action (a `CABasicAnimation` over ~0.25s, controlled by
+/// the current `CATransaction`). UIView-backing layers opt out of this (see
+/// `set_use_implicit_animations`), matching UIKit's behaviour where view
+/// property changes are only animated inside an animation block.
+fn add_default_implied_basic_animation(
+    env: &mut Environment,
+    layer: id,
+    key_path: &'static str,
+    from_value: id,
+    to_value: id,
+) {
+    let key_path = get_static_str(env, key_path);
+    let animation = msg_class![env; CABasicAnimation animationWithKeyPath:key_path];
+    () = msg![env; animation setFromValue: from_value];
+    () = msg![env; animation setToValue: to_value];
+    ca_transaction::State::add_animation(env, layer, animation);
+}
+
+/// Enable or disable implicit animations for property changes on a layer.
+pub fn set_use_implicit_animations(env: &mut Environment, layer: id, enable: bool) {
+    env.objc
+        .borrow_mut::<CALayerHostObject>(layer)
+        .use_implicit_animations = enable;
 }
