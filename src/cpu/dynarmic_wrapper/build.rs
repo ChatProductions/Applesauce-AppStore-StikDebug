@@ -40,6 +40,18 @@ fn main() {
     build.define("DYNARMIC_USE_BUNDLED_EXTERNALS", "ON");
     build.define("CMAKE_POLICY_VERSION_MINIMUM", "3.5");
 
+    // The fmt library bundled with dynarmic (v10.1.0) uses a `consteval`
+    // constructor for `basic_format_string` to perform compile-time format
+    // string checking. Newer compilers (e.g. AppleClang 21 / Xcode 26) reject
+    // this because the constructor's pointer arithmetic isn't a constant
+    // expression under their stricter `consteval` evaluation, breaking the
+    // build. Predefining FMT_CONSTEVAL to empty makes fmt's `#ifndef
+    // FMT_CONSTEVAL` block a no-op, so the constructor is no longer
+    // `consteval` and FMT_HAS_CONSTEVAL stays undefined (it gates the
+    // compile-time `parse_format_string` call). fmt then falls back to runtime
+    // format-string checking. This is harmless on older compilers too.
+    build.cxxflag("-DFMT_CONSTEVAL=");
+
     // This is Windows- and Android-specific because on macOS or Linux, you can
     // easily get Boost with a package manager.
     let os = env::var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS was not set");
