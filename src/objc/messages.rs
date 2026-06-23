@@ -122,6 +122,7 @@ fn objc_msgSend_inner(
     selector: SEL,
     super2: Option<Class>,
     tolerate_type_mismatch: bool,
+    skip_initialize: bool,
 ) {
     log_dbg!(
         "Dispatching {} for {:?}",
@@ -231,7 +232,7 @@ fn objc_msgSend_inner(
     // superclasses) before this message reaches its IMP. Skipped for super
     // calls — the calling class is already initialized by the time we reach
     // a `super` call site inside one of its methods.
-    if super2.is_none() {
+    if super2.is_none() && !skip_initialize {
         let class_to_init = if let Some(host_object) = env.objc.get_host_object(orig_class) {
             if let Some(co) = host_object
                 .as_any()
@@ -431,6 +432,7 @@ Type mismatch when sending message {} to {:?}!
 pub(super) fn objc_msgSend(env: &mut Environment, receiver: id, selector: SEL) {
     objc_msgSend_inner(
         env, receiver, selector, /* super2: */ None, /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ false,
     )
 }
 
@@ -438,6 +440,20 @@ pub(super) fn objc_msgSend(env: &mut Environment, receiver: id, selector: SEL) {
 pub(crate) fn _touchHLE_objc_msgSend_tolerant(env: &mut Environment, receiver: id, selector: SEL) {
     objc_msgSend_inner(
         env, receiver, selector, /* super2: */ None, /* tolerate_type_mismatch: */ true,
+        /* skip_initialize: */ false,
+    )
+}
+
+/// Variant of `objc_msgSend` that does not trigger `+initialize`.
+#[allow(non_snake_case)]
+pub(crate) fn _touchHLE_objc_msgSend_no_initialize(
+    env: &mut Environment,
+    receiver: id,
+    selector: SEL,
+) {
+    objc_msgSend_inner(
+        env, receiver, selector, /* super2: */ None, /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ true,
     )
 }
 
@@ -461,6 +477,7 @@ pub(super) fn objc_msgSend_stret(
 ) {
     objc_msgSend_inner(
         env, receiver, selector, /* super2: */ None, /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ false,
     )
 }
 
@@ -473,6 +490,7 @@ pub(crate) fn _touchHLE_objc_msgSend_stret_tolerant(
 ) {
     objc_msgSend_inner(
         env, receiver, selector, /* super2: */ None, /* tolerate_type_mismatch: */ true,
+        /* skip_initialize: */ false,
     )
 }
 
@@ -512,6 +530,7 @@ pub(super) fn objc_msgSendSuper2(
         selector,
         /* super2: */ Some(class),
         /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ false,
     )
 }
 
@@ -530,6 +549,7 @@ pub(super) fn objc_msgSendSuper2_stret(
         selector,
         /* super2: */ Some(class),
         /* tolerate_type_mismatch: */ false,
+        /* skip_initialize: */ false,
     )
 }
 
@@ -629,6 +649,27 @@ where
     } else {
         (_touchHLE_objc_msgSend_tolerant as fn(&mut Environment, id, SEL)).call_from_host(env, args)
     }
+}
+
+/// Variant of [msg_send] which does not trigger `+initialize` on the receiver.
+///
+/// This is meant for sending `+load`: the Objective-C runtime guarantees that
+/// `+load` runs before `+initialize`, so it must not go through the normal
+/// [msg_send] path (which would call `+initialize` first).
+pub fn msg_send_no_initialize<R, P>(env: &mut Environment, args: P) -> R
+where
+    fn(&mut Environment, id, SEL): CallFromHost<R, P>,
+    (R, P): MsgSendSignature,
+    R: GuestRet,
+{
+    assert!(
+        R::SIZE_IN_MEM.is_none(),
+        "msg_send_no_initialize does not support struct returns"
+    );
+    // Provide type info for dynamic type checking.
+    env.objc.message_type_info = Some(<(R, P) as MsgSendSignature>::type_info());
+    (_touchHLE_objc_msgSend_no_initialize as fn(&mut Environment, id, SEL))
+        .call_from_host(env, args)
 }
 
 /// Counterpart of [MsgSendSignature] for [msg_send_super2].
