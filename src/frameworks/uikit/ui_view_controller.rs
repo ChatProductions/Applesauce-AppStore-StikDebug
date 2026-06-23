@@ -601,9 +601,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
 
     // Locate a window to host the modal view. Prefer the presenting view's
-    // window (matches Apple's behaviour of presenting on top of the existing
-    // hierarchy). Fall back to the application's key window when the
-    // presenting controller is not yet attached.
+    // window, but if the controller isn't attached yet fall back to the app's
+    // key window or, failing that, the first visible window.
     let presenter_view: id = msg![env; this view];
     let mut window: id = if presenter_view != nil {
         msg![env; presenter_view window]
@@ -613,6 +612,21 @@ pub const CLASSES: ClassExports = objc_classes! {
     if window == nil {
         let app: id = msg_class![env; UIApplication sharedApplication];
         window = msg![env; app keyWindow];
+    }
+    if window == nil {
+        let app: id = msg_class![env; UIApplication sharedApplication];
+        let windows: id = msg![env; app windows];
+        let count: NSUInteger = msg![env; windows count];
+        let mut idx: NSUInteger = 0;
+        while idx < count {
+            let candidate: id = msg![env; windows objectAtIndex:idx];
+            let hidden: bool = msg![env; candidate isHidden];
+            if !hidden {
+                window = candidate;
+                break;
+            }
+            idx += 1;
+        }
     }
     if window == nil {
         log!(
