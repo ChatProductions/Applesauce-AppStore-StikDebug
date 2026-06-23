@@ -44,6 +44,7 @@ pub mod ns_error;
 pub mod ns_exception;
 pub mod ns_file_handle;
 pub mod ns_file_manager;
+pub mod ns_garbage_collector;
 pub mod ns_host;
 pub mod ns_http_cookie_storage;
 pub mod ns_index_path;
@@ -1527,6 +1528,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         ns_exception::CLASSES,
         ns_file_handle::CLASSES,
         ns_file_manager::CLASSES,
+        ns_garbage_collector::CLASSES,
         ns_host::CLASSES,
         ns_http_cookie_storage::CLASSES,
         ns_index_path::CLASSES,

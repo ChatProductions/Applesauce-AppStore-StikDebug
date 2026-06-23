@@ -1109,6 +1109,33 @@ impl ObjC {
         }
     }
 
+    /// Check whether `class` is a placeholder for a class touchHLE/HyperHLE
+    /// does not implement (an `UnimplementedClass` host object).
+    pub fn is_unimplemented_class(&self, class: Class) -> bool {
+        if class == nil {
+            return false;
+        }
+        let Some(host_object) = self.get_host_object(class) else {
+            return false;
+        };
+        matches!(
+            host_object.as_any().downcast_ref(),
+            Some(UnimplementedClass { .. })
+        )
+    }
+
+    /// Check whether `class` is a "fake" class (a `FakeClass` host object),
+    /// i.e. one we tolerate the existence of without truly implementing.
+    pub fn is_fake_class(&self, class: Class) -> bool {
+        if class == nil {
+            return false;
+        }
+        let Some(host_object) = self.get_host_object(class) else {
+            return false;
+        };
+        matches!(host_object.as_any().downcast_ref(), Some(FakeClass { .. }))
+    }
+
     pub fn get_class_name(&self, class: Class) -> &str {
         // Previously this `expect`-ed and panicked the whole emulator if the
         // class pointer didn't have a registered host object (e.g. when the
