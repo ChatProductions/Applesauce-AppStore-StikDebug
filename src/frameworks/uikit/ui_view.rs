@@ -177,6 +177,7 @@ fn init_common(env: &mut Environment, this: id) -> id {
     () = msg![env; layer setDelegate:this];
     () = msg![env; layer setOpaque:true];
 
+    // A view's backing layer is not retained by the view.
     env.objc.borrow_mut::<UIViewHostObject>(this).layer = layer;
     env.framework_state.uikit.ui_view.views.push(this);
 
