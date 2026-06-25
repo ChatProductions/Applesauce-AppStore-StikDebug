@@ -51,10 +51,9 @@ fn main() {
         if os.eq_ignore_ascii_case("linux") {
             // Make Linux release builds actually include normal desktop audio.
             // Without these, OpenAL Soft can silently build with only sndio/oss/null/wave,
-            // which makes Pulse/PipeWire/ALSA impossible to use at runtime.
+            // which makes Pulse/ALSA impossible to use at runtime.
             build.define("ALSOFT_BACKEND_PULSEAUDIO", "ON");
             build.define("ALSOFT_BACKEND_ALSA", "ON");
-            build.define("ALSOFT_BACKEND_PIPEWIRE", "ON");
 
             // Fail the build if the common Linux audio backends are missing,
             // instead of producing a no-sound binary.
@@ -73,7 +72,6 @@ fn main() {
             // Linux OpenAL Soft backend dependencies for static OpenAL builds.
             println!("cargo:rustc-link-lib=dylib=pulse");
             println!("cargo:rustc-link-lib=dylib=asound");
-            println!("cargo:rustc-link-lib=dylib=pipewire-0.3");
 
             // Keep sndio available for systems/builds that include it too.
             println!("cargo:rustc-link-lib=dylib=sndio");
