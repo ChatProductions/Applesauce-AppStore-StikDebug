@@ -336,6 +336,41 @@ pub(super) fn sel_registerName(env: &mut Environment, name: ConstPtr<u8>) -> SEL
     env.objc.register_host_selector(name_str, &mut env.mem)
 }
 
+/// `SEL sel_getUid(const char *str)` — per Apple's runtime, this is
+/// functionally identical to `sel_registerName`: it registers a method
+/// name with the runtime and returns the corresponding selector.
+/// Reference: <https://developer.apple.com/documentation/objectivec/sel_getuid(_:)>
+pub(super) fn sel_getUid(env: &mut Environment, name: ConstPtr<u8>) -> SEL {
+    sel_registerName(env, name)
+}
+
+/// `const char *sel_getName(SEL sel)` — returns the C string name of a
+/// selector. In our runtime a [SEL] already wraps a pointer to its
+/// null-terminated name string, so we simply return that pointer.
+/// A null selector maps to the C string "<null selector>" in Apple's
+/// implementation; we return a null pointer, which callers treat as an
+/// empty/absent name.
+/// Reference: <https://developer.apple.com/documentation/objectivec/sel_getname(_:)>
+pub(super) fn sel_getName(_env: &mut Environment, sel: SEL) -> ConstPtr<u8> {
+    sel.0
+}
+
+/// `BOOL sel_isEqual(SEL lhs, SEL rhs)` — returns whether two selectors
+/// are equal. Selectors are registered/deduplicated, so a pointer
+/// comparison matches Apple's behavior. As a fallback (e.g. for an
+/// unregistered binary selector pointer), compare the underlying name
+/// strings too.
+/// Reference: <https://developer.apple.com/documentation/objectivec/sel_isequal(_:_:)>
+pub(super) fn sel_isEqual(env: &mut Environment, lhs: SEL, rhs: SEL) -> bool {
+    if lhs.0 == rhs.0 {
+        return true;
+    }
+    if lhs.is_null() || rhs.is_null() {
+        return false;
+    }
+    lhs.as_str(&env.mem) == rhs.as_str(&env.mem)
+}
+
 fn warn_non_utf8_selector_once(sel_cstr: ConstPtr<u8>) {
     use std::collections::HashSet;
     static SEEN: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();

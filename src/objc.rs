@@ -78,7 +78,7 @@ use properties::{
 };
 use properties::objc_setProperty_atomic;
 use properties::{property_getAttributes, property_getName};
-use selectors::sel_registerName;
+use selectors::{sel_getName, sel_getUid, sel_isEqual, sel_registerName};
 use synchronization::{objc_sync_enter, objc_sync_exit};
 
 /// Публичная обёртка над `messages::objc_msgSend` (которая `pub(super)`),
@@ -348,6 +348,9 @@ const FUNCTIONS: FunctionExports = &[
     export_c_func!(objc_sync_enter(_)),
     export_c_func!(objc_sync_exit(_)),
     export_c_func!(sel_registerName(_)),
+    export_c_func!(sel_getUid(_)),
+    export_c_func!(sel_getName(_)),
+    export_c_func!(sel_isEqual(_, _)),
     export_c_func!(objc_getClass(_)),
     export_c_func!(objc_getMetaClass(_, _)),
     export_c_func!(object_getClassName(_)),
