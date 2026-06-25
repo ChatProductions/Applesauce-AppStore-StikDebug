@@ -17,7 +17,7 @@ use crate::frameworks::core_graphics::{CGPoint, CGRect};
 use crate::frameworks::foundation::{NSInteger, NSTimeInterval, NSUInteger};
 use crate::mem::MutVoidPtr;
 use crate::objc::{
-    autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
+    autorelease, id, msg, msg_class, msg_send_no_type_checking, nil, objc_classes, release, retain, ClassExports, HostObject,
     NSZonePtr,
 };
 use crate::window::{Coords, Event, FingerId};
@@ -50,6 +50,48 @@ pub(super) struct UITouchHostObject {
 }
 impl HostObject for UITouchHostObject {}
 
+fn touchhle_should_use_landscape_touch_remap(env: &Environment) -> bool {
+    match env.bundle.bundle_identifier() {
+        // Confirmed landscape Source/Cocos games.
+        "at.source.veggie1" | "at.source.potato3D" | "at.source.potpan" => true,
+
+        // TomatoZombie is native portrait.
+        "at.source.tomzom" => false,
+
+        // Manual override for testing.
+        _ => std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some(),
+    }
+}
+
+
+fn should_remap_touch_location_for_view(env: &mut Environment, view: id) -> bool {
+    match env.bundle.bundle_identifier() {
+        // Confirmed/wip landscape Source/Cocos games.
+        "at.source.veggie1" | "at.source.potato3D" | "at.source.potpan" => return true,
+
+        // TomatoZombie is native portrait.
+        "at.source.tomzom" => return false,
+
+        _ => {}
+    }
+
+    if std::env::var_os("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE").is_some() {
+        return true;
+    }
+
+    if view == nil {
+        return false;
+    }
+
+    let view_class: crate::objc::Class = msg![env; view class];
+    let class_name = env.objc.get_class_name(view_class);
+
+    matches!(
+        class_name,
+        "CCGLView" | "EAGLView" | "CCEAGLView" | "GLKView"
+    )
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -80,24 +122,147 @@ pub const CLASSES: ClassExports = objc_classes! {
     let &UITouchHostObject { location, window, .. } = env.objc.borrow(this);
     let location_in_window: CGPoint = msg![env; window
         convertPoint:location fromWindow:nil];
-    if that_view == nil {
+    let mut result: CGPoint = if that_view == nil {
         location_in_window
     } else {
         msg![env;
         that_view convertPoint:location_in_window fromView:window]
+    };
+
+    if touchhle_should_use_landscape_touch_remap(env) {
+        // Important: this happens AFTER UIKit hit-testing. The touch can still
+        // hit the 320x480 EAGLView, but the game receives a landscape-style
+        // 480x320 point from locationInView:, which is what PotatoGold's
+        // custom OpenGL menu widgets appear to expect.
+        let old_x = result.x;
+        let old_y = result.y;
+
+        // CaptainTomato / Cocos2D landscape fix.
+        // UIKit hit-testing sees a 320x480 portrait CCGLView, but the game's
+        // Cocos/OpenGL menu expects 480x320 landscape coordinates.
+        //
+        // Default to LandscapeRight. Set TOUCHHLE_TOUCH_LANDSCAPE_LEFT=1 if
+        // taps are mirrored to the wrong side.
+        // CaptainTomato fix:
+        // Do NOT rotate. UIKit gives 320x480-ish touch coords, while the game
+        // wants 480x320-ish coords. The image is already visually rotated by
+        // the emulator/window path, so a 90-degree touch rotation makes the
+        // speaker/pause button hit the play button.
+        let mode = std::env::var("TOUCHHLE_TOUCH_MODE").unwrap_or_else(|_| {
+            match env.bundle.bundle_identifier() {
+                // CaptainTomato's confirmed working mode.
+                "at.source.veggie1" => "scale".to_string(),
+
+                // Potato Story / Potato Panic use the same scale-only touch
+                // behavior class as CaptainTomato. Do not rotate; rotation
+                // makes buttons miss entirely.
+                "at.source.potato3D" | "at.source.potpan" => "scale".to_string(),
+
+                // Other remapped apps default to the old safe behavior.
+                _ => "scale".to_string(),
+            }
+        });
+
+        let (mut new_x, mut new_y) = match mode.as_str() {
+            // LandscapeRight: portrait window -> 480x320 landscape coords.
+            "right" => (old_y, 320.0 - old_x),
+
+            // Same rotation as right, but mirrored horizontally.
+            "right-flip-x" => (480.0 - old_y, 320.0 - old_x),
+
+            // LandscapeLeft, kept for quick testing if right is mirrored.
+            "left" => (480.0 - old_y, old_x),
+
+            // Confirmed CaptainTomato behavior.
+            "scale" | _ => (
+                old_x * (480.0 / 320.0),
+                old_y * (320.0 / 480.0),
+            ),
+        };
+
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_x += offset;
+            }
+        }
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_y += offset;
+            }
+        }
+
+        log!(
+            "UITouch landscape remap: ({:.1}, {:.1}) -> ({:.1}, {:.1})",
+            old_x,
+            old_y,
+            new_x,
+            new_y
+        );
+
+        result = CGPoint {
+            x: new_x.clamp(0.0, 479.0),
+            y: new_y.clamp(0.0, 319.0),
+        };
     }
+
+    result
 }
 
 - (CGPoint)previousLocationInView:(id)that_view {
     let &UITouchHostObject { previous_location, window, .. } = env.objc.borrow(this);
     let location_in_window: CGPoint = msg![env; window
         convertPoint:previous_location fromWindow:nil];
-    if that_view == nil {
+    let mut result: CGPoint = if that_view == nil {
         location_in_window
     } else {
         msg![env;
         that_view convertPoint:location_in_window fromView:window]
+    };
+
+    if touchhle_should_use_landscape_touch_remap(env) {
+        let old_x = result.x;
+        let old_y = result.y;
+
+        // CaptainTomato / Cocos2D landscape fix.
+        // UIKit hit-testing sees a 320x480 portrait CCGLView, but the game's
+        // Cocos/OpenGL menu expects 480x320 landscape coordinates.
+        //
+        // Default to LandscapeRight. Set TOUCHHLE_TOUCH_LANDSCAPE_LEFT=1 if
+        // taps are mirrored to the wrong side.
+        // CaptainTomato fix:
+        // Do NOT rotate. UIKit gives 320x480-ish touch coords, while the game
+        // wants 480x320-ish coords. The image is already visually rotated by
+        // the emulator/window path, so a 90-degree touch rotation makes the
+        // speaker/pause button hit the play button.
+        let mut new_x = old_x * (480.0 / 320.0);
+        let mut new_y = old_y * (320.0 / 480.0);
+
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_x += offset;
+            }
+        }
+        if let Ok(offset) = std::env::var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET") {
+            if let Ok(offset) = offset.parse::<f32>() {
+                new_y += offset;
+            }
+        }
+
+        log!(
+            "UITouch landscape remap: ({:.1}, {:.1}) -> ({:.1}, {:.1})",
+            old_x,
+            old_y,
+            new_x,
+            new_y
+        );
+
+        result = CGPoint {
+            x: new_x.clamp(0.0, 479.0),
+            y: new_y.clamp(0.0, 319.0),
+        };
     }
+
+    result
 }
 
 - (id)view {
@@ -274,6 +439,16 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
             continue;
         };
         let mut view: id = msg![env; window hitTest:location_in_window withEvent:event];
+
+        if view != nil {
+            let view_class: crate::objc::Class = msg![env; view class];
+            let class_name = env.objc.get_class_name(view_class).to_owned();
+
+            if class_name == "MBProgressHUD" {
+                log!("Touch hit MBProgressHUD; keeping HUD as touch target");
+            }
+        }
+
         if view == nil {
             log_dbg!("SUPER HACK: hitTest failed, forcing touch directly into the window");
             view = window;
@@ -417,6 +592,76 @@ fn handle_touches_move(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     release(env, pool);
 }
 
+
+fn ultrahle_minionjump_drain_pending_callback(env: &mut Environment, select_only: bool) {
+    if !matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
+        return;
+    }
+
+    let Some(target_raw) = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_TARGET")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    else {
+        return;
+    };
+
+    let Some(sel_raw) = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_SEL")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+    else {
+        return;
+    };
+
+    let sender_raw = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_SENDER")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    let callback_name = std::env::var("ULTRAHLE_MINIONJUMP_PENDING_CALLBACK")
+        .unwrap_or_else(|_| "<unknown>".to_string());
+
+    let stage =
+        std::env::var("ULTRAHLE_MINIONJUMP_PENDING_STAGE").unwrap_or_else(|_| "0".to_string());
+
+    let is_level_select = callback_name == "selectLVAction:";
+    if select_only != is_level_select {
+        return;
+    }
+
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_TARGET");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_SEL");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_SENDER");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_CALLBACK");
+    std::env::remove_var("ULTRAHLE_MINIONJUMP_PENDING_STAGE");
+
+    if target_raw == 0 || sel_raw == 0 {
+        return;
+    }
+
+    let target_id = id::from_bits(target_raw);
+    let sender = id::from_bits(sender_raw);
+    let callback_sel_ptr = crate::mem::ConstPtr::<u8>::from_bits(sel_raw);
+    let callback_sel: crate::objc::SEL = unsafe { std::mem::transmute(callback_sel_ptr) };
+
+    log!(
+        "UltraHLE MinionJump: draining pending callback selector={} target={:?} sender={:?} stage={} select_only={}",
+        callback_name,
+        target_id,
+        sender,
+        stage,
+        select_only
+    );
+
+    if callback_name.ends_with(':') {
+        let _: () = msg_send_no_type_checking(env, (target_id, callback_sel, sender));
+    } else {
+        let _: () = msg_send_no_type_checking(env, (target_id, callback_sel));
+    }
+}
+
 fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     let pool: id = msg_class![env;
         NSAutoreleasePool new];
@@ -502,6 +747,14 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
     for (view, start, end) in swipe_candidates {
         recognize_swipes(env, view, start, end);
     }
+
+    // ULTRAHLE_MINIONJUMP_DRAIN_SELECT_BEGIN
+    ultrahle_minionjump_drain_pending_callback(env, true);
+    // ULTRAHLE_MINIONJUMP_DRAIN_SELECT_END
+    // ULTRAHLE_MINIONJUMP_DRAIN_POST_BEGIN
+    ultrahle_minionjump_drain_pending_callback(env, false);
+    // ULTRAHLE_MINIONJUMP_DRAIN_POST_END
+
     release(env, pool);
 }
 

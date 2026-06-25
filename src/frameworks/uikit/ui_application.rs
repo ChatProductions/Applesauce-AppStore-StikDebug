@@ -149,6 +149,15 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (UIInterfaceOrientation)statusBarOrientation {
+    // ULTRAHLE_MINIONJUMP_STATUSBAR_BEGIN
+    if matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
+        return 4 as UIInterfaceOrientation;
+    }
+    // ULTRAHLE_MINIONJUMP_STATUSBAR_END
+
     match env.window().current_rotation() {
         DeviceOrientation::Portrait => UIDeviceOrientationPortrait,
         DeviceOrientation::PortraitUpsideDown => UIDeviceOrientationPortraitUpsideDown,

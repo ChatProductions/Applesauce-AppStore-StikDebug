@@ -592,12 +592,42 @@ impl Window {
             let x = (in_x - vx as f32) / vw as f32 - 0.5;
             let y = (in_y - vy as f32) / vh as f32 - 0.5;
             // rotate
-            let matrix = window.rotation_matrix().inverse().unwrap();
-            let [x, y] = matrix.transform([x, y]);
+            //
+            // If the final EAGL presentation is not being rotated, the touch
+            // path should not rotate either. Keep hit-testing in the normal
+            // 320x480 UIKit space so EAGLView still receives the event; a
+            // separate UITouch locationInView compatibility path can remap
+            // the coordinates returned to the game.
+            let [x, y] = if std::env::var_os("TOUCHHLE_DISABLE_PRESENT_ROTATION").is_some()
+                || std::env::var_os("TOUCHHLE_DISABLE_TOUCH_ROTATION").is_some()
+            {
+                log_once!(
+                    "TOUCHHLE_DISABLE_TOUCH_ROTATION: not rotating touch hit-test coordinates [this log will only be shown once]"
+                );
+                [x, y]
+            } else {
+                let matrix = window.rotation_matrix().inverse().unwrap();
+                matrix.transform([x, y])
+            };
+
             // back to pixels
             let (out_w, out_h) = window.size_unrotated_unscaled();
-            let out_x = (x + 0.5) * out_w as f32;
-            let out_y = (y + 0.5) * out_h as f32;
+            let mut out_x = (x + 0.5) * out_w as f32;
+            let mut out_y = (y + 0.5) * out_h as f32;
+
+            // Optional hit-test tuning only. Do not use these unless you are
+            // deliberately testing the UIKit hit-test position.
+            if let Ok(offset) = std::env::var("TOUCHHLE_HITTEST_X_OFFSET") {
+                if let Ok(offset) = offset.parse::<f32>() {
+                    out_x += offset;
+                }
+            }
+            if let Ok(offset) = std::env::var("TOUCHHLE_HITTEST_Y_OFFSET") {
+                if let Ok(offset) = offset.parse::<f32>() {
+                    out_y += offset;
+                }
+            }
+
             // Keep the result strictly *inside* the iOS window. CGRect
             // containment is half-open on the high edge (a point with
             // y == bounds.size.height is *outside*), so clamping to the

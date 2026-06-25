@@ -41,6 +41,11 @@ const SUPPORTED_COMPRESSED_TEXTURE_FORMATS: &[GLenum] = &[
     gles11::PALETTE8_RGBA4_OES,
     gles11::PALETTE8_RGBA8_OES,
 ];
+
+fn trace_potatogold_render() -> bool {
+    std::env::var_os("TOUCHHLE_TRACE_POTATOGOLD_RENDER").is_some()
+}
+
 #[track_caller]
 fn with_ctx_and_mem<T, U: Default>(env: &mut Environment, f: T) -> U
 where
@@ -173,10 +178,22 @@ fn glGetError(env: &mut Environment) -> GLenum {
             use std::sync::atomic::{AtomicU32, Ordering};
             const MAX_REPORTED: usize = 16;
             static REPORTED: [AtomicU32; MAX_REPORTED] = [
-                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
-                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
-                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
-                AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
+                AtomicU32::new(0),
             ];
             let mut already_seen = false;
             for slot in &REPORTED {
@@ -514,6 +531,57 @@ fn glScissor(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: 
     })
 }
 fn glViewport(env: &mut Environment, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+    // ULTRAHLE_MINIONJUMP_VIEWPORT_BEGIN
+    let (x, y, width, height) = if matches!(
+        env.bundle.bundle_identifier(),
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) && x == 0
+        && y == 0
+        && width == 768
+        && height == 1024
+    {
+        log!("UltraHLE MinionJump: viewport swap 768x1024 -> 1024x768");
+        (0, 0, 1024, 768)
+    } else if std::env::var_os("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN").is_some()
+        && x == 0
+        && y == 0
+        && width == 768
+        && height == 1024
+    {
+        log!("UltraHLE MinionJump: env iPad landscape viewport swap 768x1024 -> 1024x768");
+        (0, 0, 1024, 768)
+    } else {
+        (x, y, width, height)
+    };
+    // ULTRAHLE_MINIONJUMP_VIEWPORT_END
+    let (mut x, mut y, mut width, mut height) = (x, y, width, height);
+
+    if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT").is_some() {
+        // PotatoGold/adrastea-style landscape apps can end up with a 20px
+        // status-bar-shortened portrait-derived viewport, e.g. 460x320,
+        // even after UIScreen/EAGL have been made landscape. That leaves the
+        // final frame cropped/scuffed. In this compatibility mode, promote
+        // the common iPhone landscape viewport cases to the full 480x320
+        // logical viewport.
+        let should_force = (x == 0 && y == 0 && width == 460 && height == 320)
+            || (x == 0 && y == 0 && width == 320 && height == 460)
+            || (x == 0 && y == 0 && width == 320 && height == 480);
+
+        if should_force {
+            log!(
+                "TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT=1: overriding glViewport({}, {}, {}, {}) to glViewport(0, 0, 480, 320)",
+                x,
+                y,
+                width,
+                height
+            );
+            x = 0;
+            y = 0;
+            width = 480;
+            height = 320;
+        }
+    }
+
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
@@ -887,12 +955,7 @@ fn glGetTexParameterxv(
         unsafe { gles.GetTexParameterxv(target, pname, params) }
     })
 }
-fn glGetTexEnvxv(
-    env: &mut Environment,
-    target: GLenum,
-    pname: GLenum,
-    params: MutPtr<GLfixed>,
-) {
+fn glGetTexEnvxv(env: &mut Environment, target: GLenum, pname: GLenum, params: MutPtr<GLfixed>) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 16);
         unsafe { gles.GetTexEnvxv(target, pname, params) }
@@ -922,23 +985,13 @@ fn glGetLightxv(env: &mut Environment, light: GLenum, pname: GLenum, params: Mut
         unsafe { gles.GetLightxv(light, pname, params) }
     })
 }
-fn glGetMaterialfv(
-    env: &mut Environment,
-    face: GLenum,
-    pname: GLenum,
-    params: MutPtr<GLfloat>,
-) {
+fn glGetMaterialfv(env: &mut Environment, face: GLenum, pname: GLenum, params: MutPtr<GLfloat>) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 4);
         unsafe { gles.GetMaterialfv(face, pname, params) }
     })
 }
-fn glGetMaterialxv(
-    env: &mut Environment,
-    face: GLenum,
-    pname: GLenum,
-    params: MutPtr<GLfixed>,
-) {
+fn glGetMaterialxv(env: &mut Environment, face: GLenum, pname: GLenum, params: MutPtr<GLfixed>) {
     with_ctx_and_mem(env, |gles, mem| {
         let params = mem.ptr_at_mut(params, 4);
         unsafe { gles.GetMaterialxv(face, pname, params) }
@@ -975,18 +1028,39 @@ fn glDrawTexfOES(
     width: GLfloat,
     height: GLfloat,
 ) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexfOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexfOES(x, y, z, width, height)
     })
 }
-fn glDrawTexiOES(
-    env: &mut Environment,
-    x: GLint,
-    y: GLint,
-    z: GLint,
-    width: GLint,
-    height: GLint,
-) {
+fn glDrawTexiOES(env: &mut Environment, x: GLint, y: GLint, z: GLint, width: GLint, height: GLint) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexiOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexiOES(x, y, z, width, height)
     })
@@ -999,6 +1073,20 @@ fn glDrawTexxOES(
     width: GLfixed,
     height: GLfixed,
 ) {
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SEEN: AtomicBool = AtomicBool::new(false);
+        if !SEEN.swap(true, Ordering::Relaxed) {
+            log!(
+                "First glDrawTexxOES({}, {}, {}, {}, {}) [this log will only be shown once]",
+                x,
+                y,
+                z,
+                width,
+                height
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexxOES(x, y, z, width, height)
     })
@@ -1021,14 +1109,7 @@ fn glDrawTexxvOES(env: &mut Environment, coords: ConstPtr<GLfixed>) {
         unsafe { gles.DrawTexxvOES(coords) }
     })
 }
-fn glDrawTexsOES(
-    env: &mut Environment,
-    x: i16,
-    y: i16,
-    z: i16,
-    width: i16,
-    height: i16,
-) {
+fn glDrawTexsOES(env: &mut Environment, x: i16, y: i16, z: i16, width: i16, height: i16) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.DrawTexsOES(x, y, z, width, height)
     })
@@ -1079,11 +1160,7 @@ fn glDiscardFramebufferEXT(
 
 /// `glPushGroupMarkerEXT` — debug marker from `GL_EXT_debug_marker`.
 /// No-op on hosts that don't expose the extension.
-fn glPushGroupMarkerEXT(
-    _env: &mut Environment,
-    _length: GLsizei,
-    _marker: ConstPtr<u8>,
-) {
+fn glPushGroupMarkerEXT(_env: &mut Environment, _length: GLsizei, _marker: ConstPtr<u8>) {
     // Debug markers are hints; safe to ignore.
 }
 
@@ -1214,7 +1291,8 @@ unsafe fn guard_client_vertex_arrays(gles: &mut dyn GLES, mem: &Mem) -> Vec<GLui
             "Warning: disabling enabled vertex attribute array #{} for this draw: \
              no buffer is bound and its client pointer {:?} is outside guest memory \
              (would crash the host GL driver)",
-            index, ptr
+            index,
+            ptr
         );
         gles.DisableVertexAttribArray(index);
         disabled.push(index);
@@ -1224,7 +1302,7 @@ unsafe fn guard_client_vertex_arrays(gles: &mut dyn GLES, mem: &Mem) -> Vec<GLui
 
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
@@ -1232,10 +1310,39 @@ fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsize
                 mode, first, count
             );
         }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 120 {
+                log!(
+                    "[POTATO RENDER TRACE] glDrawArrays #{} mode=0x{:x} first={} count={}",
+                    n + 1,
+                    mode,
+                    first,
+                    count
+                );
+            }
+        }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let disabled_arrays = guard_client_vertex_arrays(gles, mem);
         let fog_state_backup = clamp_fog_state_values(gles);
+        if std::env::var_os("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE").is_some() {
+            static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!(
+                    "TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE=1: disabling strict native GLES2 scissor/depth/cull state before Potato draws [this log will only be shown once]"
+                );
+            }
+
+            // PC desktop GL path is more forgiving about stale/clipping state.
+            // Adreno native GLES2 can happily draw only a tiny clipped piece.
+            gles.Disable(0x0c11); // GL_SCISSOR_TEST
+            gles.Disable(0x0b71); // GL_DEPTH_TEST
+            gles.Disable(0x0b44); // GL_CULL_FACE
+        }
+
         gles.DrawArrays(mode, first, count);
         restore_fog_state_values(gles, fog_state_backup);
         for index in disabled_arrays {
@@ -1251,7 +1358,7 @@ fn glDrawElements(
     indices: ConstVoidPtr,
 ) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
@@ -1259,10 +1366,40 @@ fn glDrawElements(
                 mode, count, type_
             );
         }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 160 {
+                log!(
+                    "[POTATO RENDER TRACE] glDrawElements #{} mode=0x{:x} count={} type=0x{:x} indices=0x{:x}",
+                    n + 1,
+                    mode,
+                    count,
+                    type_,
+                    indices.to_bits()
+                );
+            }
+        }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let disabled_arrays = guard_client_vertex_arrays(gles, mem);
         let fog_state_backup = clamp_fog_state_values(gles);
+        if std::env::var_os("TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE").is_some() {
+            static SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                log!(
+                    "TOUCHHLE_POTATO_NATIVE_GLES2_PC_STATE=1: disabling strict native GLES2 scissor/depth/cull state before Potato draws [this log will only be shown once]"
+                );
+            }
+
+            // PC desktop GL path is more forgiving about stale/clipping state.
+            // Adreno native GLES2 can happily draw only a tiny clipped piece.
+            gles.Disable(0x0c11); // GL_SCISSOR_TEST
+            gles.Disable(0x0b71); // GL_DEPTH_TEST
+            gles.Disable(0x0b44); // GL_CULL_FACE
+        }
+
         let indices = translate_pointer_or_offset_to_host(
             gles,
             mem,
@@ -1336,6 +1473,15 @@ fn glClearStencil(env: &mut Environment, s: GLint) {
 }
 
 fn glMatrixMode(env: &mut Environment, mode: GLenum) {
+    if trace_potatogold_render() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            log!("[POTATO RENDER TRACE] glMatrixMode(0x{:x})", mode);
+        }
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.MatrixMode(mode) });
 }
 fn glLoadIdentity(env: &mut Environment) {
@@ -1380,6 +1526,18 @@ fn glOrthof(
     near: GLfloat,
     far: GLfloat,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glOrthof(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Orthof(left, right, bottom, top, near, far)
     });
@@ -1393,6 +1551,18 @@ fn glOrthox(
     near: GLfixed,
     far: GLfixed,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glOrthox(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Orthox(left, right, bottom, top, near, far)
     });
@@ -1406,6 +1576,18 @@ fn glFrustumf(
     near: GLfloat,
     far: GLfloat,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glFrustumf(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Frustumf(left, right, bottom, top, near, far)
     });
@@ -1419,6 +1601,18 @@ fn glFrustumx(
     near: GLfixed,
     far: GLfixed,
 ) {
+    if trace_potatogold_render() {
+        log!(
+            "[POTATO RENDER TRACE] glFrustumx(left={}, right={}, bottom={}, top={}, near={}, far={})",
+            left,
+            right,
+            bottom,
+            top,
+            near,
+            far
+        );
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Frustumx(left, right, bottom, top, near, far)
     });
@@ -1497,6 +1691,19 @@ fn glIsTexture(env: &mut Environment, texture: GLuint) -> GLboolean {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.IsTexture(texture) })
 }
 fn glBindTexture(env: &mut Environment, target: GLenum, texture: GLuint) {
+    if trace_potatogold_render() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNT: AtomicU32 = AtomicU32::new(0);
+        let n = COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            log!(
+                "[POTATO RENDER TRACE] glBindTexture(target=0x{:x}, texture={})",
+                target,
+                texture
+            );
+        }
+    }
+
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.BindTexture(target, texture)
     })
@@ -1586,6 +1793,28 @@ fn glTexParameterx(env: &mut Environment, target: GLenum, pname: GLenum, param: 
 }
 fn glTexParameteriv(env: &mut Environment, target: GLenum, pname: GLenum, params: ConstPtr<GLint>) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameteriv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameteriv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1610,6 +1839,28 @@ fn glTexParameterfv(
     params: ConstPtr<GLfloat>,
 ) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameterfv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameterfv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1634,6 +1885,28 @@ fn glTexParameterxv(
     params: ConstPtr<GLfixed>,
 ) {
     if pname == gles11::TEXTURE_CROP_RECT_OES {
+        if std::env::var_os("TOUCHHLE_ENABLE_TEXTURE_CROP_RECT").is_none() {
+            return;
+        }
+
+        with_ctx_and_mem(env, |gles, mem| unsafe {
+            let params_ptr = mem.ptr_at(params, 4);
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static SEEN: AtomicBool = AtomicBool::new(false);
+                if !SEEN.swap(true, Ordering::Relaxed) {
+                    let crop = from_raw_parts(params_ptr, 4);
+                    log!(
+                        "TOUCHHLE_ENABLE_TEXTURE_CROP_RECT=1: first glTexParameterxv(GL_TEXTURE_CROP_RECT_OES) = [{}, {}, {}, {}]",
+                        crop[0],
+                        crop[1],
+                        crop[2],
+                        crop[3]
+                    );
+                }
+            }
+            gles.TexParameterxv(target, pname, params_ptr)
+        });
         return;
     }
     let fix_min_filter = env.options.fix_texture_min_filter && pname == gles11::TEXTURE_MIN_FILTER;
@@ -1699,13 +1972,32 @@ fn glTexImage2D(
     pixels: ConstVoidPtr,
 ) {
     {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
         static SEEN: AtomicBool = AtomicBool::new(false);
         if !SEEN.swap(true, Ordering::Relaxed) {
             log!(
                 "First glTexImage2D({}x{}, internalformat=0x{:x}, format=0x{:x}, type=0x{:x}) (app uploading texture data) [this log will only be shown once]",
                 width, height, internalformat as u32, format, type_
             );
+        }
+
+        if trace_potatogold_render() {
+            static COUNT: AtomicU32 = AtomicU32::new(0);
+            let n = COUNT.fetch_add(1, Ordering::Relaxed);
+            if n < 80 {
+                log!(
+                    "[POTATO RENDER TRACE] glTexImage2D #{} target=0x{:x} level={} size={}x{} internal=0x{:x} format=0x{:x} type=0x{:x} pixels_null={}",
+                    n + 1,
+                    target,
+                    level,
+                    width,
+                    height,
+                    internalformat as u32,
+                    format,
+                    type_,
+                    pixels.is_null()
+                );
+            }
         }
     }
     let fix_filter = env.options.fix_texture_min_filter && level == 0;
@@ -1840,8 +2132,14 @@ fn glCompressedTexImage2D(
             // slot per "ever seen" entry; cap at 8 distinct entries.
             const MAX_REPORTED: usize = 8;
             static REPORTED: [AtomicU64; MAX_REPORTED] = [
-                AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0),
-                AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
             ];
             let key: u64 = ((internalformat as u64) << 32) | (post_err as u64);
             let mut already_seen = false;
@@ -2775,6 +3073,79 @@ fn glGetActiveAttrib(
         }
     });
 }
+
+fn strip_captain_tomato_shader_precision(source: &str) -> String {
+    fn replace_precision_tokens(line: &str) -> String {
+        let mut out = String::with_capacity(line.len());
+        let mut token = String::new();
+
+        let flush = |token: &mut String, out: &mut String| {
+            if token == "lowp" || token == "mediump" || token == "highp" {
+                out.push_str("highp");
+            } else {
+                out.push_str(token);
+            }
+            token.clear();
+        };
+
+        for ch in line.chars() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                token.push(ch);
+            } else {
+                if !token.is_empty() {
+                    flush(&mut token, &mut out);
+                }
+                out.push(ch);
+            }
+        }
+
+        if !token.is_empty() {
+            flush(&mut token, &mut out);
+        }
+
+        out
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    let mut has_float_precision = false;
+    let mut has_int_precision = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("precision ") && trimmed.ends_with(" float;") {
+            has_float_precision = true;
+            lines.push("precision highp float;".to_string());
+            continue;
+        }
+
+        if trimmed.starts_with("precision ") && trimmed.ends_with(" int;") {
+            has_int_precision = true;
+            lines.push("precision highp int;".to_string());
+            continue;
+        }
+
+        lines.push(replace_precision_tokens(line));
+    }
+
+    let mut insert_at = 0usize;
+    while insert_at < lines.len()
+        && (lines[insert_at].trim_start().starts_with("#version")
+            || lines[insert_at].trim_start().starts_with("#extension"))
+    {
+        insert_at += 1;
+    }
+
+    if !has_int_precision {
+        lines.insert(insert_at, "precision highp int;".to_string());
+    }
+    if !has_float_precision {
+        lines.insert(insert_at, "precision highp float;".to_string());
+    }
+
+    lines.join("\n")
+}
+
 fn glShaderSource(
     env: &mut Environment,
     shader: GLuint,
@@ -2815,6 +3186,12 @@ fn glShaderSource(
         } else {
             env.mem.cstr_at(str_ptr).to_vec()
         };
+        // Normalize GLES precision qualifiers for all Cocos2D shaders.
+        // Fixes Mesa link failures like:
+        // uniform `CC_PMatrix` declared as type `f16mat4` and type `mat4`.
+        let src = String::from_utf8_lossy(&bytes_vec);
+        let bytes_vec = strip_captain_tomato_shader_precision(&src).into_bytes();
+
         let cs = std::ffi::CString::new(bytes_vec).unwrap_or_default();
         owned.push(cs);
     }
@@ -3119,7 +3496,9 @@ fn glGetActiveUniformBlockName(
         );
     });
     let n = (host_length.max(0) as usize).min(cap);
-    let dst = env.mem.bytes_at_mut(uniform_block_name.cast(), n as GuestUSize);
+    let dst = env
+        .mem
+        .bytes_at_mut(uniform_block_name.cast(), n as GuestUSize);
     dst.copy_from_slice(&name_buf[..n]);
     if !length.is_null() {
         env.mem.write(length, host_length);
@@ -3331,16 +3710,18 @@ fn glMapBufferRange(
     let guest_buf: MutPtr<GLvoid> = env.mem.alloc(length as GuestUSize).cast();
     unsafe {
         let host_slice = from_raw_parts(host_ptr as *const u8, length as usize);
-        let guest_slice = env
-            .mem
-            .bytes_at_mut(guest_buf.cast(), length as GuestUSize);
+        let guest_slice = env.mem.bytes_at_mut(guest_buf.cast(), length as GuestUSize);
         guest_slice.copy_from_slice(host_slice);
     }
-    let current_ctx: Option<crate::objc::id> =
-        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    let current_ctx: Option<crate::objc::id> = *env
+        .framework_state
+        .opengles
+        .current_ctx_for_thread(env.current_thread);
     if let Some(ctx) = current_ctx {
         let host_obj = env.objc.borrow_mut::<EAGLContextHostObject>(ctx);
-        host_obj.mapped_buffers.insert(target, (guest_buf, host_ptr));
+        host_obj
+            .mapped_buffers
+            .insert(target, (guest_buf, host_ptr));
     }
     guest_buf.cast()
 }
@@ -3353,8 +3734,10 @@ fn glFlushMappedBufferRange(
 ) {
     // Copy the relevant slice of the guest-visible buffer back to the
     // host-mapped buffer so the driver sees the writes.
-    let current_ctx: Option<crate::objc::id> =
-        *env.framework_state.opengles.current_ctx_for_thread(env.current_thread);
+    let current_ctx: Option<crate::objc::id> = *env
+        .framework_state
+        .opengles
+        .current_ctx_for_thread(env.current_thread);
     if let Some(ctx) = current_ctx {
         let mapping = env
             .objc
@@ -3669,8 +4052,7 @@ fn glTexImage3D(
         let host_pixels: *const GLvoid = if buf != 0 || pixels.is_null() {
             pixels.cast::<u8>().to_bits() as usize as *const GLvoid
         } else {
-            let total =
-                (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
+            let total = (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
             mem.bytes_at(pixels.cast(), total).as_ptr().cast()
         };
         gles.TexImage3D(
@@ -3710,8 +4092,7 @@ fn glTexSubImage3D(
         let host_pixels: *const GLvoid = if buf != 0 || pixels.is_null() {
             pixels.cast::<u8>().to_bits() as usize as *const GLvoid
         } else {
-            let total =
-                (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
+            let total = (width as GuestUSize) * (height as GuestUSize) * (depth as GuestUSize) * 4;
             mem.bytes_at(pixels.cast(), total).as_ptr().cast()
         };
         gles.TexSubImage3D(
@@ -3838,9 +4219,7 @@ fn glIsSampler(env: &mut Environment, sampler: GLuint) -> GLboolean {
 }
 
 fn glBindSampler(env: &mut Environment, unit: GLuint, sampler: GLuint) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
-        gles.BindSampler(unit, sampler)
-    });
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.BindSampler(unit, sampler) });
 }
 
 fn glSamplerParameteri(env: &mut Environment, sampler: GLuint, pname: GLenum, param: GLint) {
@@ -3891,15 +4270,11 @@ fn glIsTransformFeedback(env: &mut Environment, id: GLuint) -> GLboolean {
 }
 
 fn glPauseTransformFeedback(env: &mut Environment) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
-        gles.PauseTransformFeedback()
-    });
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.PauseTransformFeedback() });
 }
 
 fn glResumeTransformFeedback(env: &mut Environment) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
-        gles.ResumeTransformFeedback()
-    });
+    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.ResumeTransformFeedback() });
 }
 
 // -- Integer vertex attributes --
@@ -3922,14 +4297,7 @@ fn glVertexAttribIPointer(
     });
 }
 
-fn glVertexAttribI4i(
-    env: &mut Environment,
-    index: GLuint,
-    x: GLint,
-    y: GLint,
-    z: GLint,
-    w: GLint,
-) {
+fn glVertexAttribI4i(env: &mut Environment, index: GLuint, x: GLint, y: GLint, z: GLint, w: GLint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.VertexAttribI4i(index, x, y, z, w)
     });
@@ -3969,7 +4337,15 @@ fn glCompressedTexImage3D(
                 .cast()
         };
         gles.CompressedTexImage3D(
-            target, level, internalformat, width, height, depth, border, image_size, data,
+            target,
+            level,
+            internalformat,
+            width,
+            height,
+            depth,
+            border,
+            image_size,
+            data,
         )
     });
 }
@@ -4108,7 +4484,9 @@ fn glVertexAttribI4iv(env: &mut Environment, index: GLuint, v: ConstPtr<GLint>) 
 
 fn glVertexAttribI4uiv(env: &mut Environment, index: GLuint, v: ConstPtr<GLuint>) {
     let v = env.mem.ptr_at(v, 4);
-    with_ctx_and_mem(env, |gles, _mem| unsafe { gles.VertexAttribI4uiv(index, v) });
+    with_ctx_and_mem(env, |gles, _mem| unsafe {
+        gles.VertexAttribI4uiv(index, v)
+    });
 }
 
 fn glGetVertexAttribIiv(
@@ -4307,7 +4685,6 @@ fn glGetBufferPointerv(
     env.mem.write(params, Ptr::null());
 }
 
-
 // -- Integer uniforms --
 fn glUniform1ui(env: &mut Environment, location: GLint, v0: GLuint) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.Uniform1ui(location, v0) });
@@ -4338,48 +4715,28 @@ fn glUniform4ui(
     });
 }
 
-fn glUniform1uiv(
-    env: &mut Environment,
-    location: GLint,
-    count: GLsizei,
-    value: ConstPtr<GLuint>,
-) {
+fn glUniform1uiv(env: &mut Environment, location: GLint, count: GLsizei, value: ConstPtr<GLuint>) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 4);
         gles.Uniform1uiv(location, count, slice.as_ptr().cast())
     });
 }
 
-fn glUniform2uiv(
-    env: &mut Environment,
-    location: GLint,
-    count: GLsizei,
-    value: ConstPtr<GLuint>,
-) {
+fn glUniform2uiv(env: &mut Environment, location: GLint, count: GLsizei, value: ConstPtr<GLuint>) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 8);
         gles.Uniform2uiv(location, count, slice.as_ptr().cast())
     });
 }
 
-fn glUniform3uiv(
-    env: &mut Environment,
-    location: GLint,
-    count: GLsizei,
-    value: ConstPtr<GLuint>,
-) {
+fn glUniform3uiv(env: &mut Environment, location: GLint, count: GLsizei, value: ConstPtr<GLuint>) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 12);
         gles.Uniform3uiv(location, count, slice.as_ptr().cast())
     });
 }
 
-fn glUniform4uiv(
-    env: &mut Environment,
-    location: GLint,
-    count: GLsizei,
-    value: ConstPtr<GLuint>,
-) {
+fn glUniform4uiv(env: &mut Environment, location: GLint, count: GLsizei, value: ConstPtr<GLuint>) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let slice = mem.bytes_at(value.cast(), (count as GuestUSize) * 16);
         gles.Uniform4uiv(location, count, slice.as_ptr().cast())
@@ -4547,8 +4904,7 @@ fn glGetStringi(env: &mut Environment, name: GLenum, index: GLuint) -> ConstPtr<
     }
     // Copy the C string into guest memory once and intern the pointer in
     // EAGL's per-context string cache.
-    let bytes = unsafe { std::ffi::CStr::from_ptr(host_ptr as *const _) }
-        .to_bytes_with_nul();
+    let bytes = unsafe { std::ffi::CStr::from_ptr(host_ptr as *const _) }.to_bytes_with_nul();
     let guest_buf: MutPtr<u8> = env.mem.alloc(bytes.len() as GuestUSize).cast();
     env.mem
         .bytes_at_mut(guest_buf, bytes.len() as GuestUSize)
@@ -4556,11 +4912,7 @@ fn glGetStringi(env: &mut Environment, name: GLenum, index: GLuint) -> ConstPtr<
     guest_buf.cast_const()
 }
 
-fn glGetFragDataLocation(
-    env: &mut Environment,
-    program: GLuint,
-    name: ConstPtr<u8>,
-) -> GLint {
+fn glGetFragDataLocation(env: &mut Environment, program: GLuint, name: ConstPtr<u8>) -> GLint {
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let name_cstr = mem.cstr_at(name);
         let name_c = std::ffi::CString::new(name_cstr).unwrap();
@@ -4596,7 +4948,6 @@ unsafe fn restore_fog_state_values(gles: &mut dyn GLES, from_backup: Option<(f32
         gles.Fogf(gles11::FOG_END, fog_end);
     }
 }
-
 
 /// `void glLabelObjectEXT(GLenum type, GLuint object, GLsizei length, const GLchar *label)`
 ///

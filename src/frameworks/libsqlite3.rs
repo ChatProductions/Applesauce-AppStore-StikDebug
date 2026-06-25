@@ -88,15 +88,35 @@ fn set_error(db_handle: u32, msg: String) {
 // ---------- sqlite3_open ----------
 pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32 {
     let filename = read_cstring(env, filename_ptr);
-    let safe_name = filename.replace('/', "_");
+
     let path = if filename == ":memory:" {
         ":memory:".to_string()
     } else {
-        format!(
-            "/storage/emulated/0/Android/data/org.touchhle.android.unofficial/files/touchHLE_apps/{}",
-            safe_name
-        )
+        let safe_name = filename
+            .replace('/', "_")
+            .replace('\\', "_")
+            .replace(':', "_");
+
+        let app_ns = std::env::var("TOUCHHLE_SQLITE_NAMESPACE")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| env.bundle.bundle_identifier().to_string())
+            .replace('/', "_")
+            .replace('\\', "_")
+            .replace(':', "_")
+            .replace(' ', "_");
+
+        let dir = crate::paths::user_data_base_path().join("touchHLE_sqlite");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            log!("libsqlite3: failed to create sqlite dir {:?}: {}", dir, e);
+        }
+
+        dir.join(format!("{}_{}", app_ns, safe_name))
+            .to_string_lossy()
+            .into_owned()
     };
+
+    log!("libsqlite3: sqlite3_open requested {:?} => {:?}", filename, path);
 
     match Connection::open(&path) {
         Ok(conn) => {
@@ -107,7 +127,7 @@ pub fn sqlite3_open(env: &mut Environment, filename_ptr: u32, pp_db: u32) -> u32
             SQLITE_OK
         }
         Err(e) => {
-            log!("libsqlite3: sqlite3_open failed: {}", e);
+            log!("libsqlite3: sqlite3_open failed for {:?}: {}", path, e);
             let p: MutPtr<u32> = MutPtr::from_bits(pp_db);
             env.mem.write(p, 0u32);
             SQLITE_ERROR

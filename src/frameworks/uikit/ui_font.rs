@@ -21,7 +21,9 @@ use std::ops::Range;
 pub(super) struct State {
     fonts: HashMap<FontKind, Font>,
     sans_regular_ja: Option<Font>,
-    sans_bold_ja: Option<Font>,
+sans_bold_ja: Option<Font>,
+sans_regular_zh: Option<Font>,
+sans_bold_zh: Option<Font>,
     sans_regular_ar: Option<Font>,
     sans_bold_ar: Option<Font>,
 }
@@ -508,13 +510,12 @@ fn get_font<'a>(state: &'a mut State, kind: FontKind, text: &str) -> &'a Font {
         FontKind::SerifBold | FontKind::SerifBoldItalic
     );
 
-    if needs_cjk {
-        if is_bold {
-            return state.sans_bold_ja.get_or_insert_with(Font::sans_bold_ja);
-        }
-        return state.sans_regular_ja.get_or_insert_with(Font::sans_regular_ja);
+   if needs_cjk {
+    if is_bold {
+        return state.sans_bold_zh.get_or_insert_with(Font::sans_bold_zh);
     }
-
+    return state.sans_regular_zh.get_or_insert_with(Font::sans_regular_zh);
+}
     if needs_arabic {
         if is_bold {
             return state.sans_bold_ar.get_or_insert_with(Font::sans_bold_ar);

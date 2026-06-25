@@ -32,6 +32,10 @@ use crate::objc::{
 const NS_URL_ERROR_DOMAIN: &str = "NSURLErrorDomain";
 const NS_URL_ERROR_NOT_CONNECTED_TO_INTERNET: i32 = -1009;
 
+fn fake_network_success_enabled() -> bool {
+    std::env::var_os("TOUCHHLE_FAKE_NETWORK_SUCCESS").is_some()
+}
+
 // ---------------------------------------------------------------------------
 // Host object — stores the delegate so we can call it back.
 // ---------------------------------------------------------------------------
@@ -77,6 +81,60 @@ fn make_network_error(env: &mut crate::Environment) -> id {
     error
 }
 
+fn make_fake_success_data(env: &mut crate::Environment) -> id {
+    let body = b"{}";
+    let len: u32 = body.len().try_into().unwrap();
+    let ptr = env.mem.alloc(len);
+    env.mem.bytes_at_mut(ptr.cast(), len).copy_from_slice(body);
+
+    // msg_class! cannot parse chained calls like ptr.cast_const().cast_void()
+    // directly inside the macro, so prepare the argument first.
+    let bytes_ptr = ptr.cast_const().cast_void();
+    let data: id = msg_class![env; NSData dataWithBytes:bytes_ptr length:len];
+
+    // dataWithBytes:length: copies the buffer, so free our temporary guest memory.
+    env.mem.free(ptr.cast());
+    data
+}
+
+fn make_fake_http_response(env: &mut crate::Environment, request: id) -> id {
+    use crate::frameworks::foundation::ns_string::from_rust_string;
+
+    let url: id = if request != nil {
+        msg![env; request URL]
+    } else {
+        nil
+    };
+
+    let headers: id = msg_class![env; NSMutableDictionary new];
+    autorelease(env, headers);
+
+    let content_type_key = from_rust_string(env, "Content-Type".to_string());
+    autorelease(env, content_type_key);
+    let content_type_val = from_rust_string(env, "application/json".to_string());
+    autorelease(env, content_type_val);
+    () = msg![env; headers setObject:content_type_val forKey:content_type_key];
+
+    let content_len_key = from_rust_string(env, "Content-Length".to_string());
+    autorelease(env, content_len_key);
+    let content_len_val = from_rust_string(env, "2".to_string());
+    autorelease(env, content_len_val);
+    () = msg![env; headers setObject:content_len_val forKey:content_len_key];
+
+    let http_version = from_rust_string(env, "HTTP/1.1".to_string());
+    autorelease(env, http_version);
+
+    let response: id = msg_class![env; NSHTTPURLResponse alloc];
+    let response: id = msg![env;
+        response initWithURL:url
+                 statusCode:200
+                HTTPVersion:http_version
+               headerFields:headers];
+
+    autorelease(env, response);
+    response
+}
+
 // ---------------------------------------------------------------------------
 // Helper — call `connection:didFailWithError:` on the delegate.
 // Uses msg! which already handles unimplemented selectors gracefully.
@@ -88,6 +146,21 @@ fn notify_delegate_failure(env: &mut crate::Environment, connection: id, delegat
     log_dbg!("NSURLConnection: notifying delegate of failure");
     let error = make_network_error(env);
     () = msg![env; delegate connection:connection didFailWithError:error];
+}
+
+fn notify_delegate_success(env: &mut crate::Environment, connection: id, delegate: id) {
+    if delegate == nil {
+        return;
+    }
+
+    log!("NSURLConnection: TOUCHHLE_FAKE_NETWORK_SUCCESS=1, notifying delegate of fake HTTP 200 success");
+
+    let response = make_fake_http_response(env, nil);
+    let data = make_fake_success_data(env);
+
+    () = msg![env; delegate connection:connection didReceiveResponse:response];
+    () = msg![env; delegate connection:connection didReceiveData:data];
+    () = msg![env; delegate connectionDidFinishLoading:connection];
 }
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -117,6 +190,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)sendSynchronousRequest:(id)request
            returningResponse:(MutPtr<id>)response_ptr
                        error:(MutPtr<id>)error_ptr {
+
+    if fake_network_success_enabled() {
+        log!("NSURLConnection sendSynchronousRequest: TOUCHHLE_FAKE_NETWORK_SUCCESS=1, returning fake HTTP 200 + tiny JSON + no error");
+
+        if !response_ptr.is_null() {
+            let response = make_fake_http_response(env, request);
+            retain(env, response);
+            env.mem.write(response_ptr, response);
+        }
+        if !error_ptr.is_null() {
+            env.mem.write(error_ptr, nil);
+        }
+
+        let data = make_fake_success_data(env);
+        return data;
+    }
 
     log!("NSURLConnection sendSynchronousRequest: stub called (returning empty data + error)");
 
@@ -169,9 +258,7 @@ pub const CLASSES: ClassExports = objc_classes! {
          delivering NSURLErrorNotConnectedToInternet (touchHLE has no network)"
     );
 
-    // Build the failure NSError.
     let _ = request;
-    let error = make_network_error(env);
 
     // The completion handler is a `void (^)(NSURLResponse *, NSData *,
     // NSError *)` block. ARM32 ABI: the block struct's third word
@@ -184,7 +271,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     let invoke = crate::abi::GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
 
     let _ = queue;
+
+    if fake_network_success_enabled() {
+        log!(
+            "NSURLConnection sendAsynchronousRequest:queue:completionHandler:              TOUCHHLE_FAKE_NETWORK_SUCCESS=1, delivering empty data + no error"
+        );
+        let empty_data: id = msg_class![env; NSData data];
+        let _: () = invoke.call_from_host(env, (handler, nil, empty_data, nil));
+        return;
+    }
+
     // Call with (nil_response, nil_data, error) — failure.
+    let error = make_network_error(env);
     let _: () = invoke.call_from_host(env, (handler, nil, nil, error));
 }
 
@@ -237,12 +335,21 @@ pub const CLASSES: ClassExports = objc_classes! {
         // next run-loop iteration rather than synchronously during init.
         // This matches real iOS timing behavior — delegates are never
         // called during the initializer itself.
-        log_dbg!(
-            "NSURLConnection: scheduling deferred failure notification \
-             (networking not supported in touchHLE)"
-        );
-        let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
-        () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+        if fake_network_success_enabled() {
+            log_dbg!(
+                "NSURLConnection: scheduling deferred empty-success notification \
+                 (TOUCHHLE_FAKE_NETWORK_SUCCESS=1)"
+            );
+            let sel = env.objc.register_host_selector("_touchHLE_deliverSuccess".to_string(), &mut env.mem);
+            () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+        } else {
+            log_dbg!(
+                "NSURLConnection: scheduling deferred failure notification \
+                 (networking not supported in touchHLE)"
+            );
+            let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
+            () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+        }
     }
 
     this
@@ -261,15 +368,36 @@ pub const CLASSES: ClassExports = objc_classes! {
     notify_delegate_failure(env, this, delegate);
 }
 
+- (())_touchHLE_deliverSuccess {
+    let host = env.objc.borrow::<NSURLConnectionHostObject>(this);
+    if host.cancelled {
+        return;
+    }
+    let delegate = host.delegate;
+    if delegate == nil {
+        return;
+    }
+    notify_delegate_success(env, this, delegate);
+}
+
 // MARK: - Instance methods
 
 - (())start {
-    log_dbg!(
-        "NSURLConnection start: scheduling deferred failure \
-         (networking not supported in touchHLE)"
-    );
-    let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
-    () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+    if fake_network_success_enabled() {
+        log_dbg!(
+            "NSURLConnection start: scheduling deferred empty-success \
+             (TOUCHHLE_FAKE_NETWORK_SUCCESS=1)"
+        );
+        let sel = env.objc.register_host_selector("_touchHLE_deliverSuccess".to_string(), &mut env.mem);
+        () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+    } else {
+        log_dbg!(
+            "NSURLConnection start: scheduling deferred failure \
+             (networking not supported in touchHLE)"
+        );
+        let sel = env.objc.register_host_selector("_touchHLE_deliverFailure".to_string(), &mut env.mem);
+        () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+    }
 }
 
 - (())cancel {

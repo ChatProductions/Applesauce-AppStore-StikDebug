@@ -91,6 +91,7 @@ fn translate_glsl_es_with_version(source: &str, version_directive: &'static str)
         }
 
         let stripped = strip_precision_qualifiers(raw_line);
+let stripped = strip_half_types(&stripped);
         body_lines.push(stripped);
     }
 
@@ -186,7 +187,15 @@ fn strip_precision_qualifiers(line: &str) -> String {
     }
     out
 }
-
+fn strip_half_types(line: &str) -> String {
+    line.replace("f16mat4", "mat4")
+        .replace("f16mat3", "mat3")
+        .replace("f16mat2", "mat2")
+        .replace("f16vec4", "vec4")
+        .replace("f16vec3", "vec3")
+        .replace("f16vec2", "vec2")
+        .replace("float16_t", "float")
+}
 fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }

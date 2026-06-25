@@ -105,6 +105,10 @@ const kAudioFilePositionError: OSStatus = -40;
 #[allow(dead_code)]
 const kAudioFileFileNotFoundError: OSStatus = -43;
 
+fn audiofile_soft_eof_enabled() -> bool {
+    std::env::var_os("TOUCHHLE_AUDIOFILE_SOFT_EOF").is_some()
+}
+
 type AudioFilePermissions = i8;
 pub const kAudioFileReadPermission: AudioFilePermissions = 1;
 pub const kAudioFileWritePermission: AudioFilePermissions = 2;
@@ -769,15 +773,39 @@ pub fn AudioFileReadPackets(
         }
     };
 
+    let short_read = (bytes_read as u32) < bytes_to_read;
+    let packets_read = (bytes_read as u32) / packet_size;
+
+    if short_read && audiofile_soft_eof_enabled() {
+        // Do NOT pretend EOF produced a full buffer. That can make games loop
+        // forever because they think audio data still exists.
+        //
+        // Compatibility mode: report the actual amount read and return success.
+        // At true EOF this means 0 bytes / 0 packets / noErr, which lets many
+        // CoreAudio clients stop cleanly without printing eofErr forever.
+        if !out_num_bytes.is_null() {
+            env.mem.write(out_num_bytes, bytes_read.try_into().unwrap_or(0));
+        }
+        env.mem.write(io_num_packets, packets_read);
+
+        log!(
+            "AudioFileReadPackets: TOUCHHLE_AUDIOFILE_SOFT_EOF=1,              softened EOF short read ({} < {} bytes), reporting {} packet(s) without eofErr",
+            bytes_read,
+            bytes_to_read,
+            packets_read
+        );
+
+        return kAudioFileSuccess;
+    }
+
     if !out_num_bytes.is_null() {
         env.mem
             .write(out_num_bytes, bytes_read.try_into().unwrap_or(0));
     }
 
-    let packets_read = (bytes_read as u32) / packet_size;
     env.mem.write(io_num_packets, packets_read);
 
-    if (bytes_read as u32) < bytes_to_read {
+    if short_read {
         eofErr
     } else {
         kAudioFileSuccess

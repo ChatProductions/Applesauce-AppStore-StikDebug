@@ -112,7 +112,19 @@ impl State {
         &mut env.framework_state.foundation.ns_locale
     }
 }
+fn pvz_locale_override(env: &Environment) -> Option<(&'static [&'static str], &'static str, &'static str)> {
+    let id = env.bundle.bundle_identifier();
 
+    if id == "com.popcap.ios.chs.PvZiPad" {
+        // Simplified Chinese iPad HD
+        Some((&["zh-Hans", "zh_CN", "zh"], "CN", "zh_CN"))
+    } else if id == "com.popcap.ios.chs.PvZGreatWall" {
+        // Traditional Chinese iPhone / Great Wall build
+        Some((&["zh-Hant", "zh_TW", "zh-Hant_TW", "zh"], "TW", "zh_TW"))
+    } else {
+        None
+    }
+}
 // MARK: - Internal helpers
 
 fn get_preferred_languages(env: &mut Environment) -> Vec<String> {
@@ -120,6 +132,12 @@ fn get_preferred_languages(env: &mut Environment) -> Vec<String> {
     if let Some(ref preferred_languages) = options.preferred_languages {
         log!("The app requested your preferred languages. {:?} will reported based on your --preferred-languages= option.", preferred_languages);
         return preferred_languages.clone();
+    }
+
+    if let Some((langs, _country, _locale)) = pvz_locale_override(env) {
+        let languages: Vec<String> = langs.iter().map(|s| s.to_string()).collect();
+        log!("The app requested your preferred languages. {:?} will be reported for Chinese PvZ.", languages);
+        return languages;
     }
 
     let languages = get_preferred_language_codes(env);
@@ -134,6 +152,12 @@ fn get_preferred_languages(env: &mut Environment) -> Vec<String> {
 }
 
 fn get_preferred_countries(env: &mut Environment) -> Vec<String> {
+    if let Some((_langs, country, _locale)) = pvz_locale_override(env) {
+        let countries = vec![country.to_string()];
+        log!("The app requested your current locale. {:?} will be reported for Chinese PvZ.", countries);
+        return countries;
+    }
+
     let countries = get_preferred_country_codes(env);
     if countries.is_empty() {
         let country = "US".to_string();
@@ -257,7 +281,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (id)availableLocaleIdentifiers {
     // Return a minimal list — enough to not return nil.
-    let ids = ["en_US", "en_GB", "fr_FR", "de_DE", "ja_JP", "zh_CN", "es_ES"];
+    let ids = ["en_US", "en_GB", "fr_FR", "de_DE", "ja_JP", "zh_CN", "zh-Hans", "zh-Hans_CN", "es_ES"];
     let ns_strings: Vec<id> = ids
         .iter()
         .map(|s| ns_string::from_rust_string(env, s.to_string()))
@@ -316,8 +340,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (id)localeIdentifierFromComponents:(id)_components { // NSDictionary*
-    // Stub — return "en_US".
-    let s = ns_string::from_rust_string(env, "en_US".to_string());
+    let locale = if let Some((_langs, _country, locale)) = pvz_locale_override(env) {
+        locale
+    } else {
+        "en_US"
+    };
+    let s = ns_string::from_rust_string(env, locale.to_string());
     autorelease(env, s)
 }
 

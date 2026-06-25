@@ -225,6 +225,57 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
     };
 
     let app_id = bundle.bundle_identifier();
+
+    // ULTRAHLE_MINIONJUMP_SCREEN_BEGIN
+    // Minion Jump / SheepEscape needs the iPad landscape identity/profile.
+    unsafe {
+        std::env::remove_var("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY");
+        std::env::remove_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN");
+    }
+
+    if matches!(
+        app_id,
+        "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
+    ) {
+        unsafe {
+            std::env::set_var("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY", "1");
+            std::env::set_var("TOUCHHLE_FORCE_IPAD_LANDSCAPE_SCREEN", "1");
+        }
+    }
+    // ULTRAHLE_MINIONJUMP_SCREEN_END
+
+    // ULTRAHLE_POTATO_LANDSCAPE_BEGIN
+    // Potato Panic / Potato Story: use normal PC-style present rotation/composition; remap touch coordinates as landscape-right.
+    unsafe {
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT");
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER");
+        std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE");
+        std::env::remove_var("TOUCHHLE_TOUCH_MODE");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
+        std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
+        std::env::remove_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT");
+        std::env::remove_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT");
+    }
+
+    if matches!(app_id, "at.source.potpan" | "at.source.potato3D") {
+        unsafe {
+            std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
+            std::env::set_var("TOUCHHLE_TOUCH_MODE", "right-flip-x");
+
+            if cfg!(target_os = "android") {
+                // Potato Story/Panic must use the same logical GL shape as desktop:
+                // 480x320 landscape, not Android's current 320x480 Cocos viewport.
+                std::env::set_var("TOUCHHLE_POTATO_ANDROID_THUMB2_COMPAT", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEWPORT", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER", "1");
+                std::env::set_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS", "1");
+                std::env::set_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT", "1");
+            }
+        }
+    }
+    // ULTRAHLE_POTATO_LANDSCAPE_END
+
     let minimum_os_version = bundle.minimum_os_version();
     let required_device_capabilities = bundle.required_device_capabilities();
     let device_family = bundle.device_family_array();
@@ -278,9 +329,7 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         // itself tolerates malformed plists.
         let (major_str, minor_str) = match version.split_once('.') {
             Some((maj, rest)) => {
-                let minor_str = rest
-                    .split_once('.')
-                    .map_or(rest, |(minor, _patch)| minor);
+                let minor_str = rest.split_once('.').map_or(rest, |(minor, _patch)| minor);
                 (maj, minor_str)
             }
             None => (version, "0"),

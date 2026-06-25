@@ -110,6 +110,9 @@ pub const WALLPAPER_FILES: &[&str] = &[
 /// the `Documents` directory.
 pub const SANDBOX_DIR: &str = "touchHLE_sandbox";
 
+/// Name of the directory where redirected/exported SQLite databases live.
+pub const SQLITE_DIR: &str = "touchHLE_sqlite";
+
 /// Name of the directory where touchHLE will store IMG_####.PNG files saved to
 /// the Photo Album.
 pub const PHOTO_ALBUM_DIR: &str = "DCIM/100APPLE";
@@ -202,6 +205,18 @@ pub fn prepopulate_user_data_dir() {
             }
             Err(e) => {
                 log!("Warning: Couldn't create {}: {}", apps_dir.display(), e);
+            }
+        }
+    }
+
+    let sqlite_dir = base_path.join(SQLITE_DIR);
+    if !sqlite_dir.is_dir() {
+        match std::fs::create_dir(&sqlite_dir) {
+            Ok(()) => {
+                log!("Created: {}", sqlite_dir.display());
+            }
+            Err(e) => {
+                log!("Warning: Couldn't create {}: {}", sqlite_dir.display(), e);
             }
         }
     }

@@ -36,3 +36,9 @@ android/build
 # Default developer dump file
 
 DUMP.txt
+
+# Local debug junk
+*.log
+touchHLE_apps/
+target/
+*.ipa

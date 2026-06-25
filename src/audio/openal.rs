@@ -163,7 +163,37 @@ impl OpenALContext {
                 );
             }
         }
-        unsafe { Self::new_with_device_and_attrlist(_manager, device, std::ptr::null()) }
+        match unsafe { Self::new_with_device_and_attrlist(_manager, device, std::ptr::null()) } {
+            Ok(ctx) => Ok(ctx),
+            Err(e) => {
+                log!(
+                    "Could not create OpenAL context on selected device: {}; trying OpenAL Soft \"No Output\" backend.",
+                    e
+                );
+
+                unsafe {
+                    al_sys::alcCloseDevice(device);
+                    // SAFETY: This is a last-chance fallback during audio context creation.
+                    // touchHLE is still on the main startup/audio path here, and this is only
+                    // used after the selected OpenAL device failed to create a context.
+                    std::env::set_var("ALSOFT_DRIVERS", "null");
+                }
+
+                let null_name = b"No Output\0";
+                let null_device = unsafe { al_sys::alcOpenDevice(null_name.as_ptr() as *const _) };
+
+                if null_device.is_null() {
+                    return Err(
+                        "Could not open OpenAL null backend after context creation failure"
+                            .to_string(),
+                    );
+                }
+
+                unsafe {
+                    Self::new_with_device_and_attrlist(_manager, null_device, std::ptr::null())
+                }
+            }
+        }
     }
 
     pub unsafe fn new_with_device_and_attrlist(

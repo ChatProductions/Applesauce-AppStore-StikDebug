@@ -13,6 +13,23 @@ pub struct State {
     main_screen: Option<id>,
 }
 
+fn screen_size_for_current_orientation(env: &mut crate::Environment) -> (u32, u32) {
+    let (portrait_width, portrait_height) = env.window().device_family().portrait_size();
+
+    if std::env::var_os("TOUCHHLE_LANDSCAPE_UISCREEN_BOUNDS").is_some() {
+        let is_landscape = !matches!(
+            env.window().current_rotation(),
+            crate::window::DeviceOrientation::Portrait
+        );
+
+        if is_landscape {
+            return (portrait_height, portrait_width);
+        }
+    }
+
+    (portrait_width, portrait_height)
+}
+
 pub const CLASSES: ClassExports = objc_classes! {
 
 (env, this, _cmd);
@@ -50,7 +67,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Geometry
 
 - (CGRect)bounds {
-    let (width, height) = env.window().screen_size();
+    let (width, height) = screen_size_for_current_orientation(env);
+    if std::env::var_os("TOUCHHLE_LANDSCAPE_UISCREEN_BOUNDS").is_some() {
+        log!(
+            "TOUCHHLE_LANDSCAPE_UISCREEN_BOUNDS=1: UIScreen bounds reporting {}x{}",
+            width,
+            height
+        );
+    }
     CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: CGSize {
@@ -107,13 +131,12 @@ pub const CLASSES: ClassExports = objc_classes! {
 // MARK: - Display mode / overscan
 
 - (id)currentMode {
-    let (width, height) = env.window().screen_size();
+    let (width, height) = screen_size_for_current_orientation(env);
     let size = CGSize {
         width:  width  as CGFloat,
         height: height as CGFloat,
     };
 
-    // Call your new helper function directly
     crate::frameworks::uikit::ui_screen_mode::from_size(env, size, 1.0)
 }
 
