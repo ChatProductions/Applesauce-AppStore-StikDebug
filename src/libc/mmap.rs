@@ -188,10 +188,48 @@ fn mprotect(env: &mut Environment, addr: MutVoidPtr, len: GuestUSize, prot: i32)
     0
 }
 
+/// `int mlock(const void *addr, size_t len)` — lock a region of memory
+/// so it stays resident in physical RAM. touchHLE keeps the entire
+/// guest address space resident in the host process at all times, so
+/// there is nothing to pin: the memory is already non-pageable from the
+/// guest's perspective. Real Darwin returns 0 on success, so we report
+/// success as a no-op (returning -1 here would make guest code that
+/// relies on mlock — e.g. crypto/keychain libraries protecting secrets,
+/// or audio engines pinning buffers — treat initialization as failed).
+///
+/// Reference: POSIX/Darwin mlock(2) — returns 0 on success, -1 with
+/// errno on failure.
+fn mlock(env: &mut Environment, addr: ConstPtr<u8>, len: GuestUSize) -> i32 {
+    log_dbg!(
+        "mlock({:?}, {}) -> 0 (no-op; guest memory is always resident)",
+        addr,
+        len
+    );
+    set_errno(env, 0);
+    0
+}
+
+/// `int munlock(const void *addr, size_t len)` — unlock a region
+/// previously locked with `mlock`. Mirrors [mlock]: a no-op that
+/// succeeds.
+///
+/// Reference: POSIX/Darwin munlock(2) — returns 0 on success.
+fn munlock(env: &mut Environment, addr: ConstPtr<u8>, len: GuestUSize) -> i32 {
+    log_dbg!(
+        "munlock({:?}, {}) -> 0 (no-op; guest memory is always resident)",
+        addr,
+        len
+    );
+    set_errno(env, 0);
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(mmap(_, _, _, _, _, _)),
     export_c_func!(munmap(_, _)),
     export_c_func!(madvise(_, _, _)),
     export_c_func!(shm_open(_, _, _)),
     export_c_func!(mprotect(_, _, _)),
+    export_c_func!(mlock(_, _)),
+    export_c_func!(munlock(_, _)),
 ];
