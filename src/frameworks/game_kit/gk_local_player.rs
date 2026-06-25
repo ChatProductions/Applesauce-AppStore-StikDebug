@@ -60,27 +60,33 @@ fn make_not_authenticated_error(env: &mut Environment) -> id {
     error
 }
 
-/// Invoke an ObjC block whose underlying C function has the signature
-/// `void (^)(NSError *)`. Returns silently if `block` is nil or its
-/// invoke pointer is zero (the latter happens when the guest hands us
-/// a stack-allocated literal block that was never `Block_copy`-ed and
-/// has already gone out of scope). Apple's `Block_ABI`:
+/// Read the `invoke` function pointer of an ObjC block, returning `None`
+/// when the block is nil or its invoke pointer is zero. The latter happens
+/// when the guest hands us a stack-allocated literal block that was never
+/// `Block_copy`-ed and has already gone out of scope. Apple's `Block_ABI`:
 /// <https://clang.llvm.org/docs/Block-ABI-Apple.html>.
-fn invoke_error_block(env: &mut Environment, block: id, error: id) {
+fn block_invoke(env: &mut Environment, block: id) -> Option<GuestFunction> {
     if block == nil {
-        return;
+        return None;
     }
     let block_ptr: MutPtr<u32> = Ptr::from_bits(block.to_bits());
     let invoke_addr: u32 = env.mem.read(block_ptr + BLOCK_INVOKE_WORD_OFFSET);
     if invoke_addr == 0 {
         log!(
-            "Warning: GKLocalPlayer completion block {:?} has NULL invoke \
-             pointer; not calling.",
+            "Warning: GKLocalPlayer block {:?} has NULL invoke pointer; not calling.",
             block
         );
-        return;
+        return None;
     }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    Some(GuestFunction::from_addr_with_thumb_bit(invoke_addr))
+}
+
+/// Invoke an ObjC block whose underlying C function has the signature
+/// `void (^)(NSError *)`.
+fn invoke_error_block(env: &mut Environment, block: id, error: id) {
+    let Some(invoke) = block_invoke(env, block) else {
+        return;
+    };
     let block_arg: ConstVoidPtr = Ptr::from_bits(block.to_bits()).cast_const();
     <GuestFunction as CallFromHost<(), (ConstVoidPtr, id)>>::call_from_host(
         &invoke,
@@ -93,20 +99,9 @@ fn invoke_error_block(env: &mut Environment, block: id, error: id) {
 /// `void (^)(UIViewController *viewController, NSError *error)`. Used
 /// by `-[GKLocalPlayer setAuthenticateHandler:]` introduced in iOS 6.
 fn invoke_vc_error_block(env: &mut Environment, block: id, vc: id, error: id) {
-    if block == nil {
+    let Some(invoke) = block_invoke(env, block) else {
         return;
-    }
-    let block_ptr: MutPtr<u32> = Ptr::from_bits(block.to_bits());
-    let invoke_addr: u32 = env.mem.read(block_ptr + BLOCK_INVOKE_WORD_OFFSET);
-    if invoke_addr == 0 {
-        log!(
-            "Warning: GKLocalPlayer authenticate handler {:?} has NULL \
-             invoke pointer; not calling.",
-            block
-        );
-        return;
-    }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    };
     let block_arg: ConstVoidPtr = Ptr::from_bits(block.to_bits()).cast_const();
     <GuestFunction as CallFromHost<(), (ConstVoidPtr, id, id)>>::call_from_host(
         &invoke,
@@ -143,6 +138,14 @@ struct GKLocalPlayerHostObject {
     underage: bool,
     /// `NSArray*` of `NSString*` friend player IDs
     friends: id,
+    /// Retained `void (^)(UIViewController*, NSError*)` block stored by
+    /// `setAuthenticateHandler:`. GameKit keeps this for the lifetime of the
+    /// process; we hold a strong reference and release it on dealloc.
+    authenticate_handler: id,
+    /// Pending one-shot `void (^)(NSError*)` completion block from
+    /// `authenticateWithCompletionHandler:`, retained until it has been
+    /// delivered on the next run-loop iteration, then released and cleared.
+    pending_completion_handler: id,
 }
 impl HostObject for GKLocalPlayerHostObject {}
 
@@ -153,14 +156,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation GKLocalPlayer: NSObject
 
 + (id)allocWithZone:(NSZonePtr)_zone {
-    let host_object = Box::new(GKLocalPlayerHostObject {
-        player_id: nil,
-        alias: nil,
-        display_name: nil,
-        authenticated: false,
-        underage: false,
-        friends: nil,
-    });
+    let host_object = Box::<GKLocalPlayerHostObject>::default();
     env.objc.alloc_object(this, host_object, &mut env.mem)
 }
 
@@ -225,15 +221,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 //   void (^)(NSString *leaderboardIdentifier, NSError *error)
 // which is the same ABI as `void (^)(id, id)`.
 + (())loadDefaultLeaderboardIdentifierWithCompletionHandler:(id)handler {
-    if handler == nil {
+    let Some(invoke) = block_invoke(env, handler) else {
         return;
-    }
-    let block_ptr: MutPtr<u32> = Ptr::from_bits(handler.to_bits());
-    let invoke_addr: u32 = env.mem.read(block_ptr + BLOCK_INVOKE_WORD_OFFSET);
-    if invoke_addr == 0 {
-        return;
-    }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    };
     let block_arg: ConstVoidPtr = Ptr::from_bits(handler.to_bits()).cast_const();
     let error = make_not_authenticated_error(env);
     <GuestFunction as CallFromHost<(), (ConstVoidPtr, id, id)>>::call_from_host(
@@ -249,12 +239,20 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (())dealloc {
     let host = env.objc.borrow::<GKLocalPlayerHostObject>(this);
-    let (player_id, alias, display_name, friends) =
-        (host.player_id, host.alias, host.display_name, host.friends);
+    let (player_id, alias, display_name, friends, authenticate_handler, pending) = (
+        host.player_id,
+        host.alias,
+        host.display_name,
+        host.friends,
+        host.authenticate_handler,
+        host.pending_completion_handler,
+    );
     release(env, player_id);
     release(env, alias);
     release(env, display_name);
     release(env, friends);
+    release(env, authenticate_handler);
+    release(env, pending);
     env.objc.dealloc_object(this, &mut env.mem)
 }
 
@@ -287,76 +285,126 @@ pub const CLASSES: ClassExports = objc_classes! {
 // "If the local player can't be authenticated, GameKit calls your
 //  completion handler with an error."
 //
-// touchHLE has no Game Center connectivity, so we follow the
-// documented "not authenticated" branch: emit the change-of-state
-// notification, leave `isAuthenticated == NO`, and invoke the
+// touchHLE has no Game Center connectivity, so we follow the documented
+// "not authenticated" branch: leave `isAuthenticated == NO` and invoke the
 // completion handler with a `GKErrorNotAuthenticated` NSError.
 //
-// Apple's documentation states that the completion handler is always
-// called on the main thread. We enforce this by temporarily switching
-// the current_thread to 0 (main) for the callback invocation, so that
-// guest code checking `[NSThread isMainThread]` inside the handler
-// gets the expected `YES`.
+// CRITICAL: real GameKit *never* calls this handler synchronously from
+// inside the method — authentication is asynchronous and the handler is
+// delivered on a later main run-loop iteration. Some games (e.g.
+// Bloodmasque / VampGame, com.square-enix.bloodmasque.e) re-enter GameKit
+// or touch state that is only valid once the current call stack has
+// unwound; calling the handler inline made the guest `abort()` right after
+// "Error while logging in: Error Domain=GKErrorDomain Code=6". We therefore
+// retain the block and schedule delivery via
+// performSelector:withObject:afterDelay:0, exactly like NSURLConnection's
+// deferred delegate callbacks, so it fires on the next run-loop turn on the
+// main thread.
 - (())authenticateWithCompletionHandler:(id)completion_handler {
+    if completion_handler == nil {
+        // Still post the notification, mirroring GameKit's ordering.
+        post_auth_change_notification(env);
+        return;
+    }
+
+    // Block_copy the handler so it survives the caller's stack frame, and
+    // park it on the host object until the deferred selector fires.
+    let retained: id = msg![env; completion_handler copy];
+    {
+        let host = env.objc.borrow_mut::<GKLocalPlayerHostObject>(this);
+        // If a previous authentication is still pending, drop it; GameKit
+        // only honours the most recent request.
+        let old = host.pending_completion_handler;
+        host.pending_completion_handler = retained;
+        if old != nil {
+            release(env, old);
+        }
+    }
+
+    let sel = env
+        .objc
+        .register_host_selector("_touchHLE_deliverAuthCompletion".to_string(), &mut env.mem);
+    () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+}
+
+// Internal: deliver the parked completion handler on the next run-loop
+// iteration (main thread). Posts the state-change notification first, to
+// match GameKit's documented ordering, then invokes the block and releases
+// our retained reference.
+- (())_touchHLE_deliverAuthCompletion {
+    let handler = {
+        let host = env.objc.borrow_mut::<GKLocalPlayerHostObject>(this);
+        let h = host.pending_completion_handler;
+        host.pending_completion_handler = nil;
+        h
+    };
+    if handler == nil {
+        return;
+    }
+
+    post_auth_change_notification(env);
+
     let error = make_not_authenticated_error(env);
-
-    // Apple posts `GKPlayerAuthenticationDidChangeNotificationName`
-    // before invoking the completion handler so registered observers
-    // see the new state first. We mirror that ordering.
-    let notif_center: id = msg_class![env; NSNotificationCenter defaultCenter];
-    let name = ns_string::from_rust_string(
-        env,
-        GKPlayerAuthenticationDidChangeNotificationName.to_string(),
-    );
-    autorelease(env, name);
-    () = msg![env; notif_center postNotificationName:name object:nil];
-
-    // Ensure the callback runs in main-thread context (thread 0).
-    let saved_thread = env.current_thread;
-    env.current_thread = 0;
-    invoke_error_block(env, completion_handler, error);
-    env.current_thread = saved_thread;
+    invoke_error_block(env, handler, error);
+    release(env, handler);
 }
 
 // Apple reference (iOS 6+):
 // <https://developer.apple.com/documentation/gamekit/gklocalplayer/1521050-authenticatehandler>
 // "Setting the value of this property triggers authentication. […]
-//  If the player needs to sign in, the handler is called with a
-//  view controller. If the player cannot sign in, the handler is
-//  called with a non-nil error."
+//  If the player needs to sign in, the handler is called with a view
+//  controller. If the player cannot sign in, the handler is called with a
+//  non-nil error."
 //
-// We have no UI to present, so we always take the "cannot sign in"
-// branch and invoke the handler with a nil view controller and the
-// `GKErrorNotAuthenticated` NSError. The handler block is retained
-// for the lifetime of the singleton so it survives autorelease pool
-// drains, matching what UIKit does internally.
-//
-// Apple's documentation states that the handler is always called on
-// the main thread.
+// We have no UI to present, so we always take the "cannot sign in" branch
+// and invoke the handler with a nil view controller and the
+// `GKErrorNotAuthenticated` NSError. As with
+// authenticateWithCompletionHandler:, the handler must NOT run inline —
+// GameKit invokes it asynchronously on the main thread. We Block_copy and
+// retain it for the lifetime of the singleton (GameKit keeps the handler
+// and may call it again on auth-state changes) and schedule the first
+// delivery via performSelector:withObject:afterDelay:0.
 - (())setAuthenticateHandler:(id)handler {
+    // Replace any previously stored handler (GameKit keeps exactly one).
+    let retained: id = if handler != nil {
+        msg![env; handler copy]
+    } else {
+        nil
+    };
+    {
+        let host = env.objc.borrow_mut::<GKLocalPlayerHostObject>(this);
+        let old = host.authenticate_handler;
+        host.authenticate_handler = retained;
+        if old != nil {
+            release(env, old);
+        }
+    }
+    if retained == nil {
+        return;
+    }
+
+    let sel = env
+        .objc
+        .register_host_selector("_touchHLE_deliverAuthHandler".to_string(), &mut env.mem);
+    () = msg![env; this performSelector:sel withObject:nil afterDelay:0.0_f64];
+}
+
+- (id)authenticateHandler {
+    env.objc.borrow::<GKLocalPlayerHostObject>(this).authenticate_handler
+}
+
+// Internal: deliver the stored authenticate handler on the next run-loop
+// iteration (main thread) with a nil view controller and a not-authenticated
+// error. We keep the handler retained on the host object (do not release it
+// here) because GameKit may invoke it more than once.
+- (())_touchHLE_deliverAuthHandler {
+    let handler = env.objc.borrow::<GKLocalPlayerHostObject>(this).authenticate_handler;
     if handler == nil {
         return;
     }
-    // Apple's setter is documented as `copy` — block setters always
-    // perform `Block_copy` so the block survives going out of scope
-    // in the caller. `-[NSObject copy]` on a heap-allocated block
-    // bumps its refcount; on a stack block (rare for property
-    // setters) `copy` returns a heap copy.
-    let retained_handler: id = msg![env; handler copy];
-
-    let vc: id = nil;
+    post_auth_change_notification(env);
     let error = make_not_authenticated_error(env);
-
-    // Ensure the callback runs in main-thread context (thread 0).
-    let saved_thread = env.current_thread;
-    env.current_thread = 0;
-    invoke_vc_error_block(env, retained_handler, vc, error);
-    env.current_thread = saved_thread;
-
-    // Drop our reference once the handler has been invoked. Apps that
-    // store the handler themselves are unaffected because Block_copy
-    // gives them an independent reference.
-    release(env, retained_handler);
+    invoke_vc_error_block(env, handler, nil, error);
 }
 
 // MARK: - Friends
@@ -378,15 +426,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 // array, matching what a real device returns when the local player
 // is authenticated but has no friends.
 - (())loadFriendsWithCompletionHandler:(id)completion_handler {
-    if completion_handler == nil {
+    let Some(invoke) = block_invoke(env, completion_handler) else {
         return;
-    }
-    let block_ptr: MutPtr<u32> = Ptr::from_bits(completion_handler.to_bits());
-    let invoke_addr: u32 = env.mem.read(block_ptr + BLOCK_INVOKE_WORD_OFFSET);
-    if invoke_addr == 0 {
-        return;
-    }
-    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_addr);
+    };
     let block_arg: ConstVoidPtr =
         Ptr::from_bits(completion_handler.to_bits()).cast_const();
 
@@ -411,6 +453,19 @@ pub const CLASSES: ClassExports = objc_classes! {
 @end
 
 };
+
+/// Post `GKPlayerAuthenticationDidChangeNotificationName` so registered
+/// observers see the (unchanged, not-authenticated) state, matching the
+/// ordering GameKit uses before invoking authentication callbacks.
+fn post_auth_change_notification(env: &mut Environment) {
+    let notif_center: id = msg_class![env; NSNotificationCenter defaultCenter];
+    let name = ns_string::from_rust_string(
+        env,
+        GKPlayerAuthenticationDidChangeNotificationName.to_string(),
+    );
+    autorelease(env, name);
+    () = msg![env; notif_center postNotificationName:name object:nil];
+}
 
 pub const GKPlayerAuthenticationDidChangeNotificationName: &str =
     "GKPlayerAuthenticationDidChangeNotificationName";
