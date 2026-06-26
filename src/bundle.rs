@@ -177,27 +177,37 @@ impl Bundle {
             .unwrap_or("Default");
 
         // Try device-specific variants first, then fallback to base name
-        let candidates = match device_family {
-            DeviceFamily::iPhone5 => {
-                vec![
-                    format!("{}-568h@2x.png", base_name), // iPhone 5 (4-inch)
-                    format!("{}@2x.png", base_name),      // iPhone Retina
-                    format!("{}.png", base_name),         // iPhone non-Retina
-                ]
-            }
-            DeviceFamily::iPad => {
+        let candidates = if device_family.is_ipad() {
+            if device_family.is_retina() {
                 vec![
                     format!("{}@2x~ipad.png", base_name), // iPad Retina
                     format!("{}~ipad.png", base_name),    // iPad non-Retina
+                    format!("{}@2x.png", base_name),      // Fallback Retina
+                    format!("{}.png", base_name),         // Fallback
+                ]
+            } else {
+                vec![
+                    format!("{}~ipad.png", base_name),    // iPad non-Retina
+                    format!("{}@2x~ipad.png", base_name), // iPad Retina
                     format!("{}.png", base_name),         // Fallback
                 ]
             }
-            DeviceFamily::iPhone => {
-                vec![
-                    format!("{}@2x.png", base_name), // iPhone Retina
-                    format!("{}.png", base_name),    // iPhone non-Retina
-                ]
-            }
+        } else if device_family.is_phone_568() {
+            vec![
+                format!("{}-568h@2x.png", base_name), // iPhone 5 (4-inch)
+                format!("{}@2x.png", base_name),      // iPhone Retina
+                format!("{}.png", base_name),         // iPhone non-Retina
+            ]
+        } else if device_family.is_retina() {
+            vec![
+                format!("{}@2x.png", base_name), // iPhone Retina
+                format!("{}.png", base_name),    // iPhone non-Retina
+            ]
+        } else {
+            vec![
+                format!("{}@2x.png", base_name), // iPhone Retina (fallback)
+                format!("{}.png", base_name),    // iPhone non-Retina
+            ]
         };
 
         // Find the first existing file
@@ -381,7 +391,7 @@ impl Bundle {
     pub fn main_nib_filename(&self, device_family: Option<DeviceFamily>) -> Option<&str> {
         // TODO: extend this logic for all device-specific keys
         if let Some(device_family) = device_family {
-            if device_family == DeviceFamily::iPad && self.plist.get("NSMainNibFile~ipad").is_some()
+            if device_family.is_ipad() && self.plist.get("NSMainNibFile~ipad").is_some()
             {
                 return self
                     .plist
@@ -405,7 +415,7 @@ impl Bundle {
         device_family: Option<DeviceFamily>,
     ) -> Option<&str> {
         if let Some(device_family) = device_family {
-            if device_family == DeviceFamily::iPad
+            if device_family.is_ipad()
                 && self.plist.get("UIMainStoryboardFile~ipad").is_some()
             {
                 return self

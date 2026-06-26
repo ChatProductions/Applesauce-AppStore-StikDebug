@@ -41,7 +41,26 @@ Device options:
         If omitted, suitable device family would be deduced from application
         bundle itself, falling back to iPhone if needed.
 
-        Accepted values are "iphone", "iphone5", "ipad" and "auto".
+        Accepted values are "auto" plus any of the specific device models
+        below. The legacy names "iphone", "iphone5" and "ipad" are still
+        accepted as aliases (mapping to iPhone 3GS, iPhone 5 and iPad 2).
+
+        iPhone family (32-bit):
+            iphone-2g  (iPhone1,1)   iphone-3g  (iPhone1,2)
+            iphone-3gs (iPhone2,1)   iphone-4   (iPhone3,1)
+            iphone-4s  (iPhone4,1)   iphone-5   (iPhone5,1)
+            iphone-5c  (iPhone5,3)
+        iPad family (32-bit):
+            ipad-1  (iPad1,1)   ipad-2  (iPad2,1)   ipad-3  (iPad3,1)
+            ipad-4  (iPad3,4)   ipad-5  (iPad6,11)
+            ipad-mini   (iPad2,5)   ipad-mini-2 (iPad4,4)
+            ipad-mini-3 (iPad4,7)
+        iPod touch family (32-bit):
+            ipod-touch   (iPod1,1)   ipod-touch-2 (iPod2,1)
+            ipod-touch-3 (iPod3,1)   ipod-touch-4 (iPod4,1)
+            ipod-touch-5 (iPod5,1)
+
+        A model's hardware identifier (e.g. "iphone4,1") is also accepted.
 
         Use "auto" to let touchHLE inspect your host display's resolution,
         expose that resolution directly to the app, and still pick the device

@@ -175,7 +175,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     // ULTRAHLE_MINIONJUMP_MODEL_END
 
-    ns_string::get_static_str(env, "iPhone")
+    let family = env.window().device_family();
+    let model = if family.is_ipad() {
+        "iPad"
+    } else if family.is_ipod_touch() {
+        "iPod touch"
+    } else {
+        "iPhone"
+    };
+    ns_string::get_static_str(env, model)
 }
 - (id)localizedModel {
     msg![env; this model]
@@ -190,7 +198,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     // ULTRAHLE_MINIONJUMP_NAME_END
 
-    ns_string::get_static_str(env, "iPhone")
+    let family = env.window().device_family();
+    let name = if family.is_ipad() {
+        "iPad"
+    } else if family.is_ipod_touch() {
+        "iPod touch"
+    } else {
+        "iPhone"
+    };
+    ns_string::get_static_str(env, name)
 }
 - (id)systemName {
     ns_string::get_static_str(env, "iPhone OS")
@@ -259,7 +275,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     }
     // ULTRAHLE_MINIONJUMP_IDIOM_END
 
-    UIUserInterfaceIdiomPhone
+    if env.window().device_family().is_ipad() {
+        UIUserInterfaceIdiomPad
+    } else {
+        UIUserInterfaceIdiomPhone
+    }
 }
 
 // MARK: - Capabilities

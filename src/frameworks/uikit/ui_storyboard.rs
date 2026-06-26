@@ -114,8 +114,8 @@ fn locate_storyboardc(
     device_family: Option<DeviceFamily>,
 ) -> Option<(String, String)> {
     let device_suffix = match device_family {
-        Some(DeviceFamily::iPad) => Some("~ipad"),
-        Some(DeviceFamily::iPhone) | Some(DeviceFamily::iPhone5) => Some("~iphone"),
+        Some(df) if df.is_ipad() => Some("~ipad"),
+        Some(_) => Some("~iphone"),
         None => None,
     };
 
@@ -225,8 +225,8 @@ fn find_scene_nib_name(
     device_family: Option<DeviceFamily>,
 ) -> Option<String> {
     let device_suffix = match device_family {
-        Some(DeviceFamily::iPad) => "~ipad",
-        Some(DeviceFamily::iPhone) | Some(DeviceFamily::iPhone5) => "~iphone",
+        Some(df) if df.is_ipad() => "~ipad",
+        Some(_) => "~iphone",
         None => "",
     };
 

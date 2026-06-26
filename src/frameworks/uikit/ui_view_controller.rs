@@ -233,10 +233,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         // automatically applies device suffixes at the bundle root, not
         // for files nested inside storyboardc subdirectories.
         let device_suffix = match env.options.device_family {
-            Some(crate::window::DeviceFamily::iPad) => "~ipad",
-            Some(
-                crate::window::DeviceFamily::iPhone | crate::window::DeviceFamily::iPhone5,
-            ) => "~iphone",
+            Some(df) if df.is_ipad() => "~ipad",
+            Some(_) => "~iphone",
             None => "",
         };
         let mut candidates: Vec<String> = Vec::new();
