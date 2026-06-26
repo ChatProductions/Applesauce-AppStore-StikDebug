@@ -20,7 +20,7 @@ use crate::gles::{
     create_gles1_ctx, create_gles2_ctx, create_gles3_ctx, gles1_on_gl2, GLESContext, GLES,
 };
 use crate::mem::MutPtr;
-use crate::objc::{id, msg, nil, objc_classes, release, retain, ClassExports, HostObject};
+use crate::objc::{id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject};
 use crate::options::Options;
 use crate::Environment;
 use std::cell::RefCell;
@@ -351,12 +351,50 @@ pub const CLASSES: ClassExports = objc_classes! {
         } else {
             let bounds: CGRect = msg![env; drawable bounds];
             let CGSize { width, height } = bounds.size;
-            assert!((0.0..(u32::MAX as f32)).contains(&width));
-            assert!((0.0..(u32::MAX as f32)).contains(&height));
+
+            // Apple's `-renderbufferStorage:fromDrawable:` derives the
+            // renderbuffer size from the CAEAGLayer's bounds. Some apps (e.g.
+            // Beyond Gravity — HyperHLE log #1) momentarily present a layer
+            // whose `bounds.size` is bogus (non-finite, negative, or zero)
+            // during an unbind/rebind cycle while tearing down and recreating
+            // their EAGL surface. touchHLE used to `assert!` the size was in a
+            // sane range, which aborted the whole emulator. Real iOS never
+            // crashes here — it simply allocates a renderbuffer sized to the
+            // (screen-sized) drawable. Match that by falling back to the main
+            // screen's bounds when the drawable reports an invalid size.
+            let size_is_valid = |v: f32| v.is_finite() && (1.0..(u32::MAX as f32)).contains(&v);
+            let (width, height) = if size_is_valid(width) && size_is_valid(height) {
+                (width, height)
+            } else {
+                let screen: id = msg_class![env; UIScreen mainScreen];
+                let screen_bounds: CGRect = msg![env; screen bounds];
+                // Copy the fields out of the packed CGSize before using them
+                // (taking a reference to a packed struct field is UB / a
+                // compile error).
+                let fallback_width = screen_bounds.size.width;
+                let fallback_height = screen_bounds.size.height;
+                log!(
+                    "[renderbufferStorage:{:?} fromDrawable:{:?}] Warning: drawable \
+                     reported invalid bounds size {}x{}; falling back to main screen \
+                     bounds {}x{}",
+                    target,
+                    drawable,
+                    width,
+                    height,
+                    fallback_width,
+                    fallback_height
+                );
+                (fallback_width, fallback_height)
+            };
             let scale_hack = env.options.scale_hack.get();
 
             let mut width = width.round() as u32 * scale_hack;
             let mut height = height.round() as u32 * scale_hack;
+
+            // If even the fallback produced a degenerate size, clamp to a
+            // minimum 1x1 so the GL call below cannot receive a zero extent.
+            width = width.max(1);
+            height = height.max(1);
 
             if std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_RENDERBUFFER").is_some() {
                 let is_landscape = env
