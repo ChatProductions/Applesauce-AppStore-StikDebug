@@ -966,13 +966,26 @@ impl Mem {
     /// if the guest provides a pointer to non-terminated data.
     pub fn cstr_at<const MUT: bool>(&self, ptr: Ptr<u8, MUT>) -> &[u8] {
         const MAX_CSTR_LEN: u32 = 65536; // 64KB safety limit
+        self.cstr_at_with_max_len(ptr, MAX_CSTR_LEN)
+    }
+
+    /// Like [Self::cstr_at], but with a caller-chosen maximum length instead of
+    /// the default 64KB safety limit. Useful for data that can legitimately be
+    /// larger than 64KB (e.g. GLSL shader source uploaded via `glShaderSource`
+    /// without an explicit length), where the default cap would silently
+    /// truncate the string and corrupt it.
+    pub fn cstr_at_with_max_len<const MUT: bool>(
+        &self,
+        ptr: Ptr<u8, MUT>,
+        max_len: u32,
+    ) -> &[u8] {
         let mut len: u32 = 0;
         while self.read(ptr + len) != b'\0' {
             len += 1;
-            if len >= MAX_CSTR_LEN {
+            if len >= max_len {
                 log!(
                     "Warning: cstr_at({:?}): hit {}B safety limit without finding null terminator; truncating.",
-                    ptr, MAX_CSTR_LEN
+                    ptr, max_len
                 );
                 break;
             }
