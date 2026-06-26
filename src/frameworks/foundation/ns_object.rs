@@ -83,8 +83,32 @@ fn NSAllocateObject(
     msg![env; class alloc]
 }
 
+/// `NSCopyObject(id object, NSUInteger extraBytes, NSZone *zone)`.
+///
+/// Per Apple's Objective-C Runtime Utilities documentation, NSCopyObject
+/// "Creates an exact copy of an object." It allocates a new instance of the
+/// same class as `object` (plus `extraBytes` of trailing storage) and copies
+/// the original instance's bytes into it, returning the new instance. The
+/// copy is shallow — object-pointer ivars are duplicated as raw pointers — so
+/// classes that build their `-copyWithZone:` on top of NSCopyObject are
+/// responsible for retaining any owned ivars themselves. The `zone` argument
+/// is obsolete on modern runtimes and is ignored. NSCopyObject is deprecated
+/// but plenty of shipping iPhone OS apps still call it from their
+/// `-copyWithZone:` implementations.
+fn NSCopyObject(
+    env: &mut Environment,
+    object: id,
+    extra_bytes: NSUInteger,
+    _zone: NSZonePtr,
+) -> id {
+    env.objc.object_copy(object, extra_bytes, &mut env.mem)
+}
+
 // ДОБАВЛЕН ЭКСПОРТ ФУНКЦИЙ ДЛЯ ДИНАМИЧЕСКОГО ЛИНКЕРА
-pub const FUNCTIONS: FunctionExports = &[export_c_func!(NSAllocateObject(_, _, _))];
+pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(NSAllocateObject(_, _, _)),
+    export_c_func!(NSCopyObject(_, _, _)),
+];
 
 /// Builds a KVO change dictionary and sends
 /// `observeValueForKeyPath:ofObject:change:context:` to one observer.

@@ -14,7 +14,7 @@ use crate::environment::Environment;
 use crate::mem::{ConstPtr, MutPtr};
 use crate::objc::{
     autorelease, id, msg, msg_class, nil, objc_classes, release, retain, ClassExports, HostObject,
-    NSZonePtr,
+    NSZonePtr, SEL,
 };
 
 /// Belongs to _touchHLE_NSSet
@@ -123,6 +123,35 @@ pub const CLASSES: ClassExports = objc_classes! {
         if msg![env; next isEqual:object] {
             return true;
         }
+    }
+}
+
+// Apple: "Sends a message specified by a given selector to each object in
+// the set." (NSSet makeObjectsPerformSelector:). The order in which the
+// objects receive the message is not defined.
+// https://developer.apple.com/documentation/foundation/nsset/makeobjectsperformselector:
+- (())makeObjectsPerformSelector:(SEL)sel {
+    // Snapshot the members up front via -allObjects so that the selector
+    // mutating the set (or its members triggering deallocation) can't
+    // invalidate the enumeration mid-iteration.
+    let objects: id = msg![env; this allObjects];
+    let count: NSUInteger = msg![env; objects count];
+    for i in 0..count {
+        let obj: id = msg![env; objects objectAtIndex:i];
+        let _: id = msg![env; obj performSelector:sel];
+    }
+}
+
+// Apple: "Sends a message specified by a given selector to each object in
+// the set." (NSSet makeObjectsPerformSelector:withObject:). The object
+// argument is passed with each message; the iteration order is undefined.
+// https://developer.apple.com/documentation/foundation/nsset/makeobjectsperformselector:withobject:
+- (())makeObjectsPerformSelector:(SEL)sel withObject:(id)arg {
+    let objects: id = msg![env; this allObjects];
+    let count: NSUInteger = msg![env; objects count];
+    for i in 0..count {
+        let obj: id = msg![env; objects objectAtIndex:i];
+        let _: id = msg![env; obj performSelector:sel withObject:arg];
     }
 }
 
