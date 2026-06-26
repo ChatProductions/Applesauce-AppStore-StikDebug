@@ -319,7 +319,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.bundle.bundle_identifier(),
         "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
     ) || std::env::var_os("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY").is_some() {
-        return ns_string::get_static_str(env, "iPad1,1");
+        return ns_string::get_static_str(env, "iPad2,1");
     }
     // ULTRAHLE_MINIONJUMP_PLATFORM_END
 
@@ -337,7 +337,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         env.bundle.bundle_identifier(),
         "com.apprisetec9.minionjump" | "com.risinghighapps.kingdomprincepro"
     ) || std::env::var_os("TOUCHHLE_FORCE_IPAD_DEVICE_IDENTITY").is_some() {
-        return ns_string::get_static_str(env, "iPad1,1");
+        return ns_string::get_static_str(env, "iPad2,1");
     }
     // ULTRAHLE_MINIONJUMP_HWMODEL_END
 

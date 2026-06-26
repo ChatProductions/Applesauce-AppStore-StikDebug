@@ -71,7 +71,17 @@ impl DeviceFamily {
             // while still satisfying GLES2-only apps.
             DeviceFamily::iPhone => "iPhone2,1",
             DeviceFamily::iPhone5 => "iPhone5,1",
-            DeviceFamily::iPad => "iPad1,1",
+            // iPad2,1 is the Wi-Fi iPad 2: a real non-retina 1024×768 (scale
+            // 1.0) device, which is exactly the point grid and scale factor
+            // touchHLE emulates for the iPad family. Reporting the original
+            // iPad1,1 instead breaks engines that whitelist devices by parsing
+            // hw.machine: UE4 4.9's FIOSPlatformMisc::GetIOSDeviceType() has no
+            // case for iPad major revision 1, so it falls through to
+            // IOS_Unknown and aborts with "This IOS device type is not
+            // supported by UE4" (observed with Epic Citadel, Tappy Chicken and
+            // other UE4 titles). iPad2,1 maps cleanly to IOS_IPad2 there while
+            // staying faithful to the emulated screen.
+            DeviceFamily::iPad => "iPad2,1",
         }
     }
 
