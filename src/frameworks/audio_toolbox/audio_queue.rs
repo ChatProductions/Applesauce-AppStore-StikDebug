@@ -292,7 +292,9 @@ fn apply_al_pan(context: &OpenAL<'_>, al_source: ALuint, pan: f32) {
             0.0,
             -(1.0 - pan * pan).sqrt().max(0.0),
         );
-        assert!(context.GetError() == 0);
+        // Panning is purely cosmetic; if the driver rejects any of these calls
+        // just clear the error rather than crashing the whole emulator.
+        let _ = context.GetError();
     }
 }
 
@@ -1224,15 +1226,49 @@ fn prime_audio_queue(env: &mut Environment, in_aq: AudioQueueRef) {
         let pan = host_object.pan.clamp(-1.0, 1.0);
         let mut al_source = 0;
 
-        unsafe {
+        // A real Audio Queue is backed by the system audio hardware, which can
+        // always play at least a handful of concurrent sounds. OpenAL Soft,
+        // however, has a finite source pool (mono_sources + stereo_sources).
+        // Games like Ghost Blade and UDKGame allocate a large number of
+        // AVAudioPlayer / AudioQueue objects at once and can exhaust it. When
+        // that happens `alGenSources` sets AL_OUT_OF_MEMORY / AL_INVALID_VALUE
+        // and returns no source. Previously we `assert!`ed the error was zero
+        // here, which crashed the entire emulator. Apple's AudioToolbox never
+        // tears down the process for this; the affected sound just doesn't
+        // play. Mirror that: on failure, drop this source and leave the queue
+        // silent instead of panicking.
+        let err = unsafe {
+            // Clear any pre-existing error so we only observe GenSources'.
+            let _ = context.GetError();
             context.GenSources(1, &mut al_source);
+            context.GetError()
+        };
+        if err != 0 || al_source == 0 {
+            log!(
+                "Warning: prime_audio_queue({:?}): could not allocate an OpenAL \
+                 source (alGetError() = {:#x}); this audio queue will be silent.",
+                in_aq,
+                err
+            );
+            // Best-effort cleanup if a source id was (partially) produced.
+            if al_source != 0 {
+                unsafe {
+                    context.DeleteSources(1, &al_source);
+                    let _ = context.GetError();
+                }
+            }
+            return;
+        }
+        unsafe {
             context.Sourcef(al_source, al::AL_MAX_GAIN, volume);
-            assert!(context.GetError() == 0);
+            let _ = context.GetError();
         };
         apply_al_pan(&context, al_source, pan);
         host_object.al_source = Some(al_source);
     }
-    let al_source = host_object.al_source.unwrap();
+    let Some(al_source) = host_object.al_source else {
+        return;
+    };
 
     loop {
         let mut al_buffers_queued = 0;

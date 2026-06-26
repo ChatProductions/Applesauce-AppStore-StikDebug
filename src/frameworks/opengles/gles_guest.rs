@@ -3184,7 +3184,15 @@ fn glShaderSource(
                 .bytes_at(str_ptr.cast(), len.try_into().unwrap_or(0));
             slice.to_vec()
         } else {
-            env.mem.cstr_at(str_ptr).to_vec()
+            // GLSL shader sources can legitimately exceed the default 64KB
+            // `cstr_at` safety cap (e.g. Unreal Engine's generated shaders in
+            // UDKGame). Using the default cap silently truncates the source,
+            // which then fails to compile with errors like
+            // "Unterminated #if/#ifdef/#ifndef". Allow up to 16 MB here.
+            const MAX_SHADER_SRC_LEN: u32 = 16 * 1024 * 1024;
+            env.mem
+                .cstr_at_with_max_len(str_ptr, MAX_SHADER_SRC_LEN)
+                .to_vec()
         };
         // Normalize GLES precision qualifiers for all Cocos2D shaders.
         // Fixes Mesa link failures like:
