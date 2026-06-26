@@ -10,8 +10,8 @@ use crate::frameworks::core_graphics::{CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_string::get_static_str;
 use crate::frameworks::foundation::{NSInteger, NSTimeInterval, NSUInteger};
 use crate::objc::{
-    id, impl_HostObject_with_superclass, msg, msg_super, nil, objc_classes, release, retain,
-    ClassExports, NSZonePtr,
+    id, impl_HostObject_with_superclass, msg, msg_class, msg_super, nil, objc_classes, release,
+    retain, ClassExports, NSZonePtr,
 };
 
 #[derive(Default)]
@@ -24,6 +24,13 @@ struct UIImageViewHostObject {
     animation_duration: NSTimeInterval,
     animation_repeat_count: NSInteger,
     is_animating: bool,
+    /// `NSTimer*` driving frame advancement while animating (nil when stopped).
+    animation_timer: id,
+    /// Index of the frame currently shown during animation.
+    current_frame: NSUInteger,
+    /// Number of complete loops played so far (used to honour
+    /// `animationRepeatCount`).
+    completed_loops: NSInteger,
     highlighted: bool,
     highlighted_image: id,
     highlighted_animation_images: id,
@@ -50,6 +57,9 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())dealloc {
+    // Stop and tear down any running animation timer first so it can't fire
+    // against a freed view.
+    () = msg![env; this stopAnimating];
     let &UIImageViewHostObject {
         superclass: _,
         image,
@@ -169,9 +179,8 @@ pub const CLASSES: ClassExports = objc_classes! {
     retain(env, images);
     release(env, old_images);
 
-    // В эмуляторе пока нет встроенного CAKeyframeAnimation (смены кадров),
-    // но мы можем установить первый кадр анимации как текущее изображение,
-    // чтобы объект не был прозрачным на экране.
+    // Show the first frame so the view isn't blank before/after animating,
+    // matching UIKit (which displays `image`, or the first animation frame).
     if images != nil {
         let count: NSUInteger = msg![env; images count];
         if count > 0 {
@@ -204,13 +213,128 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())startAnimating {
-    env.objc.borrow_mut::<UIImageViewHostObject>(this).is_animating = true;
-    // На реальном iOS здесь создается и добавляется слой анимации.
-    // Пока мы просто сохраняем стейт для гостевого приложения.
+    // Pick the active frame list (highlighted variant takes precedence when
+    // the view is highlighted and one was provided), matching UIKit.
+    let (frames, highlighted) = {
+        let host = env.objc.borrow::<UIImageViewHostObject>(this);
+        let frames = if host.highlighted && host.highlighted_animation_images != nil {
+            host.highlighted_animation_images
+        } else {
+            host.animation_images
+        };
+        (frames, host.highlighted)
+    };
+    let _ = highlighted;
+    if frames == nil {
+        env.objc.borrow_mut::<UIImageViewHostObject>(this).is_animating = true;
+        return;
+    }
+    let count: NSUInteger = msg![env; frames count];
+    if count == 0 {
+        env.objc.borrow_mut::<UIImageViewHostObject>(this).is_animating = true;
+        return;
+    }
+
+    // If we're already animating, restart cleanly.
+    () = msg![env; this stopAnimating];
+
+    // Per Apple's docs, when `animationDuration` is 0 the default is
+    // `frameCount / 30.0` seconds (i.e. 30 fps). Each frame is shown for
+    // `duration / frameCount` seconds.
+    let duration = {
+        let host = env.objc.borrow::<UIImageViewHostObject>(this);
+        if host.animation_duration > 0.0 {
+            host.animation_duration
+        } else {
+            count as NSTimeInterval / 30.0
+        }
+    };
+    let per_frame: NSTimeInterval = (duration / count as NSTimeInterval).max(0.0001);
+
+    {
+        let host = env.objc.borrow_mut::<UIImageViewHostObject>(this);
+        host.is_animating = true;
+        host.current_frame = 0;
+        host.completed_loops = 0;
+    }
+
+    // Show the first frame immediately.
+    let first_image: id = msg![env; frames objectAtIndex:0u32];
+    () = msg![env; this setImage:first_image];
+
+    // Drive subsequent frames with a repeating NSTimer targeting this view.
+    let sel = env
+        .objc
+        .lookup_selector("_touchHLE_advanceAnimationFrame:")
+        .expect("UIImageView animation selector must be registered");
+    let timer: id = msg_class![env; NSTimer
+        scheduledTimerWithTimeInterval:per_frame
+        target:this
+        selector:sel
+        userInfo:nil
+        repeats:true];
+    retain(env, timer);
+    env.objc.borrow_mut::<UIImageViewHostObject>(this).animation_timer = timer;
 }
 
 - (())stopAnimating {
-    env.objc.borrow_mut::<UIImageViewHostObject>(this).is_animating = false;
+    let timer = {
+        let host = env.objc.borrow_mut::<UIImageViewHostObject>(this);
+        host.is_animating = false;
+        std::mem::replace(&mut host.animation_timer, nil)
+    };
+    if timer != nil {
+        () = msg![env; timer invalidate];
+        release(env, timer);
+    }
+}
+
+// Private: advances to the next animation frame. Invoked by the repeating
+// NSTimer created in `startAnimating`.
+- (())_touchHLE_advanceAnimationFrame:(id)_timer {
+    let (frames, repeat_count) = {
+        let host = env.objc.borrow::<UIImageViewHostObject>(this);
+        if !host.is_animating {
+            (nil, 0)
+        } else {
+            let frames = if host.highlighted && host.highlighted_animation_images != nil {
+                host.highlighted_animation_images
+            } else {
+                host.animation_images
+            };
+            (frames, host.animation_repeat_count)
+        }
+    };
+    if frames == nil {
+        return;
+    }
+    let count: NSUInteger = msg![env; frames count];
+    if count == 0 {
+        return;
+    }
+
+    let next_frame = {
+        let host = env.objc.borrow_mut::<UIImageViewHostObject>(this);
+        host.current_frame += 1;
+        if host.current_frame >= count {
+            host.current_frame = 0;
+            host.completed_loops += 1;
+        }
+        host.current_frame
+    };
+
+    // Honour a finite repeat count: stop once the requested number of loops
+    // has completed. `animationRepeatCount == 0` means "loop forever".
+    if repeat_count > 0 {
+        let completed = env.objc.borrow::<UIImageViewHostObject>(this).completed_loops;
+        if completed >= repeat_count {
+            () = msg![env; this stopAnimating];
+            return;
+        }
+    }
+
+    let frame_image: id = msg![env; frames objectAtIndex:next_frame];
+    () = msg![env; this setImage:frame_image];
 }
 
 @end

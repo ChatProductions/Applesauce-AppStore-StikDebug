@@ -10,7 +10,8 @@ use std::ops::{Add, Mul, Sub};
 use crate::dyld::{export_c_func, ConstantExports, FunctionExports, HostConstant};
 use crate::frameworks::core_foundation::{CFRelease, CFRetain, CFTypeRef};
 use crate::frameworks::core_graphics::cg_color_space::{
-    kCGColorSpaceGenericRGB, CGColorSpaceHostObject, CGColorSpaceRef,
+    kCGColorSpaceGenericCMYK, kCGColorSpaceGenericGray, kCGColorSpaceGenericRGB,
+    CGColorSpaceHostObject, CGColorSpaceRef,
 };
 use crate::frameworks::core_graphics::CGFloat;
 use crate::mem::{ConstPtr, MutPtr};
@@ -101,13 +102,44 @@ fn CGColorCreate(
     space: CGColorSpaceRef,
     components: MutPtr<CGFloat>,
 ) -> CGColorRef {
+    if space.is_null() || components.is_null() {
+        return crate::objc::nil;
+    }
+    // Per Apple's CGColorCreate docs, `components` holds n+1 values: the n
+    // colour components for the given colour space, followed by the alpha
+    // component. The number of colour components depends on the colour space
+    // model, so we must not assume RGB here (e.g. LetterSchool creates colours
+    // in the Generic Gray space, which has a single grey component + alpha).
     let color_space = env.objc.borrow::<CGColorSpaceHostObject>(space).name;
-    assert_eq!(color_space, kCGColorSpaceGenericRGB);
-    let r = env.mem.read(components);
-    let g = env.mem.read(components + 1);
-    let b = env.mem.read(components + 2);
-    let a = env.mem.read(components + 3);
-    from_rgba(env, (r, g, b, a))
+    match color_space {
+        kCGColorSpaceGenericGray => {
+            // Monochrome: 1 grey component + alpha. Expand grey to RGB.
+            let gray = env.mem.read(components);
+            let a = env.mem.read(components + 1);
+            from_rgba(env, (gray, gray, gray, a))
+        }
+        kCGColorSpaceGenericCMYK => {
+            // CMYK: 4 components + alpha. Convert CMYK → RGB.
+            let cyan = env.mem.read(components);
+            let magenta = env.mem.read(components + 1);
+            let yellow = env.mem.read(components + 2);
+            let black = env.mem.read(components + 3);
+            let a = env.mem.read(components + 4);
+            let r = (1.0 - cyan) * (1.0 - black);
+            let g = (1.0 - magenta) * (1.0 - black);
+            let b = (1.0 - yellow) * (1.0 - black);
+            from_rgba(env, (r, g, b, a))
+        }
+        // GenericRGB (and anything else, which CGColorSpaceCreateWithName
+        // canonicalizes to one of our three models): 3 components + alpha.
+        _ => {
+            let r = env.mem.read(components);
+            let g = env.mem.read(components + 1);
+            let b = env.mem.read(components + 2);
+            let a = env.mem.read(components + 3);
+            from_rgba(env, (r, g, b, a))
+        }
+    }
 }
 
 fn CGColorCreateGenericRGB(
