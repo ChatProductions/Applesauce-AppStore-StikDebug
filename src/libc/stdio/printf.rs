@@ -1673,39 +1673,88 @@ where
                 }
             }
             b'[' => {
-                // Убрали assert!(length_modifier.is_none());
-                // [set] case. Honour an optional max-width prefix
-                // (e.g. "%15[abc]"); 0 means "no limit". The loop below
-                // matches as many input characters as fit in the set,
-                // but stops after `max_width` chars when one is given
-                // so the destination buffer (sized for max_width+1) is
-                // not overrun. Used by LEGO Ninjago: Spinjitzu Scavenger
-                // Hunt's text loader (e.g. `sscanf(line, "%15[^=]=%s", …)`).
-                assert_ne!(env.mem.read(format + format_char_idx), b']');
-                let mut c: u8;
+                // `%[set]` conversion. The character set is parsed per the
+                // C standard (ISO C / POSIX, mirrored by Apple's BSD
+                // `vfscanf`): see
+                // <https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/scanf.3.html>.
+                //
+                // Two well-known special cases must NOT be treated as
+                // terminators, otherwise valid format strings crash the
+                // parser:
+                //
+                //   * A `]` that is the *first* character of the scanlist
+                //     (i.e. `%[]...]` or `%[^]...]`) is a literal member of
+                //     the set, not the closing bracket.
+                //   * A `-` is a range operator only when it sits *between*
+                //     two characters; a `-` that is the first or the last
+                //     character of the scanlist is a literal `-`.
+                //
+                // We also stop at a NUL terminator so a malformed format with
+                // no closing `]` can't read past the end of guest memory.
+                //
+                // Honour an optional max-width prefix (e.g. `%15[abc]`); 0
+                // means "no limit". The matching loop below stops after
+                // `max_width` chars so the destination buffer (sized for
+                // max_width+1) is not overrun. Used by LEGO Ninjago:
+                // Spinjitzu Scavenger Hunt's text loader
+                // (e.g. `sscanf(line, "%15[^=]=%s", …)`) and BAROQUE.
                 let inverted = if env.mem.read(format + format_char_idx) == b'^' {
                     format_char_idx += 1;
-                    assert_ne!(env.mem.read(format + format_char_idx), b']');
                     true
                 } else {
                     false
                 };
-                // Build set
+
+                // Build set, honouring the literal-`]`-first rule.
                 let mut set: HashSet<u8> = HashSet::new();
-                c = env.mem.read(format + format_char_idx);
-                format_char_idx += 1;
-                while c != b']' {
-                    if env.mem.read(format + format_char_idx) == b'-' {
-                        assert_ne!(env.mem.read(format + format_char_idx + 1), b']');
-                        let cc = env.mem.read(format + format_char_idx + 1);
-                        for x in c..=cc {
-                            set.insert(x);
-                        }
-                        format_char_idx += 2;
-                    } else {
-                        set.insert(c);
+                let mut first = true;
+                loop {
+                    let c = env.mem.read(format + format_char_idx);
+                    // Closing bracket — unless it's the first scanlist char,
+                    // in which case it's a literal member of the set.
+                    if c == b']' && !first {
+                        format_char_idx += 1;
+                        break;
                     }
-                    c = env.mem.read(format + format_char_idx);
+                    // Defensive: a missing closing `]` would otherwise spin
+                    // forever / read out of bounds. Stop at NUL.
+                    if c == b'\0' {
+                        log!(
+                            "Warning: sscanf %[…]: unterminated scanset \
+                             (no closing ']'); stopping set parse."
+                        );
+                        break;
+                    }
+                    first = false;
+
+                    // Is this a range like `a-z`? Only when a `-` follows the
+                    // current char and is itself followed by a real range end
+                    // (not `]` and not NUL). Otherwise `-` is a literal.
+                    let next = env.mem.read(format + format_char_idx + 1);
+                    if next == b'-' {
+                        let range_end = env.mem.read(format + format_char_idx + 2);
+                        if range_end != b']' && range_end != b'\0' {
+                            // Valid range `c..=range_end`. Guard against a
+                            // descending range (e.g. `z-a`), which is
+                            // undefined in C: insert the endpoints and the
+                            // dash literally rather than panicking on a
+                            // reversed `RangeInclusive`.
+                            if c <= range_end {
+                                for x in c..=range_end {
+                                    set.insert(x);
+                                }
+                            } else {
+                                set.insert(c);
+                                set.insert(b'-');
+                                set.insert(range_end);
+                            }
+                            format_char_idx += 3;
+                            continue;
+                        }
+                    }
+
+                    // Plain literal character (covers a trailing `-`).
+                    set.insert(c);
                     format_char_idx += 1;
                 }
 
@@ -1808,7 +1857,6 @@ where
                 continue;
             }
             b's' => {
-                // Убрали assert!(length_modifier.is_none());
                 // Honour an optional max-width prefix (e.g. "%127s"); 0
                 // means "no limit". Stops after `max_width` chars when
                 // one is given so the destination buffer (sized for
