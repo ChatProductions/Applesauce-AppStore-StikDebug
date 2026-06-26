@@ -1354,7 +1354,7 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     //        the EAGL layer's view hierarchy and apply it here, instead of
     //        using a device-family heuristic.
     let needs_autorotation_compensation =
-        matches!(device_family, crate::window::DeviceFamily::iPad)
+        device_family.is_ipad()
             && !matches!(
                 device_orientation,
                 crate::window::DeviceOrientation::Portrait

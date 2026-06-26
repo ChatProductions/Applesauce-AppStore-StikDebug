@@ -375,46 +375,51 @@ impl Environment {
             device_family_override
         };
         let device_family_array = bundle.device_family_array();
-        let device_family = match device_family_array.len() {
-            // iPhone only or iPad only
-            1 => {
-                let only_supported = device_family_array[0];
-                let mut result = only_supported; // ← mutable variable for flexible return
+        // The bundle only declares generic device *classes* (iPhone == phone
+        // family, iPad == tablet family). A user override may now name a
+        // specific model (e.g. iPhone 4s, iPad mini 2). We accept the override
+        // when its class matches one the bundle supports, and otherwise fall
+        // back to a sensible default model for a supported class.
+        let bundle_supports_ipad = device_family_array.iter().any(|f| f.is_ipad());
+        let bundle_supports_phone = device_family_array.iter().any(|f| !f.is_ipad());
+        // Default model picked for each class when the user hasn't chosen one.
+        // iPhone 3GS (iPhone2,1) is the historical touchHLE phone default
+        // (320x480, GLES2-capable); iPad 2 (iPad2,1) is the tablet default.
+        let default_phone = DeviceFamily::iPhone3GS;
+        let default_ipad = DeviceFamily::iPad2;
 
-                if let Some(dfo) = device_family_override {
-                    // Allow iPhone5 override unconditionally when explicitly
-                    // requested
-                    if dfo == DeviceFamily::iPhone5 {
-                        result = DeviceFamily::iPhone5; // ← assign, don't return
-                    } else if dfo != only_supported {
-                        log!("Warning: User-defined {:?} device family override is not supported by the app! ignoring", dfo);
-                    }
-                }
-                result // ← return the final value
-            }
-            // iPhone and iPad
-            2 => {
-                if let Some(dfo) = device_family_override {
-                    // Allow iPhone5 override unconditionally when explicitly
-                    // requested
-                    if dfo == DeviceFamily::iPhone5 {
-                        DeviceFamily::iPhone5 // ← direct return works here (last expr in branch)
-                    } else {
-                        assert!(device_family_array.contains(&dfo));
-                        dfo
-                    }
-                } else {
-                    assert!(device_family_array.contains(&DeviceFamily::iPhone));
-                    DeviceFamily::iPhone
-                }
-            }
-            _ => {
+        let device_family = if let Some(dfo) = device_family_override {
+            let override_is_ipad = dfo.is_ipad();
+            if override_is_ipad && bundle_supports_ipad {
+                dfo
+            } else if !override_is_ipad && bundle_supports_phone {
+                dfo
+            } else {
                 log!(
-                    "Warning: bundle declares an unexpected number of supported device families ({:?}); falling back to iPhone.",
+                    "Warning: User-defined {:?} device family override is not supported by the app (supported: {:?}); ignoring.",
+                    dfo,
                     device_family_array
                 );
-                DeviceFamily::iPhone
+                if bundle_supports_phone {
+                    default_phone
+                } else if bundle_supports_ipad {
+                    default_ipad
+                } else {
+                    default_phone
+                }
             }
+        } else if bundle_supports_phone {
+            // Prefer the phone family when the bundle supports it, matching the
+            // previous behaviour for universal (iPhone + iPad) bundles.
+            default_phone
+        } else if bundle_supports_ipad {
+            default_ipad
+        } else {
+            log!(
+                "Warning: bundle declares no recognised supported device families ({:?}); falling back to iPhone.",
+                device_family_array
+            );
+            default_phone
         };
         log!("{:?} device family is chosen.", device_family);
         options.device_family = Some(device_family);

@@ -16,6 +16,7 @@ use crate::frameworks::core_graphics::cg_image::{self, kCGImageAlphaPremultiplie
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
+use crate::frameworks::foundation::NSInteger;
 use crate::frameworks::uikit::ui_font::{
     UITextAlignmentCenter, UITextAlignmentLeft, UITextAlignmentRight,
 };
@@ -149,10 +150,7 @@ struct AppPickerDelegateHostObject {
     analog_stick_tilt_controls: Option<bool>,
     network: Option<bool>,
     fullscreen: Option<bool>,
-    device_family_iphone: bool,
-    device_family_ipad: bool,
-    device_family_iphone5: bool,
-    device_family_auto: bool,
+    device_model_tag: Option<i32>,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -241,17 +239,9 @@ const CLASSES: ClassExports = objc_classes! {
     let switch_state: bool = msg![env; switch isOn];
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).fullscreen = Some(switch_state);
 }
-- (())deviceFamilyIphone {
-    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_iphone = true;
-}
-- (())deviceFamilyIpad {
-    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_ipad = true;
-}
-- (())deviceFamilyIphone5 {
-    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_iphone5 = true;
-}
-- (())deviceFamilyAuto {
-    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_family_auto = true;
+- (())deviceModel:(id)sender { // UIButton*
+    let tag: NSInteger = msg![env; sender tag];
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_model_tag = Some(tag as i32);
 }
 
 - (())openFileManager {
@@ -548,7 +538,7 @@ fn app_picker_inner(
     let mut quick_options_orientation: Option<DeviceOrientation> = None;
     let mut quick_options_analog_stick_tilt_controls = true;
     let mut quick_options_network = false;
-    let mut quick_options_device_family: Option<&str> = None;
+    let mut quick_options_device_tag: Option<i32> = None;
 
     fn update_quick_option_buttons(env: &mut Environment, buttons: &[id], selected_idx: usize) {
         for (idx, &button) in buttons.iter().enumerate() {
@@ -579,20 +569,22 @@ fn app_picker_inner(
             }),
         );
     }
-    fn update_device_family_buttons(env: &mut Environment, buttons: &[id], value: Option<&str>) {
-        update_quick_option_buttons(
-            env,
-            buttons,
-            value
-                .map_or(0, |v| match v {
-                    "iphone" => 0,
-                    "ipad" => 1,
-                    "iphone5" => 2,
-                    "auto" => 3,
-                    _ => 0,
-                })
-                .min(buttons.len() - 1),
-        );
+    fn update_device_family_buttons(env: &mut Environment, buttons: &[id], value: Option<i32>) {
+        // Each button's highlight is driven by its own UIView tag rather than a
+        // fixed index, because the device buttons live inside a scroll view and
+        // there are many of them. Tag 0 == Auto, tags 1..=N map to
+        // DeviceFamily::ALL_SELECTABLE. `None` means no explicit choice yet, so
+        // nothing is highlighted.
+        for &button in buttons {
+            let tag: crate::frameworks::foundation::NSInteger = msg![env; button tag];
+            let selected = value.map_or(false, |v| v as crate::frameworks::foundation::NSInteger == tag);
+            let color: id = if selected {
+                msg_class![env; UIColor magentaColor]
+            } else {
+                msg_class![env; UIColor grayColor]
+            };
+            () = msg![env; button setBackgroundColor:color];
+        }
     }
     update_scale_hack_buttons(
         env,
@@ -606,8 +598,8 @@ fn app_picker_inner(
     );
     update_device_family_buttons(
         env,
-        &quick_options_stuff.device_family_buttons,
-        quick_options_device_family,
+        &quick_options_stuff.device_model_buttons,
+        quick_options_device_tag,
     );
 
     () = msg![env; window makeKeyAndVisible];
@@ -747,33 +739,12 @@ fn app_picker_inner(
                 &quick_options_stuff.orientation_buttons,
                 quick_options_orientation,
             );
-        } else if std::mem::take(&mut host_obj.device_family_iphone) {
-            quick_options_device_family = Some("iphone");
+        } else if let Some(tag) = std::mem::take(&mut host_obj.device_model_tag) {
+            quick_options_device_tag = Some(tag);
             update_device_family_buttons(
                 env,
-                &quick_options_stuff.device_family_buttons,
-                quick_options_device_family,
-            );
-        } else if std::mem::take(&mut host_obj.device_family_ipad) {
-            quick_options_device_family = Some("ipad");
-            update_device_family_buttons(
-                env,
-                &quick_options_stuff.device_family_buttons,
-                quick_options_device_family,
-            );
-        } else if std::mem::take(&mut host_obj.device_family_iphone5) {
-            quick_options_device_family = Some("iphone5");
-            update_device_family_buttons(
-                env,
-                &quick_options_stuff.device_family_buttons,
-                quick_options_device_family,
-            );
-        } else if std::mem::take(&mut host_obj.device_family_auto) {
-            quick_options_device_family = Some("auto");
-            update_device_family_buttons(
-                env,
-                &quick_options_stuff.device_family_buttons,
-                quick_options_device_family,
+                &quick_options_stuff.device_model_buttons,
+                quick_options_device_tag,
             );
         } else if let Some(enabled) = std::mem::take(&mut host_obj.analog_stick_tilt_controls) {
             quick_options_analog_stick_tilt_controls = enabled;
@@ -812,8 +783,17 @@ fn app_picker_inner(
         option_args.push("--allow-network-access".to_string());
     }
 
-    if let Some(family) = quick_options_device_family {
-        option_args.push(format!("--device-family={}", family));
+    if let Some(tag) = quick_options_device_tag {
+        let tag = tag as NSInteger;
+        if tag == DEVICE_TAG_DEFAULT {
+            // No override — fall back to the app bundle / built-in default.
+        } else if tag == DEVICE_TAG_AUTO {
+            option_args.push("--device-family=auto".to_string());
+        } else if let Some(family) =
+            crate::window::DeviceFamily::ALL_SELECTABLE.get(tag as usize)
+        {
+            option_args.push(format!("--device-family={}", family.option_name()));
+        }
     }
 
     // Return the environment so some parts of it can be salvaged.
@@ -1333,8 +1313,19 @@ struct QuickOptionsStuff {
     main_view: id,
     scale_hack_buttons: [id; 5],
     orientation_buttons: [id; 4],
-    device_family_buttons: [id; 4],
+    /// Buttons for the scrollable "Device model" strip. The first two are the
+    /// special "Default" (no override) and "Auto" choices; the rest are one
+    /// button per [crate::window::DeviceFamily] in `ALL_SELECTABLE` order. Each
+    /// button carries a UIView `tag` identifying its choice (see
+    /// `DEVICE_TAG_DEFAULT` / `DEVICE_TAG_AUTO` / model index).
+    device_model_buttons: Vec<id>,
 }
+
+/// Sentinel button tags for the device-model strip. Model buttons use their
+/// index into `DeviceFamily::ALL_SELECTABLE` (0..=19) as their tag, so the
+/// sentinels are placed well above that range.
+const DEVICE_TAG_DEFAULT: NSInteger = 1000;
+const DEVICE_TAG_AUTO: NSInteger = 1001;
 
 fn setup_quick_options(
     env: &mut Environment,
@@ -1411,6 +1402,8 @@ fn setup_quick_options(
     enum RowKind {
         Label(&'static str),
         Buttons(&'static [(&'static str, &'static str)]),
+        /// Horizontally-scrollable strip listing every selectable device model.
+        DeviceScroll,
         Switch(&'static str, bool),
     }
     let rows = [
@@ -1429,13 +1422,8 @@ fn setup_quick_options(
             ("→", "orientationLandscapeRight"),
             ("↓", "orientationPortraitUpsideDown"),
         ]),
-        RowKind::Label("Device Mode"),
-        RowKind::Buttons(&[
-            ("iPhone", "deviceFamilyIphone"),
-            ("iPad", "deviceFamilyIpad"),
-            ("iPhone 5", "deviceFamilyIphone5"),
-            ("Auto", "deviceFamilyAuto"),
-        ]),
+        RowKind::Label("Device model (swipe to scroll)"),
+        RowKind::DeviceScroll,
         RowKind::Label("Network access"),
         RowKind::Switch("network:", false),
         RowKind::Label("Use analog sticks for tilt controls"),
@@ -1453,6 +1441,7 @@ fn setup_quick_options(
     };
 
     let mut button_rows = Vec::new();
+    let mut device_model_buttons: Vec<id> = Vec::new();
     for (i, row) in rows.iter().enumerate() {
         let row_center = divider
             + ((1 + i) as CGFloat)
@@ -1489,6 +1478,15 @@ fn setup_quick_options(
                     /* font_size: */ None,
                 ));
             }
+            RowKind::DeviceScroll => {
+                device_model_buttons = make_device_model_scroll(
+                    env,
+                    delegate,
+                    main_view,
+                    main_frame.size,
+                    row_center,
+                );
+            }
             RowKind::Switch(selector, default_state) => {
                 let switch_frame = CGRect {
                     origin: CGPoint {
@@ -1514,6 +1512,99 @@ fn setup_quick_options(
         main_view,
         scale_hack_buttons: button_rows[0][..].try_into().unwrap(),
         orientation_buttons: button_rows[1][..].try_into().unwrap(),
-        device_family_buttons: button_rows[2][..].try_into().unwrap(),
+        device_model_buttons,
     }
+}
+
+/// Build the horizontally-scrollable "Device model" strip: a UIScrollView
+/// containing a "Default" button, an "Auto" button, then one button per
+/// [crate::window::DeviceFamily] in `ALL_SELECTABLE` order. Each button is
+/// wired to the delegate's `deviceModel:` selector and tagged so the handler
+/// can tell which model was picked. Returns the buttons in display order.
+fn make_device_model_scroll(
+    env: &mut Environment,
+    delegate: id,
+    super_view: id,
+    super_view_size: CGSize,
+    row_center: CGFloat,
+) -> Vec<id> {
+    use crate::window::DeviceFamily;
+
+    let margin: CGFloat = 8.0;
+    let button_height: CGFloat = 34.0;
+    let button_width: CGFloat = 110.0;
+    let strip_height = button_height + margin * 2.0;
+    let side_inset: CGFloat = 10.0;
+
+    let scroll_frame = CGRect {
+        origin: CGPoint {
+            x: side_inset,
+            y: row_center - strip_height / 2.0,
+        },
+        size: CGSize {
+            width: super_view_size.width - side_inset * 2.0,
+            height: strip_height,
+        },
+    };
+
+    let scroll: id = msg_class![env; UIScrollView alloc];
+    let scroll: id = msg![env; scroll initWithFrame:scroll_frame];
+    () = msg![env; scroll setShowsHorizontalScrollIndicator:true];
+    () = msg![env; scroll setShowsVerticalScrollIndicator:false];
+    () = msg![env; scroll setScrollEnabled:true];
+    let clear: id = msg_class![env; UIColor clearColor];
+    () = msg![env; scroll setBackgroundColor:clear];
+    () = msg![env; super_view addSubview:scroll];
+
+    // The choices: Default + Auto + every model. Tags identify each choice.
+    let mut entries: Vec<(String, NSInteger)> = Vec::new();
+    entries.push(("Default".to_string(), DEVICE_TAG_DEFAULT));
+    entries.push(("Auto".to_string(), DEVICE_TAG_AUTO));
+    for (idx, family) in DeviceFamily::ALL_SELECTABLE.iter().enumerate() {
+        entries.push((family.display_name().to_string(), idx as NSInteger));
+    }
+
+    let selector = env.objc.lookup_selector("deviceModel:").unwrap();
+    let mut buttons: Vec<id> = Vec::new();
+    let mut x: CGFloat = margin;
+    for (title, tag) in entries {
+        let frame = CGRect {
+            origin: CGPoint {
+                x,
+                y: margin,
+            },
+            size: CGSize {
+                width: button_width,
+                height: button_height,
+            },
+        };
+        let button: id = msg_class![env; UIButton buttonWithType:UIButtonTypeRoundedRect];
+        let text = ns_string::from_rust_string(env, title);
+        () = msg![env; button setTitle:text forState:UIControlStateNormal];
+        release(env, text);
+        () = msg![env; button setFrame:frame];
+        () = msg![env; button layoutSubviews];
+        () = msg![env; button setTag:tag];
+        let label: id = msg![env; button titleLabel];
+        let font: id = msg_class![env; UIFont systemFontOfSize:(13.0 as CGFloat)];
+        () = msg![env; label setFont:font];
+        let text_color: id = msg_class![env; UIColor whiteColor];
+        () = msg![env; button setTitleColor:text_color forState:UIControlStateNormal];
+        let layer: id = msg![env; button layer];
+        () = msg![env; layer setCornerRadius:(6.0 as CGFloat)];
+        () = msg![env; button addTarget:delegate
+                                 action:selector
+                       forControlEvents:UIControlEventTouchUpInside];
+        () = msg![env; scroll addSubview:button];
+        buttons.push(button);
+        x += button_width + margin;
+    }
+
+    let content_size = CGSize {
+        width: x,
+        height: strip_height,
+    };
+    () = msg![env; scroll setContentSize:content_size];
+
+    buttons
 }
