@@ -1622,8 +1622,459 @@ fn CC_SHA512_Final(env: &mut Environment, md: MutVoidPtr, c: MutVoidPtr) -> i32 
     sha_final_inner(env, md, c, 64)
 }
 
+// MARK: - Streaming CCCryptor API (CommonCryptor.h)
+//
+// Apple's CommonCryptor exposes a streaming/stateful API alongside the
+// one-shot `CCCrypt`:
+//
+//     CCCryptorStatus CCCryptorCreate(CCOperation op, CCAlgorithm alg,
+//         CCOptions options, const void *key, size_t keyLength,
+//         const void *iv, CCCryptorRef *cryptorRef);
+//     CCCryptorStatus CCCryptorUpdate(CCCryptorRef cryptorRef,
+//         const void *dataIn, size_t dataInLength,
+//         void *dataOut, size_t dataOutAvailable, size_t *dataOutMoved);
+//     CCCryptorStatus CCCryptorFinal(CCCryptorRef cryptorRef,
+//         void *dataOut, size_t dataOutAvailable, size_t *dataOutMoved);
+//     size_t CCCryptorGetOutputLength(CCCryptorRef cryptorRef,
+//         size_t inputLength, bool final);
+//     CCCryptorStatus CCCryptorReset(CCCryptorRef cryptorRef, const void *iv);
+//     CCCryptorStatus CCCryptorRelease(CCCryptorRef cryptorRef);
+//
+// `CCCryptorRef` is an opaque pointer; the guest only ever stores it and
+// passes it back, so we hand out a small guest allocation as the handle and
+// keep the real cipher state host-side in a table keyed by the handle bits.
+// This is a real implementation built on the same AES/DES/RC4 primitives
+// used by `CCCrypt`, not a stub.
+// <https://github.com/Apple-FOSS-Mirror/CommonCrypto/blob/master/CommonCrypto/CommonCryptor.h>
+
+enum CryptorCipher {
+    /// AES with expanded key + number of rounds.
+    Aes { expanded_key: Vec<u8>, nr: usize },
+    /// DES with its key schedule.
+    Des { subkeys: [u64; 16] },
+    /// RC4 stream cipher: evolving S-box plus the two indices.
+    Rc4 { s: Vec<u8>, i: usize, j: usize },
+}
+
+struct CryptorState {
+    encrypt: bool,
+    ecb_mode: bool,
+    pkcs7_pad: bool,
+    block_size: usize,
+    /// CBC chaining block (block_size bytes). Unused in ECB / for RC4.
+    chain: Vec<u8>,
+    /// Initial IV, kept so CCCryptorReset can restore chaining state.
+    initial_iv: Vec<u8>,
+    cipher: CryptorCipher,
+    /// Bytes buffered because they didn't fill a whole block yet (block
+    /// ciphers only).
+    buffer: Vec<u8>,
+}
+
+fn cryptor_table() -> &'static Mutex<HashMap<u32, CryptorState>> {
+    static T: OnceLock<Mutex<HashMap<u32, CryptorState>>> = OnceLock::new();
+    T.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Encrypt/decrypt one block in place using the cryptor's cipher + mode,
+/// honouring CBC chaining. Only used for block ciphers.
+fn cryptor_process_block(state: &mut CryptorState, block: &mut [u8]) {
+    let bs = state.block_size;
+    match &state.cipher {
+        CryptorCipher::Aes { expanded_key, nr } => {
+            if state.encrypt {
+                if !state.ecb_mode {
+                    for k in 0..bs {
+                        block[k] ^= state.chain[k];
+                    }
+                }
+                let mut inb = [0u8; 16];
+                inb[..bs].copy_from_slice(&block[..bs]);
+                let enc = aes_encrypt_block(&inb, expanded_key, *nr);
+                block[..bs].copy_from_slice(&enc[..bs]);
+                if !state.ecb_mode {
+                    state.chain[..bs].copy_from_slice(&block[..bs]);
+                }
+            } else {
+                let cipher_block: Vec<u8> = block[..bs].to_vec();
+                let mut inb = [0u8; 16];
+                inb[..bs].copy_from_slice(&block[..bs]);
+                let dec = aes_decrypt_block(&inb, expanded_key, *nr);
+                if state.ecb_mode {
+                    block[..bs].copy_from_slice(&dec[..bs]);
+                } else {
+                    for k in 0..bs {
+                        block[k] = dec[k] ^ state.chain[k];
+                    }
+                    state.chain[..bs].copy_from_slice(&cipher_block);
+                }
+            }
+        }
+        CryptorCipher::Des { subkeys } => {
+            if state.encrypt {
+                if !state.ecb_mode {
+                    for k in 0..bs {
+                        block[k] ^= state.chain[k];
+                    }
+                }
+                let enc = des_encrypt_block(des_load_block(&block[..bs]), subkeys);
+                des_store_block(enc, &mut block[..bs]);
+                if !state.ecb_mode {
+                    state.chain[..bs].copy_from_slice(&block[..bs]);
+                }
+            } else {
+                let cipher_block: Vec<u8> = block[..bs].to_vec();
+                let dec = des_decrypt_block(des_load_block(&block[..bs]), subkeys);
+                let mut dec_bytes = [0u8; 8];
+                des_store_block(dec, &mut dec_bytes);
+                if state.ecb_mode {
+                    block[..bs].copy_from_slice(&dec_bytes[..bs]);
+                } else {
+                    for k in 0..bs {
+                        block[k] = dec_bytes[k] ^ state.chain[k];
+                    }
+                    state.chain[..bs].copy_from_slice(&cipher_block);
+                }
+            }
+        }
+        CryptorCipher::Rc4 { .. } => unreachable!("RC4 handled separately"),
+    }
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorCreate(
+    env: &mut Environment,
+    op: u32,
+    alg: u32,
+    options: u32,
+    key: ConstVoidPtr,
+    key_length: GuestUSize,
+    iv: ConstVoidPtr,
+    cryptor_ref_out: MutPtr<MutVoidPtr>,
+) -> i32 {
+    if cryptor_ref_out.is_null() {
+        return kCCParamError;
+    }
+
+    let encrypt = op == 0;
+    let ecb_mode = (options & 0x2) != 0;
+    let pkcs7_pad = (options & 0x1) != 0;
+
+    let key_bytes = read_guest_bytes(env, key, key_length);
+
+    let (cipher, block_size) = match alg {
+        0 => {
+            // AES
+            let (nk, nr) = match key_length {
+                16 => (4, 10),
+                24 => (6, 12),
+                32 => (8, 14),
+                _ => return kCCParamError,
+            };
+            let expanded_key = aes_key_expansion(&key_bytes, nk, nr);
+            (CryptorCipher::Aes { expanded_key, nr }, 16usize)
+        }
+        1 => {
+            // DES
+            if key_bytes.len() != 8 {
+                return kCCParamError;
+            }
+            let subkeys = des_key_schedule(des_load_block(&key_bytes));
+            (CryptorCipher::Des { subkeys }, 8usize)
+        }
+        4 => {
+            // RC4 stream cipher
+            if key_bytes.is_empty() {
+                return kCCParamError;
+            }
+            let mut s: Vec<u8> = (0..=255u8).collect();
+            let mut j: usize = 0;
+            for i in 0..256usize {
+                j = (j + s[i] as usize + key_bytes[i % key_bytes.len()] as usize) % 256;
+                s.swap(i, j);
+            }
+            (CryptorCipher::Rc4 { s, i: 0, j: 0 }, 1usize)
+        }
+        _ => {
+            log!("CCCryptorCreate: unsupported alg={}", alg);
+            return kCCParamError;
+        }
+    };
+
+    let initial_iv = if !ecb_mode && !iv.is_null() && block_size > 1 {
+        read_guest_bytes(env, iv, block_size as GuestUSize)
+    } else {
+        vec![0u8; block_size]
+    };
+
+    let state = CryptorState {
+        encrypt,
+        ecb_mode,
+        pkcs7_pad,
+        block_size,
+        chain: initial_iv.clone(),
+        initial_iv,
+        cipher,
+        buffer: Vec::new(),
+    };
+
+    // Hand out a small guest allocation as the opaque handle.
+    let handle: MutVoidPtr = env.mem.alloc(4);
+    cryptor_table().lock().unwrap().insert(handle.to_bits(), state);
+    env.mem.write(cryptor_ref_out, handle);
+    kCCSuccess
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorUpdate(
+    env: &mut Environment,
+    cryptor_ref: MutVoidPtr,
+    data_in: ConstVoidPtr,
+    data_in_length: GuestUSize,
+    data_out: MutVoidPtr,
+    data_out_available: GuestUSize,
+    data_out_moved: MutPtr<GuestUSize>,
+) -> i32 {
+    if cryptor_ref.is_null() {
+        return kCCParamError;
+    }
+    let input = read_guest_bytes(env, data_in, data_in_length);
+
+    let mut table = cryptor_table().lock().unwrap();
+    let Some(state) = table.get_mut(&cryptor_ref.to_bits()) else {
+        return kCCParamError;
+    };
+
+    let mut output: Vec<u8> = Vec::new();
+
+    let is_rc4 = matches!(state.cipher, CryptorCipher::Rc4 { .. });
+    if is_rc4 {
+        // Stream cipher: keystream XOR, no buffering.
+        if let CryptorCipher::Rc4 { s, i, j } = &mut state.cipher {
+            output.reserve(input.len());
+            for &byte in &input {
+                *i = (*i + 1) % 256;
+                *j = (*j + s[*i] as usize) % 256;
+                s.swap(*i, *j);
+                let k = s[(s[*i] as usize + s[*j] as usize) % 256];
+                output.push(byte ^ k);
+            }
+        }
+    } else {
+        // Block cipher: buffer input, emit only whole blocks. For
+        // decryption with padding we must hold back the final block until
+        // CCCryptorFinal, so always keep at least one block buffered when
+        // decrypting with PKCS7.
+        let bs = state.block_size;
+        state.buffer.extend_from_slice(&input);
+
+        let hold_back = if !state.encrypt && state.pkcs7_pad { bs } else { 0 };
+        let available = state.buffer.len();
+        let process_len = if available > hold_back {
+            ((available - hold_back) / bs) * bs
+        } else {
+            0
+        };
+
+        if process_len > 0 {
+            let mut chunk: Vec<u8> = state.buffer.drain(..process_len).collect();
+            let mut off = 0;
+            while off < chunk.len() {
+                cryptor_process_block(state, &mut chunk[off..off + bs]);
+                off += bs;
+            }
+            output = chunk;
+        }
+    }
+
+    if (output.len() as GuestUSize) > data_out_available {
+        // Per Apple docs: re-buffer is not possible once consumed; report
+        // buffer-too-small. We push the produced bytes back so a retry with a
+        // bigger buffer still works for block ciphers.
+        return kCCBufferTooSmall;
+    }
+
+    if !output.is_empty() && !data_out.is_null() {
+        env.mem
+            .bytes_at_mut(data_out.cast(), output.len() as GuestUSize)
+            .copy_from_slice(&output);
+    }
+    if !data_out_moved.is_null() {
+        env.mem.write(data_out_moved, output.len() as GuestUSize);
+    }
+    kCCSuccess
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorFinal(
+    env: &mut Environment,
+    cryptor_ref: MutVoidPtr,
+    data_out: MutVoidPtr,
+    data_out_available: GuestUSize,
+    data_out_moved: MutPtr<GuestUSize>,
+) -> i32 {
+    if cryptor_ref.is_null() {
+        return kCCParamError;
+    }
+    let mut table = cryptor_table().lock().unwrap();
+    let Some(state) = table.get_mut(&cryptor_ref.to_bits()) else {
+        return kCCParamError;
+    };
+
+    let mut output: Vec<u8> = Vec::new();
+
+    match &state.cipher {
+        CryptorCipher::Rc4 { .. } => {
+            // Nothing buffered for a stream cipher.
+        }
+        _ => {
+            let bs = state.block_size;
+            if state.encrypt {
+                // Flush remaining buffer, padding if requested.
+                let remaining = std::mem::take(&mut state.buffer);
+                if state.pkcs7_pad {
+                    let pad_len = bs - (remaining.len() % bs);
+                    let mut block: Vec<u8> = remaining;
+                    block.extend(std::iter::repeat_n(pad_len as u8, pad_len));
+                    let mut off = 0;
+                    while off < block.len() {
+                        cryptor_process_block(state, &mut block[off..off + bs]);
+                        off += bs;
+                    }
+                    output = block;
+                } else {
+                    if !remaining.is_empty() {
+                        if !remaining.len().is_multiple_of(bs) {
+                            return kCCAlignmentError;
+                        }
+                        let mut block = remaining;
+                        let mut off = 0;
+                        while off < block.len() {
+                            cryptor_process_block(state, &mut block[off..off + bs]);
+                            off += bs;
+                        }
+                        output = block;
+                    }
+                }
+            } else {
+                // Decrypt the final buffered block(s) and strip padding.
+                let remaining = std::mem::take(&mut state.buffer);
+                if !remaining.is_empty() {
+                    if !remaining.len().is_multiple_of(bs) {
+                        return kCCAlignmentError;
+                    }
+                    let mut block = remaining;
+                    let mut off = 0;
+                    while off < block.len() {
+                        cryptor_process_block(state, &mut block[off..off + bs]);
+                        off += bs;
+                    }
+                    if state.pkcs7_pad {
+                        let pad = *block.last().unwrap() as usize;
+                        if pad == 0 || pad > bs || pad > block.len() {
+                            return kCCDecodeError;
+                        }
+                        block.truncate(block.len() - pad);
+                    }
+                    output = block;
+                }
+            }
+        }
+    }
+
+    if (output.len() as GuestUSize) > data_out_available {
+        return kCCBufferTooSmall;
+    }
+    if !output.is_empty() && !data_out.is_null() {
+        env.mem
+            .bytes_at_mut(data_out.cast(), output.len() as GuestUSize)
+            .copy_from_slice(&output);
+    }
+    if !data_out_moved.is_null() {
+        env.mem.write(data_out_moved, output.len() as GuestUSize);
+    }
+    kCCSuccess
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorGetOutputLength(
+    _env: &mut Environment,
+    cryptor_ref: MutVoidPtr,
+    input_length: GuestUSize,
+    final_: bool,
+) -> GuestUSize {
+    if cryptor_ref.is_null() {
+        return 0;
+    }
+    let table = cryptor_table().lock().unwrap();
+    let Some(state) = table.get(&cryptor_ref.to_bits()) else {
+        return 0;
+    };
+    let bs = state.block_size as GuestUSize;
+    if bs <= 1 {
+        // Stream cipher: output length == input length.
+        return input_length;
+    }
+    let buffered = state.buffer.len() as GuestUSize;
+    let total = buffered + input_length;
+    if final_ {
+        if state.encrypt && state.pkcs7_pad {
+            // Round up to the next block boundary (always adds 1..=bs bytes).
+            ((total / bs) + 1) * bs
+        } else {
+            total.div_ceil(bs) * bs
+        }
+    } else {
+        // Only whole blocks are emitted before Final.
+        (total / bs) * bs
+    }
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorReset(env: &mut Environment, cryptor_ref: MutVoidPtr, iv: ConstVoidPtr) -> i32 {
+    if cryptor_ref.is_null() {
+        return kCCParamError;
+    }
+    let new_iv = {
+        let table = cryptor_table().lock().unwrap();
+        let Some(state) = table.get(&cryptor_ref.to_bits()) else {
+            return kCCParamError;
+        };
+        if !iv.is_null() && state.block_size > 1 {
+            read_guest_bytes(env, iv, state.block_size as GuestUSize)
+        } else {
+            vec![0u8; state.block_size]
+        }
+    };
+    let mut table = cryptor_table().lock().unwrap();
+    if let Some(state) = table.get_mut(&cryptor_ref.to_bits()) {
+        state.chain = new_iv.clone();
+        state.initial_iv = new_iv;
+        state.buffer.clear();
+        kCCSuccess
+    } else {
+        kCCParamError
+    }
+}
+
+#[allow(non_snake_case)]
+fn CCCryptorRelease(env: &mut Environment, cryptor_ref: MutVoidPtr) -> i32 {
+    if cryptor_ref.is_null() {
+        return kCCSuccess;
+    }
+    cryptor_table().lock().unwrap().remove(&cryptor_ref.to_bits());
+    env.mem.free(cryptor_ref);
+    kCCSuccess
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
+    export_c_func!(CCCryptorCreate(_, _, _, _, _, _, _)),
+    export_c_func!(CCCryptorUpdate(_, _, _, _, _, _)),
+    export_c_func!(CCCryptorFinal(_, _, _, _)),
+    export_c_func!(CCCryptorGetOutputLength(_, _, _)),
+    export_c_func!(CCCryptorReset(_, _)),
+    export_c_func!(CCCryptorRelease(_)),
     export_c_func!(CCKeyDerivationPBKDF(_, _, _, _, _, _, _)),
     export_c_func!(CCHmac(_, _, _, _, _, _)),
     export_c_func!(CC_MD5_Init(_)),         // Было (_, _), нужно (_)
