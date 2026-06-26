@@ -151,6 +151,9 @@ struct AppPickerDelegateHostObject {
     network: Option<bool>,
     fullscreen: Option<bool>,
     device_model_tag: Option<i32>,
+    device_model_toggle: bool,
+    device_model_scroll_up: bool,
+    device_model_scroll_down: bool,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -242,6 +245,15 @@ const CLASSES: ClassExports = objc_classes! {
 - (())deviceModel:(id)sender { // UIButton*
     let tag: NSInteger = msg![env; sender tag];
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_model_tag = Some(tag as i32);
+}
+- (())deviceModelToggle {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_model_toggle = true;
+}
+- (())deviceModelScrollUp {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_model_scroll_up = true;
+}
+- (())deviceModelScrollDown {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).device_model_scroll_down = true;
 }
 
 - (())openFileManager {
@@ -539,6 +551,8 @@ fn app_picker_inner(
     let mut quick_options_analog_stick_tilt_controls = true;
     let mut quick_options_network = false;
     let mut quick_options_device_tag: Option<i32> = None;
+    let mut quick_options_device_model_open = false;
+    let mut quick_options_device_model_scroll: isize = 0;
 
     fn update_quick_option_buttons(env: &mut Environment, buttons: &[id], selected_idx: usize) {
         for (idx, &button) in buttons.iter().enumerate() {
@@ -569,23 +583,6 @@ fn app_picker_inner(
             }),
         );
     }
-    fn update_device_family_buttons(env: &mut Environment, buttons: &[id], value: Option<i32>) {
-        // Each button's highlight is driven by its own UIView tag rather than a
-        // fixed index, because the device buttons live inside a scroll view and
-        // there are many of them. Tag 0 == Auto, tags 1..=N map to
-        // DeviceFamily::ALL_SELECTABLE. `None` means no explicit choice yet, so
-        // nothing is highlighted.
-        for &button in buttons {
-            let tag: crate::frameworks::foundation::NSInteger = msg![env; button tag];
-            let selected = value.map_or(false, |v| v as crate::frameworks::foundation::NSInteger == tag);
-            let color: id = if selected {
-                msg_class![env; UIColor magentaColor]
-            } else {
-                msg_class![env; UIColor grayColor]
-            };
-            () = msg![env; button setBackgroundColor:color];
-        }
-    }
     update_scale_hack_buttons(
         env,
         &quick_options_stuff.scale_hack_buttons,
@@ -596,10 +593,12 @@ fn app_picker_inner(
         &quick_options_stuff.orientation_buttons,
         quick_options_orientation,
     );
-    update_device_family_buttons(
+    update_device_model_menu(
         env,
-        &quick_options_stuff.device_model_buttons,
+        &quick_options_stuff.device_model_items,
+        quick_options_stuff.device_model_thumb,
         quick_options_device_tag,
+        quick_options_device_model_scroll,
     );
 
     () = msg![env; window makeKeyAndVisible];
@@ -741,10 +740,57 @@ fn app_picker_inner(
             );
         } else if let Some(tag) = std::mem::take(&mut host_obj.device_model_tag) {
             quick_options_device_tag = Some(tag);
-            update_device_family_buttons(
+            quick_options_device_model_open = false;
+            () = msg![env; (quick_options_stuff.device_model_menu) setHidden:true];
+            update_device_model_menu(
                 env,
-                &quick_options_stuff.device_model_buttons,
+                &quick_options_stuff.device_model_items,
+                quick_options_stuff.device_model_thumb,
                 quick_options_device_tag,
+                quick_options_device_model_scroll,
+            );
+            let title = format!("{} ▼", device_model_label_for_tag(quick_options_device_tag));
+            let title_ns = ns_string::from_rust_string(env, title);
+            () = msg![env; (quick_options_stuff.device_model_btn)
+                setTitle:title_ns forState:UIControlStateNormal];
+            release(env, title_ns);
+        } else if std::mem::take(&mut host_obj.device_model_toggle) {
+            quick_options_device_model_open = !quick_options_device_model_open;
+            () = msg![env; (quick_options_stuff.device_model_menu)
+                setHidden:(!quick_options_device_model_open)];
+            let arrow = if quick_options_device_model_open { "▲" } else { "▼" };
+            let title = format!(
+                "{} {}",
+                device_model_label_for_tag(quick_options_device_tag),
+                arrow
+            );
+            let title_ns = ns_string::from_rust_string(env, title);
+            () = msg![env; (quick_options_stuff.device_model_btn)
+                setTitle:title_ns forState:UIControlStateNormal];
+            release(env, title_ns);
+        } else if std::mem::take(&mut host_obj.device_model_scroll_up) {
+            if quick_options_device_model_scroll > 0 {
+                quick_options_device_model_scroll -= 1;
+            }
+            update_device_model_menu(
+                env,
+                &quick_options_stuff.device_model_items,
+                quick_options_stuff.device_model_thumb,
+                quick_options_device_tag,
+                quick_options_device_model_scroll,
+            );
+        } else if std::mem::take(&mut host_obj.device_model_scroll_down) {
+            let max_scroll = (quick_options_stuff.device_model_items.len() as isize)
+                .saturating_sub(DEVICE_MENU_VISIBLE_ITEMS as isize);
+            if quick_options_device_model_scroll < max_scroll {
+                quick_options_device_model_scroll += 1;
+            }
+            update_device_model_menu(
+                env,
+                &quick_options_stuff.device_model_items,
+                quick_options_stuff.device_model_thumb,
+                quick_options_device_tag,
+                quick_options_device_model_scroll,
             );
         } else if let Some(enabled) = std::mem::take(&mut host_obj.analog_stick_tilt_controls) {
             quick_options_analog_stick_tilt_controls = enabled;
@@ -1313,19 +1359,61 @@ struct QuickOptionsStuff {
     main_view: id,
     scale_hack_buttons: [id; 5],
     orientation_buttons: [id; 4],
-    /// Buttons for the scrollable "Device model" strip. The first two are the
-    /// special "Default" (no override) and "Auto" choices; the rest are one
-    /// button per [crate::window::DeviceFamily] in `ALL_SELECTABLE` order. Each
-    /// button carries a UIView `tag` identifying its choice (see
+    /// The button that toggles the "Device model" dropdown open/closed. Its
+    /// title shows the currently-selected model plus an up/down arrow.
+    device_model_btn: id,
+    /// The dropdown container view (hidden until toggled). Holds the scrollable
+    /// list of choices, the scrollbar track/thumb, and the scroll arrows.
+    device_model_menu: id,
+    /// One button per choice in `device_model_entries()` order ("Default",
+    /// "Auto", then every [crate::window::DeviceFamily] in `ALL_SELECTABLE`).
+    /// Each carries a UIView `tag` identifying its choice (see
     /// `DEVICE_TAG_DEFAULT` / `DEVICE_TAG_AUTO` / model index).
-    device_model_buttons: Vec<id>,
+    device_model_items: Vec<id>,
+    /// The scrollbar thumb shown alongside the list.
+    device_model_thumb: id,
 }
 
-/// Sentinel button tags for the device-model strip. Model buttons use their
+/// Sentinel button tags for the device-model dropdown. Model buttons use their
 /// index into `DeviceFamily::ALL_SELECTABLE` (0..=19) as their tag, so the
 /// sentinels are placed well above that range.
 const DEVICE_TAG_DEFAULT: NSInteger = 1000;
 const DEVICE_TAG_AUTO: NSInteger = 1001;
+
+/// How many rows of the device-model dropdown are visible at once before the
+/// list has to be scrolled.
+const DEVICE_MENU_VISIBLE_ITEMS: usize = 6;
+/// Height of a single row in the device-model dropdown.
+const DEVICE_MENU_ITEM_HEIGHT: CGFloat = 30.0;
+
+/// The choices shown in the device-model dropdown, in display order, as
+/// `(title, tag)` pairs: "Default" (no override), "Auto" (match host screen),
+/// then one entry per [crate::window::DeviceFamily] in `ALL_SELECTABLE` order
+/// tagged with its index.
+fn device_model_entries() -> Vec<(String, NSInteger)> {
+    use crate::window::DeviceFamily;
+    let mut entries: Vec<(String, NSInteger)> = Vec::new();
+    entries.push(("Default".to_string(), DEVICE_TAG_DEFAULT));
+    entries.push(("Auto".to_string(), DEVICE_TAG_AUTO));
+    for (idx, family) in DeviceFamily::ALL_SELECTABLE.iter().enumerate() {
+        entries.push((family.display_name().to_string(), idx as NSInteger));
+    }
+    entries
+}
+
+/// Human-readable label for a device-model choice tag, used as the dropdown
+/// button title.
+fn device_model_label_for_tag(tag: Option<i32>) -> String {
+    use crate::window::DeviceFamily;
+    match tag.map(|t| t as NSInteger) {
+        None | Some(DEVICE_TAG_DEFAULT) => "Default".to_string(),
+        Some(DEVICE_TAG_AUTO) => "Auto".to_string(),
+        Some(idx) => DeviceFamily::ALL_SELECTABLE
+            .get(idx as usize)
+            .map(|f| f.display_name().to_string())
+            .unwrap_or_else(|| "Default".to_string()),
+    }
+}
 
 fn setup_quick_options(
     env: &mut Environment,
@@ -1402,8 +1490,8 @@ fn setup_quick_options(
     enum RowKind {
         Label(&'static str),
         Buttons(&'static [(&'static str, &'static str)]),
-        /// Horizontally-scrollable strip listing every selectable device model.
-        DeviceScroll,
+        /// Dropdown listing every selectable device model.
+        DeviceDropdown,
         Switch(&'static str, bool),
     }
     let rows = [
@@ -1422,8 +1510,8 @@ fn setup_quick_options(
             ("→", "orientationLandscapeRight"),
             ("↓", "orientationPortraitUpsideDown"),
         ]),
-        RowKind::Label("Device model (swipe to scroll)"),
-        RowKind::DeviceScroll,
+        RowKind::Label("Device model"),
+        RowKind::DeviceDropdown,
         RowKind::Label("Network access"),
         RowKind::Switch("network:", false),
         RowKind::Label("Use analog sticks for tilt controls"),
@@ -1441,7 +1529,10 @@ fn setup_quick_options(
     };
 
     let mut button_rows = Vec::new();
-    let mut device_model_buttons: Vec<id> = Vec::new();
+    let mut device_model_btn: id = nil;
+    let mut device_model_menu: id = nil;
+    let mut device_model_items: Vec<id> = Vec::new();
+    let mut device_model_thumb: id = nil;
     for (i, row) in rows.iter().enumerate() {
         let row_center = divider
             + ((1 + i) as CGFloat)
@@ -1478,14 +1569,18 @@ fn setup_quick_options(
                     /* font_size: */ None,
                 ));
             }
-            RowKind::DeviceScroll => {
-                device_model_buttons = make_device_model_scroll(
+            RowKind::DeviceDropdown => {
+                let dropdown = make_device_model_dropdown(
                     env,
                     delegate,
                     main_view,
                     main_frame.size,
                     row_center,
                 );
+                device_model_btn = dropdown.0;
+                device_model_menu = dropdown.1;
+                device_model_items = dropdown.2;
+                device_model_thumb = dropdown.3;
             }
             RowKind::Switch(selector, default_state) => {
                 let switch_frame = CGRect {
@@ -1512,99 +1607,254 @@ fn setup_quick_options(
         main_view,
         scale_hack_buttons: button_rows[0][..].try_into().unwrap(),
         orientation_buttons: button_rows[1][..].try_into().unwrap(),
-        device_model_buttons,
+        device_model_btn,
+        device_model_menu,
+        device_model_items,
+        device_model_thumb,
     }
 }
 
-/// Build the horizontally-scrollable "Device model" strip: a UIScrollView
-/// containing a "Default" button, an "Auto" button, then one button per
-/// [crate::window::DeviceFamily] in `ALL_SELECTABLE` order. Each button is
-/// wired to the delegate's `deviceModel:` selector and tagged so the handler
-/// can tell which model was picked. Returns the buttons in display order.
-fn make_device_model_scroll(
+/// Re-lay-out and re-style the device-model dropdown list for the given scroll
+/// offset and current selection. Items are positioned relative to `scroll`
+/// (each row is `DEVICE_MENU_ITEM_HEIGHT` tall); rows outside the visible
+/// window are hidden. The currently-selected item is highlighted in magenta,
+/// the rest in dark gray. The scrollbar thumb is moved to reflect `scroll`.
+fn update_device_model_menu(
+    env: &mut Environment,
+    items: &[id],
+    thumb: id,
+    selected: Option<i32>,
+    scroll: isize,
+) {
+    let visible_menu_height = (DEVICE_MENU_VISIBLE_ITEMS as CGFloat) * DEVICE_MENU_ITEM_HEIGHT;
+    let list_width: CGFloat = 256.0;
+    let max_scroll = (items.len() as isize).saturating_sub(DEVICE_MENU_VISIBLE_ITEMS as isize);
+
+    for (j, &item) in items.iter().enumerate() {
+        let y_pos = ((j as isize - scroll) as CGFloat) * DEVICE_MENU_ITEM_HEIGHT;
+        let is_visible = y_pos >= 0.0 && y_pos < visible_menu_height;
+        () = msg![env; item setHidden:(!is_visible)];
+        if is_visible {
+            let item_frame = CGRect {
+                origin: CGPoint { x: 0.0, y: y_pos },
+                size: CGSize {
+                    width: list_width,
+                    height: DEVICE_MENU_ITEM_HEIGHT,
+                },
+            };
+            () = msg![env; item setFrame:item_frame];
+        }
+        let tag: NSInteger = msg![env; item tag];
+        let is_selected = selected.is_some_and(|v| v as NSInteger == tag);
+        let color: id = if is_selected {
+            msg_class![env; UIColor magentaColor]
+        } else {
+            msg_class![env; UIColor darkGrayColor]
+        };
+        () = msg![env; item setBackgroundColor:color];
+    }
+
+    // Position the scrollbar thumb proportionally to the scroll offset.
+    let thumb_height: CGFloat = 54.0;
+    let travel = (visible_menu_height - thumb_height).max(0.0);
+    let thumb_y = if max_scroll > 0 {
+        (scroll as CGFloat / max_scroll as CGFloat) * travel
+    } else {
+        0.0
+    };
+    let thumb_frame = CGRect {
+        origin: CGPoint {
+            x: list_width,
+            y: thumb_y,
+        },
+        size: CGSize {
+            width: 24.0,
+            height: thumb_height,
+        },
+    };
+    () = msg![env; thumb setFrame:thumb_frame];
+}
+
+/// Build the "Device model" dropdown: a toggle button whose title shows the
+/// currently-selected model and an up/down arrow, plus a (initially hidden)
+/// menu placed *above* the button so it never runs off the bottom of the
+/// screen. The menu contains a vertically-scrollable list of every choice from
+/// [device_model_entries], a scrollbar track + thumb, and transparent up/down
+/// scroll arrows. Each list item is wired to the delegate's `deviceModel:`
+/// selector and tagged with its choice; the arrows fire `deviceModelScrollUp` /
+/// `deviceModelScrollDown`. Returns `(toggle button, menu view, item buttons,
+/// scrollbar thumb)`.
+fn make_device_model_dropdown(
     env: &mut Environment,
     delegate: id,
     super_view: id,
     super_view_size: CGSize,
     row_center: CGFloat,
-) -> Vec<id> {
-    use crate::window::DeviceFamily;
+) -> (id, id, Vec<id>, id) {
+    let btn_width: CGFloat = 280.0;
+    let btn_height: CGFloat = 30.0;
+    let list_width: CGFloat = 256.0;
+    let scrollbar_width: CGFloat = 24.0;
 
-    let margin: CGFloat = 8.0;
-    let button_height: CGFloat = 34.0;
-    let button_width: CGFloat = 110.0;
-    let strip_height = button_height + margin * 2.0;
-    let side_inset: CGFloat = 10.0;
-
-    let scroll_frame = CGRect {
+    let btn_frame = CGRect {
         origin: CGPoint {
-            x: side_inset,
-            y: row_center - strip_height / 2.0,
+            x: super_view_size.width / 2.0 - btn_width / 2.0,
+            y: row_center - btn_height / 2.0,
         },
         size: CGSize {
-            width: super_view_size.width - side_inset * 2.0,
-            height: strip_height,
+            width: btn_width,
+            height: btn_height,
         },
     };
 
-    let scroll: id = msg_class![env; UIScrollView alloc];
-    let scroll: id = msg![env; scroll initWithFrame:scroll_frame];
-    () = msg![env; scroll setShowsHorizontalScrollIndicator:true];
-    () = msg![env; scroll setShowsVerticalScrollIndicator:false];
-    () = msg![env; scroll setScrollEnabled:true];
-    let clear: id = msg_class![env; UIColor clearColor];
-    () = msg![env; scroll setBackgroundColor:clear];
-    () = msg![env; super_view addSubview:scroll];
+    let dark_gray: id = msg_class![env; UIColor darkGrayColor];
 
-    // The choices: Default + Auto + every model. Tags identify each choice.
-    let mut entries: Vec<(String, NSInteger)> = Vec::new();
-    entries.push(("Default".to_string(), DEVICE_TAG_DEFAULT));
-    entries.push(("Auto".to_string(), DEVICE_TAG_AUTO));
-    for (idx, family) in DeviceFamily::ALL_SELECTABLE.iter().enumerate() {
-        entries.push((family.display_name().to_string(), idx as NSInteger));
-    }
+    // Bordered container for the toggle button (a darker frame behind a lighter
+    // inner button), so it reads as a control on the white menu background.
+    let border_view: id = msg_class![env; UIView alloc];
+    let border_view: id = msg![env; border_view initWithFrame:btn_frame];
+    () = msg![env; border_view setBackgroundColor:dark_gray];
+    () = msg![env; super_view addSubview:border_view];
 
-    let selector = env.objc.lookup_selector("deviceModel:").unwrap();
-    let mut buttons: Vec<id> = Vec::new();
-    let mut x: CGFloat = margin;
-    for (title, tag) in entries {
-        let frame = CGRect {
-            origin: CGPoint {
-                x,
-                y: margin,
-            },
+    let inner_frame = CGRect {
+        origin: CGPoint { x: 2.0, y: 2.0 },
+        size: CGSize {
+            width: btn_frame.size.width - 4.0,
+            height: btn_frame.size.height - 4.0,
+        },
+    };
+    let button: id = msg_class![env; UIButton buttonWithType:UIButtonTypeCustom];
+    let initial_title = format!("{} ^", device_model_label_for_tag(None));
+    let text = ns_string::from_rust_string(env, initial_title);
+    () = msg![env; button setTitle:text forState:UIControlStateNormal];
+    release(env, text);
+    let black: id = msg_class![env; UIColor blackColor];
+    () = msg![env; button setTitleColor:black forState:UIControlStateNormal];
+    let light_gray: id = msg_class![env; UIColor lightGrayColor];
+    () = msg![env; button setBackgroundColor:light_gray];
+    () = msg![env; button setFrame:inner_frame];
+    () = msg![env; button layoutSubviews];
+    let toggle_selector = env.objc.lookup_selector("deviceModelToggle").unwrap();
+    () = msg![env; button addTarget:delegate
+                             action:toggle_selector
+                   forControlEvents:UIControlEventTouchUpInside];
+    () = msg![env; border_view addSubview:button];
+
+    // The dropdown menu, placed directly above the toggle button. It is clipped
+    // to its own bounds and hidden until the button is tapped.
+    let visible_menu_height = (DEVICE_MENU_VISIBLE_ITEMS as CGFloat) * DEVICE_MENU_ITEM_HEIGHT;
+    let menu_frame = CGRect {
+        origin: CGPoint {
+            x: btn_frame.origin.x,
+            y: btn_frame.origin.y - visible_menu_height,
+        },
+        size: CGSize {
+            width: btn_width,
+            height: visible_menu_height,
+        },
+    };
+    let menu_view: id = msg_class![env; UIView alloc];
+    let menu_view: id = msg![env; menu_view initWithFrame:menu_frame];
+    () = msg![env; menu_view setBackgroundColor:dark_gray];
+    () = msg![env; menu_view setClipsToBounds:true];
+    () = msg![env; menu_view setHidden:true];
+    () = msg![env; super_view addSubview:menu_view];
+
+    // List items: one button per choice. Items that fall outside the initially
+    // visible window are hidden; scrolling reveals them (see
+    // `update_device_model_menu`).
+    let entries = device_model_entries();
+    let item_selector = env.objc.lookup_selector("deviceModel:").unwrap();
+    let white: id = msg_class![env; UIColor whiteColor];
+    let mut items: Vec<id> = Vec::new();
+    for (j, (title, tag)) in entries.into_iter().enumerate() {
+        let y_pos = (j as CGFloat) * DEVICE_MENU_ITEM_HEIGHT;
+        let item_frame = CGRect {
+            origin: CGPoint { x: 0.0, y: y_pos },
             size: CGSize {
-                width: button_width,
-                height: button_height,
+                width: list_width,
+                height: DEVICE_MENU_ITEM_HEIGHT,
             },
         };
-        let button: id = msg_class![env; UIButton buttonWithType:UIButtonTypeRoundedRect];
+        let item_btn: id = msg_class![env; UIButton buttonWithType:UIButtonTypeCustom];
         let text = ns_string::from_rust_string(env, title);
-        () = msg![env; button setTitle:text forState:UIControlStateNormal];
+        () = msg![env; item_btn setTitle:text forState:UIControlStateNormal];
         release(env, text);
-        () = msg![env; button setFrame:frame];
-        () = msg![env; button layoutSubviews];
-        () = msg![env; button setTag:tag];
-        let label: id = msg![env; button titleLabel];
-        let font: id = msg_class![env; UIFont systemFontOfSize:(13.0 as CGFloat)];
-        () = msg![env; label setFont:font];
-        let text_color: id = msg_class![env; UIColor whiteColor];
-        () = msg![env; button setTitleColor:text_color forState:UIControlStateNormal];
-        let layer: id = msg![env; button layer];
-        () = msg![env; layer setCornerRadius:(6.0 as CGFloat)];
-        () = msg![env; button addTarget:delegate
-                                 action:selector
-                       forControlEvents:UIControlEventTouchUpInside];
-        () = msg![env; scroll addSubview:button];
-        buttons.push(button);
-        x += button_width + margin;
+        () = msg![env; item_btn setTitleColor:white forState:UIControlStateNormal];
+        () = msg![env; item_btn setFrame:item_frame];
+        () = msg![env; item_btn layoutSubviews];
+        () = msg![env; item_btn setTag:tag];
+        if y_pos >= visible_menu_height {
+            () = msg![env; item_btn setHidden:true];
+        }
+        () = msg![env; item_btn addTarget:delegate
+                                   action:item_selector
+                         forControlEvents:UIControlEventTouchUpInside];
+        () = msg![env; menu_view addSubview:item_btn];
+        items.push(item_btn);
     }
 
-    let content_size = CGSize {
-        width: x,
-        height: strip_height,
+    // Scrollbar track (full height) and thumb.
+    let track_view: id = msg_class![env; UIView alloc];
+    let track_frame = CGRect {
+        origin: CGPoint { x: list_width, y: 0.0 },
+        size: CGSize {
+            width: scrollbar_width,
+            height: visible_menu_height,
+        },
     };
-    () = msg![env; scroll setContentSize:content_size];
+    let track_view: id = msg![env; track_view initWithFrame:track_frame];
+    let black: id = msg_class![env; UIColor blackColor];
+    () = msg![env; track_view setBackgroundColor:black];
+    () = msg![env; menu_view addSubview:track_view];
 
-    buttons
+    let thumb_view: id = msg_class![env; UIView alloc];
+    let thumb_frame = CGRect {
+        origin: CGPoint { x: list_width, y: 0.0 },
+        size: CGSize {
+            width: scrollbar_width,
+            height: 54.0,
+        },
+    };
+    let thumb_view: id = msg![env; thumb_view initWithFrame:thumb_frame];
+    let light_gray: id = msg_class![env; UIColor lightGrayColor];
+    () = msg![env; thumb_view setBackgroundColor:light_gray];
+    () = msg![env; menu_view addSubview:thumb_view];
+
+    // Transparent up/down halves over the scrollbar that scroll the list.
+    let clear: id = msg_class![env; UIColor clearColor];
+    let up_btn: id = msg_class![env; UIButton buttonWithType:UIButtonTypeCustom];
+    let up_frame = CGRect {
+        origin: CGPoint { x: list_width, y: 0.0 },
+        size: CGSize {
+            width: scrollbar_width,
+            height: visible_menu_height / 2.0,
+        },
+    };
+    () = msg![env; up_btn setFrame:up_frame];
+    () = msg![env; up_btn setBackgroundColor:clear];
+    () = msg![env; up_btn addTarget:delegate
+                             action:(env.objc.lookup_selector("deviceModelScrollUp").unwrap())
+                   forControlEvents:UIControlEventTouchUpInside];
+    () = msg![env; menu_view addSubview:up_btn];
+
+    let down_btn: id = msg_class![env; UIButton buttonWithType:UIButtonTypeCustom];
+    let down_frame = CGRect {
+        origin: CGPoint {
+            x: list_width,
+            y: visible_menu_height / 2.0,
+        },
+        size: CGSize {
+            width: scrollbar_width,
+            height: visible_menu_height / 2.0,
+        },
+    };
+    () = msg![env; down_btn setFrame:down_frame];
+    () = msg![env; down_btn setBackgroundColor:clear];
+    () = msg![env; down_btn addTarget:delegate
+                               action:(env.objc.lookup_selector("deviceModelScrollDown").unwrap())
+                     forControlEvents:UIControlEventTouchUpInside];
+    () = msg![env; menu_view addSubview:down_btn];
+
+    (button, menu_view, items, thumb_view)
 }
