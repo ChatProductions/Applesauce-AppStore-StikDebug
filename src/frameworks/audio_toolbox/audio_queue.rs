@@ -1781,6 +1781,26 @@ pub fn AudioQueueDispose(
             );
             assert!(context.GetError() == 0);
         }
+
+        // Free the OpenAL source back to the (finite) source pool. OpenAL Soft
+        // only provides a limited number of sources (mono_sources +
+        // stereo_sources), unlike a real Audio Queue which is backed by the
+        // system audio hardware. Previously the source was never deleted here,
+        // so every disposed AudioQueue / AVAudioPlayer leaked one source.
+        // Games that allocate many short-lived AVAudioPlayers for sound
+        // effects (e.g. BAROQUE) eventually exhausted the pool: alGenSources
+        // then failed with AL_OUT_OF_MEMORY (0xA005), all further audio went
+        // silent, and the game aborted ("これ以上オーディを再生できません").
+        //
+        // Apple's AudioQueueDispose documents that it "disposes of an audio
+        // queue object and all of its resources"
+        // <https://developer.apple.com/documentation/audiotoolbox/audioqueuedispose(_:_:)>,
+        // so releasing the source here matches the documented behaviour.
+        unsafe {
+            context.DeleteSources(1, &al_source);
+            assert!(context.GetError() == 0);
+        }
+        host_object.al_source = None;
     }
 
     ns_run_loop::remove_audio_queue(env, host_object.run_loop, in_aq);
