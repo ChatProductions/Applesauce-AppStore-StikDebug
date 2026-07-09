@@ -29,7 +29,6 @@ mod log;
 mod abi;
 mod audio;
 mod bundle;
-mod corrupt;
 mod cpu;
 mod debug;
 mod dyld;
