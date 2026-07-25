@@ -450,6 +450,7 @@ fn glBlendFunc(env: &mut Environment, sfactor: GLenum, dfactor: GLenum) {
 fn glBlendEquationOES(env: &mut Environment, mode: GLenum) {
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.BlendEquationOES(mode) })
 }
+
 fn glColorMask(
     env: &mut Environment,
     red: GLboolean,
@@ -779,7 +780,7 @@ fn glBufferData(
     usage: GLenum,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        let data = if data.is_null() {
+        let data: *const GLvoid = if data.is_null() {
             std::ptr::null()
         } else {
             mem.ptr_at(data.cast::<u8>(), size.try_into().unwrap())
