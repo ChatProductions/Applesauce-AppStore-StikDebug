@@ -310,3 +310,14 @@ at.source.tomzom: --device-family=iphone --force-composition
 at.source.potpan: --device-family=iphone --landscape-right --force-composition
 at.source.potato3D: --device-family=iphone --landscape-right --force-composition
 com.tayasui.mrpoofree: --device-family=iphone --landscape-right --fullscreen --force-composition
+# Hack, Slash, Loot (iPad)
+# Landscape iPad title; its first menu is rendered by the fixed-function GLES 1.1 path.
+com.DavidWilliamson.HackSlashLootiPad: --landscape-left --device-family=ipad --gles1=gles1_on_gl2
+
+# Super Battle Racers / Battle Racers
+# Unity 4.5 uses the GLES 1.1 compatibility path on this build.
+com.gamehivecorp.superbattleracers: --landscape-right --gles1=gles1_on_gl2
+
+# Animal Farm
+# iPad title; keep the legacy orientation and composition path used by its NIB UI.
+com.blackstoneaudio.enhancedaudioplayer.bsa-Animal-Farm: --device-family=ipad --landscape-right --force-composition
