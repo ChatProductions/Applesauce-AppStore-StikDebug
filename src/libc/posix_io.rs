@@ -331,12 +331,11 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
                 return None;
             }
 
-            let bundle_relative_path = format!(
-                "{}/{}",
-                env.bundle.bundle_path().as_str().trim_end_matches('/'),
-                path_string.trim_start_matches("./")
-            );
+            let bundle_root = env.bundle.bundle_path().as_str().trim_end_matches('/');
+            let relative_path = path_string.trim_start_matches("./");
+            let bundle_relative_path = format!("{bundle_root}/{relative_path}");
             case_insensitive_path(env, &bundle_relative_path)
+                .or_else(|| case_insensitive_path(env, &format!("{bundle_root}/Data/{relative_path}")))
         })
         .unwrap_or_else(|| path_string.clone());
 

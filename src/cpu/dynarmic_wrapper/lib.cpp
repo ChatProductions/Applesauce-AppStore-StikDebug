@@ -175,51 +175,49 @@ private:
 };
 
 class ArmDynarmicCP15 : public Dynarmic::A32::Coprocessor {
-  std::uint32_t addr = 0;
+  static std::uint64_t Ignore(void *, std::uint32_t, std::uint32_t) {
+    return 0;
+  }
+
+  static Callback CallbackForIgnoredOperation() {
+    return Callback{&Ignore, std::nullopt};
+  }
 
 public:
   using CoprocReg = Dynarmic::A32::CoprocReg;
 
-  CallbackOrAccessOneWord CompileSendOneWord(bool two, unsigned opc1,
-                                             CoprocReg CRn, CoprocReg CRm,
-                                             unsigned opc2) override {
-    // Corresponds to `coproc_moveto_Data_Memory_Barrier(0)` according
-    // to the Ghidra or `mcr p15,0x0,lr,cr7,cr10,0x5` in the assembly
-    if (!two && CRn == CoprocReg::C7 && opc1 == 0 && CRm == CoprocReg::C10 &&
-        opc2 == 5) {
-      // just return the address to be used as storage
-      return &addr;
-    }
-    return CallbackOrAccessOneWord{};
+  CallbackOrAccessOneWord CompileSendOneWord(bool, unsigned, CoprocReg,
+                                             CoprocReg, unsigned) override {
+    return CallbackForIgnoredOperation();
   }
 
-  // TODO
   std::optional<Callback> CompileInternalOperation(bool, unsigned, CoprocReg,
                                                    CoprocReg, CoprocReg,
                                                    unsigned) override {
-    return std::nullopt;
+    return CallbackForIgnoredOperation();
   }
-  CallbackOrAccessTwoWords CompileSendTwoWords(bool, unsigned,
-                                               CoprocReg) override {
-    return CallbackOrAccessTwoWords{};
+
+  CallbackOrAccessTwoWords CompileSendTwoWords(bool, unsigned, CoprocReg) override {
+    return CallbackForIgnoredOperation();
   }
+
   CallbackOrAccessOneWord CompileGetOneWord(bool, unsigned, CoprocReg,
                                             CoprocReg, unsigned) override {
-    return CallbackOrAccessOneWord{};
+    return CallbackForIgnoredOperation();
   }
-  CallbackOrAccessTwoWords CompileGetTwoWords(bool, unsigned,
-                                              CoprocReg) override {
-    return CallbackOrAccessTwoWords{};
+
+  CallbackOrAccessTwoWords CompileGetTwoWords(bool, unsigned, CoprocReg) override {
+    return CallbackForIgnoredOperation();
   }
-  std::optional<Callback>
-  CompileLoadWords(bool, bool, CoprocReg,
-                   std::optional<std::uint8_t>) override {
-    return std::nullopt;
+
+  std::optional<Callback> CompileLoadWords(bool, bool, CoprocReg,
+                                           std::optional<std::uint8_t>) override {
+    return CallbackForIgnoredOperation();
   }
-  std::optional<Callback>
-  CompileStoreWords(bool, bool, CoprocReg,
-                    std::optional<std::uint8_t>) override {
-    return std::nullopt;
+
+  std::optional<Callback> CompileStoreWords(bool, bool, CoprocReg,
+                                            std::optional<std::uint8_t>) override {
+    return CallbackForIgnoredOperation();
   }
 };
 
