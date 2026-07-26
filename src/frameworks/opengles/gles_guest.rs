@@ -14,8 +14,7 @@ use crate::objc::nil;
 use crate::Environment;
 use std::slice::from_raw_parts;
 use touchHLE_gl_bindings::gles11::{
-    ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER_BINDING, VERTEX_ARRAY_BUFFER_BINDING,
-    WRITE_ONLY_OES,
+    ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER_BINDING, WRITE_ONLY_OES,
 };
 
 use crate::gles::gles11_raw::types::{
@@ -1317,6 +1316,14 @@ unsafe fn guard_client_vertex_arrays(gles: &mut dyn GLES, mem: &Mem) -> Vec<GLui
         }
         let mut ptr: *mut GLvoid = std::ptr::null_mut();
         gles.GetVertexAttribPointerv(index, VERTEX_ATTRIB_ARRAY_POINTER, &mut ptr);
+        if ptr.is_null() {
+            // A null client pointer is the OpenGL default for an array that
+            // has not been populated yet. Keep the enabled array state intact:
+            // the fixed-function backend supplies its normal default attribute
+            // values, while disabling it changes the guest-visible state and
+            // can make later draws lose their vertex streams.
+            continue;
+        }
         if mem.is_host_ptr_in_guest_mem(ptr) {
             // A legitimate client-side array pointing into guest memory.
             continue;
@@ -2589,7 +2596,7 @@ fn glGenerateMipmap(env: &mut Environment, target: GLenum) {
 
 fn _get_currently_bound_buffer_object_name(env: &mut Environment, target: GLenum) -> GLuint {
     let binding = match target {
-        ARRAY_BUFFER => VERTEX_ARRAY_BUFFER_BINDING,
+        ARRAY_BUFFER => gles11::ARRAY_BUFFER_BINDING,
         ELEMENT_ARRAY_BUFFER => ELEMENT_ARRAY_BUFFER_BINDING,
         other => {
             // Anything else is a malformed call from the guest. Real GL
