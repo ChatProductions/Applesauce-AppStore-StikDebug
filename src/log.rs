@@ -121,4 +121,7 @@ pub const ENABLED_MODULES: &[&str] = &[
     "touchHLE::libc::dirent",
     "touchHLE::libc::stdlib",
     "touchHLE::frameworks::foundation::ns_bundle",
+    "touchHLE::window",
+    "touchHLE::frameworks::uikit::ui_touch",
+    "touchHLE::frameworks::uikit",
 ];
