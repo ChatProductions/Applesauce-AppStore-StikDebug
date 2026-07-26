@@ -322,3 +322,6 @@ com.gamehivecorp.superbattleracers: --landscape-right --gles1=gles1_on_gl2
 # Animal Farm
 # iPad title; keep the legacy orientation and composition path used by its NIB UI.
 com.blackstoneaudio.enhancedaudioplayer.bsa-Animal-Farm: --device-family=ipad --landscape-right --force-composition
+
+# Minecraft: Story Mode
+com.telltalegames.MC100: --device-family=ipad --landscape-left --prefer-gles2-context
