@@ -114,14 +114,12 @@ macro_rules! echo_no_panic {
 /// Put modules to enable [log_dbg] for here, e.g. "touchHLE::mem" to see when
 /// memory is allocated and freed.
 pub const ENABLED_MODULES: &[&str] = &[
-    "touchHLE::libc::posix_io",
-    "touchHLE::libc::posix_io::stat",
-    "touchHLE::libc::unistd",
-    "touchHLE::libc::stdio",
-    "touchHLE::libc::dirent",
-    "touchHLE::libc::stdlib",
-    "touchHLE::frameworks::foundation::ns_bundle",
     "touchHLE::window",
     "touchHLE::frameworks::uikit::ui_touch",
-    "touchHLE::frameworks::uikit",
+    "touchHLE::frameworks::uikit::ui_view",
+    "touchHLE::frameworks::opengles::eagl",
+    "touchHLE::frameworks::uikit::ui_view_controller",
+    "touchHLE::frameworks::foundation::ns_timer",
+    "touchHLE::frameworks::foundation::ns_run_loop",
+    "touchHLE::frameworks::core_animation::ca_display_link",
 ];
