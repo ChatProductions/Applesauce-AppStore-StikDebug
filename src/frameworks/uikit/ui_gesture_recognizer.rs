@@ -128,6 +128,9 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow_mut::<UIGestureRecognizerHostObject>(this).delegate = delegate;
 }
 - (id)view { env.objc.borrow::<UIGestureRecognizerHostObject>(this).view }
+- (())setView:(id)view {
+    env.objc.borrow_mut::<UIGestureRecognizerHostObject>(this).view = view;
+}
 - (UIGestureRecognizerState)state {
     env.objc.borrow::<UIGestureRecognizerHostObject>(this).state
 }

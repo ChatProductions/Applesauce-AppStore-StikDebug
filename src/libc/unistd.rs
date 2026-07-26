@@ -635,6 +635,10 @@ fn syscall(env: &mut Environment, number: i32, _args: DotDotDot) -> i32 {
 /// users into thinking persistence was broken.
 fn sync(_env: &mut Environment) {}
 
+fn setpriority(_env: &mut Environment, _which: i32, _who: i32, _priority: i32) -> i32 {
+    0
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(syscall(_, _)),
     export_c_func!(sleep(_)),
@@ -663,4 +667,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(chmod(_, _)),
     export_c_func!(fchmod(_, _)),
     export_c_func!(sync()),
+    export_c_func!(setpriority(_, _, _)),
 ];
