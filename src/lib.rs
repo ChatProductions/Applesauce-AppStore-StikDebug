@@ -245,6 +245,10 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         std::env::remove_var("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE");
         std::env::remove_var("TOUCHHLE_TOUCH_MODE");
+        if app_id == "com.robtop.geometryjump" {
+            std::env::set_var("TOUCHHLE_TOUCH_LOCATION_PORTRAIT_TO_LANDSCAPE", "1");
+            std::env::set_var("TOUCHHLE_TOUCH_MODE", "right");
+        }
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_X_OFFSET");
         std::env::remove_var("TOUCHHLE_TOUCH_LOCATION_Y_OFFSET");
         std::env::remove_var("TOUCHHLE_PRESENT_STRETCH_TO_VIEWPORT");
