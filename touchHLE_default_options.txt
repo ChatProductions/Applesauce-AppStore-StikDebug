@@ -328,3 +328,9 @@ com.telltalegames.MC100: --device-family=ipad --landscape-left --prefer-gles2-co
 
 # Drive Ahead! / Crash On Wheels requests an ES1 EAGL context but uses the Cocos2d GLES2 shader pipeline.
 com.dodreams.crashonwheels: --landscape-left --prefer-gles2-context --force-composition
+
+# Green Lantern: native 480x320 landscape OpenGL ES 2 profile.
+com.wb.GreenLantern: --landscape-left --prefer-gles2-context
+
+# Where's My Water?: iPhone portrait OpenGL ES 1 profile.
+com.disney.SwampyGame: --device-family=iphone-3gs

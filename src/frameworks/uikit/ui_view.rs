@@ -257,6 +257,7 @@ fn touchhle_cocos_should_force_landscape_view(env: &mut Environment, view: id) -
     if std::env::var_os("TOUCHHLE_COCOS_FORCE_LANDSCAPE_VIEW").is_some()
         || std::env::var_os("TOUCHHLE_UNITY_FORCE_LANDSCAPE_VIEW").is_some()
         || std::env::var_os("TOUCHHLE_ENGINE_FORCE_LANDSCAPE_VIEW").is_some()
+        || env.bundle.bundle_identifier() == "com.disney.SwampyGame"
         || std::env::var_os("TOUCHHLE_FORCE_LANDSCAPE_VIEW_BOUNDS").is_some()
     {
         return true;
