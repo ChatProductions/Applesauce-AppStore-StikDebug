@@ -5420,7 +5420,9 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(glIsVertexArray(_)),
     // OpenGL ES 3.0 entry points
     export_c_func!(glUnmapBuffer(_)),
+    export_c_func_aliased!("glMapBufferRangeEXT", glMapBufferRange(_, _, _, _)),
     export_c_func!(glMapBufferRange(_, _, _, _)),
+    export_c_func_aliased!("glFlushMappedBufferRangeEXT", glFlushMappedBufferRange(_, _, _)),
     export_c_func!(glFlushMappedBufferRange(_, _, _)),
     export_c_func!(glCopyBufferSubData(_, _, _, _, _)),
     export_c_func!(glBindBufferBase(_, _, _)),
