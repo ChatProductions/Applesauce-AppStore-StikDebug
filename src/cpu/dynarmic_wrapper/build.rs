@@ -32,6 +32,16 @@ fn build_type_windows() -> &'static str {
 fn main() {
     let package_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = package_root.join("../../..");
+    for path in [
+        "externals/oaknut/include/oaknut/code_block.hpp",
+        "src/dynarmic/backend/arm64/a32_address_space.cpp",
+        "src/dynarmic/backend/arm64/address_space.cpp",
+        "src/dynarmic/backend/block_range_information.cpp",
+        "src/dynarmic/backend/block_range_information.h",
+        "src/dynarmic/common/spin_lock_arm64.cpp",
+    ] {
+        rerun_if_changed(&workspace_root.join("vendor/dynarmic").join(path));
+    }
 
     let mut build = cmake::Config::new(workspace_root.join("vendor/dynarmic"));
     build.define("DYNARMIC_FRONTENDS", "A32"); // We don't need 64-bit

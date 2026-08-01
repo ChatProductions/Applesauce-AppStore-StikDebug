@@ -113,13 +113,11 @@ macro_rules! echo_no_panic {
 
 /// Put modules to enable [log_dbg] for here, e.g. "touchHLE::mem" to see when
 /// memory is allocated and freed.
-pub const ENABLED_MODULES: &[&str] = &[
-    "touchHLE::window",
-    "touchHLE::frameworks::uikit::ui_touch",
-    "touchHLE::frameworks::uikit::ui_view",
-    "touchHLE::frameworks::opengles::eagl",
-    "touchHLE::frameworks::uikit::ui_view_controller",
-    "touchHLE::frameworks::foundation::ns_timer",
-    "touchHLE::frameworks::foundation::ns_run_loop",
-    "touchHLE::frameworks::core_animation::ca_display_link",
-];
+// NOTE: keep this EMPTY for builds that run on a device. Every `log_dbg!` does
+// two blocking writes (stderr, which the iOS host redirects to a file, and
+// touchHLE_log.txt). With `eagl`/`ns_timer`/`window` enabled that is well over
+// a thousand syscalls a second on the main thread, which starves UIKit of the
+// run-loop time it needs to dispatch touches: the app still renders and still
+// hit-tests, but -[UIApplication sendEvent:] stops being called and no touch
+// ever reaches SDL or the on-screen controls.
+pub const ENABLED_MODULES: &[&str] = &[];

@@ -94,6 +94,7 @@ pub(super) struct EAGLContextHostObject {
     /// [super::gles_guest] dispatches calls and how the present-renderbuffer
     /// path saves and restores state.
     pub(super) api: EAGLRenderingAPI,
+    drawable_framebuffer: GLuint,
     /// Mapping of OpenGL ES renderbuffer names to `EAGLDrawable` instances
     /// (always `CAEAGLLayer*`). Retains the instance so it won't dangle.
     renderbuffer_drawable_bindings: Rc<RefCell<HashMap<GLuint, id>>>,
@@ -113,6 +114,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     let host_object = Box::new(EAGLContextHostObject {
         gles_ctx: None,
         api: kEAGLRenderingAPIOpenGLES1,
+        drawable_framebuffer: 0,
         renderbuffer_drawable_bindings: Rc::new(RefCell::new(HashMap::new())),
         fps_counter: None,
         next_frame_due: None,
@@ -181,13 +183,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
-    {
-        let gles_ctx = gles_ins.make_current(window);
+    let drawable_framebuffer = {
+        let mut gles_ctx = gles_ins.make_current(window);
         log!("Driver info: {}", unsafe { gles_ctx.driver_description() });
-    }
+        let mut framebuffer = 0;
+        if cfg!(target_os = "ios") {
+            unsafe {
+                gles_ctx.GetIntegerv(gles11::FRAMEBUFFER_BINDING_OES, &mut framebuffer);
+            }
+        }
+        framebuffer as GLuint
+    };
 
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = effective_api;
+    let host_object = env.objc.borrow_mut::<EAGLContextHostObject>(this);
+    host_object.gles_ctx = Some(gles_ins);
+    host_object.api = effective_api;
+    host_object.drawable_framebuffer = drawable_framebuffer;
 
     env.window.as_mut().unwrap().set_share_with_current_context(false);
 
@@ -216,13 +227,22 @@ pub const CLASSES: ClassExports = objc_classes! {
     };
 
     let window = env.window.as_mut().expect("OpenGL ES is not supported in headless mode");
-    {
-        let gles_ctx = gles_ins.make_current(window);
+    let drawable_framebuffer = {
+        let mut gles_ctx = gles_ins.make_current(window);
         log!("Driver info: {}", unsafe { gles_ctx.driver_description() });
-    }
+        let mut framebuffer = 0;
+        if cfg!(target_os = "ios") {
+            unsafe {
+                gles_ctx.GetIntegerv(gles11::FRAMEBUFFER_BINDING_OES, &mut framebuffer);
+            }
+        }
+        framebuffer as GLuint
+    };
 
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).gles_ctx = Some(gles_ins);
-    env.objc.borrow_mut::<EAGLContextHostObject>(this).api = effective_api;
+    let host_object = env.objc.borrow_mut::<EAGLContextHostObject>(this);
+    host_object.gles_ctx = Some(gles_ins);
+    host_object.api = effective_api;
+    host_object.drawable_framebuffer = drawable_framebuffer;
 
     this
 }
@@ -585,13 +605,13 @@ pub const CLASSES: ClassExports = objc_classes! {
     // delayed, so this needs to be checked before returning.
     let sleep_for = limit_framerate(&mut env.objc.borrow_mut::<EAGLContextHostObject>(this).next_frame_due, &env.options);
 
-    if env.options.print_fps {
+    if env.options.print_fps || cfg!(target_os = "ios") {
         env
             .objc
             .borrow_mut::<EAGLContextHostObject>(this)
             .fps_counter
             .get_or_insert_with(FpsCounter::start)
-            .count_frame(format_args!("EAGLContext {this:?}"));
+            .count_frame(format_args!("EAGLContext {this:?}"), env.options.print_fps);
     }
 
     let fullscreen_layer = find_fullscreen_eagl_layer(env);
@@ -636,9 +656,20 @@ pub const CLASSES: ClassExports = objc_classes! {
         return false;
     };
 
+    let use_ios_es2_direct_path = cfg!(target_os = "ios")
+        && env.options.ios_es2_direct_present
+        && fullscreen_layer == nil
+        && env.objc.borrow::<EAGLContextHostObject>(this).api
+            == kEAGLRenderingAPIOpenGLES2;
+
     // We're presenting to the opaque CAEAGLLayer that covers the screen.
     // We can use the fast path where we skip composition and present directly.
-    if drawable == fullscreen_layer {
+    if drawable == fullscreen_layer || use_ios_es2_direct_path {
+        if use_ios_es2_direct_path {
+            log_once!(
+                "Using the iOS ES2 direct presenter for a non-fullscreen CAEAGLLayer."
+            );
+        }
         log_dbg!(
             "Layer {:?} is the fullscreen layer, presenting renderbuffer {:?} directly (fast path).",
             drawable,
@@ -646,7 +677,7 @@ pub const CLASSES: ClassExports = objc_classes! {
         );
         // re-borrow
         unsafe {
-            present_renderbuffer(env);
+            present_renderbuffer(env, this);
         }
     } else {
         if fullscreen_layer != nil {
@@ -935,6 +966,7 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
 /// etc. are not part of ES 2.0 state and thus need no save/restore.
 unsafe fn present_renderbuffer_es2(
     gles: &mut dyn GLES,
+    drawable_framebuffer: GLuint,
     viewport: (u32, u32, u32, u32),
     rotation_matrix: crate::matrix::Matrix<2>,
     virtual_cursor_visible_at: Option<(f32, f32, bool)>,
@@ -950,27 +982,39 @@ unsafe fn present_renderbuffer_es2(
     gles.GetIntegerv(gles2::ELEMENT_ARRAY_BUFFER_BINDING, &mut old_elem_buffer);
     let mut old_active_texture: GLint = 0;
     gles.GetIntegerv(gles2::ACTIVE_TEXTURE, &mut old_active_texture);
-    let mut old_texture: GLint = 0;
-    gles.GetIntegerv(gles2::TEXTURE_BINDING_2D, &mut old_texture);
+    gles.ActiveTexture(gles2::TEXTURE0);
+    let mut old_texture_0: GLint = 0;
+    gles.GetIntegerv(gles2::TEXTURE_BINDING_2D, &mut old_texture_0);
+    gles.ActiveTexture(old_active_texture as GLenum);
     let mut old_framebuffer: GLint = 0;
     gles.GetIntegerv(gles2::FRAMEBUFFER_BINDING, &mut old_framebuffer);
     let mut old_viewport = [0i32; 4];
     gles.GetIntegerv(gles2::VIEWPORT, old_viewport.as_mut_ptr());
     let mut old_clear_color = [0.0f32; 4];
     gles.GetFloatv(gles2::COLOR_CLEAR_VALUE, old_clear_color.as_mut_ptr());
+    let mut old_color_mask = [0u8; 4];
+    gles.GetBooleanv(gles2::COLOR_WRITEMASK, old_color_mask.as_mut_ptr());
     let depth_test_was_on = gles.IsEnabled(gles2::DEPTH_TEST) != 0;
     let cull_was_on = gles.IsEnabled(gles2::CULL_FACE) != 0;
     let blend_was_on = gles.IsEnabled(gles2::BLEND) != 0;
     let scissor_was_on = gles.IsEnabled(gles2::SCISSOR_TEST) != 0;
 
-    // Save the enabled state of every vertex attribute slot we might touch.
-    // The app may have left attributes 0..N enabled; mutating them here would
-    // break its next draw call.
-    let mut attrib_was_enabled = [0u8; 16];
-    for (i, slot) in attrib_was_enabled.iter_mut().enumerate() {
-        let mut v: GLint = 0;
-        gles.GetVertexAttribiv(i as GLuint, gles2::VERTEX_ATTRIB_ARRAY_ENABLED, &mut v);
-        *slot = v as u8;
+    let present_attribs = [6u32, 7u32];
+    let mut attrib_enabled = [0i32; 2];
+    let mut attrib_size = [0i32; 2];
+    let mut attrib_stride = [0i32; 2];
+    let mut attrib_type = [0i32; 2];
+    let mut attrib_normalized = [0i32; 2];
+    let mut attrib_buffer = [0i32; 2];
+    let mut attrib_pointer = [std::ptr::null_mut(); 2];
+    for (slot, &index) in present_attribs.iter().enumerate() {
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_ENABLED, &mut attrib_enabled[slot]);
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_SIZE, &mut attrib_size[slot]);
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_STRIDE, &mut attrib_stride[slot]);
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_TYPE, &mut attrib_type[slot]);
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_NORMALIZED, &mut attrib_normalized[slot]);
+        gles.GetVertexAttribiv(index, gles2::VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &mut attrib_buffer[slot]);
+        gles.GetVertexAttribPointerv(index, gles2::VERTEX_ATTRIB_ARRAY_POINTER, &mut attrib_pointer[slot]);
     }
 
     // Resolve renderbuffer → texture with a cached FBO + `glCopyTexImage2D`,
@@ -993,12 +1037,16 @@ unsafe fn present_renderbuffer_es2(
         gles2::RENDERBUFFER,
         renderbuffer as GLuint,
     );
+    let source_framebuffer_status = gles.CheckFramebufferStatus(gles2::FRAMEBUFFER);
+    if source_framebuffer_status != gles2::FRAMEBUFFER_COMPLETE {
+        log_once!("Warning: ES2 present source framebuffer is incomplete.");
+    }
 
     gles.ActiveTexture(gles2::TEXTURE0);
     gles.BindTexture(gles2::TEXTURE_2D, present_objects.texture);
     gles.BindBuffer(gles2::ARRAY_BUFFER, present_objects.quad_vbo);
     #[rustfmt::skip]
-    let verts: [f32; 24] = [
+    let mut verts: [f32; 24] = [
         // x, y, u, v
         -1.0, -1.0, 0.0, 0.0,
          1.0, -1.0, 1.0, 0.0,
@@ -1007,15 +1055,52 @@ unsafe fn present_renderbuffer_es2(
          1.0,  1.0, 1.0, 1.0,
         -1.0,  1.0, 0.0, 1.0,
     ];
+    for vertex in verts.chunks_exact_mut(4) {
+        let transformed = rotation_matrix.transform([vertex[2] - 0.5, vertex[3] - 0.5]);
+        vertex[2] = transformed[0] + 0.5;
+        vertex[3] = transformed[1] + 0.5;
+    }
     gles.BufferData(
         gles2::ARRAY_BUFFER,
         std::mem::size_of_val(&verts) as isize,
         verts.as_ptr().cast(),
         gles2::STREAM_DRAW,
     );
-    gles.CopyTexImage2D(gles2::TEXTURE_2D, 0, gles2::RGB, 0, 0, width, height, 0);
+    gles.Finish();
+    if cfg!(target_os = "ios") {
+        let byte_count = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .expect("iOS present buffer size overflow");
+        IOS_PRESENT_PIXELS.with(|storage| {
+            let mut pixels = storage.borrow_mut();
+            pixels.resize(byte_count, 0);
+            gles.ReadPixels(
+                0,
+                0,
+                width,
+                height,
+                gles2::RGBA,
+                gles2::UNSIGNED_BYTE,
+                pixels.as_mut_ptr().cast(),
+            );
+            gles.TexImage2D(
+                gles2::TEXTURE_2D,
+                0,
+                gles2::RGBA as GLint,
+                width,
+                height,
+                0,
+                gles2::RGBA,
+                gles2::UNSIGNED_BYTE,
+                pixels.as_ptr().cast(),
+            );
+        });
+    } else {
+        gles.CopyTexImage2D(gles2::TEXTURE_2D, 0, gles2::RGBA, 0, 0, width, height, 0);
+    }
 
-    gles.BindFramebuffer(gles2::FRAMEBUFFER, 0);
+    gles.BindFramebuffer(gles2::FRAMEBUFFER, drawable_framebuffer);
 
     // Configure the destination viewport (the window) and clear.
     gles.Viewport(
@@ -1029,6 +1114,7 @@ unsafe fn present_renderbuffer_es2(
     gles.Disable(gles2::CULL_FACE);
     gles.Disable(gles2::BLEND);
     gles.Disable(gles2::SCISSOR_TEST);
+    gles.ColorMask(gles2::TRUE, gles2::TRUE, gles2::TRUE, gles2::TRUE);
     gles.Clear(gles2::COLOR_BUFFER_BIT | gles2::DEPTH_BUFFER_BIT | gles2::STENCIL_BUFFER_BIT);
 
     // Compile the present shader program once and cache it. If the shader
@@ -1037,12 +1123,20 @@ unsafe fn present_renderbuffer_es2(
     // remains on screen and the app continues to run.
     let Some(program) = ensure_present_program(gles) else {
         log!("Warning: present_renderbuffer_es2: present shader unavailable, skipping frame.");
-        // Restore vertex attribute enabled state so the app's next draw works.
-        for (i, &was) in attrib_was_enabled.iter().enumerate() {
-            if was != 0 {
-                gles.EnableVertexAttribArray(i as GLuint);
+        for (slot, &index) in present_attribs.iter().enumerate() {
+            gles.BindBuffer(gles2::ARRAY_BUFFER, attrib_buffer[slot] as GLuint);
+            gles.VertexAttribPointer(
+                index,
+                attrib_size[slot],
+                attrib_type[slot] as GLenum,
+                attrib_normalized[slot] as _,
+                attrib_stride[slot],
+                attrib_pointer[slot].cast_const(),
+            );
+            if attrib_enabled[slot] != 0 {
+                gles.EnableVertexAttribArray(index);
             } else {
-                gles.DisableVertexAttribArray(i as GLuint);
+                gles.DisableVertexAttribArray(index);
             }
         }
         gles.UseProgram(if old_program > 0 {
@@ -1053,7 +1147,8 @@ unsafe fn present_renderbuffer_es2(
         gles.BindBuffer(gles2::ARRAY_BUFFER, old_array_buffer as GLuint);
         gles.BindBuffer(gles2::ELEMENT_ARRAY_BUFFER, old_elem_buffer as GLuint);
         gles.BindFramebuffer(gles2::FRAMEBUFFER, old_framebuffer as GLuint);
-        gles.BindTexture(gles2::TEXTURE_2D, old_texture as GLuint);
+        gles.ActiveTexture(gles2::TEXTURE0);
+        gles.BindTexture(gles2::TEXTURE_2D, old_texture_0 as GLuint);
         gles.ActiveTexture(old_active_texture as GLenum);
         gles.Viewport(
             old_viewport[0],
@@ -1066,6 +1161,12 @@ unsafe fn present_renderbuffer_es2(
             old_clear_color[1],
             old_clear_color[2],
             old_clear_color[3],
+        );
+        gles.ColorMask(
+            old_color_mask[0],
+            old_color_mask[1],
+            old_color_mask[2],
+            old_color_mask[3],
         );
         if depth_test_was_on {
             gles.Enable(gles2::DEPTH_TEST);
@@ -1083,7 +1184,7 @@ unsafe fn present_renderbuffer_es2(
     };
     gles.UseProgram(program.program);
     gles.Uniform1i(program.u_tex, 0);
-    let m = crate::matrix::Matrix::<4>::from(&rotation_matrix);
+    let m = crate::matrix::Matrix::<4>::identity();
     let cols = m.columns();
     gles.UniformMatrix4fv(
         program.u_tex_mat,
@@ -1139,12 +1240,20 @@ unsafe fn present_renderbuffer_es2(
         let _ = pressed;
     }
 
-    // Restore vertex attribute enabled state so the app's next draw works.
-    for (i, &was) in attrib_was_enabled.iter().enumerate() {
-        if was != 0 {
-            gles.EnableVertexAttribArray(i as GLuint);
+    for (slot, &index) in present_attribs.iter().enumerate() {
+        gles.BindBuffer(gles2::ARRAY_BUFFER, attrib_buffer[slot] as GLuint);
+        gles.VertexAttribPointer(
+            index,
+            attrib_size[slot],
+            attrib_type[slot] as GLenum,
+            attrib_normalized[slot] as _,
+            attrib_stride[slot],
+            attrib_pointer[slot].cast_const(),
+        );
+        if attrib_enabled[slot] != 0 {
+            gles.EnableVertexAttribArray(index);
         } else {
-            gles.DisableVertexAttribArray(i as GLuint);
+            gles.DisableVertexAttribArray(index);
         }
     }
 
@@ -1157,7 +1266,8 @@ unsafe fn present_renderbuffer_es2(
     gles.BindBuffer(gles2::ARRAY_BUFFER, old_array_buffer as GLuint);
     gles.BindBuffer(gles2::ELEMENT_ARRAY_BUFFER, old_elem_buffer as GLuint);
     gles.BindFramebuffer(gles2::FRAMEBUFFER, old_framebuffer as GLuint);
-    gles.BindTexture(gles2::TEXTURE_2D, old_texture as GLuint);
+    gles.ActiveTexture(gles2::TEXTURE0);
+    gles.BindTexture(gles2::TEXTURE_2D, old_texture_0 as GLuint);
     gles.ActiveTexture(old_active_texture as GLenum);
     gles.Viewport(
         old_viewport[0],
@@ -1170,6 +1280,12 @@ unsafe fn present_renderbuffer_es2(
         old_clear_color[1],
         old_clear_color[2],
         old_clear_color[3],
+    );
+    gles.ColorMask(
+        old_color_mask[0],
+        old_color_mask[1],
+        old_color_mask[2],
+        old_color_mask[3],
     );
     if depth_test_was_on {
         gles.Enable(gles2::DEPTH_TEST);
@@ -1230,6 +1346,8 @@ thread_local! {
         const { std::cell::Cell::new(None) };
     static PRESENT_OBJECTS: std::cell::Cell<Option<PresentObjects>> =
         const { std::cell::Cell::new(None) };
+    static IOS_PRESENT_PIXELS: std::cell::RefCell<Vec<u8>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 unsafe fn ensure_present_program(gles: &mut dyn GLES) -> Option<PresentProgram> {
@@ -1397,11 +1515,10 @@ unsafe fn ensure_present_objects(gles: &mut dyn GLES) -> PresentObjects {
 /// (which should be provided by the app) to a texture and presents it with
 /// [present_frame], trying to avoid noticeably modifying OpenGL ES state while
 /// doing so. The front and back buffers are then swapped.
-unsafe fn present_renderbuffer(env: &mut Environment) {
+unsafe fn present_renderbuffer(env: &mut Environment, context: id) {
     // Capture this up front because the env borrow is moved into the GL
     // context machinery below.
     let trace_gl_errors = env.options.trace_gl_errors;
-
     // Save these for when we need to draw the frame
     let viewport = env.window.as_mut().unwrap().viewport();
     let device_family = env.window.as_mut().unwrap().device_family();
@@ -1427,9 +1544,31 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
                 device_orientation,
                 crate::window::DeviceOrientation::Portrait
             );
-    let rotation_matrix = if std::env::var_os("TOUCHHLE_DISABLE_PRESENT_ROTATION").is_some() {
+    // When we reach the direct presenter through the iOS ES 2.0 override (i.e.
+    // the layer is NOT the fullscreen layer, so without the override this frame
+    // would have gone through Core Animation composition), the guest has
+    // already drawn its content in the display's orientation. Applying the
+    // device rotation on top of that turns a correct landscape frame on its
+    // side, which is what made The Sims Medieval need an explicit
+    // `--present-rotation=0`. Apps that take the ordinary fullscreen-layer fast
+    // path (e.g. Wolfenstein RPG) still need the rotation, so this is scoped to
+    // the override only.
+    let is_ios_es2_override_path = cfg!(target_os = "ios")
+        && env.options.ios_es2_direct_present
+        && crate::frameworks::core_animation::ca_eagl_layer::find_fullscreen_eagl_layer(env) == nil
+        && env.objc.borrow::<EAGLContextHostObject>(context).api == kEAGLRenderingAPIOpenGLES2;
+
+    let rotation_override = env.options.present_rotation_override;
+    let rotation_matrix = if let Some(degrees) = rotation_override {
+        crate::matrix::Matrix::<2>::z_rotation((degrees as f32).to_radians())
+    } else if std::env::var_os("TOUCHHLE_DISABLE_PRESENT_ROTATION").is_some() {
         log_once!(
             "TOUCHHLE_DISABLE_PRESENT_ROTATION=1: presenting EAGL renderbuffer without texture rotation"
+        );
+        crate::matrix::Matrix::<2>::identity()
+    } else if is_ios_es2_override_path {
+        log_once!(
+            "iOS ES2 direct presenter: guest frame is already in display orientation, not rotating."
         );
         crate::matrix::Matrix::<2>::identity()
     } else if needs_autorotation_compensation {
@@ -1442,6 +1581,10 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         env.window.as_mut().unwrap().rotation_matrix()
     };
     let virtual_cursor_visible_at = env.window.as_mut().unwrap().virtual_cursor_visible_at();
+    let drawable_framebuffer = env
+        .objc
+        .borrow::<EAGLContextHostObject>(context)
+        .drawable_framebuffer;
 
     let Some(gles_ctx) = super::get_thread_context(
         &mut env.framework_state.opengles,
@@ -1524,7 +1667,13 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // glEnableClientState / glVertexPointer. Use a small dedicated
     // shader-based presenter instead.
     if gles.is_es2() {
-        present_renderbuffer_es2(gles, viewport, rotation_matrix, virtual_cursor_visible_at);
+        present_renderbuffer_es2(
+            gles,
+            drawable_framebuffer,
+            viewport,
+            rotation_matrix,
+            virtual_cursor_visible_at,
+        );
         std::mem::drop(gles_boxed);
         env.window.as_ref().unwrap().swap_window();
         return;
@@ -2127,6 +2276,8 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
 
         present_check(gles, trace_gl_errors, &SEEN, "after TexEnviv setup");
     }
+
+    gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, drawable_framebuffer);
 
     // Draw the quad
     present_frame(gles, viewport, rotation_matrix, virtual_cursor_visible_at);

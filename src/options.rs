@@ -43,6 +43,24 @@ pub struct Options {
     /// `--screen-size=WxH` override below.
     pub host_screen_size: Option<(u32, u32)>,
     pub initial_orientation: DeviceOrientation,
+    /// Override the rotation applied when presenting the guest's renderbuffer,
+    /// in degrees counter-clockwise (0, 90, 180 or 270). `None` means derive it
+    /// from [Self::initial_orientation], which is the normal behaviour.
+    ///
+    /// This exists so the correct value can be found on a device without a
+    /// rebuild: the host reads it from `touchHLE_options.txt` in the app's
+    /// Documents directory.
+    pub present_rotation_override: Option<u32>,
+    /// On iOS, present an OpenGL ES 2.0 renderbuffer directly even when its
+    /// CAEAGLayer is not the fullscreen layer, instead of going through the
+    /// Core Animation composition path.
+    ///
+    /// This is what makes apps like The Sims Medieval display at all, but it
+    /// costs a `glFinish` plus a full renderbuffer readback and re-upload every
+    /// frame on the main thread, which starves UIKit of the run-loop time it
+    /// needs to dispatch touches. Off by default so apps that worked without it
+    /// keep working; enable per app in the options file.
+    pub ios_es2_direct_present: bool,
     pub scale_hack: NonZeroU32,
     pub deadzone: f32,
     pub analog_stick_tilt_controls: bool,
@@ -121,6 +139,8 @@ impl Default for Options {
             auto_device_family: false,
             host_screen_size: None,
             initial_orientation: DeviceOrientation::Portrait,
+            present_rotation_override: None,
+            ios_es2_direct_present: false,
             scale_hack: NonZeroU32::new(1).unwrap(),
             analog_stick_tilt_controls: true,
             deadzone: 0.1,
@@ -177,6 +197,23 @@ impl Options {
             self.initial_orientation = DeviceOrientation::LandscapeRight;
         } else if arg == "--upside-down" {
             self.initial_orientation = DeviceOrientation::PortraitUpsideDown;
+        } else if arg == "--ios-es2-direct-present" {
+            self.ios_es2_direct_present = true;
+        } else if arg == "--no-ios-es2-direct-present" {
+            self.ios_es2_direct_present = false;
+        } else if let Some(value) = arg.strip_prefix("--present-rotation=") {
+            self.present_rotation_override = if value == "auto" {
+                None
+            } else {
+                let degrees: u32 = value
+                    .trim()
+                    .parse()
+                    .map_err(|_| "Invalid value for --present-rotation=".to_string())?;
+                if !matches!(degrees, 0 | 90 | 180 | 270) {
+                    return Err("--present-rotation= must be auto, 0, 90, 180 or 270".to_string());
+                }
+                Some(degrees)
+            };
         } else if let Some(value) = arg.strip_prefix("--device-family=") {
             if value == "auto" {
                 self.auto_device_family = true;
