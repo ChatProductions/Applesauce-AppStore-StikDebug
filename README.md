@@ -28,7 +28,7 @@ Games shown are not included and must be supplied by you.
 ## Install
 
 Download `touchHLE-HyperHLE-iOS-unsigned.ipa` from the
-[latest release](https://github.com/johnny901901901/touchHLE/releases) and sideload
+[latest release](https://github.com/johnny901901901/touchHLE-for-iOS/releases) and sideload
 it with AltStore Classic, or build and sign it yourself in Xcode. Then enable JIT
 with [StikDebug](https://github.com/StephenDev0/StikDebug) + LocalDevVPN, or AltJIT.
 
@@ -68,7 +68,7 @@ useful.
 
 ## Reporting a game
 
-[Open an issue](https://github.com/johnny901901901/touchHLE/issues/new/choose) using
+[Open an issue](https://github.com/johnny901901901/touchHLE-for-iOS/issues/new/choose) using
 the compatibility report form. Please include the exact app version, your iPhone
 model and iOS version, whether JIT was enabled, the port version, and a log excerpt
 (`touchHLE_log.txt`, reachable in Files under *On My iPhone → touchHLE*).
@@ -81,7 +81,7 @@ provisioning profiles or device backups.**
 See [platform/ios/README.md](platform/ios/README.md#build-from-source). In short:
 
 ```sh
-git clone --recurse-submodules https://github.com/johnny901901901/touchHLE.git
+git clone --recurse-submodules https://github.com/johnny901901901/touchHLE-for-iOS.git
 cd touchHLE
 sh platform/ios/scripts/build-host.sh iphoneos Release
 ```

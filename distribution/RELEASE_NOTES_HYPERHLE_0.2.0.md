@@ -50,7 +50,7 @@ Free Apple accounts normally require the app to be refreshed every seven days. A
 
 You can instead build and install the port from source with a free Personal Team or paid Apple Developer account. Choose your own signing team and bundle identifier; never publish your signed app, provisioning profile, certificate, team ID, or `xcuserdata`.
 
-Follow the [complete Xcode build and installation instructions](https://github.com/johnny901901901/touchHLE/blob/ios-host/platform/ios/README.md#option-b-build-and-install-with-xcode).
+Follow the [complete Xcode build and installation instructions](https://github.com/johnny901901901/touchHLE-for-iOS/blob/ios-host/platform/ios/README.md#option-b-build-and-install-with-xcode).
 
 ## Enable JIT
 
@@ -59,7 +59,7 @@ Installing the app is not enough by itself. The Dynarmic CPU backend requires JI
 - Use the in-app bolt shortcut with [StikDebug](https://github.com/StephenDev0/StikDebug), LocalDevVPN, and your private device pairing file; or
 - Use [AltJIT](https://faq.altstore.io/altstore-classic/altjit) through AltStore Classic.
 
-Never share your pairing file. See the [complete JIT setup and troubleshooting guide](https://github.com/johnny901901901/touchHLE/blob/ios-host/platform/ios/README.md#enable-jit).
+Never share your pairing file. See the [complete JIT setup and troubleshooting guide](https://github.com/johnny901901901/touchHLE-for-iOS/blob/ios-host/platform/ios/README.md#enable-jit).
 
 ## Import A Game
 
