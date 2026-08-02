@@ -8,10 +8,10 @@
   "apps": [
     {
       "name": "touchHLE",
-      "bundleIdentifier": "org.touchhle.ios.hyperhle",
+      "bundleIdentifier": "org.touchhle.ios.unofficial",
       "developerName": "Unofficial iOS port contributors",
       "subtitle": "Run supported early 32-bit iPhone games",
-      "localizedDescription": "A native iOS port of touchHLE running the HyperHLE core, with IPA importing, artwork, persistent saves, orientation handling, a return-to-library control, and optional FPS display. JIT must be enabled for each new app process. No games are included.",
+      "localizedDescription": "A native iOS port of touchHLE running the HyperHLE v1.0.6 core, with IPA importing, artwork, persistent saves, orientation handling, a return-to-library control, and optional FPS display. JIT must be enabled for each new app process. No games are included.",
       "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
       "tintColor": "1399FF",
       "category": "games",
@@ -25,10 +25,10 @@
           "version": "0.2.0",
           "buildVersion": "1",
           "date": "2026-08-02",
-          "localizedDescription": "Moves to the HyperHLE core. Fixes landscape touch input, landscape orientation, and resolution scaling.",
+          "localizedDescription": "Moves to the HyperHLE v1.0.6 core. Fixes landscape touch input, landscape orientation, and resolution scaling.",
           "downloadURL": "https://github.com/johnny901901901/touchHLE/releases/download/ios-hyperhle-v0.2.0/touchHLE-HyperHLE-iOS-unsigned.ipa",
-          "size": 36191552,
-          "sha256": "ecb201e7f96891899f280c68791edd1cd0152418d6cba4210199b92243831c9f",
+          "size": 36191553,
+          "sha256": "d9746c32fcc219704d3cbe88c5bb492110f415ba7a8a83c914bd9c5a0b984890",
           "minOSVersion": "17.4"
         }
       ],

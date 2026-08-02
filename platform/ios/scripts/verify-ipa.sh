@@ -58,7 +58,7 @@ BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO")
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")
 BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")
 
-if [ "$BUNDLE_ID" != "org.touchhle.ios.hyperhle" ]; then
+if [ "$BUNDLE_ID" != "org.touchhle.ios.unofficial" ]; then
     echo "Unexpected bundle identifier: $BUNDLE_ID" >&2
     exit 1
 fi

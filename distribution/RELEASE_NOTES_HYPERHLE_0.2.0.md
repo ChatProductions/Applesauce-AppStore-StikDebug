@@ -1,12 +1,12 @@
 # touchHLE iOS Port 0.2.0 — HyperHLE core
 
-An experimental, unofficial iOS port of touchHLE, now running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) core (upstream commit `72cb2795`) instead of the touchHLE 0.2.3 core used by the previous iOS prerelease. HyperHLE is a fork of touchHLE with broader game compatibility; it has no iOS support of its own, so the host app, build scripts and packaging in this port are specific to it.
+An experimental, unofficial iOS port of touchHLE, now running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) **v1.0.6** core instead of the touchHLE 0.2.3 core used by the previous iOS prerelease. HyperHLE is a fork of touchHLE with broader game compatibility; it has no iOS support of its own, so the host app, build scripts and packaging in this port are specific to it.
 
 This is not an official release of touchHLE or of HyperHLE.
 
 ## Changes Since 0.1.0
 
-- Now runs the HyperHLE emulator core.
+- Now runs the HyperHLE v1.0.6 emulator core.
 - **Landscape games accept touch input again.** The host handed the main thread to the emulator as soon as the scene reported it had rotated, but before UIKit had finished committing the rotation. The scene stayed mid-transition and UIKit stopped delivering touches to every window in it — games still rendered, and timers still ran, so nothing looked wrong.
 - **Landscape games are the right way up.** The iOS OpenGL ES 2.0 direct presenter was rotating frames that were already in display orientation.
 - **Resolution scaling no longer magnifies some games.** The scale hack enlarges renderbuffers but never textures, so games that render through an offscreen texture were drawn several times too large. Games affected by this previously showed only a magnified corner of the picture at any setting above 1x.
@@ -75,14 +75,14 @@ Games are not included.
 The release IPA is unsigned and credential-free. Each user signs it locally with their own Apple account.
 
 - File: `touchHLE-HyperHLE-iOS-unsigned.ipa`
-- Size: `36191552` bytes
-- SHA-256: `ecb201e7f96891899f280c68791edd1cd0152418d6cba4210199b92243831c9f`
+- Size: `36191553` bytes
+- SHA-256: `d9746c32fcc219704d3cbe88c5bb492110f415ba7a8a83c914bd9c5a0b984890`
 
 Do not install a copy that has been reuploaded with a different hash unless you trust and can verify the person who rebuilt it.
 
 ## Important
 
-This app installs under a different bundle identifier (`org.touchhle.ios.hyperhle`) from the earlier iOS prerelease, so both can be installed side by side. They do not share imported games or saves.
+This build keeps the same bundle identifier as the 0.1.0 prerelease (`org.touchhle.ios.unofficial`), so it installs **over** an existing 0.1.0 install and keeps your imported games and saves. Sideload it the same way you did before.
 
 ## Credits
 

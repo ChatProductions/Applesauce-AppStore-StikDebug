@@ -970,7 +970,7 @@ private struct AboutView: View {
 
                         Text("touchHLE")
                             .font(.title2.bold())
-                        Text("Experimental iOS Port • HyperHLE core 72cb2795")
+                        Text("Experimental iOS Port • HyperHLE core v1.0.6")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -979,7 +979,7 @@ private struct AboutView: View {
                 }
 
                 Section("About") {
-                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It runs the HyperHLE core, a fork of touchHLE with broader game compatibility.")
+                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It runs the HyperHLE v1.0.6 core, a fork of touchHLE with broader game compatibility.")
 
                     Link(destination: URL(string: "https://appdb.touchhle.org/")!) {
                         Label("Game Compatibility", systemImage: "checkmark.seal")
