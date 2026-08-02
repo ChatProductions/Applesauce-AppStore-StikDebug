@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		A20000000000000000000001 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000001 /* main.m */; };
 		A20000000000000000000008 /* NativeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3000000000000000000000B /* NativeHost.swift */; };
+		A20000000000000000000009 /* EmulatorCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3000000000000000000000D /* EmulatorCore.swift */; };
 		A20000000000000000000002 /* touchHLE_fonts in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000004 /* touchHLE_fonts */; };
 		A20000000000000000000003 /* touchHLE_dylibs in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000005 /* touchHLE_dylibs */; };
 		A20000000000000000000004 /* touchHLE_apps in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000006 /* touchHLE_apps */; };
 		A20000000000000000000005 /* touchHLE_default_options.txt in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000007 /* touchHLE_default_options.txt */; };
+		A2000000000000000000000A /* touchHLE_default_options.touchhle.txt in Resources */ = {isa = PBXBuildFile; fileRef = A3000000000000000000000E /* touchHLE_default_options.touchhle.txt */; };
 		A20000000000000000000006 /* touchHLE_options.txt in Resources */ = {isa = PBXBuildFile; fileRef = A30000000000000000000008 /* touchHLE_options.txt */; };
 		A20000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A3000000000000000000000A /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -25,11 +27,13 @@
 		A30000000000000000000005 /* touchHLE_dylibs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = touchHLE_dylibs; sourceTree = "<group>"; };
 		A30000000000000000000006 /* touchHLE_apps */ = {isa = PBXFileReference; lastKnownFileType = folder; path = touchHLE_apps; sourceTree = "<group>"; };
 		A30000000000000000000007 /* touchHLE_default_options.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = touchHLE_default_options.txt; sourceTree = "<group>"; };
+		A3000000000000000000000E /* touchHLE_default_options.touchhle.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = touchHLE_default_options.touchhle.txt; sourceTree = "<group>"; };
 		A30000000000000000000008 /* touchHLE_options.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = touchHLE_options.txt; sourceTree = "<group>"; };
 		A30000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A3000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A3000000000000000000000B /* NativeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeHost.swift; sourceTree = "<group>"; };
 		A3000000000000000000000C /* TouchHLEHost-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TouchHLEHost-Bridging-Header.h"; sourceTree = "<group>"; };
+		A3000000000000000000000D /* EmulatorCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmulatorCore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +63,7 @@
 			children = (
 				A30000000000000000000001 /* main.m */,
 				A3000000000000000000000B /* NativeHost.swift */,
+				A3000000000000000000000D /* EmulatorCore.swift */,
 				A3000000000000000000000C /* TouchHLEHost-Bridging-Header.h */,
 			);
 			path = Sources;
@@ -88,6 +93,7 @@
 				A30000000000000000000005 /* touchHLE_dylibs */,
 				A30000000000000000000006 /* touchHLE_apps */,
 				A30000000000000000000007 /* touchHLE_default_options.txt */,
+				A3000000000000000000000E /* touchHLE_default_options.touchhle.txt */,
 				A30000000000000000000008 /* touchHLE_options.txt */,
 			);
 			name = "touchHLE Resources";
@@ -104,6 +110,7 @@
 				A70000000000000000000001 /* Sources */,
 				A40000000000000000000001 /* Frameworks */,
 				A70000000000000000000002 /* Resources */,
+				A70000000000000000000003 /* Embed-Cores */,
 			);
 			buildRules = (
 			);
@@ -156,11 +163,34 @@
 				A20000000000000000000003 /* touchHLE_dylibs in Resources */,
 				A20000000000000000000004 /* touchHLE_apps in Resources */,
 				A20000000000000000000005 /* touchHLE_default_options.txt in Resources */,
+				A2000000000000000000000A /* touchHLE_default_options.touchhle.txt in Resources */,
 				A20000000000000000000006 /* touchHLE_options.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A70000000000000000000003 /* Embed-Cores */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed-Cores";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$SRCROOT/scripts/embed-cores.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A70000000000000000000001 /* Sources */ = {
@@ -169,6 +199,7 @@
 			files = (
 				A20000000000000000000001 /* main.m in Sources */,
 				A20000000000000000000008 /* NativeHost.swift in Sources */,
+				A20000000000000000000009 /* EmulatorCore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

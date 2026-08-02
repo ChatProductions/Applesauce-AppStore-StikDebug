@@ -40,14 +40,43 @@ private struct GameFile: Identifiable {
     }
 }
 
+/// A launch held back because JIT is not enabled, kept so it can be started
+/// unchanged if the user goes ahead anyway.
+private struct HeldLaunch: Identifiable {
+    let game: GameFile
+    let scaleHack: Int
+    let orientation: Int
+    let networkAccess: Bool
+    let analogTilt: Bool
+
+    var id: String { game.id }
+}
+
 @MainActor
 private final class GameLibrary: ObservableObject {
     @Published var games: [GameFile] = []
     @Published var importError: String?
     @Published var launchError: String?
+    @Published var heldLaunch: HeldLaunch?
     @Published var isLaunching = false
 
     let appsDirectory: URL
+
+    /// The core used to read game metadata. Whichever core will actually run a
+    /// game is loaded when it starts. If the default core cannot be loaded, any
+    /// other core reports the same things, and a library with names and icons
+    /// beats one without.
+    private var metadataCore: EmulatorCore? {
+        let preferred = CoreSelection.defaultKind
+        if let core = try? EmulatorCore.load(preferred) {
+            return core
+        }
+        return CoreKind.installed
+            .filter { $0 != preferred }
+            .lazy
+            .compactMap { try? EmulatorCore.load($0) }
+            .first
+    }
 
     init() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -114,6 +143,53 @@ private final class GameLibrary: ObservableObject {
         networkAccess: Bool,
         analogTilt: Bool
     ) {
+        guard touchhle_ios_jit_available() else {
+            heldLaunch = HeldLaunch(
+                game: game,
+                scaleHack: scaleHack,
+                orientation: orientation,
+                networkAccess: networkAccess,
+                analogTilt: analogTilt
+            )
+            return
+        }
+
+        start(
+            game,
+            scaleHack: scaleHack,
+            orientation: orientation,
+            networkAccess: networkAccess,
+            analogTilt: analogTilt
+        )
+    }
+
+    func start(_ held: HeldLaunch) {
+        start(
+            held.game,
+            scaleHack: held.scaleHack,
+            orientation: held.orientation,
+            networkAccess: held.networkAccess,
+            analogTilt: held.analogTilt
+        )
+    }
+
+    private func start(
+        _ game: GameFile,
+        scaleHack: Int,
+        orientation: Int,
+        networkAccess: Bool,
+        analogTilt: Bool
+    ) {
+        let core: EmulatorCore
+        do {
+            core = try EmulatorCore.load(
+                CoreSelection.kind(forBundleIdentifier: game.bundleIdentifier)
+            )
+        } catch {
+            launchError = error.localizedDescription
+            return
+        }
+
         isLaunching = true
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
@@ -127,21 +203,24 @@ private final class GameLibrary: ObservableObject {
                 launchOrientation: launchOrientation
             ) { [weak self] in
                 guard let self else { return }
-                let result = game.url.path.withCString { path in
-                    touchhle_ios_launch_game(
-                        path,
-                        Int32(scaleHack),
-                        Int32(launchOrientation),
-                        networkAccess ? 1 : 0,
-                        analogTilt ? 1 : 0
-                    )
+                let result = EmulatorCore.withRunning(core) {
+                    game.url.path.withCString { path in
+                        touchhle_ios_launch_game(
+                            core.runGame,
+                            path,
+                            Int32(scaleHack),
+                            Int32(launchOrientation),
+                            networkAccess ? 1 : 0,
+                            analogTilt ? 1 : 0
+                        )
+                    }
                 }
 
                 TouchHLENativeHost.hideGameControls()
                 TouchHLENativeHost.restoreHostWindow()
                 self.isLaunching = false
                 if result != 0 {
-                    self.launchError = "touchHLE could not start this game. The diagnostic log has been saved in Files."
+                    self.launchError = "\(core.kind.displayName) could not start this game. The diagnostic log has been saved in Files."
                 }
             }
         }
@@ -172,7 +251,12 @@ private final class GameLibrary: ObservableObject {
 
     private func gameFile(from url: URL) -> GameFile {
         let fallbackName = url.deletingPathExtension().lastPathComponent
-        guard let metadata = url.path.withCString({ touchhle_ios_game_metadata_create($0) }) else {
+        // Reading a game's name, icon and orientations does not run it, and the
+        // cores all report the same things, so the default core does this for
+        // the whole library rather than loading every core up front.
+        guard let core = metadataCore,
+              let metadata = url.path.withCString({ core.metadataCreate($0) })
+        else {
             return GameFile(
                 url: url,
                 displayName: fallbackName,
@@ -181,24 +265,24 @@ private final class GameLibrary: ObservableObject {
                 icon: nil
             )
         }
-        defer { touchhle_ios_game_metadata_free(metadata) }
+        defer { core.metadataFree(metadata) }
 
-        let metadataDisplayName = touchhle_ios_game_metadata_display_name(metadata)
+        let metadataDisplayName = core.metadataDisplayName(metadata)
             .map { String(cString: $0) } ?? fallbackName
         let displayName = preferredDisplayName(
             metadataName: metadataDisplayName,
             fallbackName: fallbackName
         )
-        let bundleIdentifier = touchhle_ios_game_metadata_bundle_identifier(metadata)
+        let bundleIdentifier = core.metadataBundleIdentifier(metadata)
             .map { String(cString: $0) }
-        let orientationCapabilities = touchhle_ios_game_metadata_orientation_capabilities(metadata)
+        let orientationCapabilities = core.metadataOrientationCapabilities(metadata)
 
         return GameFile(
             url: url,
             displayName: displayName,
             bundleIdentifier: bundleIdentifier,
             orientationCapabilities: orientationCapabilities,
-            icon: gameIcon(from: metadata)
+            icon: gameIcon(from: metadata, core: core)
         )
     }
 
@@ -210,12 +294,12 @@ private final class GameLibrary: ObservableObject {
         return fallbackName.replacingOccurrences(of: "_", with: " ")
     }
 
-    private func gameIcon(from metadata: OpaquePointer) -> UIImage? {
-        let width = Int(touchhle_ios_game_metadata_icon_width(metadata))
-        let height = Int(touchhle_ios_game_metadata_icon_height(metadata))
+    private func gameIcon(from metadata: OpaquePointer, core: EmulatorCore) -> UIImage? {
+        let width = Int(core.metadataIconWidth(metadata))
+        let height = Int(core.metadataIconHeight(metadata))
         guard width > 0,
               height > 0,
-              let pixels = touchhle_ios_game_metadata_icon_rgba(metadata)
+              let pixels = core.metadataIconRGBA(metadata)
         else {
             return nil
         }
@@ -368,7 +452,7 @@ private final class GameControlsViewController: UIViewController {
     }
 
     @objc private func updateFPS() {
-        let fps = touchhle_ios_current_fps()
+        let fps = EmulatorCore.running?.currentFPS() ?? 0
         fpsIndicator.configuration?.title = fps > 0 ? "\(Int(fps.rounded())) FPS" : "— FPS"
         fpsIndicator.accessibilityValue = fps > 0 ? "\(Int(fps.rounded())) frames per second" : "Unavailable"
     }
@@ -550,7 +634,7 @@ final class TouchHLENativeHost: NSObject {
 
     @MainActor
     @objc private func returnToLibrary() {
-        touchhle_ios_request_exit()
+        EmulatorCore.running?.requestExit()
     }
 }
 
@@ -560,6 +644,7 @@ private struct LibraryView: View {
     @State private var showingSettings = false
     @State private var showingAbout = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     @AppStorage("scaleHack") private var scaleHack = 3
     @AppStorage("orientation") private var orientation = 0
@@ -586,22 +671,19 @@ private struct LibraryView: View {
                             spacing: 16
                         ) {
                             ForEach(library.games) { game in
-                                GameCard(game: game) {
-                                    library.launch(
-                                        game,
-                                        scaleHack: scaleHack,
-                                        orientation: orientation,
-                                        networkAccess: networkAccess,
-                                        analogTilt: analogTilt
-                                    )
-                                }
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        library.delete(game)
-                                    } label: {
-                                        Label("Remove from Library", systemImage: "trash")
-                                    }
-                                }
+                                GameCard(
+                                    game: game,
+                                    launch: {
+                                        library.launch(
+                                            game,
+                                            scaleHack: scaleHack,
+                                            orientation: orientation,
+                                            networkAccess: networkAccess,
+                                            analogTilt: analogTilt
+                                        )
+                                    },
+                                    delete: { library.delete(game) }
+                                )
                             }
                         }
                         .padding(.horizontal, 18)
@@ -676,6 +758,23 @@ private struct LibraryView: View {
             } message: {
                 Text(library.launchError ?? "Unknown error")
             }
+            .alert(
+                "JIT Isn’t Enabled",
+                isPresented: heldLaunchBinding,
+                presenting: library.heldLaunch
+            ) { held in
+                Button("Enable JIT") {
+                    if let url = StikDebug.enableJITURL {
+                        openURL(url)
+                    }
+                }
+                Button("Start Anyway", role: .destructive) {
+                    library.start(held)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("Games need JIT, and without it touchHLE closes the moment one starts. Enable JIT in StikDebug, then start the game again.")
+            }
             .overlay {
                 if library.isLaunching {
                     VStack(spacing: 12) {
@@ -695,6 +794,17 @@ private struct LibraryView: View {
         }
     }
 
+    private var heldLaunchBinding: Binding<Bool> {
+        Binding(
+            get: { library.heldLaunch != nil },
+            set: { isPresented in
+                if !isPresented {
+                    library.heldLaunch = nil
+                }
+            }
+        )
+    }
+
     private func errorBinding(for error: Binding<String?>) -> Binding<Bool> {
         Binding(
             get: { error.wrappedValue != nil },
@@ -707,25 +817,29 @@ private struct LibraryView: View {
     }
 }
 
+private enum StikDebug {
+    /// Asks StikDebug to attach to this app and enable JIT.
+    static var enableJITURL: URL? {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "stikdebug"
+        components.host = "enable-jit"
+        components.queryItems = [
+            URLQueryItem(name: "bundle-id", value: bundleIdentifier),
+            URLQueryItem(name: "script-name", value: "universal.js")
+        ]
+        return components.url
+    }
+}
+
 private struct EnableJITButton: View {
     @Environment(\.openURL) private var openURL
     @State private var showingUnavailableAlert = false
 
     var body: some View {
         Button {
-            guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
-                showingUnavailableAlert = true
-                return
-            }
-
-            var components = URLComponents()
-            components.scheme = "stikdebug"
-            components.host = "enable-jit"
-            components.queryItems = [
-                URLQueryItem(name: "bundle-id", value: bundleIdentifier),
-                URLQueryItem(name: "script-name", value: "universal.js")
-            ]
-            guard let url = components.url else {
+            guard let url = StikDebug.enableJITURL else {
                 showingUnavailableAlert = true
                 return
             }
@@ -794,6 +908,29 @@ private struct LibraryBackground: View {
 private struct GameCard: View {
     let game: GameFile
     let launch: () -> Void
+    let delete: () -> Void
+
+    /// `nil` means this game follows the default core.
+    @State private var coreOverride: CoreKind?
+    @AppStorage("defaultCore") private var defaultCoreRaw = ""
+
+    private var defaultCore: CoreKind {
+        CoreSelection.kind(forStoredDefault: defaultCoreRaw)
+    }
+
+    private var core: CoreKind {
+        coreOverride ?? defaultCore
+    }
+
+    private var coreSelection: Binding<CoreKind?> {
+        Binding(
+            get: { coreOverride },
+            set: { newValue in
+                coreOverride = newValue
+                CoreSelection.setOverride(newValue, forBundleIdentifier: game.bundleIdentifier)
+            }
+        )
+    }
 
     var body: some View {
         Button(action: launch) {
@@ -829,7 +966,7 @@ private struct GameCard: View {
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("Tap to play")
+                    Text(CoreKind.installed.count > 1 ? core.displayName : "Tap to play")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -840,7 +977,25 @@ private struct GameCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(game.displayName)
-        .accessibilityHint("Starts this game in touchHLE")
+        .accessibilityHint("Starts this game in \(core.displayName)")
+        .contextMenu {
+            if CoreKind.installed.count > 1, game.bundleIdentifier != nil {
+                Picker("Core", selection: coreSelection) {
+                    Text("Default (\(defaultCore.displayName))")
+                        .tag(CoreKind?.none)
+                    ForEach(CoreKind.installed) { kind in
+                        Text(kind.displayName).tag(CoreKind?.some(kind))
+                    }
+                }
+            }
+
+            Button(role: .destructive, action: delete) {
+                Label("Remove from Library", systemImage: "trash")
+            }
+        }
+        .onAppear {
+            coreOverride = CoreSelection.override(forBundleIdentifier: game.bundleIdentifier)
+        }
     }
 }
 
@@ -850,10 +1005,29 @@ private struct SettingsView: View {
     @AppStorage("orientation") private var orientation = 0
     @AppStorage("networkAccess") private var networkAccess = false
     @AppStorage("analogTilt") private var analogTilt = true
+    @AppStorage("defaultCore") private var defaultCoreRaw = ""
+
+    private var defaultCore: CoreKind {
+        CoreSelection.kind(forStoredDefault: defaultCoreRaw)
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if CoreKind.installed.count > 1 {
+                    Section {
+                        ForEach(CoreKind.installed) { kind in
+                            CoreChoiceRow(kind: kind, isSelected: kind == defaultCore) {
+                                defaultCoreRaw = kind.rawValue
+                            }
+                        }
+                    } header: {
+                        Text("Emulator Core")
+                    } footer: {
+                        Text("Games use this core unless you pick a different one for them. Touch and hold a game in your library to do that.")
+                    }
+                }
+
                 Section("Display") {
                     Picker("Resolution Scale", selection: $scaleHack) {
                         Text("Off").tag(1)
@@ -915,6 +1089,51 @@ private struct SettingsView: View {
     }
 }
 
+/// One core in the settings list: name, version, what it is for, and a
+/// checkmark. A list of these reads more clearly than a picker, and it leaves
+/// room to say what each core actually does.
+private struct CoreChoiceRow: View {
+    let kind: CoreKind
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(kind.displayName)
+                            .font(.body.weight(isSelected ? .semibold : .regular))
+                            .foregroundStyle(.primary)
+                        Text(kind.version)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    Text(kind.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .opacity(isSelected ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
 private struct DeveloperToolsView: View {
     @AppStorage("showFPSOverlay") private var showFPSOverlay = false
 
@@ -968,18 +1187,22 @@ private struct AboutView: View {
                         .frame(width: 88, height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                        Text("HyperHLE")
+                        Text("touchHLE")
                             .font(.title2.bold())
-                        Text("touchHLE for iOS • HyperHLE core v1.0.6")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            CoreKind.installed
+                                .map { "\($0.displayName) \($0.version)" }
+                                .joined(separator: " • ")
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                 }
 
                 Section("About") {
-                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It runs the HyperHLE v1.0.6 core, a fork of touchHLE with broader game compatibility.")
+                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It ships two emulator cores — HyperHLE v1.0.6, a fork of touchHLE that runs more games, and touchHLE 0.2.3 upstream — and you can pick which one runs each game.")
 
                     Link(destination: URL(string: "https://appdb.touchhle.org/")!) {
                         Label("Game Compatibility", systemImage: "checkmark.seal")

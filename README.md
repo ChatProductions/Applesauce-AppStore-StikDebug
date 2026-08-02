@@ -3,17 +3,18 @@
 An experimental iOS port of [touchHLE](https://touchhle.org/) that plays supported
 32-bit iPhone games on modern iPhones — **no jailbreak required**, though JIT is.
 
-**There are two builds, and they install side by side.** They run different
-emulator cores, which support different sets of games:
+**One app, two emulator cores.** They support different sets of games, so both
+ship inside the app and you choose which one runs each game:
 
-| App | Core | Bundle ID |
+| Core | Version | |
 | --- | --- | --- |
-| **HyperHLE** 0.2.0 | [HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6 | `org.touchhle.ios.hyperhle` |
-| **touchHLE** 0.1.0 | touchHLE 0.2.3 | `org.touchhle.ios.unofficial` |
+| **HyperHLE** | [v1.0.6](https://github.com/HyperHLE/HyperHLE) | Runs more games, including The Sims Medieval |
+| **touchHLE** | 0.2.3 | The original emulator |
 
-Neither is strictly better. HyperHLE runs The Sims Medieval and fixes landscape
-input; some games that work under touchHLE 0.2.3 do not work under it. Install
-both and use whichever runs your game.
+Neither is strictly better. Set the default in Settings, or touch and hold a game
+in your library to give that game its own core. Before 0.3.0 the two cores shipped
+as two separate apps; 0.3.0 replaces the HyperHLE one, and the old touchHLE 0.1.0
+app can be deleted once you have it.
 
 This is **not** an official release of touchHLE or of HyperHLE, and neither project
 endorses it. The emulator core is their work; this repository adds the native iOS
@@ -21,8 +22,8 @@ host app, its build system and packaging. No games or Apple software are include
 
 | | |
 | --- | --- |
-| Latest build | HyperHLE 0.2.0 |
-| Emulator core | HyperHLE v1.0.6 (a fork of touchHLE) |
+| Latest build | 0.3.0 |
+| Emulator cores | HyperHLE v1.0.6 and touchHLE 0.2.3, switchable per game |
 | Minimum iOS | 17.4 |
 | Tested on | iPhone 16 Pro, iOS 27 beta 4 (24A5390f) |
 | JIT | Required each time the app starts as a new process |
@@ -78,8 +79,8 @@ useful.
 - A high rating in the [compatibility database](https://appdb.touchhle.org/)
   describes touchHLE generally and does not guarantee behaviour through this port.
 - Some games run under one core and not the other. Call of Duty: Zombies has been
-  reported working in the touchHLE 0.1.0 build but not in HyperHLE 0.2.0. If a game
-  fails in one, try the other before reporting it.
+  reported working under touchHLE 0.2.3 but not under HyperHLE. If a game fails,
+  switch its core and try again before reporting it.
 
 ## Reporting a game
 
@@ -97,9 +98,21 @@ See [platform/ios/README.md](platform/ios/README.md#build-from-source). In short
 
 ```sh
 git clone --recurse-submodules https://github.com/johnny901901901/touchHLE-for-iOS.git
-cd touchHLE
+cd touchHLE-for-iOS
+sh platform/ios/scripts/build-sdl-shared.sh iphoneos
 sh platform/ios/scripts/build-host.sh iphoneos Release
 ```
+
+That builds an app carrying the HyperHLE core alone. For the touchHLE core as
+well, check out [`johnny901901901/touchHLE`](https://github.com/johnny901901901/touchHLE)
+at branch `ios-core-dylib` beside it and point the build at it:
+
+```sh
+TOUCHHLE_CORE_REPO=../touchHLE sh platform/ios/scripts/build-host.sh iphoneos Release
+```
+
+The app ships whichever cores were built; the picker appears only when there is
+more than one.
 
 `vendor/dynarmic` points at a fork carrying the changes needed to run the arm64 JIT
 inside a signed iOS app (MAP_JIT / W^X handling), so the `--recurse-submodules` part

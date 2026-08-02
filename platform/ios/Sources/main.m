@@ -2,20 +2,45 @@
 #include <SDL_system.h>
 #include <limits.h>
 #include <objc/message.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #import <Foundation/Foundation.h>
 
-extern int32_t touchhle_ios_run_game(
+// Each emulator core exports this; the host passes in the one belonging to the
+// core it loaded for this game.
+typedef int32_t (*TouchHLEIOSRunGameFn)(
     const char *path,
     int32_t scale_hack,
     int32_t orientation,
     int32_t network_access,
     int32_t analog_stick_tilt_controls
 );
+
+bool touchhle_ios_jit_available(void) {
+    // dynarmic's code allocator asks for its executable memory by executing
+    // `brk #0xf00d` (see oaknut's prepare_jit_region), a trap that only an
+    // attached debugger can service. StikDebug is that debugger. With none
+    // attached the trap is fatal the instant a game starts, which reads as the
+    // app quitting for no reason, so the host checks first and says so.
+    struct kinfo_proc info;
+    info.kp_proc.p_flag = 0;
+
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+    size_t size = sizeof(info);
+    if (sysctl(mib, 4, &info, &size, NULL, 0) != 0) {
+        // If the state cannot be read, assume the best rather than stand
+        // between the user and a game that might well run.
+        return true;
+    }
+
+    return (info.kp_proc.p_flag & P_TRACED) != 0;
+}
 
 static FILE *diagnostic_log;
 
@@ -54,12 +79,18 @@ static void start_native_host(void) {
 }
 
 int32_t touchhle_ios_launch_game(
+    TouchHLEIOSRunGameFn run_game,
     const char *path,
     int32_t scale_hack,
     int32_t orientation,
     int32_t network_access,
     int32_t analog_stick_tilt_controls
 ) {
+    if (run_game == NULL) {
+        fprintf(stderr, "touchHLE failed: no emulator core was loaded\n");
+        return 1;
+    }
+
     const char *orientation_hint = "Portrait";
     if (orientation == 1) {
         orientation_hint = "LandscapeLeft";
@@ -69,7 +100,7 @@ int32_t touchhle_ios_launch_game(
     SDL_SetHint(SDL_HINT_ORIENTATIONS, orientation_hint);
 
     SDL_iPhoneSetEventPump(SDL_TRUE);
-    int32_t result = touchhle_ios_run_game(
+    int32_t result = run_game(
         path,
         scale_hack,
         orientation,

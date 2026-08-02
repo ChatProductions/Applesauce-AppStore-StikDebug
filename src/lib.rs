@@ -469,7 +469,8 @@ pub fn main<T: Iterator<Item = String>>(mut args: T) -> Result<(), String> {
         }
         Ok(())
     }
-    let default_options_path = paths::DEFAULT_OPTIONS_FILE;
+    let default_options_file = paths::default_options_file();
+    let default_options_path = default_options_file.as_str();
     match paths::ResourceFile::open(default_options_path) {
         Ok(mut file) => apply_options(file.get(), default_options_path, &mut options, app_id)?,
         Err(err) => echo!("Warning: Could not open {}: {}", default_options_path, err),

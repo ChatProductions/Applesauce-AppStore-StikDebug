@@ -5,7 +5,11 @@ edition = "2021"
 publish = false
 
 [lib]
-crate-type = ["staticlib"]
+# The host app dlopens a core rather than linking it, so that one app can ship
+# more than one. Both cores export the same symbols, so they could never have
+# been statically linked into the same binary.
+name = "hyperhle_core"
+crate-type = ["cdylib"]
 
 [dependencies]
-touchHLE = { path = "../../.." }
+touchHLE = { path = "../../..", default-features = false, features = ["dynamic-sdl"] }

@@ -1,18 +1,16 @@
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
-typedef struct TouchHLEIOSGameMetadata TouchHLEIOSGameMetadata;
+// Whether a debugger is attached to service dynarmic's JIT trap. Without one,
+// starting a game kills the app.
+bool touchhle_ios_jit_available(void);
 
-TouchHLEIOSGameMetadata *touchhle_ios_game_metadata_create(const char *path);
-const char *touchhle_ios_game_metadata_display_name(const TouchHLEIOSGameMetadata *metadata);
-const char *touchhle_ios_game_metadata_bundle_identifier(const TouchHLEIOSGameMetadata *metadata);
-uint32_t touchhle_ios_game_metadata_orientation_capabilities(const TouchHLEIOSGameMetadata *metadata);
-const uint8_t *touchhle_ios_game_metadata_icon_rgba(const TouchHLEIOSGameMetadata *metadata);
-uint32_t touchhle_ios_game_metadata_icon_width(const TouchHLEIOSGameMetadata *metadata);
-uint32_t touchhle_ios_game_metadata_icon_height(const TouchHLEIOSGameMetadata *metadata);
-void touchhle_ios_game_metadata_free(TouchHLEIOSGameMetadata *metadata);
+// The emulator core lives in a dylib that the app loads at runtime (see
+// EmulatorCore.swift), so its entry points are found with dlsym rather than
+// declared here. Only the SDL shim below is part of the app binary.
 
-int32_t touchhle_ios_launch_game(
+typedef int32_t (*TouchHLEIOSRunGameFn)(
     const char *path,
     int32_t scale_hack,
     int32_t orientation,
@@ -20,5 +18,11 @@ int32_t touchhle_ios_launch_game(
     int32_t analog_stick_tilt_controls
 );
 
-void touchhle_ios_request_exit(void);
-float touchhle_ios_current_fps(void);
+int32_t touchhle_ios_launch_game(
+    TouchHLEIOSRunGameFn run_game,
+    const char *path,
+    int32_t scale_hack,
+    int32_t orientation,
+    int32_t network_access,
+    int32_t analog_stick_tilt_controls
+);
