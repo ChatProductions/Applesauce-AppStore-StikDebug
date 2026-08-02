@@ -1,0 +1,82 @@
+name: iOS compatibility report
+description: Report how a specific game behaves in the iOS port — working, partly working, or broken.
+title: "[Compat] <game name> <app version>"
+labels: ["compatibility", "ios"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. Reports are far more useful with the **exact app
+        version**, because compatibility varies sharply between releases of
+        the same game.
+
+        **Do not post IPA files, download links, pairing files, signing
+        certificates, provisioning profiles or device backups.** Reports
+        containing them will be closed. Logs and screenshots are welcome.
+  - type: input
+    id: game
+    attributes:
+      label: Game and app version
+      description: The version shown in touchHLE's log under "App bundle info", not the App Store listing.
+      placeholder: "Wolfenstein RPG 1.1.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      options:
+        - Playable
+        - Playable with issues
+        - Starts but unplayable
+        - Crashes on launch
+        - Will not import
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: iPhone model and iOS version
+      placeholder: "iPhone 16 Pro, iOS 26.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: jit
+    attributes:
+      label: Was JIT enabled?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Port version
+      description: Shown on the About screen.
+      placeholder: "0.2.0 (HyperHLE core v1.0.6)"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What happens
+      description: What you did, what you expected, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: |
+        `touchHLE_log.txt` is in the app's Documents folder — reach it in the
+        Files app under On My iPhone → touchHLE. The first ~20 lines (which
+        include the app version and device profile) plus anything around the
+        failure are usually enough. Paste as text, not a screenshot.
+      render: shell
+  - type: input
+    id: scale
+    attributes:
+      label: Resolution scale setting
+      placeholder: "Off / 2x / 3x / 4x"
