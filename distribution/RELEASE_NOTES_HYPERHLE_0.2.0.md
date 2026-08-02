@@ -20,13 +20,13 @@ Tested on an iPhone 16 Pro (iOS 26) with:
 - Tony Hawk's Pro Skater 2 1.2.1 — playable.
 - Wolfenstein RPG 1.1.1 — playable, landscape and touch correct.
 - Mirror's Edge 1.2.2 — playable.
-- The Sims Medieval 1.0.1 — reaches gameplay, landscape and touch correct. **Known issue:** the on-screen keyboard does not appear when naming your Sim, so a new game cannot be started past that point.
+- The Sims Medieval 1.0.1 — reaches gameplay, landscape and touch correct. **Known issue:** no keyboard appears for naming your Sim or your kingdom (see below).
 
 The deployment target is iOS 17.4. Other device and iOS combinations still need wider testing. The [touchHLE compatibility database](https://appdb.touchhle.org/) is the best starting point for choosing an exact app version; its ratings do not guarantee a title has been tested through this iOS port, and HyperHLE's compatibility differs from touchHLE's.
 
 ## Known Issues
 
-- The Sims Medieval: no keyboard for text entry (see above).
+- The Sims Medieval: the on-screen keyboard does not appear when naming your Sim or your kingdom, so those names cannot be entered. The game is still playable past those screens: the confirm control sits near the top-right corner of the screen rather than where it is drawn, and tapping there advances you. The text field the game uses is not where it appears on screen, which is being looked into.
 - Games rendering through an offscreen texture gain no extra detail from resolution scaling; the setting is applied only where it is safe to do so.
 
 ## Requirements
