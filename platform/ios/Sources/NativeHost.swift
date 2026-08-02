@@ -968,9 +968,9 @@ private struct AboutView: View {
                         .frame(width: 88, height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                        Text("touchHLE HyperHLE")
+                        Text("touchHLE")
                             .font(.title2.bold())
-                        Text("Experimental iOS Build • HyperHLE 72cb2795")
+                        Text("Experimental iOS Port • HyperHLE core 72cb2795")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -979,7 +979,7 @@ private struct AboutView: View {
                 }
 
                 Section("About") {
-                    Text("This private test build combines the native iOS port with the HyperHLE emulator core. It is not an official release of HyperHLE or touchHLE.")
+                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It runs the HyperHLE core, a fork of touchHLE with broader game compatibility.")
 
                     Link(destination: URL(string: "https://appdb.touchhle.org/")!) {
                         Label("Game Compatibility", systemImage: "checkmark.seal")
