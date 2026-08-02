@@ -51,7 +51,7 @@ developer account signs for longer but does not remove the JIT requirement.
 
 ## What works
 
-Tested in the **HyperHLE 0.2.0** build on an iPhone 16 Pro running iOS 27 beta 4
+Tested on the **HyperHLE** core, on an iPhone 16 Pro running iOS 27 beta 4
 (build 24A5390f). Exact app versions matter — the same game can behave very
 differently between releases, and between the two cores:
 

@@ -1,17 +1,17 @@
 {
   "name": "touchHLE iOS (Unofficial)",
   "subtitle": "Experimental touchHLE port for modern iPhones",
-  "description": "Unofficial iOS ports of touchHLE. Two builds are offered: one running the original touchHLE core and one running the HyperHLE core, which support different sets of games. JIT and legally obtained decrypted 32-bit IPAs are required. Games are not included.",
+  "description": "Unofficial iOS port of touchHLE. One app carrying two emulator cores, HyperHLE and touchHLE, which support different sets of games; you choose which one runs each game. JIT and legally obtained decrypted 32-bit IPAs are required. Games are not included.",
   "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
   "website": "https://github.com/johnny901901901/touchHLE-for-iOS",
   "tintColor": "1399FF",
   "apps": [
     {
-      "name": "HyperHLE",
+      "name": "touchHLE",
       "bundleIdentifier": "org.touchhle.ios.hyperhle",
       "developerName": "Unofficial iOS port contributors",
-      "subtitle": "touchHLE for iOS, running the HyperHLE core",
-      "localizedDescription": "The iOS port running the HyperHLE v1.0.6 core, which supports a different set of games from the touchHLE core in the 0.1.0 build. Install both and use whichever runs your game. JIT must be enabled for each new app process. No games are included.",
+      "subtitle": "touchHLE for iOS, with the HyperHLE and touchHLE cores",
+      "localizedDescription": "The iOS port, carrying both the HyperHLE v1.0.6 and touchHLE 0.2.3 emulator cores. They support different sets of games, so you can pick which one runs each game. JIT must be enabled for each new app process. No games are included.",
       "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
       "tintColor": "1399FF",
       "category": "games",
@@ -21,6 +21,16 @@
         "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Screenshots/about.png"
       ],
       "versions": [
+        {
+          "version": "0.3.0",
+          "buildVersion": "1",
+          "date": "2026-08-02",
+          "localizedDescription": "Ships both emulator cores in one app and lets you choose which runs each game. Warns when JIT is off instead of closing. Replaces the 0.2.0 app; the separate touchHLE 0.1.0 app can be deleted.",
+          "downloadURL": "https://github.com/johnny901901901/touchHLE-for-iOS/releases/download/ios-v0.3.0/touchHLE-HyperHLE-iOS-unsigned.ipa",
+          "size": 41388201,
+          "sha256": "dae8dcfdf5640890f09387172531ea0f3d55d4165426ad3dbb2a5c019e9b4604",
+          "minOSVersion": "17.4"
+        },
         {
           "version": "0.2.0",
           "buildVersion": "1",
