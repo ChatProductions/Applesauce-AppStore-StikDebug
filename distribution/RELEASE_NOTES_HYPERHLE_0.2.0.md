@@ -19,7 +19,7 @@ Tested on an iPhone 16 Pro (iOS 26) with:
 - Touch & Go 1.1 — playable at all resolution settings.
 - Tony Hawk's Pro Skater 2 1.2.1 — playable.
 - Wolfenstein RPG 1.1.1 — playable, landscape and touch correct.
-- Mirror's Edge 1.2.2 — playable.
+- Mirror's Edge 1.4.72 — playable.
 - The Sims Medieval 1.0.1 — reaches gameplay, landscape and touch correct. **Known issue:** no keyboard appears for naming your Sim or your kingdom (see below).
 
 The deployment target is iOS 17.4. Other device and iOS combinations still need wider testing. The [touchHLE compatibility database](https://appdb.touchhle.org/) is the best starting point for choosing an exact app version; its ratings do not guarantee a title has been tested through this iOS port, and HyperHLE's compatibility differs from touchHLE's.

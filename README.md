@@ -17,6 +17,14 @@ host app, its build system and packaging. No games or Apple software are include
 | JIT | Required each time the app starts as a new process |
 | Games | Not included — bring your own decrypted 32-bit IPA |
 
+## Screenshots
+
+| Library | Settings | About |
+| --- | --- | --- |
+| ![Game library](platform/ios/Screenshots/library-games.png) | ![Settings](platform/ios/Screenshots/settings.png) | ![About](platform/ios/Screenshots/about.png) |
+
+Games shown are not included and must be supplied by you.
+
 ## Install
 
 Download `touchHLE-HyperHLE-iOS-unsigned.ipa` from the
@@ -40,7 +48,7 @@ game can behave very differently between releases:
 | Touch & Go | 1.1 | Playable at all resolution settings |
 | Tony Hawk's Pro Skater 2 | 1.2.1 | Playable |
 | Wolfenstein RPG | 1.1.1 | Playable |
-| Mirror's Edge | 1.2.2 | Playable |
+| Mirror's Edge | 1.4.72 | Playable |
 | The Sims Medieval | 1.0.1 | Playable, but see below |
 
 Only one device and one iOS version have been tested so far. Wider testing is the

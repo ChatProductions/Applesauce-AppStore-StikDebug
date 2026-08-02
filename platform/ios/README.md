@@ -51,7 +51,7 @@ Confirmed on that device, with the exact app versions tested:
 - Touch & Go 1.1 — at all resolution settings.
 - Tony Hawk's Pro Skater 2 1.2.1.
 - Wolfenstein RPG 1.1.1.
-- Mirror's Edge 1.2.2.
+- Mirror's Edge 1.4.72.
 - The Sims Medieval 1.0.1 — playable, but names cannot be entered (see Current Limitations).
 
 The [touchHLE compatibility database](https://appdb.touchhle.org/) uses a star-rating system for specific app versions. Higher-rated entries are the best place to begin, but a high rating is not a guarantee that the same version has already been tested through this iOS port.
