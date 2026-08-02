@@ -1,10 +1,10 @@
-# touchHLE iOS Port — HyperHLE 0.1.0
+# touchHLE iOS Port 0.2.0 — HyperHLE core
 
 An experimental, unofficial iOS port of touchHLE, now running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) core (upstream commit `72cb2795`) instead of the touchHLE 0.2.3 core used by the previous iOS prerelease. HyperHLE is a fork of touchHLE with broader game compatibility; it has no iOS support of its own, so the host app, build scripts and packaging in this port are specific to it.
 
 This is not an official release of touchHLE or of HyperHLE.
 
-## Changes Since The 0.1.0 iOS Prerelease
+## Changes Since 0.1.0
 
 - Now runs the HyperHLE emulator core.
 - **Landscape games accept touch input again.** The host handed the main thread to the emulator as soon as the scene reported it had rotated, but before UIKit had finished committing the rotation. The scene stayed mid-transition and UIKit stopped delivering touches to every window in it — games still rendered, and timers still ran, so nothing looked wrong.
@@ -15,12 +15,12 @@ This is not an official release of touchHLE or of HyperHLE.
 
 Tested on an iPhone 16 Pro (iOS 26) with:
 
-- Flappy Bird — playable, including at 2x/3x/4x resolution scale.
-- Touch & Go — playable at all resolution settings.
-- Wolfenstein RPG — playable, landscape and touch correct.
-- The Sims Medieval — reaches gameplay, landscape and touch correct. **Known issue:** the on-screen keyboard does not appear when naming your Sim, so a new game cannot be started past that point.
-
-Tony Hawk's Pro Skater 2 was tested against the previous prerelease but has not been re-verified on this build.
+- Flappy Bird 1.1.0 — playable, including at 2x/3x/4x resolution scale.
+- Touch & Go 1.1 — playable at all resolution settings.
+- Tony Hawk's Pro Skater 2 1.2.1 — playable.
+- Wolfenstein RPG 1.1.1 — playable, landscape and touch correct.
+- Mirror's Edge 1.2.2 — playable.
+- The Sims Medieval 1.0.1 — reaches gameplay, landscape and touch correct. **Known issue:** the on-screen keyboard does not appear when naming your Sim, so a new game cannot be started past that point.
 
 The deployment target is iOS 17.4. Other device and iOS combinations still need wider testing. The [touchHLE compatibility database](https://appdb.touchhle.org/) is the best starting point for choosing an exact app version; its ratings do not guarantee a title has been tested through this iOS port, and HyperHLE's compatibility differs from touchHLE's.
 
@@ -76,7 +76,7 @@ The release IPA is unsigned and credential-free. Each user signs it locally with
 
 - File: `touchHLE-HyperHLE-iOS-unsigned.ipa`
 - Size: `36191552` bytes
-- SHA-256: `74b037cade25da7cba39b29766b0331d65958525e153360f9743cb048c295803`
+- SHA-256: `ecb201e7f96891899f280c68791edd1cd0152418d6cba4210199b92243831c9f`
 
 Do not install a copy that has been reuploaded with a different hash unless you trust and can verify the person who rebuilt it.
 
