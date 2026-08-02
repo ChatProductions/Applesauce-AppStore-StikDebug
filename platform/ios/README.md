@@ -1,6 +1,6 @@
 # touchHLE iOS Port (Unofficial)
 
-This is an experimental iOS port based on the touchHLE 0.2.3 development line at upstream commit `6bce4119`. It runs supported 32-bit guest apps on modern iPhones through touchHLE's existing high-level emulation and Dynarmic CPU backend.
+This is an experimental iOS port of touchHLE running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6 core, a fork of touchHLE with broader game compatibility. It runs supported 32-bit guest apps on modern iPhones through high-level emulation and the Dynarmic CPU backend.
 
 This fork is not an official touchHLE release, is not endorsed by the upstream project, and does not include games or Apple software.
 
@@ -8,10 +8,10 @@ This fork is not an official touchHLE release, is not endorsed by the upstream p
 
 | Item | Current status |
 | --- | --- |
-| Port version | 0.1.0 |
-| touchHLE base | 0.2.3 development line (`6bce4119`) |
+| Port version | 0.2.0 |
+| Emulator core | HyperHLE v1.0.6 |
 | Minimum target | iOS 17.4 |
-| Tested environment | iPhone 16 Pro running iOS 27 beta 4 |
+| Tested environment | iPhone 16 Pro running iOS 27.0 |
 | CPU backend | Dynarmic |
 | JIT | Required whenever the port starts as a new process |
 | Games | Not included; decrypted 32-bit IPAs are required |
@@ -43,21 +43,26 @@ Imported titles shown in screenshots are not all compatibility claims.
 
 ## Device And Game Testing
 
-The port has been personally tested on an **iPhone 16 Pro running iOS 27 beta 4**. Its deployment target is iOS 17.4, and it is intended to work on other modern iPhones and supported iOS versions, but those combinations have not all been verified yet.
+The port has been personally tested on an **iPhone 16 Pro running iOS 27.0**. Its deployment target is iOS 17.4, and it is intended to work on other modern iPhones and supported iOS versions, but those combinations have not all been verified yet.
 
-Confirmed on that device:
+Confirmed on that device, with the exact app versions tested:
 
-- Touch & Go.
-- Tony Hawk's Pro Skater 2 (THPS2).
-- Wolfenstein RPG.
+- Flappy Bird 1.1.0 — including at 2x, 3x and 4x resolution scale.
+- Touch & Go 1.1 — at all resolution settings.
+- Tony Hawk's Pro Skater 2 1.2.1.
+- Wolfenstein RPG 1.1.1.
+- Mirror's Edge 1.2.2.
+- The Sims Medieval 1.0.1 — playable, but names cannot be entered (see Current Limitations).
 
 The [touchHLE compatibility database](https://appdb.touchhle.org/) uses a star-rating system for specific app versions. Higher-rated entries are the best place to begin, but a high rating is not a guarantee that the same version has already been tested through this iOS port.
 
-The Sims Medieval is a planned compatibility target, not a currently working title. This project began after the port developer gave his sister a new iPhone 17 Pro Max and discovered that the copy of The Sims Medieval she had legitimately purchased years ago could no longer be installed. Future compatibility work will focus on identifying and fixing the first missing touchHLE subsystem rather than changing the native library UI.
+The Sims Medieval now reaches gameplay, which was the original goal of this project. This project began after the port developer gave his sister a new iPhone 17 Pro Max and discovered that the copy of The Sims Medieval she had legitimately purchased years ago could no longer be installed. Future compatibility work will focus on identifying and fixing the first missing touchHLE subsystem rather than changing the native library UI.
 
 ## Current Limitations
 
 - JIT is required. This fork does not yet contain a no-JIT ARM interpreter.
+- **The Sims Medieval:** no keyboard appears for naming your Sim or your kingdom, so those names cannot be entered. The game is playable past those screens; the confirm control sits near the top-right corner of the screen rather than where it is drawn.
+- Games that render through an offscreen texture gain no extra detail from resolution scaling. The scale hack enlarges renderbuffers but not textures, so it is applied only where it is safe to do so.
 - The touchHLE compatibility database describes touchHLE generally, not guaranteed iOS-host behavior.
 - Device and iOS-version coverage is still limited.
 - Some games need touchHLE compatibility work even when the port itself is functioning.
@@ -183,13 +188,13 @@ Do not publish saves with a release or attach them to bug reports without checki
 
 ### There is audio and touch input but the picture is blank or stretched
 
-- Confirm you are using host 0.1.0 or newer; this release contains the iOS OpenGL ES presentation and landscape texture-coordinate fixes.
+- Confirm you are using host 0.2.0 or newer; it contains the iOS OpenGL ES presentation and landscape orientation fixes.
 - Return to the library and start the game in its declared orientation.
 - Record the exact game version, device, iOS version, and whether portrait titles render correctly.
 
-### Touch stops responding after rotation
+### Touch does not respond in a landscape game
 
-The port locks each game to its launch orientation because older games often assume a fixed screen layout. Return to the library, hold the phone in the desired supported orientation, and launch again.
+This was a bug in 0.1.0 and is fixed in 0.2.0 — update before investigating further. The port also locks each game to its launch orientation, because older games often assume a fixed screen layout, so if a game launched in the wrong orientation, return to the library, hold the phone the way you want, and launch again.
 
 ### The app no longer opens
 
