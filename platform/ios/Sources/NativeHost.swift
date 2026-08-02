@@ -968,9 +968,9 @@ private struct AboutView: View {
                         .frame(width: 88, height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                        Text("touchHLE")
+                        Text("HyperHLE")
                             .font(.title2.bold())
-                        Text("Experimental iOS Port • HyperHLE core v1.0.6")
+                        Text("touchHLE for iOS • HyperHLE core v1.0.6")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }

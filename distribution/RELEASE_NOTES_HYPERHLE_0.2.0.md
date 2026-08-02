@@ -1,6 +1,8 @@
 # touchHLE iOS Port 0.2.0 — HyperHLE core
 
-An experimental, unofficial iOS port of touchHLE, now running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) **v1.0.6** core instead of the touchHLE 0.2.3 core used by the previous iOS prerelease. HyperHLE is a fork of touchHLE with broader game compatibility; it has no iOS support of its own, so the host app, build scripts and packaging in this port are specific to it.
+An experimental, unofficial iOS port of touchHLE, now running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) **v1.0.6** core instead of the touchHLE 0.2.3 core used by the previous iOS prerelease.
+
+**This installs alongside 0.1.0 rather than replacing it.** It appears as **HyperHLE** on the home screen; the 0.1.0 build stays as **touchHLE**. The two cores support different sets of games and neither is strictly better — HyperHLE runs The Sims Medieval and fixes landscape input, but some games that work under touchHLE 0.2.3 do not work under it (Call of Duty: Zombies has been reported as one). Keep both installed and use whichever runs your game. HyperHLE is a fork of touchHLE with broader game compatibility; it has no iOS support of its own, so the host app, build scripts and packaging in this port are specific to it.
 
 This is not an official release of touchHLE or of HyperHLE.
 
@@ -28,6 +30,7 @@ The deployment target is iOS 17.4, but testing so far has only been on one devic
 
 - The Sims Medieval: the on-screen keyboard does not appear when naming your Sim or your kingdom, so those names cannot be entered. The game is still playable past those screens: the confirm control sits near the top-right corner of the screen rather than where it is drawn, and tapping there advances you. The text field the game uses is not where it appears on screen, which is being looked into.
 - Games rendering through an offscreen texture gain no extra detail from resolution scaling; the setting is applied only where it is safe to do so.
+- Some games run under the touchHLE core but not HyperHLE. Call of Duty: Zombies has been reported working in 0.1.0 and not in 0.2.0. If a game fails here, try the 0.1.0 build before reporting it — and please include the exact app version.
 
 ## Requirements
 
@@ -75,14 +78,16 @@ Games are not included.
 The release IPA is unsigned and credential-free. Each user signs it locally with their own Apple account.
 
 - File: `touchHLE-HyperHLE-iOS-unsigned.ipa`
-- Size: `36191726` bytes
-- SHA-256: `e2a690650e2c70d518948a4bb7d9b221e1c0e03540ad88461eabc363acb9cb60`
+- Size: `36192832` bytes
+- SHA-256: `f68ac992f1f9627a0d98621316b9db4e3ee5d30e46a52fa0039daa38fd8685a2`
 
 Do not install a copy that has been reuploaded with a different hash unless you trust and can verify the person who rebuilt it.
 
 ## Important
 
-This build keeps the same bundle identifier as the 0.1.0 prerelease (`org.touchhle.ios.unofficial`), so it installs **over** an existing 0.1.0 install and keeps your imported games and saves. Sideload it the same way you did before.
+This build uses its own bundle identifier (`org.touchhle.ios.hyperhle`) and appears as **HyperHLE**, so it installs alongside the 0.1.0 **touchHLE** build instead of replacing it. Games and saves are not shared between the two — each keeps its own library.
+
+If you already installed an earlier 0.2.0 that replaced your touchHLE app, reinstall 0.1.0 from its release to get the touchHLE build back.
 
 ## Credits
 

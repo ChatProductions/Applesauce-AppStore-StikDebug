@@ -1,8 +1,19 @@
 # touchHLE for iOS (Unofficial)
 
-An experimental iOS port of [touchHLE](https://touchhle.org/), running the
-[HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6 core. It plays supported
+An experimental iOS port of [touchHLE](https://touchhle.org/) that plays supported
 32-bit iPhone games on modern iPhones — **no jailbreak required**, though JIT is.
+
+**There are two builds, and they install side by side.** They run different
+emulator cores, which support different sets of games:
+
+| App | Core | Bundle ID |
+| --- | --- | --- |
+| **HyperHLE** 0.2.0 | [HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6 | `org.touchhle.ios.hyperhle` |
+| **touchHLE** 0.1.0 | touchHLE 0.2.3 | `org.touchhle.ios.unofficial` |
+
+Neither is strictly better. HyperHLE runs The Sims Medieval and fixes landscape
+input; some games that work under touchHLE 0.2.3 do not work under it. Install
+both and use whichever runs your game.
 
 This is **not** an official release of touchHLE or of HyperHLE, and neither project
 endorses it. The emulator core is their work; this repository adds the native iOS
@@ -10,7 +21,7 @@ host app, its build system and packaging. No games or Apple software are include
 
 | | |
 | --- | --- |
-| Port version | 0.2.0 |
+| Latest build | HyperHLE 0.2.0 |
 | Emulator core | HyperHLE v1.0.6 (a fork of touchHLE) |
 | Minimum iOS | 17.4 |
 | Tested on | iPhone 16 Pro, iOS 27 beta 4 (24A5390f) |
@@ -39,8 +50,9 @@ developer account signs for longer but does not remove the JIT requirement.
 
 ## What works
 
-Tested on an iPhone 16 Pro running iOS 27 beta 4 (build 24A5390f). Exact app versions matter — the same
-game can behave very differently between releases:
+Tested in the **HyperHLE 0.2.0** build on an iPhone 16 Pro running iOS 27 beta 4
+(build 24A5390f). Exact app versions matter — the same game can behave very
+differently between releases, and between the two cores:
 
 | Game | Version | Status |
 | --- | --- | --- |
@@ -65,6 +77,9 @@ useful.
   scaling, which is applied only where it is safe to do so.
 - A high rating in the [compatibility database](https://appdb.touchhle.org/)
   describes touchHLE generally and does not guarantee behaviour through this port.
+- Some games run under one core and not the other. Call of Duty: Zombies has been
+  reported working in the touchHLE 0.1.0 build but not in HyperHLE 0.2.0. If a game
+  fails in one, try the other before reporting it.
 
 ## Reporting a game
 

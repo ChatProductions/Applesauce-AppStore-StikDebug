@@ -1,17 +1,17 @@
 {
   "name": "touchHLE iOS (Unofficial)",
   "subtitle": "Experimental touchHLE port for modern iPhones",
-  "description": "An unofficial iOS port of touchHLE, running the HyperHLE core for broader game compatibility. JIT and legally obtained decrypted 32-bit IPAs are required. Games are not included.",
+  "description": "Unofficial iOS ports of touchHLE. Two builds are offered: one running the original touchHLE core and one running the HyperHLE core, which support different sets of games. JIT and legally obtained decrypted 32-bit IPAs are required. Games are not included.",
   "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
   "website": "https://github.com/johnny901901901/touchHLE-for-iOS",
   "tintColor": "1399FF",
   "apps": [
     {
-      "name": "touchHLE",
-      "bundleIdentifier": "org.touchhle.ios.unofficial",
+      "name": "HyperHLE",
+      "bundleIdentifier": "org.touchhle.ios.hyperhle",
       "developerName": "Unofficial iOS port contributors",
-      "subtitle": "Run supported early 32-bit iPhone games",
-      "localizedDescription": "A native iOS port of touchHLE running the HyperHLE v1.0.6 core, with IPA importing, artwork, persistent saves, orientation handling, a return-to-library control, and optional FPS display. JIT must be enabled for each new app process. No games are included.",
+      "subtitle": "touchHLE for iOS, running the HyperHLE core",
+      "localizedDescription": "The iOS port running the HyperHLE v1.0.6 core, which supports a different set of games from the touchHLE core in the 0.1.0 build. Install both and use whichever runs your game. JIT must be enabled for each new app process. No games are included.",
       "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
       "tintColor": "1399FF",
       "category": "games",
@@ -25,10 +25,43 @@
           "version": "0.2.0",
           "buildVersion": "1",
           "date": "2026-08-02",
-          "localizedDescription": "Moves to the HyperHLE v1.0.6 core. Fixes landscape touch input, landscape orientation, and resolution scaling.",
+          "localizedDescription": "Runs the HyperHLE v1.0.6 core. Fixes landscape touch input, landscape orientation and resolution scaling. Installs alongside the touchHLE build rather than replacing it.",
           "downloadURL": "https://github.com/johnny901901901/touchHLE-for-iOS/releases/download/ios-hyperhle-v0.2.0/touchHLE-HyperHLE-iOS-unsigned.ipa",
-          "size": 36191726,
-          "sha256": "e2a690650e2c70d518948a4bb7d9b221e1c0e03540ad88461eabc363acb9cb60",
+          "size": 36192832,
+          "sha256": "f68ac992f1f9627a0d98621316b9db4e3ee5d30e46a52fa0039daa38fd8685a2",
+          "minOSVersion": "17.4"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [
+          "get-task-allow"
+        ],
+        "privacy": {}
+      }
+    },
+    {
+      "name": "touchHLE",
+      "bundleIdentifier": "org.touchhle.ios.unofficial",
+      "developerName": "Unofficial iOS port contributors",
+      "subtitle": "touchHLE for iOS, running the original touchHLE core",
+      "localizedDescription": "The iOS port running the touchHLE 0.2.3 core. Some games run here that do not run under the HyperHLE build, and vice versa. JIT must be enabled for each new app process. No games are included.",
+      "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
+      "tintColor": "1399FF",
+      "category": "games",
+      "screenshots": [
+        "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Screenshots/library-games.png",
+        "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Screenshots/settings.png",
+        "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Screenshots/about.png"
+      ],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "buildVersion": "1",
+          "date": "2026-08-01",
+          "localizedDescription": "First iOS prerelease, running the touchHLE 0.2.3 core.",
+          "downloadURL": "https://github.com/johnny901901901/touchHLE-for-iOS/releases/download/ios-v0.1.0/touchHLE-iOS-unsigned.ipa",
+          "size": 16065421,
+          "sha256": "a00bba8d434ab52f6a393a03215a75862009ab83edb86887d1d05a90dea4bb1f",
           "minOSVersion": "17.4"
         }
       ],
