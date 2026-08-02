@@ -11,7 +11,7 @@ This fork is not an official touchHLE release, is not endorsed by the upstream p
 | Port version | 0.2.0 |
 | Emulator core | HyperHLE v1.0.6 |
 | Minimum target | iOS 17.4 |
-| Tested environment | iPhone 16 Pro running iOS 27.0 |
+| Tested environment | iPhone 16 Pro running iOS 27 beta 4 (24A5390f) |
 | CPU backend | Dynarmic |
 | JIT | Required whenever the port starts as a new process |
 | Games | Not included; decrypted 32-bit IPAs are required |
@@ -43,7 +43,7 @@ Imported titles shown in screenshots are not all compatibility claims.
 
 ## Device And Game Testing
 
-The port has been personally tested on an **iPhone 16 Pro running iOS 27.0**. Its deployment target is iOS 17.4, and it is intended to work on other modern iPhones and supported iOS versions, but those combinations have not all been verified yet.
+The port has been personally tested on an **iPhone 16 Pro running iOS 27 beta 4** (build 24A5390f). Its deployment target is iOS 17.4, and it is intended to work on other modern iPhones and supported iOS versions, but those combinations have not all been verified yet.
 
 Confirmed on that device, with the exact app versions tested:
 

@@ -13,7 +13,7 @@ This is not an official release of touchHLE or of HyperHLE.
 
 ## Tested
 
-Tested on an iPhone 16 Pro (iOS 26) with:
+Tested on an iPhone 16 Pro running iOS 27 beta 4 (build 24A5390f) with:
 
 - Flappy Bird 1.1.0 — playable, including at 2x/3x/4x resolution scale.
 - Touch & Go 1.1 — playable at all resolution settings.
@@ -22,7 +22,7 @@ Tested on an iPhone 16 Pro (iOS 26) with:
 - Mirror's Edge 1.4.72 — playable.
 - The Sims Medieval 1.0.1 — reaches gameplay, landscape and touch correct. **Known issue:** no keyboard appears for naming your Sim or your kingdom (see below).
 
-The deployment target is iOS 17.4. Other device and iOS combinations still need wider testing. The [touchHLE compatibility database](https://appdb.touchhle.org/) is the best starting point for choosing an exact app version; its ratings do not guarantee a title has been tested through this iOS port, and HyperHLE's compatibility differs from touchHLE's.
+The deployment target is iOS 17.4, but testing so far has only been on one device and only on an iOS **beta** — no shipping iOS release has been verified. Reports from stable iOS 17.4+ are especially useful. The [touchHLE compatibility database](https://appdb.touchhle.org/) is the best starting point for choosing an exact app version; its ratings do not guarantee a title has been tested through this iOS port, and HyperHLE's compatibility differs from touchHLE's.
 
 ## Known Issues
 

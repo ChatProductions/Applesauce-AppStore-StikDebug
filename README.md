@@ -13,7 +13,7 @@ host app, its build system and packaging. No games or Apple software are include
 | Port version | 0.2.0 |
 | Emulator core | HyperHLE v1.0.6 (a fork of touchHLE) |
 | Minimum iOS | 17.4 |
-| Tested on | iPhone 16 Pro, iOS 27.0 |
+| Tested on | iPhone 16 Pro, iOS 27 beta 4 (24A5390f) |
 | JIT | Required each time the app starts as a new process |
 | Games | Not included — bring your own decrypted 32-bit IPA |
 
@@ -39,7 +39,7 @@ developer account signs for longer but does not remove the JIT requirement.
 
 ## What works
 
-Tested on an iPhone 16 Pro running iOS 27.0. Exact app versions matter — the same
+Tested on an iPhone 16 Pro running iOS 27 beta 4 (build 24A5390f). Exact app versions matter — the same
 game can behave very differently between releases:
 
 | Game | Version | Status |
@@ -51,8 +51,9 @@ game can behave very differently between releases:
 | Mirror's Edge | 1.4.72 | Playable |
 | The Sims Medieval | 1.0.1 | Playable, but see below |
 
-Only one device and one iOS version have been tested so far. Wider testing is the
-most useful thing anyone can contribute.
+Only one device has been tested, and only on an iOS **beta**. No shipping iOS
+release has been verified yet, so reports from stable iOS 17.4+ are especially
+useful.
 
 ## Known issues
 
