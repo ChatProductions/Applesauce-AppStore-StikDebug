@@ -75,8 +75,8 @@ Games are not included.
 The release IPA is unsigned and credential-free. Each user signs it locally with their own Apple account.
 
 - File: `touchHLE-HyperHLE-iOS-unsigned.ipa`
-- Size: `36191553` bytes
-- SHA-256: `d9746c32fcc219704d3cbe88c5bb492110f415ba7a8a83c914bd9c5a0b984890`
+- Size: `36191726` bytes
+- SHA-256: `e2a690650e2c70d518948a4bb7d9b221e1c0e03540ad88461eabc363acb9cb60`
 
 Do not install a copy that has been reuploaded with a different hash unless you trust and can verify the person who rebuilt it.
 

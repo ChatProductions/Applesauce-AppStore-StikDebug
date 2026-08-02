@@ -27,8 +27,8 @@
           "date": "2026-08-02",
           "localizedDescription": "Moves to the HyperHLE v1.0.6 core. Fixes landscape touch input, landscape orientation, and resolution scaling.",
           "downloadURL": "https://github.com/johnny901901901/touchHLE/releases/download/ios-hyperhle-v0.2.0/touchHLE-HyperHLE-iOS-unsigned.ipa",
-          "size": 36191553,
-          "sha256": "d9746c32fcc219704d3cbe88c5bb492110f415ba7a8a83c914bd9c5a0b984890",
+          "size": 36191726,
+          "sha256": "e2a690650e2c70d518948a4bb7d9b221e1c0e03540ad88461eabc363acb9cb60",
           "minOSVersion": "17.4"
         }
       ],
