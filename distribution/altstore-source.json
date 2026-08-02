@@ -50,11 +50,11 @@
       }
     },
     {
-      "name": "touchHLE",
+      "name": "touchHLE 0.1.0 (superseded)",
       "bundleIdentifier": "org.touchhle.ios.unofficial",
       "developerName": "Unofficial iOS port contributors",
-      "subtitle": "touchHLE for iOS, running the original touchHLE core",
-      "localizedDescription": "The iOS port running the touchHLE 0.2.3 core. Some games run here that do not run under the HyperHLE build, and vice versa. JIT must be enabled for each new app process. No games are included.",
+      "subtitle": "The old touchHLE-core-only build",
+      "localizedDescription": "Superseded by the main app from 0.3.0 onward, which carries this core alongside HyperHLE and lets you choose between them. Kept only for anyone already running it; there will be no further updates here.",
       "iconURL": "https://raw.githubusercontent.com/johnny901901901/touchHLE-for-iOS/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
       "tintColor": "1399FF",
       "category": "games",
