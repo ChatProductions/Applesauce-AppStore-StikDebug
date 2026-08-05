@@ -1352,7 +1352,16 @@ private struct DeveloperToolsView: View {
 private struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
 
+    /// The asset catalog copy, not the app icon. `CFBundleIconFiles` only
+    /// reaches `AppIcon60x60`, whose largest bundled representation is 120x120,
+    /// and this is drawn at 88pt — 264 pixels on a 3x screen, so the icon
+    /// arrived visibly upscaled. Falls back to the old lookup if the asset is
+    /// ever missing.
     private var appIcon: UIImage? {
+        if let icon = UIImage(named: "AboutIcon") {
+            return icon
+        }
+
         guard
             let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
             let primaryIcon = icons["CFBundlePrimaryIcon"] as? [String: Any],
