@@ -5,7 +5,9 @@
 # Applesauce
 
 **A playful emulator for iOS.** It plays supported 32-bit iPhone games on modern
-iPhones and iPads — **no jailbreak required**, though JIT is.
+iPhones — **no jailbreak required**, though JIT is. It installs and runs on
+iPadOS too, but every game runs as an iPhone guest for now: the core's iPad
+device families are not yet reachable from the app.
 
 Applesauce is an **unaffiliated fork**. The emulation is entirely the work of
 [touchHLE](https://github.com/touchHLE/touchHLE) and its fork
