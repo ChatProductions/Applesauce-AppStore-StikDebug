@@ -42,7 +42,7 @@ CMAKE_TOOLCHAIN_FILE="$ROOT/cmake/TouchHLEiOS.cmake"
 CMAKE_GENERATOR=Ninja
 CMAKE="$ROOT/scripts/cmake-ios.sh"
 DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
-IPHONEOS_DEPLOYMENT_TARGET=17.4
+IPHONEOS_DEPLOYMENT_TARGET=15.0
 CFLAGS="${CFLAGS:-} -ffile-prefix-map=$HOME=/build -fdebug-prefix-map=$HOME=/build"
 CXXFLAGS="${CXXFLAGS:-} -DFMT_CONSTEVAL= -ffile-prefix-map=$HOME=/build -fdebug-prefix-map=$HOME=/build"
 
@@ -112,6 +112,18 @@ export CARGO_TARGET_DIR TOUCHHLE_BOOST_ROOT
 export CMAKE_TOOLCHAIN_FILE CMAKE_GENERATOR CMAKE DEVELOPER_DIR IPHONEOS_DEPLOYMENT_TARGET
 export CFLAGS CXXFLAGS
 
+# Cargo does not treat IPHONEOS_DEPLOYMENT_TARGET as an input, so lowering or
+# raising it leaves every already-built object — including the C++ ones from
+# dynarmic — at the old minimum, and the core silently ships with the wrong
+# LC_BUILD_VERSION. Keep a stamp and start that target triple over when it
+# changes.
+STAMP="$CARGO_TARGET_DIR/$TARGET/.ios-deployment-target"
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" != "$IPHONEOS_DEPLOYMENT_TARGET" ]; then
+    echo "Deployment target changed ($(cat "$STAMP") -> $IPHONEOS_DEPLOYMENT_TARGET);" \
+        "rebuilding $TARGET from scratch."
+    rm -rf "${CARGO_TARGET_DIR:?}/$TARGET"
+fi
+
 set -- build \
     --manifest-path "$CORE_ENTRY" \
     --target "$TARGET"
@@ -128,6 +140,23 @@ else
     PROFILE_DIR=debug
 fi
 CORE_OUT_DIR="$CARGO_TARGET_DIR/$TARGET/$PROFILE_DIR"
+
+mkdir -p "$(dirname -- "$STAMP")"
+printf '%s' "$IPHONEOS_DEPLOYMENT_TARGET" >"$STAMP"
+
+# Belt and braces: the stamp above prevents the stale case, this catches it if
+# it ever happens anyway. A core built for a newer iOS than the app claims will
+# not load at all on the older devices the app says it supports. Only the core
+# this invocation built is checked — other cores' dylibs are copied into this
+# directory too, and embed-cores.sh is what vets those.
+built_for=$(vtool -show-build "$CORE_OUT_DIR/$CORE_DYLIB" 2>/dev/null |
+    awk '/minos/ { print $2; exit }')
+if [ -n "$built_for" ] && [ "$built_for" != "$IPHONEOS_DEPLOYMENT_TARGET" ]; then
+    echo "error: $CORE_DYLIB was built for iOS $built_for," \
+        "not $IPHONEOS_DEPLOYMENT_TARGET." >&2
+    echo "       Delete $CARGO_TARGET_DIR/$TARGET and build again." >&2
+    exit 1
+fi
 
 # ld leaves the string pool 4-byte aligned whenever the dylib happens to have an
 # odd number of indirect symbols, and dyld then refuses to load it. See

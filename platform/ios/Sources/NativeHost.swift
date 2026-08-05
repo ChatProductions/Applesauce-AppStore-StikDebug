@@ -2,6 +2,129 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
+// MARK: - iOS 15 compatibility
+//
+// The deployment target is iOS 15.0 so that TrollStore devices (iOS 14.0-17.0)
+// are covered as well as StikDebug ones (17.4+). Anything newer than iOS 15
+// has to sit behind `#available`, including types such as `NavigationStack`
+// that would otherwise fail to resolve at all.
+
+/// `NavigationStack` on iOS 16+, `NavigationView` in stack style on iOS 15.
+private struct TouchHLENavigationContainer<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            NavigationStack(root: content)
+        } else {
+            NavigationView(content: content)
+                // Without this iPads get the split-view presentation, which
+                // this UI is not laid out for.
+                .navigationViewStyle(.stack)
+        }
+    }
+}
+
+/// `ContentUnavailableView` on iOS 17+, a hand-rolled equivalent below it.
+private struct TouchHLEEmptyState: View {
+    let title: String
+    let systemImage: String
+    let description: String
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            ContentUnavailableView {
+                Label(title, systemImage: systemImage)
+            } description: {
+                Text(description)
+            }
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 48, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(title)
+                    .font(.title2.bold())
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(32)
+        }
+    }
+}
+
+extension View {
+    /// `onChange(of:)` without tripping the iOS 17 two-parameter signature,
+    /// which does not exist on iOS 15 or 16.
+    @ViewBuilder
+    func touchHLEOnChange<Value: Equatable>(
+        of value: Value,
+        perform action: @escaping (Value) -> Void
+    ) -> some View {
+        if #available(iOS 17.0, *) {
+            onChange(of: value) { _, newValue in action(newValue) }
+        } else {
+            onChange(of: value, perform: action)
+        }
+    }
+}
+
+/// Interface and device orientations are mirrored for the landscape cases.
+private func touchHLEDeviceOrientation(
+    for mask: UIInterfaceOrientationMask
+) -> UIDeviceOrientation? {
+    if mask.contains(.landscapeLeft) {
+        return .landscapeRight
+    }
+    if mask.contains(.landscapeRight) {
+        return .landscapeLeft
+    }
+    if mask.contains(.portrait) {
+        return .portrait
+    }
+    return nil
+}
+
+/// Ask UIKit to rotate. On iOS 16+ that is `requestGeometryUpdate` plus
+/// `setNeedsUpdateOfSupportedInterfaceOrientations`. Neither exists on iOS 15,
+/// where the only lever is the device orientation UIKit follows, so set that
+/// and re-ask UIKit to rotate.
+@MainActor
+private func touchHLEApplyOrientation(
+    _ mask: UIInterfaceOrientationMask,
+    viewController: UIViewController?,
+    scene: UIWindowScene?
+) {
+    if #available(iOS 16.0, *) {
+        viewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        scene?.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+    } else {
+        // `UIDevice.orientation` is read-only in the public API, but UIKit
+        // backs it with a settable property, and driving it is the only way to
+        // start a rotation before iOS 16. `responds(to:)` keeps this a no-op
+        // rather than a crash if that ever stops being true.
+        let device = UIDevice.current
+        if let deviceOrientation = touchHLEDeviceOrientation(for: mask),
+           device.responds(to: NSSelectorFromString("setOrientation:")) {
+            device.setValue(deviceOrientation.rawValue, forKey: "orientation")
+        }
+        UIViewController.attemptRotationToDeviceOrientation()
+    }
+}
+
+/// Values stored in the "orientation" setting. These are the user's choice, not
+/// the guest orientation codes the emulator takes — `launchOrientation` maps
+/// between them.
+private enum OrientationSetting {
+    static let automatic = 0
+    static let landscapeLeft = 1
+    static let landscapeRight = 2
+    // 3 is skipped on purpose: the emulator maps that one to --upside-down.
+    static let portrait = 4
+}
+
 private struct GameFile: Identifiable {
     let url: URL
     let displayName: String
@@ -17,17 +140,31 @@ private struct GameFile: Identifiable {
     ) -> Int {
         let supportsPortrait = orientationCapabilities & 1 != 0
         let supportsLandscape = orientationCapabilities & 2 != 0
+        // An explicit landscape or portrait choice overrides what the device is
+        // doing, but never what a single-orientation bundle declares.
+        let isExplicitLandscape = orientation == OrientationSetting.landscapeLeft
+            || orientation == OrientationSetting.landscapeRight
+        let isExplicitPortrait = orientation == OrientationSetting.portrait
+
         if supportsPortrait && !supportsLandscape {
             return 0
         }
         if supportsLandscape && !supportsPortrait {
-            if orientation == 1 || orientation == 2 {
+            if isExplicitLandscape {
                 return orientation
+            }
+            // Some games advertise landscape but render portrait anyway —
+            // Sword of Fargoal builds a 320x480 view — so allow forcing it.
+            if isExplicitPortrait {
+                return 0
             }
             return currentInterfaceOrientation == .landscapeRight ? 2 : 1
         }
-        if orientation == 1 || orientation == 2 {
+        if isExplicitLandscape {
             return orientation
+        }
+        if isExplicitPortrait {
+            return 0
         }
         switch currentInterfaceOrientation {
         case .landscapeLeft:
@@ -557,14 +694,13 @@ final class TouchHLENativeHost: NSObject {
         viewController.loadViewIfNeeded()
         controlsWindow.interactiveView = viewController.exitButton
         controlsWindow.isHidden = false
-        viewController.setNeedsUpdateOfSupportedInterfaceOrientations()
         gameControlsWindow = controlsWindow
 
-        if #available(iOS 16.0, *) {
-            windowScene.requestGeometryUpdate(
-                .iOS(interfaceOrientations: launchOrientationMask)
-            )
-        }
+        touchHLEApplyOrientation(
+            launchOrientationMask,
+            viewController: viewController,
+            scene: windowScene
+        )
         waitForGameSurface(
             windowScene: windowScene,
             orientationMask: launchOrientationMask,
@@ -595,7 +731,11 @@ final class TouchHLENativeHost: NSObject {
             gameControlsWindow?.layoutIfNeeded()
             if let viewController = gameControlsWindow?.rootViewController as? GameControlsViewController {
                 viewController.allowedOrientations = orientationMask
-                viewController.setNeedsUpdateOfSupportedInterfaceOrientations()
+                touchHLEApplyOrientation(
+                    orientationMask,
+                    viewController: viewController,
+                    scene: nil
+                )
             }
             print(
                 "touchHLE game surface ready: orientation=\(windowScene.interfaceOrientation.rawValue) " +
@@ -654,16 +794,16 @@ private struct LibraryView: View {
     private static let ipaType = UTType(filenameExtension: "ipa") ?? .archive
 
     var body: some View {
-        NavigationStack {
+        TouchHLENavigationContainer {
             ZStack {
                 LibraryBackground()
 
                 if library.games.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Games Yet", systemImage: "gamecontroller")
-                    } description: {
-                        Text("Import a 32-bit iPhone game to add it to your library.")
-                    }
+                    TouchHLEEmptyState(
+                        title: "No Games Yet",
+                        systemImage: "gamecontroller",
+                        description: "Import a 32-bit iPhone game to add it to your library."
+                    )
                 } else {
                     ScrollView {
                         LazyVGrid(
@@ -773,7 +913,7 @@ private struct LibraryView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("Games need JIT, and without it touchHLE closes the moment one starts. Enable JIT in StikDebug, then start the game again.")
+                Text(JITMethod.current.unavailableMessage)
             }
             .overlay {
                 if library.isLaunching {
@@ -787,7 +927,7 @@ private struct LibraryView: View {
                 }
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .touchHLEOnChange(of: scenePhase) { newPhase in
             if newPhase == .active {
                 library.reload()
             }
@@ -833,11 +973,67 @@ private enum StikDebug {
     }
 }
 
+/// How this install can get JIT, which decides what the UI should offer.
+private enum JITMethod {
+    /// TrollStore granted `dynamic-codesigning`: JIT is on and stays on.
+    case permanent
+    /// StikDebug can attach on demand, from inside the app (iOS 17.4+).
+    case stikDebug
+    /// A debugger has to be attached from outside before the game starts —
+    /// TrollStore's "Enable JIT" below iOS 17.4, or AltJIT. There is nothing
+    /// useful for the app to offer here beyond saying so.
+    case external
+
+    static var current: JITMethod {
+        if touchhle_ios_jit_available() && !touchhle_ios_jit_is_from_debugger() {
+            return .permanent
+        }
+        if #available(iOS 17.4, *) {
+            return .stikDebug
+        }
+        return .external
+    }
+
+    /// Shown when a launch is held back because JIT is off.
+    var unavailableMessage: String {
+        switch self {
+        case .permanent, .stikDebug:
+            return "Games need JIT, and without it Applesauce closes the moment one starts. "
+                + "Enable JIT in StikDebug, then start the game again."
+        case .external:
+            return "Games need JIT, and without it Applesauce closes the moment one starts. "
+                + "Enable JIT for Applesauce in TrollStore, or with AltJIT, then start the "
+                + "game again."
+        }
+    }
+
+    /// Explains what has to happen, and how often.
+    var footer: String {
+        switch self {
+        case .permanent:
+            return "This install has permanent JIT, so there is nothing to enable."
+        case .stikDebug:
+            return "JIT must be enabled again whenever Applesauce starts as a new app process."
+        case .external:
+            return "StikDebug needs iOS 17.4 or newer. Enable JIT for Applesauce in TrollStore, "
+                + "or with AltJIT, each time it starts as a new app process."
+        }
+    }
+}
+
 private struct EnableJITButton: View {
     @Environment(\.openURL) private var openURL
     @State private var showingUnavailableAlert = false
 
     var body: some View {
+        // Hidden when it cannot help: StikDebug is iOS 17.4+, and a TrollStore
+        // build with permanent JIT never needs it.
+        if JITMethod.current == .stikDebug {
+            button
+        }
+    }
+
+    private var button: some View {
         Button {
             guard let url = StikDebug.enableJITURL else {
                 showingUnavailableAlert = true
@@ -852,7 +1048,7 @@ private struct EnableJITButton: View {
         } label: {
             Label("Enable JIT", systemImage: "bolt.fill")
         }
-        .accessibilityHint("Opens StikDebug and enables JIT for touchHLE")
+        .accessibilityHint("Opens StikDebug and enables JIT for Applesauce")
         .alert("StikDebug Not Available", isPresented: $showingUnavailableAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -1012,7 +1208,7 @@ private struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        TouchHLENavigationContainer {
             Form {
                 if CoreKind.installed.count > 1 {
                     Section {
@@ -1037,9 +1233,10 @@ private struct SettingsView: View {
                     }
 
                     Picker("Starting Orientation", selection: $orientation) {
-                        Text("Automatic").tag(0)
-                        Text("Landscape Left").tag(1)
-                        Text("Landscape Right").tag(2)
+                        Text("Automatic").tag(OrientationSetting.automatic)
+                        Text("Portrait").tag(OrientationSetting.portrait)
+                        Text("Landscape Left").tag(OrientationSetting.landscapeLeft)
+                        Text("Landscape Right").tag(OrientationSetting.landscapeRight)
                     }
                 }
 
@@ -1060,7 +1257,7 @@ private struct SettingsView: View {
                 } header: {
                     Text("JIT")
                 } footer: {
-                    Text("JIT must be enabled again whenever touchHLE starts as a new app process.")
+                    Text(JITMethod.current.footer)
                 }
 
                 Section("Advanced") {
@@ -1169,7 +1366,7 @@ private struct AboutView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        TouchHLENavigationContainer {
             List {
                 Section {
                     VStack(spacing: 14) {
@@ -1187,38 +1384,58 @@ private struct AboutView: View {
                         .frame(width: 88, height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                        Text("touchHLE")
-                            .font(.title2.bold())
+                        VStack(spacing: 4) {
+                            Text("Applesauce")
+                                .font(.title2.bold())
+                            Text("A playful emulator for iOS")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
                         Text(
                             CoreKind.installed
                                 .map { "\($0.displayName) \($0.version)" }
                                 .joined(separator: " • ")
                         )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
                 }
 
                 Section("About") {
-                    Text("touchHLE runs older 32-bit iPhone applications without including any Apple software. This native iOS port is an experimental community project and is not an official release of touchHLE. It ships two emulator cores — HyperHLE v1.0.6, a fork of touchHLE that runs more games, and touchHLE 0.2.3 upstream — and you can pick which one runs each game.")
+                    Text("Applesauce plays older 32-bit iPhone games on modern devices, without including any Apple software. It is an experimental community project, and no games are included.")
 
-                    Link(destination: URL(string: "https://appdb.touchhle.org/")!) {
-                        Label("Game Compatibility", systemImage: "checkmark.seal")
+                    Link(destination: URL(string: "https://github.com/johnny901901901/Applesauce")!) {
+                        Label("Applesauce on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
+                }
+
+                Section {
+                    Text("The emulation is entirely the work of touchHLE and its fork HyperHLE. Applesauce is the iOS app built around them — the interface, the build system and the packaging — and ships both cores so you can choose which one runs each game.")
+
+                    Text("Applesauce is an unaffiliated fork. Neither project is connected to it or endorses it, and problems you hit here should be reported to Applesauce rather than to them.")
 
                     Link(destination: URL(string: "https://touchhle.org/")!) {
                         Label("touchHLE Website", systemImage: "safari")
+                    }
+
+                    Link(destination: URL(string: "https://github.com/touchHLE/touchHLE")!) {
+                        Label("touchHLE Upstream", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
 
                     Link(destination: URL(string: "https://github.com/HyperHLE/HyperHLE")!) {
                         Label("HyperHLE Core", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
 
-                    Link(destination: URL(string: "https://github.com/touchHLE/touchHLE")!) {
-                        Label("touchHLE Upstream", systemImage: "chevron.left.forwardslash.chevron.right")
+                    Link(destination: URL(string: "https://appdb.touchhle.org/")!) {
+                        Label("Game Compatibility", systemImage: "checkmark.seal")
                     }
+                } header: {
+                    Text("Credits")
+                } footer: {
+                    Text("Licensed under MPL-2.0, subject to the existing third-party licence requirements.")
                 }
             }
             .navigationTitle("About")

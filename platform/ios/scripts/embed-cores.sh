@@ -42,6 +42,20 @@ embed() {
         exit 1
     fi
 
+    # Same reasoning for the minimum OS version. Cargo does not rebuild when
+    # IPHONEOS_DEPLOYMENT_TARGET changes, and a core built for a newer iOS than
+    # the app claims to support will not load at all on the older devices — on
+    # the device, at launch, with nothing to explain it.
+    built_for=$(vtool -show-build "$destination_path" 2>/dev/null |
+        awk '/minos/ { print $2; exit }')
+    if [ -n "$built_for" ] && [ -n "${IPHONEOS_DEPLOYMENT_TARGET:-}" ] \
+        && [ "$built_for" != "$IPHONEOS_DEPLOYMENT_TARGET" ]; then
+        echo "error: $(basename "$source_path") was built for iOS $built_for," \
+            "but this app targets $IPHONEOS_DEPLOYMENT_TARGET." >&2
+        echo "Delete its build/rust-ios-native/<target> directory and build it again." >&2
+        exit 1
+    fi
+
     sign "$destination_path"
     echo "Embedded $(basename "$source_path")"
 }

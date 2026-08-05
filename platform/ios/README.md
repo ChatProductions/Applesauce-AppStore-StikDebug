@@ -1,41 +1,56 @@
-# touchHLE iOS Port (Unofficial)
+# Applesauce — Install, JIT And Troubleshooting Guide
 
-This is an experimental iOS port of touchHLE running the [HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6 core, a fork of touchHLE with broader game compatibility. It runs supported 32-bit guest apps on modern iPhones through high-level emulation and the Dynarmic CPU backend.
+Applesauce is a native iOS app that plays supported 32-bit iPhone games on modern devices, through high-level emulation and the Dynarmic CPU backend.
 
-This fork is not an official touchHLE release, is not endorsed by the upstream project, and does not include games or Apple software.
+The emulation is not this project's work. Applesauce ships two emulator cores — [HyperHLE](https://github.com/HyperHLE/HyperHLE) v1.0.6, a fork of touchHLE with broader game compatibility, and [touchHLE](https://github.com/touchHLE/touchHLE) 0.2.3 upstream — and adds the iOS app around them: the interface, the build system and the packaging. Applesauce is an unaffiliated fork, is not endorsed by either project, and includes no games or Apple software.
 
 ## At A Glance
 
 | Item | Current status |
 | --- | --- |
-| Port version | 0.2.0 |
-| Emulator core | HyperHLE v1.0.6 |
-| Minimum target | iOS 17.4 |
+| App version | 0.4.0 |
+| Emulator cores | HyperHLE v1.0.6 and touchHLE 0.2.3, switchable per game |
+| Minimum target | iOS 15.0 |
 | Tested environment | iPhone 16 Pro running iOS 27 beta 4 (24A5390f) |
 | CPU backend | Dynarmic |
-| JIT | Required whenever the port starts as a new process |
+| JIT | Required whenever the app starts as a new process |
 | Games | Not included; decrypted 32-bit IPAs are required |
 
-The native port currently provides:
+The app currently provides:
 
 - An Apple-style SwiftUI game library.
 - IPA importing with the guest app's title and icon.
+- A per-game core picker, plus a default core in Settings.
 - Persistent settings and per-game save folders.
 - Guest-aware portrait and landscape launch handling.
 - A red in-game exit control that returns to the library.
 - A StikDebug JIT shortcut.
 - An optional FPS counter under **Settings → Advanced → Developer Tools**.
 
+## Upgrading From touchHLE For iOS
+
+This project was called *touchHLE for iOS* up to 0.3.0. 0.4.0 renames it to Applesauce and changes the bundle identifier, so it installs **alongside** the old app rather than replacing it, and starts with an empty library.
+
+To move your games across:
+
+1. Open the iOS Files app and go to **On My iPhone**.
+2. Find the old app's folder. It is named *HyperHLE* if you had 0.2.0 or 0.3.0, or *touchHLE* if you had 0.1.0.
+3. Move the `touchHLE_apps` folder from there into the **Applesauce** folder.
+4. Move `touchHLE_sandbox` too, if you want your saves.
+5. Delete the old app.
+
+App-wide settings do not move; set them again under Settings. Per-game settings live with the game.
+
 ## Screenshots
 
 <table>
   <tr>
-    <td><img src="Screenshots/library-games.png" alt="touchHLE library with imported game cards" width="260"></td>
-    <td><img src="Screenshots/library-empty.png" alt="Empty touchHLE game library" width="260"></td>
+    <td><img src="Screenshots/library-games.png" alt="Applesauce library with imported game cards" width="260"></td>
+    <td><img src="Screenshots/library-empty.png" alt="Empty Applesauce game library" width="260"></td>
   </tr>
   <tr>
-    <td><img src="Screenshots/settings.png" alt="Native touchHLE settings screen" width="260"></td>
-    <td><img src="Screenshots/about.png" alt="touchHLE about screen" width="260"></td>
+    <td><img src="Screenshots/settings.png" alt="Applesauce settings screen" width="260"></td>
+    <td><img src="Screenshots/about.png" alt="Applesauce about screen" width="260"></td>
   </tr>
 </table>
 
@@ -43,9 +58,11 @@ Imported titles shown in screenshots are not all compatibility claims.
 
 ## Device And Game Testing
 
-The port has been personally tested on an **iPhone 16 Pro running iOS 27 beta 4** (build 24A5390f). Its deployment target is iOS 17.4, and it is intended to work on other modern iPhones and supported iOS versions, but those combinations have not all been verified yet.
+Applesauce has been personally tested on an **iPhone 16 Pro running iOS 27 beta 4** (build 24A5390f). Its deployment target is iOS 15.0, and it is intended to work on other iPhones and iOS versions, but those combinations have not all been verified yet.
 
-Confirmed on that device, with the exact app versions tested:
+**iOS 15 and 16 are entirely untested here.** That support is back-ported from [nerivalaitis](https://github.com/nerivalaitis)' work, which was tested on iOS 15; the developer of this project has no device older than an iPhone 16 Pro. Below iOS 16 the app also drives rotation through the device orientation rather than `requestGeometryUpdate`, so landscape behaviour is the most likely thing to differ there.
+
+Confirmed on that device, on the HyperHLE core, with the exact app versions tested:
 
 - Flappy Bird 1.1.0 — including at 2x, 3x and 4x resolution scale.
 - Touch & Go 1.1 — at all resolution settings.
@@ -54,36 +71,54 @@ Confirmed on that device, with the exact app versions tested:
 - Mirror's Edge 1.4.72.
 - The Sims Medieval 1.0.1 — playable, but names cannot be entered (see Current Limitations).
 
-The [touchHLE compatibility database](https://appdb.touchhle.org/) uses a star-rating system for specific app versions. Higher-rated entries are the best place to begin, but a high rating is not a guarantee that the same version has already been tested through this iOS port.
+The [touchHLE compatibility database](https://appdb.touchhle.org/) uses a star-rating system for specific app versions. Higher-rated entries are the best place to begin, but a high rating is not a guarantee that the same version has already been tested through Applesauce.
 
-The Sims Medieval now reaches gameplay, which was the original goal of this project. This project began after the port developer gave his sister a new iPhone 17 Pro Max and discovered that the copy of The Sims Medieval she had legitimately purchased years ago could no longer be installed. Future compatibility work will focus on identifying and fixing the first missing touchHLE subsystem rather than changing the native library UI.
+The Sims Medieval now reaches gameplay, which was the original goal of this project. It began after the developer gave his sister a new iPhone 17 Pro Max and discovered that the copy of The Sims Medieval she had legitimately purchased years ago could no longer be installed. Future compatibility work will focus on identifying and fixing the first missing emulator subsystem rather than changing the library UI.
 
 ## Current Limitations
 
-- JIT is required. This fork does not yet contain a no-JIT ARM interpreter.
+- JIT is required. There is no no-JIT ARM interpreter.
 - **The Sims Medieval:** no keyboard appears for naming your Sim or your kingdom, so those names cannot be entered. The game is playable past those screens; the confirm control sits near the top-right corner of the screen rather than where it is drawn.
 - Games that render through an offscreen texture gain no extra detail from resolution scaling. The scale hack enlarges renderbuffers but not textures, so it is applied only where it is safe to do so.
-- The touchHLE compatibility database describes touchHLE generally, not guaranteed iOS-host behavior.
+- The touchHLE compatibility database describes touchHLE generally, not guaranteed behaviour through this app.
+- Some games run under one core and not the other. If a game fails, switch its core and try again.
 - Device and iOS-version coverage is still limited.
-- Some games need touchHLE compatibility work even when the port itself is functioning.
+- Some games need emulator-side compatibility work even when the app itself is functioning.
 - This is an early test build, not an App Store release.
 
 ## Acknowledgements
 
-This port exists because of the work of the [touchHLE contributors](https://github.com/touchHLE/touchHLE/graphs/contributors). The core emulator is their project; this fork adds an experimental native iOS port and iOS-specific integration fixes.
+Applesauce exists because of the work of the [touchHLE contributors](https://github.com/touchHLE/touchHLE/graphs/contributors) and of [HyperHLE](https://github.com/HyperHLE/HyperHLE). The emulators are their projects; this one adds the native iOS app and iOS-specific integration fixes.
 
-Thanks also to Reddit user [u/WorriedEquipment2241](https://www.reddit.com/user/WorriedEquipment2241/) for publicly demonstrating a separate touchHLE iOS experiment on a jailbroken device. That demonstration helped show that the idea was viable and highlighted an important reality: compatibility still differs game by game. This release is based on upstream touchHLE 0.2.3 and does not claim to contain that unreleased port's source code.
+Thanks to [nerivalaitis](https://github.com/nerivalaitis) for the iOS 15 back-port, the TrollStore packaging and the guest memory-allocation fallback that makes older devices work.
+
+Thanks also to Reddit user [u/WorriedEquipment2241](https://www.reddit.com/user/WorriedEquipment2241/) for publicly demonstrating a separate touchHLE iOS experiment on a jailbroken device. That demonstration helped show that the idea was viable and highlighted an important reality: compatibility still differs game by game. Applesauce does not claim to contain that unreleased port's source code.
+
+## Which Build Do I Want?
+
+JIT is what decides this, not the app itself:
+
+| Your iOS | Download | How JIT gets enabled |
+| --- | --- | --- |
+| 17.4 or newer | `Applesauce-iOS-unsigned.ipa` | Sideload, then StikDebug's bolt button in the app |
+| 15.0–17.0, TrollStore installed | `Applesauce-iOS-trollstore.ipa` | TrollStore's **Enable JIT**, before each session |
+| 15.0–17.0, TrollStore, **A11 or older** | `Applesauce-iOS-trollstore-permanent-jit.ipa` | Already on, and stays on |
+| 17.0.1–17.3 | — | Neither TrollStore nor StikDebug reaches these; AltJIT with a computer is the only route |
+
+The TrollStore builds carry `com.apple.developer.kernel.extended-virtual-addressing` and `com.apple.developer.kernel.increased-memory-limit`. The emulator maps the guest address space as one flat 4GiB region, which older hardware cannot do without them, and a free Apple account cannot sign them — which is why those builds are TrollStore-only rather than a sideloading option.
+
+**The permanent-JIT build crashes on launch on A12 and newer** (iPhone XS/XR onwards): iOS 15 bans `dynamic-codesigning` there. Use the ordinary TrollStore build on those devices.
 
 ## Install The Unsigned IPA
 
-The public IPA must remain unsigned. It contains no Apple ID, certificate, provisioning profile, development team, device identifier, games, or saves. Your chosen install method signs it locally with your own Apple account.
+The public IPA must remain unsigned. It contains no Apple ID, certificate, provisioning profile, development team, device identifier, games, or saves. Your chosen install method signs it locally with your own Apple account. (The TrollStore IPAs are ad-hoc "fakesigned" so they can carry the entitlements above — they contain no personal signing material either.)
 
 ### Option A: AltStore Classic
 
 This is the simplest public installation route.
 
 1. Install [AltStore Classic](https://altstore.io/) and complete its normal AltServer setup.
-2. Download `touchHLE-iOS-unsigned.ipa` from this fork's GitHub Releases.
+2. Download `Applesauce-iOS-unsigned.ipa` from this repository's GitHub Releases.
 3. In AltStore, open **My Apps**, tap **+**, and select the IPA from Files.
 4. Let AltStore sign and install it with your Apple account.
 5. Complete the [JIT setup](#enable-jit) before starting a game.
@@ -106,7 +141,7 @@ This works with either a free Personal Team or a paid developer account.
 3. Open `platform/ios/TouchHLEHost.xcodeproj`.
 4. Select the **TouchHLEHost** target.
 5. Under **Signing & Capabilities**, choose your own team.
-6. Change the bundle identifier if Xcode says `org.touchhle.ios.unofficial` is unavailable.
+6. Change the bundle identifier if Xcode says `io.github.johnny901901901.applesauce` is unavailable.
 7. Select your iPhone and press **Run**.
 8. Follow any Developer Mode or trust prompts shown by Xcode and the iPhone.
 9. Complete the [JIT setup](#enable-jit) before starting a game.
@@ -115,7 +150,7 @@ Never commit or upload Xcode's signed app, provisioning profile, certificate, te
 
 ## Enable JIT
 
-Dynarmic requires executable memory, so installing the app is not enough by itself. JIT must be enabled again whenever touchHLE starts as a new process. JIT normally remains available until the app is force-quit or removed from memory.
+Dynarmic requires executable memory, so installing the app is not enough by itself. JIT must be enabled again whenever Applesauce starts as a new process. JIT normally remains available until the app is force-quit or removed from memory.
 
 ### StikDebug And LocalDevVPN
 
@@ -126,24 +161,30 @@ The in-app bolt button uses StikDebug's URL scheme and its bundled `universal.js
 3. Import that pairing file into StikDebug.
 4. Install and connect [LocalDevVPN](https://apps.apple.com/app/localdevvpn/id6755608044), or another loopback VPN supported by your StikDebug version.
 5. Keep the iPhone awake, unlocked, connected to Wi-Fi, and connected to the loopback VPN.
-6. Open touchHLE to the library and tap the **bolt** button.
-7. Allow StikDebug to enable JIT for touchHLE, then return to the port and start the game.
+6. Open Applesauce to the library and tap the **bolt** button.
+7. Allow StikDebug to enable JIT for Applesauce, then return to the app and start the game.
 
-The initial pairing setup needs a Mac or PC. After that, StikDebug is designed to enable JIT on-device. StikDebug currently supports iOS 17.4 and newer, with additional caveats for newer beta versions; check its own compatibility notes before troubleshooting this port.
+The initial pairing setup needs a Mac or PC. After that, StikDebug is designed to enable JIT on-device. StikDebug currently supports iOS 17.4 and newer, with additional caveats for newer beta versions; check its own compatibility notes before troubleshooting Applesauce.
 
 Treat the pairing file as private device material. Never upload or attach it to an issue.
 
+### TrollStore
+
+On iOS 15.0–17.0 with TrollStore installed, use one of the `-trollstore` IPAs above. Install it in TrollStore, then use TrollStore's **Enable JIT** on Applesauce before starting a game; it has to be redone whenever the app starts as a new process. The bolt button does not appear in these builds, because StikDebug cannot help below iOS 17.4.
+
+On A11 and older devices the permanent-JIT build skips all of that — JIT is granted by the `dynamic-codesigning` entitlement and never has to be re-enabled. The app detects this and hides the JIT prompts entirely.
+
 ### AltJIT
 
-AltStore users can instead follow the official [AltJIT instructions](https://faq.altstore.io/altstore-classic/altjit). In AltStore, long-press touchHLE under **My Apps** and choose **Enable JIT**. Current iOS versions may require extra Mac-side setup, and the device may need to remain connected until JIT has been enabled.
+AltStore users can instead follow the official [AltJIT instructions](https://faq.altstore.io/altstore-classic/altjit). In AltStore, long-press Applesauce under **My Apps** and choose **Enable JIT**. Current iOS versions may require extra Mac-side setup, and the device may need to remain connected until JIT has been enabled.
 
 Installing through AltStore, SideStore, Sideloadly, or Xcode does not automatically provide JIT.
 
 ## Import Games
 
-1. Open touchHLE and tap **Import Game**.
+1. Open Applesauce and tap **Import Game**.
 2. Select a decrypted 32-bit `.ipa` from Files.
-3. The port imports the IPA, reads its app name and icon, and adds it to the library.
+3. The app imports the IPA, reads its app name and icon, and adds it to the library.
 4. Check the [touchHLE compatibility database](https://appdb.touchhle.org/) for the exact app version before testing.
 5. Enable JIT, then tap the game card.
 
@@ -153,18 +194,20 @@ Removing a title from the library removes the imported IPA but deliberately keep
 
 ## Saves And Backups
 
-Guest files are stored inside the port's app container:
+Guest files are stored inside the app container:
 
 ```text
 Documents/touchHLE_sandbox/<guest-bundle-id>
 ```
 
-Progress therefore survives returning to the library and normal app restarts. Deleting touchHLE from the device can delete the entire app container, including saves.
+That folder keeps its upstream name because both emulator cores read it by name.
+
+Progress therefore survives returning to the library and normal app restarts. Deleting Applesauce from the device can delete the entire app container, including saves.
 
 To back up saves:
 
 1. Open the iOS Files app.
-2. Browse to **On My iPhone → touchHLE**.
+2. Browse to **On My iPhone → Applesauce**.
 3. Copy the `touchHLE_sandbox` folder somewhere safe.
 
 Do not publish saves with a release or attach them to bug reports without checking their contents.
@@ -173,10 +216,11 @@ Do not publish saves with a release or attach them to bug reports without checki
 
 ### The game stays on “Starting game…” or crashes immediately
 
-- Re-enable JIT after every fresh touchHLE process.
+- Re-enable JIT after every fresh Applesauce process.
 - Confirm LocalDevVPN is connected and StikDebug has the correct pairing file.
 - Confirm the imported IPA is decrypted, 32-bit, and the exact version listed in the compatibility database.
-- Retry with touchHLE's default settings.
+- Switch the game to the other core and try again.
+- Retry with the app's default settings.
 
 ### StikDebug reports a tunnel or connection error
 
@@ -188,13 +232,13 @@ Do not publish saves with a release or attach them to bug reports without checki
 
 ### There is audio and touch input but the picture is blank or stretched
 
-- Confirm you are using host 0.2.0 or newer; it contains the iOS OpenGL ES presentation and landscape orientation fixes.
+- Confirm you are on 0.2.0 or newer; it contains the iOS OpenGL ES presentation and landscape orientation fixes.
 - Return to the library and start the game in its declared orientation.
 - Record the exact game version, device, iOS version, and whether portrait titles render correctly.
 
 ### Touch does not respond in a landscape game
 
-This was a bug in 0.1.0 and is fixed in 0.2.0 — update before investigating further. The port also locks each game to its launch orientation, because older games often assume a fixed screen layout, so if a game launched in the wrong orientation, return to the library, hold the phone the way you want, and launch again.
+This was a bug in 0.1.0 and is fixed in 0.2.0 — update before investigating further. Each game is also locked to its launch orientation, because older games often assume a fixed screen layout, so if a game launched in the wrong orientation, return to the library, hold the phone the way you want, and launch again.
 
 ### The app no longer opens
 
@@ -208,12 +252,13 @@ Runtime output is written to:
 Documents/touchhle-host.log
 ```
 
-The log is visible under **On My iPhone → touchHLE** because file sharing is enabled. Before sharing it, check it for game names, local paths, or other personal data.
+The log is visible under **On My iPhone → Applesauce** because file sharing is enabled. Before sharing it, check it for game names, local paths, or other personal data.
 
 A useful issue report includes:
 
 - iPhone model and iOS version.
-- Port version and install method.
+- Applesauce version and install method.
+- Which core the game was set to.
 - Whether JIT was confirmed enabled.
 - Exact guest app title and version, but not the IPA itself.
 - Reproduction steps.
@@ -260,12 +305,45 @@ sh platform/ios/scripts/package-ipa.sh
 The outputs are:
 
 ```text
-build/host-iphoneos/Build/Products/Release-iphoneos/touchHLE.app
-dist/touchHLE-iOS-unsigned.ipa
-dist/touchHLE-iOS-unsigned.ipa.sha256
+build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app
+dist/Applesauce-iOS-unsigned.ipa
+dist/Applesauce-iOS-unsigned.ipa.sha256
 ```
 
 The packaging script refuses to package a signed app.
+
+### TrollStore Builds
+
+Same app, different entitlements, applied by fakesigning with `ldid`
+(`brew install ldid`):
+
+```sh
+sh platform/ios/scripts/package-ipa.sh --trollstore
+sh platform/ios/scripts/package-ipa.sh --trollstore-permanent-jit
+```
+
+Verify each with the matching flag:
+
+```sh
+sh platform/ios/scripts/verify-ipa.sh
+sh platform/ios/scripts/verify-ipa.sh --trollstore dist/Applesauce-iOS-trollstore.ipa
+sh platform/ios/scripts/verify-ipa.sh --trollstore-permanent-jit dist/Applesauce-iOS-trollstore-permanent-jit.ipa
+```
+
+`codesign` cannot tell these three apart — ldid writes a CodeDirectory with an
+empty CMS blob, which it reports as "no signature" exactly like a genuinely
+unsigned app. So the check reads the embedded entitlements back with `ldid -e`
+instead: the plain IPA must have none, and the permanent-JIT entitlement must
+appear in exactly one of them.
+
+### Changing The Deployment Target
+
+Cargo does not treat `IPHONEOS_DEPLOYMENT_TARGET` as a build input, so changing
+it leaves already-built objects — including the C++ ones from Dynarmic — at the
+old minimum. `build-rust.sh` keeps a stamp and starts that target triple over
+when it changes, and both it and `embed-cores.sh` refuse to ship a core whose
+`minos` does not match the app's. A core built for a newer iOS than the app
+claims will not load at all on the devices the app says it supports.
 
 ### Simulator Build
 
@@ -277,10 +355,10 @@ Dynarmic and JIT behavior differs between a simulator and a physical iPhone, so 
 
 ## Upstream Relationship
 
-This work is published as an unofficial GitHub fork so the original history, contributors, and licenses remain visible. It is not an official touchHLE iOS release.
+Applesauce is published as a GitHub fork so the original history, contributors, and licenses remain visible. It is not an official touchHLE or HyperHLE release, and neither project is affiliated with it.
 
 ## License And Credits
 
-touchHLE source is licensed under MPL-2.0, while binary distribution is covered by GPL-3.0-or-later due to dependency licensing. Preserve the repository's existing license files and attribution.
+The emulator source is licensed under MPL-2.0, while binary distribution is covered by GPL-3.0-or-later due to dependency licensing. The repository's existing license files, copyright headers and attribution are preserved unchanged.
 
-Credit the touchHLE contributors, Dynarmic, SDL, StikDebug, LocalDevVPN, and the other dependencies listed by touchHLE. This fork is not affiliated with Apple.
+Credit the touchHLE contributors, HyperHLE, Dynarmic, SDL, StikDebug, LocalDevVPN, and the other dependencies listed by touchHLE. Applesauce is not affiliated with Apple.
