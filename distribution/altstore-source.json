@@ -4,7 +4,7 @@
   "description": "Applesauce plays supported 32-bit iPhone games on modern devices. One app carrying two emulator cores, HyperHLE and touchHLE, which support different sets of games; you choose which one runs each game. An unaffiliated fork, endorsed by neither project. JIT and legally obtained decrypted 32-bit IPAs are required. Games are not included.",
   "iconURL": "https://raw.githubusercontent.com/johnny901901901/Applesauce/ios-host/platform/ios/Assets.xcassets/AppIcon.appiconset/AppIcon.png",
   "website": "https://github.com/johnny901901901/Applesauce",
-  "tintColor": "1399FF",
+  "tintColor": "F01F14",
   "apps": [
     {
       "name": "Applesauce",
@@ -27,8 +27,8 @@
           "date": "2026-08-05",
           "localizedDescription": "Renames the app to Applesauce. Because the identifier changed, this installs alongside the old app with an empty library — move touchHLE_apps across in Files. Adds iOS 15 and 16 support through TrollStore, stops a refused rotation from killing a game, fixes a black screen after rotating, and no longer wedges the app when the emulator crashes.",
           "downloadURL": "https://github.com/johnny901901901/Applesauce/releases/download/ios-v0.4.0/Applesauce-iOS-unsigned.ipa",
-          "size": 45571528,
-          "sha256": "670a79d19f27f84e929620b3936d57cfcac3b72f607f38fdcbb6aaca6015532d",
+          "size": 45937768,
+          "sha256": "0b4ae008004757edaeaf7fcce1798d5336f3194aa1f9e756ea2ca67b91aed730",
           "minOSVersion": "15.0"
         }
       ],
