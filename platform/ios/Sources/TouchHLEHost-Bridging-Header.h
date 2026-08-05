@@ -2,9 +2,14 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Whether a debugger is attached to service dynarmic's JIT trap. Without one,
+// Whether dynarmic can get the executable memory it needs. Without it,
 // starting a game kills the app.
 bool touchhle_ios_jit_available(void);
+
+// Whether that came from an attached debugger rather than from the
+// `dynamic-codesigning` entitlement. A debugger has to be re-attached every
+// time the app starts as a new process; the entitlement does not.
+bool touchhle_ios_jit_is_from_debugger(void);
 
 // The emulator core lives in a dylib that the app loads at runtime (see
 // EmulatorCore.swift), so its entry points are found with dlsym rather than

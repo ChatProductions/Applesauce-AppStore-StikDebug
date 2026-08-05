@@ -174,6 +174,33 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
 
     let window = env.window.as_mut().unwrap();
     let mut gles = window.make_internal_gl_ctx_current();
+
+    // On iOS, SDL2 draws into a framebuffer object of its own rather than 0,
+    // and it recreates that object whenever the window leaves and re-enters
+    // fullscreen — which is exactly what rotating the device does (see
+    // `Window::rotate_device`). The value cached at window creation can
+    // therefore be stale by now, and compositing into a stale framebuffer
+    // produces a black screen. Ask for the current one while it is still bound,
+    // before the render-to-texture setup below replaces the binding.
+    let host_framebuffer = if cfg!(target_os = "ios") {
+        let mut current = 0;
+        unsafe {
+            gles.GetIntegerv(gles11::FRAMEBUFFER_BINDING_OES, &mut current);
+        }
+        let current = current as u32;
+        if current != host_framebuffer {
+            log!(
+                "Note: the host framebuffer changed since window creation ({} -> {}); \
+                 compositing into the current one.",
+                host_framebuffer,
+                current
+            );
+        }
+        current
+    } else {
+        host_framebuffer
+    };
+
     // Set up GL objects needed for render-to-texture. We could draw directly
     // to the screen instead, but this way we can reuse the code for scaling and
     // rotating the screen and drawing the virtual cursor.
