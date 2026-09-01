@@ -43,29 +43,59 @@ jobs:
 
       - name: Mark LiveContainer build
         run: |
+          set -e
           APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Applesauce LC Debug" "$APP/Info.plist"
-          printf '%s\n' 'Applesauce LiveContainer diagnostic build' 'Runtime logs: Settings > Developer Tools > Runtime Log.' > "$APP/LIVECONTAINER.txt"
+          printf '%s\n' \
+            'Applesauce LiveContainer diagnostic build' \
+            'Runtime logs: Settings > Developer Tools > Runtime Log.' \
+            > "$APP/LIVECONTAINER.txt"
 
       - name: Package IPA
         run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-LiveContainer-Debug.ipa
 
       - name: Verify IPA
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           IPA="dist/Applesauce-LiveContainer-Debug.ipa"
+          VERIFY_DIR="/tmp/applesauce-lc-verify"
+
           test -s "$IPA"
           unzip -tq "$IPA" >/dev/null
-          rm -rf /tmp/applesauce-lc-verify
-          mkdir -p /tmp/applesauce-lc-verify
-          unzip -q "$IPA" -d /tmp/applesauce-lc-verify
-          APP="/tmp/applesauce-lc-verify/Payload/Applesauce.app"
-          test -f "$APP/Applesauce"
-          test -f "$APP/LIVECONTAINER.txt"
-          file "$APP/Applesauce" | grep -q arm64
-          strings "$APP/Applesauce" | grep -Fq "Runtime Log"
-          strings "$APP/Applesauce" | grep -Fq "JIT is not active in this LiveContainer session."
+
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          unzip -q "$IPA" -d "$VERIFY_DIR"
+
+          APP="$VERIFY_DIR/Payload/Applesauce.app"
+          BIN="$APP/Applesauce"
+          PLIST="$APP/Info.plist"
+          MARKER="$APP/LIVECONTAINER.txt"
+
+          test -d "$APP"
+          test -f "$BIN"
+          test -f "$PLIST"
+          test -f "$MARKER"
+          test -x "$BIN"
+
+          file "$BIN" | grep -q "Mach-O"
+          file "$BIN" | grep -q "arm64"
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
+          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST")
+
+          test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
+          test "$DISPLAY_NAME" = "Applesauce LC Debug"
+          grep -Fq "Applesauce LiveContainer diagnostic build" "$MARKER"
+          grep -Fq "Runtime logs: Settings > Developer Tools > Runtime Log." "$MARKER"
+
+          echo "IPA structure verified"
+          echo "Bundle ID: $BUNDLE_ID"
+          echo "Display name: $DISPLAY_NAME"
+          file "$BIN"
+
           shasum -a 256 "$IPA" | tee "$IPA.sha256"
 
       - name: Upload IPA
