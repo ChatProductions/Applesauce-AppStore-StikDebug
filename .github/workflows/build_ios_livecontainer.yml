@@ -17,7 +17,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Patch JIT behavior for LiveContainer
+      - name: Patch LiveContainer JIT behavior and diagnostics
         shell: bash
         run: |
           set -euo pipefail
@@ -28,23 +28,17 @@ jobs:
           p = Path("platform/ios/Sources/NativeHost.swift")
           s = p.read_text()
 
-          # LiveContainer owns the real process. Applesauce must only CHECK
-          # whether JIT is already available; it must never ask StikDebug itself.
+          # LiveContainer owns the real process. Applesauce only checks whether
+          # JIT is already active; it must never invoke StikDebug itself.
           pattern = re.compile(
-              r"    static var current: JITMethod \{\n"
-              r".*?"
-              r"\n    \}\n\n"
+              r"    static var current: JITMethod \{\n.*?\n    \}\n\n"
               r"    /// Shown when a launch is held back because JIT is off\.",
               re.S,
           )
           replacement = '''    static var current: JITMethod {
-              // LiveContainer grants JIT to its host process before this guest starts.
-              // Debugger-provided JIT is valid here because Applesauce is running
-              // inside that already-JIT-enabled process.
               if touchhle_ios_jit_available() {
                   return .permanent
               }
-              // Never launch StikDebug from the guest. LiveContainer owns JIT setup.
               return .external
           }
 
@@ -54,43 +48,198 @@ jobs:
           if count != 1:
               raise SystemExit(f"Expected one JITMethod.current block, replaced {count}")
 
-          s = s.replace(
-              'return "Games need JIT, and without it Applesauce closes the moment one starts. "\n'
-              '                + "Enable JIT for Applesauce in TrollStore, or with AltJIT, then start the "\n'
-              '                + "game again."',
-              'return "Games need JIT. Enable Launch with JIT for Applesauce in LiveContainer, "\n'
-              '                + "then relaunch it before starting a game."',
-              1,
+          # Both branches must describe LiveContainer, never StikDebug/AltJIT.
+          unavailable_pattern = re.compile(
+              r'''    var unavailableMessage: String \{\n        switch self \{\n.*?\n        \}\n    \}''',
+              re.S,
           )
+          unavailable_replacement = '''    var unavailableMessage: String {
+              return "JIT is not active in this LiveContainer session. Return to LiveContainer, "
+                  + "enable Launch with JIT for Applesauce LC, and relaunch it."
+          }'''
+          unavailable_replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in unavailable_replacement.splitlines())
+          s, count = unavailable_pattern.subn(unavailable_replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f"Expected one unavailableMessage block, replaced {count}")
 
-          s = s.replace(
-              'return "This install has permanent JIT, so there is nothing to enable."',
-              'return "JIT is already active for this LiveContainer session."',
-              1,
+          footer_pattern = re.compile(
+              r'''    var footer: String \{\n        switch self \{\n.*?\n        \}\n    \}''',
+              re.S,
           )
-          s = s.replace(
-              'return "StikDebug needs iOS 17.4 or newer. Enable JIT for Applesauce in TrollStore, "\n'
-              '                + "or with AltJIT, each time it starts as a new app process."',
-              'return "LiveContainer JIT is not active. Enable Launch with JIT for Applesauce "\n'
-              '                + "in LiveContainer and relaunch it."',
-              1,
-          )
+          footer_replacement = '''    var footer: String {
+              if touchhle_ios_jit_available() {
+                  return "JIT is active for this LiveContainer session."
+              }
+              return "JIT is supplied by LiveContainer before Applesauce starts."
+          }'''
+          footer_replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in footer_replacement.splitlines())
+          s, count = footer_pattern.subn(footer_replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f"Expected one JIT footer block, replaced {count}")
+
+          # Remove the in-app Enable JIT action from the launch-blocked alert.
+          held_button = '''                Button("Enable JIT") {
+                      if let url = StikDebug.enableJITURL {
+                          openURL(url)
+                      }
+                  }
+          '''.replace('                      ', '                    ')
+          if held_button not in s:
+              # whitespace-tolerant fallback
+              s, count = re.subn(
+                  r'''\s*Button\("Enable JIT"\) \{\n\s*if let url = StikDebug\.enableJITURL \{\n\s*openURL\(url\)\n\s*\}\n\s*\}\n''',
+                  '\n', s, count=1
+              )
+              if count != 1:
+                  raise SystemExit("Could not remove held-launch Enable JIT button")
+          else:
+              s = s.replace(held_button, '', 1)
+
+          # Settings must show status only, not an action that contacts StikDebug.
+          old_settings_jit = '''                Section {
+                      EnableJITButton()
+                  } header: {
+                      Text("JIT")
+                  } footer: {
+                      Text(JITMethod.current.footer)
+                  }
+          '''.replace('                      ', '                    ')
+          new_settings_jit = '''                Section {
+                      HStack {
+                          Label("LiveContainer JIT", systemImage: touchhle_ios_jit_available() ? "checkmark.circle.fill" : "xmark.circle")
+                          Spacer()
+                          Text(touchhle_ios_jit_available() ? "Active" : "Not Active")
+                              .foregroundStyle(.secondary)
+                      }
+                  } header: {
+                      Text("JIT")
+                  } footer: {
+                      Text(JITMethod.current.footer)
+                  }
+          '''.replace('                      ', '                    ')
+          if old_settings_jit not in s:
+              raise SystemExit("Expected Settings JIT section not found")
+          s = s.replace(old_settings_jit, new_settings_jit, 1)
+
+          # Add crash-log viewer to Developer Tools. main.m already writes
+          # touchhle-host.log and rotates the previous session on each launch.
+          old_dev = '''private struct DeveloperToolsView: View {
+              @AppStorage("showFPSOverlay") private var showFPSOverlay = false
+
+              var body: some View {
+                  Form {
+                      Section {
+                          Toggle("Show FPS During Games", isOn: $showFPSOverlay)
+                      } header: {
+                          Text("Performance")
+                      } footer: {
+                          Text("Displays a small frame-rate counter beside the exit button. This is intended for testing and is off by default.")
+                      }
+                  }
+                  .navigationTitle("Developer Tools")
+                  .navigationBarTitleDisplayMode(.inline)
+              }
+          }
+          '''
+          old_dev = '\n'.join(line[10:] if line.startswith('          ') else line for line in old_dev.splitlines()) + '\n'
+          new_dev = '''private struct DeveloperToolsView: View {
+              @AppStorage("showFPSOverlay") private var showFPSOverlay = false
+
+              var body: some View {
+                  Form {
+                      Section {
+                          Toggle("Show FPS During Games", isOn: $showFPSOverlay)
+                      } header: {
+                          Text("Performance")
+                      } footer: {
+                          Text("Displays a small frame-rate counter beside the exit button. This is intended for testing and is off by default.")
+                      }
+
+                      Section("Diagnostics") {
+                          NavigationLink {
+                              LCDiagnosticsView()
+                          } label: {
+                              Label("Runtime Log", systemImage: "doc.text.magnifyingglass")
+                          }
+                      }
+                  }
+                  .navigationTitle("Developer Tools")
+                  .navigationBarTitleDisplayMode(.inline)
+              }
+          }
+
+          private struct LCDiagnosticsView: View {
+              @State private var text = "Loading…"
+              @State private var source = "Previous Session"
+
+              private var documents: URL {
+                  FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+              }
+
+              private func load(_ previous: Bool) {
+                  let name = previous ? "touchhle-host-previous.log" : "touchhle-host.log"
+                  let url = documents.appendingPathComponent(name)
+                  source = previous ? "Previous Session" : "Current Session"
+                  text = (try? String(contentsOf: url, encoding: .utf8))
+                      ?? "No log file found for this session."
+              }
+
+              var body: some View {
+                  VStack(spacing: 0) {
+                      Picker("Log", selection: $source) {
+                          Text("Previous Session").tag("Previous Session")
+                          Text("Current Session").tag("Current Session")
+                      }
+                      .pickerStyle(.segmented)
+                      .padding()
+                      .onChange(of: source) { value in
+                          load(value == "Previous Session")
+                      }
+
+                      ScrollView {
+                          Text(text)
+                              .font(.system(.caption, design: .monospaced))
+                              .textSelection(.enabled)
+                              .frame(maxWidth: .infinity, alignment: .leading)
+                              .padding()
+                      }
+
+                      Button {
+                          UIPasteboard.general.string = text
+                      } label: {
+                          Label("Copy Log", systemImage: "doc.on.doc")
+                              .frame(maxWidth: .infinity)
+                      }
+                      .buttonStyle(.borderedProminent)
+                      .padding()
+                  }
+                  .navigationTitle("Runtime Log")
+                  .navigationBarTitleDisplayMode(.inline)
+                  .onAppear { load(true) }
+              }
+          }
+          '''
+          new_dev = '\n'.join(line[10:] if line.startswith('          ') else line for line in new_dev.splitlines()) + '\n'
+          if old_dev not in s:
+              raise SystemExit("Expected DeveloperToolsView block not found")
+          s = s.replace(old_dev, new_dev, 1)
 
           p.write_text(s)
           PY
 
-          echo "--- LiveContainer JIT patch verification ---"
-          grep -n -A14 -B2 'static var current: JITMethod' platform/ios/Sources/NativeHost.swift
+          echo "--- LiveContainer patch verification ---"
+          grep -n -A8 -B2 'static var current: JITMethod' platform/ios/Sources/NativeHost.swift
+          grep -n -A8 'Diagnostics' platform/ios/Sources/NativeHost.swift
 
           python3 - <<'PY'
           from pathlib import Path
           s = Path('platform/ios/Sources/NativeHost.swift').read_text()
-          block = s.split('static var current: JITMethod', 1)[1].split('/// Shown when a launch', 1)[0]
-          if 'return .stikDebug' in block:
-              raise SystemExit('ERROR: LiveContainer build still selects in-app StikDebug')
-          if 'if touchhle_ios_jit_available()' not in block:
-              raise SystemExit('ERROR: LiveContainer build does not accept host-provided JIT')
-          print('Verified: guest only checks host-provided JIT and never requests it.')
+          current = s.split('static var current: JITMethod', 1)[1].split('/// Shown when a launch', 1)[0]
+          assert 'return .stikDebug' not in current
+          assert 'Button("Enable JIT")' not in s
+          assert 'Runtime Log' in s
+          assert 'touchhle-host-previous.log' in s
+          print('Verified: LC owns JIT; diagnostic viewer is present.')
           PY
 
       - name: Install build tools
@@ -120,48 +269,47 @@ jobs:
           set -euo pipefail
           APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
           test -d "$APP"
-          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Applesauce LC' "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Applesauce LC Debug' "$APP/Info.plist"
           cat > "$APP/LIVECONTAINER.txt" <<'EOF'
-          Applesauce LiveContainer build
+          Applesauce LiveContainer diagnostic build
           JIT is granted by LiveContainer before Applesauce starts.
           Applesauce intentionally does not contact StikDebug itself.
+          Runtime logs are available in Settings > Developer Tools > Runtime Log.
           EOF
 
       - name: Package unsigned LiveContainer IPA
-        run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-LiveContainer.ipa
+        run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-LiveContainer-Debug.ipa
 
       - name: Verify LiveContainer IPA
         shell: bash
         run: |
           set -euo pipefail
-          IPA="dist/Applesauce-LiveContainer.ipa"
+          IPA="dist/Applesauce-LiveContainer-Debug.ipa"
           test -s "$IPA"
           unzip -tq "$IPA" >/dev/null
           rm -rf /tmp/applesauce-lc-verify
           mkdir -p /tmp/applesauce-lc-verify
           unzip -q "$IPA" -d /tmp/applesauce-lc-verify
           APP="/tmp/applesauce-lc-verify/Payload/Applesauce.app"
-          test -d "$APP"
           test -f "$APP/Applesauce"
           test -f "$APP/LIVECONTAINER.txt"
           file "$APP/Applesauce" | grep -q 'arm64'
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
-          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist")
           test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
-          test "$DISPLAY_NAME" = "Applesauce LC"
-          strings "$APP/Applesauce" | grep -Fq 'LiveContainer JIT is not active.'
-          strings "$APP/Applesauce" | grep -Fq 'JIT is already active for this LiveContainer session.'
-          echo "Verified LiveContainer IPA: $IPA"
-          echo "Bundle ID: $BUNDLE_ID"
-          echo "Display name: $DISPLAY_NAME"
+          strings "$APP/Applesauce" | grep -Fq 'Runtime Log'
+          strings "$APP/Applesauce" | grep -Fq 'JIT is not active in this LiveContainer session.'
+          if strings "$APP/Applesauce" | grep -Fq 'Enable JIT in StikDebug'; then
+            echo 'Old StikDebug JIT prompt still present'
+            exit 1
+          fi
           shasum -a 256 "$IPA" | tee "$IPA.sha256"
 
       - name: Upload LiveContainer IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Applesauce-LiveContainer-IPA
+          name: Applesauce-LiveContainer-Debug-IPA
           path: |
-            dist/Applesauce-LiveContainer.ipa
-            dist/Applesauce-LiveContainer.ipa.sha256
+            dist/Applesauce-LiveContainer-Debug.ipa
+            dist/Applesauce-LiveContainer-Debug.ipa.sha256
           if-no-files-found: error
           retention-days: 7
