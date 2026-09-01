@@ -4,7 +4,6 @@ on:
   push:
     branches: ["ios-host"]
     paths:
-      - ".github/patches/stikjit-appstore.patch"
       - ".github/workflows/build_ios_stikdebug.yml"
   workflow_dispatch:
 
@@ -18,8 +17,24 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply App Store StikDebug patch
-        run: git apply --check .github/patches/stikjit-appstore.patch && git apply .github/patches/stikjit-appstore.patch
+      - name: Patch App Store StikDebug handoff
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/ios/Sources/NativeHost.swift')
+          s = p.read_text()
+          old = '''        components.scheme = "stikdebug"\n        components.host = "enable-jit"\n        components.queryItems = [\n            URLQueryItem(name: "bundle-id", value: bundleIdentifier),\n            URLQueryItem(name: "script-name", value: "universal.js")\n        ]'''
+          new = '''        components.scheme = "stikjit"\n        components.host = "enable-jit"\n        components.queryItems = [\n            URLQueryItem(name: "bundle-id", value: bundleIdentifier)\n        ]'''
+          if old not in s:
+              raise SystemExit('Expected StikDebug URL block not found')
+          s = s.replace(old, new, 1)
+          old_alert = 'Text("Install and configure StikDebug, then try again. LocalDevVPN must be connected.")'
+          new_alert = 'Text("Could not open StikDebug. Make sure StikDebug is installed and its supported loopback connection is active.")'
+          if old_alert not in s:
+              raise SystemExit('Expected StikDebug alert text not found')
+          s = s.replace(old_alert, new_alert, 1)
+          p.write_text(s)
+          PY
 
       - name: Show patched JIT URL
         run: |
