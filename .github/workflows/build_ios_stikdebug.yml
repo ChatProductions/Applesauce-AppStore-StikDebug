@@ -1,0 +1,60 @@
+name: Build patched Applesauce IPA
+
+on:
+  push:
+    branches: ["ios-host"]
+    paths:
+      - ".github/patches/stikjit-appstore.patch"
+      - ".github/workflows/build_ios_stikdebug.yml"
+  workflow_dispatch:
+
+jobs:
+  build-ios-ipa:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Apply App Store StikDebug patch
+        run: git apply --check .github/patches/stikjit-appstore.patch && git apply .github/patches/stikjit-appstore.patch
+
+      - name: Show patched JIT URL
+        run: |
+          grep -A12 -B2 'private enum StikDebug' platform/ios/Sources/NativeHost.swift
+
+      - name: Install build tools
+        run: |
+          brew install ninja cmake || true
+          rustup target add aarch64-apple-ios
+
+      - name: Prepare Boost
+        run: |
+          curl -fL --retry 4 --retry-delay 2 -o boost_1_81_0.tar.gz https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz
+          mkdir -p vendor
+          tar xzf boost_1_81_0.tar.gz -C vendor
+          rm -rf vendor/boost
+          mv vendor/boost_1_81_0 vendor/boost
+
+      - name: Build shared SDL2 for iPhoneOS
+        run: sh platform/ios/scripts/build-sdl-shared.sh iphoneos
+
+      - name: Build Applesauce for iPhoneOS
+        run: sh platform/ios/scripts/build-host.sh iphoneos Release
+
+      - name: Package unsigned IPA
+        run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-AppStore-StikDebug.ipa
+
+      - name: Verify IPA
+        run: sh platform/ios/scripts/verify-ipa.sh dist/Applesauce-AppStore-StikDebug.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Applesauce-AppStore-StikDebug-IPA
+          path: |
+            dist/Applesauce-AppStore-StikDebug.ipa
+            dist/Applesauce-AppStore-StikDebug.ipa.sha256
+          if-no-files-found: error
