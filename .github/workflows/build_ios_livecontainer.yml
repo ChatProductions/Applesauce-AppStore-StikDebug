@@ -17,96 +17,80 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Patch JIT UX for LiveContainer
+      - name: Patch JIT behavior for LiveContainer
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path("platform/ios/Sources/NativeHost.swift")
           s = p.read_text()
 
-          # In LiveContainer the guest runs inside LiveContainer's process.
-          # JIT therefore has to be acquired by LiveContainer before the guest
-          # starts; asking StikDebug to attach to the guest bundle ID is wrong.
-          old_current = '''    static var current: JITMethod {
-              if touchhle_ios_jit_available() && !touchhle_ios_jit_is_from_debugger() {
-                  return .permanent
-              }
-              if #available(iOS 17.4, *) {
-                  return .stikDebug
-              }
-              return .external
-          }'''
-          canonical_current = '''    static var current: JITMethod {
-              if touchhle_ios_jit_available() && !touchhle_ios_jit_is_from_debugger() {
-                  return .permanent
-              }
-              if #available(iOS 17.4, *) {
-                  return .stikDebug
-              }
-              return .external
-          }'''.replace('              ', '        ')
-          new_current = '''    static var current: JITMethod {
-              // LiveContainer acquires JIT on its host process before launching
-              // this guest. A debugger-provided JIT is therefore fully valid.
+          # LiveContainer owns the real process. Applesauce must only CHECK
+          # whether JIT is already available; it must never ask StikDebug itself.
+          pattern = re.compile(
+              r"    static var current: JITMethod \{\n"
+              r".*?"
+              r"\n    \}\n\n"
+              r"    /// Shown when a launch is held back because JIT is off\.",
+              re.S,
+          )
+          replacement = '''    static var current: JITMethod {
+              // LiveContainer grants JIT to its host process before this guest starts.
+              // Debugger-provided JIT is valid here because Applesauce is running
+              // inside that already-JIT-enabled process.
               if touchhle_ios_jit_available() {
                   return .permanent
               }
-              // Do not offer Applesauce's in-app StikDebug handoff here: the
-              // guest bundle ID is not the process StikDebug must attach to.
+              // Never launch StikDebug from the guest. LiveContainer owns JIT setup.
               return .external
-          }'''.replace('              ', '        ')
+          }
 
-          if canonical_current not in s:
-              raise SystemExit("Expected JITMethod.current block not found")
-          s = s.replace(canonical_current, new_current, 1)
+          /// Shown when a launch is held back because JIT is off.'''
+          replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in replacement.splitlines())
+          s, count = pattern.subn(replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f"Expected one JITMethod.current block, replaced {count}")
 
-          old_external_message = '''        case .external:
-              return "Games need JIT, and without it Applesauce closes the moment one starts. "
-                  + "Enable JIT for Applesauce in TrollStore, or with AltJIT, then start the "
-                  + "game again."'''.replace('              ', '            ')
-          new_external_message = '''        case .external:
-              return "Games need JIT. In LiveContainer, long-press Applesauce, open Settings, "
-                  + "enable Launch with JIT, then relaunch Applesauce before starting a game."'''.replace('              ', '            ')
-          if old_external_message not in s:
-              raise SystemExit("Expected external JIT warning not found")
-          s = s.replace(old_external_message, new_external_message, 1)
+          s = s.replace(
+              'return "Games need JIT, and without it Applesauce closes the moment one starts. "\n'
+              '                + "Enable JIT for Applesauce in TrollStore, or with AltJIT, then start the "\n'
+              '                + "game again."',
+              'return "Games need JIT. Enable Launch with JIT for Applesauce in LiveContainer, "\n'
+              '                + "then relaunch it before starting a game."',
+              1,
+          )
 
-          old_footer = '''        case .permanent:
-              return "This install has permanent JIT, so there is nothing to enable."
-          case .stikDebug:
-              return "JIT must be enabled again whenever Applesauce starts as a new app process."
-          case .external:
-              return "StikDebug needs iOS 17.4 or newer. Enable JIT for Applesauce in TrollStore, "
-                  + "or with AltJIT, each time it starts as a new app process."'''.replace('              ', '            ')
-          new_footer = '''        case .permanent:
-              return "JIT is active for this LiveContainer session."
-          case .stikDebug:
-              return "LiveContainer should acquire JIT before launching this guest."
-          case .external:
-              return "LiveContainer JIT is not active. Long-press Applesauce in LiveContainer, "
-                  + "open Settings, enable Launch with JIT, and relaunch it."'''.replace('              ', '            ')
-          if old_footer not in s:
-              raise SystemExit("Expected JIT footer block not found")
-          s = s.replace(old_footer, new_footer, 1)
+          s = s.replace(
+              'return "This install has permanent JIT, so there is nothing to enable."',
+              'return "JIT is already active for this LiveContainer session."',
+              1,
+          )
+          s = s.replace(
+              'return "StikDebug needs iOS 17.4 or newer. Enable JIT for Applesauce in TrollStore, "\n'
+              '                + "or with AltJIT, each time it starts as a new app process."',
+              'return "LiveContainer JIT is not active. Enable Launch with JIT for Applesauce "\n'
+              '                + "in LiveContainer and relaunch it."',
+              1,
+          )
 
           p.write_text(s)
           PY
 
           echo "--- LiveContainer JIT patch verification ---"
-          grep -n -A12 -B2 'static var current: JITMethod' platform/ios/Sources/NativeHost.swift
-          grep -n 'Launch with JIT' platform/ios/Sources/NativeHost.swift
+          grep -n -A14 -B2 'static var current: JITMethod' platform/ios/Sources/NativeHost.swift
 
-          # This build must never route the visible JIT UI to the in-app
-          # StikDebug path when JIT is absent.
           python3 - <<'PY'
           from pathlib import Path
           s = Path('platform/ios/Sources/NativeHost.swift').read_text()
           block = s.split('static var current: JITMethod', 1)[1].split('/// Shown when a launch', 1)[0]
           if 'return .stikDebug' in block:
-              raise SystemExit('LiveContainer build still selects in-app StikDebug')
+              raise SystemExit('ERROR: LiveContainer build still selects in-app StikDebug')
+          if 'if touchhle_ios_jit_available()' not in block:
+              raise SystemExit('ERROR: LiveContainer build does not accept host-provided JIT')
+          print('Verified: guest only checks host-provided JIT and never requests it.')
           PY
 
       - name: Install build tools
@@ -139,10 +123,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Applesauce LC' "$APP/Info.plist"
           cat > "$APP/LIVECONTAINER.txt" <<'EOF'
           Applesauce LiveContainer build
-
-          JIT is intentionally acquired by LiveContainer, not by Applesauce.
-          In LiveContainer: long-press Applesauce -> Settings -> Launch with JIT.
-          Configure StikDebug as LiveContainer's JIT enabler, then launch Applesauce from LiveContainer.
+          JIT is granted by LiveContainer before Applesauce starts.
+          Applesauce intentionally does not contact StikDebug itself.
           EOF
 
       - name: Package unsigned LiveContainer IPA
@@ -168,7 +150,7 @@ jobs:
           test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
           test "$DISPLAY_NAME" = "Applesauce LC"
           strings "$APP/Applesauce" | grep -Fq 'LiveContainer JIT is not active.'
-          strings "$APP/Applesauce" | grep -Fq 'JIT is active for this LiveContainer session.'
+          strings "$APP/Applesauce" | grep -Fq 'JIT is already active for this LiveContainer session.'
           echo "Verified LiveContainer IPA: $IPA"
           echo "Bundle ID: $BUNDLE_ID"
           echo "Display name: $DISPLAY_NAME"
