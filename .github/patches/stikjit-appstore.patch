@@ -1,0 +1,30 @@
+diff --git a/platform/ios/Sources/NativeHost.swift b/platform/ios/Sources/NativeHost.swift
+--- a/platform/ios/Sources/NativeHost.swift
++++ b/platform/ios/Sources/NativeHost.swift
+@@
+ private enum StikDebug {
+     /// Asks StikDebug to attach to this app and enable JIT.
+     static var enableJITURL: URL? {
+         guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return nil }
+ 
+         var components = URLComponents()
+-        components.scheme = "stikdebug"
++        components.scheme = "stikjit"
+         components.host = "enable-jit"
+         components.queryItems = [
+-            URLQueryItem(name: "bundle-id", value: bundleIdentifier),
+-            URLQueryItem(name: "script-name", value: "universal.js")
++            URLQueryItem(name: "bundle-id", value: bundleIdentifier)
+         ]
+         return components.url
+     }
+ }
+@@
+         .alert("StikDebug Not Available", isPresented: $showingUnavailableAlert) {
+             Button("OK", role: .cancel) {}
+         } message: {
+-            Text("Install and configure StikDebug, then try again. LocalDevVPN must be connected.")
++            Text("Could not open StikDebug. Make sure StikDebug is installed and its supported loopback connection is active.")
+         }
+     }
+ }
