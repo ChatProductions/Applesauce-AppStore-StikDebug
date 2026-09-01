@@ -1,4 +1,4 @@
-name: Build Applesauce LiveContainer IPA
+name: Build Applesauce LiveContainer App
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
       - ios-host
     paths:
       - .github/workflows/build_ios_livecontainer.yml
+      - platform/ios/scripts/patch-livecontainer.py
+      - platform/ios/scripts/patch-runtime-diagnostics.py
   workflow_dispatch:
 
 jobs:
@@ -19,7 +21,10 @@ jobs:
           submodules: recursive
 
       - name: Patch for LiveContainer
-        run: python3 platform/ios/scripts/patch-livecontainer.py
+        run: |
+          set -e
+          python3 platform/ios/scripts/patch-livecontainer.py
+          python3 platform/ios/scripts/patch-runtime-diagnostics.py
 
       - name: Install build tools
         run: |
@@ -50,60 +55,60 @@ jobs:
           printf '%s\n' \
             'Applesauce LiveContainer diagnostic build' \
             'Runtime logs: Settings > Developer Tools > Runtime Log.' \
+            'Diagnostic checkpoints: LC-DIAG 10 through 51.' \
             > "$APP/LIVECONTAINER.txt"
 
-      - name: Package IPA
-        run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-LiveContainer-Debug.ipa
+      - name: Package app bundle
+        run: |
+          set -e
+          mkdir -p dist
+          APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/Applesauce-LiveContainer-Debug.app.zip
 
-      - name: Verify IPA
+      - name: Verify app bundle
         shell: bash
         run: |
           set -euo pipefail
-          IPA="dist/Applesauce-LiveContainer-Debug.ipa"
-          VERIFY_DIR="/tmp/applesauce-lc-verify"
+          ZIP="dist/Applesauce-LiveContainer-Debug.app.zip"
+          VERIFY_DIR="/tmp/applesauce-lc-app-verify"
 
-          test -s "$IPA"
-          unzip -tq "$IPA" >/dev/null
-
+          test -s "$ZIP"
+          unzip -tq "$ZIP" >/dev/null
           rm -rf "$VERIFY_DIR"
           mkdir -p "$VERIFY_DIR"
-          unzip -q "$IPA" -d "$VERIFY_DIR"
+          unzip -q "$ZIP" -d "$VERIFY_DIR"
 
-          APP="$VERIFY_DIR/Payload/Applesauce.app"
+          APP="$VERIFY_DIR/Applesauce.app"
           BIN="$APP/Applesauce"
           PLIST="$APP/Info.plist"
           MARKER="$APP/LIVECONTAINER.txt"
 
           test -d "$APP"
           test -f "$BIN"
+          test -x "$BIN"
           test -f "$PLIST"
           test -f "$MARKER"
-          test -x "$BIN"
-
           file "$BIN" | grep -q "Mach-O"
           file "$BIN" | grep -q "arm64"
 
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
           DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST")
-
           test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
           test "$DISPLAY_NAME" = "Applesauce LC Debug"
-          grep -Fq "Applesauce LiveContainer diagnostic build" "$MARKER"
-          grep -Fq "Runtime logs: Settings > Developer Tools > Runtime Log." "$MARKER"
+          grep -Fq "Diagnostic checkpoints: LC-DIAG 10 through 51." "$MARKER"
 
-          echo "IPA structure verified"
+          echo "App bundle verified"
           echo "Bundle ID: $BUNDLE_ID"
           echo "Display name: $DISPLAY_NAME"
           file "$BIN"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
 
-          shasum -a 256 "$IPA" | tee "$IPA.sha256"
-
-      - name: Upload IPA
+      - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Applesauce-LiveContainer-Debug-IPA
+          name: Applesauce-LiveContainer-Debug-App
           path: |
-            dist/Applesauce-LiveContainer-Debug.ipa
-            dist/Applesauce-LiveContainer-Debug.ipa.sha256
+            dist/Applesauce-LiveContainer-Debug.app.zip
+            dist/Applesauce-LiveContainer-Debug.app.zip.sha256
           if-no-files-found: error
           retention-days: 7
