@@ -1,0 +1,185 @@
+name: Build Applesauce LiveContainer IPA
+
+on:
+  push:
+    branches: ["ios-host"]
+    paths:
+      - ".github/workflows/build_ios_livecontainer.yml"
+  workflow_dispatch:
+
+jobs:
+  build-ios-livecontainer:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Patch JIT UX for LiveContainer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("platform/ios/Sources/NativeHost.swift")
+          s = p.read_text()
+
+          # In LiveContainer the guest runs inside LiveContainer's process.
+          # JIT therefore has to be acquired by LiveContainer before the guest
+          # starts; asking StikDebug to attach to the guest bundle ID is wrong.
+          old_current = '''    static var current: JITMethod {
+              if touchhle_ios_jit_available() && !touchhle_ios_jit_is_from_debugger() {
+                  return .permanent
+              }
+              if #available(iOS 17.4, *) {
+                  return .stikDebug
+              }
+              return .external
+          }'''
+          canonical_current = '''    static var current: JITMethod {
+              if touchhle_ios_jit_available() && !touchhle_ios_jit_is_from_debugger() {
+                  return .permanent
+              }
+              if #available(iOS 17.4, *) {
+                  return .stikDebug
+              }
+              return .external
+          }'''.replace('              ', '        ')
+          new_current = '''    static var current: JITMethod {
+              // LiveContainer acquires JIT on its host process before launching
+              // this guest. A debugger-provided JIT is therefore fully valid.
+              if touchhle_ios_jit_available() {
+                  return .permanent
+              }
+              // Do not offer Applesauce's in-app StikDebug handoff here: the
+              // guest bundle ID is not the process StikDebug must attach to.
+              return .external
+          }'''.replace('              ', '        ')
+
+          if canonical_current not in s:
+              raise SystemExit("Expected JITMethod.current block not found")
+          s = s.replace(canonical_current, new_current, 1)
+
+          old_external_message = '''        case .external:
+              return "Games need JIT, and without it Applesauce closes the moment one starts. "
+                  + "Enable JIT for Applesauce in TrollStore, or with AltJIT, then start the "
+                  + "game again."'''.replace('              ', '            ')
+          new_external_message = '''        case .external:
+              return "Games need JIT. In LiveContainer, long-press Applesauce, open Settings, "
+                  + "enable Launch with JIT, then relaunch Applesauce before starting a game."'''.replace('              ', '            ')
+          if old_external_message not in s:
+              raise SystemExit("Expected external JIT warning not found")
+          s = s.replace(old_external_message, new_external_message, 1)
+
+          old_footer = '''        case .permanent:
+              return "This install has permanent JIT, so there is nothing to enable."
+          case .stikDebug:
+              return "JIT must be enabled again whenever Applesauce starts as a new app process."
+          case .external:
+              return "StikDebug needs iOS 17.4 or newer. Enable JIT for Applesauce in TrollStore, "
+                  + "or with AltJIT, each time it starts as a new app process."'''.replace('              ', '            ')
+          new_footer = '''        case .permanent:
+              return "JIT is active for this LiveContainer session."
+          case .stikDebug:
+              return "LiveContainer should acquire JIT before launching this guest."
+          case .external:
+              return "LiveContainer JIT is not active. Long-press Applesauce in LiveContainer, "
+                  + "open Settings, enable Launch with JIT, and relaunch it."'''.replace('              ', '            ')
+          if old_footer not in s:
+              raise SystemExit("Expected JIT footer block not found")
+          s = s.replace(old_footer, new_footer, 1)
+
+          p.write_text(s)
+          PY
+
+          echo "--- LiveContainer JIT patch verification ---"
+          grep -n -A12 -B2 'static var current: JITMethod' platform/ios/Sources/NativeHost.swift
+          grep -n 'Launch with JIT' platform/ios/Sources/NativeHost.swift
+
+          # This build must never route the visible JIT UI to the in-app
+          # StikDebug path when JIT is absent.
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('platform/ios/Sources/NativeHost.swift').read_text()
+          block = s.split('static var current: JITMethod', 1)[1].split('/// Shown when a launch', 1)[0]
+          if 'return .stikDebug' in block:
+              raise SystemExit('LiveContainer build still selects in-app StikDebug')
+          PY
+
+      - name: Install build tools
+        run: |
+          brew install ninja cmake
+          rustup target add aarch64-apple-ios
+
+      - name: Prepare Boost
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 -o boost_1_81_0.tar.gz https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz
+          mkdir -p vendor
+          tar xzf boost_1_81_0.tar.gz -C vendor
+          rm -rf vendor/boost
+          mv vendor/boost_1_81_0 vendor/boost
+
+      - name: Build shared SDL2 for iPhoneOS
+        run: sh platform/ios/scripts/build-sdl-shared.sh iphoneos
+
+      - name: Build Applesauce for iPhoneOS
+        run: sh platform/ios/scripts/build-host.sh iphoneos Release
+
+      - name: Add LiveContainer build marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Applesauce LC' "$APP/Info.plist"
+          cat > "$APP/LIVECONTAINER.txt" <<'EOF'
+          Applesauce LiveContainer build
+
+          JIT is intentionally acquired by LiveContainer, not by Applesauce.
+          In LiveContainer: long-press Applesauce -> Settings -> Launch with JIT.
+          Configure StikDebug as LiveContainer's JIT enabler, then launch Applesauce from LiveContainer.
+          EOF
+
+      - name: Package unsigned LiveContainer IPA
+        run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-LiveContainer.ipa
+
+      - name: Verify LiveContainer IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="dist/Applesauce-LiveContainer.ipa"
+          test -s "$IPA"
+          unzip -tq "$IPA" >/dev/null
+          rm -rf /tmp/applesauce-lc-verify
+          mkdir -p /tmp/applesauce-lc-verify
+          unzip -q "$IPA" -d /tmp/applesauce-lc-verify
+          APP="/tmp/applesauce-lc-verify/Payload/Applesauce.app"
+          test -d "$APP"
+          test -f "$APP/Applesauce"
+          test -f "$APP/LIVECONTAINER.txt"
+          file "$APP/Applesauce" | grep -q 'arm64'
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist")
+          test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
+          test "$DISPLAY_NAME" = "Applesauce LC"
+          strings "$APP/Applesauce" | grep -Fq 'LiveContainer JIT is not active.'
+          strings "$APP/Applesauce" | grep -Fq 'JIT is active for this LiveContainer session.'
+          echo "Verified LiveContainer IPA: $IPA"
+          echo "Bundle ID: $BUNDLE_ID"
+          echo "Display name: $DISPLAY_NAME"
+          shasum -a 256 "$IPA" | tee "$IPA.sha256"
+
+      - name: Upload LiveContainer IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Applesauce-LiveContainer-IPA
+          path: |
+            dist/Applesauce-LiveContainer.ipa
+            dist/Applesauce-LiveContainer.ipa.sha256
+          if-no-files-found: error
+          retention-days: 7
