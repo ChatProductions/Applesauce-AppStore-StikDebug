@@ -18,35 +18,93 @@ jobs:
           submodules: recursive
 
       - name: Patch App Store StikDebug handoff
+        shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('platform/ios/Sources/NativeHost.swift')
+
+          p = Path("platform/ios/Sources/NativeHost.swift")
           s = p.read_text()
-          old = '''        components.scheme = "stikdebug"\n        components.host = "enable-jit"\n        components.queryItems = [\n            URLQueryItem(name: "bundle-id", value: bundleIdentifier),\n            URLQueryItem(name: "script-name", value: "universal.js")\n        ]'''
-          new = '''        components.scheme = "stikjit"\n        components.host = "enable-jit"\n        components.queryItems = [\n            URLQueryItem(name: "bundle-id", value: bundleIdentifier)\n        ]'''
-          if old not in s:
-              raise SystemExit('Expected StikDebug URL block not found')
-          s = s.replace(old, new, 1)
+
+          old = '''        components.scheme = "stikdebug"
+                  components.host = "enable-jit"
+                  components.queryItems = [
+                      URLQueryItem(name: "bundle-id", value: bundleIdentifier),
+                      URLQueryItem(name: "script-name", value: "universal.js")
+                  ]'''
+
+          # The exact block normally uses eight spaces on every Swift line.
+          # Keep a second form so the build does not depend on YAML/Python
+          # indentation if this workflow is edited later.
+          canonical_old = '''        components.scheme = "stikdebug"
+          components.host = "enable-jit"
+          components.queryItems = [
+              URLQueryItem(name: "bundle-id", value: bundleIdentifier),
+              URLQueryItem(name: "script-name", value: "universal.js")
+          ]'''
+
+          canonical_new = '''        // LiveContainer's normal StikDebug handoff uses the legacy `stikjit`
+          // scheme, which is compatible with older/App Store StikDebug builds.
+          components.scheme = "stikjit"
+          components.host = "enable-jit"
+          components.queryItems = [
+              URLQueryItem(name: "bundle-id", value: bundleIdentifier)
+          ]'''
+
+          if 'components.scheme = "stikjit"' not in s:
+              if canonical_old in s:
+                  s = s.replace(canonical_old, canonical_new, 1)
+              else:
+                  # Fall back to a whitespace-tolerant replacement.
+                  import re
+                  pattern = re.compile(
+                      r'(?m)^(?P<i>\s*)components\.scheme = "stikdebug"\n'
+                      r'(?P=i)components\.host = "enable-jit"\n'
+                      r'(?P=i)components\.queryItems = \[\n'
+                      r'(?P=i)    URLQueryItem\(name: "bundle-id", value: bundleIdentifier\),\n'
+                      r'(?P=i)    URLQueryItem\(name: "script-name", value: "universal\.js"\)\n'
+                      r'(?P=i)\]'
+                  )
+                  m = pattern.search(s)
+                  if not m:
+                      raise SystemExit("Expected StikDebug URL block not found")
+                  indent = m.group("i")
+                  replacement = (
+                      f'{indent}// LiveContainer\'s normal StikDebug handoff uses the legacy `stikjit`\n'
+                      f'{indent}// scheme, which is compatible with older/App Store StikDebug builds.\n'
+                      f'{indent}components.scheme = "stikjit"\n'
+                      f'{indent}components.host = "enable-jit"\n'
+                      f'{indent}components.queryItems = [\n'
+                      f'{indent}    URLQueryItem(name: "bundle-id", value: bundleIdentifier)\n'
+                      f'{indent}]'
+                  )
+                  s = s[:m.start()] + replacement + s[m.end():]
+
           old_alert = 'Text("Install and configure StikDebug, then try again. LocalDevVPN must be connected.")'
           new_alert = 'Text("Could not open StikDebug. Make sure StikDebug is installed and its supported loopback connection is active.")'
-          if old_alert not in s:
-              raise SystemExit('Expected StikDebug alert text not found')
-          s = s.replace(old_alert, new_alert, 1)
+          if old_alert in s:
+              s = s.replace(old_alert, new_alert, 1)
+
           p.write_text(s)
           PY
 
-      - name: Show patched JIT URL
-        run: |
-          grep -A12 -B2 'private enum StikDebug' platform/ios/Sources/NativeHost.swift
+          grep -n 'components.scheme = "stikjit"' platform/ios/Sources/NativeHost.swift
+          grep -n 'supported loopback connection' platform/ios/Sources/NativeHost.swift
+          if grep -n 'components.scheme = "stikdebug"' platform/ios/Sources/NativeHost.swift; then
+            echo "Old StikDebug URL scheme is still present in NativeHost.swift"
+            exit 1
+          fi
 
       - name: Install build tools
         run: |
-          brew install ninja cmake || true
+          brew install ninja cmake
           rustup target add aarch64-apple-ios
 
       - name: Prepare Boost
+        shell: bash
         run: |
+          set -euo pipefail
           curl -fL --retry 4 --retry-delay 2 -o boost_1_81_0.tar.gz https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz
           mkdir -p vendor
           tar xzf boost_1_81_0.tar.gz -C vendor
@@ -62,8 +120,25 @@ jobs:
       - name: Package unsigned IPA
         run: sh platform/ios/scripts/package-ipa.sh dist/Applesauce-AppStore-StikDebug.ipa
 
-      - name: Verify IPA
-        run: sh platform/ios/scripts/verify-ipa.sh dist/Applesauce-AppStore-StikDebug.ipa
+      - name: Verify IPA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="dist/Applesauce-AppStore-StikDebug.ipa"
+          test -s "$IPA"
+          unzip -tq "$IPA" >/dev/null
+          rm -rf /tmp/applesauce-verify
+          mkdir -p /tmp/applesauce-verify
+          unzip -q "$IPA" -d /tmp/applesauce-verify
+          APP="/tmp/applesauce-verify/Payload/Applesauce.app"
+          test -d "$APP"
+          test -f "$APP/Applesauce"
+          file "$APP/Applesauce" | grep -q 'arm64'
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
+          echo "Verified unsigned IPA package: $IPA"
+          echo "Bundle ID: $BUNDLE_ID"
+          shasum -a 256 "$IPA"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -73,3 +148,4 @@ jobs:
             dist/Applesauce-AppStore-StikDebug.ipa
             dist/Applesauce-AppStore-StikDebug.ipa.sha256
           if-no-files-found: error
+          retention-days: 7
