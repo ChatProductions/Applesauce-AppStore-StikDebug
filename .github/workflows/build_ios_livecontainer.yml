@@ -46,14 +46,56 @@ jobs:
       - name: Build Applesauce
         run: sh platform/ios/scripts/build-host.sh iphoneos Release
 
+      - name: Configure LiveContainer JIT script
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
+          test -d "$APP"
+
+          # LiveContainer only injects universal.js automatically for guests it
+          # classifies as 32-bit. Applesauce itself is arm64, but its Dynarmic
+          # code cache uses the iOS 26 universal breakpoint protocol. Store the
+          # script as per-app LC metadata so LiveContainer passes it to the JIT
+          # enabler before launching Applesauce.
+          LC_COMMIT="12b1f782d760a43f47c9f7f77f1c270f7d888aac"
+          SCRIPT_URL="https://raw.githubusercontent.com/LiveContainer/LiveContainer/${LC_COMMIT}/LiveContainer/Resources/universal.js"
+          curl -fL --retry 4 --retry-delay 2 "$SCRIPT_URL" -o /tmp/universal.js
+
+          python3 - "$APP" <<'PY'
+          import base64
+          import pathlib
+          import plistlib
+          import sys
+
+          app = pathlib.Path(sys.argv[1])
+          script = pathlib.Path('/tmp/universal.js').read_bytes()
+          if b'0xf00d' not in script or b'JIT26' not in script:
+              raise SystemExit('Downloaded universal.js does not contain the expected JIT26 breakpoint protocol')
+
+          lc_info_path = app / 'LCAppInfo.plist'
+          if lc_info_path.exists():
+              with lc_info_path.open('rb') as f:
+                  info = plistlib.load(f)
+          else:
+              info = {}
+
+          info['jitLaunchScriptJs'] = base64.b64encode(script).decode('ascii')
+          with lc_info_path.open('wb') as f:
+              plistlib.dump(info, f, fmt=plistlib.FMT_BINARY)
+
+          print(f'Embedded universal.js into {lc_info_path} ({len(script)} bytes)')
+          PY
+
       - name: Mark LiveContainer build
         run: |
           set -e
           APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
           test -d "$APP"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Applesauce LC Debug" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Applesauce LC JITFix" "$APP/Info.plist"
           printf '%s\n' \
-            'Applesauce LiveContainer diagnostic build' \
+            'Applesauce LiveContainer JIT-script build' \
+            'LiveContainer metadata embeds universal.js for Dynarmic JIT26 region preparation.' \
             'Runtime logs: Settings > Developer Tools > Runtime Log.' \
             'Diagnostic checkpoints: LC-DIAG 10 through 51.' \
             > "$APP/LIVECONTAINER.txt"
@@ -63,13 +105,13 @@ jobs:
           set -e
           mkdir -p dist
           APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/Applesauce-LiveContainer-Debug.app.zip
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/Applesauce-LiveContainer-JITFix.app.zip
 
       - name: Verify app bundle
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="dist/Applesauce-LiveContainer-Debug.app.zip"
+          ZIP="dist/Applesauce-LiveContainer-JITFix.app.zip"
           VERIFY_DIR="/tmp/applesauce-lc-app-verify"
 
           test -s "$ZIP"
@@ -81,12 +123,14 @@ jobs:
           APP="$VERIFY_DIR/Applesauce.app"
           BIN="$APP/Applesauce"
           PLIST="$APP/Info.plist"
+          LCINFO="$APP/LCAppInfo.plist"
           MARKER="$APP/LIVECONTAINER.txt"
 
           test -d "$APP"
           test -f "$BIN"
           test -x "$BIN"
           test -f "$PLIST"
+          test -f "$LCINFO"
           test -f "$MARKER"
           file "$BIN" | grep -q "Mach-O"
           file "$BIN" | grep -q "arm64"
@@ -94,8 +138,23 @@ jobs:
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
           DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST")
           test "$BUNDLE_ID" = "io.github.johnny901901901.applesauce"
-          test "$DISPLAY_NAME" = "Applesauce LC Debug"
-          grep -Fq "Diagnostic checkpoints: LC-DIAG 10 through 51." "$MARKER"
+          test "$DISPLAY_NAME" = "Applesauce LC JITFix"
+          grep -Fq "LiveContainer metadata embeds universal.js" "$MARKER"
+
+          python3 - "$LCINFO" <<'PY'
+          import base64
+          import plistlib
+          import sys
+          with open(sys.argv[1], 'rb') as f:
+              info = plistlib.load(f)
+          encoded = info.get('jitLaunchScriptJs')
+          if not encoded:
+              raise SystemExit('jitLaunchScriptJs missing from LCAppInfo.plist')
+          script = base64.b64decode(encoded)
+          if b'0xf00d' not in script or b'JIT26' not in script:
+              raise SystemExit('Embedded JIT script failed protocol verification')
+          print(f'Embedded LiveContainer JIT script verified ({len(script)} bytes)')
+          PY
 
           echo "App bundle verified"
           echo "Bundle ID: $BUNDLE_ID"
@@ -106,9 +165,9 @@ jobs:
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Applesauce-LiveContainer-Debug-App
+          name: Applesauce-LiveContainer-JITFix-App
           path: |
-            dist/Applesauce-LiveContainer-Debug.app.zip
-            dist/Applesauce-LiveContainer-Debug.app.zip.sha256
+            dist/Applesauce-LiveContainer-JITFix.app.zip
+            dist/Applesauce-LiveContainer-JITFix.app.zip.sha256
           if-no-files-found: error
           retention-days: 7
