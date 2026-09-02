@@ -91,14 +91,19 @@ jobs:
           APP="$VERIFY_DIR/Applesauce.app"
           BIN="$APP/Applesauce"
           PLIST="$APP/Info.plist"
+          CORE="$APP/Frameworks/libhyperhle_core.dylib"
+          MARKER="$APP/ARM32_LAYER.txt"
 
           test -d "$APP"
           test -f "$BIN"
           test -x "$BIN"
           test -f "$PLIST"
-          test -f "$APP/Frameworks/libhyperhle_core.dylib"
+          test -f "$CORE"
+          test -f "$MARKER"
           file "$BIN" | grep -q "Mach-O"
           file "$BIN" | grep -q "arm64"
+          file "$CORE" | grep -q "Mach-O"
+          file "$CORE" | grep -q "arm64"
 
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
           DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST")
@@ -107,13 +112,15 @@ jobs:
           test "$BUNDLE_ID" = "io.chatproductions.applesauce.arm32"
           test "$DISPLAY_NAME" = "Applesauce ARM32"
           test "$LAYER" = "true"
-
-          strings "$BIN" | grep -Fq "ARM32 layer: starting translated guest"
+          grep -Fq "Applesauce ARM32 translation layer for LiveContainer" "$MARKER"
+          grep -Fq "Bundle ID: io.chatproductions.applesauce.arm32" "$MARKER"
 
           echo "ARM32 translation layer verified"
           echo "Bundle ID: $BUNDLE_ID"
           echo "Display name: $DISPLAY_NAME"
+          echo "LC32BitTranslationLayer: $LAYER"
           file "$BIN"
+          file "$CORE"
           shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
 
       - name: Upload app bundle
