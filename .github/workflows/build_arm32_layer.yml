@@ -1,0 +1,127 @@
+name: Build Applesauce ARM32 Layer
+
+on:
+  push:
+    branches:
+      - arm32-layer
+    paths:
+      - .github/workflows/build_arm32_layer.yml
+      - platform/ios/scripts/patch-arm32-layer.py
+      - platform/ios/scripts/patch-runtime-diagnostics.py
+      - platform/ios/Sources/**
+  workflow_dispatch:
+
+jobs:
+  build-arm32-layer:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Patch ARM32 translation entrypoint
+        run: |
+          set -euo pipefail
+          python3 platform/ios/scripts/patch-arm32-layer.py
+          python3 platform/ios/scripts/patch-runtime-diagnostics.py
+
+      - name: Install build tools
+        run: |
+          brew install ninja cmake
+          rustup target add aarch64-apple-ios
+
+      - name: Prepare Boost
+        run: |
+          set -euo pipefail
+          curl -fL --retry 4 --retry-delay 2 -o boost_1_81_0.tar.gz https://archives.boost.io/release/1.81.0/source/boost_1_81_0.tar.gz
+          mkdir -p vendor
+          tar xzf boost_1_81_0.tar.gz -C vendor
+          rm -rf vendor/boost
+          mv vendor/boost_1_81_0 vendor/boost
+
+      - name: Build SDL2
+        run: sh platform/ios/scripts/build-sdl-shared.sh iphoneos
+
+      - name: Build Applesauce
+        run: sh platform/ios/scripts/build-host.sh iphoneos Release
+
+      - name: Configure translation-layer identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
+          PLIST="$APP/Info.plist"
+          test -d "$APP"
+          test -f "$PLIST"
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier io.chatproductions.applesauce.arm32" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Applesauce ARM32" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName Applesauce ARM32" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Delete :LC32BitTranslationLayer" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :LC32BitTranslationLayer bool true" "$PLIST"
+
+          printf '%s\n' \
+            'Applesauce ARM32 translation layer for LiveContainer' \
+            'Bundle ID: io.chatproductions.applesauce.arm32' \
+            'Import this .app into LiveContainer; do not replace LiveContainer itself.' \
+            > "$APP/ARM32_LAYER.txt"
+
+      - name: Package app bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APP="build/host-iphoneos/Build/Products/Release-iphoneos/Applesauce.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/Applesauce-ARM32.app.zip
+
+      - name: Verify app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="dist/Applesauce-ARM32.app.zip"
+          VERIFY_DIR="/tmp/applesauce-arm32-verify"
+
+          test -s "$ZIP"
+          unzip -tq "$ZIP" >/dev/null
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          unzip -q "$ZIP" -d "$VERIFY_DIR"
+
+          APP="$VERIFY_DIR/Applesauce.app"
+          BIN="$APP/Applesauce"
+          PLIST="$APP/Info.plist"
+
+          test -d "$APP"
+          test -f "$BIN"
+          test -x "$BIN"
+          test -f "$PLIST"
+          test -f "$APP/Frameworks/libhyperhle_core.dylib"
+          file "$BIN" | grep -q "Mach-O"
+          file "$BIN" | grep -q "arm64"
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
+          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST")
+          LAYER=$(/usr/libexec/PlistBuddy -c "Print :LC32BitTranslationLayer" "$PLIST")
+
+          test "$BUNDLE_ID" = "io.chatproductions.applesauce.arm32"
+          test "$DISPLAY_NAME" = "Applesauce ARM32"
+          test "$LAYER" = "true"
+
+          strings "$BIN" | grep -Fq "ARM32 layer: starting translated guest"
+
+          echo "ARM32 translation layer verified"
+          echo "Bundle ID: $BUNDLE_ID"
+          echo "Display name: $DISPLAY_NAME"
+          file "$BIN"
+          shasum -a 256 "$ZIP" | tee "$ZIP.sha256"
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Applesauce-ARM32-App
+          path: |
+            dist/Applesauce-ARM32.app.zip
+            dist/Applesauce-ARM32.app.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
