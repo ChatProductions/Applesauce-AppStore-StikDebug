@@ -27,6 +27,12 @@ jobs:
           if old not in s:
               raise RuntimeError('QuickJS timezone implementation changed')
           s=s.replace(old, 'res = 0; /* Vita fallback: UTC until timezone support is implemented */')
+          # QuickJS unconditionally enables Atomics on non-Emscripten targets.
+          # VitaSDK does not expose the required pthread primitives.
+          atomics='#define CONFIG_ATOMICS'
+          if s.count(atomics) != 1:
+              raise RuntimeError('Unexpected QuickJS Atomics definition')
+          s=s.replace(atomics, '/* VitaSurf: omit threaded Atomics support */')
           p.write_text(s)
           PY
       - name: Configure
