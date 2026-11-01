@@ -7,6 +7,7 @@
 #include <malloc.h>
 #include "quickjs.h"
 #include <stdio.h>
+#include <string.h>
 static int jsok=0;
 static int tested=0;
 static int input=7;
@@ -41,7 +42,6 @@ static void run_tests(void){
   JS_FreeRuntime(rt);
   jsok=(tested==6);
 }
-#include <string.h>
 
 #define W 960
 #define H 544
