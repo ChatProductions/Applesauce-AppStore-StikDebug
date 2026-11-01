@@ -34,3 +34,16 @@ target_link_libraries(vitasurf_net
 vita_create_self(eboot-net.bin vitasurf_net)
 vita_create_vpk(VitaSurf-WebLoad-Test.vpk VTSF00003 eboot-net.bin
   VERSION 00.02 NAME "VitaSurf WebLoad Test")
+
+# Separate proof: fetch a live HTTPS document, construct a Lexbor HTML5 DOM,
+# and present its actual body text in a minimal scrolling Vita display.
+if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/lexbor_single.h")
+  add_executable(vitasurf_html src/html_test.c)
+  target_include_directories(vitasurf_html PRIVATE vendor)
+  target_link_libraries(vitasurf_html
+    SceDisplay_stub SceCtrl_stub SceKernelThreadMgr_stub SceSysmem_stub
+    SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub m)
+  vita_create_self(eboot-html.bin vitasurf_html)
+  vita_create_vpk(VitaSurf-HTML-Test.vpk VTSF00004 eboot-html.bin
+    VERSION 00.01 NAME "VitaSurf HTML Test")
+endif()
