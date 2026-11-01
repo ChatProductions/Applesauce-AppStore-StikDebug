@@ -75,6 +75,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/quickjs/quickjs.c"
   target_include_directories(vitasurf_domjs PRIVATE vendor vendor/quickjs)
   target_compile_definitions(vitasurf_domjs PRIVATE _GNU_SOURCE CONFIG_VERSION="2025-09-13")
   target_compile_options(vitasurf_domjs PRIVATE -O2)
+  # Keep the large QuickJS engine at -O0: the browser UI is optimized,
+  # but optimizing the engine's enormous source makes CI much slower.
+  set_source_files_properties(vendor/quickjs/quickjs.c PROPERTIES COMPILE_FLAGS "-O0")
   target_link_libraries(vitasurf_domjs
     SceDisplay_stub SceCtrl_stub SceTouch_stub SceKernelThreadMgr_stub SceSysmem_stub
     SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub
