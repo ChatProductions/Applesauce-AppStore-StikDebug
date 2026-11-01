@@ -1,0 +1,22 @@
+name: VitaSurf POC build
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-host]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2
+        run: vdpm install SDL2
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
+      - name: Build
+        run: cmake --build build --parallel 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VitaSurf-POC
+          path: build/*.vpk
+          if-no-files-found: error
