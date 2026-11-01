@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install SDL2
-        run: vdpm install SDL2
+        run: vdpm install sdl2
       - name: Configure
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
       - name: Build
