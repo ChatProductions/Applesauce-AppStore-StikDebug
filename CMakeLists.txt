@@ -33,4 +33,4 @@ target_link_libraries(vitasurf_net
   SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub)
 vita_create_self(eboot-net.bin vitasurf_net)
 vita_create_vpk(VitaSurf-WebLoad-Test.vpk VTSF00003 eboot-net.bin
-  VERSION 00.01 NAME "VitaSurf WebLoad Test")
+  VERSION 00.02 NAME "VitaSurf WebLoad Test")
