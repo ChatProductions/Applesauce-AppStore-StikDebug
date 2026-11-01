@@ -33,14 +33,10 @@ jobs:
           if s.count(atomics) != 1:
               raise RuntimeError('Unexpected QuickJS Atomics definition')
           s=s.replace(atomics, '/* VitaSurf: omit threaded Atomics support */')
-          import re
-          # The runtime destructor still references this function even when
-          # Atomics is compiled out. Guard the single cleanup call.
-          call_pattern=r'(?m)^(\\s*)js_atomics_free_waiters\\(([^;]*)\\);'
-          matches=list(re.finditer(call_pattern,s))
-          if len(matches)!=1:
-              raise RuntimeError(f'Expected one atomics cleanup call, found {len(matches)}')
-          s=re.sub(call_pattern, lambda m: m.group(1)+'#ifdef CONFIG_ATOMICS\\n'+m.group(1)+'js_atomics_free_waiters('+m.group(2)+');\\n'+m.group(1)+'#endif', s, count=1)
+          call='js_atomics_free_waiters(rt);'
+          if s.count(call)!=1:
+              raise RuntimeError('QuickJS cleanup call changed')
+          s=s.replace(call, '(void)rt; /* atomics disabled */')
           p.write_text(s)
           PY
       - name: Configure
