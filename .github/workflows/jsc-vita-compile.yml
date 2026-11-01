@@ -17,7 +17,7 @@ jobs:
         run: |
           git clone --depth 1 --filter=blob:none --sparse https://github.com/WebKit/WebKit.git webkit
           cd webkit
-          git sparse-checkout set Source Tools/Scripts Configurations CMakeLists.txt
+          git sparse-checkout set Source Tools/Scripts Configurations
           git rev-parse HEAD > ../webkit-source-commit.txt
       - name: Cross-configure JavaScriptCore for Vita ARMv7
         shell: bash
