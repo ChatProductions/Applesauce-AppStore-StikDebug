@@ -16,9 +16,21 @@ Standalone PlayStation Vita browser research and development.
 - WebGL investigation; WebGPU is not an initial deliverable.
 - DRM excluded.
 
-## Current status
+## Current status — 2026-11-01
 
-Engine feasibility stage only. No working browser or VPK has been built or verified.
+VitaSurf is **not yet a usable web browser**. Independent PS Vita hardware milestones:
+
+- **Native display:** confirmed working on PS Vita (CDRAM-backed dual framebuffers).
+- **QuickJS:** confirmed running natively on PS Vita; six JavaScript tests pass and rerun with changing input on Cross.
+- **WebLoad HTTPS test:** `VitaSurf-WebLoad-Test.vpk` uses native Vita networking/SSL and attempts `https://example.com/`. It displays the HTTP status, bytes read, and basic HTML/title recognition. Hardware networking and certificate compatibility remain unverified.
+- **WebKit/JavaScriptCore:** WebKit cross-compilation research is separate and incomplete; QuickJS is a working scripting proof of concept, not a complete DOM, HTML/CSS engine or WebAssembly solution.
+
+GitHub Actions on the `ios-host` branch builds standalone diagnostic VPKs. The diagnostics use distinct Vita title IDs, so they can be tested independently.
+
+## Project scope
+
+VitaSurf targets modern HTML/CSS, JavaScript, DOM, WebAssembly, WebGL/WebGPU investigation, non-DRM video, audio, browsing and games on Vita hardware, subject to measurable platform limitations. **DRM is the only deliberately excluded feature.** No unimplemented capability is presented as working.
+
 
 ## References
 
