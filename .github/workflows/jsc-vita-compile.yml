@@ -26,13 +26,10 @@ jobs:
           from pathlib import Path
           p = Path('webkit/Source/cmake/WebKitCommon.cmake')
           s = p.read_text()
-          needle = '    elseif (CMAKE_SYSTEM_NAME MATCHES "Fuchsia")
-        set(WTF_OS_FUCHSIA 1)'
+          needle = '    elseif (CMAKE_SYSTEM_NAME MATCHES "Fuchsia")\\n        set(WTF_OS_FUCHSIA 1)'
           assert needle in s, 'Upstream OS detection changed; patch needs review'
-          s = s.replace(needle, '    elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic")
-        # VitaSDK uses Generic; use Unix as a temporary configuration probe only.
-        set(WTF_OS_UNIX 1)
-' + needle, 1)
+          insertion = '    elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic")\\n        set(WTF_OS_UNIX 1)\\n'
+          s = s.replace(needle, insertion + needle, 1)
           p.write_text(s)
           PY
       - name: Cross-configure JavaScriptCore for Vita ARMv7
