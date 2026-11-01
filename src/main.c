@@ -3,6 +3,7 @@
 #include <psp2/kernel/threadmgr.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <malloc.h>
 #include <string.h>
 
 #define W 960
