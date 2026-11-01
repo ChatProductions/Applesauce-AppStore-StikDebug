@@ -24,3 +24,13 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/quickjs/quickjs.c")
   vita_create_self(eboot-js.bin vitasurf_js)
   vita_create_vpk(VitaSurf-JS-Test.vpk VTSF00002 eboot-js.bin VERSION 00.01 NAME "VitaSurf JS Test")
 endif()
+
+# Standalone hardware probe: HTTPS fetch + initial HTML document recognition.
+# This does not replace the verified JavaScript test or imply complete HTML rendering.
+add_executable(vitasurf_net src/network_test.c)
+target_link_libraries(vitasurf_net
+  SceDisplay_stub SceCtrl_stub SceKernelThreadMgr_stub SceSysmem_stub
+  SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub)
+vita_create_self(eboot-net.bin vitasurf_net)
+vita_create_vpk(VitaSurf-WebLoad-Test.vpk VTSF00003 eboot-net.bin
+  VERSION 00.01 NAME "VitaSurf WebLoad Test")
