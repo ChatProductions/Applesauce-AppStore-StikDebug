@@ -9,6 +9,10 @@ jobs:
     container: vitasdk/vitasdk:latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch QuickJS source for native JS test
+        run: |
+          mkdir -p vendor
+          git clone --depth 1 https://github.com/bellard/quickjs.git vendor/quickjs
       - name: Configure
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
       - name: Build
