@@ -1,0 +1,51 @@
+name: WebKit JavaScriptCore Vita ARMv7 compile probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-host]
+    paths:
+      - '.github/workflows/jsc-vita-compile.yml'
+jobs:
+  compile-probe:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk:latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch upstream WebKit source
+        shell: bash
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/WebKit/WebKit.git webkit
+          cd webkit
+          git sparse-checkout set Source Tools/Scripts Configurations CMakeLists.txt
+          git rev-parse HEAD > ../webkit-source-commit.txt
+      - name: Cross-configure JavaScriptCore for Vita ARMv7
+        shell: bash
+        run: |
+          mkdir -p audit
+          set +e
+          cmake -S webkit -B webkit-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake" \
+            -DPORT=JSCOnly -DENABLE_JIT=OFF -DENABLE_WEBASSEMBLY=OFF \
+            -DENABLE_FTL_JIT=OFF -DENABLE_DFG_JIT=OFF \
+            > audit/configure.log 2>&1
+          configure_rc=$?
+          echo "configure_exit_code=$configure_rc" | tee audit/result.txt
+          if [ "$configure_rc" -eq 0 ]; then
+            set +e
+            cmake --build webkit-build --parallel 2 --target JavaScriptCore > audit/compile.log 2>&1
+            build_rc=$?
+            echo "compile_exit_code=$build_rc" | tee -a audit/result.txt
+          else
+            echo "compile_not_attempted_due_to_configuration_failure=true" | tee -a audit/result.txt
+          fi
+          tail -n 100 audit/configure.log
+          if [ -f audit/compile.log ]; then tail -n 100 audit/compile.log; fi
+      - name: Upload compiler diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: jsc-vita-armv7-compile-diagnostics
+          path: |
+            audit/
+            webkit-source-commit.txt
+          if-no-files-found: error
