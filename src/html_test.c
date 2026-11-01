@@ -61,6 +61,13 @@ static void label(int x,int y,const char *s,uint32_t color,int scale) {
   while(*s){ for(int j=0;j<7;j++){uint8_t bits=glyph(*s,j);for(int i=0;i<5;i++)if(bits&(1<<(4-i)))rect(x+i*scale,y+j*scale,scale,scale,color);} x+=6*scale;s++; }
 }
 
+#define PAGE_LIMIT (128 * 1024)
+static int stage=0;
+static int failure=0;
+static int http_code=0;
+static int received=0;
+static int html_seen=0;
+static int has_title=0;
 static int requests=0;
 static int phase=0;
 static char title_text[53]="NO TITLE";
