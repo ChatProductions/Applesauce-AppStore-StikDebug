@@ -23,7 +23,7 @@ jobs:
         run: |
           git clone --depth 1 --filter=blob:none --sparse https://github.com/WebKit/WebKit.git webkit
           cd webkit
-          git sparse-checkout set Source Tools/Scripts Configurations
+          git sparse-checkout set Source Tools/Scripts Tools/TestWebKitAPI Configurations
           git rev-parse HEAD > ../webkit-source-commit.txt
       - name: Patch upstream OS detection for experimental Vita target
         shell: bash
