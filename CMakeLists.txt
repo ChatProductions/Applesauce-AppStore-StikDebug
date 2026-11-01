@@ -19,7 +19,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/quickjs/quickjs.c")
     vendor/quickjs/libunicode.c vendor/quickjs/cutils.c
     vendor/quickjs/dtoa.c)
   target_include_directories(vitasurf_js PRIVATE vendor/quickjs)
-  target_compile_definitions(vitasurf_js PRIVATE _GNU_SOURCE CONFIG_VERSION="2025-09-13" CONFIG_ATOMICS=0)
+  target_compile_definitions(vitasurf_js PRIVATE _GNU_SOURCE CONFIG_VERSION="2025-09-13")
   target_link_libraries(vitasurf_js m SceDisplay_stub SceCtrl_stub SceKernelThreadMgr_stub SceSysmem_stub)
   vita_create_self(eboot-js.bin vitasurf_js)
   vita_create_vpk(VitaSurf-JS-Test.vpk VTSF00002 eboot-js.bin VERSION 00.01 NAME "VitaSurf JS Test")
