@@ -13,6 +13,22 @@ jobs:
         run: |
           mkdir -p vendor
           git clone --depth 1 https://github.com/bellard/quickjs.git vendor/quickjs
+      - name: Patch QuickJS for Vita libc
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('vendor/quickjs/quickjs.c')
+          s=p.read_text()
+          old='return malloc_usable_size((void *)ptr);'
+          if old not in s:
+              raise RuntimeError('QuickJS malloc implementation changed')
+          s=s.replace(old, 'return 0; /* Vita libc lacks malloc_usable_size; QuickJS tracks requested sizes separately */')
+          old='res = -tm.tm_gmtoff / 60;'
+          if old not in s:
+              raise RuntimeError('QuickJS timezone implementation changed')
+          s=s.replace(old, 'res = 0; /* Vita fallback: UTC until timezone support is implemented */')
+          p.write_text(s)
+          PY
       - name: Configure
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
       - name: Build
