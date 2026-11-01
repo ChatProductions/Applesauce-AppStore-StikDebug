@@ -601,6 +601,7 @@ static void handle_ime_result(void){
     if(ok<0){edit_error=ok;return;}
     strcpy(current_url,url);
     edit_error=0;
+    domjs_result=0; /* A real website is no longer the isolated JS fixture. */
     do_fetch();
   }
 }
@@ -686,8 +687,15 @@ int main(void){
         run_domjs_fixture();
         repaint_remaining=2;
       }else if((pad.buttons&SCE_CTRL_CROSS)&&!(prev&SCE_CTRL_CROSS)){
-        domjs_result=0;
-        do_fetch();
+        /* vitasurf:// is an internal fixture, not an HTTPS address.
+           Reload the fixture in place instead of asking the network stack
+           to connect to an unsupported custom URL scheme. */
+        if(strcmp(current_url,"vitasurf://domjs-test")==0)
+          run_domjs_fixture();
+        else {
+          domjs_result=0;
+          do_fetch();
+        }
         repaint_remaining=2;
       }else if((pad.buttons&SCE_CTRL_DOWN)&&!(prev&SCE_CTRL_DOWN)){
         if(scroll+12<line_total){scroll++;repaint_remaining=2;}
