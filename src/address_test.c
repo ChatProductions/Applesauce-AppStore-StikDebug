@@ -46,7 +46,17 @@ static const uint8_t font[18][7] = {
 {14,17,17,17,21,18,13}, /* Q */
 {30,17,17,30,20,18,17} /* R */
 };
-static uint8_t glyph(char c,int y) {
+/* Dedicated 5x7 glyphs for Turkish uppercase diacritics. */
+static uint8_t glyph(unsigned int c,int y) {
+  static const uint8_t tr[6][7]={
+    {4,0,31,4,4,4,31},    /* 0x80: İ (dotted capital I) */
+    {15,16,16,14,1,30,4},/* 0x81: Ş */
+    {4,14,17,23,17,17,14},/* 0x82: Ğ */
+    {14,17,16,16,17,14,4},/* 0x83: Ç */
+    {10,14,17,17,17,17,14},/* 0x84: Ö */
+    {10,17,17,17,17,17,14} /* 0x85: Ü */
+  };
+  if(c>=0x80&&c<=0x85)return tr[c-0x80][y];
   if(c>='a'&&c<='z')c=(char)(c-32);
   if(c>='A'&&c<='R') return font[c-'A'][y];
   if(c=='S') { static const uint8_t a[]={15,16,16,14,1,1,30};return a[y]; }
@@ -77,7 +87,7 @@ static void rect(int x,int y,int w,int h,uint32_t color) {
   for(int j=y;j<y+h&&j<H;j++) for(int i=x;i<x+w&&i<W;i++) if(i>=0&&j>=0) fb[j*PITCH+i]=color;
 }
 static void label(int x,int y,const char *s,uint32_t color,int scale) {
-  while(*s){ for(int j=0;j<7;j++){uint8_t bits=glyph(*s,j);for(int i=0;i<5;i++)if(bits&(1<<(4-i)))rect(x+i*scale,y+j*scale,scale,scale,color);} x+=6*scale;s++; }
+  while(*s){ for(int j=0;j<7;j++){uint8_t bits=glyph((unsigned char)*s,j);for(int i=0;i<5;i++)if(bits&(1<<(4-i)))rect(x+i*scale,y+j*scale,scale,scale,color);} x+=6*scale;s++; }
 }
 
 #define PAGE_LIMIT (128 * 1024)
@@ -167,15 +177,65 @@ static void line_break(void) {
     poscol=0;
   }
 }
+
+/* Decode UTF-8 before layout: a multibyte Turkish letter occupies one cell. */
+static int turkish_page=0;
+static uint32_t next_codepoint(const unsigned char *src,size_t n,size_t *i){
+  unsigned c=src[(*i)++];
+  if(c<0x80)return c;
+  int more=(c>=0xC2&&c<=0xDF)?1:
+           (c>=0xE0&&c<=0xEF)?2:
+           (c>=0xF0&&c<=0xF4)?3:0;
+  if(!more || *i+(size_t)more>n)return '?';
+  uint32_t cp=c&((1U<<(6-more))-1U);
+  for(int k=0;k<more;k++){
+    unsigned v=src[(*i)++];
+    if((v&0xC0)!=0x80)return '?';
+    cp=(cp<<6)|(v&0x3F);
+  }
+  if(cp>0x10FFFF||(cp>=0xD800&&cp<=0xDFFF))return '?';
+  return cp;
+}
+static unsigned int output_glyph(uint32_t cp){
+  if(cp=='i' && turkish_page)return 0x80;
+  if(cp==0x0130)return 0x80;        /* İ / i with dot */
+  if(cp==0x0131)return 'I';          /* dotless ı */
+  if(cp==0x015E||cp==0x015F)return 0x81; /* Ş ş */
+  if(cp==0x011E||cp==0x011F)return 0x82; /* Ğ ğ */
+  if(cp==0x00C7||cp==0x00E7)return 0x83; /* Ç ç */
+  if(cp==0x00D6||cp==0x00F6)return 0x84; /* Ö ö */
+  if(cp==0x00DC||cp==0x00FC)return 0x85; /* Ü ü */
+  if(cp==0x00A0||cp==0x202F)return ' ';
+  if(cp==0x2013||cp==0x2014||cp==0x2212)return '-';
+  if(cp==0x2018||cp==0x2019)return 39;
+  if(cp==0x201C||cp==0x201D)return 34;
+  if(cp==0x2026)return '.';
+  if(cp==0x00C2||cp==0x00E2||cp==0x00C1||cp==0x00E1||cp==0x00C0||cp==0x00E0) return 'A';
+  if(cp==0x00C9||cp==0x00E9||cp==0x00C8||cp==0x00E8||cp==0x00CA||cp==0x00EA) return 'E';
+  if(cp==0x00CE||cp==0x00EE||cp==0x00CD||cp==0x00ED) return 'I';
+  if(cp==0x00D4||cp==0x00F4||cp==0x00D3||cp==0x00F3) return 'O';
+  if(cp==0x00DB||cp==0x00FB||cp==0x00DA||cp==0x00FA) return 'U';
+  if(cp>=97&&cp<=122)cp-=32;
+  if(cp>=32&&cp<=126)return (unsigned int)cp;
+  return '?'; /* Explicit fallback instead of silently deleting text. */
+}
+static int has_turkish_utf8(const char *s,int len){
+  for(int i=0;i+1<len;i++){
+    unsigned char a=(unsigned char)s[i],b=(unsigned char)s[i+1];
+    if(a==0xC4 && (b==0xB0||b==0xB1||b==0x9E||b==0x9F))return 1;
+    if(a==0xC5 && (b==0x9E||b==0x9F))return 1;
+    if(a==0xC3 && (b==0x87||b==0xA7||b==0x96||b==0xB6||b==0x9C||b==0xBC))return 1;
+  }
+  return 0;
+}
 static void append_visible(const lxb_char_t *text,size_t size){
   if(!text)return;
-  for(size_t i=0;i<size;i++){
-    unsigned char c=text[i];
-    if(c=='\r'||c=='\n'||c=='\t')c=' ';
+  for(size_t i=0;i<size && line_total<64;){
+    uint32_t cp=next_codepoint((const unsigned char *)text,size,&i);
+    if(cp==10||cp==13||cp==9)cp=' ';
+    unsigned int c=output_glyph(cp);
     if(c==' ' && (poscol==0 || lines[line_total][poscol-1]==' '))continue;
-    if(c>='a'&&c<='z')c=(unsigned char)(c-'a'+'A');
-    if(c<32 || c>126)continue;
-    if(poscol>=63 && c==' ') {line_break();continue;}
+    if(poscol>=63 && c==' '){line_break();continue;}
     if(poscol>=66)line_break();
     if(line_total>=64)break;
     lines[line_total][poscol++]=(char)c;
@@ -206,6 +266,7 @@ static void walk_dom(lxb_dom_node_t *node,int depth){
 static void parse_response(const char *data,int len){
   html_seen=0;has_title=0;dom_links=0;dom_elements=0;line_total=0;poscol=0;scroll=0;parser_status=-1;
   memset(lines,0,sizeof(lines));strcpy(title_text,"NO TITLE");
+  turkish_page=(strstr(current_url,".tr")!=NULL)||has_turkish_utf8(data,len);
   lxb_html_document_t *doc=lxb_html_document_create();
   if(!doc)return;
   lxb_status_t st=lxb_html_document_parse(doc,(const lxb_char_t*)data,(size_t)len);
@@ -216,10 +277,9 @@ static void parse_response(const char *data,int len){
     const lxb_char_t *title=lxb_html_document_title(doc,&tlen);
     if(title && tlen){
       int out=0;
-      for(size_t i=0;i<tlen && out<(int)sizeof(title_text)-1;i++){
-        unsigned char c=title[i];
-        if(c>='a'&&c<='z')c=(unsigned char)(c-'a'+'A');
-        if(c>=32 && c<127)title_text[out++]=(char)c;
+      for(size_t i=0;i<tlen && out<(int)sizeof(title_text)-1;){
+        unsigned int c=output_glyph(next_codepoint(title,tlen,&i));
+        title_text[out++]=(char)c;
       }
       title_text[out]=0;
       has_title=out>0;
