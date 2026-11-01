@@ -1,0 +1,35 @@
+name: PS5 WebKit ARMv7 feasibility audit
+on:
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch upstream WebKit JavaScriptCore and PlayStation build configuration
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/WebKit/WebKit.git webkit
+          cd webkit
+          git sparse-checkout set Source/JavaScriptCore Source/WTF Source/cmake Source/bmalloc Tools/Scripts Configurations
+      - name: Identify PlayStation and ARMv7 support (diagnostic only)
+        shell: bash
+        run: |
+          mkdir -p audit
+          {
+            echo '# WebKit feasibility audit'
+            echo
+            echo 'Source: upstream WebKit (NOT Sony PS5 firmware snapshot)'
+            echo "Commit: $(git -C webkit rev-parse HEAD)"
+            echo
+            echo '## JavaScriptCore platform/ARM/JIT build references'
+            grep -RIlE 'CPU\(ARM\)|CPU\(ARM_THUMB2\)|ENABLE_JIT|JSCOnly|PLAYSTATION' webkit/Source/cmake webkit/Source/JavaScriptCore/CMakeLists.txt webkit/Source/WTF/wtf/Platform.h 2>/dev/null | head -60 || true
+            echo
+            echo '## Selected PlayStation configuration files'
+            find webkit/Source -iname '*playstation*' | head -70
+          } | tee audit/report.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webkit-armv7-source-audit
+          path: audit/report.md
+          if-no-files-found: error
