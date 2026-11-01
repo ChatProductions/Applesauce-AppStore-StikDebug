@@ -26,10 +26,20 @@ jobs:
           from pathlib import Path
           p = Path('webkit/Source/cmake/WebKitCommon.cmake')
           s = p.read_text()
-          needle = '    elseif (CMAKE_SYSTEM_NAME MATCHES "Fuchsia")\\n        set(WTF_OS_FUCHSIA 1)'
-          assert needle in s, 'Upstream OS detection changed; patch needs review'
-          insertion = '    elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic")\\n        set(WTF_OS_UNIX 1)\\n'
-          s = s.replace(needle, insertion + needle, 1)
+          import re
+          pattern = r'(?m)^(\s*)else\s*\(\s*\)\s*\n\s*message\s*\(\s*FATAL_ERROR\s+"Unknown OS[^\n]*\n'
+          matches = list(re.finditer(pattern, s))
+          if len(matches) != 1:
+              raise RuntimeError(f'Expected one WebKit unknown-OS fallback; found {len(matches)}')
+          m = matches[0]
+          indent = m.group(1)
+          replacement = (
+              indent + 'elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic")\n'
+              + indent + '    set(WTF_OS_UNIX 1)\n'
+              + m.group(0)
+          )
+          s = s[:m.start()] + replacement + s[m.end():]
+          print('Inserted experimental Vita Generic OS branch')
           p.write_text(s)
           PY
       - name: Cross-configure JavaScriptCore for Vita ARMv7
