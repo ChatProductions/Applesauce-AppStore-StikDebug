@@ -66,12 +66,14 @@ static void draw(int mode,unsigned frames) {
 }
 int main(void) {
   const unsigned bytes=W*H*sizeof(uint32_t);
-  const unsigned alloc_bytes=(bytes+1024*1024-1)&~(1024*1024-1);
+  const unsigned stride=(bytes+1024*1024-1)&~(1024*1024-1);
+  const unsigned alloc_bytes=2*stride;
   SceUID memblock=sceKernelAllocMemBlock("VitaSurfFrame",SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,alloc_bytes,NULL);
   if(memblock<0)return -1;
   void *base=NULL;
   if(sceKernelGetMemBlockBase(memblock,&base)<0){sceKernelFreeMemBlock(memblock);return -2;}
-  fb=(uint32_t *)base;
+  uint32_t *screens[2]={(uint32_t *)base,(uint32_t *)((char *)base+stride)};
+  for(int i=0;i<2;i++) { fb=screens[i]; draw(i,0); }
   SceDisplayFrameBuf frame={0};
   frame.size=sizeof(frame);
   frame.base=fb;
@@ -87,7 +89,7 @@ int main(void) {
     if(pad.buttons&SCE_CTRL_START)break;
     if((pad.buttons&SCE_CTRL_CROSS)&&!(prev&SCE_CTRL_CROSS))mode=!mode;
     prev=pad.buttons;
-    draw(mode,frames);
+    frame.base=screens[mode];
     sceDisplaySetFrameBuf(&frame,SCE_DISPLAY_SETBUF_NEXTFRAME);
     sceDisplayWaitVblankStart();
   }
