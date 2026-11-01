@@ -498,8 +498,8 @@ int main(void){
       update.renderTarget.width=W;
       update.renderTarget.height=H;
       update.renderTarget.strideInPixels=PITCH;
-      update.renderTarget.depthSurface=NULL;
-      update.renderTarget.colorSurface=fb;
+      update.renderTarget.depthSurfaceData=NULL;
+      update.renderTarget.colorSurfaceData=fb;
       update.displaySyncObject=dbuf[back_index].sync;
       sceCommonDialogUpdate(&update);
     }
