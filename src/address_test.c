@@ -524,6 +524,7 @@ int main(void){
   sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT,SCE_TOUCH_SAMPLING_STATE_START);
   unsigned prev=0;
   int was_touching=0;
+  int repaint_remaining=2; /* Only redraw on changes; 2 frames refresh both buffers. */
   for(unsigned frames=0;;frames++){
     SceCtrlData pad={0};
     sceCtrlPeekBufferPositive(0,&pad,1);
@@ -535,23 +536,27 @@ int main(void){
     was_touching=touching;
     if(ime_active){
       handle_ime_result();
+      if(!ime_active)repaint_remaining=2; /* Remove residual IME pixels. */
     }else{
       if((pad.buttons&SCE_CTRL_START)&&!(prev&SCE_CTRL_START))break;
       if(((pad.buttons&SCE_CTRL_TRIANGLE)&&!(prev&SCE_CTRL_TRIANGLE))||touch_bar){
         if(apputil_ready)open_url_keyboard();
         else edit_error=-100;
+        repaint_remaining=2;
       }else if((pad.buttons&SCE_CTRL_CROSS)&&!(prev&SCE_CTRL_CROSS)){
         do_fetch();
+        repaint_remaining=2;
       }else if((pad.buttons&SCE_CTRL_DOWN)&&!(prev&SCE_CTRL_DOWN)){
-        if(scroll+12<line_total)scroll++;
+        if(scroll+12<line_total){scroll++;repaint_remaining=2;}
       }else if((pad.buttons&SCE_CTRL_UP)&&!(prev&SCE_CTRL_UP)){
-        if(scroll>0)scroll--;
+        if(scroll>0){scroll--;repaint_remaining=2;}
       }
     }
     prev=pad.buttons;
     fb=(uint32_t*)dbuf[back_index].data;
-    draw(0,frames);
     if(ime_active){
+      /* The system keyboard animates: it needs a fresh GXM render target. */
+      draw(0,frames);
       SceCommonDialogUpdateParam update={0};
       update.renderTarget.colorFormat=SCE_GXM_COLOR_FORMAT_A8B8G8R8;
       update.renderTarget.surfaceType=SCE_GXM_COLOR_SURFACE_LINEAR;
@@ -562,7 +567,14 @@ int main(void){
       update.renderTarget.colorSurfaceData=fb;
       update.displaySyncObject=dbuf[back_index].sync;
       sceCommonDialogUpdate(&update);
+    }else if(repaint_remaining>0){
+      /* Stop touching the displayed framebuffer. Draw only the safe back
+         buffer, then present; on the next frame redraw the other buffer. */
+      sceGxmDisplayQueueFinish();
+      draw(0,frames);
+      repaint_remaining--;
     }
+    /* Keep 60 Hz scanout / GXM queue submissions without per-frame CPU rasterization. */
     swap_gxm();
     sceDisplayWaitVblankStart();
   }
