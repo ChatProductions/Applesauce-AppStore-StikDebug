@@ -63,3 +63,23 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/lexbor_single.h")
   vita_create_vpk(VitaSurf-AddressBar-Test.vpk VTSF00005 eboot-address.bin
     VERSION 00.02 NAME "VitaSurf Address Bar")
 endif()
+
+# Controlled DOM + JavaScript integration probe. The known-good address bar
+# application remains untouched; no external website scripts run in this build.
+if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/quickjs/quickjs.c"
+   AND EXISTS "${CMAKE_SOURCE_DIR}/vendor/lexbor_single.h")
+  add_executable(vitasurf_domjs
+    src/domjs_test.c
+    vendor/quickjs/quickjs.c vendor/quickjs/libregexp.c
+    vendor/quickjs/libunicode.c vendor/quickjs/cutils.c vendor/quickjs/dtoa.c)
+  target_include_directories(vitasurf_domjs PRIVATE vendor vendor/quickjs)
+  target_compile_definitions(vitasurf_domjs PRIVATE _GNU_SOURCE CONFIG_VERSION="2025-09-13")
+  target_compile_options(vitasurf_domjs PRIVATE -O2)
+  target_link_libraries(vitasurf_domjs
+    SceDisplay_stub SceCtrl_stub SceTouch_stub SceKernelThreadMgr_stub SceSysmem_stub
+    SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub
+    SceGxm_stub SceAppUtil_stub SceCommonDialog_stub SceIme_stub m)
+  vita_create_self(eboot-domjs.bin vitasurf_domjs)
+  vita_create_vpk(VitaSurf-DOMJS-Test.vpk VTSF00006 eboot-domjs.bin
+    VERSION 00.01 NAME "VitaSurf DOM JS Test")
+endif()
