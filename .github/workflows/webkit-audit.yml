@@ -1,6 +1,10 @@
 name: PS5 WebKit ARMv7 feasibility audit
 on:
   workflow_dispatch:
+  push:
+    branches: [ios-host]
+    paths:
+      - '.github/workflows/webkit-audit.yml'
 jobs:
   audit:
     runs-on: ubuntu-latest
