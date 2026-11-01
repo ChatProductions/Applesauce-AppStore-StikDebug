@@ -478,7 +478,7 @@ int main(void){
     }else{
       if((pad.buttons&SCE_CTRL_START)&&!(prev&SCE_CTRL_START))break;
       if(((pad.buttons&SCE_CTRL_TRIANGLE)&&!(prev&SCE_CTRL_TRIANGLE))||touch_bar){
-        if(apputil_ready&&ime_module_ready)open_url_keyboard();
+        if(apputil_ready)open_url_keyboard();
         else edit_error=-100;
       }else if((pad.buttons&SCE_CTRL_CROSS)&&!(prev&SCE_CTRL_CROSS)){
         do_fetch();
