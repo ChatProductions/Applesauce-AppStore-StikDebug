@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: App compatibility database (touchHLE)
-    about: Tracks which app versions work in touchHLE generally. Worth checking when choosing a version to test.
-    url: https://appdb.touchhle.org/
-  - name: Emulator bug that is not iOS-specific
-    about: If a game misbehaves the same way on desktop HyperHLE, report it upstream instead of here.
-    url: https://github.com/HyperHLE/HyperHLE/issues
