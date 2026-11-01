@@ -19,6 +19,18 @@ jobs:
           cd webkit
           git sparse-checkout set Source Tools/Scripts Configurations
           git rev-parse HEAD > ../webkit-source-commit.txt
+      - name: Patch upstream OS detection for experimental Vita target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('webkit/Source/cmake/WebKitCommon.cmake')
+          s = p.read_text()
+          needle = '    elseif (CMAKE_SYSTEM_NAME MATCHES "Fuchsia")\n        set(WTF_OS_FUCHSIA 1)'
+          assert needle in s, 'Upstream OS detection changed; patch needs review'
+          s = s.replace(needle, '    elseif (CMAKE_SYSTEM_NAME STREQUAL "Generic")\n        # VitaSDK uses Generic; use Unix as a temporary configuration probe only.\n        set(WTF_OS_UNIX 1)\n' + needle, 1)
+          p.write_text(s)
+          PY
       - name: Cross-configure JavaScriptCore for Vita ARMv7
         shell: bash
         run: |
@@ -49,3 +61,4 @@ jobs:
             audit/
             webkit-source-commit.txt
           if-no-files-found: error
+      - name: Enforce real compile result\n        if: always()\n        shell: bash\n        run: |\n          test -f audit/result.txt || { echo 'Missing compiler diagnostics'; exit 1; }\n          grep -qx 'configure_exit_code=0' audit/result.txt\n          grep -qx 'compile_exit_code=0' audit/result.txt\n
