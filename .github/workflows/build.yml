@@ -9,8 +9,10 @@ jobs:
     container: vitasdk/vitasdk:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install SDL2
-        run: vdpm install sdl2
+      - name: Check bundled SDL2
+        run: |
+          vdpm -Q sdl2_vitagl
+          test -f "$VITASDK/arm-vita-eabi/include/SDL2/SDL.h"
       - name: Configure
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
       - name: Build
