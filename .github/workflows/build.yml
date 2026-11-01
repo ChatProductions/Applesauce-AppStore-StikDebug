@@ -39,6 +39,14 @@ jobs:
           s=s.replace(call, '(void)rt; /* atomics disabled */')
           p.write_text(s)
           PY
+      - name: Prepare Lexbor HTML5 amalgamation
+        run: |
+          git clone --depth 1 https://github.com/lexbor/lexbor.git vendor/lexbor
+          cd vendor/lexbor
+          git fetch --depth 1 origin 145872a2e5d6c22d923afcd3c386a21e59f9a0e2
+          git checkout --detach 145872a2e5d6c22d923afcd3c386a21e59f9a0e2
+          perl single.pl --port=posix html > ../lexbor_single.h
+          test -s ../lexbor_single.h
       - name: Configure
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$VITASDK/share/vita.toolchain.cmake"
       - name: Build
