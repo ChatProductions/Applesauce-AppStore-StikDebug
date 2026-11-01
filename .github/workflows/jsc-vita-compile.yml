@@ -12,6 +12,12 @@ jobs:
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
+      - name: Install WebKit host build dependencies
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ruby ruby-dev
+          ruby --version
       - name: Fetch upstream WebKit source
         shell: bash
         run: |
