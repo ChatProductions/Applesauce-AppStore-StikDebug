@@ -1,6 +1,7 @@
 #include <psp2/display.h>
 #include <psp2/ctrl.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/kernel/sysmem.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -82,6 +83,7 @@ int main(void) {
     if((pad.buttons&SCE_CTRL_CROSS)&&!(prev&SCE_CTRL_CROSS))mode=!mode;
     prev=pad.buttons;
     draw(mode,frames);
+    sceKernelDcacheWritebackRange(fb,W*H*sizeof(uint32_t));
     sceDisplaySetFrameBuf(&frame,SCE_DISPLAY_SETBUF_NEXTFRAME);
     sceDisplayWaitVblankStart();
   }
