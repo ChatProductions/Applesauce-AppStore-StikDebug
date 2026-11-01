@@ -84,5 +84,5 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/quickjs/quickjs.c"
     SceGxm_stub SceAppUtil_stub SceCommonDialog_stub SceIme_stub m)
   vita_create_self(eboot-domjs.bin vitasurf_domjs)
   vita_create_vpk(VitaSurf-DOMJS-Test.vpk VTSF00006 eboot-domjs.bin
-    VERSION 00.01 NAME "VitaSurf DOM JS Test")
+    VERSION 00.02 NAME "VitaSurf DOM JS Test")
 endif()
