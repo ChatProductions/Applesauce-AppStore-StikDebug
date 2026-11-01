@@ -53,11 +53,13 @@ endif()
 if(EXISTS "${CMAKE_SOURCE_DIR}/vendor/lexbor_single.h")
   add_executable(vitasurf_address src/address_test.c)
   target_include_directories(vitasurf_address PRIVATE vendor)
+  # The CPU rasterizer previously rebuilt 960x544 pixels every frame at -O0.
+  target_compile_options(vitasurf_address PRIVATE -O2)
   target_link_libraries(vitasurf_address
     SceDisplay_stub SceCtrl_stub SceTouch_stub SceKernelThreadMgr_stub SceSysmem_stub
     SceNet_stub SceNetCtl_stub SceHttp_stub SceSsl_stub SceSysmodule_stub
     SceGxm_stub SceAppUtil_stub SceCommonDialog_stub SceIme_stub m)
   vita_create_self(eboot-address.bin vitasurf_address)
   vita_create_vpk(VitaSurf-AddressBar-Test.vpk VTSF00005 eboot-address.bin
-    VERSION 00.01 NAME "VitaSurf Address Bar")
+    VERSION 00.02 NAME "VitaSurf Address Bar")
 endif()
